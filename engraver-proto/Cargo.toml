@@ -2,3 +2,79 @@
 name = "engraver-proto"
 version = "0.1.0"
 edition = "2024"
+description = "Engraver types and rendering pipeline for Keyflow"
+
+[features]
+default = []
+engraver = [
+    "dep:wgpu",
+    "dep:vello",
+    "dep:kurbo",
+    "dep:parley",
+    "dep:skrifa",
+    "dep:smufl",
+    "dep:lyon",
+    "dep:bytemuck",
+    "dep:bitflags",
+    "dep:serde_json",
+    "dep:thiserror",
+    "dep:macro_rules_attribute",
+    "dep:printpdf",
+    "dep:svg2pdf",
+    "dep:usvg",
+    "dep:pdf-writer",
+    "dep:lopdf",
+]
+engraver-example = ["engraver", "dep:winit", "dep:pollster", "dep:env_logger", "dep:log"]
+midi-import = ["engraver", "dep:midly"]
+
+[dependencies]
+tracing = "0.1"
+color-eyre = "0.6"
+serde = { version = "1.0", features = ["derive"] }
+colored = "3.0"
+regex = "1.11.3"
+derive_more = { version = "1.0", features = ["debug", "display", "from", "error"] }
+
+keyflow-proto = { path = "../keyflow-proto", features = ["serde"] }
+facet.workspace = true
+helgoboss-midi = "0.4.0"
+
+wgpu = { version = "26", features = ["wgsl"], optional = true }
+vello = { version = "0.6", optional = true }
+kurbo = { version = "0.12", optional = true }
+parley = { version = "0.2", optional = true, default-features = false, features = ["std"] }
+skrifa = { version = "0.26", optional = true }
+smufl = { version = "0.2", optional = true }
+lyon = { version = "1.0", optional = true }
+bytemuck = { version = "1.14", features = ["derive"], optional = true }
+bitflags = { version = "2.4", features = ["serde"], optional = true }
+serde_json = { workspace = true, optional = true }
+thiserror = { workspace = true, optional = true }
+macro_rules_attribute = { version = "0.2", optional = true }
+printpdf = { version = "0.8", optional = true, features = ["png"] }
+svg2pdf = { version = "0.13", optional = true }
+usvg = { version = "0.45", optional = true, default-features = false, features = ["text"] }
+pdf-writer = { version = "0.12", optional = true }
+lopdf = { version = "0.36", optional = true }
+midly = { version = "0.5", optional = true }
+
+winit = { version = "0.30", optional = true }
+pollster = { version = "0.4", optional = true }
+env_logger = { version = "0.11", optional = true }
+log = { version = "0.4", optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+uuid = { version = "1.0", features = ["serde", "v4", "js"] }
+getrandom = { version = "0.2", features = ["js"] }
+wgpu = { version = "26", features = ["wgsl", "webgpu", "webgl"], optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+uuid = { version = "1.0", features = ["serde", "v4"] }
+
+[dev-dependencies]
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+pollster = "0.4"
+
+[lints]
+workspace = true

@@ -2,3 +2,21 @@
 name = "keyflow-proto"
 version = "0.1.0"
 edition = "2024"
+
+[features]
+default = ["serde"]
+serde = ["dep:serde"]
+highlighting = []
+
+[dependencies]
+roam.workspace = true
+facet.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+serde = { workspace = true, optional = true }
+daw-control = { path = "../../daw/daw-control" }
+uuid = { version = "1", features = ["v4", "serde"] }
+helgoboss-midi = "0.4.0"
+
+[lints]
+workspace = true
