@@ -92,7 +92,7 @@ fn create_test_engine() -> ChartLayoutEngine {
 
 /// Parse the test chart.
 fn parse_test_chart() -> Chart {
-    Chart::parse(TEST_CHART).expect("Failed to parse test chart")
+    keyflow::parse(TEST_CHART).expect("Failed to parse test chart")
 }
 
 /// Find all barline X positions in the scene, sorted by position.

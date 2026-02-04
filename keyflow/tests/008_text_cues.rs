@@ -12,7 +12,7 @@ VS 8
 Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // Should have one section
@@ -46,7 +46,7 @@ VS 8
 Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     let section = &chart.sections[0];
@@ -75,7 +75,7 @@ Cmaj7/// Dm7///
 Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     let section = &chart.sections[0];
@@ -112,7 +112,7 @@ VS 8
 Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     let section = &chart.sections[0];
@@ -145,7 +145,7 @@ VS 8
 Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     let section = &chart.sections[0];
@@ -184,7 +184,7 @@ CH 8
 Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     assert_eq!(chart.sections.len(), 2);
@@ -219,7 +219,7 @@ VS 8
 Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     let section = &chart.sections[0];
@@ -242,7 +242,7 @@ VS 8
 Cmaj7/// Dm7/// @keys "synth here" Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     let section = &chart.sections[0];
@@ -268,7 +268,7 @@ VS 8
 Cmaj7/// @drums "kick" Dm7/// @keys "pad" Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     let section = &chart.sections[0];
@@ -297,7 +297,7 @@ VS 8
 Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     let section = &chart.sections[0];
@@ -326,7 +326,7 @@ VS 8
 Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     let section = &chart.sections[0];
@@ -363,7 +363,7 @@ VS 8
 Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     let section = &chart.sections[0];
@@ -394,11 +394,11 @@ VS 8
 Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart1 = Chart::parse(input).unwrap();
+    let chart1 = keyflow::parse(input).unwrap();
     let syntax = chart1.to_syntax();
     println!("Serialized:\n{}", syntax);
 
-    let chart2 = Chart::parse(&syntax).unwrap();
+    let chart2 = keyflow::parse(&syntax).unwrap();
 
     // Find measure with cue in both charts
     let m1 = chart1.sections[0]

@@ -8,6 +8,95 @@
 pub use keyflow_proto::*;
 #[cfg(feature = "engraver")]
 pub use engraver_proto as engraver;
+#[cfg(feature = "text")]
+pub use keyflow_text as text;
+#[cfg(feature = "midi")]
+pub use keyflow_midi as midi;
+
+#[derive(Debug, Clone)]
+pub enum KeyflowSourceError {
+    Text(String),
+    Midi(String),
+}
+
+impl std::fmt::Display for KeyflowSourceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Text(err) => write!(f, "text parse error: {err}"),
+            Self::Midi(err) => write!(f, "midi parse error: {err}"),
+        }
+    }
+}
+
+impl std::error::Error for KeyflowSourceError {}
+
+pub trait IntoChart {
+    fn into_chart(self) -> Result<keyflow_proto::Chart, KeyflowSourceError>;
+}
+
+impl IntoChart for keyflow_proto::Chart {
+    fn into_chart(self) -> Result<keyflow_proto::Chart, KeyflowSourceError> {
+        Ok(self)
+    }
+}
+
+#[cfg(feature = "text")]
+impl<'a> IntoChart for &'a str {
+    fn into_chart(self) -> Result<keyflow_proto::Chart, KeyflowSourceError> {
+        keyflow_text::chart::parse_chart(self).map_err(KeyflowSourceError::Text)
+    }
+}
+
+#[cfg(feature = "text")]
+impl IntoChart for String {
+    fn into_chart(self) -> Result<keyflow_proto::Chart, KeyflowSourceError> {
+        keyflow_text::chart::parse_chart(&self).map_err(KeyflowSourceError::Text)
+    }
+}
+
+#[cfg(feature = "midi")]
+impl<'a> IntoChart for &'a [u8] {
+    fn into_chart(self) -> Result<keyflow_proto::Chart, KeyflowSourceError> {
+        keyflow_midi::parse_midi_bytes(self).map_err(KeyflowSourceError::Midi)
+    }
+}
+
+#[cfg(feature = "midi")]
+impl IntoChart for Vec<u8> {
+    fn into_chart(self) -> Result<keyflow_proto::Chart, KeyflowSourceError> {
+        keyflow_midi::parse_midi_bytes(&self).map_err(KeyflowSourceError::Midi)
+    }
+}
+
+#[cfg(feature = "midi")]
+impl<'a> IntoChart for &'a std::path::Path {
+    fn into_chart(self) -> Result<keyflow_proto::Chart, KeyflowSourceError> {
+        keyflow_midi::parse_midi_path(self).map_err(KeyflowSourceError::Midi)
+    }
+}
+
+#[cfg(feature = "midi")]
+impl IntoChart for std::path::PathBuf {
+    fn into_chart(self) -> Result<keyflow_proto::Chart, KeyflowSourceError> {
+        keyflow_midi::parse_midi_path(self.as_path()).map_err(KeyflowSourceError::Midi)
+    }
+}
+
+#[cfg(feature = "text")]
+pub trait KeyflowParseExt {
+    fn keyflow_parse(&self) -> Result<keyflow_proto::Chart, KeyflowSourceError>;
+}
+
+#[cfg(feature = "text")]
+impl KeyflowParseExt for str {
+    fn keyflow_parse(&self) -> Result<keyflow_proto::Chart, KeyflowSourceError> {
+        keyflow_text::chart::parse_chart(self).map_err(KeyflowSourceError::Text)
+    }
+}
+
+pub fn parse<T: IntoChart>(source: T) -> Result<keyflow_proto::Chart, KeyflowSourceError> {
+    source.into_chart()
+}
 
 // Local modules
 mod error;

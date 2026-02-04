@@ -36,7 +36,7 @@ VS
 {content}
 "#
     );
-    Chart::parse(&full_input).expect("Failed to parse chart")
+    keyflow::parse(&full_input).expect("Failed to parse chart")
 }
 
 /// Get duration in beats for a chord

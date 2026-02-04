@@ -223,7 +223,7 @@ fn create_test_engine() -> ChartLayoutEngine {
 
 /// Helper to layout a chart in snippet mode.
 fn layout_snippet(source: &str) -> keyflow::engraver::layout::chart::ChartLayoutResult {
-    let chart = Chart::parse(source).expect("Failed to parse chart");
+    let chart = keyflow::parse(source).expect("Failed to parse chart");
     let engine = create_test_engine();
     let mode = LayoutMode::snippet(800.0);
     engine.layout_chart(&chart, &mode)

@@ -39,7 +39,7 @@ G C G C
 vs
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     // Test metadata
     assert_eq!(chart.metadata.title, Some("First Section Global".to_string()));
@@ -90,7 +90,7 @@ ch 4
 G C G C
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     // Test sections
     assert_eq!(chart.sections.len(), 3);
@@ -130,7 +130,7 @@ ch 2
 !G7 G
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     // Test metadata
     assert_eq!(
@@ -174,7 +174,7 @@ ch 4
 C G Cm Em
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     // Test sections
     assert_eq!(chart.sections.len(), 2);
@@ -212,7 +212,7 @@ vs 4
 Cm !Cm Cm !Cm
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     let verse_section = &chart.sections[0];
     // Cm - recalls Cm7b5 from global assignment
@@ -239,7 +239,7 @@ Gmaj13 C9 Em7 D7
 vs
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     assert_eq!(chart.sections.len(), 2);
 
@@ -270,7 +270,7 @@ Gmaj7 Cmaj7 Dmin7 G7
 vs
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     assert_eq!(chart.sections.len(), 2);
 
@@ -303,7 +303,7 @@ ch 4
 I IV vi V
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     assert_eq!(chart.sections.len(), 3);
 
@@ -345,7 +345,7 @@ vs 4
 Gmaj13 C9 G C
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     // Verse: Gmaj13 and C9 are stored to section-local memory
     // G and C (basic) recall from section-local memory within the same section
@@ -371,7 +371,7 @@ vs 4
 Cmaj7 Cm7 C Cm
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     let verse_section = &chart.sections[0];
     // Cmaj7 stores to major family

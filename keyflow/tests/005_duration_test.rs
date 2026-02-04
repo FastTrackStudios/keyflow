@@ -18,7 +18,7 @@ vs
 Gmaj7_4 Cmaj7_2 Dm7_8 Em7_8
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     // Display the chart to show duration notation
     println!("\n{}", chart);
@@ -99,7 +99,7 @@ vs
 Gmaj7//// Cmaj7// Dm7/ Em7/
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     // Test metadata
     assert_eq!(
@@ -183,7 +183,7 @@ vs
 Gmaj7_4 C//// Dm7_2 Em7/
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     // Test metadata
     assert_eq!(
@@ -255,7 +255,7 @@ vs
 Gmaj7_4. Cmaj7_2. Dm7_8.
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     // Test metadata
     assert_eq!(
@@ -322,7 +322,7 @@ vs
 Gmaj7 Cmaj7 Dm7 Em7
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     // Test metadata
     assert_eq!(
@@ -367,7 +367,7 @@ vs
 Gmaj13_4 C9_2 Gmaj13// C9/
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     assert_eq!(chart.sections.len(), 1);
 
@@ -434,7 +434,7 @@ Gmaj7
 "#;
 
     // Test 4/4
-    let chart_4_4 = Chart::parse(input_4_4).unwrap();
+    let chart_4_4 = keyflow::parse(input_4_4).unwrap();
     let chord_4_4 = &chart_4_4.sections[0].measures()[0].chords[0];
     assert_eq!(
         chord_4_4
@@ -444,7 +444,7 @@ Gmaj7
     );
 
     // Test 3/4
-    let chart_3_4 = Chart::parse(input_3_4).unwrap();
+    let chart_3_4 = keyflow::parse(input_3_4).unwrap();
     let chord_3_4 = &chart_3_4.sections[0].measures()[0].chords[0];
     assert_eq!(
         chord_3_4
@@ -454,7 +454,7 @@ Gmaj7
     );
 
     // Test 6/8
-    let chart_6_8 = Chart::parse(input_6_8).unwrap();
+    let chart_6_8 = keyflow::parse(input_6_8).unwrap();
     let chord_6_8 = &chart_6_8.sections[0].measures()[0].chords[0];
     assert_eq!(
         chord_6_8
@@ -481,7 +481,7 @@ br
 G// C// D/ Em7/
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     assert_eq!(chart.sections.len(), 4);
 

@@ -6,6 +6,7 @@
 #![deny(unsafe_code)]
 
 // Domain modules
+pub mod api;
 pub mod chart;
 pub mod chord;
 pub mod core;
@@ -25,6 +26,7 @@ pub mod ast;
 pub mod highlighting;
 
 // Re-export common types for convenience
+pub use api::prelude as api_prelude;
 pub use chart::{
     Chart, ChartIndex, ChartPosition, ChartSection, ChordInstance, DynamicMarking, ElementId,
     KeyChange, Measure, NavigationType, SemanticRole, SourceLink, TempoChange, TextCue,
@@ -41,7 +43,7 @@ pub use key::{Key, ScaleMode, ScaleType};
 
 pub use metadata::SongMetadata;
 
-pub use parsing::{Lexer, ParseError, TextSpan, Token, TokenType};
+pub use parsing::{ParseError, TextSpan, Token, TokenType};
 
 pub use primitives::{
     Interval, MusicalNote, MusicalNoteToken, Note, RomanCase, RomanNumeralToken, RootFormat,
@@ -63,6 +65,7 @@ pub use ast::{
 
 // Service types
 pub use services::{
-    ChartService, ChartServiceClient, ChartServiceDispatcher, ParseRequest, ParseResponse,
-    ParserService, ParserServiceClient, ParserServiceDispatcher,
+    ChartParseService, ChartParseServiceClient, ChartParseServiceDispatcher, ChartService,
+    ChartServiceClient, ChartServiceDispatcher, ParseRequest, ParseResponse, ParserService,
+    ParserServiceClient, ParserServiceDispatcher,
 };

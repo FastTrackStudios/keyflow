@@ -3247,7 +3247,7 @@ outro 4
 Em7 Am7 D7 Gmaj7
 "#;
 
-        let chart = Chart::parse(autumn_leaves).expect("Failed to parse Autumn Leaves chart");
+        let chart = keyflow::parse(autumn_leaves).expect("Failed to parse Autumn Leaves chart");
         let style = test_style();
         let text_font = Arc::new(Vec::new());
         let symbol_font = Arc::new(Vec::new());
@@ -3367,7 +3367,7 @@ vs 8
 Em7 Am7 D7 Gmaj7 Cmaj7 F#m7b5 B7 Em
 "#;
 
-        let chart = Chart::parse(autumn_leaves).expect("Failed to parse chart");
+        let chart = keyflow::parse(autumn_leaves).expect("Failed to parse chart");
         let style = test_style();
         let text_font = Arc::new(Vec::new());
         let symbol_font = Arc::new(Vec::new());
@@ -3454,7 +3454,7 @@ F C G Am x2
 outro 4
 C G Am F
 "#;
-        let chart = Chart::parse(chart_text).expect("Failed to parse chart");
+        let chart = keyflow::parse(chart_text).expect("Failed to parse chart");
         let style = test_style();
         let text_font = Arc::new(Vec::new());
         let symbol_font = Arc::new(Vec::new());
@@ -3497,7 +3497,7 @@ Song - Artist
 vs 32
 C G Am F x8
 "#;
-        let chart = Chart::parse(chart_text).expect("Failed to parse chart");
+        let chart = keyflow::parse(chart_text).expect("Failed to parse chart");
         let style = test_style();
         let text_font = Arc::new(Vec::new());
         let symbol_font = Arc::new(Vec::new());
@@ -3541,7 +3541,7 @@ Song - Artist
 vs 32
 C G Am F x8
 "#;
-        let chart = Chart::parse(chart_text).expect("Failed to parse chart");
+        let chart = keyflow::parse(chart_text).expect("Failed to parse chart");
         let style = test_style();
         let text_font = Arc::new(Vec::new());
         let symbol_font = Arc::new(Vec::new());
@@ -3586,7 +3586,7 @@ Song - Artist
 vs 16
 C G Am F x4
 "#;
-        let chart = Chart::parse(chart_text).expect("Failed to parse chart");
+        let chart = keyflow::parse(chart_text).expect("Failed to parse chart");
         let style = test_style();
         let text_font = Arc::new(Vec::new());
         let symbol_font = Arc::new(Vec::new());
@@ -3647,7 +3647,7 @@ outro 4
 Em7 Am7 D7 Gmaj7
 "#;
 
-        let chart = Chart::parse(autumn_leaves).expect("Failed to parse chart");
+        let chart = keyflow::parse(autumn_leaves).expect("Failed to parse chart");
         let style = test_style();
         let text_font = Arc::new(Vec::new());
         let symbol_font = Arc::new(Vec::new());
@@ -3695,7 +3695,7 @@ My Long Song Title - Famous Artist Name
 vs 32
 C G Am F x8
 "#;
-        let chart = Chart::parse(chart_text).expect("Failed to parse chart");
+        let chart = keyflow::parse(chart_text).expect("Failed to parse chart");
         let style = test_style();
         let text_font = Arc::new(Vec::new());
         let symbol_font = Arc::new(Vec::new());
@@ -3783,7 +3783,7 @@ Gmaj7 Cmaj7 F#m7b5 B7
 Em7 Am7 D7 Gmaj7
 "#;
 
-        let chart = Chart::parse(extended_chart).expect("Failed to parse extended chart");
+        let chart = keyflow::parse(extended_chart).expect("Failed to parse extended chart");
         let style = test_style();
         let text_font = Arc::new(Vec::new());
         let symbol_font = Arc::new(Vec::new());
@@ -3875,7 +3875,7 @@ Test - Artist
 vs 6
 C C C G G C
 "#;
-        let chart = Chart::parse(chart_text).expect("Failed to parse chart");
+        let chart = keyflow::parse(chart_text).expect("Failed to parse chart");
         let style = test_style();
         let text_font = Arc::new(Vec::new());
         let symbol_font = Arc::new(Vec::new());
@@ -3932,7 +3932,7 @@ Test - Artist
 vs 8
 C C C C G G G G
 "#;
-        let chart = Chart::parse(chart_text).expect("Failed to parse chart");
+        let chart = keyflow::parse(chart_text).expect("Failed to parse chart");
         let style = test_style();
         let text_font = Arc::new(Vec::new());
         let symbol_font = Arc::new(Vec::new());
@@ -3967,7 +3967,7 @@ G Am F C
 ch 4
 C G Am F
 "#;
-        let chart = Chart::parse(chart_text).expect("Failed to parse chart");
+        let chart = keyflow::parse(chart_text).expect("Failed to parse chart");
         let style = test_style();
         let text_font = Arc::new(Vec::new());
         let symbol_font = Arc::new(Vec::new());
@@ -4001,7 +4001,7 @@ C C G G
 ch 4
 Am Am F F
 "#;
-        let chart = Chart::parse(chart_text).expect("Failed to parse chart");
+        let chart = keyflow::parse(chart_text).expect("Failed to parse chart");
         let style = test_style();
         let text_font = Arc::new(Vec::new());
         let symbol_font = Arc::new(Vec::new());
@@ -4049,7 +4049,7 @@ Am7 D7 Gmaj7 Cmaj7
 F#m7b5 B7 Em7 Em7
 "#;
 
-        let chart = Chart::parse(chart_text).expect("Failed to parse chart");
+        let chart = keyflow::parse(chart_text).expect("Failed to parse chart");
 
         println!("\n=== Debug: Parsed Chart Chords ===");
         println!("Total sections: {}", chart.sections.len());
@@ -4104,7 +4104,7 @@ vs 16
 Em7 Am7 D7 Gmaj7
 "#;
 
-        let chart = Chart::parse(chart_text).expect("Failed to parse chart");
+        let chart = keyflow::parse(chart_text).expect("Failed to parse chart");
 
         println!("\n=== KEYFLOW LEVEL: Verse Section Analysis ===");
 
@@ -4155,7 +4155,7 @@ vs 16
 Em7 Am7 D7 Gmaj7
 "#;
 
-        let chart = Chart::parse(chart_text).expect("Failed to parse chart");
+        let chart = keyflow::parse(chart_text).expect("Failed to parse chart");
 
         let style = Box::leak(Box::new(MStyle::default()));
         let engine = ChartLayoutEngine::new(style, Arc::new(Vec::new()), Arc::new(Vec::new()));
@@ -4250,7 +4250,7 @@ pre 4
 Am7 D7 Bm7 E7
 "#;
 
-        let chart = Chart::parse(chart_text).expect("Failed to parse chart");
+        let chart = keyflow::parse(chart_text).expect("Failed to parse chart");
 
         // Create minimal layout config for testing
         let style = Box::leak(Box::new(MStyle::default()));
@@ -4312,7 +4312,7 @@ vs 6
 C G Am F | C G
 "#;
 
-        let chart = Chart::parse(chart_text).expect("Failed to parse chart");
+        let chart = keyflow::parse(chart_text).expect("Failed to parse chart");
         let style = test_style();
         let text_font = Arc::new(Vec::new());
         let symbol_font = Arc::new(Vec::new());

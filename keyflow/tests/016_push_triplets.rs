@@ -19,7 +19,7 @@ VS 4
 'tC D 'tEm F
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     let section = &chart.sections[0];
@@ -83,7 +83,7 @@ VS 4
 C't D Em't F
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     let section = &chart.sections[0];
@@ -110,7 +110,7 @@ VS 4
 ''tC D ''tEm F
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     let section = &chart.sections[0];
@@ -142,7 +142,7 @@ VS 4
 ':5C D ':5Em F
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     let section = &chart.sections[0];
@@ -178,7 +178,7 @@ VS 4
 C':7 D Em':7 F
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     let section = &chart.sections[0];
@@ -210,7 +210,7 @@ VS 4
 'C D 'Em F
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     let section = &chart.sections[0];
@@ -247,7 +247,7 @@ VS 4
 'C D ''Em F
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     let section = &chart.sections[0];
@@ -355,7 +355,7 @@ VS 4
 'tC D 'tEm F
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     let syntax = chart.to_syntax();
     println!("Original:\n{}", input);
     println!("Generated:\n{}", syntax);
@@ -377,7 +377,7 @@ VS 4
 ':5C D ':5Em F
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     let syntax = chart.to_syntax();
     println!("Original:\n{}", input);
     println!("Generated:\n{}", syntax);
@@ -399,7 +399,7 @@ VS 4
 'C 'tDm Em't F'
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     let section = &chart.sections[0];

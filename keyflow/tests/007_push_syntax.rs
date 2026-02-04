@@ -27,7 +27,7 @@ vs
 'C Dm 'Em F
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     // Display the chart to show push notation
     println!("\n{}", chart);
@@ -85,7 +85,7 @@ vs
 C' Dm Em' F
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     // Display the chart to show pull notation
     println!("\n{}", chart);
@@ -136,7 +136,7 @@ vs
 ''C D ''Em F
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     // Display the chart
     println!("\n{}", chart);
@@ -182,7 +182,7 @@ vs
 C''' D Em''' F
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     // Display the chart
     println!("\n{}", chart);
@@ -228,7 +228,7 @@ vs
 'C Dm' ''Em F'''
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     // Display the chart
     println!("\n{}", chart);
@@ -290,7 +290,7 @@ vs
 'C//// D'// 'Em// F////
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     // Display the chart
     println!("\n{}", chart);
@@ -332,7 +332,7 @@ vs
 '1 '4 5' 6'
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     // Display the chart
     println!("\n{}", chart);

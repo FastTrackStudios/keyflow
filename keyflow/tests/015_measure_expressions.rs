@@ -18,7 +18,7 @@ VS 8
 Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     assert_eq!(chart.sections.len(), 1);
@@ -35,7 +35,7 @@ VS 8+1
 Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // 8+1 = 9 measures
@@ -53,7 +53,7 @@ VS 8-1
 Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // 8-1 = 7 measures
@@ -71,7 +71,7 @@ VS 4x4
 Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // 4x4 = 16 measures
@@ -89,7 +89,7 @@ VS 4*4
 Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // 4*4 = 16 measures
@@ -110,7 +110,7 @@ VS
 Gmaj7/// Am7/// Bm7/// Cmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // Both verses should have 8 measures
@@ -132,7 +132,7 @@ VS +1
 Gmaj7/// Am7/// Bm7/// Cmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // First verse: 8 measures
@@ -155,7 +155,7 @@ VS -1
 Gmaj7/// Am7/// Bm7/// Cmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // First verse: 8 measures
@@ -184,7 +184,7 @@ CH
 Fmaj7/// Gmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // Each section type has its own memory
@@ -211,7 +211,7 @@ VS -2
 Dmaj7/// Em7/// Fmaj7/// Gmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // Relative expressions don't update memory, only absolute values do
@@ -235,7 +235,7 @@ Test Song - Artist
 Cmaj7/// Dm7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // Custom section should be recognized
@@ -268,7 +268,7 @@ CH +2
 Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // Memory is independent per section type
@@ -290,7 +290,7 @@ VS 16+
 Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // "16+" should parse as 16 measures
@@ -312,7 +312,7 @@ CH 4x
 Dm7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // "8-" should parse as 8, "4x" should parse as 4
@@ -332,7 +332,7 @@ Cmaj7/// Dm7/// Em7/// Fmaj7///
 [melody] m{ C_4 D_4 E_4 F_4 G_4 A_4 B_4 C'_4 }
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // 4x2 = 8 measures
@@ -368,7 +368,7 @@ Bm7/// Cmaj7///
 [melody lead] m{ D_4 E_4 F_4 G_4 A_4 B_4 }
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // VS 8, CH 4, VS +2 (8+2=10)
@@ -406,7 +406,7 @@ Cmaj7/// Dm7/// Em7/// Fmaj7///
 [melody pad] m{ E_1 }
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // 2x4 = 8 measures
@@ -442,7 +442,7 @@ Bm7/// Cmaj7/// Dmaj7/// Em7///
 CH
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // VS 8, CH 4, VS (8 from memory), CH (4 from memory)

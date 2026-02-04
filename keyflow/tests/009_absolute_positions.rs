@@ -11,7 +11,7 @@ VS 8
 Cmaj7/// Dm7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     let section = &chart.sections[0];
@@ -76,7 +76,7 @@ CH 4
 Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     assert_eq!(chart.sections.len(), 2);
@@ -109,7 +109,7 @@ VS
 Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     let section = &chart.sections[0];
@@ -149,7 +149,7 @@ VS
 Cmaj7/// Dm7/// 6/8 Em7/. Fmaj7/.
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     let section = &chart.sections[0];
@@ -188,7 +188,7 @@ VS 8
 Cmaj7/// @keys "here" Dm7/// Em7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     let section = &chart.sections[0];
@@ -223,7 +223,7 @@ CH 4
 Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     assert_eq!(chart.sections.len(), 2);
@@ -267,7 +267,7 @@ VS 4
 Cmaj7//// 'Dm7////
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     let section = &chart.sections[0];

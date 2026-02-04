@@ -16,7 +16,7 @@ VS 8
 Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     assert_eq!(chart.sections.len(), 1);
@@ -43,7 +43,7 @@ VS 8
 Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     let section = &chart.sections[0];
     let first_measure = &section.measures()[0];
@@ -64,7 +64,7 @@ VS 8
 Cmaj7/// <Build> Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     let section = &chart.sections[0];
 
@@ -90,7 +90,7 @@ VS 8
 Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     let section = &chart.sections[0];
     let first_measure = &section.measures()[0];
@@ -110,7 +110,7 @@ VS 8
 Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     let section = &chart.sections[0];
     let first_measure = &section.measures()[0];
@@ -135,7 +135,7 @@ CH 8
 Gmaj7/// Am7/// Bm7/// Cmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     assert_eq!(chart.sections.len(), 2);
 
@@ -168,7 +168,7 @@ VS 8
 Cmaj7//// <Down> Dm7////
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     let section = &chart.sections[0];
 
@@ -191,7 +191,7 @@ VS 8
 Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     let section = &chart.sections[0];
     let first_measure = &section.measures()[0];
@@ -214,12 +214,12 @@ VS 8
 Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart1 = Chart::parse(input).unwrap();
+    let chart1 = keyflow::parse(input).unwrap();
     let syntax = chart1.to_syntax();
     println!("Serialized:\n{}", syntax);
 
     // Parse it again
-    let chart2 = Chart::parse(&syntax).unwrap();
+    let chart2 = keyflow::parse(&syntax).unwrap();
 
     // Find measures with dynamics in both charts
     let m1_with_dynamic = chart1.sections[0]

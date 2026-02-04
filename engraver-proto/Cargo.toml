@@ -37,6 +37,7 @@ regex = "1.11.3"
 derive_more = { version = "1.0", features = ["debug", "display", "from", "error"] }
 
 keyflow-proto = { path = "../keyflow-proto", features = ["serde"] }
+keyflow-text = { path = "../keyflow-text" }
 facet.workspace = true
 helgoboss-midi = "0.4.0"
 
@@ -75,6 +76,7 @@ uuid = { version = "1.0", features = ["serde", "v4"] }
 [dev-dependencies]
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 pollster = "0.4"
+keyflow = { path = "../keyflow", features = ["text"] }
 
 [lints]
 workspace = true

@@ -20,7 +20,7 @@ mainRiff = m{ C_8 D_8 E_4 }
 Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // Should have the melody variable defined
@@ -43,7 +43,7 @@ VS 8
 Cmaj7/// m{ C_8 D_8 E_4 F_4 } Dm7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // The measure should have a melody attached
@@ -65,7 +65,7 @@ mainRiff = m{ C_8 D_8 E_4 }
 Cmaj7/// $mainRiff Dm7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // The melody variable should be defined
@@ -87,7 +87,7 @@ riff = m{ 1_4 3_4 5_4 1'_4 }
 Cmaj7/// $riff
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     let melody = chart.melody_variables.get("riff").unwrap();
     assert_eq!(melody.notes.len(), 4);
@@ -122,7 +122,7 @@ riff = m{ C_4 G'_4 C,_4 E_4 }
 Cmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     let melody = chart.melody_variables.get("riff").unwrap();
     assert_eq!(melody.notes.len(), 4);
@@ -153,7 +153,7 @@ blues = m{ C_4 Eb_4 F_4 F#_4 G_4 Bb_4 C'_4 }
 Cmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     let melody = chart.melody_variables.get("blues").unwrap();
     assert_eq!(melody.notes.len(), 7);
@@ -174,7 +174,7 @@ phrase = m{ C_4 r_4 E_4 r_4 }
 Cmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     let melody = chart.melody_variables.get("phrase").unwrap();
     assert_eq!(melody.notes.len(), 4);
@@ -196,7 +196,7 @@ swing = m{ C_4. D_8 E_4. F_8 }
 Cmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     let melody = chart.melody_variables.get("swing").unwrap();
     assert_eq!(melody.notes.len(), 4);
@@ -219,7 +219,7 @@ outro = m{ G_4 F_4 E_4 D_4 }
 Cmaj7/// $intro Dm7/// $outro
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     // Both melodies should be defined
     assert!(chart.melody_variables.get("intro").is_some());
@@ -245,7 +245,7 @@ mainRiff = m{ C_8 D_8 E_4 F_4 }
 Cmaj7/// $mainRiff Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("Original parsed chart:");
     println!("{}", chart);
 
@@ -255,7 +255,7 @@ Cmaj7/// $mainRiff Dm7/// Em7/// Fmaj7///
     println!("{}", syntax);
 
     // Re-parse the serialized syntax
-    let reparsed = Chart::parse(&syntax).unwrap();
+    let reparsed = keyflow::parse(&syntax).unwrap();
     println!("Re-parsed chart:");
     println!("{}", reparsed);
 
@@ -279,7 +279,7 @@ VS 4
 Cmaj7/// m{ C_4 E_4 G_4 C'_4 } Dm7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     let syntax = chart.to_syntax();
     println!("Serialized: {}", syntax);
 

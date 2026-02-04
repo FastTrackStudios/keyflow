@@ -93,9 +93,15 @@ impl DurationTrait for time::MusicalDuration {
 #[cfg(feature = "engraver")]
 pub mod engraver;
 
+#[cfg(feature = "engraver")]
+pub mod api;
+
 // endregion: --- Modules
 
 // region:    --- Re-exports
+
+#[cfg(feature = "engraver")]
+pub use api::prelude as api_prelude;
 
 #[cfg(feature = "engraver")]
 pub use engraver::error::{Error, Result};

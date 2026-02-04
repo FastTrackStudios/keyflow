@@ -1,0 +1,16 @@
+[package]
+name = "keyflow-midi"
+version.workspace = true
+edition.workspace = true
+description = "Keyflow MIDI import helpers"
+
+[features]
+default = []
+
+[dependencies]
+keyflow-proto = { path = "../keyflow-proto" }
+keyflow-text = { path = "../keyflow-text" }
+engraver-proto = { path = "../engraver-proto", default-features = false, features = ["engraver", "midi-import"] }
+
+[lints]
+workspace = true

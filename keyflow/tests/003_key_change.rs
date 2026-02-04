@@ -17,7 +17,7 @@ post 4
 gmaj7 cmaj7 #C# c#maj7 g#m7
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     // Test metadata
     assert_eq!(chart.metadata.title, Some("Key Change Test".to_string()));
@@ -98,7 +98,7 @@ br 4
 I IV vi V
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     // Test metadata
     assert_eq!(

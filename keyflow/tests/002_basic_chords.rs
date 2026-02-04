@@ -35,7 +35,7 @@ outro 4
 1*4
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     // Test metadata
     assert_eq!(chart.metadata.title, Some("Simple Test".to_string()));

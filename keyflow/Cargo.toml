@@ -5,7 +5,9 @@ edition.workspace = true
 description = "Music theory and chord parsing - re-exports from keyflow-proto"
 
 [features]
-default = []
+default = ["text"]
+text = ["dep:keyflow-text"]
+midi = ["dep:keyflow-midi"]
 engraver = ["dep:engraver-proto"]
 midi-import = ["engraver", "engraver-proto/midi-import"]
 
@@ -24,6 +26,8 @@ helgoboss-midi = "0.4.0"
 
 # Keyflow protocol types
 keyflow-proto = { path = "../keyflow-proto" }
+keyflow-text = { path = "../keyflow-text", optional = true }
+keyflow-midi = { path = "../keyflow-midi", optional = true }
 engraver-proto = { path = "../engraver-proto", optional = true, default-features = false, features = ["engraver"] }
 
 # WASM-specific dependencies

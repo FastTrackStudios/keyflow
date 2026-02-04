@@ -66,7 +66,7 @@ fn create_test_engine() -> ChartLayoutEngine {
 
 #[test]
 fn test_parse_spacing_chart() {
-    let chart = Chart::parse(SPACING_TEST_CHART).expect("Failed to parse chart");
+    let chart = keyflow::parse(SPACING_TEST_CHART).expect("Failed to parse chart");
 
     eprintln!("\n=== Parsing Results ===");
     eprintln!("Sections: {}", chart.sections.len());
@@ -102,7 +102,7 @@ fn test_parse_spacing_chart() {
 
 #[test]
 fn test_layout_segment_ticks() {
-    let chart = Chart::parse(SPACING_TEST_CHART).expect("Failed to parse chart");
+    let chart = keyflow::parse(SPACING_TEST_CHART).expect("Failed to parse chart");
     let engine = create_test_engine();
 
     let result = engine.layout_chart(
@@ -274,7 +274,7 @@ fn test_segment_stretch_values() {
 #[test]
 fn test_snippet_mode_layout() {
     // This test mimics what the web app does - snippet mode layout
-    let chart = Chart::parse(SPACING_TEST_CHART).expect("Failed to parse chart");
+    let chart = keyflow::parse(SPACING_TEST_CHART).expect("Failed to parse chart");
     let engine = create_test_engine();
 
     // Simulate web app viewport: 800 CSS pixels / DPI_SCALE (96/72 = 1.333)

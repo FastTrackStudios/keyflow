@@ -26,7 +26,7 @@ impl Chord {
     /// - Additions (add9, 6, 6/9)
     /// - Omissions (no3, no5)
     /// - Bass note for slash chords (/G)
-    pub(crate) fn normalize(&mut self) {
+    pub fn normalize(&mut self) {
         let mut desc = String::new();
 
         let is_sixth_chord = self.additions.contains(&ChordDegree::Sixth) && self.family.is_none();

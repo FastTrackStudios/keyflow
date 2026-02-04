@@ -13,6 +13,15 @@ pub trait ChartService {
     async fn parse(&self, text: String) -> Result<crate::Chart, crate::ParseError>;
 }
 
+/// Service for parsing chart sources into a Chart.
+///
+/// This is the generic interface for text and MIDI sources.
+#[service]
+pub trait ChartParseService {
+    async fn parse_text(&self, text: String) -> Result<crate::Chart, String>;
+    async fn parse_midi(&self, bytes: Vec<u8>) -> Result<crate::Chart, String>;
+}
+
 /// Service for parsing operations
 #[service]
 pub trait ParserService {

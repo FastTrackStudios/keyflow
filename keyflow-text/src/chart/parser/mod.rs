@@ -21,11 +21,11 @@ pub use helpers::{LineOffsetMap, PushPullModifier, RepeatCount};
 
 // region:    --- Parser Entry Point
 
-use crate::chart::Chart;
+use super::ChartParser;
 use crate::sections::MeasureExpression;
 use crate::time::{MusicalPositionExt, TimeSignatureExt};
 
-impl Chart {
+impl<'a> ChartParser<'a> {
     /// Strip comments from a line (everything after ;)
     fn strip_comment(line: &str) -> &str {
         if let Some(pos) = line.find(';') {
@@ -60,12 +60,11 @@ impl Chart {
     }
 
     /// Parse a chart from input string
-    pub fn parse(input: &str) -> Result<Self, String> {
+    pub fn parse(&mut self, input: &str) -> Result<(), String> {
         use crate::time::TimeSignature;
         use crate::key::Key;
         use crate::primitives::MusicalNote;
 
-        let mut chart = Self::new();
         let lines: Vec<&str> = input
             .lines()
             .map(|l| Self::strip_comment(l.trim()))
@@ -76,30 +75,30 @@ impl Chart {
         }
 
         // Phase 1: Parse metadata at the beginning
-        let mut line_idx = chart.parse_metadata(&lines, 0)?;
+        let mut line_idx = self.parse_metadata(&lines, 0)?;
 
         // Phase 1.5: Apply defaults for unspecified metadata
         // Default time signature: 4/4 (common time)
-        if chart.time_signature.is_none() {
-            chart.time_signature = Some(TimeSignature::common_time());
-            chart.initial_time_signature = Some(TimeSignature::common_time());
+        if self.time_signature.is_none() {
+            self.time_signature = Some(TimeSignature::common_time());
+            self.initial_time_signature = Some(TimeSignature::common_time());
         }
         // Default key: C major
-        if chart.current_key.is_none() {
+        if self.current_key.is_none() {
             let c_major = Key::major(MusicalNote::c());
-            chart.current_key = Some(c_major.clone());
-            chart.initial_key = Some(c_major);
+            self.current_key = Some(c_major.clone());
+            self.initial_key = Some(c_major);
         }
 
         // Phase 2: Parse sections and content
-        line_idx = chart.parse_sections(&lines, line_idx)?;
+        line_idx = self.parse_sections(&lines, line_idx)?;
 
         // Phase 3: Post-processing
-        chart.post_process();
+        self.post_process();
 
         let _ = line_idx; // Suppress unused warning
 
-        Ok(chart)
+        Ok(())
     }
 }
 
@@ -110,6 +109,7 @@ impl Chart {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::chart::parse_chart;
     use crate::chord::ChordRhythm;
     use crate::key::Key;
     use crate::primitives::{MusicalNote, Note, RootNotation};
@@ -127,7 +127,7 @@ vs
 cmaj7 Dm7 g7 Cmaj7
 "#;
 
-        let chart = Chart::parse(input).expect("Failed to parse chart");
+        let chart = parse_chart(input).expect("Failed to parse chart");
 
         // Verify metadata
         assert_eq!(chart.metadata.title, Some("My Song".to_string()));
@@ -165,7 +165,7 @@ vs
 cmaj7 dm7 #G gmaj7 am7
 "#;
 
-        let chart = Chart::parse(input).expect("Failed to parse chart");
+        let chart = parse_chart(input).expect("Failed to parse chart");
 
         // Verify initial key
         let c_major = Key::major(MusicalNote::c());
@@ -202,7 +202,7 @@ br
 #D dmaj7 Em7
 "#;
 
-        let chart = Chart::parse(input).expect("Failed to parse chart");
+        let chart = parse_chart(input).expect("Failed to parse chart");
 
         // Should have 3 sections
         assert_eq!(chart.sections.len(), 3);
@@ -235,7 +235,7 @@ ch
 c d g
 "#;
 
-        let chart = Chart::parse(input).expect("Failed to parse chart");
+        let chart = parse_chart(input).expect("Failed to parse chart");
 
         // Verify verse has full chord symbols
         let verse_measures = &chart.sections[0].measures();
@@ -264,7 +264,7 @@ vs
 gmaj7
 "#;
 
-        let chart = Chart::parse(input).expect("Failed to parse chart");
+        let chart = parse_chart(input).expect("Failed to parse chart");
 
         // Verify time signature
         assert_eq!(chart.time_signature.unwrap().numerator, 6);
@@ -295,7 +295,7 @@ ch
 am7
 "#;
 
-        let chart = Chart::parse(input).expect("Failed to parse chart");
+        let chart = parse_chart(input).expect("Failed to parse chart");
 
         // Should have 4 sections
         assert_eq!(chart.sections.len(), 4);
@@ -320,7 +320,7 @@ cmaj7 dm7 em7 fmaj7
 ch 4
 "#;
 
-        let chart = Chart::parse(input).expect("Failed to parse chart");
+        let chart = parse_chart(input).expect("Failed to parse chart");
 
         // Should have 2 sections
         assert_eq!(chart.sections.len(), 2);
@@ -342,7 +342,7 @@ Inline Chords Test
 
 vs 4, cmaj7 dm7 g7 cmaj7
 "#;
-        let chart = Chart::parse(input).expect("Failed to parse chart");
+        let chart = parse_chart(input).expect("Failed to parse chart");
 
         assert_eq!(chart.sections.len(), 1);
         let section = &chart.sections[0];
@@ -362,7 +362,7 @@ Sectionless Test
 
 Cm | Fm | Gm | Cm
 "#;
-        let chart = Chart::parse(input).expect("Failed to parse chart");
+        let chart = parse_chart(input).expect("Failed to parse chart");
 
         assert_eq!(chart.sections.len(), 1);
         let section = &chart.sections[0];
@@ -383,7 +383,7 @@ vs
 cmaj7_2 dm7_2 | em7_2 fmaj7_2
 "#;
 
-        let chart = Chart::parse(input).expect("Failed to parse chart");
+        let chart = parse_chart(input).expect("Failed to parse chart");
 
         // Should have 2 measures (separated by |)
         // Each chord is 2 beats (half note), so 2 chords per measure
@@ -413,7 +413,7 @@ vs
 | G C |
 "#;
 
-        let chart = Chart::parse(input).expect("Failed to parse chart");
+        let chart = parse_chart(input).expect("Failed to parse chart");
 
         // Should have 1 measure with 2 chords, each 2 beats (half notes)
         assert_eq!(chart.sections.len(), 1);
@@ -438,7 +438,7 @@ VS 16
 cmaj7 dm7 x^
 "#;
 
-        let chart = Chart::parse(input).expect("Failed to parse chart");
+        let chart = parse_chart(input).expect("Failed to parse chart");
 
         // Should have 16 measures total (2-bar phrase repeated 8 times)
         assert_eq!(chart.sections.len(), 1);
@@ -502,7 +502,7 @@ VS
 F/C . | Cm .
 "#;
 
-        let chart = Chart::parse(input).expect("Failed to parse chart");
+        let chart = parse_chart(input).expect("Failed to parse chart");
 
         let section = &chart.sections[0];
         let measures = section.measures();
@@ -557,7 +557,7 @@ VS
 F/C .
 "#;
 
-        let chart = Chart::parse(input).expect("Failed to parse chart");
+        let chart = parse_chart(input).expect("Failed to parse chart");
 
         let section = &chart.sections[0];
         let measures = section.measures();
@@ -609,7 +609,7 @@ VS
 'F/C .
 "#;
 
-        let chart = Chart::parse(input).expect("Failed to parse chart");
+        let chart = parse_chart(input).expect("Failed to parse chart");
 
         let section = &chart.sections[0];
         let measures = section.measures();
@@ -684,7 +684,7 @@ CH
 Cm/Eb / Eb ///
 "#;
 
-        let chart = Chart::parse(input).expect("Failed to parse chart");
+        let chart = parse_chart(input).expect("Failed to parse chart");
 
         let section = &chart.sections[0];
         let measures = section.measures();
@@ -743,7 +743,7 @@ CH
 Abmaj9 //// | // Cm
 "#;
 
-        let chart = Chart::parse(input).expect("Failed to parse chart");
+        let chart = parse_chart(input).expect("Failed to parse chart");
 
         let section = &chart.sections[0];
         let measures = section.measures();
@@ -795,7 +795,7 @@ VS
 C G Am F
 "#;
 
-        let chart = Chart::parse(input).expect("Should parse successfully");
+        let chart = parse_chart(input).expect("Should parse successfully");
 
         // Default time signature should be 4/4
         assert_eq!(
@@ -842,7 +842,7 @@ VS
 G D Em C
 "#;
 
-        let chart = Chart::parse(input).expect("Should parse successfully");
+        let chart = parse_chart(input).expect("Should parse successfully");
 
         // Time signature should still be 4/4 (default)
         assert_eq!(chart.time_signature.unwrap().numerator, 4);
@@ -863,7 +863,7 @@ VS
 G D Em
 "#;
 
-        let chart = Chart::parse(input).expect("Should parse successfully");
+        let chart = parse_chart(input).expect("Should parse successfully");
 
         // Time signature should be 6/8 (specified)
         assert_eq!(chart.time_signature.unwrap().numerator, 6);

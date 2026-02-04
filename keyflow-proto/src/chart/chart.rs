@@ -52,11 +52,11 @@ pub struct Chart {
     /// All tempo changes throughout the song
     pub tempo_changes: Vec<TempoChange>,
 
-    /// Chord memory manager (internal)
-    pub(crate) chord_memory: ChordMemory,
+    /// Chord memory manager (used by text parsing and DAW integration)
+    pub chord_memory: ChordMemory,
 
-    /// Template manager (internal)
-    pub(crate) templates: TemplateManager,
+    /// Template manager (used by text parsing)
+    pub templates: TemplateManager,
 
     /// Chart configuration settings
     pub settings: ChartSettings,
@@ -64,9 +64,9 @@ pub struct Chart {
     /// Melody variables (named melody patterns)
     pub melody_variables: MelodyVariables,
 
-    /// Section measure memory (internal, for expression evaluation)
+    /// Section measure memory (for expression evaluation)
     /// Tracks the last used measure count for each section type
-    pub(crate) section_measure_memory: HashMap<SectionType, usize>,
+    pub section_measure_memory: HashMap<SectionType, usize>,
 
     /// Default push/pull amount for the entire chart.
     /// If set, pushed chords matching this amount are displayed as just `'`
@@ -1220,14 +1220,14 @@ F C G Am
 "#;
 
         // Parse the chart
-        let chart1 = Chart::parse(input).expect("Should parse successfully");
+        let chart1 = keyflow_text::chart::parse_chart(input).expect("Should parse successfully");
 
         // Serialize it
         let output = chart1.to_syntax();
         println!("Serialized output:\n{}", output);
 
         // Parse it again
-        let chart2 = Chart::parse(&output).expect("Should parse serialized output");
+        let chart2 = keyflow_text::chart::parse_chart(&output).expect("Should parse serialized output");
 
         // Verify they have the same structure
         assert_eq!(chart1.metadata.title, chart2.metadata.title);

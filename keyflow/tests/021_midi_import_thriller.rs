@@ -2142,7 +2142,7 @@ fn test_generated_chart_parseable() {
     println!("{}", chart_text);
 
     // Attempt to parse the generated chart
-    match Chart::parse(&chart_text) {
+    match keyflow::parse(&chart_text) {
         Ok(chart) => {
             println!("\nParsed successfully!");
             println!("Title: {:?}", chart.metadata.title);

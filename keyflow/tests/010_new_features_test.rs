@@ -18,7 +18,7 @@ fn test_comment_syntax() {
 intro, 1/ 4/ 5/ 1/  ; inline comment
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     assert_eq!(chart.metadata.title, Some("Test Song".to_string()));
     assert_eq!(chart.sections.len(), 1);
@@ -34,7 +34,7 @@ intro, 1/ 4/ 5/ 1/
 intro, 1/ 4/ 5/ 1/
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     assert_eq!(chart.sections.len(), 2);
 
@@ -50,7 +50,7 @@ fn test_accent_shorthand() {
 intro, 1/ 4->/ 5/ 1/
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     assert_eq!(chart.sections.len(), 1);
     let measure = &chart.sections[0].measures()[0];
@@ -80,7 +80,7 @@ fn test_fermata_command() {
 intro, 1/ 4/ 5/ 1/ /fermata
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     assert_eq!(chart.sections.len(), 1);
     let measure = &chart.sections[0].measures()[0];
@@ -110,7 +110,7 @@ fn test_accent_slash_command() {
 intro, 1/ 4/ /accent 5/ 1/
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     assert_eq!(chart.sections.len(), 1);
     let measure = &chart.sections[0].measures()[0];
@@ -142,7 +142,7 @@ Test Song - Artist
 intro, 1/ 4/ 5/ 1/
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     assert!(chart.settings.smart_repeats());
 }
@@ -157,7 +157,7 @@ Test Song - Artist
 intro, 1/ 4/ 5/ 1/
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     assert!(!chart.settings.smart_repeats());
 }
@@ -176,7 +176,7 @@ intro, 1->/ 4/ 5/ 1/ /fermata
 intro, 1/ 4/ 5->/ 1/
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     // Check settings
     assert!(chart.settings.smart_repeats());

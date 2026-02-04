@@ -14,7 +14,7 @@ VS 8
 Cmaj7/// Dm7/// ->140bpm Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // Initial tempo should be 120
@@ -42,7 +42,7 @@ VS 4
 Cmaj7/// ->150bpm Dm7///
 "#;
 
-    let chart1 = Chart::parse(input1).unwrap();
+    let chart1 = keyflow::parse(input1).unwrap();
     assert_eq!(chart1.tempo_changes.len(), 1);
     assert_eq!(chart1.tempo_changes[0].to_tempo.bpm as u32, 150);
 
@@ -55,7 +55,7 @@ VS 4
 Cmaj7/// ->160BPM Dm7///
 "#;
 
-    let chart2 = Chart::parse(input2).unwrap();
+    let chart2 = keyflow::parse(input2).unwrap();
     assert_eq!(chart2.tempo_changes.len(), 1);
     assert_eq!(chart2.tempo_changes[0].to_tempo.bpm as u32, 160);
 
@@ -68,7 +68,7 @@ VS 4
 Cmaj7/// ->170 Dm7///
 "#;
 
-    let chart3 = Chart::parse(input3).unwrap();
+    let chart3 = keyflow::parse(input3).unwrap();
     assert_eq!(chart3.tempo_changes.len(), 1);
     assert_eq!(chart3.tempo_changes[0].to_tempo.bpm as u32, 170);
 }
@@ -83,7 +83,7 @@ VS 8
 Cmaj7/// ->120bpm Dm7/// Em7/// ->140bpm Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // Should have two tempo changes
@@ -109,7 +109,7 @@ VS 4
 Cmaj7/// Dm7/// ->140bpm Em7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // Should have one tempo change
@@ -130,7 +130,7 @@ CH 8
 ->120bpm Gmaj7/// Am7/// Bm7/// Cmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     assert_eq!(chart.sections.len(), 2);
@@ -167,7 +167,7 @@ VS 4
 Cmaj7/// ->140bpm Dm7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     // Should have one tempo change
     assert_eq!(chart.tempo_changes.len(), 1);

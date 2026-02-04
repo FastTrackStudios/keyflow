@@ -3,14 +3,14 @@
 //! Handles parsing of chart metadata including title, artist, tempo,
 //! time signature, key, and settings.
 
-use crate::chart::Chart;
+use super::ChartParser;
 use crate::key::Key;
 use crate::metadata::SongMetadata;
 use crate::time::{Tempo, TimeSignature};
 
 // region:    --- Metadata Parsing
 
-impl Chart {
+impl<'a> ChartParser<'a> {
     /// Phase 1: Parse metadata
     pub(super) fn parse_metadata(
         &mut self,

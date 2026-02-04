@@ -9,9 +9,6 @@ pub mod index;
 pub mod measure;
 pub mod memory;
 pub mod melody;
-#[macro_use]
-pub mod r#macro;
-pub mod parser;
 pub mod position;
 pub mod rhythm;
 pub mod semantic_role;

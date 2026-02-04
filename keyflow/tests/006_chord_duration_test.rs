@@ -23,7 +23,7 @@ ch
 I/// IV/ vi////
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     // Display the chart to show duration notation with all root formats
     println!("\n{}", chart);
@@ -210,7 +210,7 @@ ch
 I_2 IV_2 vi_2 V_2
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     assert_eq!(chart.sections.len(), 3);
 
@@ -310,7 +310,7 @@ ch
 I//// IV_4 vi/// V_2 I_2 IV////
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     assert_eq!(chart.sections.len(), 3);
 
@@ -413,7 +413,7 @@ intro
 Gmaj7//// Em7_2 D7_2 Cmaj7////
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     assert_eq!(chart.sections.len(), 1);
 
@@ -472,7 +472,7 @@ ch
 G_2 C_2 D////
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     assert_eq!(chart.sections.len(), 3);
 
@@ -543,7 +543,7 @@ ch
 I_2. IV_2. vi_2. V_2.
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     assert_eq!(chart.sections.len(), 4);
 

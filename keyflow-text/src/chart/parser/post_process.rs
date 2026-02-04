@@ -2,7 +2,7 @@
 //!
 //! Handles section numbering, push/pull adjustments, and position calculation.
 
-use crate::chart::Chart;
+use super::ChartParser;
 use crate::chart::types::{ChordInstance, RhythmElement};
 use crate::chord::{ChordRhythm, PushPullAmount};
 use crate::primitives::RootNotation;
@@ -14,7 +14,7 @@ use crate::time::{
 
 // region:    --- Post Processing
 
-impl Chart {
+impl<'a> ChartParser<'a> {
     /// Phase 3: Post-processing
     pub(super) fn post_process(&mut self) {
         // Auto-number sections using batch method for retroactive split letter assignment

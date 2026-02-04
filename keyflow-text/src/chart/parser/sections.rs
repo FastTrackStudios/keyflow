@@ -3,7 +3,7 @@
 //! Handles parsing of chart sections including verse, chorus, bridge, etc.
 //! Also handles track grouping and section content parsing.
 
-use crate::chart::Chart;
+use super::ChartParser;
 use crate::chart::melody::Melody;
 use crate::chart::track::{Track, TrackType};
 use crate::chart::types::{ChartSection, Measure, RhythmElement};
@@ -101,7 +101,7 @@ fn looks_like_chord_content(line: &str) -> bool {
     false
 }
 
-impl Chart {
+impl<'a> ChartParser<'a> {
     /// Phase 2: Parse sections and content
     pub(super) fn parse_sections(
         &mut self,
@@ -213,10 +213,11 @@ impl Chart {
                                 | SectionType::Pre(_)
                                 | SectionType::Post(_)
                         ) {
+                            let current_key = self.current_key.clone();
                             self.templates.store(
                                 &section_type,
                                 &parsed_measures,
-                                self.current_key.as_ref(),
+                                current_key.as_ref(),
                             );
                         }
 
@@ -326,14 +327,14 @@ impl Chart {
 
     /// Group content lines by track type
     /// Returns a Vec of (TrackType, Option<name>, Vec<lines>)
-    pub(super) fn group_lines_by_track<'a>(
+    pub(super) fn group_lines_by_track<'b>(
         &self,
-        lines: &[&'a str],
-    ) -> Vec<(TrackType, Option<String>, Vec<&'a str>)> {
-        let mut groups: Vec<(TrackType, Option<String>, Vec<&'a str>)> = Vec::new();
+        lines: &[&'b str],
+    ) -> Vec<(TrackType, Option<String>, Vec<&'b str>)> {
+        let mut groups: Vec<(TrackType, Option<String>, Vec<&'b str>)> = Vec::new();
         let mut current_type = TrackType::Chords;
         let mut current_name: Option<String> = None;
-        let mut current_lines: Vec<&'a str> = Vec::new();
+        let mut current_lines: Vec<&'b str> = Vec::new();
 
         for line in lines {
             if let Some((track_type, name, remaining)) = Self::parse_track_marker(line) {
@@ -558,10 +559,11 @@ impl Chart {
                                     | SectionType::Pre(_)
                                     | SectionType::Post(_)
                             ) {
+                                let current_key = self.current_key.clone();
                                 self.templates.store(
                                     &section_type,
                                     &parsed_measures,
-                                    self.current_key.as_ref(),
+                                    current_key.as_ref(),
                                 );
                             }
                         }

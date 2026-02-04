@@ -20,7 +20,7 @@ VS 8
 Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // Should have one section with one track
@@ -46,7 +46,7 @@ VS 4
 [chords] Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     assert_eq!(chart.sections.len(), 1);
@@ -68,7 +68,7 @@ Cmaj7/// Dm7/// Em7/// Fmaj7///
 [melody] m{ C_8 D_8 E_4 F_4 G_4 A_4 B_4 C'_4 }
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // Should have one section with two tracks
@@ -100,7 +100,7 @@ CH 8
 [melody lead] m{ G_4 A_4 B_4 C'_4 D'_4 E'_4 F#'_4 G'_4 }
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // Second track should have name "lead"
@@ -121,7 +121,7 @@ CH 8
 [melody harmony] m{ D_4 E_4 F#_4 G_4 }
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("{}", chart);
 
     // Should have 3 tracks
@@ -156,7 +156,7 @@ VS 4
 Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
 
     // The measures() method should work for backward compatibility
     let section = &chart.sections[0];
@@ -174,7 +174,7 @@ VS 4
 Cmaj7/// Dm7/// Em7/// Fmaj7///
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     let syntax = chart.to_syntax();
     println!("Serialized:\n{}", syntax);
 
@@ -194,7 +194,7 @@ Cmaj7/// Dm7/// Em7/// Fmaj7///
 [melody] m{ C_4 D_4 E_4 F_4 }
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     let syntax = chart.to_syntax();
     println!("Serialized:\n{}", syntax);
 
@@ -215,14 +215,14 @@ Cmaj7/// Dm7/// Em7/// Fmaj7///
 [melody] m{ C_4 D_4 E_4 F_4 }
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     println!("Original chart:");
     println!("{}", chart);
 
     let syntax = chart.to_syntax();
     println!("Serialized:\n{}", syntax);
 
-    let reparsed = Chart::parse(&syntax).unwrap();
+    let reparsed = keyflow::parse(&syntax).unwrap();
     println!("Re-parsed chart:");
     println!("{}", reparsed);
 
@@ -256,7 +256,7 @@ Cmaj7/// Dm7///
 [melody] m{ C_4 D_4 }
 "#;
 
-    let chart = Chart::parse(input).unwrap();
+    let chart = keyflow::parse(input).unwrap();
     let section = &chart.sections[0];
 
     // chord_track() should return the chord track

@@ -4,7 +4,7 @@
 //! functionality including duration calculation, slash chords, and push/pull notation.
 
 use super::helpers::{PushPullModifier, RepeatCount};
-use crate::chart::Chart;
+use super::ChartParser;
 use crate::chart::cues::TextCue;
 use crate::chart::dynamics::DynamicMarking;
 use crate::chart::melody::Melody;
@@ -23,7 +23,7 @@ use crate::time::{
 
 // region:    --- Token Helpers
 
-impl Chart {
+impl<'a> ChartParser<'a> {
     /// Normalize chord case - capitalize first letter for note names
     /// This allows "cmaj7", "dm7", "g7", "bbmaj7" to be parsed as "Cmaj7", "Dm7", "G7", "Bbmaj7"
     pub(super) fn normalize_chord_case(token: &str) -> String {
@@ -636,7 +636,7 @@ impl Chart {
 
 // region:    --- Chord Line Parsing
 
-impl Chart {
+impl<'a> ChartParser<'a> {
     /// Parse section content lines into measures
     pub(super) fn parse_section_measures(
         &mut self,
@@ -1768,7 +1768,7 @@ impl Chart {
 
 // region:    --- Chord Token Parsing
 
-impl Chart {
+impl<'a> ChartParser<'a> {
     /// Parse a single chord token
     ///
     /// # Arguments
@@ -1860,6 +1860,7 @@ impl Chart {
 
         // Use ChordMemory to process this chord and get the appropriate full symbol
         // Pass chord_part (which includes quality like "2maj") so it can detect explicit quality
+        let current_key = self.current_key.clone();
         let mut full_symbol = if is_slash_chord_with_just_root {
             // Slash chord with just root - use the normalized symbol, don't recall from memory
             chord.normalized.clone()
@@ -1870,7 +1871,7 @@ impl Chart {
                 &chord.normalized,
                 section_type,
                 is_override,
-                self.current_key.as_ref(),
+                current_key.as_ref(),
             )
         };
 
@@ -1950,6 +1951,7 @@ impl Chart {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::chart::parse_chart;
 
     #[test]
     fn test_duration_push_parsing_ambiguous_cases() {
@@ -2041,7 +2043,7 @@ Accent Test
 VS
 >C
 "#;
-        let chart = Chart::parse(input).expect("Should parse");
+        let chart = parse_chart(input).expect("Should parse");
         let measures: Vec<_> = chart.sections.iter()
             .filter(|s| !s.section.section_type.is_compact() && s.section.section_type != SectionType::End)
             .flat_map(|s| s.measures())
@@ -2093,7 +2095,7 @@ BR
 VS
 'F/C . Cm . 'F/C . Cm . 'F/C . Cm . 'F/C . Cm Cm9
 "#;
-        let chart = Chart::parse(input).expect("Should parse");
+        let chart = parse_chart(input).expect("Should parse");
 
         // Find VS section (first one after COUNT and IN)
         let verse_sections: Vec<_> = chart.sections.iter()
@@ -2170,7 +2172,7 @@ Accent Memory Test
 VS
 >Cmaj7 | C D E F
 "#;
-        let chart = Chart::parse(input).expect("Should parse");
+        let chart = parse_chart(input).expect("Should parse");
 
         // Get all verse sections
         let verse_sections: Vec<_> = chart.sections.iter()
@@ -2233,7 +2235,7 @@ VS
 
 VS
 "#;
-        let chart = Chart::parse(input).expect("Should parse");
+        let chart = parse_chart(input).expect("Should parse");
         let verse_sections: Vec<_> = chart.sections.iter()
             .filter(|s| s.section.section_type == SectionType::Verse)
             .collect();
@@ -2274,7 +2276,7 @@ Test
 BR
 '_4>F7 | >'_4G7 |
 "#;
-        let chart = Chart::parse(input).expect("Should parse");
+        let chart = parse_chart(input).expect("Should parse");
 
         // Find BR section
         let br_sections: Vec<_> = chart.sections.iter()
