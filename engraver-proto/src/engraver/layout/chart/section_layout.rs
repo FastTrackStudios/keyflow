@@ -6,7 +6,7 @@
 use crate::sections::SectionType;
 use std::collections::HashMap;
 
-use crate::engraver::layout::tlayout::{rehearsal_themes, RehearsalMarkStyle};
+use crate::engraver::layout::tlayout::{RehearsalMarkStyle, rehearsal_themes};
 
 /// Get theme for section type.
 ///
@@ -33,6 +33,7 @@ pub fn get_section_theme(section_type: &SectionType) -> RehearsalMarkStyle {
         SectionType::Instrumental => rehearsal_themes::instrumental(),
         SectionType::Solo => rehearsal_themes::solo(),
         SectionType::Interlude => rehearsal_themes::interlude(),
+        SectionType::Vamp => rehearsal_themes::interlude(), // Vamp uses interlude styling (similar transitional role)
 
         // Pre/Post sections - lighter versions of their parent section
         SectionType::Pre(inner) | SectionType::Post(inner) => {

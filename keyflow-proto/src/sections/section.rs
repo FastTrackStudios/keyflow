@@ -261,6 +261,34 @@ impl Section {
         }
     }
 
+    /// Get display name with comment if present (e.g., "Interlude C (Woodwinds)")
+    pub fn display_name_with_comment(&self) -> String {
+        match &self.comment {
+            Some(comment) => format!("{} ({})", self.display_name(), comment),
+            None => self.display_name(),
+        }
+    }
+
+    /// Get a short display name for space-constrained UI contexts
+    ///
+    /// Converts section names to abbreviated forms:
+    /// - "Interlude A" -> "INT A"
+    /// - "Verse 1" -> "VS 1"
+    /// - "Chorus 2" -> "CH 2"
+    /// - "Pre-Chorus" -> "PRE-CH"
+    /// - "Bridge 1" -> "BR 1"
+    /// - "Outro A" -> "OUT A"
+    pub fn short_display(&self) -> String {
+        let abbrev = self.section_type.abbreviation();
+
+        match (self.number, self.split_letter) {
+            (Some(n), Some(l)) => format!("{} {}{}", abbrev, n, l),
+            (Some(n), None) => format!("{} {}", abbrev, n),
+            (None, Some(l)) => format!("{} {}", abbrev, l),
+            (None, None) => abbrev,
+        }
+    }
+
     /// Calculate the duration of the section in seconds (for DAW integration)
     pub fn duration_seconds(&self) -> Option<f64> {
         if let (Some(start), Some(end)) = (&self.start_position, &self.end_position) {
@@ -418,11 +446,7 @@ impl Section {
                     / beats_per_measure;
 
             let length = end_measures - start_measures;
-            if length > 0.0 {
-                Some(length)
-            } else {
-                None
-            }
+            if length > 0.0 { Some(length) } else { None }
         } else {
             None
         }

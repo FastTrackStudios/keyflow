@@ -21,6 +21,7 @@ pub enum SectionType {
     Hits,                   // Hits section (rhythmic accents)
     Interlude,              // Interlude section
     Breakdown,              // Breakdown section
+    Vamp,                   // Vamp section (repeated section for improvisation/transitions)
     Pre(Box<SectionType>),  // Pre-Chorus, Pre-Verse, etc.
     Post(Box<SectionType>), // Post-Chorus, Post-Verse, etc.
     Custom(String),         // Custom section types
@@ -114,6 +115,7 @@ impl SectionType {
             SectionType::Hits => "hits".to_string(),
             SectionType::Interlude => "interlude".to_string(),
             SectionType::Breakdown => "breakdown".to_string(),
+            SectionType::Vamp => "vamp".to_string(),
             SectionType::Pre(inner) => format!("pre_{}", inner.key()),
             SectionType::Post(inner) => format!("post_{}", inner.key()),
             SectionType::Custom(name) => {
@@ -146,6 +148,7 @@ impl SectionType {
             SectionType::Hits => "Hits".to_string(),
             SectionType::Interlude => "Interlude".to_string(),
             SectionType::Breakdown => "Breakdown".to_string(),
+            SectionType::Vamp => "Vamp".to_string(),
             SectionType::Pre(inner) => format!("Pre-{}", inner.full_name()),
             SectionType::Post(inner) => format!("Post-{}", inner.full_name()),
             SectionType::Custom(name) => name.clone(),
@@ -167,6 +170,7 @@ impl SectionType {
             SectionType::Hits => "HITS".to_string(),
             SectionType::Interlude => "INT".to_string(),
             SectionType::Breakdown => "BD".to_string(),
+            SectionType::Vamp => "VMP".to_string(),
             SectionType::Pre(inner) => format!("PRE-{}", inner.abbreviation()),
             SectionType::Post(inner) => format!("POST-{}", inner.abbreviation()),
             SectionType::Custom(name) => name.clone(), // Custom sections use their full name
@@ -184,7 +188,8 @@ impl SectionType {
             SectionType::Solo
             | SectionType::Hits
             | SectionType::Interlude
-            | SectionType::Breakdown => false,
+            | SectionType::Breakdown
+            | SectionType::Vamp => false,
             SectionType::Pre(_) | SectionType::Post(_) => false,
             SectionType::Custom(_) => false, // Custom sections don't get numbered
             _ => true,
@@ -225,6 +230,7 @@ impl SectionType {
             "hits" | "hit" => return Ok(SectionType::Hits),
             "interlude" | "inter" | "int" => return Ok(SectionType::Interlude),
             "breakdown" | "bd" => return Ok(SectionType::Breakdown),
+            "vamp" | "vmp" => return Ok(SectionType::Vamp),
             _ => {}
         }
 
@@ -300,6 +306,11 @@ impl SectionType {
             return Ok(SectionType::Breakdown);
         }
 
+        // Vamp variations
+        if Self::fuzzy_match(s_lower, "vamp", &["vmp", "vampp"]) {
+            return Ok(SectionType::Vamp);
+        }
+
         // Try to parse Pre/Post
         if let Some(rest) = s_lower.strip_prefix("pre-") {
             if let Ok(inner) = Self::parse(rest) {
@@ -313,7 +324,7 @@ impl SectionType {
         }
 
         Err(format!(
-            "Unknown section type: '{}' - supported types: verse, chorus, bridge, intro, outro, instrumental, solo, count, hits, interlude, breakdown, pre-*, post-*",
+            "Unknown section type: '{}' - supported types: verse, chorus, bridge, intro, outro, instrumental, solo, count, hits, interlude, breakdown, vamp, pre-*, post-*",
             s
         ))
     }
@@ -485,6 +496,7 @@ impl SectionType {
             "hits" | "hit" => Some(SectionType::Hits),
             "interlude" | "inter" | "int" => Some(SectionType::Interlude),
             "breakdown" | "bd" => Some(SectionType::Breakdown),
+            "vamp" | "vmp" => Some(SectionType::Vamp),
             _ => None,
         };
 
@@ -548,7 +560,11 @@ fn parse_solo_section(parts: &[&str], existing_comment: Option<String>) -> Optio
         })
     });
 
-    Some(ParsedSection::full(SectionType::Solo, measure_expr, comment))
+    Some(ParsedSection::full(
+        SectionType::Solo,
+        measure_expr,
+        comment,
+    ))
 }
 
 /// Check if a token is a valid section sub-label.
@@ -809,14 +825,16 @@ mod tests {
         assert_eq!(SectionType::parse_with_measure_count("vs abc"), None);
 
         // Four tokens should still be rejected
-        assert_eq!(SectionType::parse_with_measure_count("ch 3a 10 extra"), None);
+        assert_eq!(
+            SectionType::parse_with_measure_count("ch 3a 10 extra"),
+            None
+        );
     }
 
     #[test]
     fn test_parse_sub_labels_with_quoted_comment() {
         // Sub-label + quoted comment: 'Interlude B 8 "HORNS"'
-        let parsed =
-            SectionType::parse_with_measure_count(r#"Interlude B 8 "HORNS""#).unwrap();
+        let parsed = SectionType::parse_with_measure_count(r#"Interlude B 8 "HORNS""#).unwrap();
         assert_eq!(parsed.section_type, SectionType::Interlude);
         assert_eq!(parsed.measure_expr, Some(MeasureExpression::Absolute(8)));
         // Quoted comment takes precedence over sub-label

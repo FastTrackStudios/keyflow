@@ -5,13 +5,13 @@
 //! All chart types and parsing functionality is re-exported from `keyflow-proto`.
 
 // Re-export all types from keyflow-proto for convenience
-pub use keyflow_proto::*;
 #[cfg(feature = "engraver")]
 pub use engraver_proto as engraver;
-#[cfg(feature = "text")]
-pub use keyflow_text as text;
 #[cfg(feature = "midi")]
 pub use keyflow_midi as midi;
+pub use keyflow_proto::*;
+#[cfg(feature = "text")]
+pub use keyflow_text as text;
 
 #[derive(Debug, Clone)]
 pub enum KeyflowSourceError {
@@ -31,70 +31,79 @@ impl std::fmt::Display for KeyflowSourceError {
 impl std::error::Error for KeyflowSourceError {}
 
 pub trait IntoChart {
-    fn into_chart(self) -> Result<keyflow_proto::Chart, KeyflowSourceError>;
+    fn into_chart(self) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError>;
 }
 
 impl IntoChart for keyflow_proto::Chart {
-    fn into_chart(self) -> Result<keyflow_proto::Chart, KeyflowSourceError> {
+    fn into_chart(self) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError> {
         Ok(self)
     }
 }
 
 #[cfg(feature = "text")]
 impl<'a> IntoChart for &'a str {
-    fn into_chart(self) -> Result<keyflow_proto::Chart, KeyflowSourceError> {
+    fn into_chart(self) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError> {
         keyflow_text::chart::parse_chart(self).map_err(KeyflowSourceError::Text)
     }
 }
 
 #[cfg(feature = "text")]
 impl IntoChart for String {
-    fn into_chart(self) -> Result<keyflow_proto::Chart, KeyflowSourceError> {
+    fn into_chart(self) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError> {
         keyflow_text::chart::parse_chart(&self).map_err(KeyflowSourceError::Text)
+    }
+}
+
+#[cfg(feature = "text")]
+impl<'a> IntoChart for &'a String {
+    fn into_chart(self) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError> {
+        keyflow_text::chart::parse_chart(self.as_str()).map_err(KeyflowSourceError::Text)
     }
 }
 
 #[cfg(feature = "midi")]
 impl<'a> IntoChart for &'a [u8] {
-    fn into_chart(self) -> Result<keyflow_proto::Chart, KeyflowSourceError> {
+    fn into_chart(self) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError> {
         keyflow_midi::parse_midi_bytes(self).map_err(KeyflowSourceError::Midi)
     }
 }
 
 #[cfg(feature = "midi")]
 impl IntoChart for Vec<u8> {
-    fn into_chart(self) -> Result<keyflow_proto::Chart, KeyflowSourceError> {
+    fn into_chart(self) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError> {
         keyflow_midi::parse_midi_bytes(&self).map_err(KeyflowSourceError::Midi)
     }
 }
 
 #[cfg(feature = "midi")]
 impl<'a> IntoChart for &'a std::path::Path {
-    fn into_chart(self) -> Result<keyflow_proto::Chart, KeyflowSourceError> {
+    fn into_chart(self) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError> {
         keyflow_midi::parse_midi_path(self).map_err(KeyflowSourceError::Midi)
     }
 }
 
 #[cfg(feature = "midi")]
 impl IntoChart for std::path::PathBuf {
-    fn into_chart(self) -> Result<keyflow_proto::Chart, KeyflowSourceError> {
+    fn into_chart(self) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError> {
         keyflow_midi::parse_midi_path(self.as_path()).map_err(KeyflowSourceError::Midi)
     }
 }
 
 #[cfg(feature = "text")]
 pub trait KeyflowParseExt {
-    fn keyflow_parse(&self) -> Result<keyflow_proto::Chart, KeyflowSourceError>;
+    fn keyflow_parse(&self) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError>;
 }
 
 #[cfg(feature = "text")]
 impl KeyflowParseExt for str {
-    fn keyflow_parse(&self) -> Result<keyflow_proto::Chart, KeyflowSourceError> {
+    fn keyflow_parse(&self) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError> {
         keyflow_text::chart::parse_chart(self).map_err(KeyflowSourceError::Text)
     }
 }
 
-pub fn parse<T: IntoChart>(source: T) -> Result<keyflow_proto::Chart, KeyflowSourceError> {
+pub fn parse<T: IntoChart>(
+    source: T,
+) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError> {
     source.into_chart()
 }
 
