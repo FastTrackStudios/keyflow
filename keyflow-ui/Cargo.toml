@@ -1,0 +1,37 @@
+[package]
+name = "keyflow-ui"
+version = "0.1.0"
+edition = "2021"
+description = "Dioxus UI components for Keyflow chart editing"
+
+[dependencies]
+# Keyflow parsing and types
+keyflow = { workspace = true, features = ["text"] }
+keyflow-proto = { workspace = true, features = ["serde", "highlighting"] }
+
+# Engraver for chart layout and rendering
+engraver-proto = { workspace = true, features = ["engraver"] }
+
+# Dioxus UI framework - use dioxus-native when native feature is enabled
+dioxus = { version = "0.7.2", optional = true }
+dioxus-native = { workspace = true, optional = true }
+
+# Vello scene types (for building scenes to hand off to ChartGraphics)
+vello = "0.7"
+kurbo = { workspace = true }
+
+# Icons
+lucide-dioxus = { version = "2", features = ["all-icons"] }
+
+# Async runtime (for debounce timers on desktop)
+tokio = { version = "1.49", features = ["time"] }
+
+# Logging
+tracing = "0.1"
+
+[features]
+default = ["web"]
+# Web/desktop (WebView-based) rendering
+web = ["dioxus"]
+# Native GPU-accelerated rendering via Blitz
+native = ["dioxus-native"]
