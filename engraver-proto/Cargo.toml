@@ -42,8 +42,8 @@ facet.workspace = true
 helgoboss-midi = "0.4.0"
 
 wgpu = { version = "26", features = ["wgsl"], optional = true }
-vello = { version = "0.6", optional = true }
-kurbo = { version = "0.12", optional = true }
+vello = { version = "0.7", optional = true }
+kurbo = { version = "0.13", optional = true }
 parley = { version = "0.2", optional = true, default-features = false, features = ["std"] }
 skrifa = { version = "0.26", optional = true }
 smufl = { version = "0.2", optional = true }
