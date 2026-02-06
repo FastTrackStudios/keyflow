@@ -27,5 +27,5 @@ mod theme;
 
 pub use highlighter::Highlighter;
 pub use kind::{HighlightKind, HighlightSpan};
-pub use render::StyledSpan;
+pub use render::{Renderer, StyledSpan};
 pub use theme::{Color, Theme};
