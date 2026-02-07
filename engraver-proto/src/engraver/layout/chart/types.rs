@@ -110,6 +110,9 @@ pub struct BeatPosition {
     pub stem_up: bool,
     /// Number of flags (0 for quarter and longer, 1 for 8th, 2 for 16th, 3 for 32nd).
     pub flag_count: u8,
+    /// Time signature for the measure containing this beat: (numerator, denominator).
+    /// Used for computing musical position (M.B.TTT) from tick offsets.
+    pub time_signature: (u8, u8),
 }
 
 impl BeatPosition {

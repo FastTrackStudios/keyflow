@@ -22,28 +22,28 @@ pub mod section_layout;
 pub mod types;
 
 // Re-export new config types (ChartLayoutConfig is still defined locally for backward compatibility)
-pub use config::{BehavioralFlags, LayoutParams, RenderOptions, DEFAULT_MIN_CHORD_SYMBOL_GAP};
+pub use config::{BehavioralFlags, DEFAULT_MIN_CHORD_SYMBOL_GAP, LayoutParams, RenderOptions};
 // Note: config::ChartLayoutConfig and config::FlatChartLayoutConfig are available
 // but not re-exported to avoid conflict with the legacy struct below
 
 // Re-export main types for convenience
 pub use types::{
-    expand_melodies_across_measures, slash_glyph_for_ticks, BeatPosition, ChartLayoutResult,
-    LayoutMode, MeasureMelodyData, MelodyNoteSegment, PageLayoutMetrics,
+    BeatPosition, ChartLayoutResult, LayoutMode, MeasureMelodyData, MelodyNoteSegment,
+    PageLayoutMetrics, expand_melodies_across_measures, slash_glyph_for_ticks,
 };
 
 // Re-export rhythm types from chart module (canonical source)
 // These were previously in types.rs but now live in chart::rhythm
 pub use crate::chart::rhythm::{
+    BeatStructure, ResolvedRhythm, SectionRhythms, Spillback as PushSpillback,
     detect_push_spillbacks, detect_section_start_spillback, resolve_measure_rhythm,
-    resolve_section_rhythms, BeatStructure, ResolvedRhythm, SectionRhythms,
-    Spillback as PushSpillback,
+    resolve_section_rhythms,
 };
 
 // Re-export measurement pass types for multi-pass layout
 pub use measure_pass::{
-    compute_measure_weight, measure_chart, measure_measure, CachedHarmonyLayout, ChartMeasurements,
-    ChordLayoutData, HarmonyKey, MeasureMeasurements, MeasurementCache,
+    CachedHarmonyLayout, ChartMeasurements, ChordLayoutData, HarmonyKey, MeasureMeasurements,
+    MeasurementCache, compute_measure_weight, measure_chart, measure_measure,
 };
 
 // Re-export cursor types for renderer-agnostic playback highlighting
@@ -52,7 +52,7 @@ pub use cursor::{
 };
 
 // Re-export collision detection types
-pub use collision::{resolve_chord_positions, ChordCollisionContext};
+pub use collision::{ChordCollisionContext, resolve_chord_positions};
 
 use std::sync::Arc;
 
@@ -64,17 +64,17 @@ use crate::engraver::layout::segment::SegmentType;
 use crate::engraver::layout::segment_list::SegmentList;
 use crate::engraver::layout::text_metrics::TextFontMetrics;
 use crate::engraver::layout::tlayout::{
-    layout_clef, layout_harmony, layout_margin_label, layout_rest, layout_tie, layout_timesig,
-    parse_chord, rehearsal_themes, BarlineType, ClefParams, ClefType, HarmonyParams, HarmonyStyle,
-    MarginLabelParams, NoteHeadType, RestDuration, RestParams, SlurDirection, SlurEndpoint,
-    SlurTieConfig, TimeSigParams, TimeSigType,
+    BarlineType, ClefParams, ClefType, HarmonyParams, HarmonyStyle, MarginLabelParams,
+    NoteHeadType, RestDuration, RestParams, SlurDirection, SlurEndpoint, SlurTieConfig,
+    TimeSigParams, TimeSigType, layout_clef, layout_harmony, layout_margin_label, layout_rest,
+    layout_tie, layout_timesig, parse_chord, rehearsal_themes,
 };
 use crate::engraver::model::{DurationKind, NoteHead};
 use crate::engraver::notation::{
     Duration, MeasureBuilder, MeasureScene, RhythmEntry, TupletRatio, TupletSpec,
 };
 use crate::engraver::scene::id::{ElementType, SemanticId};
-use crate::engraver::scene::node::{metadata_keys, SceneNode};
+use crate::engraver::scene::node::{SceneNode, metadata_keys};
 use crate::engraver::scene::paint::{FontStyle, FontWeight, PaintCommand, TextAnchor};
 use crate::engraver::style::MStyle;
 use crate::sections::SectionType;
@@ -758,6 +758,7 @@ impl ChartLayoutEngine {
                                 has_stem: false,
                                 stem_up: true,
                                 flag_count: 0,
+                                time_signature,
                             });
                         }
                     }
@@ -1057,6 +1058,7 @@ impl ChartLayoutEngine {
                                 has_stem,
                                 stem_up: true, // Default to stem up
                                 flag_count,
+                                time_signature,
                             });
                         }
 

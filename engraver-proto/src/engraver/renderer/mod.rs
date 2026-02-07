@@ -14,6 +14,7 @@
 pub mod canvas2d;
 #[cfg(feature = "engraver-example")]
 pub mod context;
+pub mod cursor_renderer;
 pub mod primitives;
 pub mod scene_renderer;
 
@@ -22,11 +23,12 @@ pub mod scene_renderer;
 // region:    --- Re-exports
 
 pub use canvas2d::{Canvas2D, Color as Canvas2DColor, Rect as Canvas2DRect, Vertex2D};
+pub use cursor_renderer::render_cursor_commands;
 pub use primitives::{
-    create_blit_pipeline, create_blit_texture_bind_group_layout, create_camera_bind_group_layout,
-    create_fullscreen_quad, create_line, create_main_pipeline, create_rect, create_sdf_pipeline,
-    create_sdf_rounded_rect, px_to_ndc, BlitVertex, CameraUniform, SdfRectVertex, Vertex,
-    BLIT_SHADER_SOURCE, SDF_SHADER_SOURCE, SHADER_SOURCE,
+    BLIT_SHADER_SOURCE, BlitVertex, CameraUniform, SDF_SHADER_SOURCE, SHADER_SOURCE, SdfRectVertex,
+    Vertex, create_blit_pipeline, create_blit_texture_bind_group_layout,
+    create_camera_bind_group_layout, create_fullscreen_quad, create_line, create_main_pipeline,
+    create_rect, create_sdf_pipeline, create_sdf_rounded_rect, px_to_ndc,
 };
 pub use scene_renderer::{SceneRenderBuilder, SceneRenderConfig, VelloSceneRenderer};
 
@@ -38,8 +40,8 @@ pub use context::VelloRenderContext;
 // region:    --- RenderConfig
 
 use kurbo::{Affine, Point, Rect};
-use vello::peniko::Color;
 use vello::Scene;
+use vello::peniko::Color;
 
 /// Renderer configuration.
 #[derive(Debug, Clone)]

@@ -402,6 +402,7 @@ mod tests {
                 has_stem: false,
                 stem_up: true,
                 flag_count: 0,
+                time_signature: (4, 4),
             },
             BeatPosition {
                 page: 1,
@@ -423,6 +424,7 @@ mod tests {
                 has_stem: false,
                 stem_up: true,
                 flag_count: 0,
+                time_signature: (4, 4),
             },
             BeatPosition {
                 page: 1,
@@ -444,6 +446,7 @@ mod tests {
                 has_stem: false,
                 stem_up: true,
                 flag_count: 0,
+                time_signature: (4, 4),
             },
         ];
 
@@ -477,18 +480,24 @@ mod tests {
         assert!((state.cursor_y - 200.0).abs() < 0.01);
 
         // Should have a StrokeLine + StrokeGlyph + FillGlyph (notehead highlight enabled by default)
-        assert!(state
-            .commands
-            .iter()
-            .any(|c| matches!(c, HighlightCommand::StrokeLine { .. })));
-        assert!(state
-            .commands
-            .iter()
-            .any(|c| matches!(c, HighlightCommand::StrokeGlyph { .. })));
-        assert!(state
-            .commands
-            .iter()
-            .any(|c| matches!(c, HighlightCommand::FillGlyph { .. })));
+        assert!(
+            state
+                .commands
+                .iter()
+                .any(|c| matches!(c, HighlightCommand::StrokeLine { .. }))
+        );
+        assert!(
+            state
+                .commands
+                .iter()
+                .any(|c| matches!(c, HighlightCommand::StrokeGlyph { .. }))
+        );
+        assert!(
+            state
+                .commands
+                .iter()
+                .any(|c| matches!(c, HighlightCommand::FillGlyph { .. }))
+        );
     }
 
     #[test]
@@ -564,14 +573,18 @@ mod tests {
 
         // Beat at tick 1920 has no glyph_codepoint
         let state = cursor.compute(&layout, 1920).unwrap();
-        assert!(!state
-            .commands
-            .iter()
-            .any(|c| matches!(c, HighlightCommand::StrokeGlyph { .. })));
-        assert!(!state
-            .commands
-            .iter()
-            .any(|c| matches!(c, HighlightCommand::FillGlyph { .. })));
+        assert!(
+            !state
+                .commands
+                .iter()
+                .any(|c| matches!(c, HighlightCommand::StrokeGlyph { .. }))
+        );
+        assert!(
+            !state
+                .commands
+                .iter()
+                .any(|c| matches!(c, HighlightCommand::FillGlyph { .. }))
+        );
     }
 
     #[test]
@@ -584,10 +597,12 @@ mod tests {
         let layout = test_layout();
 
         let state = cursor.compute(&layout, 0).unwrap();
-        assert!(!state
-            .commands
-            .iter()
-            .any(|c| matches!(c, HighlightCommand::StrokeGlyph { .. })));
+        assert!(
+            !state
+                .commands
+                .iter()
+                .any(|c| matches!(c, HighlightCommand::StrokeGlyph { .. }))
+        );
     }
 
     #[test]
@@ -627,6 +642,7 @@ mod tests {
             has_stem: false,
             stem_up: true,
             flag_count: 0,
+            time_signature: (4, 4),
         }];
 
         let layout = ChartLayoutResult {

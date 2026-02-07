@@ -50,9 +50,12 @@ pub mod layouts;
 pub mod signals;
 
 // Re-export key types for convenience
-pub use chart_renderer::ChartLayoutManager;
+pub use chart_renderer::{ChartLayoutManager, SceneHitResult};
 pub use layouts::ChartEditorLayout;
 pub use signals::{
-    ChartEditorBounds, ChartViewport, PreviewMode, RenderStats, CHART_EDITOR_BOUNDS,
-    CHART_PREVIEW_MODE, CHART_RENDER_STATS, CHART_SOURCE, CHART_VIEWPORT,
+    ChartEditorBounds, ChartPageInfo, ChartViewport, PageMeta, PreviewMode, RenderStats,
+    SemanticZoomLevel, SystemMeta, CHART_BASE_SCALE, CHART_CURSOR_POSITION,
+    CHART_CURSOR_SCENE_CLICK, CHART_CURSOR_TICK, CHART_CURSOR_VISIBLE, CHART_EDITOR_BOUNDS,
+    CHART_HOVER_SCENE_POINT, CHART_PAGE_INFO, CHART_PREVIEW_MODE, CHART_RENDER_STATS, CHART_SOURCE,
+    CHART_VIEWPORT, SESSION_CHART_SOURCE,
 };

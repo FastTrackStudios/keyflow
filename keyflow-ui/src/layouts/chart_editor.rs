@@ -9,6 +9,109 @@ use crate::examples::{self, EXAMPLES};
 use crate::prelude::*;
 use crate::signals::*;
 
+/// Navigate the viewport to show a specific page.
+///
+/// Pages are laid out **side by side** horizontally. Computes the scroll_x
+/// that places the target page's left edge at the viewport left edge.
+fn navigate_to_page(page_number: u32) {
+    let info = CHART_PAGE_INFO.read();
+    let Some(meta) = info.page_metadata.iter().find(|m| m.number == page_number) else {
+        return;
+    };
+    let x_offset = meta.x_offset;
+    drop(info);
+    let bounds = *CHART_EDITOR_BOUNDS.read();
+    let viewport = *CHART_VIEWPORT.read();
+    let base_scale = *CHART_BASE_SCALE.read();
+    if base_scale <= 0.0 || bounds.dpr <= 0.0 {
+        return;
+    }
+    // scroll_x is in CSS pixels. Transform: screen_x = pad - scroll_x*dpr + scene_x*base_scale*zoom
+    // To place page left at viewport left: scroll_x = x_offset * base_scale * zoom / dpr
+    let scroll_x = x_offset * base_scale * viewport.zoom / bounds.dpr;
+    tracing::info!(
+        "navigate_to_page({}): x_offset={:.1} base_scale={:.4} zoom={:.3} dpr={:.2} → scroll_x={:.1}",
+        page_number, x_offset, base_scale, viewport.zoom, bounds.dpr, scroll_x
+    );
+    let mut vp = CHART_VIEWPORT.write();
+    vp.scroll_x = scroll_x;
+    vp.scroll_y = 0.0; // Reset vertical scroll when turning pages
+}
+
+/// Apply a semantic zoom preset to the viewport.
+///
+/// Computes the zoom factor that fits the requested vertical content amount
+/// in the viewport. Also scrolls horizontally to the current page.
+fn apply_semantic_zoom(level: SemanticZoomLevel) {
+    let info = CHART_PAGE_INFO.read();
+    let bounds = *CHART_EDITOR_BOUNDS.read();
+    let base_scale = *CHART_BASE_SCALE.read();
+    if base_scale <= 0.0 || bounds.dpr <= 0.0 || bounds.height <= 0.0 {
+        return;
+    }
+
+    let current_page = info.current_page;
+    let Some(page_meta) = info.page_metadata.iter().find(|m| m.number == current_page) else {
+        return;
+    };
+
+    let (zoom, scroll_y) =
+        compute_zoom_for_level(level, page_meta, base_scale, bounds.height, bounds.dpr);
+    // Also compute scroll_x to keep current page centered
+    let scroll_x = page_meta.x_offset * base_scale * zoom / bounds.dpr;
+    tracing::info!(
+        "apply_semantic_zoom({:?}): page={} base_scale={:.4} viewport_h={:.0} dpr={:.2} → zoom={:.3} scroll_x={:.1} scroll_y={:.1}",
+        level, current_page, base_scale, bounds.height, bounds.dpr, zoom, scroll_x, scroll_y
+    );
+    let mut vp = CHART_VIEWPORT.write();
+    vp.zoom = zoom.clamp(0.1, 8.0);
+    vp.scroll_x = scroll_x;
+    vp.scroll_y = scroll_y;
+    vp.zoom_level = level;
+}
+
+/// Pure function: compute (zoom, scroll_y) for a semantic zoom level.
+///
+/// The zoom controls vertical fit — how many systems are visible.
+/// The returned scroll_y positions the viewport at the page's y_offset
+/// (which is typically a constant 20.0 since pages are side-by-side).
+fn compute_zoom_for_level(
+    level: SemanticZoomLevel,
+    page: &PageMeta,
+    base_scale: f64,
+    viewport_height: f64,
+    dpr: f64,
+) -> (f64, f64) {
+    let zoom = match level {
+        SemanticZoomLevel::FullPage => viewport_height / (page.height * base_scale),
+        SemanticZoomLevel::HalfPage => viewport_height / (page.height * 0.5 * base_scale),
+        SemanticZoomLevel::SystemView => {
+            if page.systems.is_empty() {
+                return (1.0, 0.0);
+            }
+            let n = 3.min(page.systems.len());
+            let first = &page.systems[0];
+            let last = &page.systems[n - 1];
+            let h = (last.y + last.height) - first.y + 40.0; // 40pt breathing room
+            viewport_height / (h * base_scale)
+        }
+        SemanticZoomLevel::LineView => {
+            if page.systems.is_empty() {
+                return (1.0, 0.0);
+            }
+            let n = 2.min(page.systems.len());
+            let first = &page.systems[0];
+            let last = &page.systems[n - 1];
+            let h = (last.y + last.height) - first.y + 20.0; // 20pt breathing room
+            viewport_height / (h * base_scale)
+        }
+        SemanticZoomLevel::Custom => return (1.0, 0.0),
+    };
+    // scroll_y positions at the page's y_offset (constant for horizontal layout)
+    let scroll_y = page.y_offset * base_scale * zoom / dpr;
+    (zoom, scroll_y)
+}
+
 /// Chart editor split-view layout.
 ///
 /// Left panel: syntax-highlighted text editor with examples dropdown.
@@ -153,6 +256,7 @@ pub fn ChartEditorLayout() -> Element {
                 div {
                     class: "flex items-center justify-between px-3 py-2 border-b border-border bg-card",
 
+                    // Left group: label + FPS + error + page nav
                     div {
                         class: "flex items-center gap-2",
                         span { class: "text-sm font-medium text-foreground", "Live Preview" }
@@ -171,6 +275,18 @@ pub fn ChartEditorLayout() -> Element {
                                 span {
                                     class: "text-xs font-mono {fps_color}",
                                     "{stats.fps:.0} fps  {stats.frame_time_ms:.1}ms"
+                                }
+                            }
+                        }
+
+                        // Musical position display
+                        {
+                            let cursor_pos = CHART_CURSOR_POSITION.read();
+                            rsx! {
+                                span {
+                                    class: "text-xs font-mono text-blue-400 select-none",
+                                    title: "Musical position (Measure.Beat.Ticks)",
+                                    "{cursor_pos}"
                                 }
                             }
                         }
@@ -197,34 +313,160 @@ pub fn ChartEditorLayout() -> Element {
                                 "Parse error"
                             }
                         }
+
+                        // Page navigation (Page mode only)
+                        if preview_mode == PreviewMode::Page {
+                            {
+                                let page_info = CHART_PAGE_INFO.read();
+                                let current = page_info.current_page;
+                                let total = page_info.total_pages;
+                                rsx! {
+                                    div {
+                                        class: "flex items-center gap-0.5 ml-1",
+
+                                        // Previous page
+                                        button {
+                                            class: "p-1 rounded hover:bg-accent transition-colors disabled:opacity-30 disabled:cursor-default",
+                                            disabled: current <= 1,
+                                            onclick: move |_| {
+                                                let cp = CHART_PAGE_INFO.read().current_page;
+                                                if cp > 1 {
+                                                    navigate_to_page(cp - 1);
+                                                }
+                                            },
+                                            svg {
+                                                width: "14",
+                                                height: "14",
+                                                view_box: "0 0 24 24",
+                                                fill: "none",
+                                                stroke: "currentColor",
+                                                stroke_width: "2",
+                                                stroke_linecap: "round",
+                                                stroke_linejoin: "round",
+                                                path { d: "m15 18-6-6 6-6" }
+                                            }
+                                        }
+
+                                        // Page indicator
+                                        span {
+                                            class: "text-xs font-mono text-muted-foreground select-none",
+                                            "{current}/{total}"
+                                        }
+
+                                        // Next page
+                                        button {
+                                            class: "p-1 rounded hover:bg-accent transition-colors disabled:opacity-30 disabled:cursor-default",
+                                            disabled: current >= total,
+                                            onclick: move |_| {
+                                                let info = CHART_PAGE_INFO.read();
+                                                if info.current_page < info.total_pages {
+                                                    let next = info.current_page + 1;
+                                                    drop(info);
+                                                    navigate_to_page(next);
+                                                }
+                                            },
+                                            svg {
+                                                width: "14",
+                                                height: "14",
+                                                view_box: "0 0 24 24",
+                                                fill: "none",
+                                                stroke: "currentColor",
+                                                stroke_width: "2",
+                                                stroke_linecap: "round",
+                                                stroke_linejoin: "round",
+                                                path { d: "m9 18 6-6-6-6" }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
 
-                    // Preview mode toggle (segmented control)
+                    // Right group: zoom presets + mode toggle
                     div {
-                        class: "flex items-center gap-0.5 rounded-md border border-border bg-secondary p-0.5",
+                        class: "flex items-center gap-2",
 
-                        button {
-                            class: if preview_mode == PreviewMode::Snippet {
-                                "text-xs px-2.5 py-1 rounded bg-primary text-primary-foreground font-medium transition-colors"
-                            } else {
-                                "text-xs px-2.5 py-1 rounded text-muted-foreground hover:text-foreground transition-colors"
-                            },
-                            onclick: move |_| {
-                                *CHART_PREVIEW_MODE.write() = PreviewMode::Snippet;
-                            },
-                            "Snippet"
+                        // Semantic zoom presets (Page mode only)
+                        if preview_mode == PreviewMode::Page {
+                            {
+                                let page_info = CHART_PAGE_INFO.read();
+                                let current_level = page_info.zoom_level;
+                                rsx! {
+                                    div {
+                                        class: "flex items-center gap-0.5 rounded-md border border-border bg-secondary p-0.5",
+
+                                        button {
+                                            class: if current_level == SemanticZoomLevel::FullPage {
+                                                "text-xs px-2 py-1 rounded bg-primary text-primary-foreground font-medium transition-colors"
+                                            } else {
+                                                "text-xs px-2 py-1 rounded text-muted-foreground hover:text-foreground transition-colors"
+                                            },
+                                            onclick: move |_| { apply_semantic_zoom(SemanticZoomLevel::FullPage); },
+                                            "Page"
+                                        }
+
+                                        button {
+                                            class: if current_level == SemanticZoomLevel::HalfPage {
+                                                "text-xs px-2 py-1 rounded bg-primary text-primary-foreground font-medium transition-colors"
+                                            } else {
+                                                "text-xs px-2 py-1 rounded text-muted-foreground hover:text-foreground transition-colors"
+                                            },
+                                            onclick: move |_| { apply_semantic_zoom(SemanticZoomLevel::HalfPage); },
+                                            "Half"
+                                        }
+
+                                        button {
+                                            class: if current_level == SemanticZoomLevel::SystemView {
+                                                "text-xs px-2 py-1 rounded bg-primary text-primary-foreground font-medium transition-colors"
+                                            } else {
+                                                "text-xs px-2 py-1 rounded text-muted-foreground hover:text-foreground transition-colors"
+                                            },
+                                            onclick: move |_| { apply_semantic_zoom(SemanticZoomLevel::SystemView); },
+                                            "3-Line"
+                                        }
+
+                                        button {
+                                            class: if current_level == SemanticZoomLevel::LineView {
+                                                "text-xs px-2 py-1 rounded bg-primary text-primary-foreground font-medium transition-colors"
+                                            } else {
+                                                "text-xs px-2 py-1 rounded text-muted-foreground hover:text-foreground transition-colors"
+                                            },
+                                            onclick: move |_| { apply_semantic_zoom(SemanticZoomLevel::LineView); },
+                                            "2-Line"
+                                        }
+                                    }
+                                }
+                            }
                         }
 
-                        button {
-                            class: if preview_mode == PreviewMode::Page {
-                                "text-xs px-2.5 py-1 rounded bg-primary text-primary-foreground font-medium transition-colors"
-                            } else {
-                                "text-xs px-2.5 py-1 rounded text-muted-foreground hover:text-foreground transition-colors"
-                            },
-                            onclick: move |_| {
-                                *CHART_PREVIEW_MODE.write() = PreviewMode::Page;
-                            },
-                            "Page (A4)"
+                        // Preview mode toggle (segmented control)
+                        div {
+                            class: "flex items-center gap-0.5 rounded-md border border-border bg-secondary p-0.5",
+
+                            button {
+                                class: if preview_mode == PreviewMode::Snippet {
+                                    "text-xs px-2.5 py-1 rounded bg-primary text-primary-foreground font-medium transition-colors"
+                                } else {
+                                    "text-xs px-2.5 py-1 rounded text-muted-foreground hover:text-foreground transition-colors"
+                                },
+                                onclick: move |_| {
+                                    *CHART_PREVIEW_MODE.write() = PreviewMode::Snippet;
+                                },
+                                "Snippet"
+                            }
+
+                            button {
+                                class: if preview_mode == PreviewMode::Page {
+                                    "text-xs px-2.5 py-1 rounded bg-primary text-primary-foreground font-medium transition-colors"
+                                } else {
+                                    "text-xs px-2.5 py-1 rounded text-muted-foreground hover:text-foreground transition-colors"
+                                },
+                                onclick: move |_| {
+                                    *CHART_PREVIEW_MODE.write() = PreviewMode::Page;
+                                },
+                                "Page (A4)"
+                            }
                         }
                     }
                 }
@@ -234,6 +476,8 @@ pub fn ChartEditorLayout() -> Element {
                 {
                     let mut dragging = use_signal(|| false);
                     let mut last_mouse = use_signal(|| (0.0f64, 0.0f64));
+                    // Track mouse-down position to distinguish click from drag
+                    let mut mouse_down_pos = use_signal(|| (0.0f64, 0.0f64));
 
                     rsx! {
                         div {
@@ -241,24 +485,27 @@ pub fn ChartEditorLayout() -> Element {
                             class: "flex-1 cursor-grab",
                             style: "background: transparent !important;",
 
-                            // Wheel → zoom (scroll wheel and trackpad pinch both zoom)
+                            // Wheel → zoom (marks as Custom to deselect presets)
                             onwheel: move |evt| {
                                 let delta_y = evt.delta().strip_units().y;
                                 let mut vp = CHART_VIEWPORT.write();
                                 let zoom_factor = if delta_y < 0.0 { 1.05 } else { 0.95 };
                                 vp.zoom = (vp.zoom * zoom_factor).clamp(0.1, 8.0);
+                                vp.zoom_level = SemanticZoomLevel::Custom;
                             },
 
-                            // Mouse drag → pan
+                            // Mouse drag → pan, click → set cursor
                             onmousedown: move |evt| {
                                 dragging.set(true);
                                 let coords = evt.client_coordinates();
                                 last_mouse.set((coords.x, coords.y));
+                                mouse_down_pos.set((coords.x, coords.y));
                             },
 
                             onmousemove: move |evt| {
+                                let coords = evt.client_coordinates();
+
                                 if *dragging.read() {
-                                    let coords = evt.client_coordinates();
                                     let (lx, ly) = *last_mouse.read();
                                     let dx = coords.x - lx;
                                     let dy = coords.y - ly;
@@ -268,15 +515,72 @@ pub fn ChartEditorLayout() -> Element {
                                     vp.scroll_y -= dy;
 
                                     last_mouse.set((coords.x, coords.y));
+                                    // Clear hover during drag
+                                    *CHART_HOVER_SCENE_POINT.write() = None;
+                                } else {
+                                    // Not dragging — compute hover point in scene coordinates
+                                    let bounds = *CHART_EDITOR_BOUNDS.peek();
+                                    let viewport = *CHART_VIEWPORT.peek();
+                                    let base_scale = *CHART_BASE_SCALE.peek();
+
+                                    if base_scale > 0.0 && bounds.dpr > 0.0 {
+                                        let scale = base_scale * viewport.zoom;
+                                        let pad = 20.0 * bounds.dpr;
+                                        let px_x = coords.x * bounds.dpr - bounds.x;
+                                        let px_y = coords.y * bounds.dpr - bounds.y;
+                                        let scene_x = (px_x - pad + viewport.scroll_x * bounds.dpr) / scale;
+                                        let scene_y = (px_y - pad + viewport.scroll_y * bounds.dpr) / scale;
+                                        *CHART_HOVER_SCENE_POINT.write() = Some((scene_x, scene_y));
+                                    }
                                 }
                             },
 
-                            onmouseup: move |_| {
-                                dragging.set(false);
+                            onmouseup: move |evt| {
+                                if *dragging.read() {
+                                    dragging.set(false);
+
+                                    // Distinguish click from drag: if mouse barely moved, treat as click
+                                    let coords = evt.client_coordinates();
+                                    let (dx, dy) = *mouse_down_pos.read();
+                                    let distance = ((coords.x - dx).powi(2) + (coords.y - dy).powi(2)).sqrt();
+
+                                    if distance < 5.0 {
+                                        // Click → set cursor position
+                                        // Convert CSS click coords to scene coordinates
+                                        let bounds = *CHART_EDITOR_BOUNDS.peek();
+                                        let viewport = *CHART_VIEWPORT.peek();
+                                        let base_scale = *CHART_BASE_SCALE.peek();
+
+                                        if base_scale > 0.0 && bounds.dpr > 0.0 {
+                                            let scale = base_scale * viewport.zoom;
+                                            let pad = 20.0 * bounds.dpr;
+
+                                            // CSS click coords → physical pixel coords relative to preview area
+                                            let px_x = coords.x * bounds.dpr - bounds.x;
+                                            let px_y = coords.y * bounds.dpr - bounds.y;
+
+                                            // Invert the render transform: screen = pad - scroll*dpr + scene*scale
+                                            // scene = (screen - pad + scroll*dpr) / scale
+                                            let scene_x = (px_x - pad + viewport.scroll_x * bounds.dpr) / scale;
+                                            let scene_y = (px_y - pad + viewport.scroll_y * bounds.dpr) / scale;
+
+                                            tracing::info!(
+                                                "Click-to-position: css=({:.0},{:.0}) scene=({:.1},{:.1})",
+                                                coords.x, coords.y, scene_x, scene_y
+                                            );
+
+                                            // Write to cursor tick signal — render effect will pick it up
+                                            // We defer the actual tick lookup to the render pipeline
+                                            // via a separate signal for the scene point
+                                            *CHART_CURSOR_SCENE_CLICK.write() = Some((scene_x, scene_y));
+                                        }
+                                    }
+                                }
                             },
 
                             onmouseleave: move |_| {
                                 dragging.set(false);
+                                *CHART_HOVER_SCENE_POINT.write() = None;
                             },
                         }
                     }
