@@ -137,6 +137,102 @@ pub struct ChartLayoutManager {
 }
 
 impl ChartLayoutManager {
+    fn ensure_cached_static_scene(&mut self) {
+        if self.layout_result.is_some() && self.cached_vello_scene.is_none() {
+            let mut cached = Scene::new();
+            let base_renderer = SceneRenderBuilder::new().spatium(5.0).build();
+            let mut renderer = self.font_bundle.configure_renderer(base_renderer);
+            renderer.render_with_transform(
+                &mut cached,
+                &self.layout_result.as_ref().unwrap().scene,
+                Affine::IDENTITY,
+            );
+            self.cached_vello_scene = Some(cached);
+        }
+    }
+
+    /// Render only the static chart layer (background + cached glyph scene).
+    ///
+    /// This should be used when cursor/hover overlays are rendered separately
+    /// to avoid rebuilding static content on every transport tick.
+    pub fn render_static_layer_to_scene(
+        &mut self,
+        scene: &mut Scene,
+        width: f64,
+        height: f64,
+        transform: Affine,
+    ) {
+        // Fill background (gray workspace) — varies with viewport size.
+        scene.fill(
+            Fill::NonZero,
+            Affine::IDENTITY,
+            Color::from_rgb8(55, 65, 81),
+            None,
+            &Rect::new(0.0, 0.0, width, height),
+        );
+
+        if self.layout_result.is_none() {
+            return;
+        }
+
+        self.ensure_cached_static_scene();
+
+        let clip_rect = Rect::new(0.0, 0.0, width, height);
+        scene.push_layer(
+            Fill::NonZero,
+            vello::peniko::Compose::SrcOver,
+            1.0,
+            Affine::IDENTITY,
+            &clip_rect,
+        );
+
+        if let Some(ref cached) = self.cached_vello_scene {
+            scene.append(cached, Some(transform));
+        }
+
+        scene.pop_layer();
+    }
+
+    /// Render only the dynamic overlay layer (hover + cursor).
+    ///
+    /// Draws on top of a previously-rendered static layer.
+    pub fn render_overlay_layer_to_scene(
+        &mut self,
+        scene: &mut Scene,
+        width: f64,
+        height: f64,
+        transform: Affine,
+        cursor_tick: Option<i64>,
+        hover_point: Option<(f64, f64)>,
+    ) {
+        if self.layout_result.is_none() {
+            return;
+        }
+
+        let clip_rect = Rect::new(0.0, 0.0, width, height);
+        scene.push_layer(
+            Fill::NonZero,
+            vello::peniko::Compose::SrcOver,
+            1.0,
+            Affine::IDENTITY,
+            &clip_rect,
+        );
+
+        if let Some((scene_x, scene_y)) = hover_point {
+            self.render_hover_highlight(scene, scene_x, scene_y, transform);
+        }
+
+        if let Some(tick) = cursor_tick {
+            self.update_cursor(tick);
+            if let Some(ref state) = self.cached_cursor_state {
+                let font = self.font_bundle.smufl_font();
+                render_cursor_commands(scene, &state.commands, transform, Some(font));
+            }
+        }
+
+        scene.pop_layer();
+    }
+
     /// Create a new chart layout manager with embedded fonts.
     pub fn new() -> Result<Self, String> {
         let font_bundle = ChartFontBundle::new()?;
@@ -293,60 +389,15 @@ impl ChartLayoutManager {
         cursor_tick: Option<i64>,
         hover_point: Option<(f64, f64)>,
     ) {
-        // Fill background (gray workspace) — varies with viewport size, always drawn fresh
-        scene.fill(
-            Fill::NonZero,
-            Affine::IDENTITY,
-            Color::from_rgb8(55, 65, 81),
-            None,
-            &Rect::new(0.0, 0.0, width, height),
+        self.render_static_layer_to_scene(scene, width, height, transform);
+        self.render_overlay_layer_to_scene(
+            scene,
+            width,
+            height,
+            transform,
+            cursor_tick,
+            hover_point,
         );
-
-        if self.layout_result.is_some() {
-            // Build the cached scene if it doesn't exist (first frame after layout change)
-            if self.cached_vello_scene.is_none() {
-                let mut cached = Scene::new();
-                let base_renderer = SceneRenderBuilder::new().spatium(5.0).build();
-                let mut renderer = self.font_bundle.configure_renderer(base_renderer);
-                renderer.render_with_transform(
-                    &mut cached,
-                    &self.layout_result.as_ref().unwrap().scene,
-                    Affine::IDENTITY,
-                );
-                self.cached_vello_scene = Some(cached);
-            }
-
-            // Clip to viewport bounds so adjacent pages don't bleed through
-            let clip_rect = Rect::new(0.0, 0.0, width, height);
-            scene.push_layer(
-                Fill::NonZero,
-                vello::peniko::Compose::SrcOver,
-                1.0,
-                Affine::IDENTITY,
-                &clip_rect,
-            );
-
-            // Append cached scene with the viewport transform (fast path)
-            if let Some(ref cached) = self.cached_vello_scene {
-                scene.append(cached, Some(transform));
-            }
-
-            // Render hover highlight (blue, before cursor so cursor draws on top)
-            if let Some((scene_x, scene_y)) = hover_point {
-                self.render_hover_highlight(scene, scene_x, scene_y, transform);
-            }
-
-            // Render cursor overlay (not cached — changes with tick independently of layout)
-            if let Some(tick) = cursor_tick {
-                self.update_cursor(tick);
-                if let Some(ref state) = self.cached_cursor_state {
-                    let font = self.font_bundle.smufl_font();
-                    render_cursor_commands(scene, &state.commands, transform, Some(font));
-                }
-            }
-
-            scene.pop_layer();
-        }
     }
 
     /// Get the cached layout result.
