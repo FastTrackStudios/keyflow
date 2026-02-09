@@ -12,6 +12,9 @@ keyflow-proto = { workspace = true, features = ["serde", "highlighting"] }
 # Engraver for chart layout and rendering
 engraver-proto = { workspace = true, features = ["engraver"] }
 
+# Backend-agnostic rendering abstraction
+anyrender = { workspace = true }
+
 # Dioxus UI framework - use dioxus-native when native feature is enabled
 dioxus = { version = "0.7.2", optional = true }
 dioxus-native = { workspace = true, optional = true }

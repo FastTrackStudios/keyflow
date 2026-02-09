@@ -5,6 +5,7 @@
 //! (no WASM canvas methods — produces `vello::Scene` for the app to render).
 
 use crate::signals::{PageMeta, SystemMeta};
+use anyrender::PaintScene;
 use engraver_proto::engraver::fonts::ChartFontBundle;
 use engraver_proto::engraver::layout::chart::cursor::{
     ChartCursor, CursorState, HighlightCommand, Rgba,
@@ -18,8 +19,7 @@ use engraver_proto::engraver::scene::node::{metadata_keys, SceneNode};
 use engraver_proto::engraver::style::MStyle;
 use keyflow_proto::{Chart, ChartPosition};
 use kurbo::{Affine, Point, Rect};
-use vello::peniko::{Color, Fill};
-use vello::Scene;
+use vello::peniko::{Color, Compose, Fill};
 
 /// Screen DPI for rendering.
 const SCREEN_DPI: f64 = 96.0;
@@ -103,14 +103,14 @@ fn hit_test_scene_recursive<'a>(
 ///
 /// # Caching Strategy
 ///
-/// Three cache levels to avoid redundant work:
+/// Two cache levels to avoid redundant work:
 /// 1. **Parse cache** (`cached_chart`): Keyed by source text hash. Avoids re-parsing
 ///    (~10-20ms) when only the layout mode or viewport changes.
 /// 2. **Layout cache** (`layout_result`): Keyed by (source, snippet_mode) hash. Avoids
 ///    re-layout (~440-500ms) when the same chart is re-rendered.
-/// 3. **Scene cache** (`cached_vello_scene`): Built once per layout change via
-///    `render_with_transform` at identity. Per-frame rendering uses `Scene::append`
-///    with the viewport transform for instant pan/zoom (~1-2ms vs ~67ms).
+///
+/// Rendering uses the `PaintScene` trait abstraction (via anyrender) so the
+/// chart rendering pipeline is backend-agnostic.
 pub struct ChartLayoutManager {
     /// Font bundle (single source of truth for all chart fonts).
     font_bundle: ChartFontBundle,
@@ -120,8 +120,6 @@ pub struct ChartLayoutManager {
     layout_result: Option<ChartLayoutResult>,
     /// Last layout hash — covers (source, snippet_mode) for layout invalidation.
     last_chart_hash: u64,
-    /// Cached vello Scene — rebuilt only when layout changes.
-    cached_vello_scene: Option<Scene>,
     /// Cached parsed chart — rebuilt only when source text changes.
     cached_chart: Option<Chart>,
     /// Hash of just the source text (for parse cache invalidation).
@@ -137,35 +135,22 @@ pub struct ChartLayoutManager {
 }
 
 impl ChartLayoutManager {
-    fn ensure_cached_static_scene(&mut self) {
-        if self.layout_result.is_some() && self.cached_vello_scene.is_none() {
-            let mut cached = Scene::new();
-            let base_renderer = SceneRenderBuilder::new().spatium(5.0).build();
-            let mut renderer = self.font_bundle.configure_renderer(base_renderer);
-            renderer.render_with_transform(
-                &mut cached,
-                &self.layout_result.as_ref().unwrap().scene,
-                Affine::IDENTITY,
-            );
-            self.cached_vello_scene = Some(cached);
-        }
-    }
-
-    /// Render only the static chart layer (background + cached glyph scene).
+    /// Render only the static chart layer (background + chart glyphs).
     ///
     /// This should be used when cursor/hover overlays are rendered separately
     /// to avoid rebuilding static content on every transport tick.
     pub fn render_static_layer_to_scene(
         &mut self,
-        scene: &mut Scene,
+        scene: &mut impl PaintScene,
         width: f64,
         height: f64,
+        offset: Affine,
         transform: Affine,
     ) {
         // Fill background (gray workspace) — varies with viewport size.
         scene.fill(
             Fill::NonZero,
-            Affine::IDENTITY,
+            offset,
             Color::from_rgb8(55, 65, 81),
             None,
             &Rect::new(0.0, 0.0, width, height),
@@ -175,20 +160,17 @@ impl ChartLayoutManager {
             return;
         }
 
-        self.ensure_cached_static_scene();
-
         let clip_rect = Rect::new(0.0, 0.0, width, height);
-        scene.push_layer(
-            Fill::NonZero,
-            vello::peniko::Compose::SrcOver,
-            1.0,
-            Affine::IDENTITY,
-            &clip_rect,
-        );
+        scene.push_layer(Compose::SrcOver, 1.0, offset, &clip_rect);
 
-        if let Some(ref cached) = self.cached_vello_scene {
-            scene.append(cached, Some(transform));
-        }
+        // Render the chart scene graph directly with the viewport transform.
+        let base_renderer = SceneRenderBuilder::new().spatium(5.0).build();
+        let mut renderer = self.font_bundle.configure_renderer(base_renderer);
+        renderer.render_with_transform(
+            scene,
+            &self.layout_result.as_ref().unwrap().scene,
+            offset * transform,
+        );
 
         scene.pop_layer();
     }
@@ -198,9 +180,10 @@ impl ChartLayoutManager {
     /// Draws on top of a previously-rendered static layer.
     pub fn render_overlay_layer_to_scene(
         &mut self,
-        scene: &mut Scene,
+        scene: &mut impl PaintScene,
         width: f64,
         height: f64,
+        offset: Affine,
         transform: Affine,
         cursor_tick: Option<i64>,
         hover_point: Option<(f64, f64)>,
@@ -210,23 +193,17 @@ impl ChartLayoutManager {
         }
 
         let clip_rect = Rect::new(0.0, 0.0, width, height);
-        scene.push_layer(
-            Fill::NonZero,
-            vello::peniko::Compose::SrcOver,
-            1.0,
-            Affine::IDENTITY,
-            &clip_rect,
-        );
+        scene.push_layer(Compose::SrcOver, 1.0, offset, &clip_rect);
 
         if let Some((scene_x, scene_y)) = hover_point {
-            self.render_hover_highlight(scene, scene_x, scene_y, transform);
+            self.render_hover_highlight(scene, scene_x, scene_y, offset * transform);
         }
 
         if let Some(tick) = cursor_tick {
             self.update_cursor(tick);
             if let Some(ref state) = self.cached_cursor_state {
                 let font = self.font_bundle.smufl_font();
-                render_cursor_commands(scene, &state.commands, transform, Some(font));
+                render_cursor_commands(scene, &state.commands, offset * transform, Some(font));
             }
         }
 
@@ -245,7 +222,6 @@ impl ChartLayoutManager {
             layout_engine,
             layout_result: None,
             last_chart_hash: 0,
-            cached_vello_scene: None,
             cached_chart: None,
             last_source_hash: 0,
             last_snippet_mode: false,
@@ -313,7 +289,6 @@ impl ChartLayoutManager {
         self.layout_result = Some(result);
         self.last_chart_hash = chart_hash;
         self.last_snippet_mode = snippet_mode;
-        self.cached_vello_scene = None; // Force scene rebuild on next render
         self.cached_cursor_state = None; // Invalidate cursor cache
         self.cached_cursor_tick = i64::MIN;
 
@@ -362,7 +337,6 @@ impl ChartLayoutManager {
 
         self.layout_result = Some(result);
         self.last_chart_hash = chart_hash;
-        self.cached_vello_scene = None; // Force scene rebuild on next render
         self.cached_cursor_state = None; // Invalidate cursor cache
         self.cached_cursor_tick = i64::MIN;
     }
@@ -382,18 +356,20 @@ impl ChartLayoutManager {
     /// on the nearest beat to that scene coordinate.
     pub fn render_to_scene(
         &mut self,
-        scene: &mut Scene,
+        scene: &mut impl PaintScene,
         width: f64,
         height: f64,
+        offset: Affine,
         transform: Affine,
         cursor_tick: Option<i64>,
         hover_point: Option<(f64, f64)>,
     ) {
-        self.render_static_layer_to_scene(scene, width, height, transform);
+        self.render_static_layer_to_scene(scene, width, height, offset, transform);
         self.render_overlay_layer_to_scene(
             scene,
             width,
             height,
+            offset,
             transform,
             cursor_tick,
             hover_point,
@@ -657,7 +633,7 @@ impl ChartLayoutManager {
     /// node was hit directly.
     fn render_hover_highlight(
         &self,
-        scene: &mut Scene,
+        scene: &mut impl PaintScene,
         scene_x: f64,
         scene_y: f64,
         transform: Affine,
@@ -720,7 +696,7 @@ impl ChartLayoutManager {
     /// Render blue hover highlight commands for a specific BeatPosition.
     fn render_beat_hover(
         &self,
-        scene: &mut Scene,
+        scene: &mut impl PaintScene,
         beat: &engraver_proto::engraver::layout::chart::BeatPosition,
         scene_x: f64,
         transform: Affine,
