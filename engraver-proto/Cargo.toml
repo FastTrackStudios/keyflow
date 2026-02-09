@@ -7,6 +7,7 @@ description = "Engraver types and rendering pipeline for Keyflow"
 [features]
 default = []
 engraver = [
+    "dep:anyrender",
     "dep:wgpu",
     "dep:vello",
     "dep:kurbo",
@@ -41,6 +42,7 @@ keyflow-text = { path = "../keyflow-text" }
 facet.workspace = true
 helgoboss-midi = "0.4.0"
 
+anyrender = { workspace = true, optional = true }
 wgpu = { version = "26", features = ["wgsl"], optional = true }
 vello = { version = "0.7", optional = true }
 kurbo = { version = "0.13", optional = true }

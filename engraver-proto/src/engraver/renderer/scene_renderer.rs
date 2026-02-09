@@ -5,17 +5,17 @@
 
 use std::sync::Arc;
 
+use anyrender::{Glyph, PaintScene};
 use kurbo::{Affine, BezPath, Circle, Ellipse, Line, Point, Rect, RoundedRect, RoundedRectRadii};
 use skrifa::{
+    MetadataProvider,
     instance::Size,
     outline::{DrawSettings, OutlinePen},
     prelude::LocationRef,
     raw::{FileRef, FontRef},
-    MetadataProvider,
 };
 use vello::kurbo::Stroke;
 use vello::peniko::{Blob, Brush, Color, Fill, FontData};
-use vello::{Glyph, Scene};
 
 use crate::engraver::fonts::SMuFLFont;
 use crate::engraver::scene::node::SceneNode;
@@ -237,7 +237,7 @@ impl<'a> VelloSceneRenderer<'a> {
     }
 
     /// Render a SceneNode tree to a Vello Scene.
-    pub fn render(&mut self, scene: &mut Scene, root: &SceneNode) {
+    pub fn render(&mut self, scene: &mut impl PaintScene, root: &SceneNode) {
         self.stats = RenderStats::default();
         self.render_node(scene, root);
     }
@@ -253,7 +253,7 @@ impl<'a> VelloSceneRenderer<'a> {
     /// * `base_transform` - Additional transform to apply (e.g., pan/zoom)
     pub fn render_with_transform(
         &mut self,
-        scene: &mut Scene,
+        scene: &mut impl PaintScene,
         root: &SceneNode,
         base_transform: Affine,
     ) {
@@ -311,7 +311,7 @@ impl<'a> VelloSceneRenderer<'a> {
     }
 
     /// Render a single node and its children recursively.
-    fn render_node(&mut self, scene: &mut Scene, node: &SceneNode) {
+    fn render_node(&mut self, scene: &mut impl PaintScene, node: &SceneNode) {
         self.stats.nodes_visited += 1;
 
         // Skip invisible nodes
@@ -362,7 +362,7 @@ impl<'a> VelloSceneRenderer<'a> {
     }
 
     /// Render a single paint command.
-    fn render_command(&self, scene: &mut Scene, cmd: &PaintCommand, transform: Affine) {
+    fn render_command(&self, scene: &mut impl PaintScene, cmd: &PaintCommand, transform: Affine) {
         match cmd {
             PaintCommand::Fill {
                 path,
@@ -516,7 +516,7 @@ impl<'a> VelloSceneRenderer<'a> {
     /// to get the correct font size for rendering.
     fn render_glyph(
         &self,
-        scene: &mut Scene,
+        scene: &mut impl PaintScene,
         codepoint: char,
         position: Point,
         size: f64,
@@ -591,7 +591,7 @@ impl<'a> VelloSceneRenderer<'a> {
     /// 3. Use only a translation transform for the text (to avoid double-scaling glyph positions)
     fn render_text(
         &self,
-        scene: &mut Scene,
+        scene: &mut impl PaintScene,
         text: &str,
         font_family: &str,
         font_size: f64,
@@ -659,12 +659,18 @@ impl<'a> VelloSceneRenderer<'a> {
                     (screen_position + kurbo::Vec2::new(anchor_offset, 0.0)).to_vec2(),
                 );
 
-                scene
-                    .draw_glyphs(font_data)
-                    .font_size(screen_font_size as f32)
-                    .transform(text_transform)
-                    .brush(color)
-                    .draw(Fill::NonZero, glyphs.into_iter());
+                scene.draw_glyphs(
+                    font_data,
+                    screen_font_size as f32,
+                    false,          // hint
+                    &[],            // normalized_coords
+                    Fill::NonZero,  // style
+                    color,          // brush
+                    1.0,            // brush_alpha
+                    text_transform, // transform
+                    None,           // glyph_transform
+                    glyphs.into_iter(),
+                );
 
                 return;
             }
@@ -830,7 +836,7 @@ mod tests {
 
     #[test]
     fn test_render_empty_scene() {
-        let mut scene = Scene::new();
+        let mut scene = anyrender::NullScenePainter::new();
         let mut renderer = VelloSceneRenderer::new();
 
         let node = SceneNode::group(SemanticId::page(1));
@@ -841,7 +847,7 @@ mod tests {
 
     #[test]
     fn test_render_with_commands() {
-        let mut scene = Scene::new();
+        let mut scene = anyrender::NullScenePainter::new();
         let mut renderer = VelloSceneRenderer::new();
 
         let node = SceneNode::leaf(
@@ -862,7 +868,7 @@ mod tests {
 
     #[test]
     fn test_render_nested_nodes() {
-        let mut scene = Scene::new();
+        let mut scene = anyrender::NullScenePainter::new();
         let mut renderer = VelloSceneRenderer::new();
 
         let mut parent = SceneNode::group(SemanticId::measure(1));
@@ -883,7 +889,7 @@ mod tests {
 
     #[test]
     fn test_invisible_nodes_skipped() {
-        let mut scene = Scene::new();
+        let mut scene = anyrender::NullScenePainter::new();
         let mut renderer = VelloSceneRenderer::new();
 
         let mut node = SceneNode::leaf(
@@ -946,7 +952,7 @@ mod tests {
 
     #[test]
     fn test_render_all_paint_commands() {
-        let mut scene = Scene::new();
+        let mut scene = anyrender::NullScenePainter::new();
         let mut renderer = VelloSceneRenderer::new();
 
         let mut path = BezPath::new();

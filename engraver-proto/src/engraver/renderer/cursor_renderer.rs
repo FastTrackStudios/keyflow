@@ -8,6 +8,7 @@
 //! [`ChartCursor`]: crate::engraver::layout::chart::cursor::ChartCursor
 //! [`HighlightCommand`]: crate::engraver::layout::chart::cursor::HighlightCommand
 
+use anyrender::PaintScene;
 use kurbo::{Affine, Line, Point, Rect, RoundedRect};
 use skrifa::{
     MetadataProvider,
@@ -15,7 +16,6 @@ use skrifa::{
     outline::{DrawSettings, OutlinePen},
     prelude::LocationRef,
 };
-use vello::Scene;
 use vello::kurbo::{BezPath, Stroke};
 use vello::peniko::{Color, Fill};
 
@@ -36,7 +36,7 @@ fn rgba_to_color(rgba: Rgba) -> Color {
 /// `font` is needed for `StrokeGlyph` and `FillGlyph` commands. If `None`,
 /// glyph commands are silently skipped.
 pub fn render_cursor_commands(
-    scene: &mut Scene,
+    scene: &mut impl PaintScene,
     commands: &[HighlightCommand],
     transform: Affine,
     font: Option<&SMuFLFont<'_>>,
@@ -190,7 +190,7 @@ mod tests {
 
     #[test]
     fn render_stroke_line() {
-        let mut scene = Scene::new();
+        let mut scene = anyrender::NullScenePainter::new();
         let commands = vec![HighlightCommand::StrokeLine {
             x: 100.0,
             y_top: 50.0,
@@ -204,7 +204,7 @@ mod tests {
 
     #[test]
     fn render_fill_rect() {
-        let mut scene = Scene::new();
+        let mut scene = anyrender::NullScenePainter::new();
         let commands = vec![HighlightCommand::FillRect {
             x: 10.0,
             y: 20.0,
@@ -217,7 +217,7 @@ mod tests {
 
     #[test]
     fn render_fill_rounded_rect() {
-        let mut scene = Scene::new();
+        let mut scene = anyrender::NullScenePainter::new();
         let commands = vec![HighlightCommand::FillRoundedRect {
             x: 10.0,
             y: 20.0,
@@ -231,7 +231,7 @@ mod tests {
 
     #[test]
     fn glyph_commands_skipped_without_font() {
-        let mut scene = Scene::new();
+        let mut scene = anyrender::NullScenePainter::new();
         let commands = vec![
             HighlightCommand::StrokeGlyph {
                 codepoint: '\u{E101}',

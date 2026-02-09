@@ -39,8 +39,8 @@ pub use context::VelloRenderContext;
 
 // region:    --- RenderConfig
 
+use anyrender::PaintScene;
 use kurbo::{Affine, Point, Rect};
-use vello::Scene;
 use vello::peniko::Color;
 
 /// Renderer configuration.
@@ -103,7 +103,7 @@ impl EngraverRenderer {
     /// * `transform` - The view transform (for zoom/pan)
     pub fn render(
         &self,
-        scene: &mut Scene,
+        scene: &mut impl PaintScene,
         _score: &crate::engraver::model::Score,
         _viewport: Rect,
         transform: Affine,
@@ -129,7 +129,13 @@ impl EngraverRenderer {
     }
 
     /// Draw 5 staff lines.
-    fn draw_staff_lines(&self, scene: &mut Scene, transform: Affine, origin: Point, width: f64) {
+    fn draw_staff_lines(
+        &self,
+        scene: &mut impl PaintScene,
+        transform: Affine,
+        origin: Point,
+        width: f64,
+    ) {
         let space = self.config.staff_space;
         let stroke = vello::kurbo::Stroke::new(1.0);
 
