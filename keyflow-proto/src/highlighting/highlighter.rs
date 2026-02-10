@@ -4,7 +4,7 @@
 //! tokenizer and chord parsing infrastructure.
 
 use super::{HighlightKind, HighlightSpan};
-use crate::parsing::{Lexer, TextSpan, Token, TokenType};
+use crate::parsing::{Lexer, Token, TokenType};
 use crate::sections::SectionType;
 
 /// Highlighter for Keyflow notation.
@@ -338,7 +338,7 @@ impl Highlighter {
     /// Highlight a custom section marker (e.g., [Hits], [SOLO Keys]).
     fn highlight_custom_section(line: &str) -> Vec<HighlightSpan> {
         let mut spans = Vec::new();
-        let leading_ws = line.len() - line.trim_start().len();
+        let _leading_ws = line.len() - line.trim_start().len();
 
         // Find brackets
         if let (Some(open), Some(close)) = (line.find('['), line.find(']')) {
@@ -393,7 +393,7 @@ impl Highlighter {
         let trimmed = line.trim();
 
         let mut pos = leading_ws;
-        let mut chars = trimmed.char_indices().peekable();
+        let _chars = trimmed.char_indices().peekable();
 
         // Section keyword
         let keyword_len = trimmed
@@ -523,7 +523,7 @@ impl Highlighter {
         let first_word = name_lower.split_whitespace().next().unwrap_or("");
 
         if ["chords", "melody", "rhythm", "lyrics"].contains(&first_word) {
-            let leading_ws = line.len() - line.trim_start().len();
+            let _leading_ws = line.len() - line.trim_start().len();
             let open = line.find('[')?;
             let close = line.find(']')?;
 

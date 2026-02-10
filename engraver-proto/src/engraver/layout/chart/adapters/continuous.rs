@@ -7,7 +7,6 @@ use crate::engraver::layout::chart::pipeline::{LayoutAdapter, LayoutState};
 use crate::engraver::layout::chart::types::ChartLayoutResult;
 use crate::engraver::layout::orchestrator::PageMargins;
 use crate::engraver::scene::node::SceneNode;
-use kurbo::Rect;
 
 /// Adapter for continuous (scroll-based) chart layout.
 ///

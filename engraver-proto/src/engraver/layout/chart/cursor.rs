@@ -237,7 +237,7 @@ impl ChartCursor {
     pub fn compute_at_time(&self, layout: &ChartLayoutResult, time: f64) -> Option<CursorState> {
         let beat = layout.beat_at_time(time)?;
         let cursor_x = beat.x_at_time(time);
-        let tick = beat.absolute_tick;
+        let _tick = beat.absolute_tick;
 
         let mut commands = Vec::new();
 

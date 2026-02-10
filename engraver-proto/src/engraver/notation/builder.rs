@@ -1,6 +1,6 @@
 //! Builders for automatic music notation layout.
 
-use kurbo::{Affine, Point, Rect};
+use kurbo::{Affine, Point};
 use vello::peniko::Color;
 
 use crate::engraver::layout::context::LayoutContext;

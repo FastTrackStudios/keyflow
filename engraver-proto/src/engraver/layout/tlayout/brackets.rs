@@ -494,7 +494,7 @@ fn layout_normal_bracket(
     input: &BracketInput,
     spatium: f64,
     config: &BracketConfig,
-    height: f64,
+    _height: f64,
     extension: f64,
 ) -> BracketLayout {
     let width = config.bracket_width * spatium;
@@ -612,7 +612,7 @@ fn layout_line_bracket(
     input: &BracketInput,
     spatium: f64,
     config: &BracketConfig,
-    height: f64,
+    _height: f64,
     extension: f64,
 ) -> BracketLayout {
     let line_width = 0.67 * config.bracket_width * spatium;

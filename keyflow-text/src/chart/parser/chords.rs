@@ -9,7 +9,7 @@ use crate::chart::cues::TextCue;
 use crate::chart::dynamics::DynamicMarking;
 use crate::chart::melody::Melody;
 use crate::chart::types::{
-    ChordInstance, KeyChange, Measure, RestInstance, RhythmElement, SpaceInstance, TempoChange,
+    ChordInstance, KeyChange, Measure, RestInstance, RhythmElement, SpaceInstance,
 };
 use crate::chord::{ChordRhythm, LilySyntax};
 use crate::key::Key;
@@ -283,7 +283,7 @@ impl<'a> ChartParser<'a> {
         // Check for trailing tuplet number first (e.g., ":5" at the end)
         // Pattern: ':' followed by digits at the very end
         if end_pos >= 2 {
-            let mut num_end = end_pos;
+            let num_end = end_pos;
             let mut num_start = end_pos;
 
             // Find digits at end
@@ -823,7 +823,7 @@ impl<'a> ChartParser<'a> {
                         let dotted_duration = slash_count as f64 * 1.5;
 
                         // Convert to Lily rhythm for proper representation
-                        let lily_duration = match slash_count {
+                        let _lily_duration = match slash_count {
                             1 => LilySyntax::Quarter,   // /. = dotted quarter
                             2 => LilySyntax::Half,      // //. = dotted half
                             3 | 4 => LilySyntax::Whole, // ///. or ////. = dotted whole

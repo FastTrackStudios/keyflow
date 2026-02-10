@@ -426,7 +426,7 @@ impl HorizontalSpacing {
     pub fn compute_spacing_with_context(
         &self,
         segments: &mut SegmentList,
-        available_width: f64,
+        _available_width: f64,
         ctx: &HorizontalSpacingContext,
     ) -> f64 {
         if segments.is_empty() {

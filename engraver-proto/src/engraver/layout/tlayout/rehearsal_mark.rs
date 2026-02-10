@@ -18,9 +18,7 @@ use vello::peniko::Color;
 use crate::engraver::layout::context::LayoutContext;
 use crate::engraver::scene::node::SceneNode;
 use crate::engraver::scene::paint::PaintCommand;
-use crate::engraver::ui::{
-    format_rehearsal_label_with_letter, CapsuleLabelConfig, CapsuleLabelMode, ComputedCapsuleLabel,
-};
+use crate::engraver::ui::format_rehearsal_label_with_letter;
 
 /// Parameters for rehearsal mark layout.
 #[derive(Debug, Clone)]

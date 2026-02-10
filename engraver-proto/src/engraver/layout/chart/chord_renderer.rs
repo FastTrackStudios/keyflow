@@ -22,17 +22,17 @@
 //!
 //! To disable collision detection, set `min_chord_symbol_gap = 0.0` in config.
 
-use kurbo::{Affine, Rect, Vec2};
+use kurbo::{Rect, Vec2};
 use vello::peniko::Color;
 
 use crate::chart::commands::Command;
 use crate::chart::types::{ChordInstance, Measure, RhythmElement};
 use crate::chord::ChordRhythm;
 use crate::engraver::layout::context::LayoutContext;
-use crate::engraver::layout::tlayout::{layout_harmony, parse_chord, HarmonyParams, HarmonyStyle};
+use crate::engraver::layout::tlayout::{layout_harmony, parse_chord, HarmonyStyle};
 use crate::engraver::scene::id::{ElementType, SemanticId};
 use crate::engraver::scene::node::{metadata_keys, SceneNode};
-use crate::engraver::scene::paint::{PaintCommand, TextAnchor};
+use crate::engraver::scene::paint::PaintCommand;
 use crate::time::{MusicalPositionExt, TimeSignature};
 use crate::{ChartPosition, SourceLink};
 

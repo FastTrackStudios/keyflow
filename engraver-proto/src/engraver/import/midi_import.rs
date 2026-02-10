@@ -23,6 +23,7 @@ use midly::{MetaMessage, MidiMessage, Smf, Timing, TrackEventKind};
 use std::collections::HashMap;
 
 use crate::engraver::error::{Error, Result};
+use crate::key::{Key, KeySpelling, SpellingMode};
 
 /// A parsed MIDI file with extracted musical data.
 #[derive(Debug, Clone)]
@@ -481,17 +482,20 @@ impl MidiFile {
     ///
     /// The position is relative to SONGSTART if present, otherwise absolute.
     /// Returns (measure, beat, subdivision_ticks) where:
-    /// - measure: 0-indexed measure number
+    /// - measure: if `SONGSTART` marker exists, that tick is measure 1.
+    ///            otherwise, tick 0 is measure 0 (legacy behavior).
     /// - beat: 0-indexed beat within measure
     /// - subdivision_ticks: remaining ticks within the beat
     ///
     /// Takes into account time signature changes throughout the piece.
     #[must_use]
     pub fn tick_to_musical_position(&self, tick: u32) -> MusicalPosition {
-        let songstart = self.songstart_tick();
+        let songstart_opt = self.find_marker("SONGSTART").map(|m| m.tick);
+        let songstart = songstart_opt.unwrap_or(0);
+        let measure_origin = if songstart_opt.is_some() { 1 } else { 0 };
 
         // If tick is before songstart, return negative measure (count-in)
-        if tick < songstart {
+        if songstart_opt.is_some() && tick < songstart {
             let ticks_before = songstart - tick;
             let (ts_num, ts_denom) = self.initial_time_signature();
             let ticks_per_beat = self.ticks_per_beat_for_denominator(ts_denom);
@@ -503,7 +507,7 @@ impl MidiFile {
             let subdivision = (remaining % ticks_per_beat) as i32;
 
             return MusicalPosition {
-                measure: -(measures_before as i32),
+                measure: measure_origin - (measures_before as i32),
                 beat,
                 subdivision,
             };
@@ -514,7 +518,7 @@ impl MidiFile {
 
         // Track position through time signature changes
         let mut current_tick: u32 = 0;
-        let mut current_measure: i32 = 0;
+        let mut current_measure: i32 = measure_origin;
         let mut ts_idx = 0;
 
         // Find time signatures after songstart
@@ -584,7 +588,7 @@ impl MidiFile {
         let subdivision = (remaining % ticks_per_beat) as i32;
 
         MusicalPosition {
-            measure,
+            measure: measure + measure_origin,
             beat,
             subdivision,
         }
@@ -611,25 +615,14 @@ impl MidiFile {
     /// Filters out special markers like "SONGSTART", "Count-In", section names, etc.
     #[must_use]
     pub fn chord_markers(&self) -> Vec<ChordMarker> {
-        self.markers
-            .iter()
-            .filter(|m| is_chord_marker(&m.text))
-            .map(|m| {
-                let position = self.tick_to_musical_position(m.tick);
-                ChordMarker {
-                    tick: m.tick,
-                    chord_name: m.text.clone(),
-                    position,
-                }
-            })
-            .collect()
+        self.chord_markers_with_position(|tick| self.tick_to_musical_position(tick))
     }
 }
 
 /// Musical position in measure.beat.subdivision format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MusicalPosition {
-    /// Measure number (0-indexed, can be negative for count-in)
+    /// Measure number (SONGSTART = 1, can be <= 0 for count-in)
     pub measure: i32,
     /// Beat within measure (0-indexed)
     pub beat: i32,
@@ -651,13 +644,46 @@ impl MusicalPosition {
 }
 
 impl MidiFile {
+    fn chord_markers_with_position<F>(&self, mut position_for_tick: F) -> Vec<ChordMarker>
+    where
+        F: FnMut(u32) -> MusicalPosition,
+    {
+        let mut current_key: Option<Key> = None;
+        let mut out = Vec::new();
+
+        for marker in &self.markers {
+            if let Some(key) = parse_key_signature_marker(&marker.text) {
+                current_key = Some(key);
+                continue;
+            }
+
+            if !is_chord_marker(&marker.text) {
+                continue;
+            }
+
+            let position = position_for_tick(marker.tick);
+            let mut chord_name = normalize_chord_name(&marker.text);
+            if let Some(key) = current_key.as_ref() {
+                chord_name = respell_chord_name_for_key(&chord_name, key);
+            }
+
+            out.push(ChordMarker {
+                tick: marker.tick,
+                chord_name,
+                position,
+            });
+        }
+
+        out
+    }
+
     /// Convert a tick position to an absolute MIDI measure position (where tick 0 = measure 1).
     ///
     /// Unlike `tick_to_musical_position` which is relative to SONGSTART,
     /// this returns the absolute measure number as it would appear in a DAW.
     #[must_use]
     pub fn tick_to_absolute_measure(&self, tick: u32) -> MusicalPosition {
-        let ppq = self.ppq;
+        let _ppq = self.ppq;
         let (ts_num, ts_denom) = self.initial_time_signature();
         let ticks_per_beat = self.ticks_per_beat_for_denominator(ts_denom);
         let ticks_per_measure = ticks_per_beat * u32::from(ts_num);
@@ -696,21 +722,27 @@ impl MidiFile {
             .collect()
     }
 
+    /// Get key signature markers with absolute MIDI measure positions.
+    #[must_use]
+    pub fn key_signature_markers_absolute(&self) -> Vec<KeySignatureMarker> {
+        self.markers
+            .iter()
+            .filter_map(|m| {
+                let key = parse_key_signature_marker(&m.text)?;
+                Some(KeySignatureMarker {
+                    tick: m.tick,
+                    key_name: m.text.trim().to_string(),
+                    key,
+                    position: self.tick_to_absolute_measure(m.tick),
+                })
+            })
+            .collect()
+    }
+
     /// Get chord markers with absolute MIDI measure positions.
     #[must_use]
     pub fn chord_markers_absolute(&self) -> Vec<ChordMarker> {
-        self.markers
-            .iter()
-            .filter(|m| is_chord_marker(&m.text))
-            .map(|m| {
-                let position = self.tick_to_absolute_measure(m.tick);
-                ChordMarker {
-                    tick: m.tick,
-                    chord_name: m.text.clone(),
-                    position,
-                }
-            })
-            .collect()
+        self.chord_markers_with_position(|tick| self.tick_to_absolute_measure(tick))
     }
 }
 
@@ -728,6 +760,19 @@ pub struct ChordMarker {
     /// Chord name/symbol
     pub chord_name: String,
     /// Musical position (measure, beat, subdivision)
+    pub position: MusicalPosition,
+}
+
+/// A key signature marker from a MIDI file with its position.
+#[derive(Debug, Clone)]
+pub struct KeySignatureMarker {
+    /// Original tick position.
+    pub tick: u32,
+    /// Original marker text (e.g. "#D", "bBb").
+    pub key_name: String,
+    /// Parsed key.
+    pub key: Key,
+    /// Musical position (measure, beat, subdivision).
     pub position: MusicalPosition,
 }
 
@@ -1287,6 +1332,9 @@ impl SectionType {
         if text_lower == "songend" {
             return (Self::Other, None);
         }
+        if text_lower == "ending" || text_lower == "end" {
+            return (Self::Outro, None);
+        }
 
         // Check for hits/stabs
         if text_lower == "hits" || text_lower.starts_with("hit") {
@@ -1366,11 +1414,17 @@ fn is_section_marker(text: &str) -> bool {
         return false;
     }
 
+    if parse_key_signature_marker(text).is_some() {
+        return false;
+    }
+
     // Known section marker patterns
     let section_markers = [
         "SONGSTART",
         "Count-In",
         "SONGEND",
+        "ENDING",
+        "END",
         "HITS",
         "VS",
         "CH",
@@ -1398,8 +1452,13 @@ fn is_section_marker(text: &str) -> bool {
         }
     }
 
-    // Also match patterns like "Intro \"Groove\"" (intro with description)
     let text_lower = text.to_lowercase();
+    // Also match patterns like "B-Section" / "A Section"
+    if text_lower.ends_with("-section") || text_lower.ends_with(" section") {
+        return true;
+    }
+
+    // Also match patterns like "Intro \"Groove\"" (intro with description)
     text_lower.starts_with("intro")
         || text_lower.starts_with("verse")
         || text_lower.starts_with("chorus")
@@ -1417,6 +1476,11 @@ fn is_chord_marker(text: &str) -> bool {
 
     // Skip section markers (these are not chords)
     if is_section_marker(text) {
+        return false;
+    }
+
+    // Skip key signature markers (e.g. "#D", "bBb")
+    if parse_key_signature_marker(text).is_some() {
         return false;
     }
 
@@ -1446,13 +1510,35 @@ fn is_chord_marker(text: &str) -> bool {
     true
 }
 
+fn parse_key_signature_marker(text: &str) -> Option<Key> {
+    let trimmed = text.trim();
+    let looks_like_key_sig =
+        trimmed.len() <= 4 && (trimmed.starts_with('#') || trimmed.starts_with('b'));
+    if !looks_like_key_sig {
+        return None;
+    }
+    keyflow_text::api::parse::key(trimmed).ok()
+}
+
+fn respell_chord_name_for_key(chord_name: &str, key: &Key) -> String {
+    let mut chord = match keyflow_text::api::parse::chord(chord_name) {
+        Ok(chord) => chord,
+        Err(_) => return chord_name.to_string(),
+    };
+
+    let key_spelling = KeySpelling::major(key.root());
+    chord.respell_root(&key_spelling, SpellingMode::Relaxed);
+    chord.normalized
+}
+
 /// Normalize a MIDI chord name to keyflow format.
 ///
 /// Handles common DAW chord naming conventions:
 /// - `Fmaj/C` → `F/C` (strip "maj" from major triads with slash bass)
 /// - `Cmaj` → `C` (strip "maj" from simple major triads)
 /// - `Abaug/maj7` → `Abmaj7#5` (augmented major 7th)
-/// - `Abmaj add9` or `Abmaj9 add9` → `Abmaj9` (normalize add9 variants)
+/// - `Abmaj add9` → `Abadd9` (major triad + added 9, no implied 7th)
+/// - `Abmaj9 add9` → `Abmaj9` (redundant add9 on maj9)
 /// - `Csus4` → `Csus` (normalize sus4)
 /// - Preserves valid keyflow notation unchanged
 #[must_use]
@@ -1466,12 +1552,22 @@ pub fn normalize_chord_name(name: &str) -> String {
         result = result.replace("augmaj7", "maj7#5");
     }
 
-    // Handle "maj add9" → "maj9" or "(add9)"
+    // Keep explicit maj9, but treat "maj add9" as add9 (no implied 7th).
+    if result.contains("maj9 add9") {
+        result = result.replace("maj9 add9", "maj9");
+    }
+    if result.contains("Maj9 add9") {
+        result = result.replace("Maj9 add9", "Maj9");
+    }
     if result.contains("maj add9") {
-        result = result.replace("maj add9", "maj9");
+        result = result.replace("maj add9", " add9");
+    }
+    if result.contains("Maj add9") {
+        result = result.replace("Maj add9", " add9");
     }
     if result.contains(" add9") {
-        result = result.replace(" add9", "(add9)");
+        // keyflow-text parses add-chords as "add9" (without parentheses)
+        result = result.replace(" add9", "add9");
     }
 
     // Handle "Xmaj/Y" → "X/Y" for major triads with slash bass
@@ -1505,7 +1601,12 @@ pub fn normalize_chord_name(name: &str) -> String {
         result = result.replace("sus4", "sus");
     }
 
-    result
+    // Use keyflow-text for final canonicalization when possible.
+    if let Ok(chord) = keyflow_text::api::parse::chord(&result) {
+        chord.normalized
+    } else {
+        result
+    }
 }
 
 impl MidiNote {
@@ -1747,10 +1848,10 @@ mod tests {
         println!("PPQ: {}", ppq);
         println!("Ticks per measure: {}", ticks_per_measure);
 
-        // Test: exactly at SONGSTART should be measure 0, beat 0
+        // Test: exactly at SONGSTART should be measure 1, beat 0
         let pos = midi.tick_to_musical_position(songstart);
         println!("\nAt SONGSTART (tick {}): {:?}", songstart, pos);
-        assert_eq!(pos.measure, 0, "SONGSTART should be measure 0");
+        assert_eq!(pos.measure, 1, "SONGSTART should be measure 1");
         assert_eq!(pos.beat, 0, "SONGSTART should be beat 0");
         assert_eq!(pos.subdivision, 0, "SONGSTART should have no subdivision");
 
@@ -1761,14 +1862,14 @@ mod tests {
             "One measure after SONGSTART (tick {}): {:?}",
             one_measure, pos
         );
-        assert_eq!(pos.measure, 1, "Should be measure 1");
+        assert_eq!(pos.measure, 2, "Should be measure 2");
         assert_eq!(pos.beat, 0, "Should be beat 0");
 
-        // Test: beat 2 of measure 1 (1.5 measures after start)
+        // Test: beat 2 of measure 2 (1.5 measures after start)
         let beat2_m1 = songstart + ticks_per_measure + ppq;
         let pos = midi.tick_to_musical_position(beat2_m1);
-        println!("Beat 2 of measure 1 (tick {}): {:?}", beat2_m1, pos);
-        assert_eq!(pos.measure, 1);
+        println!("Beat 2 of measure 2 (tick {}): {:?}", beat2_m1, pos);
+        assert_eq!(pos.measure, 2);
         assert_eq!(pos.beat, 1); // 0-indexed, so beat 1 = 2nd beat
 
         // Test: First chord (Ab9) at tick 11840
@@ -1780,8 +1881,8 @@ mod tests {
             first_chord_tick, relative, pos
         );
         // relative = 320, which is 320/960 = 1/3 beat = triplet offset
-        // So it should be measure 0, beat 0, subdivision 320
-        assert_eq!(pos.measure, 0);
+        // So it should be measure 1, beat 0, subdivision 320
+        assert_eq!(pos.measure, 1);
         assert_eq!(pos.beat, 0);
         assert_eq!(pos.subdivision, 320, "Ab9 has 320 tick offset (triplet)");
     }
@@ -1822,8 +1923,8 @@ mod tests {
         assert!(songstart.is_some(), "Should have SONGSTART marker");
         let songstart = songstart.unwrap();
         assert_eq!(
-            songstart.position.measure, 0,
-            "SONGSTART should be measure 0"
+            songstart.position.measure, 1,
+            "SONGSTART should be measure 1"
         );
 
         // Check Verse 1 position
@@ -1849,6 +1950,93 @@ mod tests {
             ch1.position.measure + 1,
             ch1.tick
         );
+    }
+
+    #[test]
+    fn test_ending_is_section_marker_not_chord() {
+        assert!(is_section_marker("ENDING"));
+        assert!(!is_chord_marker("ENDING"));
+
+        let (section_type, number) = SectionType::from_marker_text("ENDING");
+        assert_eq!(section_type, SectionType::Outro);
+        assert_eq!(number, None);
+    }
+
+    #[test]
+    fn test_hash_key_markers_are_not_chords_or_sections() {
+        assert!(parse_key_signature_marker("#D").is_some());
+        assert!(parse_key_signature_marker("#C").is_some());
+        assert!(!is_chord_marker("#D"));
+        assert!(!is_section_marker("#D"));
+    }
+
+    #[test]
+    fn test_key_signature_markers_and_key_based_respelling() {
+        let ppq = 960;
+        let ticks_per_measure = ppq * 4;
+
+        let m64 = (64 - 1) * ticks_per_measure;
+        let m80 = (80 - 1) * ticks_per_measure;
+
+        let markers = vec![
+            MarkerEvent {
+                tick: 0,
+                text: "#D".to_string(),
+                marker_type: MarkerType::Marker,
+            },
+            MarkerEvent {
+                tick: 120,
+                text: "Dbm7".to_string(),
+                marker_type: MarkerType::Marker,
+            },
+            MarkerEvent {
+                tick: m64,
+                text: "#C".to_string(),
+                marker_type: MarkerType::Marker,
+            },
+            MarkerEvent {
+                tick: m64 + 120,
+                text: "Dbm7".to_string(),
+                marker_type: MarkerType::Marker,
+            },
+            MarkerEvent {
+                tick: m80,
+                text: "#D".to_string(),
+                marker_type: MarkerType::Marker,
+            },
+            MarkerEvent {
+                tick: m80 + 120,
+                text: "Gbmaj".to_string(),
+                marker_type: MarkerType::Marker,
+            },
+        ];
+
+        let midi = MidiFile::from_parts(
+            ppq,
+            vec![],
+            vec![],
+            vec![],
+            markers,
+            vec![],
+        );
+
+        let keys = midi.key_signature_markers_absolute();
+        assert_eq!(keys.len(), 3);
+        assert_eq!(keys[0].position.measure, 1);
+        assert_eq!(keys[1].position.measure, 64);
+        assert_eq!(keys[2].position.measure, 80);
+        assert_eq!(keys[0].key.root().name(), "D");
+        assert_eq!(keys[1].key.root().name(), "C");
+        assert_eq!(keys[2].key.root().name(), "D");
+
+        let chords = midi.chord_markers_absolute();
+        assert_eq!(chords.len(), 3);
+        // In key D, Db should be respelled to C#.
+        assert_eq!(chords[0].chord_name, "C#m7");
+        // In key C, keep flat spelling accepted from marker.
+        assert_eq!(chords[1].chord_name, "Dbm7");
+        // Back in key D, Gb should be respelled to F#.
+        assert_eq!(chords[2].chord_name, "F#");
     }
 
     #[test]

@@ -131,7 +131,7 @@ fn get_slope_constraint(notes: &[BeamNote], stem_up: bool) -> SlopeConstraint {
     // The "higher" end depends on stem direction:
     // - Stem up: higher = smaller line number (higher on staff)
     // - Stem down: higher = larger line number (lower on staff)
-    let (higher_end, lower_end) = if stem_up {
+    let (higher_end, _lower_end) = if stem_up {
         (start_line.min(end_line), start_line.max(end_line))
     } else {
         (start_line.max(end_line), start_line.min(end_line))

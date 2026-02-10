@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use crate::engraver::layout::chart::ChartLayoutEngine;
-use crate::engraver::renderer::scene_renderer::{SceneRenderBuilder, VelloSceneRenderer};
+use crate::engraver::renderer::scene_renderer::VelloSceneRenderer;
 use crate::engraver::style::MStyle;
 
 use super::SMuFLFont;

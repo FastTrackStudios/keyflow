@@ -415,7 +415,7 @@ impl Chart {
 
 impl std::fmt::Display for Chart {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use crate::chord::{PushPullBase, LilySyntax};
+        use crate::chord::PushPullBase;
 
         // Simple title
         if let Some(ref title) = self.metadata.title {
@@ -502,7 +502,7 @@ impl std::fmt::Display for Chart {
                             // so we don't need to add it again here
 
                             // Pull notation (always show amount for pulls)
-                            if let Some((is_push, amount)) = &chord.push_pull {
+                            if let Some((is_push, _amount)) = &chord.push_pull {
                                 if !*is_push {
                                     chord_text.push('\'');
                                 }

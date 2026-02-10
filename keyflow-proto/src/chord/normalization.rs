@@ -162,7 +162,12 @@ impl Chord {
             desc.push_str("6/9");
             // Add any other additions
             for addition in &self.additions {
-                if *addition != ChordDegree::Sixth && *addition != ChordDegree::Ninth {
+                // 13 is enharmonically the same scale degree as 6 in 6/9 chords,
+                // so avoid impossible forms like "6/9add13".
+                if *addition != ChordDegree::Sixth
+                    && *addition != ChordDegree::Ninth
+                    && *addition != ChordDegree::Thirteenth
+                {
                     desc.push_str(&format!("add{}", addition_value(addition)));
                 }
             }

@@ -9,7 +9,7 @@ use skrifa::charmap::Charmap;
 use skrifa::metrics::GlyphMetrics;
 use skrifa::prelude::Size;
 use skrifa::raw::FileRef;
-use skrifa::{FontRef, MetadataProvider};
+use skrifa::MetadataProvider;
 
 /// Text font metrics provider.
 ///

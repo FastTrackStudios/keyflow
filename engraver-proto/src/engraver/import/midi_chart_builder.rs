@@ -7,7 +7,6 @@
 //! determines push/pull timing, builds measure-aware rhythm elements,
 //! and formats everything as Keyflow chart text.
 
-use std::collections::BTreeMap;
 
 use crate::chord::{detect_chords_from_midi_notes, DetectedChord, MidiNote as KeyflowMidiNote};
 use crate::key::{KeySpelling, SpellingMode};
@@ -385,7 +384,7 @@ fn detect_push_pull_for_chord(
     let triplet_eighth = ppq / 3; // 320 at 960 PPQ
     let triplet_quarter = triplet_eighth * 2; // 640 at 960 PPQ
     let straight_eighth = ppq / 2; // 480 at 960 PPQ
-    let sixteenth = ppq / 4; // 240 at 960 PPQ
+    let _sixteenth = ppq / 4; // 240 at 960 PPQ
     let dotted_eighth = (ppq * 3) / 4; // 720 at 960 PPQ — sixteenth before next beat
     let tolerance = ppq / 24; // ~40 ticks
 
@@ -449,7 +448,7 @@ fn is_staccato_push(
     ppq: u32,
     songstart: u32,
     is_pushed: bool,
-    push_amount: &Option<String>,
+    _push_amount: &Option<String>,
 ) -> bool {
     // Only pushed chords can be staccato pushes
     if !is_pushed {
@@ -876,7 +875,7 @@ fn build_rhythm_elements(
         //   Use the chord's actual start position to determine push type (triplet vs quarter).
         // - Chords that stay within a single beat are NOT pushed
         // - Otherwise use normal detection
-        let ticks_per_measure = ticks_per_beat * 4; // 4/4
+        let _ticks_per_measure = ticks_per_beat * 4; // 4/4
         let (mut is_pushed, mut push_amount) = if is_continuing {
             // This chord started in the previous section and sustains into this one.
             // Detect push type from the chord's actual start position.

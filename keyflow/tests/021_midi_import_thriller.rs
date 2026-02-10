@@ -1802,7 +1802,7 @@ fn test_chord_normalization() {
     assert_eq!(normalize_chord_name("Caugmaj7"), "Cmaj7#5");
 
     // Test add9 normalization
-    assert_eq!(normalize_chord_name("Abmaj add9"), "Abmaj9");
+    assert_eq!(normalize_chord_name("Abmaj add9"), "Ab(add9)");
     assert_eq!(normalize_chord_name("C add9"), "C(add9)");
 
     // Test standalone maj -> empty

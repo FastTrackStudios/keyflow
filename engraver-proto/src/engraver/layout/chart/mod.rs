@@ -56,8 +56,7 @@ pub use collision::{ChordCollisionContext, resolve_chord_positions};
 
 use std::sync::Arc;
 
-use crate::chart::types::{Measure, RhythmElement};
-use crate::chord::{LilySyntax, PushPullBase};
+use crate::chord::LilySyntax;
 use crate::engraver::layout::context::LayoutContext;
 use crate::engraver::layout::orchestrator::{PageLayout, PageMargins, SystemLayout};
 use crate::engraver::layout::segment::SegmentType;
@@ -66,22 +65,20 @@ use crate::engraver::layout::text_metrics::TextFontMetrics;
 use crate::engraver::layout::tlayout::{
     BarlineType, ClefParams, ClefType, HarmonyParams, HarmonyStyle, MarginLabelParams,
     NoteHeadType, RestDuration, RestParams, SlurDirection, SlurEndpoint, SlurTieConfig,
-    TimeSigParams, TimeSigType, layout_clef, layout_harmony, layout_margin_label, layout_rest,
-    layout_tie, layout_timesig, parse_chord, rehearsal_themes,
+    TimeSigParams, TimeSigType, layout_clef, layout_margin_label, layout_rest,
+    layout_tie, layout_timesig,
 };
-use crate::engraver::model::{DurationKind, NoteHead};
 use crate::engraver::notation::{
-    Duration, MeasureBuilder, MeasureScene, RhythmEntry, TupletRatio, TupletSpec,
+    Duration, MeasureBuilder, MeasureScene, RhythmEntry,
 };
 use crate::engraver::scene::id::{ElementType, SemanticId};
-use crate::engraver::scene::node::{SceneNode, metadata_keys};
-use crate::engraver::scene::paint::{FontStyle, FontWeight, PaintCommand, TextAnchor};
+use crate::engraver::scene::node::SceneNode;
+use crate::engraver::scene::paint::PaintCommand;
 use crate::engraver::style::MStyle;
 use crate::sections::SectionType;
-use crate::time::TimeSignature;
-use crate::{Chart, ChartPosition, SourceLink};
+use crate::Chart;
 use kurbo::{Affine, Rect};
-use rhythm_builder::{NoteHeadOverride, RhythmBuildConfig, RhythmBuildResult, RhythmSource};
+use rhythm_builder::{NoteHeadOverride, RhythmBuildConfig, RhythmSource};
 use tracing::debug;
 use vello::peniko::Color;
 
@@ -1251,7 +1248,7 @@ impl ChartLayoutEngine {
             .unwrap_or((4u8, 4u8));
 
         // Detect count-in from parsed chart sections if not configured explicitly.
-        let count_in_measures = if self.config.count_in_measures > 0 {
+        let _count_in_measures = if self.config.count_in_measures > 0 {
             self.config.count_in_measures as usize
         } else {
             chart
@@ -2046,8 +2043,8 @@ impl ChartLayoutEngine {
             8 => 240, // Eighth note beat
             _ => 480, // Default to quarter
         };
-        let measure_ticks = beat_ticks * time_signature.0 as i32;
-        let beats_per_measure = time_signature.0 as f64;
+        let _measure_ticks = beat_ticks * time_signature.0 as i32;
+        let _beats_per_measure = time_signature.0 as f64;
 
         // Check if the measure has explicit chord rhythms (Lily, Rest, Space notation)
         let has_explicit_chord_rhythm = rhythm_builder::measure_has_explicit_chord_rhythm(measure);
@@ -2157,7 +2154,7 @@ impl ChartLayoutEngine {
         let spillback_positions = rhythm_result.spillback_positions.clone();
 
         // Convert RhythmBuildResult to the format expected by MeasureBuilder
-        let (rhythm_entries, full_rhythm, rhythm_ticks, tuplet_specs, internal_push_positions) =
+        let (rhythm_entries, full_rhythm, _rhythm_ticks, tuplet_specs, internal_push_positions) =
             if has_explicit_chord_rhythm || melody_data.is_some() {
                 // Use entries directly for explicit rhythms and melody data
                 (

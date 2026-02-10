@@ -178,10 +178,10 @@ pub struct SystemLayout {
 #[must_use]
 pub fn layout_system(
     measures: &[MeasureParams],
-    system_width: f64,
+    _system_width: f64,
     ctx: &LayoutContext,
 ) -> (LayoutData, SceneNode) {
-    let spatium = ctx.spatium();
+    let _spatium = ctx.spatium();
 
     // Create system group
     let mut system_node = SceneNode::group(SemanticId::new(ElementType::System, 0));

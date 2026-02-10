@@ -8,7 +8,7 @@ use vello::peniko::Color;
 
 use crate::engraver::layout::context::LayoutContext;
 use crate::engraver::layout::shape::Shape;
-use crate::engraver::scene::id::{ElementType, SemanticId};
+use crate::engraver::scene::id::SemanticId;
 use crate::engraver::scene::node::SceneNode;
 use crate::engraver::scene::paint::PaintCommand;
 

@@ -227,7 +227,7 @@ fn extract_from_explicit(
     // Triplets are grouped by beat: 3 triplet eighths = 480 ticks (one quarter note)
     const TRIPLET_BEAT_TICKS: i32 = 480;
 
-    for (idx, element) in elements.iter().enumerate() {
+    for (_idx, element) in elements.iter().enumerate() {
         let (duration, is_rest, is_triplet) = extract_rhythm_parts(element);
 
         // Skip 0-duration elements (like space markers for push)
@@ -1026,7 +1026,7 @@ pub fn build_rhythm_with_triplets(
         auto_rhythm_slashes: false,
         push_alters_rhythm: true,
     };
-    let source = RhythmSource::SlashNotation {
+    let _source = RhythmSource::SlashNotation {
         chords: &measure.chords,
         spillbacks,
     };

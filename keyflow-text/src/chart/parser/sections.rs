@@ -10,7 +10,7 @@ use crate::chart::types::{ChartSection, Measure, RhythmElement};
 use crate::primitives::RootNotation;
 use crate::sections::{Section, SectionType};
 use crate::time::{
-    AbsolutePosition, MusicalDuration, MusicalPosition, TimeSignature, TimeSignatureExt,
+    AbsolutePosition, MusicalDuration, TimeSignature, TimeSignatureExt,
 };
 
 // region:    --- Section Parsing

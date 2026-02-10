@@ -15,7 +15,7 @@
 //!
 //! Reference: MuseScore `slurtielayout.cpp` (3,214 lines)
 
-use kurbo::{BezPath, CubicBez, ParamCurve, ParamCurveArclen, Point, Rect, Vec2};
+use kurbo::{BezPath, CubicBez, ParamCurve, Point, Rect, Vec2};
 use vello::peniko::Color;
 
 use crate::engraver::scene::id::{ElementType, SemanticId};

@@ -751,7 +751,7 @@ where
 /// Weight value for spring-based width distribution (typically 0.5-4.0)
 #[must_use]
 pub fn compute_measure_weight(
-    measurements: &MeasureMeasurements,
+    _measurements: &MeasureMeasurements,
     segment_count: usize,
     triplet_count: usize,
 ) -> f64 {

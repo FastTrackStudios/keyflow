@@ -16,7 +16,6 @@ pub use behavioral::{BehavioralFlags, DEFAULT_MIN_CHORD_SYMBOL_GAP};
 pub use layout_params::LayoutParams;
 pub use render_options::RenderOptions;
 
-use super::constants;
 use crate::engraver::layout::orchestrator::PageMargins;
 use crate::engraver::layout::tlayout::HarmonyStyle;
 

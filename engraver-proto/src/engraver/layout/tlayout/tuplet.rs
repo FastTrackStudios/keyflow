@@ -208,7 +208,7 @@ pub fn layout_tuplet(
     let is_up = determine_tuplet_direction(notes);
 
     // Get first and last notes (safe due to len >= 2 check above)
-    let (Some(first), Some(last)) = (notes.first(), notes.last()) else {
+    let (Some(_first), Some(last)) = (notes.first(), notes.last()) else {
         return TupletLayout {
             commands: Vec::new(),
             bbox: Rect::ZERO,
@@ -266,7 +266,7 @@ pub fn layout_tuplet(
     // Get number text
     let number_text = ratio.to_display_string(config.number_type);
     let number_width = number_text.len() as f64 * config.number_size * spatium * 0.6;
-    let number_height = config.number_size * spatium;
+    let _number_height = config.number_size * spatium;
 
     // Gap in bracket for number
     let gap_start = number_x - number_width / 2.0 - spatium * 0.2;
@@ -584,7 +584,7 @@ fn interpolate_y(p1: Point, p2: Point, x: f64) -> f64 {
 }
 
 /// Determine if bracket should be shown.
-fn should_show_bracket(notes: &[TupletNote], bracket_type: TupletBracketType) -> bool {
+fn should_show_bracket(_notes: &[TupletNote], bracket_type: TupletBracketType) -> bool {
     match bracket_type {
         TupletBracketType::ShowBracket => true,
         TupletBracketType::NoBracket => false,

@@ -23,7 +23,7 @@ pub use helpers::{LineOffsetMap, PushPullModifier, RepeatCount};
 
 use super::ChartParser;
 use crate::sections::MeasureExpression;
-use crate::time::{MusicalPositionExt, TimeSignatureExt};
+use crate::time::TimeSignatureExt;
 
 impl<'a> ChartParser<'a> {
     /// Strip comments from a line (everything after ;)

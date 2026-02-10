@@ -24,7 +24,7 @@ use vello::peniko::Color;
 
 use crate::engraver::fonts::SMuFLFont;
 use crate::engraver::layout::context::{
-    LayoutConfiguration, LayoutContext, LayoutContextOwned, LayoutMode,
+    LayoutContext, LayoutContextOwned, LayoutMode,
 };
 use crate::engraver::layout::tlayout::chord::{
     layout_chord, ChordNote, ChordParams, StemDirection,
@@ -349,7 +349,7 @@ impl<'a> LayoutEngine<'a> {
         let content_height =
             self.config.page_height - self.config.margins.top - self.config.margins.bottom;
 
-        for (sys_idx, measure_indices) in systems_measures.iter().enumerate() {
+        for (_sys_idx, measure_indices) in systems_measures.iter().enumerate() {
             // Create system node
             let system_height = self.config.spatium * 4.0; // 5 staff lines = 4 spaces
 
@@ -1098,7 +1098,7 @@ impl<'a> LayoutEngine<'a> {
     /// Create staff lines for a measure.
     fn create_staff_lines(&self, width: f64) -> SceneNode {
         let spatium = self.config.spatium;
-        let half_staff = 2.0 * spatium; // 4 spaces / 2
+        let _half_staff = 2.0 * spatium; // 4 spaces / 2
         let line_thickness = spatium * 0.1;
 
         let mut commands = Vec::new();

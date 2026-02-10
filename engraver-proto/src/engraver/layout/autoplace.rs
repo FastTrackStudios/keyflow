@@ -5,7 +5,7 @@
 //!
 //! Based on MuseScore's autoplace.cpp implementation.
 
-use kurbo::{Point, Rect};
+use kurbo::Point;
 
 use crate::engraver::layout::shape::Shape;
 use crate::engraver::layout::skyline::{Skyline, SkylineElement, SkylineLine};

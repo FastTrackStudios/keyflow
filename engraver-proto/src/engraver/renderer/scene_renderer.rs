@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use anyrender::{Glyph, PaintScene};
-use kurbo::{Affine, BezPath, Circle, Ellipse, Line, Point, Rect, RoundedRect, RoundedRectRadii};
+use kurbo::{Affine, BezPath, Circle, Ellipse, Line, Point, Rect, RoundedRect};
 use skrifa::{
     MetadataProvider,
     instance::Size,
@@ -15,7 +15,7 @@ use skrifa::{
     raw::{FileRef, FontRef},
 };
 use vello::kurbo::Stroke;
-use vello::peniko::{Blob, Brush, Color, Fill, FontData};
+use vello::peniko::{Blob, Color, Fill, FontData};
 
 use crate::engraver::fonts::SMuFLFont;
 use crate::engraver::scene::node::SceneNode;
