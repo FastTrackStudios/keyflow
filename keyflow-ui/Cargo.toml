@@ -14,6 +14,8 @@ engraver-proto = { workspace = true, features = ["engraver"] }
 
 # Backend-agnostic rendering abstraction
 anyrender = { workspace = true }
+anyrender_vello = { workspace = true, optional = true }
+peniko = { workspace = true, optional = true }
 
 # Dioxus UI framework - use dioxus-native when native feature is enabled
 dioxus = { version = "0.7.2", optional = true }
@@ -22,6 +24,20 @@ dioxus-native = { workspace = true, optional = true }
 # Vello scene types (for building scenes to hand off to ChartGraphics)
 vello = "0.7"
 kurbo = { workspace = true }
+
+# Session UI signals (for playback state, chart area bounds, etc.)
+session-ui = { path = "../../session/session-ui", default-features = false, optional = true }
+session = { workspace = true, optional = true }
+
+# DAW protocol types (for MusicalPosition)
+daw-proto = { workspace = true, optional = true }
+
+# Dock layout system (for panel visibility checks)
+dock-dioxus = { path = "../../dock/dock-dioxus", default-features = false, optional = true }
+dock-proto = { path = "../../dock/dock-proto", optional = true }
+
+# JSON parsing (for bounds eval results)
+serde_json = { workspace = true, optional = true }
 
 # Icons
 lucide-dioxus = { version = "2", features = ["all-icons"] }
@@ -35,6 +51,17 @@ tracing = "0.1"
 [features]
 default = ["web"]
 # Web/desktop (WebView-based) rendering
-web = ["dioxus"]
+web = ["dioxus", "desktop-panels"]
 # Native GPU-accelerated rendering via Blitz
-native = ["dioxus-native"]
+native = ["dioxus-native", "desktop-panels"]
+# Desktop panel components (ChartView, ChartPreviewPanel) with full app dependencies
+desktop-panels = [
+    "anyrender_vello",
+    "peniko",
+    "session-ui",
+    "session",
+    "daw-proto",
+    "dock-dioxus",
+    "dock-proto",
+    "serde_json",
+]

@@ -49,9 +49,18 @@ pub mod examples;
 pub mod layouts;
 pub mod signals;
 
+#[cfg(feature = "desktop-panels")]
+pub mod chart_graphics;
+#[cfg(feature = "desktop-panels")]
+pub mod panels;
+
 // Re-export key types for convenience
+#[cfg(feature = "desktop-panels")]
+pub use chart_graphics::ChartGraphics;
 pub use chart_renderer::{ChartLayoutManager, SceneHitResult};
 pub use layouts::ChartEditorLayout;
+#[cfg(feature = "desktop-panels")]
+pub use panels::{ChartPreviewPanel, ChartView};
 pub use signals::{
     ChartEditorBounds, ChartPageInfo, ChartViewport, PageMeta, PreviewMode, RenderStats,
     SemanticZoomLevel, SystemMeta, CHART_BASE_SCALE, CHART_CURSOR_POSITION,
