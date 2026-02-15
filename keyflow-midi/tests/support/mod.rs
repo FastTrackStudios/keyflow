@@ -193,7 +193,8 @@ pub fn assert_marker_chords_match(midi_relative_path: &str) {
 }
 
 fn chords_equivalent(expected: &Chord, detected: &Chord) -> bool {
-    if normalized_for_compare(&expected.normalized) == normalized_for_compare(&detected.normalized) {
+    if normalized_for_compare(&expected.normalized) == normalized_for_compare(&detected.normalized)
+    {
         return true;
     }
 
@@ -386,9 +387,9 @@ fn notes_at_tick(
             .take(24)
             .map(|n| {
                 let start_pos = format_position(midi.tick_to_absolute_measure(n.start_tick));
-                let end_pos = format_position(midi.tick_to_absolute_measure(
-                    n.start_tick.saturating_add(n.duration_ticks),
-                ));
+                let end_pos = format_position(
+                    midi.tick_to_absolute_measure(n.start_tick.saturating_add(n.duration_ticks)),
+                );
                 format!(
                     "{}(p{} ch{} v{} {}..{} @ {}->{})",
                     midi_pitch_to_note_name(n.pitch),
@@ -421,9 +422,9 @@ fn notes_at_tick(
         .take(24)
         .map(|(dist, n)| {
             let start_pos = format_position(midi.tick_to_absolute_measure(n.start_tick));
-            let end_pos = format_position(midi.tick_to_absolute_measure(
-                n.start_tick.saturating_add(n.duration_ticks),
-            ));
+            let end_pos = format_position(
+                midi.tick_to_absolute_measure(n.start_tick.saturating_add(n.duration_ticks)),
+            );
             format!(
                 "~{}:{}(p{} ch{} v{} {}..{} @ {}->{})",
                 dist,
@@ -459,12 +460,10 @@ fn nearest_detected_chord(
         return Some(chord);
     }
 
-    detected
-        .iter()
-        .min_by_key(|chord| {
-            let start_q = quantize_to_sixteenth(chord.start_ppq, ppq);
-            (start_q - marker_quantized).abs()
-        })
+    detected.iter().min_by_key(|chord| {
+        let start_q = quantize_to_sixteenth(chord.start_ppq, ppq);
+        (start_q - marker_quantized).abs()
+    })
 }
 
 fn quantize_to_sixteenth(tick: i64, ppq: u32) -> i64 {
@@ -553,7 +552,10 @@ fn build_mismatch(
         marker_kind: parsed_marker.marker_kind.clone(),
         parsed_text_marker: parsed_marker.parsed_text_marker.clone(),
         parsed_section: parsed_marker.parsed_section.clone(),
-        parsed_marker_chord: parsed_marker.parsed_chord.as_ref().map(|c| c.normalized.clone()),
+        parsed_marker_chord: parsed_marker
+            .parsed_chord
+            .as_ref()
+            .map(|c| c.normalized.clone()),
         midi_notes_at_position,
         detected_tick: nearest.map(|c| c.start_ppq),
         detected_position,
@@ -579,7 +581,10 @@ fn format_detected(midi: &MidiFile, chord: &DetectedChord) -> String {
         .ok()
         .map(|t| format_position(midi.tick_to_absolute_measure(t)))
         .unwrap_or_else(|| "unknown".to_string());
-    format!("{} @ {} (tick {})", chord.chord.normalized, pos, chord.start_ppq)
+    format!(
+        "{} @ {} (tick {})",
+        chord.chord.normalized, pos, chord.start_ppq
+    )
 }
 
 fn format_raw_marker_event(event: &keyflow_midi::import::MarkerEvent) -> String {

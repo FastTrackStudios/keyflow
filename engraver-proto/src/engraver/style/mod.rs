@@ -8,7 +8,7 @@
 
 mod styledef;
 
-pub use styledef::{default_value, StyleValue};
+pub use styledef::{StyleValue, default_value};
 
 // endregion: --- Modules
 

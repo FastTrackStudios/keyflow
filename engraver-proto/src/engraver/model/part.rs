@@ -1,6 +1,6 @@
 //! Part (instrument) representation.
 
-use super::{element::Clef, Measure};
+use super::{Measure, element::Clef};
 use serde::{Deserialize, Serialize};
 
 /// Unique identifier for a part.

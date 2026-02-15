@@ -2,8 +2,8 @@
 //!
 //! Provides utilities for converting MIDI events to chords and working with MIDI note data.
 
-use crate::chord::{Chord, ChordDegree, ChordQuality, from_semitones};
 use crate::chord::quality::SuspendedType;
+use crate::chord::{Chord, ChordDegree, ChordQuality, from_semitones};
 use crate::primitives::note::Note;
 use crate::primitives::{MusicalNote, RootNotation};
 use helgoboss_midi::KeyNumber;
@@ -443,7 +443,10 @@ fn apply_midi_octave_adjustments(
         // NOT a power chord with add2. Converting to Power would lose the sus2 quality
         // since the Power→sus2 reconversion below only fires when family.is_none().
         let is_sus2_with_seventh = chord.quality.is_suspended()
-            && matches!(chord.quality, ChordQuality::Suspended(SuspendedType::Second))
+            && matches!(
+                chord.quality,
+                ChordQuality::Suspended(SuspendedType::Second)
+            )
             && chord.family.is_some();
 
         if !is_sus2_with_seventh
@@ -483,20 +486,26 @@ fn apply_midi_octave_adjustments(
     {
         chord.quality = ChordQuality::Suspended(SuspendedType::Second);
         chord.extensions.ninth = None;
-        chord.additions.retain(|&d| d != ChordDegree::Ninth && d != ChordDegree::Second);
+        chord
+            .additions
+            .retain(|&d| d != ChordDegree::Ninth && d != ChordDegree::Second);
     }
 
     // For sus4 chords with a natural 11th extension, the 11th is redundant (same as the 4th)
     // D11sus4 → D7sus4, G11sus4 → G7sus4
-    if matches!(chord.quality, ChordQuality::Suspended(SuspendedType::Fourth))
-        && chord.extensions.eleventh.is_some()
+    if matches!(
+        chord.quality,
+        ChordQuality::Suspended(SuspendedType::Fourth)
+    ) && chord.extensions.eleventh.is_some()
     {
         chord.extensions.eleventh = None;
     }
 
     // For sus2 chords with a natural 9th extension, the 9th is redundant (same as the 2nd)
-    if matches!(chord.quality, ChordQuality::Suspended(SuspendedType::Second))
-        && chord.extensions.ninth.is_some()
+    if matches!(
+        chord.quality,
+        ChordQuality::Suspended(SuspendedType::Second)
+    ) && chord.extensions.ninth.is_some()
     {
         chord.extensions.ninth = None;
     }

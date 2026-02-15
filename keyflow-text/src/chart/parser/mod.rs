@@ -61,9 +61,9 @@ impl<'a> ChartParser<'a> {
 
     /// Parse a chart from input string
     pub fn parse(&mut self, input: &str) -> Result<(), String> {
-        use crate::time::TimeSignature;
         use crate::key::Key;
         use crate::primitives::MusicalNote;
+        use crate::time::TimeSignature;
 
         let lines: Vec<&str> = input
             .lines()

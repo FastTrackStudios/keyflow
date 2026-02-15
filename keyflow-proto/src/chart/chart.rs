@@ -1019,8 +1019,7 @@ mod tests {
 
         // Add key change at measure 4 (start of measure 2 in verse = section 1, measure 2)
         let g_major = Key::major(MusicalNote::g());
-        let key_change_position =
-            AbsolutePosition::new(MusicalPosition::new(4, 0, 0), 1);
+        let key_change_position = AbsolutePosition::new(MusicalPosition::new(4, 0, 0), 1);
         chart.add_key_change(g_major.clone(), key_change_position.clone(), 1);
 
         // Section 2: Chorus - 4 measures in 6/8 time
@@ -1037,8 +1036,7 @@ mod tests {
 
         // Add time signature change at measure 6 (start of chorus = section 2, measure 0)
         let time_6_8 = TimeSignature::new(6, 8);
-        let ts_change_position =
-            AbsolutePosition::new(MusicalPosition::new(6, 0, 0), 2);
+        let ts_change_position = AbsolutePosition::new(MusicalPosition::new(6, 0, 0), 2);
         chart.add_time_signature_change(time_6_8, ts_change_position.clone(), 2);
 
         // Test 1: Position at start of song (section 0, measure 0)
@@ -1080,7 +1078,8 @@ mod tests {
         let key_at_start = chart.key_at_position(&pos_start);
         assert_eq!(key_at_start, Some(&c_major));
 
-        let key_before_change = chart.key_at_position(&AbsolutePosition::new(MusicalPosition::new(3, 0, 0), 1));
+        let key_before_change =
+            chart.key_at_position(&AbsolutePosition::new(MusicalPosition::new(3, 0, 0), 1));
         assert_eq!(key_before_change, Some(&c_major));
 
         let key_after_change = chart.key_at_position(&pos_key_change);
@@ -1227,7 +1226,8 @@ F C G Am
         println!("Serialized output:\n{}", output);
 
         // Parse it again
-        let chart2 = keyflow_text::chart::parse_chart(&output).expect("Should parse serialized output");
+        let chart2 =
+            keyflow_text::chart::parse_chart(&output).expect("Should parse serialized output");
 
         // Verify they have the same structure
         assert_eq!(chart1.metadata.title, chart2.metadata.title);

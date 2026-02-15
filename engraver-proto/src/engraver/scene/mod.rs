@@ -45,18 +45,18 @@ pub mod traverse;
 
 // Re-export main types for convenience
 pub use id::{ElementType, SemanticId};
-pub use node::{metadata_keys, GlyphInfo, GlyphType, SceneNode};
+pub use node::{GlyphInfo, GlyphType, SceneNode, metadata_keys};
 pub use paint::{
-    color_to_svg, path_to_svg_d, FillRule, FontStyle, FontWeight, LineCap, LineJoin, PaintCommand,
-    TextAnchor,
+    FillRule, FontStyle, FontWeight, LineCap, LineJoin, PaintCommand, TextAnchor, color_to_svg,
+    path_to_svg_d,
 };
 pub use transform::{
-    affine_to_svg_transform, get_scale, get_translation, is_identity, is_scale, is_translation,
-    position_at, rotate_around, rotation_angle, scale_around, TransformStack,
+    TransformStack, affine_to_svg_transform, get_scale, get_translation, is_identity, is_scale,
+    is_translation, position_at, rotate_around, rotation_angle, scale_around,
 };
 pub use traverse::{
-    collect_visible_nodes, traverse, traverse_with_transform, NodeIterator, SceneNodeExt,
-    SceneVisitor, TransformIterator,
+    NodeIterator, SceneNodeExt, SceneVisitor, TransformIterator, collect_visible_nodes, traverse,
+    traverse_with_transform,
 };
 
 // endregion: --- Re-exports

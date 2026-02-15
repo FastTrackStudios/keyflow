@@ -381,11 +381,7 @@ impl MelodyNote {
     /// Get duration in beats (assuming quarter note = 1 beat)
     pub fn duration_beats(&self) -> f64 {
         let base = 4.0 / self.duration as f64;
-        if self.dotted {
-            base * 1.5
-        } else {
-            base
-        }
+        if self.dotted { base * 1.5 } else { base }
     }
 }
 

@@ -53,16 +53,16 @@ pub mod tlayout;
 
 pub use autoplace::{Autoplace, AutoplaceConfig, AutoplaceResult, AutoplaceState};
 pub use boundary::{
-    calculate_overhang, clamp_point_to_boundary, clamp_to_boundary, constrain_shape_to_boundary,
-    padding as boundary_padding, BoundaryContext,
+    BoundaryContext, calculate_overhang, clamp_point_to_boundary, clamp_to_boundary,
+    constrain_shape_to_boundary, padding as boundary_padding,
 };
 pub use context::{
     LayoutConfiguration, LayoutContext, LayoutContextOwned, LayoutMode, LayoutState,
 };
 pub use kerning::{KerningType, SpacingPadding, SpacingPaddingPixels};
 pub use orchestrator::{
-    layout_score, layout_score_with_config, LayoutEngine, LayoutEngineBuilder, LayoutEngineConfig,
-    LayoutResult, PageLayout, PageMargins, SystemLayout,
+    LayoutEngine, LayoutEngineBuilder, LayoutEngineConfig, LayoutResult, PageLayout, PageMargins,
+    SystemLayout, layout_score, layout_score_with_config,
 };
 pub use segment::{ElementId, Segment, SegmentType, VOICES};
 pub use segment_list::SegmentList;
@@ -75,9 +75,9 @@ pub use tlayout::{Layout, LayoutData};
 
 #[cfg(feature = "engraver")]
 pub use chart::{
-    expand_melodies_across_measures, ChartCursor, ChartLayoutEngine, ChartLayoutResult,
-    CursorConfig, CursorRgba, CursorState, CursorStyle, HighlightCommand,
-    LayoutMode as ChartLayoutMode, MeasureMelodyData, MelodyNoteSegment, PageLayoutMetrics,
+    ChartCursor, ChartLayoutEngine, ChartLayoutResult, CursorConfig, CursorRgba, CursorState,
+    CursorStyle, HighlightCommand, LayoutMode as ChartLayoutMode, MeasureMelodyData,
+    MelodyNoteSegment, PageLayoutMetrics, expand_melodies_across_measures,
 };
 
 // endregion: --- Re-exports

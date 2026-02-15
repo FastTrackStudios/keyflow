@@ -8,10 +8,10 @@ use lyon::lyon_tessellation::{
 };
 use lyon::path::Path;
 use skrifa::{
+    FontRef, MetadataProvider,
     instance::Size,
     outline::{DrawSettings, OutlinePen},
     prelude::LocationRef,
-    FontRef, MetadataProvider,
 };
 use smufl::Glyph;
 

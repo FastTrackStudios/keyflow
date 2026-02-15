@@ -56,6 +56,7 @@ pub use collision::{ChordCollisionContext, resolve_chord_positions};
 
 use std::sync::Arc;
 
+use crate::Chart;
 use crate::chord::LilySyntax;
 use crate::engraver::layout::context::LayoutContext;
 use crate::engraver::layout::orchestrator::{PageLayout, PageMargins, SystemLayout};
@@ -65,18 +66,15 @@ use crate::engraver::layout::text_metrics::TextFontMetrics;
 use crate::engraver::layout::tlayout::{
     BarlineType, ClefParams, ClefType, HarmonyParams, HarmonyStyle, MarginLabelParams,
     NoteHeadType, RestDuration, RestParams, SlurDirection, SlurEndpoint, SlurTieConfig,
-    TimeSigParams, TimeSigType, layout_clef, layout_margin_label, layout_rest,
-    layout_tie, layout_timesig,
+    TimeSigParams, TimeSigType, layout_clef, layout_margin_label, layout_rest, layout_tie,
+    layout_timesig,
 };
-use crate::engraver::notation::{
-    Duration, MeasureBuilder, MeasureScene, RhythmEntry,
-};
+use crate::engraver::notation::{Duration, MeasureBuilder, MeasureScene, RhythmEntry};
 use crate::engraver::scene::id::{ElementType, SemanticId};
 use crate::engraver::scene::node::SceneNode;
 use crate::engraver::scene::paint::PaintCommand;
 use crate::engraver::style::MStyle;
 use crate::sections::SectionType;
-use crate::Chart;
 use kurbo::{Affine, Rect};
 use rhythm_builder::{NoteHeadOverride, RhythmBuildConfig, RhythmSource};
 use tracing::debug;

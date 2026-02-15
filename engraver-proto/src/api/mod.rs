@@ -8,14 +8,14 @@ use std::fmt;
 
 /// Commonly used types for chart engraving.
 pub mod prelude {
+    pub use crate::Chart;
+    pub use crate::ParseError;
     pub use crate::api::style::{
         leak_default_style, leak_jazz_lead_sheet_style, leak_lead_sheet_style,
     };
     pub use crate::engraver::fonts::ChartFontBundle;
     pub use crate::engraver::layout::chart::{ChartLayoutEngine, ChartLayoutResult, LayoutMode};
     pub use crate::engraver::style::MStyle;
-    pub use crate::Chart;
-    pub use crate::ParseError;
 }
 
 /// Convenience helpers for obtaining a `'static` style.
@@ -67,11 +67,11 @@ impl Error for ChartLayoutError {}
 
 /// Chart engraving helpers (keyflow chart → layout).
 pub mod chart {
-    use super::{style, ChartLayoutError};
+    use super::{ChartLayoutError, style};
+    use crate::Chart;
     use crate::engraver::fonts::ChartFontBundle;
     use crate::engraver::layout::chart::{ChartLayoutEngine, ChartLayoutResult, LayoutMode};
     use crate::engraver::style::MStyle;
-    use crate::Chart;
 
     /// Create a chart layout engine from a style and font bundle.
     #[must_use]
@@ -81,12 +81,19 @@ pub mod chart {
 
     /// Layout an already-parsed chart using the provided engine and layout mode.
     #[must_use]
-    pub fn layout(chart: &Chart, engine: &ChartLayoutEngine, mode: &LayoutMode) -> ChartLayoutResult {
+    pub fn layout(
+        chart: &Chart,
+        engine: &ChartLayoutEngine,
+        mode: &LayoutMode,
+    ) -> ChartLayoutResult {
         engine.layout_chart(chart, mode)
     }
 
     /// Parse and layout chart text with default fonts and a lead sheet style.
-    pub fn layout_text(text: &str, mode: &LayoutMode) -> Result<ChartLayoutResult, ChartLayoutError> {
+    pub fn layout_text(
+        text: &str,
+        mode: &LayoutMode,
+    ) -> Result<ChartLayoutResult, ChartLayoutError> {
         let chart = keyflow_text::chart::parse_chart(text).map_err(ChartLayoutError::Parse)?;
         layout_chart(&chart, mode)
     }

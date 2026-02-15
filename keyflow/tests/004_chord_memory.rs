@@ -42,7 +42,10 @@ vs
     let chart = keyflow::parse(input).unwrap();
 
     // Test metadata
-    assert_eq!(chart.metadata.title, Some("First Section Global".to_string()));
+    assert_eq!(
+        chart.metadata.title,
+        Some("First Section Global".to_string())
+    );
     assert_eq!(chart.metadata.artist, Some("Demo".to_string()));
 
     // Test sections

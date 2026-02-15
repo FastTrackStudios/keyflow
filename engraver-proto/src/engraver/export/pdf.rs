@@ -495,7 +495,7 @@ impl PdfSerializer {
         svg_pages: &[String],
         fonts: &[(&str, &[u8])],
     ) -> Result<Vec<u8>, PdfExportError> {
-        use lopdf::{dictionary, Document, Object, ObjectId};
+        use lopdf::{Document, Object, ObjectId, dictionary};
         use std::collections::BTreeMap;
         use svg2pdf::{ConversionOptions, PageOptions};
 

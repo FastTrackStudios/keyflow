@@ -220,9 +220,8 @@ fn find_simplest_interpretation(
 
             // Check for 6th chord pattern: root(0) + fifth(7) + sixth(9)
             // X6 chords are complete harmonic concepts even without the 3rd
-            let has_sixth_chord_pattern = rotated_pcs.contains(&0)
-                && rotated_pcs.contains(&7)
-                && rotated_pcs.contains(&9);
+            let has_sixth_chord_pattern =
+                rotated_pcs.contains(&0) && rotated_pcs.contains(&7) && rotated_pcs.contains(&9);
 
             // Calculate complexity score (lower = simpler = better)
             let complexity = chord_complexity_score(&info, &rotated_pcs);
@@ -447,10 +446,13 @@ fn analyze_chord_structure(semitones: &[u8]) -> Result<ChordInfo> {
     // - 13th (pc 9): Block when it's a diminished chord with dim7th (pc 9 = dim7).
     //   Don't block when a minor/major 7th is present (then pc 9 is a separate 6th/13th).
     // - b13 (pc 8): Block when aug5th is present (same pitch class).
-    let has_sharp_eleventh = semitones.contains(&SHARP_ELEVENTH)
-        && !(has_dim_fifth && !has_perfect_fifth);
-    let is_dim_with_dim7 = has_dim_fifth && has_minor_third && has_sixth_or_dim7
-        && !has_minor_seventh && !has_major_seventh;
+    let has_sharp_eleventh =
+        semitones.contains(&SHARP_ELEVENTH) && !(has_dim_fifth && !has_perfect_fifth);
+    let is_dim_with_dim7 = has_dim_fifth
+        && has_minor_third
+        && has_sixth_or_dim7
+        && !has_minor_seventh
+        && !has_major_seventh;
     let has_thirteenth = semitones.contains(&THIRTEENTH) && !is_dim_with_dim7;
     let has_flat_thirteenth = semitones.contains(&FLAT_THIRTEENTH) && !has_aug_fifth;
 

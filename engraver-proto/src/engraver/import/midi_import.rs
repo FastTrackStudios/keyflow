@@ -2011,14 +2011,7 @@ mod tests {
             },
         ];
 
-        let midi = MidiFile::from_parts(
-            ppq,
-            vec![],
-            vec![],
-            vec![],
-            markers,
-            vec![],
-        );
+        let midi = MidiFile::from_parts(ppq, vec![], vec![], vec![], markers, vec![]);
 
         let keys = midi.key_signature_markers_absolute();
         assert_eq!(keys.len(), 3);
@@ -2722,7 +2715,7 @@ mod keyflow_comparison_tests {
     /// - Marker chords: the "ground truth" chord labels in the MIDI file
     #[test]
     fn test_detected_vs_marker_chords() {
-        use crate::chord::{detect_chords_from_midi_notes, MidiNote as KeyflowMidiNote};
+        use crate::chord::{MidiNote as KeyflowMidiNote, detect_chords_from_midi_notes};
         use crate::key::{KeySpelling, SpellingMode};
         use crate::primitives::MusicalNote;
 

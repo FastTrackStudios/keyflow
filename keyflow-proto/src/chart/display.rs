@@ -17,7 +17,11 @@ fn format_rhythm(rhythm: &ChordRhythm) -> String {
 
     match rhythm {
         ChordRhythm::Default => "/".to_string(),
-        ChordRhythm::Slashes { count, dotted, tied } => {
+        ChordRhythm::Slashes {
+            count,
+            dotted,
+            tied,
+        } => {
             let mut s = "/".repeat(*count as usize);
             if *dotted {
                 s.push('.');
@@ -436,7 +440,11 @@ impl std::fmt::Display for Chart {
                 PushPullBase::Tuplet(n) => {
                     writeln!(f, "tuplet:{}", n)?;
                 }
-                PushPullBase::Duration { duration, dotted, triplet } => {
+                PushPullBase::Duration {
+                    duration,
+                    dotted,
+                    triplet,
+                } => {
                     write!(f, "{}", duration.value())?;
                     if *dotted {
                         write!(f, ".")?;
@@ -491,7 +499,8 @@ impl std::fmt::Display for Chart {
                                         chord_text.push('\'');
                                     } else {
                                         // Use full notation with amount
-                                        chord_text.push_str(&Chart::format_push_pull_amount(amount));
+                                        chord_text
+                                            .push_str(&Chart::format_push_pull_amount(amount));
                                     }
                                 }
                             }
@@ -515,9 +524,7 @@ impl std::fmt::Display for Chart {
                             // - Whole measure (4 slashes in 4/4) = omitted
                             let ts = measure.time_signature;
                             match &chord.rhythm {
-                                ChordRhythm::Slashes { count, .. }
-                                    if *count == ts.0 =>
-                                {
+                                ChordRhythm::Slashes { count, .. } if *count == ts.0 => {
                                     // Whole measure — omit slashes entirely,
                                     // chord name alone implies full measure
                                 }

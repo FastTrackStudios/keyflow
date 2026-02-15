@@ -8,7 +8,7 @@ use roam::service;
 pub trait ChartService {
     /// Get chart by ID
     async fn get_chart(&self, chart_id: String) -> Option<crate::Chart>;
-    
+
     /// Parse chart from keyflow syntax
     async fn parse(&self, text: String) -> Result<crate::Chart, crate::ParseError>;
 }

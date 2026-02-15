@@ -241,7 +241,10 @@ pub fn layout_tuplet(
         if p2.x != clamped_x {
             tracing::debug!(
                 "[tuplet-boundary] Adjusting bracket p2.x from {:.1} to {:.1} (boundary={:.1}, last_note={:.1})",
-                p2.x, clamped_x, boundary, last.x
+                p2.x,
+                clamped_x,
+                boundary,
+                last.x
             );
         }
         Point::new(clamped_x, p2.y)

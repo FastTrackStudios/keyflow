@@ -12,8 +12,8 @@ use crate::engraver::scene::id::SemanticId;
 use crate::engraver::scene::node::SceneNode;
 use crate::engraver::scene::paint::PaintCommand;
 
-use super::note::{layout_note, Accidental, NoteDuration, NoteHeadType, NoteParams};
 use super::LayoutData;
+use super::note::{Accidental, NoteDuration, NoteHeadType, NoteParams, layout_note};
 
 /// SMuFL codepoints for stems and flags.
 pub mod glyphs {
@@ -50,11 +50,7 @@ impl StemDirection {
         match self {
             Self::Auto => {
                 // Standard rule: stem down if average note is above middle line
-                if avg_line > 0.0 {
-                    Self::Down
-                } else {
-                    Self::Up
-                }
+                if avg_line > 0.0 { Self::Down } else { Self::Up }
             }
             _ => self,
         }
@@ -75,11 +71,7 @@ impl StemDirection {
                     Self::Down
                 } else {
                     // Standard rule: stem down if average note is above middle line
-                    if avg_line > 0.0 {
-                        Self::Down
-                    } else {
-                        Self::Up
-                    }
+                    if avg_line > 0.0 { Self::Down } else { Self::Up }
                 }
             }
             _ => self,

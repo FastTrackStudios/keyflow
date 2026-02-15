@@ -1,11 +1,11 @@
 //! Parsing module - Token and span types
 
+pub mod lexer;
 pub mod span;
 pub mod token;
-pub mod lexer;
 
-pub use span::TextSpan;
 pub use lexer::Lexer;
+pub use span::TextSpan;
 pub use token::{Token, TokenType};
 
 use facet::Facet;

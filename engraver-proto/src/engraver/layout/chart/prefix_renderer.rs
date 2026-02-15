@@ -8,8 +8,8 @@
 
 use crate::engraver::layout::context::LayoutContext;
 use crate::engraver::layout::tlayout::{
-    layout_clef, layout_keysig, layout_timesig, ClefParams, ClefType, KeySigParams, KeySigType,
-    TimeSigParams, TimeSigType,
+    ClefParams, ClefType, KeySigParams, KeySigType, TimeSigParams, TimeSigType, layout_clef,
+    layout_keysig, layout_timesig,
 };
 use crate::engraver::scene::node::SceneNode;
 use crate::key::Key;

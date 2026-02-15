@@ -164,59 +164,60 @@ pub mod tuplet;
 
 // Re-exports for convenient access
 pub use accidentals_layout::{
-    layout_accidentals, AccidentalInfo, AccidentalLayoutConfig, AccidentalPlacement,
+    AccidentalInfo, AccidentalLayoutConfig, AccidentalPlacement, layout_accidentals,
 };
 pub use articulation::{
-    layout_articulation, layout_articulations, ArticulationAlign, ArticulationAnchor,
-    ArticulationConfig, ArticulationContext, ArticulationInput, ArticulationLayout,
-    ArticulationType,
+    ArticulationAlign, ArticulationAnchor, ArticulationConfig, ArticulationContext,
+    ArticulationInput, ArticulationLayout, ArticulationType, layout_articulation,
+    layout_articulations,
 };
-pub use barline::{layout_barline, BarlineParams, BarlineType};
-pub use beam_layout::{layout_beam, BeamLayout, BeamLayoutConfig, BeamNote};
+pub use barline::{BarlineParams, BarlineType, layout_barline};
+pub use beam_layout::{BeamLayout, BeamLayoutConfig, BeamNote, layout_beam};
 pub use brackets::{
-    brace_magnification, create_brace_path, create_square_bracket_path, layout_bracket,
-    layout_brackets, select_brace_glyph, smufl as bracket_smufl, total_brackets_width,
-    BracketConfig, BracketInput, BracketLayout, BracketType,
+    BracketConfig, BracketInput, BracketLayout, BracketType, brace_magnification,
+    create_brace_path, create_square_bracket_path, layout_bracket, layout_brackets,
+    select_brace_glyph, smufl as bracket_smufl, total_brackets_width,
 };
-pub use chord::{layout_chord, ChordNote, ChordParams, StemDirection};
-pub use clef::{layout_clef, ClefOctave, ClefParams, ClefType};
-pub use dynamics::{layout_dynamic, DynamicType, DynamicsAlign, DynamicsParams, DynamicsPlacement};
+pub use chord::{ChordNote, ChordParams, StemDirection, layout_chord};
+pub use clef::{ClefOctave, ClefParams, ClefType, layout_clef};
+pub use dynamics::{DynamicType, DynamicsAlign, DynamicsParams, DynamicsPlacement, layout_dynamic};
 pub use fermata::{
-    layout_fermata, layout_fermatas, FermataConfig, FermataInput, FermataLayout, FermataPlacement,
-    FermataType,
+    FermataConfig, FermataInput, FermataLayout, FermataPlacement, FermataType, layout_fermata,
+    layout_fermatas,
 };
 pub use harmony::{
-    layout_harmony, musejazz, parse_chord, smufl, ChordNotation, HarmonyLayoutData, HarmonyParams,
-    HarmonyStyle, SymbolSet,
+    ChordNotation, HarmonyLayoutData, HarmonyParams, HarmonyStyle, SymbolSet, layout_harmony,
+    musejazz, parse_chord, smufl,
 };
-pub use keysig::{layout_keysig, ClefContext, KeySigParams, KeySigType};
+pub use keysig::{ClefContext, KeySigParams, KeySigType, layout_keysig};
 pub use lyrics::{
-    layout_lyrics, layout_lyrics_dash, layout_melisma, LyricsParams, LyricsPlacement, SyllabicType,
+    LyricsParams, LyricsPlacement, SyllabicType, layout_lyrics, layout_lyrics_dash, layout_melisma,
 };
-pub use measure::{layout_measure, layout_system, MeasureParams};
-pub use note::{layout_note, note_shape, Accidental, NoteDuration, NoteHeadType, NoteParams};
+pub use measure::{MeasureParams, layout_measure, layout_system};
+pub use note::{Accidental, NoteDuration, NoteHeadType, NoteParams, layout_note, note_shape};
 pub use rehearsal_mark::{
-    layout_margin_label, layout_rehearsal_mark, layout_section_label, themes as rehearsal_themes,
     MarginLabelParams, RehearsalMarkLayoutData, RehearsalMarkParams, RehearsalMarkStyle,
+    layout_margin_label, layout_rehearsal_mark, layout_section_label, themes as rehearsal_themes,
 };
 pub use repeat_signs::{
-    layout_jump, layout_jumps, layout_marker, layout_markers, smufl as repeat_smufl, JumpInput,
-    JumpLayout, JumpType, MarkerInput, MarkerLayout, MarkerType, RepeatPlacement, RepeatSignConfig,
+    JumpInput, JumpLayout, JumpType, MarkerInput, MarkerLayout, MarkerType, RepeatPlacement,
+    RepeatSignConfig, layout_jump, layout_jumps, layout_marker, layout_markers,
+    smufl as repeat_smufl,
 };
-pub use rest::{layout_multi_measure_rest, layout_rest, RestDuration, RestParams};
+pub use rest::{RestDuration, RestParams, layout_multi_measure_rest, layout_rest};
 pub use slur_tie::{
-    layout_slur, layout_slur_with_obstacles, layout_tie, layout_tie_with_obstacles, ObstacleType,
-    SlurControlPoints, SlurDirection, SlurEndpoint, SlurObstacle, SlurStyle, SlurTieConfig,
-    SlurTieLayout,
+    ObstacleType, SlurControlPoints, SlurDirection, SlurEndpoint, SlurObstacle, SlurStyle,
+    SlurTieConfig, SlurTieLayout, layout_slur, layout_slur_with_obstacles, layout_tie,
+    layout_tie_with_obstacles,
 };
 pub use system_dividers::{
-    layout_system_divider, layout_system_dividers, smufl as divider_smufl, system_divider_width,
     DividerSide, SystemDividerConfig, SystemDividerInput, SystemDividerLayout, SystemDividerStyle,
+    layout_system_divider, layout_system_dividers, smufl as divider_smufl, system_divider_width,
 };
-pub use timesig::{layout_timesig, TimeSigParams, TimeSigType};
+pub use timesig::{TimeSigParams, TimeSigType, layout_timesig};
 pub use tuplet::{
-    layout_tuplet, TupletBracketType, TupletConfig, TupletLayout, TupletNote, TupletNumberType,
-    TupletRatio,
+    TupletBracketType, TupletConfig, TupletLayout, TupletNote, TupletNumberType, TupletRatio,
+    layout_tuplet,
 };
 
 #[cfg(test)]

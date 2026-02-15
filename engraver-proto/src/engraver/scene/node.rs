@@ -5,7 +5,7 @@
 //! Each node can have paint commands and child nodes.
 
 use kurbo::{Affine, Point, Rect, Shape};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::collections::HashMap;
 
 use super::id::SemanticId;

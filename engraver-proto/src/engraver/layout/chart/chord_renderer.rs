@@ -29,15 +29,15 @@ use crate::chart::commands::Command;
 use crate::chart::types::{ChordInstance, Measure, RhythmElement};
 use crate::chord::ChordRhythm;
 use crate::engraver::layout::context::LayoutContext;
-use crate::engraver::layout::tlayout::{layout_harmony, parse_chord, HarmonyStyle};
+use crate::engraver::layout::tlayout::{HarmonyStyle, layout_harmony, parse_chord};
 use crate::engraver::scene::id::{ElementType, SemanticId};
-use crate::engraver::scene::node::{metadata_keys, SceneNode};
+use crate::engraver::scene::node::{SceneNode, metadata_keys};
 use crate::engraver::scene::paint::PaintCommand;
 use crate::time::{MusicalPositionExt, TimeSignature};
 use crate::{ChartPosition, SourceLink};
 
-use super::measure_pass::MeasureMeasurements;
 use super::PushSpillback;
+use super::measure_pass::MeasureMeasurements;
 
 /// Create push marker color (red for visibility)
 fn push_marker_color() -> Color {
@@ -789,7 +789,10 @@ pub fn render_spillback_chords(
             spillback.beat_position,
             segment_idx,
             ctx.segment_positions.len(),
-            ctx.segment_positions.get(segment_idx).copied().unwrap_or(0.0),
+            ctx.segment_positions
+                .get(segment_idx)
+                .copied()
+                .unwrap_or(0.0),
             ctx.spillback_positions
         );
 

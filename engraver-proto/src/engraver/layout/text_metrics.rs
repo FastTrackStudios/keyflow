@@ -5,11 +5,11 @@
 
 use std::sync::Arc;
 
+use skrifa::MetadataProvider;
 use skrifa::charmap::Charmap;
 use skrifa::metrics::GlyphMetrics;
 use skrifa::prelude::Size;
 use skrifa::raw::FileRef;
-use skrifa::MetadataProvider;
 
 /// Text font metrics provider.
 ///

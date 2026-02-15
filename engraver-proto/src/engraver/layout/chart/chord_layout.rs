@@ -4,7 +4,7 @@
 //! collision detection, and conversion to harmony parameters.
 
 use crate::engraver::layout::segment::SegmentType;
-use crate::engraver::layout::tlayout::{parse_chord, HarmonyParams, HarmonyStyle};
+use crate::engraver::layout::tlayout::{HarmonyParams, HarmonyStyle, parse_chord};
 use crate::engraver::notation::MeasureScene;
 
 /// Extract ChordRest segment x-positions from a MeasureScene (in spatiums).

@@ -11,7 +11,7 @@ pub mod prelude {
     pub use crate::chord::{Chord, ChordParseError, ChordRhythm, PushPullAmount};
     pub use crate::key::Key;
     pub use crate::metadata::SongMetadata;
-pub use crate::parsing::ParseError;
+    pub use crate::parsing::ParseError;
     pub use crate::sections::{Section, SectionType};
     pub use crate::time::{MusicalDuration, MusicalPosition, Tempo, TimeSignature};
     pub use crate::{DynamicMarking, TextCue};

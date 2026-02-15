@@ -12,8 +12,8 @@ use crate::engraver::scene::id::{ElementType, SemanticId};
 use crate::engraver::scene::node::SceneNode;
 use crate::engraver::scene::paint::PaintCommand;
 
-use super::barline::{layout_barline, BarlineParams, BarlineType};
 use super::LayoutData;
+use super::barline::{BarlineParams, BarlineType, layout_barline};
 
 /// Measure layout parameters.
 #[derive(Debug, Clone)]

@@ -17,7 +17,7 @@ use crate::parsing::{Lexer, TextSpan};
 use crate::primitives::RootNotation;
 use crate::sections::SectionType;
 use crate::time::{
-    AbsolutePosition, MusicalDuration, MusicalPosition, TimeSignature, MusicalPositionExt,
+    AbsolutePosition, MusicalDuration, MusicalPosition, MusicalPositionExt, TimeSignature,
     TimeSignatureExt,
 };
 
@@ -201,7 +201,11 @@ impl<'a> ChartParser<'a> {
                     // Skip past the bass note to continue looking for rhythm
                     i += 1;
                     // Skip the bass note (letters, digits, accidentals)
-                    while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'#' || bytes[i] == b'b') {
+                    while i < bytes.len()
+                        && (bytes[i].is_ascii_alphanumeric()
+                            || bytes[i] == b'#'
+                            || bytes[i] == b'b')
+                    {
                         i += 1;
                     }
                     continue;
@@ -915,144 +919,143 @@ impl<'a> ChartParser<'a> {
                             // "Cm/Eb /" means Cm/Eb for 1 beat
                             // "Eb ///" means Eb for 3 beats
                             // "Abmaj9 //// | //" means Abmaj9 for 6 beats (spans 1.5 bars)
-                            let applied =
-                                if let Some(last_chord) = current_measure.chords.last_mut() {
-                                    // Only accumulate if previous token was also a slash (consecutive slashes).
-                                    // This prevents accumulating on top of auto-filled slash rhythm.
-                                    // "C // G //" - when we see first "/" after C, it should SET to 1 (not accumulate).
-                                    // When we see second "/" after first, it should accumulate to 2.
-                                    let new_count = if last_token_was_slash {
-                                        if let ChordRhythm::Slashes {
-                                            count: existing, ..
-                                        } = &last_chord.rhythm
-                                        {
-                                            existing + slash_count
-                                        } else {
-                                            slash_count
-                                        }
+                            let applied = if let Some(last_chord) =
+                                current_measure.chords.last_mut()
+                            {
+                                // Only accumulate if previous token was also a slash (consecutive slashes).
+                                // This prevents accumulating on top of auto-filled slash rhythm.
+                                // "C // G //" - when we see first "/" after C, it should SET to 1 (not accumulate).
+                                // When we see second "/" after first, it should accumulate to 2.
+                                let new_count = if last_token_was_slash {
+                                    if let ChordRhythm::Slashes {
+                                        count: existing, ..
+                                    } = &last_chord.rhythm
+                                    {
+                                        existing + slash_count
                                     } else {
-                                        // First slash after a chord - SET (override auto-fill)
                                         slash_count
-                                    };
-                                    last_chord.rhythm = ChordRhythm::slashes(new_count);
-                                    last_chord.duration =
-                                        MusicalDuration::from_beats(f64::from(new_count), time_sig);
+                                    }
+                                } else {
+                                    // First slash after a chord - SET (override auto-fill)
+                                    slash_count
+                                };
+                                last_chord.rhythm = ChordRhythm::slashes(new_count);
+                                last_chord.duration =
+                                    MusicalDuration::from_beats(f64::from(new_count), time_sig);
 
-                                    // Also update the chord in rhythm_elements
-                                    for elem in current_measure.rhythm_elements.iter_mut().rev() {
-                                        if let RhythmElement::Chord(c) = elem {
-                                            c.rhythm = ChordRhythm::slashes(new_count);
-                                            c.duration = MusicalDuration::from_beats(
+                                // Also update the chord in rhythm_elements
+                                for elem in current_measure.rhythm_elements.iter_mut().rev() {
+                                    if let RhythmElement::Chord(c) = elem {
+                                        c.rhythm = ChordRhythm::slashes(new_count);
+                                        c.duration = MusicalDuration::from_beats(
+                                            f64::from(new_count),
+                                            time_sig,
+                                        );
+                                        break;
+                                    }
+                                }
+                                true
+                            } else if !measures.is_empty() {
+                                // Current measure is empty - slashes apply to previous measure's chord
+                                // Check if the previous chord has EXPLICIT rhythm (slashes) vs DEFAULT (auto-fill)
+                                // - If previous chord has Slashes: measure is explicitly full, add SPACES
+                                // - If previous chord has Default: it was auto-filled, so SET the duration
+                                let prev_chord_has_explicit_rhythm = measures
+                                    .last()
+                                    .and_then(|m| m.chords.last())
+                                    .map_or(false, |c| {
+                                        matches!(
+                                            c.rhythm,
+                                            ChordRhythm::Slashes { .. } | ChordRhythm::Explicit(_)
+                                        )
+                                    });
+
+                                if let Some(last_measure) = measures.last_mut() {
+                                    if let Some(last_chord) = last_measure.chords.last_mut() {
+                                        // If after explicit | separator OR previous chord has explicit rhythm,
+                                        // add SPACES to current measure instead of modifying previous chord.
+                                        // "Abmaj9 //// | //" = Abmaj9 (4 slashes) + 2 spaces (continuation)
+                                        // "C //// //" = C (4 slashes) + 2 spaces (explicit slashes = full)
+                                        // "Cm/Eb / Eb ///" = SET to 1 beat (Default rhythm = auto-filled)
+                                        if measure_was_created_by_separator
+                                            || prev_chord_has_explicit_rhythm
+                                        {
+                                            // After explicit separator: add SPACES to current measure
+                                            // as continuation of the previous chord. These render as
+                                            // rhythm slashes without a chord symbol.
+
+                                            // Create a space for each beat of continuation
+                                            for i in 0..slash_count {
+                                                let space_duration =
+                                                    MusicalDuration::from_beats(1.0, time_sig);
+                                                let space_rhythm = ChordRhythm::slashes(1);
+                                                let space = SpaceInstance::new(
+                                                    space_rhythm,
+                                                    space_duration,
+                                                    AbsolutePosition::new(
+                                                        MusicalPosition::try_new(
+                                                            measures.len() as i32,
+                                                            i as i32,
+                                                            0,
+                                                        )
+                                                        .unwrap_or_else(|_| {
+                                                            MusicalPosition::start()
+                                                        }),
+                                                        self.sections.len(),
+                                                    ),
+                                                    format!("/{}", "/".repeat(i as usize)),
+                                                );
+                                                current_measure
+                                                    .rhythm_elements
+                                                    .push(RhythmElement::Space(space));
+                                            }
+                                            current_measure_beats += f64::from(slash_count);
+                                            true
+                                        } else {
+                                            // Auto-completed measure: only accumulate if previous was slash
+                                            let new_count = if last_token_was_slash {
+                                                if let ChordRhythm::Slashes {
+                                                    count: existing,
+                                                    ..
+                                                } = &last_chord.rhythm
+                                                {
+                                                    existing + slash_count
+                                                } else {
+                                                    slash_count
+                                                }
+                                            } else {
+                                                slash_count
+                                            };
+                                            last_chord.rhythm = ChordRhythm::slashes(new_count);
+                                            last_chord.duration = MusicalDuration::from_beats(
                                                 f64::from(new_count),
                                                 time_sig,
                                             );
-                                            break;
-                                        }
-                                    }
-                                    true
-                                } else if !measures.is_empty() {
-                                    // Current measure is empty - slashes apply to previous measure's chord
-                                    // Check if the previous chord has EXPLICIT rhythm (slashes) vs DEFAULT (auto-fill)
-                                    // - If previous chord has Slashes: measure is explicitly full, add SPACES
-                                    // - If previous chord has Default: it was auto-filled, so SET the duration
-                                    let prev_chord_has_explicit_rhythm =
-                                        measures.last().and_then(|m| m.chords.last()).map_or(
-                                            false,
-                                            |c| {
-                                                matches!(
-                                                    c.rhythm,
-                                                    ChordRhythm::Slashes { .. }
-                                                        | ChordRhythm::Explicit(_)
-                                                )
-                                            },
-                                        );
 
-                                    if let Some(last_measure) = measures.last_mut() {
-                                        if let Some(last_chord) = last_measure.chords.last_mut() {
-                                            // If after explicit | separator OR previous chord has explicit rhythm,
-                                            // add SPACES to current measure instead of modifying previous chord.
-                                            // "Abmaj9 //// | //" = Abmaj9 (4 slashes) + 2 spaces (continuation)
-                                            // "C //// //" = C (4 slashes) + 2 spaces (explicit slashes = full)
-                                            // "Cm/Eb / Eb ///" = SET to 1 beat (Default rhythm = auto-filled)
-                                            if measure_was_created_by_separator
-                                                || prev_chord_has_explicit_rhythm
+                                            // Also update the chord in rhythm_elements
+                                            for elem in
+                                                last_measure.rhythm_elements.iter_mut().rev()
                                             {
-                                                // After explicit separator: add SPACES to current measure
-                                                // as continuation of the previous chord. These render as
-                                                // rhythm slashes without a chord symbol.
-
-                                                // Create a space for each beat of continuation
-                                                for i in 0..slash_count {
-                                                    let space_duration =
-                                                        MusicalDuration::from_beats(1.0, time_sig);
-                                                    let space_rhythm = ChordRhythm::slashes(1);
-                                                    let space = SpaceInstance::new(
-                                                        space_rhythm,
-                                                        space_duration,
-                                                        AbsolutePosition::new(
-                                                            MusicalPosition::try_new(
-                                                                measures.len() as i32,
-                                                                i as i32,
-                                                                0,
-                                                            )
-                                                            .unwrap_or_else(|_| {
-                                                                MusicalPosition::start()
-                                                            }),
-                                                            self.sections.len(),
-                                                        ),
-                                                        format!("/{}", "/".repeat(i as usize)),
+                                                if let RhythmElement::Chord(c) = elem {
+                                                    c.rhythm = ChordRhythm::slashes(new_count);
+                                                    c.duration = MusicalDuration::from_beats(
+                                                        f64::from(new_count),
+                                                        time_sig,
                                                     );
-                                                    current_measure
-                                                        .rhythm_elements
-                                                        .push(RhythmElement::Space(space));
+                                                    break;
                                                 }
-                                                current_measure_beats += f64::from(slash_count);
-                                                true
-                                            } else {
-                                                // Auto-completed measure: only accumulate if previous was slash
-                                                let new_count = if last_token_was_slash {
-                                                    if let ChordRhythm::Slashes {
-                                                        count: existing,
-                                                        ..
-                                                    } = &last_chord.rhythm
-                                                    {
-                                                        existing + slash_count
-                                                    } else {
-                                                        slash_count
-                                                    }
-                                                } else {
-                                                    slash_count
-                                                };
-                                                last_chord.rhythm = ChordRhythm::slashes(new_count);
-                                                last_chord.duration = MusicalDuration::from_beats(
-                                                    f64::from(new_count),
-                                                    time_sig,
-                                                );
-
-                                                // Also update the chord in rhythm_elements
-                                                for elem in
-                                                    last_measure.rhythm_elements.iter_mut().rev()
-                                                {
-                                                    if let RhythmElement::Chord(c) = elem {
-                                                        c.rhythm = ChordRhythm::slashes(new_count);
-                                                        c.duration = MusicalDuration::from_beats(
-                                                            f64::from(new_count),
-                                                            time_sig,
-                                                        );
-                                                        break;
-                                                    }
-                                                }
-                                                true
                                             }
-                                        } else {
-                                            false
+                                            true
                                         }
                                     } else {
                                         false
                                     }
                                 } else {
                                     false
-                                };
+                                }
+                            } else {
+                                false
+                            };
 
                             if applied {
                                 // Recalculate total beats for current measure since the duration changed
@@ -1251,7 +1254,8 @@ impl<'a> ChartParser<'a> {
                             Err(e) => {
                                 tracing::warn!(
                                     "Failed to parse inline melody '{}': {}",
-                                    melody_str, e
+                                    melody_str,
+                                    e
                                 );
                             }
                         }
@@ -1526,7 +1530,7 @@ impl<'a> ChartParser<'a> {
                     let mut repeat_chord = prev_chord.clone();
                     repeat_chord.original_token = ".".to_string();
                     repeat_chord.position = AbsolutePosition::at_beginning(); // Will be recalculated
-                    // Clear push/pull - the dot repeat doesn't inherit the timing modifier
+                                                                              // Clear push/pull - the dot repeat doesn't inherit the timing modifier
                     repeat_chord.push_pull = None;
                     // Inherit the source chord's rhythm and duration
                     // "F/C ." = two measures (F/C for 4 beats, then F/C repeated for 4 beats)
@@ -1664,7 +1668,7 @@ impl<'a> ChartParser<'a> {
                             (time_sig.numerator as u8, time_sig.denominator as u8);
                         current_measure_beats = 0.0;
                         measure_has_slash_rhythm = false; // Reset for new measure
-                        // Auto-created measure, not by separator
+                                                          // Auto-created measure, not by separator
                     }
                 }
                 Err(_e) => {
@@ -1796,7 +1800,12 @@ impl<'a> ChartParser<'a> {
 
         // Check for one-time override (prefix !)
         let (is_override, token_clean) = if token_after_leading_accent.starts_with('!') {
-            (true, token_after_leading_accent.strip_prefix('!').unwrap_or(token_after_leading_accent))
+            (
+                true,
+                token_after_leading_accent
+                    .strip_prefix('!')
+                    .unwrap_or(token_after_leading_accent),
+            )
         } else {
             (false, token_after_leading_accent)
         };
@@ -1807,7 +1816,12 @@ impl<'a> ChartParser<'a> {
         // Check for accent AFTER push prefix - indicates accent on the downbeat
         // Supports: '>C (accent on beat 1, the downbeat)
         let (accent_after_push, token_after_post_accent) = if token_after_push.starts_with('>') {
-            (true, token_after_push.strip_prefix('>').unwrap_or(token_after_push))
+            (
+                true,
+                token_after_push
+                    .strip_prefix('>')
+                    .unwrap_or(token_after_push),
+            )
         } else {
             (false, token_after_push)
         };
@@ -2032,8 +2046,8 @@ mod tests {
     #[test]
     fn test_accent_prefix_parsing() {
         use crate::chart::commands::Command;
-        use crate::time::TimeSignature;
         use crate::sections::SectionType;
+        use crate::time::TimeSignature;
 
         // Test that >C parses as C with an accent command
         let input = r#"
@@ -2044,16 +2058,25 @@ VS
 >C
 "#;
         let chart = parse_chart(input).expect("Should parse");
-        let measures: Vec<_> = chart.sections.iter()
-            .filter(|s| !s.section.section_type.is_compact() && s.section.section_type != SectionType::End)
+        let measures: Vec<_> = chart
+            .sections
+            .iter()
+            .filter(|s| {
+                !s.section.section_type.is_compact() && s.section.section_type != SectionType::End
+            })
             .flat_map(|s| s.measures())
             .collect();
 
         assert!(!measures.is_empty(), "Should have at least one measure");
-        let chords: Vec<_> = measures[0].chords.iter()
+        let chords: Vec<_> = measures[0]
+            .chords
+            .iter()
             .filter(|c| c.full_symbol != "s")
             .collect();
-        assert!(!chords.is_empty(), "Should have at least one non-space chord");
+        assert!(
+            !chords.is_empty(),
+            "Should have at least one non-space chord"
+        );
 
         let chord = &chords[0];
         assert_eq!(chord.full_symbol, "C", "Chord symbol should be C");
@@ -2098,14 +2121,18 @@ VS
         let chart = parse_chart(input).expect("Should parse");
 
         // Find VS section (first one after COUNT and IN)
-        let verse_sections: Vec<_> = chart.sections.iter()
+        let verse_sections: Vec<_> = chart
+            .sections
+            .iter()
             .filter(|s| s.section.section_type == SectionType::Verse)
             .collect();
         assert!(!verse_sections.is_empty(), "Should have VS sections");
 
         // First VS measure should have >'F/C which is AccentOnPush
         let vs_measures = verse_sections[0].measures();
-        let vs_chords: Vec<_> = vs_measures[0].chords.iter()
+        let vs_chords: Vec<_> = vs_measures[0]
+            .chords
+            .iter()
             .filter(|c| c.full_symbol != "s")
             .collect();
         assert!(!vs_chords.is_empty(), "VS should have non-space chords");
@@ -2113,13 +2140,21 @@ VS
         let vs_chord = vs_chords[0];
         assert_eq!(vs_chord.full_symbol, "F/C", "VS chord should be F/C");
         assert!(
-            vs_chord.commands.iter().any(|c| matches!(c, Command::AccentOnPush)),
+            vs_chord
+                .commands
+                .iter()
+                .any(|c| matches!(c, Command::AccentOnPush)),
             ">'F/C should have AccentOnPush command (accent on anticipation)"
         );
-        assert!(vs_chord.push_pull.is_some(), "VS chord should have push_pull");
+        assert!(
+            vs_chord.push_pull.is_some(),
+            "VS chord should have push_pull"
+        );
 
         // Find CH section to test both accent types
-        let chorus_sections: Vec<_> = chart.sections.iter()
+        let chorus_sections: Vec<_> = chart
+            .sections
+            .iter()
             .filter(|s| s.section.section_type == SectionType::Chorus)
             .collect();
         assert!(!chorus_sections.is_empty(), "Should have CH sections");
@@ -2129,12 +2164,17 @@ VS
         let ch_measures = chorus_sections[0].measures();
         assert!(ch_measures.len() >= 8, "CH should have at least 8 measures");
 
-        let ch7_chords: Vec<_> = ch_measures[7].chords.iter()
+        let ch7_chords: Vec<_> = ch_measures[7]
+            .chords
+            .iter()
             .filter(|c| c.full_symbol != "s" && c.full_symbol != "r")
             .collect();
 
         // Should have Ab9, F9, and Fm/Ab
-        assert!(ch7_chords.len() >= 2, "CH measure 7 should have at least 2 chords");
+        assert!(
+            ch7_chords.len() >= 2,
+            "CH measure 7 should have at least 2 chords"
+        );
 
         // Ab9 has regular accent (>Ab9)
         let ab9_chord = ch7_chords.iter().find(|c| c.full_symbol == "Ab9");
@@ -2150,7 +2190,9 @@ VS
         assert!(f9_chord.is_some(), "Should have F9 chord");
         let f9 = f9_chord.unwrap();
         assert!(
-            f9.commands.iter().any(|c| matches!(c, Command::AccentOnPush)),
+            f9.commands
+                .iter()
+                .any(|c| matches!(c, Command::AccentOnPush)),
             ">'F9 should have AccentOnPush (accent before push marker)"
         );
         assert!(f9.push_pull.is_some(), "F9 should have push_pull");
@@ -2175,20 +2217,34 @@ VS
         let chart = parse_chart(input).expect("Should parse");
 
         // Get all verse sections
-        let verse_sections: Vec<_> = chart.sections.iter()
+        let verse_sections: Vec<_> = chart
+            .sections
+            .iter()
             .filter(|s| s.section.section_type == SectionType::Verse)
             .collect();
 
-        eprintln!("All sections: {:?}", chart.sections.iter().map(|s| format!("{:?}", s.section.section_type)).collect::<Vec<_>>());
+        eprintln!(
+            "All sections: {:?}",
+            chart
+                .sections
+                .iter()
+                .map(|s| format!("{:?}", s.section.section_type))
+                .collect::<Vec<_>>()
+        );
         eprintln!("Verse sections: {}", verse_sections.len());
 
-        assert!(!verse_sections.is_empty(), "Should have at least 1 verse section");
+        assert!(
+            !verse_sections.is_empty(),
+            "Should have at least 1 verse section"
+        );
 
         // VS measure 0: >Cmaj7 should have accent
         let vs_measures = verse_sections[0].measures();
         assert!(vs_measures.len() >= 2, "VS should have at least 2 measures");
 
-        let m0_chords: Vec<_> = vs_measures[0].chords.iter()
+        let m0_chords: Vec<_> = vs_measures[0]
+            .chords
+            .iter()
             .filter(|c| c.full_symbol != "s")
             .collect();
         assert!(!m0_chords.is_empty(), "M0 should have non-space chords");
@@ -2197,23 +2253,34 @@ VS
         let first_chord = m0_chords[0];
         assert_eq!(first_chord.full_symbol, "Cmaj7");
         assert!(
-            first_chord.commands.iter().any(|c| matches!(c, Command::Accent)),
+            first_chord
+                .commands
+                .iter()
+                .any(|c| matches!(c, Command::Accent)),
             "First chord should have accent"
         );
 
         // VS measure 1: C (basic major) should recall Cmaj7 from major family memory
         // Basic chords CAN recall but don't store - split memory by chord family
-        let m1_chords: Vec<_> = vs_measures[1].chords.iter()
+        let m1_chords: Vec<_> = vs_measures[1]
+            .chords
+            .iter()
             .filter(|c| c.full_symbol != "s")
             .collect();
         assert!(!m1_chords.is_empty(), "M1 should have non-space chords");
 
         let second_chord = m1_chords[0];
         // Basic chords DO recall from their family's memory
-        assert_eq!(second_chord.full_symbol, "Cmaj7", "Basic C should recall Cmaj7 from major family memory");
+        assert_eq!(
+            second_chord.full_symbol, "Cmaj7",
+            "Basic C should recall Cmaj7 from major family memory"
+        );
         // But the accent is NOT recalled (it's a modifier on the chord instance, not stored in memory)
         assert!(
-            !second_chord.commands.iter().any(|c| matches!(c, Command::Accent)),
+            !second_chord
+                .commands
+                .iter()
+                .any(|c| matches!(c, Command::Accent)),
             "Recalled chord should NOT have accent from memory. Commands: {:?}",
             second_chord.commands
         );
@@ -2236,29 +2303,41 @@ VS
 VS
 "#;
         let chart = parse_chart(input).expect("Should parse");
-        let verse_sections: Vec<_> = chart.sections.iter()
+        let verse_sections: Vec<_> = chart
+            .sections
+            .iter()
             .filter(|s| s.section.section_type == SectionType::Verse)
             .collect();
 
         assert_eq!(verse_sections.len(), 2, "Should have 2 verse sections");
 
         // VS1 (template definition): >C should have accent
-        let vs1_chords: Vec<_> = verse_sections[0].measures()[0].chords.iter()
+        let vs1_chords: Vec<_> = verse_sections[0].measures()[0]
+            .chords
+            .iter()
             .filter(|c| c.full_symbol != "s")
             .collect();
         assert!(!vs1_chords.is_empty());
         assert!(
-            vs1_chords[0].commands.iter().any(|c| matches!(c, Command::Accent)),
+            vs1_chords[0]
+                .commands
+                .iter()
+                .any(|c| matches!(c, Command::Accent)),
             "VS1 first chord should have accent"
         );
 
         // VS2 (recalled from template): should also have accent on first chord
-        let vs2_chords: Vec<_> = verse_sections[1].measures()[0].chords.iter()
+        let vs2_chords: Vec<_> = verse_sections[1].measures()[0]
+            .chords
+            .iter()
             .filter(|c| c.full_symbol != "s")
             .collect();
         assert!(!vs2_chords.is_empty());
         assert!(
-            vs2_chords[0].commands.iter().any(|c| matches!(c, Command::Accent)),
+            vs2_chords[0]
+                .commands
+                .iter()
+                .any(|c| matches!(c, Command::Accent)),
             "VS2 recalled chord should have accent - templates preserve commands"
         );
     }
@@ -2279,7 +2358,9 @@ BR
         let chart = parse_chart(input).expect("Should parse");
 
         // Find BR section
-        let br_sections: Vec<_> = chart.sections.iter()
+        let br_sections: Vec<_> = chart
+            .sections
+            .iter()
             .filter(|s| s.section.section_type == crate::sections::SectionType::Bridge)
             .collect();
         assert!(!br_sections.is_empty(), "Should have BR section");
@@ -2287,41 +2368,57 @@ BR
         let measures = br_sections[0].measures();
 
         // Measure 0: '_4>F7 - accent AFTER push = regular Accent (downbeat)
-        let m0_chords: Vec<_> = measures[0].chords.iter()
+        let m0_chords: Vec<_> = measures[0]
+            .chords
+            .iter()
             .filter(|c| c.full_symbol != "s" && c.full_symbol != "r")
             .collect();
         assert!(!m0_chords.is_empty(), "Measure 0 should have chords");
         let f7 = &m0_chords[0];
-        eprintln!("F7 chord: symbol='{}' commands={:?} push_pull={:?}",
-            f7.full_symbol, f7.commands, f7.push_pull);
+        eprintln!(
+            "F7 chord: symbol='{}' commands={:?} push_pull={:?}",
+            f7.full_symbol, f7.commands, f7.push_pull
+        );
         assert_eq!(f7.full_symbol, "F7", "Should be F7");
         assert!(f7.push_pull.is_some(), "F7 should have push");
         assert!(
             f7.commands.iter().any(|c| matches!(c, Command::Accent)),
-            "'_4>F7 should have Accent (accent after push = downbeat). Got: {:?}", f7.commands
+            "'_4>F7 should have Accent (accent after push = downbeat). Got: {:?}",
+            f7.commands
         );
         assert!(
-            !f7.commands.iter().any(|c| matches!(c, Command::AccentOnPush)),
-            "'_4>F7 should NOT have AccentOnPush. Got: {:?}", f7.commands
+            !f7.commands
+                .iter()
+                .any(|c| matches!(c, Command::AccentOnPush)),
+            "'_4>F7 should NOT have AccentOnPush. Got: {:?}",
+            f7.commands
         );
 
         // Measure 1: >'_4G7 - accent BEFORE push = AccentOnPush (pushed beat)
-        let m1_chords: Vec<_> = measures[1].chords.iter()
+        let m1_chords: Vec<_> = measures[1]
+            .chords
+            .iter()
             .filter(|c| c.full_symbol != "s" && c.full_symbol != "r")
             .collect();
         assert!(!m1_chords.is_empty(), "Measure 1 should have chords");
         let g7 = &m1_chords[0];
-        eprintln!("G7 chord: symbol='{}' commands={:?} push_pull={:?}",
-            g7.full_symbol, g7.commands, g7.push_pull);
+        eprintln!(
+            "G7 chord: symbol='{}' commands={:?} push_pull={:?}",
+            g7.full_symbol, g7.commands, g7.push_pull
+        );
         assert_eq!(g7.full_symbol, "G7", "Should be G7");
         assert!(g7.push_pull.is_some(), "G7 should have push");
         assert!(
-            g7.commands.iter().any(|c| matches!(c, Command::AccentOnPush)),
-            ">'_4G7 should have AccentOnPush (accent before push = pushed beat). Got: {:?}", g7.commands
+            g7.commands
+                .iter()
+                .any(|c| matches!(c, Command::AccentOnPush)),
+            ">'_4G7 should have AccentOnPush (accent before push = pushed beat). Got: {:?}",
+            g7.commands
         );
         assert!(
             !g7.commands.iter().any(|c| matches!(c, Command::Accent)),
-            ">'_4G7 should NOT have regular Accent. Got: {:?}", g7.commands
+            ">'_4G7 should NOT have regular Accent. Got: {:?}",
+            g7.commands
         );
     }
 }

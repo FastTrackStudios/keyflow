@@ -65,5 +65,5 @@ mod detector;
 mod grouper;
 
 pub use config::QuantizeConfig;
-pub use detector::{quantize_duration, quantize_duration_batch, QuantizedDuration, TupletType};
-pub use grouper::{detect_tuplet_groups, merge_adjacent_groups, TupletGroup};
+pub use detector::{QuantizedDuration, TupletType, quantize_duration, quantize_duration_batch};
+pub use grouper::{TupletGroup, detect_tuplet_groups, merge_adjacent_groups};

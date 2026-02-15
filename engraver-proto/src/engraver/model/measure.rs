@@ -1,8 +1,8 @@
 //! Measure (bar) representation.
 
+use super::Voice;
 use super::element::{KeySignature, TimeSignature};
 use super::layout::{LayoutBreak, RehearsalMark};
-use super::Voice;
 use serde::{Deserialize, Serialize};
 
 /// A measure (bar) of music.

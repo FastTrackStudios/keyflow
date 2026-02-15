@@ -9,9 +9,7 @@ use crate::chart::track::{Track, TrackType};
 use crate::chart::types::{ChartSection, Measure, RhythmElement};
 use crate::primitives::RootNotation;
 use crate::sections::{Section, SectionType};
-use crate::time::{
-    AbsolutePosition, MusicalDuration, TimeSignature, TimeSignatureExt,
-};
+use crate::time::{AbsolutePosition, MusicalDuration, TimeSignature, TimeSignatureExt};
 
 // region:    --- Section Parsing
 
@@ -289,7 +287,8 @@ impl<'a> ChartParser<'a> {
                     let was_first_section = self.chord_memory.in_first_section();
                     self.chord_memory.enter_section();
 
-                    let measures = self.parse_section_measures(&content_lines, &section_type, None)?;
+                    let measures =
+                        self.parse_section_measures(&content_lines, &section_type, None)?;
 
                     // Complete first section if this was the first section
                     if was_first_section {
@@ -439,8 +438,7 @@ impl<'a> ChartParser<'a> {
             // - Starts with '/' and contains '=' (e.g., "/PUSH=8t")
             // - Starts with '/push ' (space-separated syntax, e.g., "/push 4")
             let is_setting_line = trimmed.starts_with('/')
-                && (trimmed.contains('=')
-                    || trimmed.to_lowercase().starts_with("/push "));
+                && (trimmed.contains('=') || trimmed.to_lowercase().starts_with("/push "));
 
             if is_setting_line {
                 // This is a settings line - apply it temporarily

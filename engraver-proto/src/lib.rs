@@ -47,7 +47,11 @@ pub trait DurationTrait: fmt::Debug + fmt::Display {
     fn beats(&self) -> u32;
     fn subdivisions(&self) -> u32;
     fn to_beats(&self, time_sig: time::TimeSignature) -> f64;
-    fn add(&self, other: &dyn DurationTrait, time_sig: time::TimeSignature) -> Box<dyn DurationTrait>;
+    fn add(
+        &self,
+        other: &dyn DurationTrait,
+        time_sig: time::TimeSignature,
+    ) -> Box<dyn DurationTrait>;
     fn clone_box(&self) -> Box<dyn DurationTrait>;
 }
 
@@ -71,14 +75,22 @@ impl DurationTrait for time::MusicalDuration {
             + self.subdivision.clamp(0, 999) as f64 / 1000.0
     }
 
-    fn add(&self, other: &dyn DurationTrait, time_sig: time::TimeSignature) -> Box<dyn DurationTrait> {
+    fn add(
+        &self,
+        other: &dyn DurationTrait,
+        time_sig: time::TimeSignature,
+    ) -> Box<dyn DurationTrait> {
         let total_beats = self.to_beats(time_sig) + other.to_beats(time_sig);
         let beats_per_measure = time_sig.numerator() as f64;
         let measures = (total_beats / beats_per_measure).floor() as i32;
         let remaining_beats = total_beats - (measures as f64 * beats_per_measure);
         let beats = remaining_beats.floor() as i32;
         let subdivisions = ((remaining_beats - beats as f64) * 1000.0).round() as i32;
-        Box::new(time::MusicalDuration::new(measures, beats, subdivisions.clamp(0, 999)))
+        Box::new(time::MusicalDuration::new(
+            measures,
+            beats,
+            subdivisions.clamp(0, 999),
+        ))
     }
 
     fn clone_box(&self) -> Box<dyn DurationTrait> {

@@ -8,7 +8,7 @@ use crate::chord::{ChordRhythm, PushPullAmount};
 use crate::primitives::RootNotation;
 use crate::sections::SectionNumberer;
 use crate::time::{
-    AbsolutePosition, MusicalDuration, MusicalPosition, TimeSignature, MusicalPositionExt,
+    AbsolutePosition, MusicalDuration, MusicalPosition, MusicalPositionExt, TimeSignature,
     TimeSignatureExt,
 };
 

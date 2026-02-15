@@ -18,8 +18,8 @@ use crate::engraver::model::DurationKind;
 use crate::engraver::notation::{Duration, RhythmEntry, TupletRatio, TupletSpec};
 use crate::time::{MusicalPositionExt, TimeSignatureExt};
 
-use super::types::MeasureMelodyData;
 use super::PushSpillback;
+use super::types::MeasureMelodyData;
 
 // ============================================================================
 // Core Types

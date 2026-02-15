@@ -11,8 +11,8 @@ use crate::engraver::scene::id::{ElementType, SemanticId};
 use crate::engraver::scene::node::SceneNode;
 use crate::engraver::scene::paint::PaintCommand;
 
-use super::note::glyphs::{ACCIDENTAL_FLAT, ACCIDENTAL_NATURAL, ACCIDENTAL_SHARP};
 use super::LayoutData;
+use super::note::glyphs::{ACCIDENTAL_FLAT, ACCIDENTAL_NATURAL, ACCIDENTAL_SHARP};
 
 /// Key signature type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

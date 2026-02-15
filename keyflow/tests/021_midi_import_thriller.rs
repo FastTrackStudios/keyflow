@@ -11,8 +11,8 @@
 //! - Push/pull detection based on triplet subdivisions (640/320 ticks at 960 PPQ)
 //! - Section type mapping (Count-In -> COUNT, VS 1 -> VS, etc.)
 
-use std::collections::BTreeMap;
 use keyflow::time::MusicalPositionExt;
+use std::collections::BTreeMap;
 
 use keyflow::chart::Chart;
 use keyflow::chord::{
@@ -45,10 +45,7 @@ enum ChordOrRest {
         is_accented: bool,
     },
     /// A rest between chords, with position tracking
-    Rest {
-        start_ppq: i64,
-        end_ppq: i64,
-    },
+    Rest { start_ppq: i64, end_ppq: i64 },
 }
 
 /// Detect chords from MIDI notes and convert to our internal format.
@@ -93,11 +90,7 @@ fn detect_chords_from_notes(midi: &MidiFile) -> Vec<DetectedChord> {
 }
 
 /// Detect push/pull timing for a detected chord based on its position within a beat.
-fn detect_push_pull_for_chord(
-    start_ppq: i64,
-    ppq: u32,
-    songstart: u32,
-) -> (bool, Option<String>) {
+fn detect_push_pull_for_chord(start_ppq: i64, ppq: u32, songstart: u32) -> (bool, Option<String>) {
     // Calculate position relative to songstart
     let relative_tick = if start_ppq >= songstart as i64 {
         start_ppq - songstart as i64
@@ -429,10 +422,22 @@ fn merge_consecutive_chords(elements: Vec<ChordOrRest>) -> Vec<ChordOrRest> {
 
     for elem in elements {
         match elem {
-            ChordOrRest::Chord { symbol, start_ppq, end_ppq, is_pushed, push_amount, is_accented } => {
+            ChordOrRest::Chord {
+                symbol,
+                start_ppq,
+                end_ppq,
+                is_pushed,
+                push_amount,
+                is_accented,
+            } => {
                 // Check if we can merge with the previous chord
                 let can_merge = if let Some(last) = merged.last() {
-                    if let ChordOrRest::Chord { symbol: prev_symbol, end_ppq: prev_end, .. } = last {
+                    if let ChordOrRest::Chord {
+                        symbol: prev_symbol,
+                        end_ppq: prev_end,
+                        ..
+                    } = last
+                    {
                         // Merge if same chord symbol and the new chord starts near where the old one ends
                         let gap = start_ppq - prev_end;
                         *prev_symbol == symbol && gap < 960 && gap >= 0
@@ -445,7 +450,10 @@ fn merge_consecutive_chords(elements: Vec<ChordOrRest>) -> Vec<ChordOrRest> {
 
                 if can_merge {
                     // Extend the previous chord
-                    if let Some(ChordOrRest::Chord { end_ppq: prev_end, .. }) = merged.last_mut() {
+                    if let Some(ChordOrRest::Chord {
+                        end_ppq: prev_end, ..
+                    }) = merged.last_mut()
+                    {
                         *prev_end = end_ppq;
                     }
                 } else {
@@ -464,7 +472,10 @@ fn merge_consecutive_chords(elements: Vec<ChordOrRest>) -> Vec<ChordOrRest> {
                 // Try to merge consecutive rests
                 let can_merge = matches!(merged.last(), Some(ChordOrRest::Rest { .. }));
                 if can_merge {
-                    if let Some(ChordOrRest::Rest { end_ppq: prev_end, .. }) = merged.last_mut() {
+                    if let Some(ChordOrRest::Rest {
+                        end_ppq: prev_end, ..
+                    }) = merged.last_mut()
+                    {
                         *prev_end = end_ppq;
                     }
                 } else {
@@ -484,11 +495,21 @@ fn apply_groove_pattern_push(elements: Vec<ChordOrRest>) -> Vec<ChordOrRest> {
 
     for (i, elem) in elements.iter().enumerate() {
         match elem {
-            ChordOrRest::Chord { symbol, start_ppq, end_ppq, is_pushed, push_amount, is_accented } => {
+            ChordOrRest::Chord {
+                symbol,
+                start_ppq,
+                end_ppq,
+                is_pushed,
+                push_amount,
+                is_accented,
+            } => {
                 // Check if this is F/C (or F) followed by Cm
                 let is_f_chord = symbol == "F/C" || symbol == "F" || symbol.starts_with("F/");
                 let next_is_cm = elements.get(i + 1).map_or(false, |next| {
-                    if let ChordOrRest::Chord { symbol: next_sym, .. } = next {
+                    if let ChordOrRest::Chord {
+                        symbol: next_sym, ..
+                    } = next
+                    {
                         next_sym.starts_with("Cm")
                     } else {
                         false
@@ -512,7 +533,10 @@ fn apply_groove_pattern_push(elements: Vec<ChordOrRest>) -> Vec<ChordOrRest> {
                 });
             }
             ChordOrRest::Rest { start_ppq, end_ppq } => {
-                result.push(ChordOrRest::Rest { start_ppq: *start_ppq, end_ppq: *end_ppq });
+                result.push(ChordOrRest::Rest {
+                    start_ppq: *start_ppq,
+                    end_ppq: *end_ppq,
+                });
             }
         }
     }
@@ -524,7 +548,11 @@ fn apply_groove_pattern_push(elements: Vec<ChordOrRest>) -> Vec<ChordOrRest> {
 #[derive(Debug, Clone)]
 enum MeasureContent {
     /// Full measure of a chord (no duration suffix needed)
-    FullMeasure { symbol: String, is_pushed: bool, is_accented: bool },
+    FullMeasure {
+        symbol: String,
+        is_pushed: bool,
+        is_accented: bool,
+    },
     /// Repeat of previous measure
     Repeat,
     /// Silence for full measure
@@ -538,16 +566,16 @@ enum MeasureElement {
     /// Chord with duration info
     Chord {
         symbol: String,
-        beats: i32,          // Duration in beats (for slash notation)
-        ticks: i64,          // Actual duration in ticks (for explicit suffixes)
+        beats: i32, // Duration in beats (for slash notation)
+        ticks: i64, // Actual duration in ticks (for explicit suffixes)
         is_pushed: bool,
         push_amount: Option<String>, // Push amount notation (e.g., "t" for triplet, "_4" for quarter)
-        is_accented: bool,   // Velocity > 100 triggers `>` phrase marker
+        is_accented: bool,           // Velocity > 100 triggers `>` phrase marker
     },
     /// Rest with duration info
     Rest {
         beats: i32,
-        ticks: i64,               // Actual duration in ticks
+        ticks: i64,                 // Actual duration in ticks
         start_tick_in_measure: i64, // Position within the measure (for beat boundary splitting)
     },
 }
@@ -555,10 +583,10 @@ enum MeasureElement {
 /// Format a duration as Keyflow suffix (e.g., "_8t" for triplet eighth, "_4" for quarter)
 fn format_duration_suffix_beats(beats: i32, is_triplet_context: bool) -> String {
     match beats {
-        1 => "_4".to_string(),  // quarter note
-        2 => "_2".to_string(),  // half note
-        3 => "_2.".to_string(), // dotted half
-        4 => "".to_string(),    // whole note (full measure) - no suffix
+        1 => "_4".to_string(),        // quarter note
+        2 => "_2".to_string(),        // half note
+        3 => "_2.".to_string(),       // dotted half
+        4 => "".to_string(),          // whole note (full measure) - no suffix
         _ => format!("_4x{}", beats), // fallback
     }
 }
@@ -614,9 +642,20 @@ fn build_measures(
         // 2. Regular continuation chords (started earlier, extend into this measure) - show continuation
         if measure_idx > 0 {
             for elem in elements {
-                if let ChordOrRest::Chord { symbol, start_ppq, end_ppq, is_pushed, push_amount, is_accented } = elem {
+                if let ChordOrRest::Chord {
+                    symbol,
+                    start_ppq,
+                    end_ppq,
+                    is_pushed,
+                    push_amount,
+                    is_accented,
+                } = elem
+                {
                     // Check if chord started in the previous measure
-                    if *start_ppq >= prev_measure_start && *start_ppq < measure_start && *end_ppq > measure_start {
+                    if *start_ppq >= prev_measure_start
+                        && *start_ppq < measure_start
+                        && *end_ppq > measure_start
+                    {
                         let chord_start_in_prev = *start_ppq - prev_measure_start;
                         let start_beat_in_prev = (chord_start_in_prev / ticks_per_beat) as i32;
                         let duration_in_prev_measure = measure_start - *start_ppq;
@@ -630,7 +669,8 @@ fn build_measures(
                         // For both quarter push and regular continuation, show in this measure
                         let chord_end_clamped = (*end_ppq).min(measure_end);
                         let duration_ticks = chord_end_clamped - measure_start;
-                        let duration_beats = ((duration_ticks + ticks_per_beat - 1) / ticks_per_beat) as i32;
+                        let duration_beats =
+                            ((duration_ticks + ticks_per_beat - 1) / ticks_per_beat) as i32;
 
                         // For quarter push, show full duration; for continuation, show remaining duration
                         // Both use the same calculation since we're measuring from measure_start
@@ -662,7 +702,14 @@ fn build_measures(
 
         for elem in elements {
             match elem {
-                ChordOrRest::Chord { symbol, start_ppq, end_ppq, is_pushed, push_amount, is_accented } => {
+                ChordOrRest::Chord {
+                    symbol,
+                    start_ppq,
+                    end_ppq,
+                    is_pushed,
+                    push_amount,
+                    is_accented,
+                } => {
                     // Check if this chord overlaps with this measure
                     if *end_ppq <= measure_start || *start_ppq >= measure_end {
                         continue;
@@ -698,15 +745,19 @@ fn build_measures(
 
                     // Calculate how many beats of this chord are in this measure
                     let chord_end_in_measure = (*end_ppq - measure_start).min(ticks_per_measure);
-                    let end_beat = ((chord_end_in_measure + ticks_per_beat - 1) / ticks_per_beat) as i32;
+                    let end_beat =
+                        ((chord_end_in_measure + ticks_per_beat - 1) / ticks_per_beat) as i32;
                     let duration_beats = (end_beat - start_beat).max(1);
 
                     // Add rest if there's a gap before this chord (beat-level or tick-level)
                     let gap_ticks = chord_start_clamped - current_tick;
                     let min_rest_ticks = ticks_per_beat / 4; // At least a sixteenth note gap
-                    if start_beat > current_beat || (start_beat == current_beat && gap_ticks >= min_rest_ticks) {
+                    if start_beat > current_beat
+                        || (start_beat == current_beat && gap_ticks >= min_rest_ticks)
+                    {
                         if gap_ticks >= min_rest_ticks {
-                            let gap_beats = ((gap_ticks + ticks_per_beat - 1) / ticks_per_beat) as i32;
+                            let gap_beats =
+                                ((gap_ticks + ticks_per_beat - 1) / ticks_per_beat) as i32;
                             let start_pos = current_tick - measure_start;
                             measure_elements.push(MeasureElement::Rest {
                                 beats: gap_beats.max(1),
@@ -728,7 +779,10 @@ fn build_measures(
                     current_beat = start_beat + duration_beats;
                     current_tick = chord_end_clamped;
                 }
-                ChordOrRest::Rest { start_ppq: rest_start, end_ppq: rest_end } => {
+                ChordOrRest::Rest {
+                    start_ppq: rest_start,
+                    end_ppq: rest_end,
+                } => {
                     // Check if this rest overlaps with this measure
                     if *rest_end <= measure_start || *rest_start >= measure_end {
                         continue;
@@ -745,8 +799,10 @@ fn build_measures(
                     }
 
                     // Calculate beat position within the measure
-                    let start_beat_in_measure = ((rest_start_clamped - measure_start) / ticks_per_beat) as i32;
-                    let rest_beats = ((duration_ticks + ticks_per_beat - 1) / ticks_per_beat) as i32;
+                    let start_beat_in_measure =
+                        ((rest_start_clamped - measure_start) / ticks_per_beat) as i32;
+                    let rest_beats =
+                        ((duration_ticks + ticks_per_beat - 1) / ticks_per_beat) as i32;
 
                     // Only add if we haven't already accounted for this time
                     if start_beat_in_measure >= current_beat && current_beat < beats_per_measure {
@@ -780,7 +836,15 @@ fn build_measures(
         let content = if measure_elements.is_empty() {
             // No elements in this measure - check if a chord continues from previous
             let continuing_chord = elements.iter().find_map(|e| {
-                if let ChordOrRest::Chord { symbol, start_ppq, end_ppq, is_pushed, is_accented, .. } = e {
+                if let ChordOrRest::Chord {
+                    symbol,
+                    start_ppq,
+                    end_ppq,
+                    is_pushed,
+                    is_accented,
+                    ..
+                } = e
+                {
                     if *start_ppq < measure_start && *end_ppq > measure_start {
                         Some((symbol.clone(), *is_pushed, *is_accented))
                     } else {
@@ -796,7 +860,11 @@ fn build_measures(
                     MeasureContent::Repeat
                 } else {
                     last_chord_symbol = Some(symbol.clone());
-                    MeasureContent::FullMeasure { symbol, is_pushed, is_accented }
+                    MeasureContent::FullMeasure {
+                        symbol,
+                        is_pushed,
+                        is_accented,
+                    }
                 }
             } else {
                 MeasureContent::Silence
@@ -804,13 +872,24 @@ fn build_measures(
         } else if measure_elements.len() == 1 {
             // Single element in measure
             match &measure_elements[0] {
-                MeasureElement::Chord { symbol, beats, is_pushed, is_accented, ticks, .. } if *beats >= beats_per_measure && *ticks >= ticks_per_measure - 100 => {
+                MeasureElement::Chord {
+                    symbol,
+                    beats,
+                    is_pushed,
+                    is_accented,
+                    ticks,
+                    ..
+                } if *beats >= beats_per_measure && *ticks >= ticks_per_measure - 100 => {
                     // Full measure chord (allow 100 tick tolerance)
                     if last_chord_symbol.as_ref() == Some(symbol) {
                         MeasureContent::Repeat
                     } else {
                         last_chord_symbol = Some(symbol.clone());
-                        MeasureContent::FullMeasure { symbol: symbol.clone(), is_pushed: *is_pushed, is_accented: *is_accented }
+                        MeasureContent::FullMeasure {
+                            symbol: symbol.clone(),
+                            is_pushed: *is_pushed,
+                            is_accented: *is_accented,
+                        }
                     }
                 }
                 MeasureElement::Rest { beats, .. } if *beats >= beats_per_measure => {
@@ -826,7 +905,11 @@ fn build_measures(
             }
         } else {
             // Multiple elements - mixed measure
-            if let Some(MeasureElement::Chord { symbol, .. }) = measure_elements.iter().filter(|e| matches!(e, MeasureElement::Chord { .. })).last() {
+            if let Some(MeasureElement::Chord { symbol, .. }) = measure_elements
+                .iter()
+                .filter(|e| matches!(e, MeasureElement::Chord { .. }))
+                .last()
+            {
                 last_chord_symbol = Some(symbol.clone());
             }
             MeasureContent::Mixed(measure_elements.clone())
@@ -1020,11 +1103,20 @@ fn format_rests_split_at_beats(
 /// - Short chords get explicit duration suffixes (e.g., "Ab9_8t")
 /// - Rests use r4, r2, r1 notation with tick-based precision
 /// - Accented chords (velocity > 100) get `>` prefix for phrase markers
-fn format_measure(content: &MeasureContent, beats_per_measure: i32, use_short_push: bool, ppq: u32) -> String {
+fn format_measure(
+    content: &MeasureContent,
+    beats_per_measure: i32,
+    use_short_push: bool,
+    ppq: u32,
+) -> String {
     let ticks_per_beat = ppq as i64;
 
     match content {
-        MeasureContent::FullMeasure { symbol, is_pushed, is_accented } => {
+        MeasureContent::FullMeasure {
+            symbol,
+            is_pushed,
+            is_accented,
+        } => {
             // Full measure chords don't need slashes - just the chord symbol
             let accent = if *is_accented { ">" } else { "" };
             if *is_pushed {
@@ -1048,12 +1140,21 @@ fn format_measure(content: &MeasureContent, beats_per_measure: i32, use_short_pu
 
             for (idx, elem) in elements.iter().enumerate() {
                 match elem {
-                    MeasureElement::Chord { symbol, beats, ticks, is_pushed, push_amount, is_accented } => {
+                    MeasureElement::Chord {
+                        symbol,
+                        beats,
+                        ticks,
+                        is_pushed,
+                        push_amount,
+                        is_accented,
+                    } => {
                         // Determine push/pull state
                         let is_pull = !*is_pushed && push_amount.is_some();
 
                         // Check if this measure has any rests (indicating exact rhythm notation / HITS pattern)
-                        let has_rests = elements.iter().any(|e| matches!(e, MeasureElement::Rest { .. }));
+                        let has_rests = elements
+                            .iter()
+                            .any(|e| matches!(e, MeasureElement::Rest { .. }));
 
                         // In exact rhythm (HITS-style) measures, all chords get accent markers
                         let accent = if has_rests || *is_accented { ">" } else { "" };
@@ -1105,7 +1206,13 @@ fn format_measure(content: &MeasureContent, beats_per_measure: i32, use_short_pu
 
                         // Check if next element is a pushed chord
                         let next_is_pushed = elements.get(idx + 1).map_or(false, |next| {
-                            matches!(next, MeasureElement::Chord { is_pushed: true, .. })
+                            matches!(
+                                next,
+                                MeasureElement::Chord {
+                                    is_pushed: true,
+                                    ..
+                                }
+                            )
                         });
 
                         if !*is_pushed && next_is_pushed {
@@ -1114,7 +1221,10 @@ fn format_measure(content: &MeasureContent, beats_per_measure: i32, use_short_pu
                         }
 
                         // Check if this is the only chord in the measure (for //// notation)
-                        let chord_count = elements.iter().filter(|e| matches!(e, MeasureElement::Chord { .. })).count();
+                        let chord_count = elements
+                            .iter()
+                            .filter(|e| matches!(e, MeasureElement::Chord { .. }))
+                            .count();
                         let is_sole_chord = chord_count == 1;
 
                         // Use duration suffix for very short durations (triplet eighth or less)
@@ -1148,9 +1258,14 @@ fn format_measure(content: &MeasureContent, beats_per_measure: i32, use_short_pu
                             }
                         }
                     }
-                    MeasureElement::Rest { beats: _, ticks, start_tick_in_measure } => {
+                    MeasureElement::Rest {
+                        beats: _,
+                        ticks,
+                        start_tick_in_measure,
+                    } => {
                         // Format rest split at beat boundaries for accurate rhythm notation
-                        let rest_str = format_rests_split_at_beats(*ticks, *start_tick_in_measure, ppq);
+                        let rest_str =
+                            format_rests_split_at_beats(*ticks, *start_tick_in_measure, ppq);
                         if !rest_str.is_empty() {
                             parts.push(rest_str);
                         }
@@ -1172,7 +1287,13 @@ fn format_rhythm_elements(
     beats_per_measure: i32,
     use_short_push: bool,
 ) -> String {
-    let measures = build_measures(elements, section_start_tick, section_length_measures, ppq, beats_per_measure);
+    let measures = build_measures(
+        elements,
+        section_start_tick,
+        section_length_measures,
+        ppq,
+        beats_per_measure,
+    );
 
     let mut result = String::new();
     let mut measure_count = 0;
@@ -1183,7 +1304,12 @@ fn format_rhythm_elements(
             result.push_str(" | ");
         }
 
-        result.push_str(&format_measure(content, beats_per_measure, use_short_push, ppq));
+        result.push_str(&format_measure(
+            content,
+            beats_per_measure,
+            use_short_push,
+            ppq,
+        ));
         measure_count += 1;
 
         // Add newline every 4 measures for readability (like target output)
@@ -1559,13 +1685,28 @@ fn generate_keyflow_chart(midi: &MidiFile) -> String {
             .collect();
 
         // Format measures based on section type
-        let measures = if is_simple_section(keyflow_type) && section_chords.len() <= (*length as usize) {
-            // Sparse section - fill with groove pattern
-            fill_groove_measures(&section_chords, *length, *start_measure, ppq, use_triplet_setting, beats_per_measure)
-        } else {
-            // Dense section - use chords as-is with slash notation
-            format_section_with_slashes(&section_chords, *length, *start_measure, ppq, use_triplet_setting, beats_per_measure)
-        };
+        let measures =
+            if is_simple_section(keyflow_type) && section_chords.len() <= (*length as usize) {
+                // Sparse section - fill with groove pattern
+                fill_groove_measures(
+                    &section_chords,
+                    *length,
+                    *start_measure,
+                    ppq,
+                    use_triplet_setting,
+                    beats_per_measure,
+                )
+            } else {
+                // Dense section - use chords as-is with slash notation
+                format_section_with_slashes(
+                    &section_chords,
+                    *length,
+                    *start_measure,
+                    ppq,
+                    use_triplet_setting,
+                    beats_per_measure,
+                )
+            };
 
         // Output measures (4 per line with bar line separators)
         for chunk in measures.chunks(4) {
@@ -1584,7 +1725,11 @@ fn generate_keyflow_chart(midi: &MidiFile) -> String {
 // ============================================================================
 
 /// Check if the majority of detected chords are on triplet positions.
-fn should_use_triplet_push_from_detected(chords: &[DetectedChord], ppq: u32, songstart: u32) -> bool {
+fn should_use_triplet_push_from_detected(
+    chords: &[DetectedChord],
+    ppq: u32,
+    songstart: u32,
+) -> bool {
     let mut triplet_count = 0;
     let mut other_push_count = 0;
 
@@ -1916,7 +2061,10 @@ fn test_hits_section_rhythm_with_rests() {
         .unwrap_or(hits.position.measure + 2);
 
     println!("\n=== HITS Section Rhythm ===");
-    println!("HITS at measure {}, ends at measure {}", hits.position.measure, hits_end);
+    println!(
+        "HITS at measure {}, ends at measure {}",
+        hits.position.measure, hits_end
+    );
 
     // Get chords in HITS section
     let hits_chords: Vec<_> = chords
@@ -1952,7 +2100,10 @@ fn test_hits_section_rhythm_with_rests() {
         .copied()
         .collect();
 
-    println!("\nFirst HITS measure chords: {:?}", first_measure_chords.len());
+    println!(
+        "\nFirst HITS measure chords: {:?}",
+        first_measure_chords.len()
+    );
 
     // Default chord duration for HITS is triplet eighth (staccato hits)
     let triplet_eighth = ppq / 3; // 320 ticks
@@ -1967,8 +2118,18 @@ fn test_hits_section_rhythm_with_rests() {
     println!("\nGenerated rhythm elements:");
     for (i, elem) in elements.iter().enumerate() {
         match elem {
-            RhythmElement::Chord { symbol, duration_ticks, push_pull } => {
-                println!("  {}. Chord: {} ({} ticks, {:?})", i + 1, symbol, duration_ticks, push_pull);
+            RhythmElement::Chord {
+                symbol,
+                duration_ticks,
+                push_pull,
+            } => {
+                println!(
+                    "  {}. Chord: {} ({} ticks, {:?})",
+                    i + 1,
+                    symbol,
+                    duration_ticks,
+                    push_pull
+                );
             }
             RhythmElement::Rest { duration_ticks } => {
                 println!("  {}. Rest: {} ticks", i + 1, duration_ticks);
@@ -1983,13 +2144,20 @@ fn test_hits_section_rhythm_with_rests() {
     // The HITS pattern should include rests between the chords
     // Expected: r8t Ab9_8t r8t r8t r8t F9_8t r2 (or similar)
     assert!(
-        keyflow.contains("r") || elements.iter().any(|e| matches!(e, RhythmElement::Rest { .. })),
+        keyflow.contains("r")
+            || elements
+                .iter()
+                .any(|e| matches!(e, RhythmElement::Rest { .. })),
         "HITS measure should contain rests"
     );
 
     // Verify we have both chords
-    let has_ab9 = elements.iter().any(|e| matches!(e, RhythmElement::Chord { symbol, .. } if symbol.contains("Ab9")));
-    let has_f9 = elements.iter().any(|e| matches!(e, RhythmElement::Chord { symbol, .. } if symbol.contains("F9")));
+    let has_ab9 = elements
+        .iter()
+        .any(|e| matches!(e, RhythmElement::Chord { symbol, .. } if symbol.contains("Ab9")));
+    let has_f9 = elements
+        .iter()
+        .any(|e| matches!(e, RhythmElement::Chord { symbol, .. } if symbol.contains("F9")));
     assert!(has_ab9, "Should have Ab9 chord");
     assert!(has_f9, "Should have F9 chord");
 }
@@ -2015,7 +2183,10 @@ fn test_verse_chord_pattern() {
         .map(|s| s.position.measure)
         .unwrap_or(vs1.position.measure + 16);
 
-    println!("\n=== Verse 1 Chords (M{} - M{}) ===\n", vs1.position.measure, vs1_end);
+    println!(
+        "\n=== Verse 1 Chords (M{} - M{}) ===\n",
+        vs1.position.measure, vs1_end
+    );
 
     // Get chords in/anticipating verse 1
     let verse_chords: Vec<_> = chords
@@ -2053,7 +2224,10 @@ fn test_verse_chord_pattern() {
         normalized
     );
 
-    println!("\nFirst verse chord: {} -> {}", first_verse_chord.chord_name, first_keyflow);
+    println!(
+        "\nFirst verse chord: {} -> {}",
+        first_verse_chord.chord_name, first_keyflow
+    );
 }
 
 #[test]
@@ -2077,7 +2251,10 @@ fn test_chorus_chord_structure() {
         .map(|s| s.position.measure)
         .unwrap_or(ch1.position.measure + 8);
 
-    println!("\n=== Chorus 1 Chords (M{} - M{}) ===\n", ch1.position.measure, ch1_end);
+    println!(
+        "\n=== Chorus 1 Chords (M{} - M{}) ===\n",
+        ch1.position.measure, ch1_end
+    );
 
     // Get chords in chorus 1
     let chorus_chords: Vec<_> = chords
@@ -2102,7 +2279,10 @@ fn test_chorus_chord_structure() {
 
     // First chorus chord should be Cm/Eb on the beat
     let first = &chorus_chords[0];
-    assert_eq!(first.chord_name, "Cm/Eb", "First chorus chord should be Cm/Eb");
+    assert_eq!(
+        first.chord_name, "Cm/Eb",
+        "First chorus chord should be Cm/Eb"
+    );
     let pp = first.detect_push_pull(ppq);
     assert_eq!(pp, PushPull::OnBeat, "Cm/Eb should be on the beat");
 }
@@ -2120,7 +2300,10 @@ fn test_generate_keyflow_chart() {
     // Verify structure
     assert!(chart_text.contains("Thriller - Dirty Loops"));
     // The actual MIDI file has ~131 BPM
-    assert!(chart_text.contains("bpm 4/4 #Eb"), "Should have tempo and time signature");
+    assert!(
+        chart_text.contains("bpm 4/4 #Eb"),
+        "Should have tempo and time signature"
+    );
     assert!(chart_text.contains("/push = triplet"));
 
     // Verify sections are present
@@ -2230,13 +2413,15 @@ fn test_debug_all_chords_with_positions() {
     let bytes = include_bytes!("fixtures/thriller_dirty_loops.mid");
     let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
     let ppq = midi.ppq();
-    
+
     let chords = midi.chord_markers_absolute();
-    
-    println!("
+
+    println!(
+        "
 === First 30 Chords with Positions ===
-");
-    
+"
+    );
+
     for (i, chord) in chords.iter().take(30).enumerate() {
         let pp = chord.detect_push_pull(ppq);
         println!(
@@ -2249,9 +2434,12 @@ fn test_debug_all_chords_with_positions() {
             pp
         );
     }
-    
-    println!("
-Total chords: {}", chords.len());
+
+    println!(
+        "
+Total chords: {}",
+        chords.len()
+    );
 }
 
 // ============================================================================
@@ -2276,8 +2464,7 @@ fn test_detect_chords_from_midi_notes() {
     // Print first 30 detected chords with timing info
     println!("=== First 30 Detected Chords ===\n");
     for (i, chord) in detected.iter().take(30).enumerate() {
-        let (is_pushed, push_amount) =
-            detect_push_pull_for_chord(chord.start_ppq, ppq, songstart);
+        let (is_pushed, push_amount) = detect_push_pull_for_chord(chord.start_ppq, ppq, songstart);
 
         // Calculate position
         let ticks_per_measure = (ppq as i64) * 4; // 4/4 time
@@ -2305,7 +2492,11 @@ fn test_detect_chords_from_midi_notes() {
 
     // Basic assertions
     assert!(!detected.is_empty(), "Should detect chords from MIDI notes");
-    assert!(detected.len() > 50, "Thriller should have many chords, got {}", detected.len());
+    assert!(
+        detected.len() > 50,
+        "Thriller should have many chords, got {}",
+        detected.len()
+    );
 }
 
 #[test]
@@ -2361,7 +2552,10 @@ fn test_compare_marker_vs_detected_chords() {
     println!("HITS range: tick {} - {}", hits_start, hits_end);
 
     println!("\nMarker chords in HITS:");
-    for chord in markers.iter().filter(|c| c.tick >= hits_start as u32 && c.tick < hits_end as u32) {
+    for chord in markers
+        .iter()
+        .filter(|c| c.tick >= hits_start as u32 && c.tick < hits_end as u32)
+    {
         let normalized = normalize_chord_name(&chord.chord_name);
         let pp = chord.detect_push_pull(ppq);
         println!(
@@ -2371,7 +2565,10 @@ fn test_compare_marker_vs_detected_chords() {
     }
 
     println!("\nDetected chords in HITS:");
-    for chord in detected.iter().filter(|c| c.start_ppq >= hits_start && c.start_ppq < hits_end) {
+    for chord in detected
+        .iter()
+        .filter(|c| c.start_ppq >= hits_start && c.start_ppq < hits_end)
+    {
         let (is_pushed, push_amount) = detect_push_pull_for_chord(chord.start_ppq, ppq, songstart);
         let duration = chord.end_ppq - chord.start_ppq;
         println!(
@@ -2403,7 +2600,10 @@ fn test_raw_midi_notes_in_hits_section() {
     let hits_start_tick = songstart; // measure 4 absolute
     let hits_end_tick = songstart + 2 * ticks_per_measure; // 2 measures
 
-    println!("HITS tick range: {} - {} (2 measures)", hits_start_tick, hits_end_tick);
+    println!(
+        "HITS tick range: {} - {} (2 measures)",
+        hits_start_tick, hits_end_tick
+    );
 
     // Get all notes
     let all_notes = midi.all_notes();
@@ -2415,12 +2615,19 @@ fn test_raw_midi_notes_in_hits_section() {
         .filter(|n| n.start_tick >= hits_start_tick && n.start_tick < hits_end_tick)
         .collect();
 
-    println!("\nNotes in HITS section (tick {} - {}): {}", hits_start_tick, hits_end_tick, hits_notes.len());
+    println!(
+        "\nNotes in HITS section (tick {} - {}): {}",
+        hits_start_tick,
+        hits_end_tick,
+        hits_notes.len()
+    );
     for (i, note) in hits_notes.iter().take(30).enumerate() {
         // Calculate pitch name
         let pitch_class = note.pitch % 12;
         let octave = (note.pitch / 12) as i32 - 1;
-        let note_names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+        let note_names = [
+            "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+        ];
         let name = note_names[pitch_class as usize];
 
         println!(
@@ -2475,22 +2682,30 @@ fn test_rhythm_elements_for_hits_section() {
     println!("HITS section: tick {} - {}", section_start, section_end);
 
     // Build rhythm elements
-    let elements = build_rhythm_elements(
-        &detected,
-        section_start,
-        section_end,
-        ppq,
-        songstart,
-    );
+    let elements = build_rhythm_elements(&detected, section_start, section_end, ppq, songstart);
 
     println!("\nGenerated {} rhythm elements:", elements.len());
     for (i, elem) in elements.iter().enumerate() {
         match elem {
-            ChordOrRest::Chord { symbol, start_ppq, end_ppq, is_pushed, push_amount, is_accented } => {
+            ChordOrRest::Chord {
+                symbol,
+                start_ppq,
+                end_ppq,
+                is_pushed,
+                push_amount,
+                is_accented,
+            } => {
                 let duration = end_ppq - start_ppq;
                 println!(
                     "  {:2}. Chord: {:15} tick {:6}-{:6} ({:4}) push={} amt={:?} accent={}",
-                    i + 1, symbol, start_ppq, end_ppq, duration, is_pushed, push_amount, is_accented
+                    i + 1,
+                    symbol,
+                    start_ppq,
+                    end_ppq,
+                    duration,
+                    is_pushed,
+                    push_amount,
+                    is_accented
                 );
             }
             ChordOrRest::Rest { start_ppq, end_ppq } => {
@@ -2498,7 +2713,10 @@ fn test_rhythm_elements_for_hits_section() {
                 let (notation, is_triplet) = ticks_to_duration_notation(duration_ppq, ppq);
                 println!(
                     "  {:2}. Rest:  {:4} ticks ({}{})",
-                    i + 1, duration_ppq, notation, if is_triplet { "t" } else { "" }
+                    i + 1,
+                    duration_ppq,
+                    notation,
+                    if is_triplet { "t" } else { "" }
                 );
             }
         }
@@ -2508,7 +2726,14 @@ fn test_rhythm_elements_for_hits_section() {
     let section_length_measures = 2; // HITS is 2 measures
     let beats_per_measure = 4; // 4/4 time
     let use_short_push = true; // assume /push = triplet setting
-    let keyflow = format_rhythm_elements(&elements, section_start, section_length_measures, ppq, beats_per_measure, use_short_push);
+    let keyflow = format_rhythm_elements(
+        &elements,
+        section_start,
+        section_length_measures,
+        ppq,
+        beats_per_measure,
+        use_short_push,
+    );
     println!("\nKeyflow notation: {}", keyflow);
 }
 
@@ -2534,7 +2759,8 @@ fn test_chorus_output_format() {
 
     // Find first CH section
     let section_lengths = calculate_section_lengths(&sections);
-    let ch_section = section_lengths.iter()
+    let ch_section = section_lengths
+        .iter()
         .find(|(name, _, _)| name == "CH")
         .expect("Should have CH section");
 
@@ -2543,7 +2769,13 @@ fn test_chorus_output_format() {
     let section_end = section_start + ((*length as i64) * ticks_per_measure);
 
     println!("=== First CH Section Analysis ===");
-    println!("Section: measures {}-{} (ticks {}-{})", start_measure, start_measure + length - 1, section_start, section_end);
+    println!(
+        "Section: measures {}-{} (ticks {}-{})",
+        start_measure,
+        start_measure + length - 1,
+        section_start,
+        section_end
+    );
 
     // Build and format the section
     let elements = build_rhythm_elements(&detected, section_start, section_end, ppq, songstart);
@@ -2554,19 +2786,40 @@ fn test_chorus_output_format() {
     println!("\nChord/Rest elements:");
     for (i, elem) in elements.iter().enumerate() {
         match elem {
-            ChordOrRest::Chord { symbol, start_ppq, end_ppq, is_pushed, is_accented, .. } => {
+            ChordOrRest::Chord {
+                symbol,
+                start_ppq,
+                end_ppq,
+                is_pushed,
+                is_accented,
+                ..
+            } => {
                 let measure = ((*start_ppq - section_start) / ticks_per_measure) + 1;
                 let beat = (((*start_ppq - section_start) % ticks_per_measure) / (ppq as i64)) + 1;
                 let duration_beats = (*end_ppq - *start_ppq) as f64 / ppq as f64;
                 let accent_str = if *is_accented { " ACCENT" } else { "" };
-                println!("  {:2}. M{} B{}: {:15} ({:.1} beats) push={}{}",
-                    i + 1, measure, beat, symbol, duration_beats, is_pushed, accent_str);
+                println!(
+                    "  {:2}. M{} B{}: {:15} ({:.1} beats) push={}{}",
+                    i + 1,
+                    measure,
+                    beat,
+                    symbol,
+                    duration_beats,
+                    is_pushed,
+                    accent_str
+                );
             }
             ChordOrRest::Rest { start_ppq, end_ppq } => {
                 let measure = ((*start_ppq - section_start) / ticks_per_measure) + 1;
                 let beat = (((*start_ppq - section_start) % ticks_per_measure) / (ppq as i64)) + 1;
                 let duration_ticks = *end_ppq - *start_ppq;
-                println!("  {:2}. M{} B{}: REST ({} ticks)", i + 1, measure, beat, duration_ticks);
+                println!(
+                    "  {:2}. M{} B{}: REST ({} ticks)",
+                    i + 1,
+                    measure,
+                    beat,
+                    duration_ticks
+                );
             }
         }
     }
@@ -2584,21 +2837,35 @@ fn test_chorus_output_format() {
 
     // Check measure 1 chords appear
     assert!(stripped.contains("Cm/Eb"), "Should contain Cm/Eb");
-    assert!(stripped.contains("'Eb") || stripped.contains("Eb"), "Should contain Eb (possibly pushed)");
+    assert!(
+        stripped.contains("'Eb") || stripped.contains("Eb"),
+        "Should contain Eb (possibly pushed)"
+    );
 
     // Check measure 2 chords appear
-    assert!(stripped.contains("'F/C") || stripped.contains("F/C"), "Should contain F/C");
-    assert!(stripped.contains("'Cm") || stripped.contains("Cm"), "Should contain Cm");
+    assert!(
+        stripped.contains("'F/C") || stripped.contains("F/C"),
+        "Should contain F/C"
+    );
+    assert!(
+        stripped.contains("'Cm") || stripped.contains("Cm"),
+        "Should contain Cm"
+    );
 
     // Check measure 3 chord
-    assert!(stripped.contains("'F/A") || stripped.contains("F/A"), "Should contain F/A");
+    assert!(
+        stripped.contains("'F/A") || stripped.contains("F/A"),
+        "Should contain F/A"
+    );
 
     // Check measure 4 chord
     assert!(stripped.contains("Fm9"), "Should contain Fm9");
 
     println!("\n=== Expected format (reference) ===");
     println!(">Cm/Eb / 'Eb /// | 'Eb / 'F/C / 'Cm // | 'F/A //// | 'Fm9 ////");
-    println!(">Cm/Eb / 'Eb /// | 'Eb / 'F/C / 'Cm // | 'F/A | r8t >Ab9_8t r8t r4t >'F9_8t r4 >Fm/Ab_4");
+    println!(
+        ">Cm/Eb / 'Eb /// | 'Eb / 'F/C / 'Cm // | 'F/A | r8t >Ab9_8t r8t r4t >'F9_8t r4 >Fm/Ab_4"
+    );
 }
 
 /// Format rhythm elements without bar lines (space-separated measures, newline every 4).
@@ -2610,7 +2877,13 @@ fn format_rhythm_no_bars(
     beats_per_measure: i32,
     use_short_push: bool,
 ) -> String {
-    let measures = build_measures(elements, section_start_tick, section_length_measures, ppq, beats_per_measure);
+    let measures = build_measures(
+        elements,
+        section_start_tick,
+        section_length_measures,
+        ppq,
+        beats_per_measure,
+    );
 
     let mut result = String::new();
     let mut measure_count = 0;
@@ -2621,7 +2894,12 @@ fn format_rhythm_no_bars(
             result.push(' ');
         }
 
-        result.push_str(&format_measure(content, beats_per_measure, use_short_push, ppq));
+        result.push_str(&format_measure(
+            content,
+            beats_per_measure,
+            use_short_push,
+            ppq,
+        ));
         measure_count += 1;
 
         // Add newline every 4 measures for readability
@@ -2676,7 +2954,11 @@ fn test_interlude_outro_hits_sections() {
         .collect();
 
     // Verify section counts
-    assert_eq!(interlude_sections.len(), 4, "Should have 4 Interlude sections");
+    assert_eq!(
+        interlude_sections.len(),
+        4,
+        "Should have 4 Interlude sections"
+    );
     assert_eq!(outro_sections.len(), 2, "Should have 2 Outro sections");
 
     // Helper to generate section output
@@ -2684,14 +2966,16 @@ fn test_interlude_outro_hits_sections() {
         let section_start = ((*start_measure as i64) - 1) * ticks_per_measure;
         let section_end = section_start + ((*length as i64) * ticks_per_measure);
 
-        let push_type = detect_section_push_type(&detected, section_start, section_end, ppq, songstart);
+        let push_type =
+            detect_section_push_type(&detected, section_start, section_end, ppq, songstart);
         let use_short_push = push_type.is_some() || true;
 
         let elements = build_rhythm_elements(&detected, section_start, section_end, ppq, songstart);
         let elements = merge_consecutive_chords(elements);
         let elements = apply_groove_pattern_push(elements);
 
-        let output = format_rhythm_no_bars(&elements, section_start, *length, ppq, 4, use_short_push);
+        let output =
+            format_rhythm_no_bars(&elements, section_start, *length, ppq, 4, use_short_push);
         (output, push_type)
     };
 
@@ -2726,10 +3010,16 @@ fn test_interlude_outro_hits_sections() {
     assert_eq!(push_b, Some("4".to_string()), "HORNS should use /push 4");
 
     // Verify key chords in HORNS (allowing for chord name variations)
-    assert!(interlude_b.contains("Cm7b5") || interlude_b.contains("Cm7♭5"),
-        "HORNS should contain Cm7b5, got: {}", interlude_b);
-    assert!(interlude_b.contains("B") && interlude_b.contains("/C"),
-        "HORNS should contain B/C or B5/C, got: {}", interlude_b);
+    assert!(
+        interlude_b.contains("Cm7b5") || interlude_b.contains("Cm7♭5"),
+        "HORNS should contain Cm7b5, got: {}",
+        interlude_b
+    );
+    assert!(
+        interlude_b.contains("B") && interlude_b.contains("/C"),
+        "HORNS should contain B/C or B5/C, got: {}",
+        interlude_b
+    );
 
     // ========================================================================
     // Interlude C "WINDS" (measures 123-130): Expected "C C+ // C // Cm7b5 Cmaj7 / 'Cmaj7 % Fm/C Cdim7"
@@ -2739,14 +3029,26 @@ fn test_interlude_outro_hits_sections() {
     println!("Interlude C (WINDS):\n{}\n", interlude_c);
 
     // Verify key chords in WINDS
-    assert!(interlude_c.contains("C ") || interlude_c.starts_with("C"),
-        "WINDS should start with C chord, got: {}", interlude_c);
-    assert!(interlude_c.contains("C+") || interlude_c.contains("Caug"),
-        "WINDS should contain C+ (augmented), got: {}", interlude_c);
-    assert!(interlude_c.contains("Cmaj7") || interlude_c.contains("'Cmaj7"),
-        "WINDS should contain Cmaj7, got: {}", interlude_c);
-    assert!(interlude_c.contains("Fm/C") || interlude_c.contains("Fm"),
-        "WINDS should contain Fm/C, got: {}", interlude_c);
+    assert!(
+        interlude_c.contains("C ") || interlude_c.starts_with("C"),
+        "WINDS should start with C chord, got: {}",
+        interlude_c
+    );
+    assert!(
+        interlude_c.contains("C+") || interlude_c.contains("Caug"),
+        "WINDS should contain C+ (augmented), got: {}",
+        interlude_c
+    );
+    assert!(
+        interlude_c.contains("Cmaj7") || interlude_c.contains("'Cmaj7"),
+        "WINDS should contain Cmaj7, got: {}",
+        interlude_c
+    );
+    assert!(
+        interlude_c.contains("Fm/C") || interlude_c.contains("Fm"),
+        "WINDS should contain Fm/C, got: {}",
+        interlude_c
+    );
 
     // ========================================================================
     // Interlude D "TRUMPETS" (measures 131-138): Expected "Fm6 % 'Dbmaj7/F % D/F % B7/F %"
@@ -2756,12 +3058,21 @@ fn test_interlude_outro_hits_sections() {
     println!("Interlude D (TRUMPETS):\n{}\n", interlude_d);
 
     // Verify key chords in TRUMPETS
-    assert!(interlude_d.contains("Fm6") || interlude_d.contains("Fm"),
-        "TRUMPETS should contain Fm6, got: {}", interlude_d);
-    assert!(interlude_d.contains("Dbmaj7/F") || interlude_d.contains("Dbmaj7"),
-        "TRUMPETS should contain Dbmaj7/F, got: {}", interlude_d);
-    assert!(interlude_d.contains("B7") && interlude_d.contains("/F"),
-        "TRUMPETS should contain B7/F, got: {}", interlude_d);
+    assert!(
+        interlude_d.contains("Fm6") || interlude_d.contains("Fm"),
+        "TRUMPETS should contain Fm6, got: {}",
+        interlude_d
+    );
+    assert!(
+        interlude_d.contains("Dbmaj7/F") || interlude_d.contains("Dbmaj7"),
+        "TRUMPETS should contain Dbmaj7/F, got: {}",
+        interlude_d
+    );
+    assert!(
+        interlude_d.contains("B7") && interlude_d.contains("/F"),
+        "TRUMPETS should contain B7/F, got: {}",
+        interlude_d
+    );
 
     // ========================================================================
     // Outro A (measures 139-146): Expected "Em7b5/D 'Dmaj9 % % % % Gm7/D 'D11"
@@ -2771,14 +3082,26 @@ fn test_interlude_outro_hits_sections() {
     println!("Outro A:\n{}\n", outro_a);
 
     // Verify key chords in Outro A
-    assert!(outro_a.contains("Em7b5/D") || outro_a.contains("Em7b5"),
-        "Outro A should contain Em7b5/D, got: {}", outro_a);
-    assert!(outro_a.contains("Dmaj9") || outro_a.contains("Dmaj7") || outro_a.contains("'Dmaj"),
-        "Outro A should contain Dmaj9 (pushed), got: {}", outro_a);
-    assert!(outro_a.contains("Gm7/D") || outro_a.contains("Gm7"),
-        "Outro A should contain Gm7/D, got: {}", outro_a);
-    assert!(outro_a.contains("D11") || outro_a.contains("'D11"),
-        "Outro A should contain D11, got: {}", outro_a);
+    assert!(
+        outro_a.contains("Em7b5/D") || outro_a.contains("Em7b5"),
+        "Outro A should contain Em7b5/D, got: {}",
+        outro_a
+    );
+    assert!(
+        outro_a.contains("Dmaj9") || outro_a.contains("Dmaj7") || outro_a.contains("'Dmaj"),
+        "Outro A should contain Dmaj9 (pushed), got: {}",
+        outro_a
+    );
+    assert!(
+        outro_a.contains("Gm7/D") || outro_a.contains("Gm7"),
+        "Outro A should contain Gm7/D, got: {}",
+        outro_a
+    );
+    assert!(
+        outro_a.contains("D11") || outro_a.contains("'D11"),
+        "Outro A should contain D11, got: {}",
+        outro_a
+    );
 
     // ========================================================================
     // Outro B (measures 147-154): Expected "'Gm7/D 'Dadd9 'Em7b5 'Dadd9 / 'Em7b5 'Dadd9 'Gm9/Bb 'Fmaj9/C"
@@ -2788,10 +3111,16 @@ fn test_interlude_outro_hits_sections() {
     println!("Outro B:\n{}\n", outro_b);
 
     // Verify key chords in Outro B (most should be pushed)
-    assert!(outro_b.contains("Dadd9") || outro_b.contains("'Dadd9"),
-        "Outro B should contain Dadd9, got: {}", outro_b);
-    assert!(outro_b.contains("Em7b5") || outro_b.contains("'Em7b5"),
-        "Outro B should contain Em7b5, got: {}", outro_b);
+    assert!(
+        outro_b.contains("Dadd9") || outro_b.contains("'Dadd9"),
+        "Outro B should contain Dadd9, got: {}",
+        outro_b
+    );
+    assert!(
+        outro_b.contains("Em7b5") || outro_b.contains("'Em7b5"),
+        "Outro B should contain Em7b5, got: {}",
+        outro_b
+    );
 
     // ========================================================================
     // Final HITS (measures 155-158): Expected "'C#/G % % %"

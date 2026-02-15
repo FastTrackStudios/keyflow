@@ -178,10 +178,12 @@ mod tests {
     fn test_boundary_roles() {
         assert!(SemanticRole::FirstInSystem.is_boundary());
         assert!(SemanticRole::LastInMeasure.is_boundary());
-        assert!(!SemanticRole::SectionStart {
-            section_type: "Verse".to_string()
-        }
-        .is_boundary());
+        assert!(
+            !SemanticRole::SectionStart {
+                section_type: "Verse".to_string()
+            }
+            .is_boundary()
+        );
     }
 
     #[test]

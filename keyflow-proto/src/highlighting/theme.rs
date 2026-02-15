@@ -294,39 +294,39 @@ impl Theme {
             foreground: Color::rgb(200, 200, 205),
 
             // Chord components - warm amber/gold palette for harmony elements
-            root: Style::bold(Color::rgb(240, 180, 100)),       // Warm amber - primary chord element
+            root: Style::bold(Color::rgb(240, 180, 100)), // Warm amber - primary chord element
             scale_degree: Style::bold(Color::rgb(240, 180, 100)), // Same as root
             roman_numeral: Style::bold(Color::rgb(240, 180, 100)), // Same as root
-            accidental: Style::color(Color::rgb(220, 140, 95)),  // Burnt orange - stands out but harmonizes
-            quality: Style::color(Color::rgb(130, 190, 140)),    // Sage green - soft contrast
-            extension: Style::color(Color::rgb(140, 180, 220)),  // Soft blue - complements amber
-            modifier: Style::color(Color::rgb(180, 140, 200)),   // Soft lavender
-            bass: Style::color(Color::rgb(200, 150, 120)),       // Warm tan
+            accidental: Style::color(Color::rgb(220, 140, 95)), // Burnt orange - stands out but harmonizes
+            quality: Style::color(Color::rgb(130, 190, 140)),   // Sage green - soft contrast
+            extension: Style::color(Color::rgb(140, 180, 220)), // Soft blue - complements amber
+            modifier: Style::color(Color::rgb(180, 140, 200)),  // Soft lavender
+            bass: Style::color(Color::rgb(200, 150, 120)),      // Warm tan
 
             // Rhythm - cooler, more subdued tones
-            duration: Style::color(Color::rgb(120, 180, 190)),   // Muted teal
+            duration: Style::color(Color::rgb(120, 180, 190)), // Muted teal
             slash_rhythm: Style::color(Color::rgb(120, 120, 125)), // Subtle gray
-            rest: Style::italic(Color::rgb(110, 110, 115)),      // Quieter gray italic
-            push_pull: Style::color(Color::rgb(180, 150, 110)),  // Muted gold
+            rest: Style::italic(Color::rgb(110, 110, 115)),    // Quieter gray italic
+            push_pull: Style::color(Color::rgb(180, 150, 110)), // Muted gold
 
             // Structure - accent colors for navigation
-            section: Style::bold(Color::rgb(130, 200, 170)),     // Seafoam green - eye-catching but calm
+            section: Style::bold(Color::rgb(130, 200, 170)), // Seafoam green - eye-catching but calm
             measure_count: Style::color(Color::rgb(170, 160, 140)), // Warm gray
             section_comment: Style::italic(Color::rgb(140, 160, 130)), // Olive italic
-            measure_separator: Style::color(Color::rgb(80, 80, 85)),   // Subtle separator
+            measure_separator: Style::color(Color::rgb(80, 80, 85)), // Subtle separator
 
             // Metadata - distinctive but not distracting
-            title: Style::bold(Color::rgb(220, 200, 160)),       // Cream/gold
-            tempo: Style::color(Color::rgb(150, 180, 200)),      // Steel blue
+            title: Style::bold(Color::rgb(220, 200, 160)), // Cream/gold
+            tempo: Style::color(Color::rgb(150, 180, 200)), // Steel blue
             time_signature: Style::color(Color::rgb(150, 180, 200)), // Steel blue
-            key: Style::color(Color::rgb(160, 190, 150)),        // Sage
+            key: Style::color(Color::rgb(160, 190, 150)),  // Sage
 
             // Other
-            comment: Style::italic(Color::rgb(100, 130, 100)),   // Muted forest green
-            command: Style::color(Color::rgb(170, 140, 190)),    // Soft purple
-            dynamic: Style::bold(Color::rgb(200, 130, 120)),     // Muted coral
+            comment: Style::italic(Color::rgb(100, 130, 100)), // Muted forest green
+            command: Style::color(Color::rgb(170, 140, 190)),  // Soft purple
+            dynamic: Style::bold(Color::rgb(200, 130, 120)),   // Muted coral
             memory_recall: Style::color(Color::rgb(140, 180, 180)), // Muted cyan
-            unknown: Style::color(Color::rgb(200, 90, 90)),      // Muted error red
+            unknown: Style::color(Color::rgb(200, 90, 90)),    // Muted error red
         }
     }
 

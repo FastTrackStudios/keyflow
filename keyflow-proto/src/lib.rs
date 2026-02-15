@@ -53,8 +53,8 @@ pub use primitives::{
 pub use sections::{Section, SectionNumberer, SectionType};
 
 pub use time::{
-    AbsolutePosition, Duration, MusicalDuration, MusicalPosition, PPQDuration,
-    PPQPosition, Position, Tempo, TimeDuration, TimePosition, TimeSignature,
+    AbsolutePosition, Duration, MusicalDuration, MusicalPosition, PPQDuration, PPQPosition,
+    Position, Tempo, TimeDuration, TimePosition, TimeSignature,
 };
 
 pub use ast::{

@@ -23,19 +23,17 @@ use kurbo::{Affine, Point, Rect};
 use vello::peniko::Color;
 
 use crate::engraver::fonts::SMuFLFont;
-use crate::engraver::layout::context::{
-    LayoutContext, LayoutContextOwned, LayoutMode,
-};
+use crate::engraver::layout::context::{LayoutContext, LayoutContextOwned, LayoutMode};
 use crate::engraver::layout::tlayout::chord::{
-    layout_chord, ChordNote, ChordParams, StemDirection,
+    ChordNote, ChordParams, StemDirection, layout_chord,
 };
-use crate::engraver::layout::tlayout::clef::{layout_clef, ClefParams, ClefType};
-use crate::engraver::layout::tlayout::keysig::{layout_keysig, KeySigParams, KeySigType};
+use crate::engraver::layout::tlayout::clef::{ClefParams, ClefType, layout_clef};
+use crate::engraver::layout::tlayout::keysig::{KeySigParams, KeySigType, layout_keysig};
 use crate::engraver::layout::tlayout::note::{
-    layout_note, Accidental, NoteDuration, NoteHeadType, NoteParams,
+    Accidental, NoteDuration, NoteHeadType, NoteParams, layout_note,
 };
-use crate::engraver::layout::tlayout::rest::{layout_rest, RestDuration, RestParams};
-use crate::engraver::layout::tlayout::timesig::{layout_timesig, TimeSigParams, TimeSigType};
+use crate::engraver::layout::tlayout::rest::{RestDuration, RestParams, layout_rest};
+use crate::engraver::layout::tlayout::timesig::{TimeSigParams, TimeSigType, layout_timesig};
 use crate::engraver::model::LayoutBreak;
 use crate::engraver::model::{DurationKind, MusicElement, Score};
 use crate::engraver::scene::id::{ElementType, SemanticId};

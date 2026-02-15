@@ -28,15 +28,15 @@ pub use header::{
     ScoreHeader,
 };
 pub use layout::{
+    LayoutBreak, LineBreakPolicy, PageContentBounds, PageInfo, PageLayout, PageLayoutConfig,
+    RehearsalMark, RehearsalMarkStyle, SystemInfo, SystemLayout, SystemYPosition,
     compute_all_system_y_positions, compute_page_layout, compute_page_layout_mut,
-    compute_system_layout, spread_systems_on_page, LayoutBreak, LineBreakPolicy, PageContentBounds,
-    PageInfo, PageLayout, PageLayoutConfig, RehearsalMark, RehearsalMarkStyle, SystemInfo,
-    SystemLayout, SystemYPosition,
+    compute_system_layout, spread_systems_on_page,
 };
 pub use measure::Measure;
 pub use measure_layout::{
-    calculate_beat_positions, compute_measure_layouts, justify_measure_layouts, BeatPosition,
-    MeasureInfo, MeasureLayout, MeasureLayoutConfig,
+    BeatPosition, MeasureInfo, MeasureLayout, MeasureLayoutConfig, calculate_beat_positions,
+    compute_measure_layouts, justify_measure_layouts,
 };
 pub use note::{Accidental, Note, NoteHead, Stem};
 pub use page_style::{LineBreakConfig, Margins, PageStyle, PaperSize, StaffConfig, SystemSpacing};

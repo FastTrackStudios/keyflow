@@ -14,13 +14,13 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use keyflow::Chart;
 use keyflow::engraver::layout::chart::{ChartLayoutConfig, ChartLayoutEngine, LayoutMode};
 use keyflow::engraver::layout::segment::SegmentType;
 use keyflow::engraver::scene::id::ElementType;
 use keyflow::engraver::scene::node::SceneNode;
 use keyflow::engraver::scene::traverse::SceneNodeExt;
 use keyflow::engraver::style::MStyle;
+use keyflow::Chart;
 
 /// Test chart with explicit durations to diagnose spacing
 const SPACING_TEST_CHART: &str = r#"Spacing Test

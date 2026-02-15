@@ -28,8 +28,8 @@ pub use smufl::{Glyph, Metadata as SMuFLMetadata, StaffSpaces};
 
 // Re-export tessellation utilities
 pub use tessellation::{
-    get_glyph_id, tessellate_glyph, tessellate_glyph_to_ndc, GlyphVertex, GlyphVertexConstructor,
-    LyonPen, TessellatedGlyph,
+    GlyphVertex, GlyphVertexConstructor, LyonPen, TessellatedGlyph, get_glyph_id, tessellate_glyph,
+    tessellate_glyph_to_ndc,
 };
 
 // endregion: --- Re-exports

@@ -744,7 +744,9 @@ impl Highlighter {
                             1,
                             HighlightKind::Triplet,
                         ));
-                    } else if ['I', 'V', 'i', 'v'].contains(c) && Self::is_chord_position(&tokens, i) {
+                    } else if ['I', 'V', 'i', 'v'].contains(c)
+                        && Self::is_chord_position(&tokens, i)
+                    {
                         // Roman numeral - highlight the whole numeral (only at word boundaries)
                         let (len, kind) = Self::parse_roman_numeral(&tokens, i);
                         spans.push(HighlightSpan::from_range(start_pos, len, kind));

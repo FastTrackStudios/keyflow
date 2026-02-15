@@ -15,7 +15,7 @@ use crate::engraver::model::{
     MusicElement, Note, NoteHead, Octave, Part, PartId, Pitch, PitchClass, RehearsalMark,
     RehearsalMarkStyle, Rest, Score, ScoreMetadata, Stem, TimeSignature as EngraverTimeSig, Voice,
 };
-use crate::engraver::quantize::{quantize_duration, QuantizeConfig};
+use crate::engraver::quantize::{QuantizeConfig, quantize_duration};
 use crate::{DurationTrait, Note as KeyflowNote};
 
 // region:    --- From<Chart> for Score

@@ -8,7 +8,7 @@
 
 use crate::core::duration::{NotationDuration, NoteValue, RhythmType, TupletRatio};
 use crate::parsing::{ParseError, Token, TokenType};
-use crate::time::{MusicalDuration, TimeSignature, MusicalPositionExt};
+use crate::time::{MusicalDuration, MusicalPositionExt, TimeSignature};
 use facet::Facet;
 use tracing::instrument;
 

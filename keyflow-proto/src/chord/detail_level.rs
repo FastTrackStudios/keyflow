@@ -4,7 +4,6 @@
 //! When a chord exceeds the configured level, it can be represented
 //! as a polychord/slash chord (e.g., C13 → Dm/C at the Sevenths level).
 
-
 use crate::chord::Chord;
 use crate::chord::degree::ChordDegree;
 use crate::chord::quality::ChordQuality;

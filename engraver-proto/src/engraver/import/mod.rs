@@ -18,12 +18,12 @@ mod midi_chart_builder;
 pub use keyflow_import::import_chart;
 
 #[cfg(feature = "midi-import")]
-pub use midi_chart_builder::{generate_chart_text, MidiChartConfig};
+pub use midi_chart_builder::{MidiChartConfig, generate_chart_text};
 
 #[cfg(feature = "midi-import")]
 pub use midi_import::{
-    format_duration_suffix, format_measure_rhythm, format_rest, generate_measure_rhythm,
-    normalize_chord_name, ChordMarker, MarkerEvent, MarkerType, MidiFile, MidiImportConfig,
-    MidiNote, MidiTrack, MusicalPosition, PushPull, PushPullAmount, RhythmElement, SectionMarker,
-    SectionType, TempoEvent, TimeSignatureEvent,
+    ChordMarker, MarkerEvent, MarkerType, MidiFile, MidiImportConfig, MidiNote, MidiTrack,
+    MusicalPosition, PushPull, PushPullAmount, RhythmElement, SectionMarker, SectionType,
+    TempoEvent, TimeSignatureEvent, format_duration_suffix, format_measure_rhythm, format_rest,
+    generate_measure_rhythm, normalize_chord_name,
 };

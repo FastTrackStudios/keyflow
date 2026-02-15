@@ -6,6 +6,6 @@
 pub mod capsule_label;
 
 pub use capsule_label::{
-    format_rehearsal_label, format_rehearsal_label_with_letter, CapsuleLabelConfig,
-    CapsuleLabelMode, ComputedCapsuleLabel,
+    CapsuleLabelConfig, CapsuleLabelMode, ComputedCapsuleLabel, format_rehearsal_label,
+    format_rehearsal_label_with_letter,
 };

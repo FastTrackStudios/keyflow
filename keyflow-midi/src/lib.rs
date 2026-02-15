@@ -14,8 +14,8 @@ use std::path::Path;
 use keyflow_proto::Chart;
 
 pub fn parse_midi_bytes(bytes: &[u8]) -> Result<Chart, String> {
-    let midi = engraver_proto::engraver::import::MidiFile::parse(bytes)
-        .map_err(|e| e.to_string())?;
+    let midi =
+        engraver_proto::engraver::import::MidiFile::parse(bytes).map_err(|e| e.to_string())?;
     let config = engraver_proto::engraver::import::MidiChartConfig::default();
     let text = engraver_proto::engraver::import::generate_chart_text(&midi, &config);
     keyflow_text::api::parse::chart(&text)

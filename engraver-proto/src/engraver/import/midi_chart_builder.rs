@@ -7,11 +7,10 @@
 //! determines push/pull timing, builds measure-aware rhythm elements,
 //! and formats everything as Keyflow chart text.
 
-
-use crate::chord::{detect_chords_from_midi_notes, DetectedChord, MidiNote as KeyflowMidiNote};
+use crate::chord::{DetectedChord, MidiNote as KeyflowMidiNote, detect_chords_from_midi_notes};
 use crate::key::{KeySpelling, SpellingMode};
-use crate::primitives::note::Note;
 use crate::primitives::MusicalNote;
+use crate::primitives::note::Note;
 
 use super::midi_import::{MidiFile, SectionType as MidiSectionType};
 
