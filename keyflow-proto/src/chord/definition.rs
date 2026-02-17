@@ -1274,7 +1274,9 @@ impl std::fmt::Display for Chord {
 mod tests {
     use super::*;
     use crate::chord::duration::ChordRhythm;
+    use crate::key::Key;
     use crate::parsing::Lexer;
+    use crate::primitives::MusicalNote;
 
     #[test]
     fn test_parse_c_major() {

@@ -2958,9 +2958,11 @@ mod tests {
     use crate::engraver::style::MStyle;
     use crate::{
         AbsolutePosition, Chart, ChartSection, Chord, ChordInstance, ChordQuality, ChordRhythm,
-        Measure, MusicalDuration, MusicalNote, MusicalPosition, RootNotation, Section, SectionType,
+        MusicalDuration, MusicalNote, MusicalPosition, RootNotation, Section, SectionType,
         TimeSignature,
     };
+    use keyflow_proto::chart::types::Measure;
+    use keyflow_proto::time::MusicalPositionExt;
     use std::sync::Arc;
 
     /// Create a static MStyle for testing (leaked for 'static lifetime).
