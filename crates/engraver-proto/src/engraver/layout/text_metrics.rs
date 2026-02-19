@@ -55,11 +55,10 @@ impl TextFontMetrics {
         glyph_metrics: &GlyphMetrics,
         font_size: f64,
     ) -> f64 {
-        if let Some(gid) = charmap.map(c) {
-            if let Some(advance) = glyph_metrics.advance_width(gid) {
+        if let Some(gid) = charmap.map(c)
+            && let Some(advance) = glyph_metrics.advance_width(gid) {
                 return advance as f64;
             }
-        }
         // Fallback to estimation if glyph not found
         self.estimate_char_width(c, font_size)
     }

@@ -80,12 +80,11 @@ impl Chord {
             // Check if current root is a scale degree in source key
             let mut found_scale_degree = None;
             for deg in 1..=7 {
-                if let Some(scale_note) = src_key.get_scale_degree(deg) {
-                    if scale_note.semitone == current_root.semitone {
+                if let Some(scale_note) = src_key.get_scale_degree(deg)
+                    && scale_note.semitone == current_root.semitone {
                         found_scale_degree = Some(deg);
                         break;
                     }
-                }
             }
 
             if let Some(degree) = found_scale_degree {
@@ -122,13 +121,12 @@ impl Chord {
                     // Try to find this in the target scale
                     let mut found_root = false;
                     for scale_deg in 1..=7 {
-                        if let Some(scale_note) = target_key.get_scale_degree(scale_deg) {
-                            if scale_note.semitone == transposed_root_semitone {
+                        if let Some(scale_note) = target_key.get_scale_degree(scale_deg)
+                            && scale_note.semitone == transposed_root_semitone {
                                 transposed_notes.push(scale_note);
                                 found_root = true;
                                 break;
                             }
-                        }
                     }
 
                     if !found_root {
@@ -144,13 +142,12 @@ impl Chord {
                     // For other notes, try to find in target scale first
                     let mut found_in_scale = false;
                     for scale_deg in 1..=7 {
-                        if let Some(scale_note) = target_key.get_scale_degree(scale_deg) {
-                            if scale_note.semitone == new_semitone {
+                        if let Some(scale_note) = target_key.get_scale_degree(scale_deg)
+                            && scale_note.semitone == new_semitone {
                                 transposed_notes.push(scale_note);
                                 found_in_scale = true;
                                 break;
                             }
-                        }
                     }
 
                     if !found_in_scale {
@@ -182,12 +179,11 @@ impl Chord {
             let new_chord_root = &transposed_notes[0];
             let mut chord_root_scale_degree = None;
             for deg in 1..=7 {
-                if let Some(scale_note) = target_key.get_scale_degree(deg) {
-                    if scale_note.semitone == new_chord_root.semitone {
+                if let Some(scale_note) = target_key.get_scale_degree(deg)
+                    && scale_note.semitone == new_chord_root.semitone {
                         chord_root_scale_degree = Some(deg);
                         break;
                     }
-                }
             }
 
             if let Some(root_deg) = chord_root_scale_degree {
@@ -239,12 +235,11 @@ impl Chord {
             let mut absolute_note = transposed_notes[0].clone();
             // Search for this note name in the target scale
             for deg in 1..=7 {
-                if let Some(scale_note) = target_key.get_scale_degree(deg) {
-                    if scale_note.name == *root_name {
+                if let Some(scale_note) = target_key.get_scale_degree(deg)
+                    && scale_note.name == *root_name {
                         absolute_note.semitone = scale_note.semitone;
                         break;
                     }
-                }
             }
             absolute_note
         } else {

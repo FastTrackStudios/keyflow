@@ -179,8 +179,8 @@ pub fn detect_chords_from_midi_notes(
         // If this note starts after or at the earliest end time, process existing active notes
         if note.start_ppq >= chord_min_eppq.unwrap_or(0) {
             // Build chord from current active notes if we have 2+
-            if active_notes.len() >= 2 {
-                if let Some(chord) = build_chord_from_notes(
+            if active_notes.len() >= 2
+                && let Some(chord) = build_chord_from_notes(
                     &active_notes,
                     chord_min_eppq.unwrap_or(0),
                     note.start_ppq,
@@ -188,7 +188,6 @@ pub fn detect_chords_from_midi_notes(
                 ) {
                     chords.push(chord);
                 }
-            }
 
             // Remove notes that have ended before or at this note's start time
             // Use >= instead of > to ensure notes ending exactly when new note starts are removed
@@ -231,8 +230,8 @@ pub fn detect_chords_from_midi_notes(
     }
 
     // Process remaining active notes at the end
-    if active_notes.len() >= 2 {
-        if let Some(chord) = build_chord_from_notes(
+    if active_notes.len() >= 2
+        && let Some(chord) = build_chord_from_notes(
             &active_notes,
             chord_min_eppq.unwrap_or(0),
             i64::MAX,
@@ -240,7 +239,6 @@ pub fn detect_chords_from_midi_notes(
         ) {
             chords.push(chord);
         }
-    }
 
     // Merge consecutive identical chords (like Lil Chordbox)
     // But don't merge if chords start exactly when the previous one ends (separate musical events)
@@ -415,15 +413,14 @@ fn apply_midi_octave_adjustments(
         }
 
         // Also handle case where we have 3rd and 4th in same octave but no extension detected
-        if third_and_fourth_same_octave && chord.extensions.eleventh.is_none() {
-            if !chord.additions.contains(&ChordDegree::Fourth)
+        if third_and_fourth_same_octave && chord.extensions.eleventh.is_none()
+            && !chord.additions.contains(&ChordDegree::Fourth)
                 && !chord.additions.contains(&ChordDegree::Eleventh)
                 && has_fourth
                 && has_major_third
             {
                 chord.additions.push(ChordDegree::Fourth);
             }
-        }
     }
 
     // Handle "D2" style chords: power chord with 2nd

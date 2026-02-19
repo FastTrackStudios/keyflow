@@ -14,8 +14,8 @@ thiserror.workspace = true
 roam.workspace = true
 tracing.workspace = true
 serde = { workspace = true, optional = true }
-daw-control = { path = "../../daw/daw-control" }
-color-palette = { path = "../../../crates/color/color-palette" }
+daw-control = { workspace = true }
+color-palette = { workspace = true }
 uuid = { version = "1", features = ["v4", "serde"] }
 helgoboss-midi = "0.4.0"
 

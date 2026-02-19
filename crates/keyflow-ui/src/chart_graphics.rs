@@ -23,11 +23,10 @@
 
 use std::sync::Arc;
 
-use anyrender::{PaintScene, WindowRenderer};
+use anyrender::WindowRenderer;
 use anyrender_vello::{VelloRendererOptions, VelloWindowRenderer};
 use dioxus::desktop::tao::window::Window;
-use kurbo::{Affine, Circle, Point, Rect, Stroke};
-use peniko::{Color, Fill};
+use peniko::Color;
 
 /// Chart graphics context wrapping anyrender's VelloWindowRenderer.
 ///

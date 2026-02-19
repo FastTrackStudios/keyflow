@@ -94,7 +94,7 @@ impl DurationTrait for time::MusicalDuration {
     }
 
     fn clone_box(&self) -> Box<dyn DurationTrait> {
-        Box::new(self.clone())
+        Box::new(*self)
     }
 }
 

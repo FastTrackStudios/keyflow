@@ -347,7 +347,7 @@ impl<'a> LayoutEngine<'a> {
         let content_height =
             self.config.page_height - self.config.margins.top - self.config.margins.bottom;
 
-        for (_sys_idx, measure_indices) in systems_measures.iter().enumerate() {
+        for measure_indices in systems_measures.iter() {
             // Create system node
             let system_height = self.config.spatium * 4.0; // 5 staff lines = 4 spaces
 
@@ -641,7 +641,7 @@ impl<'a> LayoutEngine<'a> {
                     is_change: false,
                     ..Default::default()
                 };
-                let (_, clef_node) = layout_clef(&clef_params, &ctx);
+                let (_, clef_node) = layout_clef(&clef_params, ctx);
                 let mut positioned = clef_node;
                 positioned.transform = Affine::translate((element_x, 0.0));
                 measure_node.add_child(positioned);
@@ -656,7 +656,7 @@ impl<'a> LayoutEngine<'a> {
                     },
                     large: false,
                 };
-                let (_, ts_node) = layout_timesig(&ts_params, &ctx);
+                let (_, ts_node) = layout_timesig(&ts_params, ctx);
                 let mut positioned = ts_node;
                 positioned.transform = Affine::translate((element_x, 0.0));
                 measure_node.add_child(positioned);
@@ -664,19 +664,18 @@ impl<'a> LayoutEngine<'a> {
             }
 
             // Layout music elements
-            if let Some(part) = score.parts.first() {
-                if let Some(measure) = part.measures.get(measure_idx) {
+            if let Some(part) = score.parts.first()
+                && let Some(measure) = part.measures.get(measure_idx) {
                     let content_area = measure_width - element_x - self.config.spatium * 0.5;
                     let elements_node = self.layout_measure_elements(
                         measure,
-                        &ctx,
+                        ctx,
                         element_x,
                         content_area,
                         measure_idx as u64,
                     );
                     measure_node.add_child(elements_node);
                 }
-            }
 
             // Right barline
             let right_barline = self.create_barline(measure_width, is_last);
@@ -885,7 +884,7 @@ impl<'a> LayoutEngine<'a> {
                     is_change: false,
                     ..Default::default()
                 };
-                let (_, clef_node) = layout_clef(&clef_params, &ctx);
+                let (_, clef_node) = layout_clef(&clef_params, ctx);
                 let mut positioned = clef_node;
                 positioned.transform = Affine::translate((element_x, 0.0));
                 measure_node.add_child(positioned);
@@ -910,7 +909,7 @@ impl<'a> LayoutEngine<'a> {
                     },
                     large: false,
                 };
-                let (_, ts_node) = layout_timesig(&ts_params, &ctx);
+                let (_, ts_node) = layout_timesig(&ts_params, ctx);
                 let mut positioned = ts_node;
                 positioned.transform = Affine::translate((element_x, 0.0));
                 measure_node.add_child(positioned);
@@ -918,19 +917,18 @@ impl<'a> LayoutEngine<'a> {
             }
 
             // Layout music elements from the score
-            if let Some(part) = score.parts.first() {
-                if let Some(measure) = part.measures.get(measure_idx) {
+            if let Some(part) = score.parts.first()
+                && let Some(measure) = part.measures.get(measure_idx) {
                     let content_area = measure_width - element_x - self.config.spatium * 0.5;
                     let elements_node = self.layout_measure_elements(
                         measure,
-                        &ctx,
+                        ctx,
                         element_x,
                         content_area,
                         measure_idx as u64,
                     );
                     measure_node.add_child(elements_node);
                 }
-            }
 
             // Right barline
             let right_barline = self.create_barline(measure_width, is_last);

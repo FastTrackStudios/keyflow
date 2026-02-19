@@ -472,7 +472,7 @@ pub fn measure_measure_with_config(
             && chord
                 .push_pull
                 .as_ref()
-                .map_or(false, |(is_push, _)| *is_push);
+                .is_some_and(|(is_push, _)| *is_push);
 
         // Only skip if pushed AND not at a boundary (at boundaries, chord renders in both places)
         let should_skip_for_spillback = is_pushed && !is_section_boundary;

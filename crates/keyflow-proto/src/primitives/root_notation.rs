@@ -99,11 +99,10 @@ impl RootNotation {
     /// Parse from a string (auto-detect format)
     pub fn from_string(s: &str) -> Option<Self> {
         // Try scale degree (single digit 1-7)
-        if let Ok(degree) = s.parse::<u8>() {
-            if (1..=7).contains(&degree) {
+        if let Ok(degree) = s.parse::<u8>()
+            && (1..=7).contains(&degree) {
                 return Some(Self::from_scale_degree(degree, None));
             }
-        }
 
         // Try roman numeral
         if let Some((degree, case)) = Self::parse_roman_numeral(s) {

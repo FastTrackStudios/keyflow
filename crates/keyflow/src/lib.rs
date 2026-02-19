@@ -41,7 +41,7 @@ impl IntoChart for keyflow_proto::Chart {
 }
 
 #[cfg(feature = "text")]
-impl<'a> IntoChart for &'a str {
+impl IntoChart for &str {
     fn into_chart(self) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError> {
         keyflow_text::chart::parse_chart(self).map_err(KeyflowSourceError::Text)
     }
@@ -55,7 +55,7 @@ impl IntoChart for String {
 }
 
 #[cfg(feature = "text")]
-impl<'a> IntoChart for &'a String {
+impl IntoChart for &String {
     fn into_chart(self) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError> {
         keyflow_text::chart::parse_chart(self.as_str()).map_err(KeyflowSourceError::Text)
     }

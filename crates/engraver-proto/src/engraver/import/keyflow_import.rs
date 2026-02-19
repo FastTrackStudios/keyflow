@@ -175,7 +175,7 @@ pub fn import_chart(chart: &crate::Chart) -> Score {
         metadata,
         parts: vec![part],
         time_signature: time_sig,
-        tempo_bpm: chart.tempo.as_ref().map(|t| f64::from(t.bpm)),
+        tempo_bpm: chart.tempo.as_ref().map(|t| t.bpm),
         ..Default::default()
     }
 }

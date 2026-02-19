@@ -253,10 +253,8 @@ impl<'a> ChartParser<'a> {
             let duration_candidates = ["32", "16", "8", "4", "2", "1"];
 
             for candidate in &duration_candidates {
-                if after_underscore.starts_with(candidate) {
+                if let Some(after_duration) = after_underscore.strip_prefix(candidate) {
                     if let Some(duration) = LilySyntax::from_number(candidate) {
-                        let after_duration = &after_underscore[candidate.len()..];
-
                         // Check for optional dotted (.) or triplet (t) modifier
                         let (has_dot, has_triplet, suffix_len) = if after_duration.starts_with('.')
                         {
@@ -903,12 +901,12 @@ impl<'a> ChartParser<'a> {
                         let last_chord_is_tied = current_measure
                             .chords
                             .last()
-                            .map_or(false, |c| c.rhythm.is_tied())
+                            .is_some_and(|c| c.rhythm.is_tied())
                             || (!measures.is_empty()
                                 && measures
                                     .last()
                                     .and_then(|m| m.chords.last())
-                                    .map_or(false, |c| c.rhythm.is_tied()));
+                                    .is_some_and(|c| c.rhythm.is_tied()));
 
                         if last_chord_is_tied {
                             // Fall through to tie handling code below
@@ -963,7 +961,7 @@ impl<'a> ChartParser<'a> {
                                 let prev_chord_has_explicit_rhythm = measures
                                     .last()
                                     .and_then(|m| m.chords.last())
-                                    .map_or(false, |c| {
+                                    .is_some_and(|c| {
                                         matches!(
                                             c.rhythm,
                                             ChordRhythm::Slashes { .. } | ChordRhythm::Explicit(_)
@@ -1184,7 +1182,7 @@ impl<'a> ChartParser<'a> {
                             // Update in rhythm_elements too
                             for elem in current_measure.rhythm_elements.iter_mut().rev() {
                                 if let RhythmElement::Chord(c) = elem {
-                                    c.duration = last_chord.duration.clone();
+                                    c.duration = last_chord.duration;
                                     c.rhythm.clear_tie();
                                     break;
                                 }
@@ -1202,7 +1200,7 @@ impl<'a> ChartParser<'a> {
                                     last_chord.rhythm.clear_tie();
                                     for elem in last_measure.rhythm_elements.iter_mut().rev() {
                                         if let RhythmElement::Chord(c) = elem {
-                                            c.duration = last_chord.duration.clone();
+                                            c.duration = last_chord.duration;
                                             c.rhythm.clear_tie();
                                             break;
                                         }
@@ -1222,8 +1220,7 @@ impl<'a> ChartParser<'a> {
             }
 
             // Check for melody variable reference (e.g., "$mainRiff")
-            if token_str.starts_with('$') {
-                let var_name = &token_str[1..];
+            if let Some(var_name) = token_str.strip_prefix('$') {
                 if let Some(melody) = self.melody_variables.get(var_name).cloned() {
                     // Attach the melody to the current measure
                     current_measure.melodies.push(melody);
@@ -1593,7 +1590,7 @@ impl<'a> ChartParser<'a> {
                                 .take_while(|t| {
                                     // Stop at measure separator or new chord
                                     **t != "|"
-                                        && !t.chars().next().map_or(true, |c| c.is_alphabetic())
+                                        && !t.chars().next().is_none_or(|c| c.is_alphabetic())
                                 })
                                 .any(|t| t.chars().all(|c| c == '/') && !t.is_empty());
 

@@ -259,15 +259,14 @@ impl Chord {
     /// enharmonic spelling (e.g., G# → Ab in Eb major).
     pub fn respell_root(&mut self, key_spelling: &KeySpelling, mode: SpellingMode) {
         if let Some(root_note) = self.root.resolved_note() {
-            let respelled = key_spelling.respell(&root_note, mode);
+            let respelled = key_spelling.respell(root_note, mode);
             self.root = RootNotation::from_note_name(respelled);
             // Also respell bass if present
-            if let Some(bass) = &self.bass {
-                if let Some(bass_note) = bass.resolved_note() {
-                    let respelled_bass = key_spelling.respell(&bass_note, mode);
+            if let Some(bass) = &self.bass
+                && let Some(bass_note) = bass.resolved_note() {
+                    let respelled_bass = key_spelling.respell(bass_note, mode);
                     self.bass = Some(RootNotation::from_note_name(respelled_bass));
                 }
-            }
             self.normalize();
         }
     }

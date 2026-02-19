@@ -763,13 +763,13 @@ impl SceneNode {
     /// Check if this node renders a SMuFL glyph.
     #[must_use]
     pub fn is_smufl_glyph(&self) -> bool {
-        self.get_glyph_info().map_or(false, |info| info.is_smufl())
+        self.get_glyph_info().is_some_and(|info| info.is_smufl())
     }
 
     /// Check if this node renders text.
     #[must_use]
     pub fn is_text_glyph(&self) -> bool {
-        self.get_glyph_info().map_or(false, |info| info.is_text())
+        self.get_glyph_info().is_some_and(|info| info.is_text())
     }
 
     // =========================================================================
@@ -809,7 +809,7 @@ impl SceneNode {
         self.find_all(|node| {
             node.metadata
                 .get(metadata_keys::ELEMENT_TYPE)
-                .map_or(false, |t| t == element_type)
+                .is_some_and(|t| t == element_type)
         })
     }
 
@@ -818,7 +818,7 @@ impl SceneNode {
         self.find_all(|node| {
             node.metadata
                 .get(metadata_keys::SECTION_TYPE)
-                .map_or(false, |t| t == section_type)
+                .is_some_and(|t| t == section_type)
         })
     }
 
@@ -827,7 +827,7 @@ impl SceneNode {
         self.find_all(|node| {
             node.metadata
                 .get(metadata_keys::FONT_FAMILY)
-                .map_or(false, |f| f == font_family)
+                .is_some_and(|f| f == font_family)
         })
     }
 
@@ -845,7 +845,7 @@ impl SceneNode {
     pub fn find_by_glyph_type(&self, glyph_type: GlyphType) -> Vec<&SceneNode> {
         self.find_all(|node| {
             node.get_glyph_info()
-                .map_or(false, |info| info.glyph_type == glyph_type)
+                .is_some_and(|info| info.glyph_type == glyph_type)
         })
     }
 
@@ -939,7 +939,7 @@ impl SceneNode {
     pub fn find_by_source_offset(&self, offset: usize) -> Vec<&SceneNode> {
         self.find_all(|node| {
             node.get_json_metadata::<crate::TextSpan>(metadata_keys::SOURCE_SPAN)
-                .map_or(false, |span| span.contains(offset))
+                .is_some_and(|span| span.contains(offset))
         })
     }
 
@@ -951,7 +951,7 @@ impl SceneNode {
     pub fn find_by_source_range(&self, start: usize, end: usize) -> Vec<&SceneNode> {
         self.find_all(|node| {
             node.get_json_metadata::<crate::TextSpan>(metadata_keys::SOURCE_SPAN)
-                .map_or(false, |span| span.overlaps_range(start, end))
+                .is_some_and(|span| span.overlaps_range(start, end))
         })
     }
 
@@ -960,7 +960,7 @@ impl SceneNode {
     pub fn find_by_chart_position(&self, measure: u32, beat: u32) -> Vec<&SceneNode> {
         self.find_all(|node| {
             node.get_json_metadata::<crate::ChartPosition>(metadata_keys::CHART_POSITION)
-                .map_or(false, |pos| pos.measure == measure && pos.beat == beat)
+                .is_some_and(|pos| pos.measure == measure && pos.beat == beat)
         })
     }
 }

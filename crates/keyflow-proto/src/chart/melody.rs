@@ -142,7 +142,7 @@ impl MelodyNote {
         let base_pitch = self.pitch.chars().next()?;
         let base_class = PITCH_CLASS
             .iter()
-            .find(|(p, _)| p.chars().next() == Some(base_pitch))
+            .find(|(p, _)| p.starts_with(base_pitch))
             .map(|(_, c)| *c)?;
 
         // Apply accidentals
@@ -283,11 +283,10 @@ impl MelodyNote {
 
             // Check for accidental after the number
             let mut final_pitch = pitch;
-            if let Some(&c) = chars.peek() {
-                if c == '#' || c == 'b' {
+            if let Some(&c) = chars.peek()
+                && (c == '#' || c == 'b') {
                     final_pitch.push(chars.next().unwrap());
                 }
-            }
 
             // Check for octave modifier
             let octave_modifier = Self::parse_octave_modifier(&mut chars);
@@ -322,11 +321,10 @@ impl MelodyNote {
 
         // Check for accidental
         let mut pitch = pitch_letter;
-        if let Some(&c) = chars.peek() {
-            if c == '#' || c == 'b' {
+        if let Some(&c) = chars.peek()
+            && (c == '#' || c == 'b') {
                 pitch.push(chars.next().unwrap());
             }
-        }
 
         // Check for octave modifier
         let octave_modifier = Self::parse_octave_modifier(&mut chars);

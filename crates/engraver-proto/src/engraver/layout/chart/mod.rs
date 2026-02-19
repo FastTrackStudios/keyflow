@@ -332,7 +332,7 @@ impl ChartLayoutEngine {
         };
 
         let measure_config = ChartLayoutConfig {
-            margins: snippet_margins.clone(),
+            margins: snippet_margins,
             snippet_mode: true, // Simple white background
             ..self.config.clone()
         };
@@ -487,7 +487,7 @@ impl ChartLayoutEngine {
         let mut global_measure_index: usize = 0;
 
         // Calculate seconds per tick from tempo (480 ticks per quarter note)
-        let tempo_bpm = chart.tempo.map(|t| t.bpm as f64).unwrap_or(120.0);
+        let tempo_bpm = chart.tempo.map(|t| t.bpm).unwrap_or(120.0);
         let seconds_per_quarter = 60.0 / tempo_bpm;
         let seconds_per_tick = seconds_per_quarter / 480.0;
 
@@ -630,8 +630,8 @@ impl ChartLayoutEngine {
                 !s.section.section_type.is_compact()
                     && !matches!(s.section.section_type, SectionType::End)
             });
-            if let Some(next_section) = next_non_compact_section {
-                if let Some(mut spillback) = detect_section_start_spillback(next_section.measures())
+            if let Some(next_section) = next_non_compact_section
+                && let Some(mut spillback) = detect_section_start_spillback(next_section.measures())
                 {
                     // Adjust beat position based on this section's last measure time signature
                     if let Some(last_measure) = chart_section.measures().last() {
@@ -654,7 +654,6 @@ impl ChartLayoutEngine {
                         .or_default()
                         .push(spillback);
                 }
-            }
 
             // Group measures into systems (count-based for consistent layout)
             let systems = self.group_measures_into_systems(chart_section.measures(), content_width);
@@ -677,7 +676,7 @@ impl ChartLayoutEngine {
                             width: page_width,
                             height: page_height,
                             systems: std::mem::take(&mut current_page_systems),
-                            margins: self.config.margins.clone(),
+                            margins: self.config.margins,
                         });
                         page_number += 1;
                         page_y = self.config.margins.top;
@@ -1159,7 +1158,7 @@ impl ChartLayoutEngine {
                 width: page_width,
                 height: page_height,
                 systems: current_page_systems,
-                margins: self.config.margins.clone(),
+                margins: self.config.margins,
             });
         }
 
@@ -1309,8 +1308,8 @@ impl ChartLayoutEngine {
                 !s.section.section_type.is_compact()
                     && !matches!(s.section.section_type, SectionType::End)
             });
-            if let Some(next_section) = next_non_compact_section {
-                if let Some(mut spillback) = detect_section_start_spillback(next_section.measures())
+            if let Some(next_section) = next_non_compact_section
+                && let Some(mut spillback) = detect_section_start_spillback(next_section.measures())
                 {
                     // Adjust beat position based on this section's last measure time signature
                     if let Some(last_measure) = chart_section.measures().last() {
@@ -1323,7 +1322,6 @@ impl ChartLayoutEngine {
                         .or_default()
                         .push(spillback);
                 }
-            }
 
             // Group measures into systems (count-based for consistent layout)
             let systems = self.group_measures_into_systems(chart_section.measures(), content_width);
@@ -2048,7 +2046,7 @@ impl ChartLayoutEngine {
         let has_explicit_chord_rhythm = rhythm_builder::measure_has_explicit_chord_rhythm(measure);
 
         // Check if there are triplet spillbacks that need rhythmic processing
-        let has_triplet_spillbacks = spillbacks.map_or(false, |spills| {
+        let has_triplet_spillbacks = spillbacks.is_some_and(|spills| {
             spills
                 .iter()
                 .any(|s| s.push_base == crate::chord::PushPullBase::Triplet)
@@ -2069,7 +2067,7 @@ impl ChartLayoutEngine {
                     continue;
                 }
                 let is_triplet_push =
-                    chord.push_pull.as_ref().map_or(false, |(is_push, amount)| {
+                    chord.push_pull.as_ref().is_some_and(|(is_push, amount)| {
                         *is_push && amount.base == crate::chord::PushPullBase::Triplet
                     });
                 // Only count as internal if we've accumulated some beats (not at beat 0)
@@ -2207,7 +2205,7 @@ impl ChartLayoutEngine {
 
         // Build the measure based on whether we have explicit rhythm entries or not
         let mut builder = MeasureBuilder::new()
-            .id_base(id_base as u64)
+            .id_base(id_base)
             .justify_to(width_spatiums)
             .no_barlines() // Barlines handled by chart_layout
             .segment_min_widths(chord_min_widths);
@@ -2623,7 +2621,7 @@ impl ChartLayoutEngine {
                         && chord
                             .push_pull
                             .as_ref()
-                            .map_or(false, |(is_push, _)| *is_push);
+                            .is_some_and(|(is_push, _)| *is_push);
 
                     // Only skip if pushed AND not at a boundary
                     let should_skip_for_spillback = is_pushed && !is_boundary;

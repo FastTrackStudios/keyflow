@@ -141,7 +141,7 @@ impl SegmentList {
     pub fn push(&mut self, segment: Segment) {
         // Verify ordering in debug builds
         debug_assert!(
-            self.segments.last().map_or(true, |last| last <= &segment),
+            self.segments.last().is_none_or(|last| last <= &segment),
             "Segment pushed out of order"
         );
         self.segments.push(segment);

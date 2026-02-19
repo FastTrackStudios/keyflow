@@ -505,7 +505,7 @@ pub fn add_title_header_with_count_in(
 
     // Tempo indicator - below version with padding
     // Extra space is added when there's a pushed chord that spills into the count-in
-    let has_pushed_chord = count_in.map_or(false, |c| c.has_pushed_chord);
+    let has_pushed_chord = count_in.is_some_and(|c| c.has_pushed_chord);
     let tempo_padding = if has_pushed_chord { 20.0 } else { 6.0 };
     let tempo_y = version_y + small_font_size + tempo_padding;
     let tempo_font_size = 12.0;
@@ -553,8 +553,8 @@ pub fn add_title_header_with_count_in(
     // Render count-in snippet next to tempo indicator
     let mut count_in_height = 0.0;
     let mut count_in_beat_geos = Vec::new();
-    if let Some(config) = count_in {
-        if config.num_measures > 0 {
+    if let Some(config) = count_in
+        && config.num_measures > 0 {
             let snippet_config = CountInSnippetConfig {
                 beats_per_measure: config.beats_per_measure,
                 beat_unit: config.beat_unit,
@@ -583,7 +583,6 @@ pub fn add_title_header_with_count_in(
             count_in_height = snippet_result.height;
             count_in_beat_geos = snippet_result.beat_geometries;
         }
-    }
 
     // Composer/Artist - right aligned
     let mut commands = Vec::new();

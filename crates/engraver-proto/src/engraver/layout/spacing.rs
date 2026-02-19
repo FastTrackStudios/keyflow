@@ -525,11 +525,10 @@ impl HorizontalSpacing {
         // Count ChordRest segments before collision point
         let mut cr_count = 0;
         for i in 0..collision_index {
-            if let Some(seg) = segments.get(i) {
-                if seg.ticks > 0 {
+            if let Some(seg) = segments.get(i)
+                && seg.ticks > 0 {
                     cr_count += 1;
                 }
-            }
         }
 
         if cr_count == 0 {
@@ -540,11 +539,10 @@ impl HorizontalSpacing {
         let per_segment = extra_space / cr_count as f64;
 
         for i in 0..collision_index {
-            if let Some(seg) = segments.get_mut(i) {
-                if seg.ticks > 0 {
+            if let Some(seg) = segments.get_mut(i)
+                && seg.ticks > 0 {
                     seg.width += per_segment;
                 }
-            }
         }
     }
 }

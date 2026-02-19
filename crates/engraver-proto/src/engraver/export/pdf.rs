@@ -484,7 +484,7 @@ impl PdfSerializer {
         // For multiple pages, we need to combine them
         // svg2pdf creates standalone PDFs, so for multi-page we use a different approach:
         // Convert each SVG to a PDF XObject and place on pages
-        Self::combine_svg_pdfs_to_multipage(&svg_pages, fonts)
+        Self::combine_svg_pdfs_to_multipage(svg_pages, fonts)
     }
 
     /// Combine multiple SVG documents into a single multi-page PDF.
@@ -623,11 +623,10 @@ impl PdfSerializer {
 
             // Collect all objects (excluding Catalog, Pages, and Outlines)
             for (id, object) in doc.objects {
-                if let Ok(type_name) = object.type_name() {
-                    if type_name == b"Catalog" || type_name == b"Outlines" {
+                if let Ok(type_name) = object.type_name()
+                    && (type_name == b"Catalog" || type_name == b"Outlines") {
                         continue; // Skip catalog and outlines, we'll create our own
                     }
-                }
                 all_objects.insert(id, object);
             }
         }
@@ -652,11 +651,10 @@ impl PdfSerializer {
 
         // Update each page's Parent to point to our new Pages object
         for page_id in &all_pages {
-            if let Ok(page_obj) = merged_doc.get_object_mut(*page_id) {
-                if let Object::Dictionary(dict) = page_obj {
+            if let Ok(page_obj) = merged_doc.get_object_mut(*page_id)
+                && let Object::Dictionary(dict) = page_obj {
                     dict.set("Parent", Object::Reference(pages_id));
                 }
-            }
         }
 
         // Create Pages dictionary

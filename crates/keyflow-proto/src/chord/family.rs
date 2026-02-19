@@ -78,19 +78,19 @@ impl ChordFamily {
         let mut consumed = 0;
 
         // Check for "maj7", "M7", "Maj7", "Ma7", etc. (explicit major seventh)
-        if consumed < tokens.len() {
-            if let TokenType::Letter('m') | TokenType::Letter('M') = tokens[consumed].token_type {
+        if consumed < tokens.len()
+            && let TokenType::Letter('m') | TokenType::Letter('M') = tokens[consumed].token_type {
                 let is_upper = matches!(tokens[consumed].token_type, TokenType::Letter('M'));
 
                 // Look for "maj" followed by a number (maj6, maj7, maj9, maj11, maj13)
-                if consumed + 2 < tokens.len() {
-                    if let TokenType::Letter('a') = tokens[consumed + 1].token_type {
-                        if let TokenType::Letter('j') = tokens[consumed + 2].token_type {
+                if consumed + 2 < tokens.len()
+                    && let TokenType::Letter('a') = tokens[consumed + 1].token_type
+                        && let TokenType::Letter('j') = tokens[consumed + 2].token_type {
                             consumed += 3; // "maj" or "Maj"
 
                             // Look for a number (6, 7, 9, 11, 13)
-                            if consumed < tokens.len() {
-                                if let TokenType::Number(n) = &tokens[consumed].token_type {
+                            if consumed < tokens.len()
+                                && let TokenType::Number(n) = &tokens[consumed].token_type {
                                     // For maj6, maj9, maj11, maj13: consume "maj" but not the number
                                     // The number will be handled by additions/extensions parsers
                                     // For maj7: consume both "maj" and "7"
@@ -118,70 +118,53 @@ impl ChordFamily {
                                         return Ok((Some(family), consumed));
                                     }
                                 }
-                            }
                         }
-                    }
-                }
 
                 // Just "M7" (shorthand for maj7)
-                if is_upper && consumed + 1 < tokens.len() {
-                    if let TokenType::Number(n) = &tokens[consumed + 1].token_type {
-                        if n == "7" {
+                if is_upper && consumed + 1 < tokens.len()
+                    && let TokenType::Number(n) = &tokens[consumed + 1].token_type
+                        && n == "7" {
                             let family = match quality {
                                 ChordQuality::Minor => ChordFamily::MinorMajor7,
                                 _ => ChordFamily::Major7,
                             };
                             return Ok((Some(family), 2));
                         }
-                    }
-                }
 
                 // Reset if we didn't find maj7/M7
                 consumed = 0;
             }
-        }
 
         // Check for "dim7" or "o7" (fully diminished seventh)
         if consumed < tokens.len() {
-            if let TokenType::Letter('d') = tokens[consumed].token_type {
-                if consumed + 3 < tokens.len() {
-                    if let TokenType::Letter('i') = tokens[consumed + 1].token_type {
-                        if let TokenType::Letter('m') = tokens[consumed + 2].token_type {
-                            if let TokenType::Number(n) = &tokens[consumed + 3].token_type {
-                                if n == "7" {
+            if let TokenType::Letter('d') = tokens[consumed].token_type
+                && consumed + 3 < tokens.len()
+                    && let TokenType::Letter('i') = tokens[consumed + 1].token_type
+                        && let TokenType::Letter('m') = tokens[consumed + 2].token_type
+                            && let TokenType::Number(n) = &tokens[consumed + 3].token_type
+                                && n == "7" {
                                     return Ok((Some(ChordFamily::FullyDiminished), 4));
                                 }
-                            }
-                        }
-                    }
-                }
-            }
 
-            if let TokenType::Letter('o') | TokenType::Circle = tokens[consumed].token_type {
-                if consumed + 1 < tokens.len() {
-                    if let TokenType::Number(n) = &tokens[consumed + 1].token_type {
-                        if n == "7" {
+            if let TokenType::Letter('o') | TokenType::Circle = tokens[consumed].token_type
+                && consumed + 1 < tokens.len()
+                    && let TokenType::Number(n) = &tokens[consumed + 1].token_type
+                        && n == "7" {
                             return Ok((Some(ChordFamily::FullyDiminished), 2));
                         }
-                    }
-                }
-            }
         }
 
         // Check for "ø7" or "ø" (half-diminished seventh)
-        if consumed < tokens.len() {
-            if let TokenType::HalfDiminished = tokens[consumed].token_type {
-                if consumed + 1 < tokens.len() {
-                    if let TokenType::Number(n) = &tokens[consumed + 1].token_type {
-                        if n == "7" {
+        if consumed < tokens.len()
+            && let TokenType::HalfDiminished = tokens[consumed].token_type {
+                if consumed + 1 < tokens.len()
+                    && let TokenType::Number(n) = &tokens[consumed + 1].token_type
+                        && n == "7" {
                             return Ok((Some(ChordFamily::HalfDiminished), 2));
                         }
-                    }
-                }
                 // ø without explicit 7 still means half-dim 7
                 return Ok((Some(ChordFamily::HalfDiminished), 1));
             }
-        }
 
         // Check for plain "7" (context-dependent seventh)
         // The family depends on the base quality:
@@ -189,9 +172,9 @@ impl ChordFamily {
         // - Minor quality -> Minor seventh
         // - Diminished quality -> Half-diminished seventh (though usually notated as ø7)
         // - Augmented quality -> Augmented seventh (treated as Dominant with altered 5th)
-        if consumed < tokens.len() {
-            if let TokenType::Number(n) = &tokens[consumed].token_type {
-                if n == "7" {
+        if consumed < tokens.len()
+            && let TokenType::Number(n) = &tokens[consumed].token_type
+                && n == "7" {
                     let family = match quality {
                         ChordQuality::Minor => ChordFamily::Minor7,
                         ChordQuality::Diminished => ChordFamily::HalfDiminished,
@@ -199,8 +182,6 @@ impl ChordFamily {
                     };
                     return Ok((Some(family), 1));
                 }
-            }
-        }
 
         // No seventh found
         Ok((None, 0))

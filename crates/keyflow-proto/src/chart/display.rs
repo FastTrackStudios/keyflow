@@ -298,11 +298,10 @@ impl Chart {
                     let mut chord_text = String::new();
 
                     // Show push/pull notation
-                    if let Some((is_push, _amount)) = chord.push_pull {
-                        if is_push {
+                    if let Some((is_push, _amount)) = chord.push_pull
+                        && is_push {
                             chord_text.push('\'');
                         }
-                    }
 
                     chord_text.push_str(&chord.full_symbol);
 
@@ -312,11 +311,10 @@ impl Chart {
                     }
 
                     // Show pull notation
-                    if let Some((is_push, _amount)) = chord.push_pull {
-                        if !is_push {
+                    if let Some((is_push, _amount)) = chord.push_pull
+                        && !is_push {
                             chord_text.push('\'');
                         }
-                    }
 
                     chord_parts.push(chord_text);
                 }
@@ -482,8 +480,8 @@ impl std::fmt::Display for Chart {
                             }
 
                             // Push/pull notation
-                            if let Some((is_push, amount)) = &chord.push_pull {
-                                if *is_push {
+                            if let Some((is_push, amount)) = &chord.push_pull
+                                && *is_push {
                                     // Check if this push matches the default
                                     let matches_default = self
                                         .default_push_amount
@@ -503,7 +501,6 @@ impl std::fmt::Display for Chart {
                                             .push_str(&Chart::format_push_pull_amount(amount));
                                     }
                                 }
-                            }
 
                             chord_text.push_str(&chord.full_symbol);
 
@@ -511,11 +508,10 @@ impl std::fmt::Display for Chart {
                             // so we don't need to add it again here
 
                             // Pull notation (always show amount for pulls)
-                            if let Some((is_push, _amount)) = &chord.push_pull {
-                                if !*is_push {
+                            if let Some((is_push, _amount)) = &chord.push_pull
+                                && !*is_push {
                                     chord_text.push('\'');
                                 }
-                            }
 
                             // Add rhythm notation
                             // - Explicit durations attach directly: Ab9_8t

@@ -71,6 +71,7 @@ impl Default for TimeSigType {
 
 /// Time signature layout parameters.
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct TimeSigParams {
     /// Unique identifier
     pub id: u64,
@@ -80,15 +81,6 @@ pub struct TimeSigParams {
     pub large: bool,
 }
 
-impl Default for TimeSigParams {
-    fn default() -> Self {
-        Self {
-            id: 0,
-            sig_type: TimeSigType::default(),
-            large: false,
-        }
-    }
-}
 
 /// Get the SMuFL glyph for a digit.
 const fn digit_glyph(digit: u8) -> char {
@@ -142,7 +134,7 @@ pub fn layout_timesig(params: &TimeSigParams, ctx: &LayoutContext) -> (LayoutDat
             let semantic_id = SemanticId::new(ElementType::TimeSignature, params.id);
             let node = SceneNode::leaf(semantic_id, commands).with_metadata("timesig", "C");
 
-            return (layout, node);
+            (layout, node)
         }
 
         TimeSigType::Cut => {
@@ -162,7 +154,7 @@ pub fn layout_timesig(params: &TimeSigParams, ctx: &LayoutContext) -> (LayoutDat
             let semantic_id = SemanticId::new(ElementType::TimeSignature, params.id);
             let node = SceneNode::leaf(semantic_id, commands).with_metadata("timesig", "C|");
 
-            return (layout, node);
+            (layout, node)
         }
 
         TimeSigType::Numeric {
@@ -187,7 +179,7 @@ pub fn layout_timesig(params: &TimeSigParams, ctx: &LayoutContext) -> (LayoutDat
             let node = SceneNode::leaf(semantic_id, commands)
                 .with_metadata("timesig", format!("{}/{}", numerator, denominator));
 
-            return (layout, node);
+            (layout, node)
         }
 
         TimeSigType::SingleNumber(n) => {
@@ -203,7 +195,7 @@ pub fn layout_timesig(params: &TimeSigParams, ctx: &LayoutContext) -> (LayoutDat
             let node =
                 SceneNode::leaf(semantic_id, commands).with_metadata("timesig", n.to_string());
 
-            return (layout, node);
+            (layout, node)
         }
 
         TimeSigType::Additive {
@@ -274,7 +266,7 @@ pub fn layout_timesig(params: &TimeSigParams, ctx: &LayoutContext) -> (LayoutDat
                 format!("{}+/{}", groups_str.join("+"), denominator),
             );
 
-            return (layout, node);
+            (layout, node)
         }
     }
 }

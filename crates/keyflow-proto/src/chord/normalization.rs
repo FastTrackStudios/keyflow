@@ -80,33 +80,30 @@ impl Chord {
                 } else if self.extensions.ninth.is_some() {
                     desc.push('9');
                 }
-                if let Some(qual) = self.extensions.ninth {
-                    if qual != ExtensionQuality::Natural {
+                if let Some(qual) = self.extensions.ninth
+                    && qual != ExtensionQuality::Natural {
                         match qual {
                             ExtensionQuality::Flat => desc.push_str("b9"),
                             ExtensionQuality::Sharp => desc.push_str("#9"),
                             _ => {}
                         }
                     }
-                }
-                if let Some(qual) = self.extensions.eleventh {
-                    if qual != ExtensionQuality::Natural {
+                if let Some(qual) = self.extensions.eleventh
+                    && qual != ExtensionQuality::Natural {
                         match qual {
                             ExtensionQuality::Flat => desc.push_str("b11"),
                             ExtensionQuality::Sharp => desc.push_str("#11"),
                             _ => {}
                         }
                     }
-                }
-                if let Some(qual) = self.extensions.thirteenth {
-                    if qual != ExtensionQuality::Natural {
+                if let Some(qual) = self.extensions.thirteenth
+                    && qual != ExtensionQuality::Natural {
                         match qual {
                             ExtensionQuality::Flat => desc.push_str("b13"),
                             ExtensionQuality::Sharp => desc.push_str("#13"),
                             _ => {}
                         }
                     }
-                }
             } else {
                 // Non-major family or no extensions
                 // The highest natural extension masks the seventh

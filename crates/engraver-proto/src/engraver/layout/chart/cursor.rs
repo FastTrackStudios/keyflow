@@ -172,17 +172,11 @@ pub struct CursorState {
 /// Renderer-agnostic playback cursor that computes highlight commands from
 /// a layout and a tick position.
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct ChartCursor {
     pub config: CursorConfig,
 }
 
-impl Default for ChartCursor {
-    fn default() -> Self {
-        Self {
-            config: CursorConfig::default(),
-        }
-    }
-}
 
 impl ChartCursor {
     /// Create a new cursor with the given configuration.

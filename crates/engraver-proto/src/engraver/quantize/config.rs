@@ -146,7 +146,7 @@ impl QuantizeConfig {
     pub fn is_compound_time_signature(ts: &TimeSignature) -> bool {
         // Compound meters: 6/8, 9/8, 12/8, 6/4, etc.
         // The numerator is divisible by 3 and greater than 3
-        ts.numerator % 3 == 0 && ts.numerator > 3
+        ts.numerator.is_multiple_of(3) && ts.numerator > 3
     }
 
     /// Scale a tick value from source PPQ to target PPQ.

@@ -527,8 +527,8 @@ impl<'a> VelloSceneRenderer<'a> {
         let font_size = size * 4.0;
 
         // Try to render actual glyph outline from font
-        if let Some(font) = self.font {
-            if let Some(path) = self.get_glyph_path(font, codepoint, font_size) {
+        if let Some(font) = self.font
+            && let Some(path) = self.get_glyph_path(font, codepoint, font_size) {
                 // Font outlines are Y-up, but screen coordinates are Y-down
                 // Apply position and flip Y axis
                 let glyph_transform = transform
@@ -538,7 +538,6 @@ impl<'a> VelloSceneRenderer<'a> {
                 scene.fill(Fill::NonZero, glyph_transform, color, None, &path);
                 return;
             }
-        }
 
         // Fallback: draw placeholder rectangle (visual size matches glyph)
         let placeholder = Rect::new(
@@ -618,8 +617,8 @@ impl<'a> VelloSceneRenderer<'a> {
             .or(self.text_font.as_ref());
 
         // Try to render with the resolved font
-        if let Some(font_data) = font_data {
-            if let Some(font_ref) = to_font_ref(font_data) {
+        if let Some(font_data) = font_data
+            && let Some(font_ref) = to_font_ref(font_data) {
                 // Use screen font size for glyph metrics so advances match the rendered size
                 let size = skrifa::instance::Size::new(screen_font_size as f32);
                 let charmap = font_ref.charmap();
@@ -674,7 +673,6 @@ impl<'a> VelloSceneRenderer<'a> {
 
                 return;
             }
-        }
 
         // Fallback: draw placeholder rectangles
         let char_width = font_size * 0.6;

@@ -415,18 +415,16 @@ fn calculate_bracket_endpoints(
             } else {
                 note.y_head - head_offset
             }
-        } else {
-            if let Some(stem_tip) = note.y_stem_tip {
-                if note.stem_direction == StemDirection::Down
-                    || (note.stem_direction == StemDirection::Auto && stem_tip > note.y_head)
-                {
-                    stem_tip + stem_offset
-                } else {
-                    note.y_head + head_offset
-                }
+        } else if let Some(stem_tip) = note.y_stem_tip {
+            if note.stem_direction == StemDirection::Down
+                || (note.stem_direction == StemDirection::Auto && stem_tip > note.y_head)
+            {
+                stem_tip + stem_offset
             } else {
                 note.y_head + head_offset
             }
+        } else {
+            note.y_head + head_offset
         }
     };
 
@@ -540,18 +538,16 @@ fn avoid_collisions(
             } else {
                 note.y_head
             }
-        } else {
-            if let Some(stem_tip) = note.y_stem_tip {
-                if note.stem_direction == StemDirection::Down
-                    || (note.stem_direction == StemDirection::Auto && stem_tip > note.y_head)
-                {
-                    stem_tip
-                } else {
-                    note.y_head
-                }
+        } else if let Some(stem_tip) = note.y_stem_tip {
+            if note.stem_direction == StemDirection::Down
+                || (note.stem_direction == StemDirection::Auto && stem_tip > note.y_head)
+            {
+                stem_tip
             } else {
                 note.y_head
             }
+        } else {
+            note.y_head
         };
 
         // Calculate bracket Y at this X position
@@ -564,12 +560,10 @@ fn avoid_collisions(
                 p1.y -= offset;
                 p2.y -= offset;
             }
-        } else {
-            if bracket_y < note_y + margin {
-                let offset = (note_y + margin) - bracket_y;
-                p1.y += offset;
-                p2.y += offset;
-            }
+        } else if bracket_y < note_y + margin {
+            let offset = (note_y + margin) - bracket_y;
+            p1.y += offset;
+            p2.y += offset;
         }
     }
 

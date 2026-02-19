@@ -24,12 +24,14 @@ use facet::Facet;
 /// | SixtyFourth | 30 | 0.0625 |
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, Facet)]
+#[derive(Default)]
 pub enum NoteValue {
     /// Whole note (semibreve) - 4 beats in 4/4
     Whole,
     /// Half note (minim) - 2 beats in 4/4
     Half,
     /// Quarter note (crotchet) - 1 beat in 4/4
+    #[default]
     Quarter,
     /// Eighth note (quaver) - 1/2 beat in 4/4
     Eighth,
@@ -151,11 +153,6 @@ impl<const PPQ: u32> ToTicks<PPQ> for NoteValue {
     }
 }
 
-impl Default for NoteValue {
-    fn default() -> Self {
-        Self::Quarter
-    }
-}
 
 impl std::fmt::Display for NoteValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

@@ -424,7 +424,7 @@ impl<'a> ChartParser<'a> {
         // Check for scale degree (1-7 optionally followed by modifiers)
         // But NOT time signatures like "4/4" or "6/8"
         if let Some(first_char) = first_token.chars().next() {
-            if first_char.is_ascii_digit() && first_char >= '1' && first_char <= '7' {
+            if first_char.is_ascii_digit() && ('1'..='7').contains(&first_char) {
                 // Make sure it's not a time signature (digit/digit pattern)
                 if Self::parse_time_signature(first_token).is_some() {
                     return false;

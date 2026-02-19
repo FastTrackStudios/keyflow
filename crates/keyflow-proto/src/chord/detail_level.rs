@@ -95,21 +95,18 @@ pub fn compute_upper_structure(chord: &Chord, level: DetailLevel) -> Option<Uppe
     // Collect semitones for extensions that exceed the level
     let mut upper_semitones: Vec<u8> = Vec::new();
 
-    if !level.allows(ChordDegree::Ninth) {
-        if let Some(interval) = chord.extensions.ninth_interval() {
+    if !level.allows(ChordDegree::Ninth)
+        && let Some(interval) = chord.extensions.ninth_interval() {
             upper_semitones.push(interval.semitones());
         }
-    }
-    if !level.allows(ChordDegree::Eleventh) {
-        if let Some(interval) = chord.extensions.eleventh_interval() {
+    if !level.allows(ChordDegree::Eleventh)
+        && let Some(interval) = chord.extensions.eleventh_interval() {
             upper_semitones.push(interval.semitones());
         }
-    }
-    if !level.allows(ChordDegree::Thirteenth) {
-        if let Some(interval) = chord.extensions.thirteenth_interval() {
+    if !level.allows(ChordDegree::Thirteenth)
+        && let Some(interval) = chord.extensions.thirteenth_interval() {
             upper_semitones.push(interval.semitones());
         }
-    }
 
     if upper_semitones.is_empty() {
         return None;

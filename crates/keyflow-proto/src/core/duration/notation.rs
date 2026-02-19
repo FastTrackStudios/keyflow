@@ -268,7 +268,7 @@ impl NotationDuration {
     #[must_use]
     pub fn total_ticks_at_ppq<const PPQ: u32>(&self) -> Ticks<PPQ> {
         let ticks_480 = self.total_ticks_480();
-        let scaled = (i64::from(ticks_480) * i64::from(PPQ) / 480) as i64;
+        let scaled = i64::from(ticks_480) * i64::from(PPQ) / 480;
         Ticks(scaled)
     }
 
@@ -352,7 +352,7 @@ impl DurationContext {
     #[must_use]
     pub fn detect_compound_meter(mut self) -> Self {
         let n = self.time_signature.numerator;
-        self.compound_meter = n >= 6 && n % 3 == 0;
+        self.compound_meter = n >= 6 && n.is_multiple_of(3);
         self
     }
 }

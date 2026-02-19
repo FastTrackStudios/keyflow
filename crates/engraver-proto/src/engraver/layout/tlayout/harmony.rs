@@ -996,12 +996,11 @@ fn parse_quality_and_extensions(s: &str, params: &mut HarmonyParams) {
     ];
 
     for (pattern, quality, extension) in patterns {
-        if s.starts_with(pattern) {
+        if let Some(remaining) = s.strip_prefix(pattern) {
             params.quality = quality.to_string();
             params.extension = extension.to_string();
 
             // Check for remaining alterations
-            let remaining = &s[pattern.len()..];
             if !remaining.is_empty() {
                 // Parse alterations like b5, #9, etc.
                 let mut alt_str = remaining.to_string();
@@ -1016,7 +1015,7 @@ fn parse_quality_and_extensions(s: &str, params: &mut HarmonyParams) {
                         || alt_str.starts_with("#11")
                     {
                         let alt = if alt_str.len() >= 3
-                            && alt_str.chars().nth(2).map_or(false, |c| c.is_ascii_digit())
+                            && alt_str.chars().nth(2).is_some_and(|c| c.is_ascii_digit())
                         {
                             alt_str[..3].to_string()
                         } else {

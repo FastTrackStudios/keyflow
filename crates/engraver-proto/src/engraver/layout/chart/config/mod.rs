@@ -25,6 +25,7 @@ use crate::engraver::layout::tlayout::HarmonyStyle;
 /// for backward compatibility. New code should prefer using the
 /// individual config types directly.
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct ChartLayoutConfig {
     /// Layout parameters (margins, spacing, sizing).
     pub layout: LayoutParams,
@@ -34,15 +35,6 @@ pub struct ChartLayoutConfig {
     pub behavior: BehavioralFlags,
 }
 
-impl Default for ChartLayoutConfig {
-    fn default() -> Self {
-        Self {
-            layout: LayoutParams::default(),
-            render: RenderOptions::default(),
-            behavior: BehavioralFlags::default(),
-        }
-    }
-}
 
 impl ChartLayoutConfig {
     /// Create a new configuration with default values.
@@ -215,7 +207,7 @@ impl ChartLayoutConfig {
     #[must_use]
     pub fn to_flat(&self) -> FlatChartLayoutConfig {
         FlatChartLayoutConfig {
-            margins: self.layout.margins.clone(),
+            margins: self.layout.margins,
             spatium: self.layout.spatium,
             system_spacing: self.layout.system_spacing,
             max_measures_per_system: self.layout.max_measures_per_system,

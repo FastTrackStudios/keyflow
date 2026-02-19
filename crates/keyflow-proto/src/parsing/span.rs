@@ -111,11 +111,7 @@ impl TextSpan {
     pub const fn extend_to(&self, end: usize) -> TextSpan {
         TextSpan {
             start: self.start,
-            len: if end > self.start {
-                end - self.start
-            } else {
-                0
-            },
+            len: end.saturating_sub(self.start),
             line: self.line,
             column: self.column,
         }

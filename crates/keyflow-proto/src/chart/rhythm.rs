@@ -172,8 +172,8 @@ pub fn detect_section_start_spillback(section_measures: &[Measure]) -> Option<Sp
             continue;
         }
 
-        if let Some((is_push, amount)) = &chord.push_pull {
-            if *is_push {
+        if let Some((is_push, amount)) = &chord.push_pull
+            && *is_push {
                 // Check if this chord has AccentOnPush (>' syntax - accent before push)
                 let has_accent = chord
                     .commands
@@ -182,12 +182,11 @@ pub fn detect_section_start_spillback(section_measures: &[Measure]) -> Option<Sp
                 return Some(Spillback {
                     chord_symbol: chord.full_symbol.clone(),
                     beat_position: 3, // Last beat of 4/4, will be adjusted based on time sig
-                    push_base: amount.base.clone(),
+                    push_base: amount.base,
                     push_level: amount.level,
                     has_accent,
                 });
             }
-        }
 
         // If we found a non-space chord without push_pull, no spillback
         break;
@@ -205,9 +204,9 @@ pub fn detect_push_spillbacks(section_measures: &[Measure]) -> HashMap<usize, Ve
 
     for (measure_idx, measure) in section_measures.iter().enumerate() {
         // Check if this measure starts with a pushed chord
-        if let Some(first_chord) = measure.chords.first() {
-            if let Some((is_push, amount)) = &first_chord.push_pull {
-                if *is_push {
+        if let Some(first_chord) = measure.chords.first()
+            && let Some((is_push, amount)) = &first_chord.push_pull
+                && *is_push {
                     // This chord pushes back - affects the PREVIOUS measure
                     if measure_idx > 0 {
                         let prev_measure_idx = measure_idx - 1;
@@ -227,7 +226,7 @@ pub fn detect_push_spillbacks(section_measures: &[Measure]) -> HashMap<usize, Ve
                         let spillback = Spillback {
                             chord_symbol: first_chord.full_symbol.clone(),
                             beat_position: last_beat,
-                            push_base: amount.base.clone(),
+                            push_base: amount.base,
                             push_level: amount.level,
                             has_accent,
                         };
@@ -235,8 +234,6 @@ pub fn detect_push_spillbacks(section_measures: &[Measure]) -> HashMap<usize, Ve
                         result.entry(prev_measure_idx).or_default().push(spillback);
                     }
                 }
-            }
-        }
     }
 
     result

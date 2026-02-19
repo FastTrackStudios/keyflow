@@ -98,7 +98,7 @@ impl TimeSignature {
     /// with a denominator of 8 or smaller subdivision.
     #[must_use]
     pub const fn is_compound(&self) -> bool {
-        self.numerator % 3 == 0 && self.numerator > 3 && self.denominator >= 8
+        self.numerator.is_multiple_of(3) && self.numerator > 3 && self.denominator >= 8
     }
 
     /// Check if this is a simple time signature.

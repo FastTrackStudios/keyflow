@@ -299,7 +299,7 @@ pub fn layout_beam(notes: &[BeamNote], spatium: f64, config: &BeamLayoutConfig) 
     // Beam run for Y interpolation (using stem anchor X positions)
     let beam_run = end_anchor_x - start_anchor_x;
 
-    for (_i, note) in notes.iter().enumerate() {
+    for note in notes.iter() {
         let note_y = note.y_center(spatium);
 
         // Calculate the actual stem X position (Middle anchor - center of stem)
@@ -933,11 +933,10 @@ fn find_beam_segments(notes: &[BeamNote], level: usize) -> Vec<(usize, usize)> {
     }
 
     // Handle segment at end
-    if let Some(start) = segment_start {
-        if notes.len() > start + 1 {
+    if let Some(start) = segment_start
+        && notes.len() > start + 1 {
             segments.push((start, notes.len() - 1));
         }
-    }
 
     // For primary beam (level 0), ensure we have at least one segment spanning all notes
     if level == 0 && segments.is_empty() && notes.len() >= 2 {

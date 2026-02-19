@@ -13,10 +13,10 @@ use crate::engraver::style::MStyle;
 use super::SMuFLFont;
 
 // Embedded fonts — single source of truth for the entire workspace
-static BRAVURA_FONT_BYTES: &[u8] = include_bytes!("../../../../fonts/Bravura.otf");
-static BRAVURA_METADATA_BYTES: &[u8] = include_bytes!("../../../../fonts/bravura_metadata.json");
-static FREESANS_FONT_BYTES: &[u8] = include_bytes!("../../../../fonts/FreeSans.ttf");
-static MUSEJAZZ_FONT_BYTES: &[u8] = include_bytes!("../../../../fonts/MuseJazzText.otf");
+static BRAVURA_FONT_BYTES: &[u8] = include_bytes!("../../../fonts/Bravura.otf");
+static BRAVURA_METADATA_BYTES: &[u8] = include_bytes!("../../../fonts/bravura_metadata.json");
+static FREESANS_FONT_BYTES: &[u8] = include_bytes!("../../../fonts/FreeSans.ttf");
+static MUSEJAZZ_FONT_BYTES: &[u8] = include_bytes!("../../../fonts/MuseJazzText.otf");
 
 /// All fonts needed for chart layout and rendering, bundled together.
 ///

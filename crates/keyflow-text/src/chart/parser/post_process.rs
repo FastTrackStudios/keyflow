@@ -169,7 +169,7 @@ impl<'a> ChartParser<'a> {
                             .iter()
                             .find(|c| c.full_symbol == chord_el.full_symbol)
                         {
-                            chord_el.duration = matching_chord.duration.clone();
+                            chord_el.duration = matching_chord.duration;
                         }
                     }
                 }

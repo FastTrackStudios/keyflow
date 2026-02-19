@@ -934,15 +934,13 @@ fn min_accidental_to_chord_distance(acc: &AccidentalInfo, ctx: &LayoutContext) -
     // Check against ledger lines
     for ledger in &ctx.chord_shape.ledger_lines {
         // Sharp and natural need extra padding near ledger lines
-        if acc.accidental_type == AccidentalType::Sharp
-            || acc.accidental_type == AccidentalType::Natural
-        {
-            if ledger.y0 > acc.shape.top && ledger.y1 < acc.shape.bottom {
+        if (acc.accidental_type == AccidentalType::Sharp
+            || acc.accidental_type == AccidentalType::Natural)
+            && ledger.y0 > acc.shape.top && ledger.y1 < acc.shape.bottom {
                 let dist = acc.shape.right - ledger.x0
                     + config.sharp_and_natural_ledger_line_padding * spatium;
                 min_dist = min_dist.max(dist);
             }
-        }
     }
 
     min_dist
@@ -1026,11 +1024,10 @@ fn align_octaves(accidentals: &mut [AccidentalInfo], ctx: &LayoutContext) {
         // Find all octave partners
         let mut octave_indices: Vec<usize> = vec![i];
         for oct_id in octave_ids {
-            if let Some(idx) = accidentals.iter().position(|a| a.id == oct_id) {
-                if !already_aligned.contains(&accidentals[idx].id) {
+            if let Some(idx) = accidentals.iter().position(|a| a.id == oct_id)
+                && !already_aligned.contains(&accidentals[idx].id) {
                     octave_indices.push(idx);
                 }
-            }
         }
 
         if octave_indices.len() < 2 {
@@ -1148,7 +1145,7 @@ fn additional_padding_for_verticals(
     }
 
     let line_diff = acc2.line - acc1.line;
-    if line_diff < -2 || line_diff > 5 {
+    if !(-2..=5).contains(&line_diff) {
         return 0.0;
     }
 
@@ -1171,7 +1168,7 @@ fn additional_padding_for_verticals_stacked(
     }
 
     let line_diff = acc2.line - acc1.line;
-    if line_diff < -2 || line_diff > 5 {
+    if !(-2..=5).contains(&line_diff) {
         return 0.0;
     }
 

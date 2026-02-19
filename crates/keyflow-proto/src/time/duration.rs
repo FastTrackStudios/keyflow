@@ -94,13 +94,13 @@ impl MusicalDuration {
         // Handle subdivision overflow (1000 subdivisions per beat)
         if self.subdivisions >= 1000 {
             self.beats += self.subdivisions / 1000;
-            self.subdivisions = self.subdivisions % 1000;
+            self.subdivisions %= 1000;
         }
 
         // Handle beat overflow
         if self.beats >= beats_per_measure {
             self.measures += self.beats / beats_per_measure;
-            self.beats = self.beats % beats_per_measure;
+            self.beats %= beats_per_measure;
         }
 
         self

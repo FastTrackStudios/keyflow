@@ -19,6 +19,7 @@ use super::midi_import::{MidiFile, SectionType as MidiSectionType};
 // ============================================================================
 
 /// Configuration for MIDI chart building.
+#[derive(Default)]
 pub struct MidiChartConfig {
     /// Key for chord spelling (e.g., "Eb" for Cm songs).
     /// If None, defaults to "C" (no respelling).
@@ -27,14 +28,6 @@ pub struct MidiChartConfig {
     pub title: Option<String>,
 }
 
-impl Default for MidiChartConfig {
-    fn default() -> Self {
-        Self {
-            key_root: None,
-            title: None,
-        }
-    }
-}
 
 /// Generate a Keyflow chart text string from a parsed MIDI file.
 ///
@@ -112,12 +105,11 @@ pub fn generate_chart_text(midi: &MidiFile, config: &MidiChartConfig) -> String 
         let mut header = section.keyflow_type.clone();
         let show_sub_label =
             section.sub_label.is_some() && !matches!(section.keyflow_type.as_str(), "Outro" | "VS");
-        if show_sub_label {
-            if let Some(ref label) = section.sub_label {
+        if show_sub_label
+            && let Some(ref label) = section.sub_label {
                 header.push(' ');
                 header.push_str(label);
             }
-        }
         if show_count {
             header.push(' ');
             header.push_str(&section.length.to_string());
@@ -129,11 +121,10 @@ pub fn generate_chart_text(midi: &MidiFile, config: &MidiChartConfig) -> String 
         output.push('\n');
 
         // Add section-specific push directive if different from global
-        if let Some(ref push_type) = section_push_type {
-            if use_triplet_setting && push_type == "4" {
+        if let Some(ref push_type) = section_push_type
+            && use_triplet_setting && push_type == "4" {
                 output.push_str("/push 4\n");
             }
-        }
 
         // Handle COUNT section specially - just shows silence
         if section.keyflow_type == "COUNT" {
@@ -274,8 +265,8 @@ fn detect_chords_from_notes(midi: &MidiFile, config: &MidiChartConfig) -> Vec<De
     let mut detected = detect_chords_from_midi_notes(&keyflow_notes, min_duration);
 
     // Respell chords to target key if provided
-    if let Some(ref key_root) = config.key_root {
-        if let Some(note) = MusicalNote::from_string(key_root) {
+    if let Some(ref key_root) = config.key_root
+        && let Some(note) = MusicalNote::from_string(key_root) {
             let key_spelling = KeySpelling::major(&note);
             for chord_event in &mut detected {
                 chord_event
@@ -283,7 +274,6 @@ fn detect_chords_from_notes(midi: &MidiFile, config: &MidiChartConfig) -> Vec<De
                     .respell_root(&key_spelling, SpellingMode::Relaxed);
             }
         }
-    }
 
     // Apply common chord spelling normalizations
     // (e.g., D#m -> Ebm, G#m -> Abm for readability)
@@ -790,16 +780,15 @@ fn build_rhythm_elements(
         })
         .collect();
 
-    section_chords.extend(pickup_chords.drain(..));
+    section_chords.append(&mut pickup_chords);
 
     // If there is a short pickup hit that ends on the section downbeat and isn't already included, inject it.
     let existing_starts: std::collections::HashSet<i64> =
         section_chords.iter().map(|c| c.start_ppq).collect();
-    if let Some(c) = pickup_candidate {
-        if !existing_starts.contains(&c.start_ppq) {
+    if let Some(c) = pickup_candidate
+        && !existing_starts.contains(&c.start_ppq) {
             section_chords.push(c);
         }
-    }
 
     // Also find chords that start before the section but sustain into it.
     // These are "continuing" chords — or pushed chords from the previous measure.
@@ -953,9 +942,9 @@ fn build_rhythm_elements(
 
     // If the section still starts with a rest but we detected a pickup hit landing on the downbeat,
     // convert the leading rest into that short staccato push chord.
-    if let Some(c) = pickup_candidate {
-        if let Some(ChordOrRest::Rest { start_ppq, end_ppq }) = elements.first() {
-            if *start_ppq == section_start_tick {
+    if let Some(c) = pickup_candidate
+        && let Some(ChordOrRest::Rest { start_ppq, end_ppq }) = elements.first()
+            && *start_ppq == section_start_tick {
                 let chord_end = c.end_ppq.min(section_start_tick + ticks_per_beat / 2);
                 let remaining_rest_start = chord_end;
                 let remaining_rest_end = *end_ppq;
@@ -983,8 +972,6 @@ fn build_rhythm_elements(
                     );
                 }
             }
-        }
-    }
 
     if current_pos < section_end_tick {
         let gap = section_end_tick - current_pos;
@@ -1025,8 +1012,7 @@ fn merge_consecutive_chords(elements: Vec<ChordOrRest>) -> Vec<ChordOrRest> {
                         // Don't merge staccato chords - they need to stay separate
                         let gap = start_ppq - prev_end;
                         *prev_symbol == symbol
-                            && gap < 960
-                            && gap >= 0
+                            && (0..960).contains(&gap)
                             && !*prev_staccato
                             && !is_staccato
                     } else {
@@ -1090,7 +1076,7 @@ fn apply_groove_pattern_push(elements: Vec<ChordOrRest>) -> Vec<ChordOrRest> {
                 is_staccato,
             } => {
                 let is_f_chord = symbol == "F/C" || symbol == "F" || symbol.starts_with("F/");
-                let next_is_cm = elements.get(i + 1).map_or(false, |next| {
+                let next_is_cm = elements.get(i + 1).is_some_and(|next| {
                     if let ChordOrRest::Chord {
                         symbol: next_sym, ..
                     } = next
@@ -1209,8 +1195,7 @@ fn build_measures(
                     is_accented,
                     is_staccato,
                 } = elem
-                {
-                    if *start_ppq >= prev_measure_start
+                    && *start_ppq >= prev_measure_start
                         && *start_ppq < measure_start
                         && *end_ppq > measure_start
                     {
@@ -1250,7 +1235,6 @@ fn build_measures(
                             break;
                         }
                     }
-                }
             }
         }
 
@@ -1299,10 +1283,9 @@ fn build_measures(
                     // Add rest if there's a gap before this chord
                     let gap_ticks = chord_start_clamped - current_tick;
                     let min_rest_ticks = ticks_per_beat / 6;
-                    if start_beat > current_beat
-                        || (start_beat == current_beat && gap_ticks >= min_rest_ticks)
-                    {
-                        if gap_ticks >= min_rest_ticks {
+                    if (start_beat > current_beat
+                        || (start_beat == current_beat && gap_ticks >= min_rest_ticks))
+                        && gap_ticks >= min_rest_ticks {
                             let gap_beats =
                                 ((gap_ticks + ticks_per_beat - 1) / ticks_per_beat) as i32;
                             let start_pos = current_tick - measure_start;
@@ -1312,7 +1295,6 @@ fn build_measures(
                                 start_tick_in_measure: start_pos,
                             });
                         }
-                    }
 
                     measure_elements.push(MeasureElement::Chord {
                         symbol: symbol.clone(),
@@ -1501,9 +1483,7 @@ fn build_measures(
                 }
             } else {
                 if let Some(MeasureElement::Chord { symbol, .. }) = measure_elements
-                    .iter()
-                    .filter(|e| matches!(e, MeasureElement::Chord { .. }))
-                    .last()
+                    .iter().rfind(|e| matches!(e, MeasureElement::Chord { .. }))
                 {
                     last_chord_symbol = Some(symbol.clone());
                 }
@@ -1773,7 +1753,7 @@ fn format_measure(
 
                         let mut adjusted_beats = *beats;
 
-                        let next_is_pushed = elements.get(idx + 1).map_or(false, |next| {
+                        let next_is_pushed = elements.get(idx + 1).is_some_and(|next| {
                             matches!(
                                 next,
                                 MeasureElement::Chord {
@@ -1895,13 +1875,12 @@ fn format_measures(
         measure_count += 1;
         just_inserted_separator = false;
 
-        if let Some(split_at) = midline_separator_at {
-            if measure_count % measures_per_line == split_at && i < measures.len() - 1 {
+        if let Some(split_at) = midline_separator_at
+            && measure_count % measures_per_line == split_at && i < measures.len() - 1 {
                 result.push_str(" | ");
                 just_inserted_separator = true;
                 continue;
             }
-        }
 
         if measure_count % measures_per_line == 0 && i < measures.len() - 1 {
             result.push('\n');

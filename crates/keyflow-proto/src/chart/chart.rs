@@ -864,11 +864,10 @@ impl Chart {
         let mut output = String::new();
 
         // Push notation (leading apostrophes with optional triplet/tuplet)
-        if let Some((is_push, amount)) = &chord.push_pull {
-            if *is_push {
+        if let Some((is_push, amount)) = &chord.push_pull
+            && *is_push {
                 output.push_str(&Self::format_push_pull_amount(amount));
             }
-        }
 
         // Chord symbol (use full_symbol which preserves the original format)
         output.push_str(&chord.full_symbol);
@@ -877,11 +876,10 @@ impl Chart {
         output.push_str(&self.format_rhythm_for_syntax(&chord.rhythm));
 
         // Pull notation (trailing apostrophes with optional triplet/tuplet)
-        if let Some((is_push, amount)) = &chord.push_pull {
-            if !is_push {
+        if let Some((is_push, amount)) = &chord.push_pull
+            && !is_push {
                 output.push_str(&Self::format_push_pull_amount(amount));
             }
-        }
 
         // Commands
         for command in &chord.commands {

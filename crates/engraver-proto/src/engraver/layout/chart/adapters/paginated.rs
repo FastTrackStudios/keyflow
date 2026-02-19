@@ -84,7 +84,7 @@ impl PaginatedAdapter {
             width: self.page_width,
             height: self.page_height,
             systems: std::mem::take(&mut state.current_page_systems),
-            margins: self.margins.clone(),
+            margins: self.margins,
         };
 
         state.pages.push(page_layout);

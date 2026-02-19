@@ -329,11 +329,10 @@ impl SvgSerializer {
         write!(self.output, "<g").unwrap();
 
         // Add semantic ID attributes
-        if self.config.include_semantic_ids {
-            if let Some(id) = &node.id {
+        if self.config.include_semantic_ids
+            && let Some(id) = &node.id {
                 self.write_semantic_attrs(id);
             }
-        }
 
         // Add metadata attributes (escape values for XML safety)
         for (key, value) in &node.metadata {
@@ -720,7 +719,7 @@ fn detect_font_format(data: &[u8]) -> (&'static str, &'static str) {
 fn base64_encode(data: &[u8]) -> String {
     const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-    let mut result = String::with_capacity((data.len() + 2) / 3 * 4);
+    let mut result = String::with_capacity(data.len().div_ceil(3) * 4);
 
     for chunk in data.chunks(3) {
         let b0 = chunk[0] as usize;

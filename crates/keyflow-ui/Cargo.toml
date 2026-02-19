@@ -26,15 +26,15 @@ vello = "0.7"
 kurbo = { workspace = true }
 
 # Session UI signals (for playback state, chart area bounds, etc.)
-session-ui = { path = "../../session/session-ui", default-features = false, optional = true }
+session-ui = { workspace = true, default-features = false, optional = true }
 session = { workspace = true, optional = true }
 
 # DAW protocol types (for MusicalPosition)
 daw-proto = { workspace = true, optional = true }
 
 # Dock layout system (for panel visibility checks)
-dock-dioxus = { path = "../../dock/dock-dioxus", default-features = false, optional = true }
-dock-proto = { path = "../../dock/dock-proto", optional = true }
+dock-dioxus = { workspace = true, default-features = false, optional = true }
+dock-proto = { workspace = true, optional = true }
 
 # JSON parsing (for bounds eval results)
 serde_json = { workspace = true, optional = true }

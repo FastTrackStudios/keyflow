@@ -190,7 +190,7 @@ impl Section {
         let start_musical = start_time.to_musical(tempo, time_signature);
         let end_musical = end_time.to_musical(tempo, time_signature);
 
-        let start_position = Position::new(Some(start_musical.clone()), Some(start_time), None);
+        let start_position = Position::new(Some(start_musical), Some(start_time), None);
         let end_position = Position::new(Some(end_musical), Some(end_time), None);
 
         Ok(Self::with_positions(
@@ -454,32 +454,28 @@ impl Section {
 
     /// Validate section data
     pub fn validate(&self) -> Result<(), String> {
-        if let (Some(start), Some(end)) = (self.start_seconds(), self.end_seconds()) {
-            if start >= end {
+        if let (Some(start), Some(end)) = (self.start_seconds(), self.end_seconds())
+            && start >= end {
                 return Err(format!(
                     "Invalid time range: start ({}) >= end ({})",
                     start, end
                 ));
             }
-        }
 
-        if let Some(ref name) = self.name {
-            if name.trim().is_empty() {
+        if let Some(ref name) = self.name
+            && name.trim().is_empty() {
                 return Err("Section name cannot be empty".to_string());
             }
-        }
 
-        if let Some(start) = self.start_seconds() {
-            if start < 0.0 {
+        if let Some(start) = self.start_seconds()
+            && start < 0.0 {
                 return Err("Section start time cannot be negative".to_string());
             }
-        }
 
-        if let Some(num) = self.number {
-            if num == 0 {
+        if let Some(num) = self.number
+            && num == 0 {
                 return Err("Section number must be greater than 0".to_string());
             }
-        }
 
         Ok(())
     }

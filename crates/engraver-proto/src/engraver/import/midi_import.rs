@@ -184,7 +184,7 @@ impl MidiFile {
             let mut track_channel: Option<u8> = None;
 
             for event in track {
-                current_tick += event.delta.as_int() as u32;
+                current_tick += event.delta.as_int();
 
                 match event.kind {
                     TrackEventKind::Meta(meta) => match meta {
@@ -501,7 +501,7 @@ impl MidiFile {
             let ticks_per_beat = self.ticks_per_beat_for_denominator(ts_denom);
             let ticks_per_measure = ticks_per_beat * u32::from(ts_num);
 
-            let measures_before = (ticks_before + ticks_per_measure - 1) / ticks_per_measure;
+            let measures_before = ticks_before.div_ceil(ticks_per_measure);
             let remaining = measures_before * ticks_per_measure - ticks_before;
             let beat = (remaining / ticks_per_beat) as i32;
             let subdivision = (remaining % ticks_per_beat) as i32;

@@ -11,8 +11,10 @@ use facet::Facet;
 /// A measure count expression that can be absolute or relative to memory
 #[derive(Debug, Clone, PartialEq, Facet)]
 #[repr(u8)]
+#[derive(Default)]
 pub enum MeasureExpression {
     /// No expression - use section memory
+    #[default]
     UseMemory,
     /// Absolute number of measures
     Absolute(usize),
@@ -39,8 +41,7 @@ impl MeasureExpression {
         }
 
         // Check for relative expressions first: +N or -N at the start
-        if input.starts_with('+') {
-            let rest = &input[1..];
+        if let Some(rest) = input.strip_prefix('+') {
             if let Ok(n) = rest.parse::<usize>() {
                 return Some(Self::Add(n));
             }
@@ -48,8 +49,7 @@ impl MeasureExpression {
             return Some(Self::UseMemory);
         }
 
-        if input.starts_with('-') {
-            let rest = &input[1..];
+        if let Some(rest) = input.strip_prefix('-') {
             if let Ok(n) = rest.parse::<usize>() {
                 return Some(Self::Subtract(n));
             }
@@ -105,22 +105,20 @@ impl MeasureExpression {
 
         // Try addition (8+1)
         // Find the last + or - that isn't at the start (to handle expressions, not signs)
-        if let Some(pos) = input.rfind('+') {
-            if pos > 0 {
+        if let Some(pos) = input.rfind('+')
+            && pos > 0 {
                 let left = input[..pos].parse::<usize>().ok()?;
                 let right = input[pos + 1..].parse::<usize>().ok()?;
                 return Some(left + right);
             }
-        }
 
         // Try subtraction (8-1)
-        if let Some(pos) = input.rfind('-') {
-            if pos > 0 {
+        if let Some(pos) = input.rfind('-')
+            && pos > 0 {
                 let left = input[..pos].parse::<usize>().ok()?;
                 let right = input[pos + 1..].parse::<usize>().ok()?;
                 return left.checked_sub(right);
             }
-        }
 
         None
     }
@@ -151,11 +149,6 @@ impl MeasureExpression {
     }
 }
 
-impl Default for MeasureExpression {
-    fn default() -> Self {
-        Self::UseMemory
-    }
-}
 
 impl std::fmt::Display for MeasureExpression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

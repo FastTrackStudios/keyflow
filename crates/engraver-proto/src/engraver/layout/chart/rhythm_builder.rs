@@ -90,6 +90,7 @@ pub enum NoteHeadOverride {
 /// Contains all the information needed to render a measure's rhythm,
 /// including entries, tuplet brackets, and position tracking.
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct RhythmBuildResult {
     /// The rhythm entries (notes and rests) for this measure.
     pub entries: Vec<RhythmEntry>,
@@ -108,18 +109,6 @@ pub struct RhythmBuildResult {
     pub internal_push_positions: Vec<(usize, usize)>,
 }
 
-impl Default for RhythmBuildResult {
-    fn default() -> Self {
-        Self {
-            entries: Vec::new(),
-            total_ticks: 0,
-            tuplet_specs: Vec::new(),
-            head_type_overrides: Vec::new(),
-            spillback_positions: Vec::new(),
-            internal_push_positions: Vec::new(),
-        }
-    }
-}
 
 impl RhythmBuildResult {
     /// Returns true if any triplet groups were detected.
@@ -227,7 +216,7 @@ fn extract_from_explicit(
     // Triplets are grouped by beat: 3 triplet eighths = 480 ticks (one quarter note)
     const TRIPLET_BEAT_TICKS: i32 = 480;
 
-    for (_idx, element) in elements.iter().enumerate() {
+    for element in elements.iter() {
         let (duration, is_rest, is_triplet) = extract_rhythm_parts(element);
 
         // Skip 0-duration elements (like space markers for push)
@@ -259,15 +248,14 @@ fn extract_from_explicit(
         }
 
         // Close triplet group if we've hit a beat boundary
-        if is_triplet && triplet_group_ticks >= TRIPLET_BEAT_TICKS {
-            if let Some(start) = triplet_group_start {
+        if is_triplet && triplet_group_ticks >= TRIPLET_BEAT_TICKS
+            && let Some(start) = triplet_group_start {
                 result
                     .tuplet_specs
                     .push(TupletSpec::triplet(start, result.entries.len()));
                 triplet_group_start = None;
                 triplet_group_ticks = 0;
             }
-        }
     }
 
     // Close any pending triplet group
@@ -282,8 +270,8 @@ fn extract_from_explicit(
     // Handle triplet spillbacks from the next measure
     // If there are triplet spillbacks and push_alters_rhythm is enabled,
     // we need to modify the end of the measure to accommodate the pushed chord
-    if config.push_alters_rhythm {
-        if let Some(spillbacks) = spillbacks {
+    if config.push_alters_rhythm
+        && let Some(spillbacks) = spillbacks {
             tracing::debug!(
                 "[explicit-spillback] Processing {} spillbacks in extract_from_explicit",
                 spillbacks.len()
@@ -401,7 +389,6 @@ fn extract_from_explicit(
                 }
             }
         }
-    }
 
     result
 }
@@ -486,8 +473,8 @@ fn extract_from_slash(
         };
 
         // Push affects the PREVIOUS beat (where the anticipation lands)
-        if is_push && chord_idx > 0 {
-            if let Some((_, amount)) = &chord.push_pull {
+        if is_push && chord_idx > 0
+            && let Some((_, amount)) = &chord.push_pull {
                 let target_beat = cumulative_beats.saturating_sub(1);
                 if target_beat < num_beats && beats_with_pushes[target_beat].is_none() {
                     beats_with_pushes[target_beat] = Some(BeatPushInfo {
@@ -497,7 +484,6 @@ fn extract_from_slash(
                     });
                 }
             }
-        }
 
         cumulative_beats += chord_duration_beats;
     }
@@ -589,13 +575,12 @@ fn extract_from_slash(
                 }
 
                 // Track spillback chord position
-                if let Some(spills) = spillbacks {
-                    if let Some(spillback) = spills.iter().find(|s| s.beat_position == beat_idx) {
+                if let Some(spills) = spillbacks
+                    && let Some(spillback) = spills.iter().find(|s| s.beat_position == beat_idx) {
                         result
                             .spillback_positions
                             .push((rhythm_index + 1, spillback.chord_symbol.clone()));
                     }
-                }
 
                 rhythm_index += 2;
 
@@ -613,8 +598,8 @@ fn extract_from_slash(
         } else {
             // Standard quarter note beat (no push)
             // Check for standard (non-triplet) spillbacks
-            if let Some(spills) = spillbacks {
-                if let Some(spillback) = spills
+            if let Some(spills) = spillbacks
+                && let Some(spillback) = spills
                     .iter()
                     .find(|s| s.beat_position == beat_idx && s.push_base == PushPullBase::Standard)
                 {
@@ -622,7 +607,6 @@ fn extract_from_slash(
                         .spillback_positions
                         .push((rhythm_index, spillback.chord_symbol.clone()));
                 }
-            }
 
             result.entries.push(RhythmEntry::Note(Duration::Quarter));
             rhythm_index += 1;
@@ -712,7 +696,7 @@ fn expand_to_quarters(result: &mut RhythmBuildResult) {
                     }
                 } else {
                     // Quarter notes and shorter stay as-is
-                    expanded.push(entry.clone());
+                    expanded.push(*entry);
                     if !result.head_type_overrides.is_empty() {
                         expanded_overrides
                             .push(result.head_type_overrides.get(i).copied().flatten());
@@ -885,7 +869,7 @@ pub fn measure_has_explicit_chord_rhythm(measure: &Measure) -> bool {
                     let is_pushed_first = chord
                         .push_pull
                         .as_ref()
-                        .map_or(false, |(is_push, _)| *is_push);
+                        .is_some_and(|(is_push, _)| *is_push);
                     !is_pushed_first && chord.rhythm.has_lily_duration()
                 }
                 RhythmElement::Rest(_) => true, // Rests count as real rhythm
@@ -903,7 +887,7 @@ pub fn measure_has_explicit_chord_rhythm(measure: &Measure) -> bool {
             && chord
                 .push_pull
                 .as_ref()
-                .map_or(false, |(is_push, _)| *is_push);
+                .is_some_and(|(is_push, _)| *is_push);
         !is_pushed_first && (chord.rhythm.has_lily_duration() || chord.rhythm.is_rest())
     })
 }

@@ -375,7 +375,7 @@ pub fn calculate_segment_index(
     let is_pushed_at_boundary = chord
         .push_pull
         .as_ref()
-        .map_or(false, |(is_push, _)| *is_push)
+        .is_some_and(|(is_push, _)| *is_push)
         && is_first_real
         && is_boundary;
 
@@ -388,7 +388,7 @@ pub fn calculate_segment_index(
     let is_internal_push = chord
         .push_pull
         .as_ref()
-        .map_or(false, |(is_push, _)| *is_push)
+        .is_some_and(|(is_push, _)| *is_push)
         && !is_first_real
         && !internal_push_positions.is_empty();
 
@@ -513,7 +513,7 @@ pub fn should_hide_chord(
     }
 
     // Check for duplicate
-    previous_symbol.map_or(false, |prev| prev == current_symbol)
+    previous_symbol == Some(current_symbol)
 }
 
 /// Render chord symbols for a measure with automatic collision detection.
@@ -563,17 +563,16 @@ pub fn render_chord_symbols(
         let is_first_real = is_first_real_chord(&measure.chords, chord_idx);
 
         // Skip pushed chords that spill back (except at boundaries)
-        if let Some((is_push, _)) = &chord.push_pull {
-            if *is_push && is_first_real && !is_boundary {
+        if let Some((is_push, _)) = &chord.push_pull
+            && *is_push && is_first_real && !is_boundary {
                 continue;
             }
-        }
 
         // Check for pushed chord at boundary
         let is_pushed_at_boundary = chord
             .push_pull
             .as_ref()
-            .map_or(false, |(is_push, _)| *is_push)
+            .is_some_and(|(is_push, _)| *is_push)
             && is_first_real
             && is_boundary;
 
@@ -608,7 +607,7 @@ pub fn render_chord_symbols(
             let is_pushed = chord
                 .push_pull
                 .as_ref()
-                .map_or(false, |(is_push, _)| *is_push);
+                .is_some_and(|(is_push, _)| *is_push);
             tracing::debug!(
                 "[chord-render] section={} measure={} chord_idx={} '{}' is_pushed={} is_first_real={} is_boundary={} is_pushed_at_boundary={} segment_idx={} internal_push_positions={:?}",
                 ctx.section_name,
@@ -687,8 +686,8 @@ pub fn render_chord_symbols(
         nodes.push(chord_node);
 
         // Add apostrophe marker for pushed/pulled chords when push_alters_rhythm=false
-        if !ctx.push_alters_rhythm {
-            if let Some((is_push, _amount)) = &chord.push_pull {
+        if !ctx.push_alters_rhythm
+            && let Some((is_push, _amount)) = &chord.push_pull {
                 let marker_node = create_push_marker(
                     *is_push,
                     layout_data.bounds,
@@ -699,7 +698,6 @@ pub fn render_chord_symbols(
                 id_counter += 1;
                 nodes.push(marker_node);
             }
-        }
 
         // Add accent marker for regular accents (rendered in red above the chord)
         // AccentOnPush accents are rendered on the spillback chord instead

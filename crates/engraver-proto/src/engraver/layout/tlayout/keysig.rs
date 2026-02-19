@@ -55,8 +55,10 @@ impl KeySigType {
 
 /// Clef-dependent position data for key signatures.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum ClefContext {
     /// Treble clef
+    #[default]
     Treble,
     /// Bass clef
     Bass,
@@ -66,11 +68,6 @@ pub enum ClefContext {
     Tenor,
 }
 
-impl Default for ClefContext {
-    fn default() -> Self {
-        Self::Treble
-    }
-}
 
 impl ClefContext {
     /// Get the staff lines for sharps in order (F#, C#, G#, D#, A#, E#, B#).
@@ -99,6 +96,7 @@ impl ClefContext {
 
 /// Key signature layout parameters.
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct KeySigParams {
     /// Unique identifier
     pub id: u64,
@@ -112,17 +110,6 @@ pub struct KeySigParams {
     pub prev_key: Option<KeySigType>,
 }
 
-impl Default for KeySigParams {
-    fn default() -> Self {
-        Self {
-            id: 0,
-            key: KeySigType::default(),
-            clef: ClefContext::default(),
-            show_naturals: false,
-            prev_key: None,
-        }
-    }
-}
 
 /// Layout a key signature.
 #[must_use]
@@ -134,8 +121,8 @@ pub fn layout_keysig(params: &KeySigParams, ctx: &LayoutContext) -> (LayoutData,
     let mut x = 0.0;
 
     // First, show naturals if this is a key change
-    if params.show_naturals {
-        if let Some(prev_key) = &params.prev_key {
+    if params.show_naturals
+        && let Some(prev_key) = &params.prev_key {
             let naturals = calculate_naturals(prev_key, &params.key);
             let positions = if prev_key.has_sharps() {
                 params.clef.sharp_positions()
@@ -161,7 +148,6 @@ pub fn layout_keysig(params: &KeySigParams, ctx: &LayoutContext) -> (LayoutData,
                 x += spatium * 0.3; // Gap before new key
             }
         }
-    }
 
     // Now draw the new key signature
     match params.key {
