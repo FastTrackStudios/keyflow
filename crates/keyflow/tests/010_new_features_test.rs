@@ -96,7 +96,7 @@ intro, 1/ 4/ 5/ 1/ /fermata
     let last_idx = measure.chords.len() - 1;
     let last_chord = &measure.chords[last_idx];
     assert!(
-        last_chord.commands.len() > 0,
+        !last_chord.commands.is_empty(),
         "Last chord should have commands"
     );
     assert_eq!(last_chord.commands[0], Command::Fermata);

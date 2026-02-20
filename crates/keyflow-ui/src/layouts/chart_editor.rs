@@ -135,10 +135,7 @@ pub fn ChartEditorLayout() -> Element {
     // Parse error state
     let parse_error = use_memo(move || {
         let source = CHART_SOURCE.read().clone();
-        match keyflow::text::chart::parse_chart(&source) {
-            Ok(_) => None,
-            Err(e) => Some(e),
-        }
+        keyflow::text::chart::parse_chart(&source).err()
     });
 
     rsx! {

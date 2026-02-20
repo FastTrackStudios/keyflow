@@ -9,7 +9,6 @@ use facet::Facet;
 /// Song Metadata
 ///
 /// Represents song information like title, artist, composer, etc.
-
 /// Complete song metadata
 #[derive(Debug, Clone, PartialEq, Default, Facet)]
 pub struct SongMetadata {

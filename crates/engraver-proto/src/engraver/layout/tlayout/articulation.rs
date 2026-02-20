@@ -657,8 +657,10 @@ mod tests {
         let spatium = 5.0;
 
         // Notehead alignment
-        let mut config = ArticulationConfig::default();
-        config.align = ArticulationAlign::Notehead;
+        let mut config = ArticulationConfig {
+            align: ArticulationAlign::Notehead,
+            ..Default::default()
+        };
         let layout = layout_articulation(&input, &context, spatium, &config);
         assert!((layout.position.x - 100.0).abs() < 0.01);
 
@@ -679,8 +681,10 @@ mod tests {
         let context = make_context();
 
         let config_normal = ArticulationConfig::default();
-        let mut config_scaled = ArticulationConfig::default();
-        config_scaled.scale = 1.5;
+        let config_scaled = ArticulationConfig {
+            scale: 1.5,
+            ..Default::default()
+        };
 
         let layout_normal = layout_articulation(&input, &context, 5.0, &config_normal);
         let layout_scaled = layout_articulation(&input, &context, 5.0, &config_scaled);

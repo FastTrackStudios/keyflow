@@ -573,8 +573,8 @@ impl<'a> ChartParser<'a> {
         // Auto-duration patterns: _1, _2, _4, _8, _16
         // These are whole, half, quarter, eighth, sixteenth notes
         for suffix in &["_16", "_8", "_4", "_2", "_1"] {
-            if token.ends_with(suffix) {
-                return token[..token.len() - suffix.len()].to_string();
+            if let Some(stripped) = token.strip_suffix(suffix) {
+                return stripped.to_string();
             }
         }
         token.to_string()
@@ -761,17 +761,14 @@ impl<'a> ChartParser<'a> {
                 if let Some(cmd) = Command::parse_slash(token_str) {
                     // Apply command to the last chord in rhythm_elements (source of truth)
                     // and also to chords for backward compatibility during parsing
-                    let applied =
-                        if let Some(last_elem) = current_measure.rhythm_elements.last_mut() {
-                            if let RhythmElement::Chord(c) = last_elem {
-                                c.commands.push(cmd.clone());
-                                true
-                            } else {
-                                false
-                            }
-                        } else {
-                            false
-                        };
+                    let applied = if let Some(RhythmElement::Chord(c)) =
+                        current_measure.rhythm_elements.last_mut()
+                    {
+                        c.commands.push(cmd.clone());
+                        true
+                    } else {
+                        false
+                    };
 
                     // Also apply to chords vec for backward compatibility
                     if let Some(last_chord) = current_measure.chords.last_mut() {
@@ -781,10 +778,10 @@ impl<'a> ChartParser<'a> {
                     // If current measure has no chord, try previous measure
                     if !applied && !measures.is_empty() {
                         if let Some(last_measure) = measures.last_mut() {
-                            if let Some(last_elem) = last_measure.rhythm_elements.last_mut() {
-                                if let RhythmElement::Chord(c) = last_elem {
-                                    c.commands.push(cmd.clone());
-                                }
+                            if let Some(RhythmElement::Chord(c)) =
+                                last_measure.rhythm_elements.last_mut()
+                            {
+                                c.commands.push(cmd.clone());
                             }
                             if let Some(last_chord) = last_measure.chords.last_mut() {
                                 last_chord.commands.push(cmd);
@@ -1961,6 +1958,7 @@ impl<'a> ChartParser<'a> {
 
 #[cfg(test)]
 mod tests {
+    use super::ChartParser as Chart;
     use super::*;
     use crate::chart::parse_chart;
 
@@ -2044,7 +2042,6 @@ mod tests {
     fn test_accent_prefix_parsing() {
         use crate::chart::commands::Command;
         use crate::sections::SectionType;
-        use crate::time::TimeSignature;
 
         // Test that >C parses as C with an accent command
         let input = r#"

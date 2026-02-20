@@ -178,6 +178,7 @@ impl ChartLayoutManager {
     /// Render only the dynamic overlay layer (hover + cursor).
     ///
     /// Draws on top of a previously-rendered static layer.
+    #[allow(clippy::too_many_arguments)]
     pub fn render_overlay_layer_to_scene(
         &mut self,
         scene: &mut impl PaintScene,
@@ -354,6 +355,7 @@ impl ChartLayoutManager {
     ///
     /// If `hover_point` is `Some((scene_x, scene_y))`, a blue highlight is rendered
     /// on the nearest beat to that scene coordinate.
+    #[allow(clippy::too_many_arguments)]
     pub fn render_to_scene(
         &mut self,
         scene: &mut impl PaintScene,

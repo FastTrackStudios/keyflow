@@ -697,7 +697,7 @@ pub fn measure_measure_with_config(
 ///
 /// # Returns
 /// Complete chart measurements
-pub fn measure_chart<'a, I, M>(
+pub fn measure_chart<I, M>(
     sections: I,
     style: &HarmonyStyle,
     cache: &mut MeasurementCache,

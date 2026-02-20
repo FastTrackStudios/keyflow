@@ -68,14 +68,12 @@ impl Chord {
         // Check if the scale mode changed - if so, we need to map scale degrees
         let source_scale_mode = source_key.map(|k| k.mode);
         let target_scale_mode = target_key.mode;
-        let scale_mode_changed =
-            source_scale_mode.is_some() && source_scale_mode.unwrap() != target_scale_mode;
+        let scale_mode_changed = source_scale_mode.is_some_and(|m| m != target_scale_mode);
 
         // Calculate the transposition interval
         // If scale mode changed and the chord root is a scale degree in the source key,
         // we need to find what scale degree it is and map to that degree in target key
-        let interval_semitones = if scale_mode_changed && source_key.is_some() {
-            let src_key = source_key.unwrap();
+        let interval_semitones = if let (true, Some(src_key)) = (scale_mode_changed, source_key) {
 
             // Check if current root is a scale degree in source key
             let mut found_scale_degree = None;
@@ -169,8 +167,7 @@ impl Chord {
         // because Ionian and Aeolian are both Diatonic but different modes
         let source_scale_mode = source_key.map(|k| k.mode);
         let target_scale_mode = target_key.mode;
-        let scale_mode_changed =
-            source_scale_mode.is_some() && source_scale_mode.unwrap() != target_scale_mode;
+        let scale_mode_changed = source_scale_mode.is_some_and(|m| m != target_scale_mode);
 
         if scale_mode_changed {
             let mut scale_transformed_notes: Vec<MusicalNote> = Vec::new();
@@ -251,10 +248,10 @@ impl Chord {
         let new_quality = self.calculate_quality_from_notes(&transposed_notes)?;
 
         // Recalculate family if needed
-        let new_family = if scale_mode_changed && self.family.is_some() {
+        let new_family = if let (true, Some(family)) = (scale_mode_changed, self.family) {
             // If quality changed, we need to update the family
             if new_quality != self.quality {
-                match (new_quality, self.family.unwrap()) {
+                match (new_quality, family) {
                     (ChordQuality::Major, ChordFamily::Minor7) => Some(ChordFamily::Dominant7),
                     (ChordQuality::Major, ChordFamily::MinorMajor7) => Some(ChordFamily::Major7),
                     (ChordQuality::Minor, ChordFamily::Major7) => Some(ChordFamily::MinorMajor7),

@@ -447,7 +447,7 @@ fn analyze_chord_structure(semitones: &[u8]) -> Result<ChordInfo> {
     //   Don't block when a minor/major 7th is present (then pc 9 is a separate 6th/13th).
     // - b13 (pc 8): Block when aug5th is present (same pitch class).
     let has_sharp_eleventh =
-        semitones.contains(&SHARP_ELEVENTH) && !(has_dim_fifth && !has_perfect_fifth);
+        semitones.contains(&SHARP_ELEVENTH) && (!has_dim_fifth || has_perfect_fifth);
     let is_dim_with_dim7 = has_dim_fifth
         && has_minor_third
         && has_sixth_or_dim7

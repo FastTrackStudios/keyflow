@@ -361,6 +361,7 @@ impl MeasureBuilder {
     }
 
     /// Add a single duration to the rhythm (as a note).
+    #[allow(clippy::should_implement_trait)]
     #[must_use]
     pub fn add(mut self, duration: Duration) -> Self {
         self.rhythm.push(duration);

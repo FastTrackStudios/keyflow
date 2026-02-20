@@ -1,5 +1,6 @@
 //! Chart module - Chart data types and structures
 
+#[allow(clippy::module_inception)]
 pub mod chart;
 pub mod commands;
 pub mod cues;

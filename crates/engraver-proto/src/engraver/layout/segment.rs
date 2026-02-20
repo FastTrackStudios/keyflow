@@ -503,7 +503,7 @@ impl Eq for Segment {}
 
 impl PartialOrd for Segment {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp_order(other))
+        Some(std::cmp::Ord::cmp(self, other))
     }
 }
 

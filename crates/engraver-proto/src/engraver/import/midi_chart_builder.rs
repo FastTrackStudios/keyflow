@@ -28,7 +28,6 @@ pub struct MidiChartConfig {
     pub title: Option<String>,
 }
 
-
 /// Generate a Keyflow chart text string from a parsed MIDI file.
 ///
 /// This is the main entry point. It:
@@ -105,11 +104,10 @@ pub fn generate_chart_text(midi: &MidiFile, config: &MidiChartConfig) -> String 
         let mut header = section.keyflow_type.clone();
         let show_sub_label =
             section.sub_label.is_some() && !matches!(section.keyflow_type.as_str(), "Outro" | "VS");
-        if show_sub_label
-            && let Some(ref label) = section.sub_label {
-                header.push(' ');
-                header.push_str(label);
-            }
+        if show_sub_label && let Some(ref label) = section.sub_label {
+            header.push(' ');
+            header.push_str(label);
+        }
         if show_count {
             header.push(' ');
             header.push_str(&section.length.to_string());
@@ -122,9 +120,11 @@ pub fn generate_chart_text(midi: &MidiFile, config: &MidiChartConfig) -> String 
 
         // Add section-specific push directive if different from global
         if let Some(ref push_type) = section_push_type
-            && use_triplet_setting && push_type == "4" {
-                output.push_str("/push 4\n");
-            }
+            && use_triplet_setting
+            && push_type == "4"
+        {
+            output.push_str("/push 4\n");
+        }
 
         // Handle COUNT section specially - just shows silence
         if section.keyflow_type == "COUNT" {
@@ -266,14 +266,15 @@ fn detect_chords_from_notes(midi: &MidiFile, config: &MidiChartConfig) -> Vec<De
 
     // Respell chords to target key if provided
     if let Some(ref key_root) = config.key_root
-        && let Some(note) = MusicalNote::from_string(key_root) {
-            let key_spelling = KeySpelling::major(&note);
-            for chord_event in &mut detected {
-                chord_event
-                    .chord
-                    .respell_root(&key_spelling, SpellingMode::Relaxed);
-            }
+        && let Some(note) = MusicalNote::from_string(key_root)
+    {
+        let key_spelling = KeySpelling::major(&note);
+        for chord_event in &mut detected {
+            chord_event
+                .chord
+                .respell_root(&key_spelling, SpellingMode::Relaxed);
         }
+    }
 
     // Apply common chord spelling normalizations
     // (e.g., D#m -> Ebm, G#m -> Abm for readability)
@@ -786,9 +787,10 @@ fn build_rhythm_elements(
     let existing_starts: std::collections::HashSet<i64> =
         section_chords.iter().map(|c| c.start_ppq).collect();
     if let Some(c) = pickup_candidate
-        && !existing_starts.contains(&c.start_ppq) {
-            section_chords.push(c);
-        }
+        && !existing_starts.contains(&c.start_ppq)
+    {
+        section_chords.push(c);
+    }
 
     // Also find chords that start before the section but sustain into it.
     // These are "continuing" chords — or pushed chords from the previous measure.
@@ -944,34 +946,35 @@ fn build_rhythm_elements(
     // convert the leading rest into that short staccato push chord.
     if let Some(c) = pickup_candidate
         && let Some(ChordOrRest::Rest { start_ppq, end_ppq }) = elements.first()
-            && *start_ppq == section_start_tick {
-                let chord_end = c.end_ppq.min(section_start_tick + ticks_per_beat / 2);
-                let remaining_rest_start = chord_end;
-                let remaining_rest_end = *end_ppq;
-                // Replace the leading rest with the pickup chord
-                elements.remove(0);
-                elements.insert(
-                    0,
-                    ChordOrRest::Chord {
-                        symbol: c.chord.normalized.clone(),
-                        start_ppq: section_start_tick,
-                        end_ppq: chord_end,
-                        is_pushed: true,
-                        push_amount: Some("8".to_string()),
-                        is_accented: c.is_accented(),
-                        is_staccato: true,
-                    },
-                );
-                if remaining_rest_end > remaining_rest_start {
-                    elements.insert(
-                        1,
-                        ChordOrRest::Rest {
-                            start_ppq: remaining_rest_start,
-                            end_ppq: remaining_rest_end,
-                        },
-                    );
-                }
-            }
+        && *start_ppq == section_start_tick
+    {
+        let chord_end = c.end_ppq.min(section_start_tick + ticks_per_beat / 2);
+        let remaining_rest_start = chord_end;
+        let remaining_rest_end = *end_ppq;
+        // Replace the leading rest with the pickup chord
+        elements.remove(0);
+        elements.insert(
+            0,
+            ChordOrRest::Chord {
+                symbol: c.chord.normalized.clone(),
+                start_ppq: section_start_tick,
+                end_ppq: chord_end,
+                is_pushed: true,
+                push_amount: Some("8".to_string()),
+                is_accented: c.is_accented(),
+                is_staccato: true,
+            },
+        );
+        if remaining_rest_end > remaining_rest_start {
+            elements.insert(
+                1,
+                ChordOrRest::Rest {
+                    start_ppq: remaining_rest_start,
+                    end_ppq: remaining_rest_end,
+                },
+            );
+        }
+    }
 
     if current_pos < section_end_tick {
         let gap = section_end_tick - current_pos;
@@ -1001,23 +1004,19 @@ fn merge_consecutive_chords(elements: Vec<ChordOrRest>) -> Vec<ChordOrRest> {
                 is_accented,
                 is_staccato,
             } => {
-                let can_merge = if let Some(last) = merged.last() {
-                    if let ChordOrRest::Chord {
-                        symbol: prev_symbol,
-                        end_ppq: prev_end,
-                        is_staccato: prev_staccato,
-                        ..
-                    } = last
-                    {
-                        // Don't merge staccato chords - they need to stay separate
-                        let gap = start_ppq - prev_end;
-                        *prev_symbol == symbol
-                            && (0..960).contains(&gap)
-                            && !*prev_staccato
-                            && !is_staccato
-                    } else {
-                        false
-                    }
+                let can_merge = if let Some(ChordOrRest::Chord {
+                    symbol: prev_symbol,
+                    end_ppq: prev_end,
+                    is_staccato: prev_staccato,
+                    ..
+                }) = merged.last()
+                {
+                    // Don't merge staccato chords - they need to stay separate
+                    let gap = start_ppq - prev_end;
+                    *prev_symbol == symbol
+                        && (0..960).contains(&gap)
+                        && !*prev_staccato
+                        && !is_staccato
                 } else {
                     false
                 };
@@ -1196,45 +1195,45 @@ fn build_measures(
                     is_staccato,
                 } = elem
                     && *start_ppq >= prev_measure_start
-                        && *start_ppq < measure_start
-                        && *end_ppq > measure_start
-                    {
-                        let chord_start_in_prev = *start_ppq - prev_measure_start;
-                        let start_beat_in_prev = (chord_start_in_prev / ticks_per_beat) as i32;
-                        let duration_in_prev_measure = measure_start - *start_ppq;
-                        let total_duration = *end_ppq - *start_ppq;
-                        let duration_in_this_measure = total_duration - duration_in_prev_measure;
+                    && *start_ppq < measure_start
+                    && *end_ppq > measure_start
+                {
+                    let chord_start_in_prev = *start_ppq - prev_measure_start;
+                    let start_beat_in_prev = (chord_start_in_prev / ticks_per_beat) as i32;
+                    let duration_in_prev_measure = measure_start - *start_ppq;
+                    let total_duration = *end_ppq - *start_ppq;
+                    let duration_in_this_measure = total_duration - duration_in_prev_measure;
 
-                        let is_quarter_push_chord = start_beat_in_prev == beats_per_measure - 1
-                            && duration_in_this_measure > duration_in_prev_measure;
+                    let is_quarter_push_chord = start_beat_in_prev == beats_per_measure - 1
+                        && duration_in_this_measure > duration_in_prev_measure;
 
-                        let chord_end_clamped = (*end_ppq).min(measure_end);
-                        let duration_ticks = chord_end_clamped - measure_start;
-                        let duration_beats =
-                            ((duration_ticks + ticks_per_beat - 1) / ticks_per_beat) as i32;
+                    let chord_end_clamped = (*end_ppq).min(measure_end);
+                    let duration_ticks = chord_end_clamped - measure_start;
+                    let duration_beats =
+                        ((duration_ticks + ticks_per_beat - 1) / ticks_per_beat) as i32;
 
-                        let display_beats = if is_quarter_push_chord {
-                            duration_beats.max(1)
-                        } else {
-                            duration_beats.max(2)
-                        };
+                    let display_beats = if is_quarter_push_chord {
+                        duration_beats.max(1)
+                    } else {
+                        duration_beats.max(2)
+                    };
 
-                        measure_elements.push(MeasureElement::Chord {
-                            symbol: symbol.clone(),
-                            beats: display_beats,
-                            ticks: duration_ticks,
-                            is_pushed: *is_pushed,
-                            push_amount: push_amount.clone(),
-                            is_accented: *is_accented,
-                            is_staccato: *is_staccato,
-                        });
-                        current_beat = display_beats.min(beats_per_measure);
-                        current_tick = chord_end_clamped.min(measure_end);
+                    measure_elements.push(MeasureElement::Chord {
+                        symbol: symbol.clone(),
+                        beats: display_beats,
+                        ticks: duration_ticks,
+                        is_pushed: *is_pushed,
+                        push_amount: push_amount.clone(),
+                        is_accented: *is_accented,
+                        is_staccato: *is_staccato,
+                    });
+                    current_beat = display_beats.min(beats_per_measure);
+                    current_tick = chord_end_clamped.min(measure_end);
 
-                        if !is_quarter_push_chord {
-                            break;
-                        }
+                    if !is_quarter_push_chord {
+                        break;
                     }
+                }
             }
         }
 
@@ -1283,18 +1282,15 @@ fn build_measures(
                     // Add rest if there's a gap before this chord
                     let gap_ticks = chord_start_clamped - current_tick;
                     let min_rest_ticks = ticks_per_beat / 6;
-                    if (start_beat > current_beat
-                        || (start_beat == current_beat && gap_ticks >= min_rest_ticks))
-                        && gap_ticks >= min_rest_ticks {
-                            let gap_beats =
-                                ((gap_ticks + ticks_per_beat - 1) / ticks_per_beat) as i32;
-                            let start_pos = current_tick - measure_start;
-                            measure_elements.push(MeasureElement::Rest {
-                                beats: gap_beats.max(1),
-                                ticks: gap_ticks,
-                                start_tick_in_measure: start_pos,
-                            });
-                        }
+                    if start_beat >= current_beat && gap_ticks >= min_rest_ticks {
+                        let gap_beats = ((gap_ticks + ticks_per_beat - 1) / ticks_per_beat) as i32;
+                        let start_pos = current_tick - measure_start;
+                        measure_elements.push(MeasureElement::Rest {
+                            beats: gap_beats.max(1),
+                            ticks: gap_ticks,
+                            start_tick_in_measure: start_pos,
+                        });
+                    }
 
                     measure_elements.push(MeasureElement::Chord {
                         symbol: symbol.clone(),
@@ -1483,7 +1479,8 @@ fn build_measures(
                 }
             } else {
                 if let Some(MeasureElement::Chord { symbol, .. }) = measure_elements
-                    .iter().rfind(|e| matches!(e, MeasureElement::Chord { .. }))
+                    .iter()
+                    .rfind(|e| matches!(e, MeasureElement::Chord { .. }))
                 {
                     last_chord_symbol = Some(symbol.clone());
                 }
@@ -1578,9 +1575,7 @@ fn split_rest_at_beat_boundaries(
 
     let mut result = Vec::new();
     let mut remaining = duration_ticks;
-    let mut current_pos = start_tick_in_measure;
-
-    let pos_in_beat = current_pos % ticks_per_beat;
+    let pos_in_beat = start_tick_in_measure % ticks_per_beat;
 
     // Fill to next beat boundary with triplet eighths if off-beat
     if pos_in_beat > tolerance {
@@ -1593,7 +1588,6 @@ fn split_rest_at_beat_boundaries(
                 result.push(chunk);
                 fill_remaining -= chunk;
                 remaining -= chunk;
-                current_pos += chunk;
             }
         }
     }
@@ -1602,7 +1596,6 @@ fn split_rest_at_beat_boundaries(
     while remaining >= ticks_per_beat - tolerance {
         result.push(ticks_per_beat);
         remaining -= ticks_per_beat;
-        current_pos += ticks_per_beat;
     }
 
     // Remaining triplet-based duration
@@ -1818,6 +1811,7 @@ fn format_measure(
 
 /// Format rhythm elements as Keyflow notation with measure awareness.
 /// All sections use compact formatting: single space between measures, 4 measures per line.
+#[allow(clippy::too_many_arguments)]
 fn format_rhythm_elements(
     elements: &[ChordOrRest],
     section_start_tick: i64,
@@ -1876,11 +1870,13 @@ fn format_measures(
         just_inserted_separator = false;
 
         if let Some(split_at) = midline_separator_at
-            && measure_count % measures_per_line == split_at && i < measures.len() - 1 {
-                result.push_str(" | ");
-                just_inserted_separator = true;
-                continue;
-            }
+            && measure_count % measures_per_line == split_at
+            && i < measures.len() - 1
+        {
+            result.push_str(" | ");
+            just_inserted_separator = true;
+            continue;
+        }
 
         if measure_count % measures_per_line == 0 && i < measures.len() - 1 {
             result.push('\n');

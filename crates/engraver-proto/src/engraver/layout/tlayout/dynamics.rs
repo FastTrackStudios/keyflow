@@ -319,8 +319,9 @@ mod tests {
     use crate::engraver::style::MStyle;
 
     fn test_ctx() -> LayoutContext<'static> {
-        let style = Box::leak(Box::new(MStyle::default()));
-        LayoutContext::minimal(style)
+        use crate::engraver::layout::context::LayoutContextOwned;
+        let owned = Box::leak(Box::new(LayoutContextOwned::new_minimal(MStyle::default())));
+        owned.as_context()
     }
 
     #[test]

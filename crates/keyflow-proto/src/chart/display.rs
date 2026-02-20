@@ -360,13 +360,13 @@ impl Chart {
             let mut repeat_count = 1;
 
             // Scan forward to find a measure with repeat_count > 1
-            for j in i..measures.len() {
-                if measures[j].repeat_count > 1 {
+            for (j, measure) in measures.iter().enumerate().skip(i) {
+                if measure.repeat_count > 1 {
                     // Found a repeat annotation - this marks the end of the pattern
                     pattern_length = j - i + 1;
-                    repeat_count = measures[j].repeat_count;
+                    repeat_count = measure.repeat_count;
                     break;
-                } else if j > i && measures[j].repeat_count == 1 {
+                } else if j > i && measure.repeat_count == 1 {
                     // This is a regular measure, include it
                     pattern_length = j - i + 1;
                 }

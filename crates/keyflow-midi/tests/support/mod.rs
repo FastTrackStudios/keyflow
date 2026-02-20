@@ -513,6 +513,7 @@ fn detect_chord_at_marker(
         .min_by_key(|chord| (chord.start_ppq - marker).abs())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_mismatch(
     midi: &MidiFile,
     raw_markers: &[keyflow_midi::import::MarkerEvent],

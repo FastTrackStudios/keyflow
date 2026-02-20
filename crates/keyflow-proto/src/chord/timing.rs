@@ -379,7 +379,7 @@ mod tests {
             offset_ticks: -320,
         };
 
-        assert!(!has_rhythmic_complexity(&[on_beat.clone()]));
+        assert!(!has_rhythmic_complexity(std::slice::from_ref(&on_beat)));
         assert!(has_rhythmic_complexity(&[on_beat.clone(), pushed]));
     }
 

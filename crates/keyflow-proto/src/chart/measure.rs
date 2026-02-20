@@ -234,6 +234,7 @@ impl SpaceInstance {
 /// This represents a single element in a measure's rhythm pattern.
 /// Measures with explicit rhythm notation (like `r8t Ab9_8t r8t r4t F9_8t r2`)
 /// use this to preserve both chords and rests in their written order.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Facet)]
 #[repr(u8)]
 pub enum RhythmElement {

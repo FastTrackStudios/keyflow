@@ -415,8 +415,7 @@ impl Chart {
     ) {
         // Collect text cues and dynamics from all measures in the pattern
         let measures = section.measures();
-        for idx in start_idx..=end_idx {
-            let measure = &measures[idx];
+        for measure in measures.iter().take(end_idx + 1).skip(start_idx) {
             for cue in &measure.text_cues {
                 output.push_str(&format!("{}\n", cue));
             }
@@ -427,9 +426,7 @@ impl Chart {
 
         // Output chords from each measure in the pattern
         let mut all_chords = Vec::new();
-        for idx in start_idx..=end_idx {
-            let measure = &measures[idx];
-
+        for (idx, measure) in measures.iter().enumerate().take(end_idx + 1).skip(start_idx) {
             // Check for key/time sig changes
             let position = self.calculate_position(section_idx, idx);
             for key_change in &self.key_changes {
@@ -614,8 +611,7 @@ impl Chart {
         repeat_count: usize,
     ) {
         // Collect text cues and dynamics from all measures in the pattern
-        for idx in start_idx..=end_idx {
-            let measure = &measures[idx];
+        for measure in measures.iter().take(end_idx + 1).skip(start_idx) {
             for cue in &measure.text_cues {
                 output.push_str(&format!("{}\n", cue));
             }
@@ -626,9 +622,7 @@ impl Chart {
 
         // Output chords from each measure in the pattern
         let mut all_chords = Vec::new();
-        for idx in start_idx..=end_idx {
-            let measure = &measures[idx];
-
+        for (idx, measure) in measures.iter().enumerate().take(end_idx + 1).skip(start_idx) {
             // Check for key/time sig changes
             let position = self.calculate_position(section_idx, idx);
             for key_change in &self.key_changes {

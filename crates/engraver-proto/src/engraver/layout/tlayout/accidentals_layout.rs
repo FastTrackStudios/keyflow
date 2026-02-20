@@ -815,10 +815,9 @@ fn count_columns(accidentals: &[AccidentalInfo], ordering: &[usize], ctx: &Layou
         let mut col = 0;
 
         // Check against all previously placed accidentals
-        for j in 0..i {
-            let prev_idx = ordering[j];
-            let prev_acc = &accidentals[prev_idx];
-            let prev_col = *columns.get(&prev_idx).unwrap_or(&0);
+        for prev_idx in ordering.iter().take(i) {
+            let prev_acc = &accidentals[*prev_idx];
+            let prev_col = *columns.get(prev_idx).unwrap_or(&0);
 
             if !can_fit_in_same_column(acc, prev_acc, ctx) && prev_col >= col {
                 col = prev_col + 1;
@@ -1308,9 +1307,11 @@ mod tests {
             make_acc(0, AccidentalType::Sharp, 0),
             make_acc(1, AccidentalType::Sharp, 7), // Octave below
         ];
-        let mut config = AccidentalLayoutConfig::default();
-        config.align_octaves = true;
-        config.align_offset_octaves = true;
+        let config = AccidentalLayoutConfig {
+            align_octaves: true,
+            align_offset_octaves: true,
+            ..Default::default()
+        };
 
         let placements = layout_accidentals_simple(&mut accidentals, 5.0, &config);
 
@@ -1356,7 +1357,7 @@ mod tests {
         let sub_chords = split_into_sub_chords(&accidentals, &config);
 
         // Should split into 2 groups
-        assert!(sub_chords.len() >= 1);
+        assert!(!sub_chords.is_empty());
     }
 
     #[test]

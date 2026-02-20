@@ -433,7 +433,7 @@ mod tests {
         let max_systems = style.max_systems_per_page();
 
         // Lead sheet should fit 7-10 systems per page
-        assert!(max_systems >= 6 && max_systems <= 12);
+        assert!((6..=12).contains(&max_systems));
     }
 
     #[test]

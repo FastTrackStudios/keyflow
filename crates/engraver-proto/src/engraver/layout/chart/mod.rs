@@ -58,7 +58,7 @@ use std::sync::Arc;
 
 use crate::Chart;
 use crate::chord::LilySyntax;
-use crate::engraver::layout::context::LayoutContext;
+use crate::engraver::layout::context::{LayoutContext, LayoutContextOwned};
 use crate::engraver::layout::orchestrator::{PageLayout, PageMargins, SystemLayout};
 use crate::engraver::layout::segment::SegmentType;
 use crate::engraver::layout::segment_list::SegmentList;
@@ -108,6 +108,7 @@ pub struct ChartLayoutConfig {
     /// are automatically expanded to quarter note slashes:
     /// - A whole note chord (4 beats in 4/4) becomes 4 quarter slashes
     /// - A half note chord (2 beats) becomes 2 quarter slashes
+    ///
     /// This is standard notation for master rhythm charts.
     /// Can be disabled with `/AUTO_RHYTHM_SLASHES=false` in the chart.
     pub auto_rhythm_slashes: bool,
@@ -451,7 +452,8 @@ impl ChartLayoutEngine {
         page_width: f64,
         page_height: f64,
     ) -> ChartLayoutResult {
-        let ctx = LayoutContext::minimal(self.style);
+        let ctx_owned = LayoutContextOwned::new_minimal((*self.style).clone());
+        let ctx = ctx_owned.as_context();
         let text_metrics = TextFontMetrics::new(self.text_font_data.clone());
         // Use text font for symbols when symbol_font_family is None (e.g., MuseJazz uses same font)
         let symbol_metrics = if self.config.harmony_style.symbol_font_family.is_none() {
@@ -1168,7 +1170,6 @@ impl ChartLayoutEngine {
         // Post-process beat positions to make them contiguous (no gaps at barlines).
         // Each beat's width is extended to reach the next beat's x position,
         // ensuring smooth cursor movement across measure boundaries.
-        let mut beat_positions = beat_positions;
         for i in 0..beat_positions.len().saturating_sub(1) {
             let next_x = beat_positions[i + 1].x;
             let current_x = beat_positions[i].x;
@@ -1190,7 +1191,8 @@ impl ChartLayoutEngine {
 
     /// Layout chart in continuous scroll mode.
     fn layout_continuous(&self, chart: &Chart, width: f64) -> ChartLayoutResult {
-        let ctx = LayoutContext::minimal(self.style);
+        let ctx_owned = LayoutContextOwned::new_minimal((*self.style).clone());
+        let ctx = ctx_owned.as_context();
         let text_metrics = TextFontMetrics::new(self.text_font_data.clone());
         // Use text font for symbols when symbol_font_family is None (e.g., MuseJazz uses same font)
         let symbol_metrics = if self.config.harmony_style.symbol_font_family.is_none() {
@@ -1658,6 +1660,7 @@ impl ChartLayoutEngine {
     }
 
     /// Create a section label scene node.
+    #[allow(clippy::too_many_arguments)]
     fn create_section_label(
         &self,
         section: &crate::sections::Section,
@@ -1913,6 +1916,7 @@ impl ChartLayoutEngine {
     ///
     /// If `count_in_measures` > 0, a compact count-in snippet is rendered
     /// next to the tempo indicator instead of on the first system.
+    #[allow(clippy::too_many_arguments)]
     fn add_title_header(
         &self,
         root: &mut SceneNode,
@@ -1956,6 +1960,7 @@ impl ChartLayoutEngine {
     ///
     /// If `spillbacks` is provided, it contains chords from the next measure that push
     /// back across the barline and need to be rendered in this measure.
+    #[allow(clippy::too_many_arguments)]
     fn layout_measure(
         &self,
         measure: &crate::chart::types::Measure,
@@ -1985,6 +1990,7 @@ impl ChartLayoutEngine {
     }
 
     /// Layout a measure with compact mode (minimal left margin).
+    #[allow(clippy::too_many_arguments)]
     fn layout_measure_compact(
         &self,
         measure: &crate::chart::types::Measure,
@@ -2013,6 +2019,7 @@ impl ChartLayoutEngine {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn layout_measure_inner(
         &self,
         measure: &crate::chart::types::Measure,
@@ -2896,7 +2903,7 @@ pub mod test_utils {
             .filter(|(node, _)| {
                 node.id
                     .as_ref()
-                    .map_or(false, |id| id.element_type == element_type)
+                    .is_some_and(|id| id.element_type == element_type)
             })
             .count()
     }
@@ -3845,7 +3852,7 @@ Em7 Am7 D7 Gmaj7
         // Total systems should be roughly 32+ (chart has ~128 measures at 4 per system)
         // Parser may add slightly more due to smart chord memory
         assert!(
-            total_systems >= 30 && total_systems <= 40,
+            (30..=40).contains(&total_systems),
             "Expected ~30-40 total systems across all pages, got {}",
             total_systems
         );
@@ -3898,8 +3905,10 @@ C C C G G C
         );
 
         // Test with hide_repeated_chords = false
-        let mut config = ChartLayoutConfig::default();
-        config.hide_repeated_chords = false;
+        let config = ChartLayoutConfig {
+            hide_repeated_chords: false,
+            ..Default::default()
+        };
         let engine_no_hide = ChartLayoutEngine::with_config(config, style, text_font, symbol_font);
         let result_no_hide = engine_no_hide.layout_chart(&chart, &LayoutMode::default());
 

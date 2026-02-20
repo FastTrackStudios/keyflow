@@ -184,6 +184,7 @@ pub fn tessellate_glyph(
 ///
 /// # Returns
 /// A vector of vertices in NDC, ready for rendering.
+#[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn tessellate_glyph_to_ndc(
     font: &FontRef<'_>,

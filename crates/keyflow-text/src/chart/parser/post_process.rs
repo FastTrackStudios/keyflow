@@ -75,10 +75,8 @@ impl<'a> ChartParser<'a> {
             // First pass: identify chords that need space inserted
             let mut insertions: Vec<(usize, usize, ChordInstance)> = Vec::new(); // (measure_idx, chord_idx, space_chord)
 
-            let mut measure_idx = 0;
-            for measure in section.measures() {
-                let mut chord_idx = 0;
-                for chord in &measure.chords {
+            for (measure_idx, measure) in section.measures().iter().enumerate() {
+                for (chord_idx, chord) in measure.chords.iter().enumerate() {
                     if let Some((is_push, amount)) = chord.push_pull {
                         let _adjustment = Self::push_pull_to_duration(amount);
 
@@ -103,9 +101,7 @@ impl<'a> ChartParser<'a> {
                             insertions.push((measure_idx, chord_idx, space_chord));
                         }
                     }
-                    chord_idx += 1;
                 }
-                measure_idx += 1;
             }
 
             // Apply insertions (in reverse order to maintain indices)

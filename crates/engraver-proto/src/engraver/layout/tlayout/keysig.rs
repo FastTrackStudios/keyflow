@@ -154,9 +154,8 @@ pub fn layout_keysig(params: &KeySigParams, ctx: &LayoutContext) -> (LayoutData,
         KeySigType::Standard(n) if n > 0 => {
             // Sharps
             let positions = params.clef.sharp_positions();
-            for i in 0..n as usize {
-                let line = positions[i];
-                let y = -line as f64 * spatium / 2.0;
+            for line in positions.iter().take(n as usize) {
+                let y = -(*line) as f64 * spatium / 2.0;
 
                 commands.push(PaintCommand::glyph(
                     ACCIDENTAL_SHARP,
@@ -172,9 +171,8 @@ pub fn layout_keysig(params: &KeySigParams, ctx: &LayoutContext) -> (LayoutData,
         KeySigType::Standard(n) if n < 0 => {
             // Flats
             let positions = params.clef.flat_positions();
-            for i in 0..(-n) as usize {
-                let line = positions[i];
-                let y = -line as f64 * spatium / 2.0;
+            for line in positions.iter().take((-n) as usize) {
+                let y = -(*line) as f64 * spatium / 2.0;
 
                 commands.push(PaintCommand::glyph(
                     ACCIDENTAL_FLAT,

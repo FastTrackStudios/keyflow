@@ -83,9 +83,10 @@ impl NoteSpelling {
     pub fn to_note(&self) -> MusicalNote {
         MusicalNote::from_letter_and_accidental(self.letter, self.accidental)
     }
+}
 
-    /// Get the display string
-    pub fn to_string(&self) -> String {
+impl std::fmt::Display for NoteSpelling {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let acc_str = match self.accidental {
             None | Some(Accidental::Natural) => "",
             Some(Accidental::Sharp) => "#",
@@ -93,13 +94,7 @@ impl NoteSpelling {
             Some(Accidental::DoubleSharp) => "##",
             Some(Accidental::DoubleFlat) => "bb",
         };
-        format!("{}{}", self.letter, acc_str)
-    }
-}
-
-impl std::fmt::Display for NoteSpelling {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_string())
+        write!(f, "{}{}", self.letter, acc_str)
     }
 }
 
@@ -247,13 +242,13 @@ impl KeySpelling {
         let mut spellings = Vec::with_capacity(7);
         let root_semitone = self.root.semitone();
 
-        for degree in 0..7 {
+        for (degree, &interval) in intervals.iter().enumerate() {
             // The letter for this degree
             let letter_idx = (root_letter_idx + degree) % 7;
             let letter = letters[letter_idx];
 
             // The target semitone for this degree
-            let target_semitone = (root_semitone + intervals[degree]) % 12;
+            let target_semitone = (root_semitone + interval) % 12;
 
             // The natural semitone for this letter
             let letter_semitone = match letter {

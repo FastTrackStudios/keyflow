@@ -123,6 +123,7 @@ impl Autoplace {
     /// Autoplace a segment element (attached to a segment, like dynamics).
     ///
     /// This is the main autoplace method for most notation elements.
+    #[allow(clippy::too_many_arguments)]
     pub fn autoplace_segment_element(
         &self,
         shape: &Shape,
@@ -322,6 +323,7 @@ impl AutoplaceState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kurbo::Rect;
 
     #[test]
     fn test_autoplace_config_default() {

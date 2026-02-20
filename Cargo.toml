@@ -9,6 +9,7 @@ authors = ["FastTrack Studio"]
 license = "MIT OR Apache-2.0"
 
 [workspace.lints.rust]
+unused = "allow"
 
 [workspace.lints.clippy]
 

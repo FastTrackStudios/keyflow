@@ -774,8 +774,10 @@ mod tests {
     #[test]
     fn test_layout_brace_path() {
         let input = BracketInput::new(BracketType::Brace, 100.0, 0.0, 80.0, 2);
-        let mut config = BracketConfig::default();
-        config.use_path_brace = true;
+        let config = BracketConfig {
+            use_path_brace: true,
+            ..Default::default()
+        };
         let result = layout_bracket(&input, 5.0, &config);
 
         // Should have a path, not glyph
@@ -893,8 +895,10 @@ mod tests {
     #[test]
     fn test_bracket_with_extension() {
         let input = BracketInput::new(BracketType::Normal, 100.0, 10.0, 50.0, 2);
-        let mut config = BracketConfig::default();
-        config.bracket_extension = 1.0; // 1 spatium extension
+        let config = BracketConfig {
+            bracket_extension: 1.0, // 1 spatium extension
+            ..Default::default()
+        };
 
         let result = layout_bracket(&input, 5.0, &config);
 

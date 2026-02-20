@@ -1,9 +1,9 @@
-///! Scale harmonization - generate chords from scale degrees
-///!
-///! This module provides utilities to:
-///! - Get all notes from a scale with a given root
-///! - Build chords (triads through 13ths) at each scale degree
-///! - Analyze harmonic structure of any scale mode
+//! Scale harmonization - generate chords from scale degrees
+//!
+//! This module provides utilities to:
+//! - Get all notes from a scale with a given root
+//! - Build chords (triads through 13ths) at each scale degree
+//! - Analyze harmonic structure of any scale mode
 use super::ScaleMode;
 use crate::chord::{Chord, from_semitones};
 use crate::primitives::{MusicalNote, Note, RootNotation};

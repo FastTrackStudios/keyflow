@@ -17,7 +17,7 @@ use crate::{
     CHART_RENDER_STATS, CHART_SOURCE, CHART_VIEWPORT,
 };
 
-use dock_dioxus::DOCK_LAYOUT;
+use dock_dioxus::DOCK_WORKSPACE;
 use dock_proto::PanelId;
 use session_ui::{Session, ACTIVE_INDICES, ACTIVE_PLAYBACK_IS_PLAYING, ACTIVE_PLAYBACK_MUSICAL};
 
@@ -38,10 +38,10 @@ pub fn ChartView() -> Element {
 
     // Cleanup: remove transparent mode when component unmounts (if no other chart visible)
     use_drop(move || {
-        let layout = DOCK_LAYOUT.peek();
-        if !layout.panel_is_visible(PanelId::ChartEditor)
-            && !layout.panel_is_visible(PanelId::ChartPreview)
-        {
+        let workspace = DOCK_WORKSPACE.peek();
+        let chart_editor_visible = workspace.windows.values().any(|w| w.layout.panel_is_visible(PanelId::ChartEditor));
+        let chart_preview_visible = workspace.windows.values().any(|w| w.layout.panel_is_visible(PanelId::ChartPreview));
+        if !chart_editor_visible && !chart_preview_visible {
             document::eval(r#"document.documentElement.classList.remove('transparent-mode');"#);
         }
     });

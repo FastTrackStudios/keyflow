@@ -1340,7 +1340,7 @@ mod tests {
 
         assert_eq!(result.measure_count, 8);
         assert!(result.system_count >= 1);
-        assert!(result.pages.len() >= 1);
+        assert!(!result.pages.is_empty());
     }
 
     #[test]
@@ -1435,7 +1435,7 @@ mod tests {
         let result = layout_score_with_config(&score, &style, config);
 
         // Should have multiple pages with large system spacing
-        assert!(result.pages.len() >= 1);
+        assert!(!result.pages.is_empty());
     }
 
     #[test]
@@ -1607,7 +1607,7 @@ mod tests {
         let result = layout_score_with_config(&score, &style, config);
 
         // Float uses page mode internally, so should have pagination
-        assert!(result.pages.len() >= 1);
+        assert!(!result.pages.is_empty());
         assert_eq!(result.measure_count, 16);
     }
 

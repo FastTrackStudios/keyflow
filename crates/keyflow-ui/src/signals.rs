@@ -127,6 +127,7 @@ pub struct ChartPageInfo {
 }
 
 impl ChartPageInfo {
+    #[allow(clippy::should_implement_trait)]
     pub fn default() -> Self {
         Self {
             current_page: 1,

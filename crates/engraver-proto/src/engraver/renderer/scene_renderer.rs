@@ -588,6 +588,7 @@ impl<'a> VelloSceneRenderer<'a> {
     /// 1. Transform the text position to screen coordinates
     /// 2. Scale the font size by the transform's scale factor
     /// 3. Use only a translation transform for the text (to avoid double-scaling glyph positions)
+    #[allow(clippy::too_many_arguments)]
     fn render_text(
         &self,
         scene: &mut impl PaintScene,

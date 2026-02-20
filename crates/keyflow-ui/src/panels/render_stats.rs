@@ -18,6 +18,12 @@ pub struct FpsTracker {
     samples: VecDeque<u64>,
 }
 
+impl Default for FpsTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FpsTracker {
     pub fn new() -> Self {
         Self {
@@ -100,6 +106,12 @@ pub struct PerfRenderAccumulator {
     static_build_ms: f64,
     overlay_ms: f64,
     frame_samples_ms: Vec<f64>,
+}
+
+impl Default for PerfRenderAccumulator {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PerfRenderAccumulator {

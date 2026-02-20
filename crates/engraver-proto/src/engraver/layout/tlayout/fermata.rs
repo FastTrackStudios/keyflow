@@ -407,8 +407,10 @@ mod tests {
     fn test_fermata_scaling() {
         let input = FermataInput::new(100.0, 0.0, 0.0, 20.0);
         let config_normal = FermataConfig::default();
-        let mut config_scaled = FermataConfig::default();
-        config_scaled.scale = 1.5;
+        let config_scaled = FermataConfig {
+            scale: 1.5,
+            ..Default::default()
+        };
 
         let result_normal = layout_fermata(&input, 5.0, &config_normal);
         let result_scaled = layout_fermata(&input, 5.0, &config_scaled);
@@ -421,8 +423,10 @@ mod tests {
     #[test]
     fn test_fermata_offset() {
         let input = FermataInput::new(100.0, 0.0, 0.0, 20.0);
-        let mut config = FermataConfig::default();
-        config.offset = (2.0, -1.0); // 2 spatiums right, 1 spatium up
+        let config = FermataConfig {
+            offset: (2.0, -1.0), // 2 spatiums right, 1 spatium up
+            ..Default::default()
+        };
 
         let result = layout_fermata(&input, 5.0, &config);
 

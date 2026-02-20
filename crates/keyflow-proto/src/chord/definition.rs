@@ -1227,6 +1227,65 @@ impl std::fmt::Display for Chord {
 
 // endregion: --- Display
 
+// region:    --- ChordSymbol Trait Implementation
+
+use crate::core::ChordSymbol;
+
+impl ChordSymbol for Chord {
+    fn root_str(&self) -> String {
+        self.root.to_string()
+    }
+
+    fn quality_str(&self) -> &str {
+        self.quality.symbol()
+    }
+
+    fn seventh_str(&self) -> Option<&str> {
+        self.family.as_ref().map(|f| f.symbol())
+    }
+
+    fn extensions_str(&self) -> String {
+        let mut result = String::new();
+
+        // Build extension string from highest to lowest
+        if self.extensions.thirteenth.is_some() {
+            result.push_str("13");
+        } else if self.extensions.eleventh.is_some() {
+            result.push_str("11");
+        } else if self.extensions.ninth.is_some() {
+            result.push('9');
+        }
+
+        result
+    }
+
+    fn alterations_str(&self) -> String {
+        let mut result = String::new();
+
+        for alt in &self.alterations {
+            result.push_str(&alt.to_string());
+        }
+
+        result
+    }
+
+    fn bass_str(&self) -> Option<String> {
+        self.bass.as_ref().map(|b| b.to_string())
+    }
+
+    // Override to use the already-computed normalized field
+    fn to_symbol_string(&self) -> String {
+        if self.normalized.is_empty() {
+            // Fallback to Display impl if normalized not set
+            self.to_string()
+        } else {
+            format!("{}{}", self.root, self.normalized)
+        }
+    }
+}
+
+// endregion: --- ChordSymbol Trait Implementation
+
 // region:    --- Tests
 
 #[cfg(test)]
@@ -2772,62 +2831,3 @@ mod tests {
 }
 
 // endregion: --- Tests
-
-// region:    --- ChordSymbol Trait Implementation
-
-use crate::core::ChordSymbol;
-
-impl ChordSymbol for Chord {
-    fn root_str(&self) -> String {
-        self.root.to_string()
-    }
-
-    fn quality_str(&self) -> &str {
-        self.quality.symbol()
-    }
-
-    fn seventh_str(&self) -> Option<&str> {
-        self.family.as_ref().map(|f| f.symbol())
-    }
-
-    fn extensions_str(&self) -> String {
-        let mut result = String::new();
-
-        // Build extension string from highest to lowest
-        if self.extensions.thirteenth.is_some() {
-            result.push_str("13");
-        } else if self.extensions.eleventh.is_some() {
-            result.push_str("11");
-        } else if self.extensions.ninth.is_some() {
-            result.push('9');
-        }
-
-        result
-    }
-
-    fn alterations_str(&self) -> String {
-        let mut result = String::new();
-
-        for alt in &self.alterations {
-            result.push_str(&alt.to_string());
-        }
-
-        result
-    }
-
-    fn bass_str(&self) -> Option<String> {
-        self.bass.as_ref().map(|b| b.to_string())
-    }
-
-    // Override to use the already-computed normalized field
-    fn to_symbol_string(&self) -> String {
-        if self.normalized.is_empty() {
-            // Fallback to Display impl if normalized not set
-            self.to_string()
-        } else {
-            format!("{}{}", self.root, self.normalized)
-        }
-    }
-}
-
-// endregion: --- ChordSymbol Trait Implementation

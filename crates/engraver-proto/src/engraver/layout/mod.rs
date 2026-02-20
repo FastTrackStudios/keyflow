@@ -87,7 +87,6 @@ pub use chart::{
 /// Unit conversions and newtype wrappers for dimensional safety.
 ///
 /// These newtypes prevent common unit confusion bugs at compile time.
-
 /// Staff spaces (fundamental unit in music notation).
 ///
 /// One spatium = 1/4 of staff height = distance between two staff lines.

@@ -1862,6 +1862,8 @@ dependencies = [
  "facet",
  "futures",
  "roam",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

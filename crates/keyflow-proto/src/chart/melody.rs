@@ -227,8 +227,8 @@ impl MelodyNote {
         }
 
         // Check for dotted
-        let (note_str, dotted) = if s.ends_with('.') {
-            (&s[..s.len() - 1], true)
+        let (note_str, dotted) = if let Some(stripped) = s.strip_suffix('.') {
+            (stripped, true)
         } else {
             (s, false)
         };

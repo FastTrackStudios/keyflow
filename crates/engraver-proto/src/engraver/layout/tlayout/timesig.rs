@@ -112,7 +112,7 @@ fn number_width(n: u8) -> f64 {
 #[must_use]
 pub fn layout_timesig(params: &TimeSigParams, ctx: &LayoutContext) -> (LayoutData, SceneNode) {
     let spatium = ctx.spatium();
-    let scale = if params.large { 1.0 } else { 1.0 };
+    let scale = 1.0;
 
     let mut commands = Vec::new();
 

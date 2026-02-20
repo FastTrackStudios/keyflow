@@ -539,6 +539,8 @@ impl PdfSerializer {
         // Step 1: Generate a complete PDF for each SVG page using to_pdf
         let mut pdf_documents: Vec<Document> = Vec::new();
 
+        let font_family_re = regex::Regex::new(r#"font-family="([^"]+)""#).unwrap();
+
         for (page_idx, svg_str) in svg_pages.iter().enumerate() {
             tracing::debug!("Processing SVG page {}", page_idx + 1);
 
@@ -552,10 +554,7 @@ impl PdfSerializer {
             // Log font-family references in the SVG (first page only for brevity)
             if page_idx == 0 {
                 let mut svg_fonts: Vec<String> = Vec::new();
-                for cap in regex::Regex::new(r#"font-family="([^"]+)""#)
-                    .unwrap()
-                    .captures_iter(svg_str)
-                {
+                for cap in font_family_re.captures_iter(svg_str) {
                     let font = cap.get(1).unwrap().as_str().to_string();
                     if !svg_fonts.contains(&font) {
                         svg_fonts.push(font);
@@ -1485,48 +1484,6 @@ fn ellipse_to_line_points(cx: f64, cy: f64, rx: f64, ry: f64) -> Vec<LinePoint> 
     points
 }
 
-/// Parse width and height from an SVG string.
-///
-/// Looks for width and height attributes in the root <svg> element.
-/// Returns dimensions in points (assumes SVG uses no units or points).
-fn parse_svg_dimensions(svg_str: &str) -> Option<(f64, f64)> {
-    // Simple regex-free parsing for width="X" height="Y"
-    let width = extract_svg_attr(svg_str, "width")?;
-    let height = extract_svg_attr(svg_str, "height")?;
-    Some((width, height))
-}
-
-/// Extract a numeric attribute value from an SVG string.
-fn extract_svg_attr(svg_str: &str, attr: &str) -> Option<f64> {
-    // Find the attribute in the SVG header (first 500 chars should be enough)
-    let search_area = &svg_str[..svg_str.len().min(500)];
-
-    // Look for attr="value" or attr='value'
-    let patterns = [format!("{}=\"", attr), format!("{}='", attr)];
-
-    for pattern in &patterns {
-        if let Some(start_idx) = search_area.find(pattern) {
-            let value_start = start_idx + pattern.len();
-            let remaining = &search_area[value_start..];
-
-            // Find the closing quote
-            let end_char = if pattern.ends_with('"') { '"' } else { '\'' };
-            if let Some(end_idx) = remaining.find(end_char) {
-                let value_str = &remaining[..end_idx];
-
-                // Parse numeric value (strip units like "pt", "px", etc.)
-                let numeric: String = value_str
-                    .chars()
-                    .take_while(|c| c.is_ascii_digit() || *c == '.' || *c == '-')
-                    .collect();
-
-                return numeric.parse().ok();
-            }
-        }
-    }
-
-    None
-}
 
 #[cfg(test)]
 mod tests {

@@ -66,14 +66,6 @@ mod tests {
     // #[apply(Params!)]
     // pub struct ChordParams { ... }
     // ```
-
-    #[test]
-    fn test_derive_alias_module_exists() {
-        // This test verifies the module compiles and the derive_alias! macro
-        // was processed successfully. Actual derive tests happen where aliases
-        // are applied.
-        assert!(true);
-    }
 }
 
 // endregion: --- Tests

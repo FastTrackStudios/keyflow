@@ -348,9 +348,9 @@ fn refine_with_context(
             // Check if this window looks like a complete tuplet group
             if looks_like_tuplet_group(window, tuplet_type, config) {
                 // Strengthen tuplet classification for all notes in the group
-                for j in i..i + window_size {
-                    if results[j].tuplet_type == Some(tuplet_type) {
-                        results[j].confidence = (results[j].confidence + 0.15).min(1.0);
+                for item in results.iter_mut().skip(i).take(window_size) {
+                    if item.tuplet_type == Some(tuplet_type) {
+                        item.confidence = (item.confidence + 0.15).min(1.0);
                     }
                 }
             }

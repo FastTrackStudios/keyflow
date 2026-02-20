@@ -132,10 +132,10 @@ impl ChartSettings {
             _ => {
                 // Check for duration syntax: number followed by optional 't' (triplet) or '.' (dotted)
                 let trimmed = value.trim();
-                let (num_part, suffix) = if trimmed.ends_with('t') {
-                    (&trimmed[..trimmed.len() - 1], Some('t'))
-                } else if trimmed.ends_with('.') {
-                    (&trimmed[..trimmed.len() - 1], Some('.'))
+                let (num_part, suffix) = if let Some(stripped) = trimmed.strip_suffix('t') {
+                    (stripped, Some('t'))
+                } else if let Some(stripped) = trimmed.strip_suffix('.') {
+                    (stripped, Some('.'))
                 } else {
                     (trimmed, None)
                 };

@@ -564,9 +564,12 @@ pub fn render_chord_symbols(
 
         // Skip pushed chords that spill back (except at boundaries)
         if let Some((is_push, _)) = &chord.push_pull
-            && *is_push && is_first_real && !is_boundary {
-                continue;
-            }
+            && *is_push
+            && is_first_real
+            && !is_boundary
+        {
+            continue;
+        }
 
         // Check for pushed chord at boundary
         let is_pushed_at_boundary = chord
@@ -687,17 +690,18 @@ pub fn render_chord_symbols(
 
         // Add apostrophe marker for pushed/pulled chords when push_alters_rhythm=false
         if !ctx.push_alters_rhythm
-            && let Some((is_push, _amount)) = &chord.push_pull {
-                let marker_node = create_push_marker(
-                    *is_push,
-                    layout_data.bounds,
-                    ctx.chord_y,
-                    ctx.spatium,
-                    id_counter,
-                );
-                id_counter += 1;
-                nodes.push(marker_node);
-            }
+            && let Some((is_push, _amount)) = &chord.push_pull
+        {
+            let marker_node = create_push_marker(
+                *is_push,
+                layout_data.bounds,
+                ctx.chord_y,
+                ctx.spatium,
+                id_counter,
+            );
+            id_counter += 1;
+            nodes.push(marker_node);
+        }
 
         // Add accent marker for regular accents (rendered in red above the chord)
         // AccentOnPush accents are rendered on the spillback chord instead

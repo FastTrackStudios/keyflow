@@ -153,6 +153,7 @@ pub fn px_to_ndc(x: f32, y: f32, width: f32, height: f32) -> [f32; 2] {
 }
 
 /// Create a line as two triangles (a thin rectangle)
+#[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn create_line(
     x1: f32,
@@ -248,6 +249,7 @@ pub fn create_rect(
 }
 
 /// Create an SDF rounded rectangle (6 vertices for 2 triangles forming a quad)
+#[allow(clippy::too_many_arguments)]
 #[must_use]
 pub fn create_sdf_rounded_rect(
     x: f32,

@@ -108,13 +108,13 @@ impl<'a> ChartParser<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::chart::parse_chart;
     use crate::chord::ChordRhythm;
     use crate::key::Key;
     use crate::primitives::{MusicalNote, Note, RootNotation};
     use crate::sections::SectionType;
     use crate::time::MusicalDuration;
+    use crate::time::MusicalPositionExt;
 
     #[test]
     fn test_parse_simple_chord_line() {

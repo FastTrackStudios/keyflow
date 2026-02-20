@@ -483,7 +483,7 @@ impl MidiFile {
     /// The position is relative to SONGSTART if present, otherwise absolute.
     /// Returns (measure, beat, subdivision_ticks) where:
     /// - measure: if `SONGSTART` marker exists, that tick is measure 1.
-    ///            otherwise, tick 0 is measure 0 (legacy behavior).
+    ///   otherwise, tick 0 is measure 0 (legacy behavior).
     /// - beat: 0-indexed beat within measure
     /// - subdivision_ticks: remaining ticks within the beat
     ///
@@ -1691,7 +1691,7 @@ mod tests {
 
     #[test]
     fn test_parse_thriller_midi() {
-        let bytes = include_bytes!("../../../tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
 
         // Basic structure checks
@@ -1746,7 +1746,7 @@ mod tests {
         }
 
         // Extract durations for quantization test
-        if let Some(track) = midi.tracks().get(0) {
+        if let Some(track) = midi.tracks().first() {
             let (durations, positions) = midi.extract_durations(track.index);
             println!("\nFirst track durations (first 10):");
             for (i, (dur, pos)) in durations.iter().zip(positions.iter()).take(10).enumerate() {
@@ -1761,7 +1761,7 @@ mod tests {
 
     #[test]
     fn test_chord_marker_positions() {
-        let bytes = include_bytes!("../../../tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
 
         println!("=== Thriller MIDI Chord Position Analysis ===\n");
@@ -1837,7 +1837,7 @@ mod tests {
 
     #[test]
     fn test_tick_to_position_basic() {
-        let bytes = include_bytes!("../../../tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
 
         let songstart = midi.songstart_tick();
@@ -1889,7 +1889,7 @@ mod tests {
 
     #[test]
     fn test_section_markers() {
-        let bytes = include_bytes!("../../../tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
 
         let sections = midi.section_markers();
@@ -2018,9 +2018,9 @@ mod tests {
         assert_eq!(keys[0].position.measure, 1);
         assert_eq!(keys[1].position.measure, 64);
         assert_eq!(keys[2].position.measure, 80);
-        assert_eq!(keys[0].key.root().name(), "D");
-        assert_eq!(keys[1].key.root().name(), "C");
-        assert_eq!(keys[2].key.root().name(), "D");
+        assert_eq!(keys[0].key.name(), "D");
+        assert_eq!(keys[1].key.name(), "C");
+        assert_eq!(keys[2].key.name(), "D");
 
         let chords = midi.chord_markers_absolute();
         assert_eq!(chords.len(), 3);
@@ -2034,7 +2034,7 @@ mod tests {
 
     #[test]
     fn test_count_in_measures() {
-        let bytes = include_bytes!("../../../tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
 
         let ppq = midi.ppq();
@@ -2070,7 +2070,7 @@ mod tests {
 
     #[test]
     fn test_absolute_section_positions() {
-        let bytes = include_bytes!("../../../tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
 
         let sections = midi.section_markers_absolute();
@@ -2145,7 +2145,7 @@ mod tests {
 
     #[test]
     fn test_chord_positions_absolute() {
-        let bytes = include_bytes!("../../../tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
 
         let chords = midi.chord_markers_absolute();
@@ -2184,7 +2184,7 @@ mod tests {
 
     #[test]
     fn test_push_pull_detection() {
-        let bytes = include_bytes!("../../../tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
         let ppq = midi.ppq();
 
@@ -2249,7 +2249,7 @@ mod tests {
 
     #[test]
     fn test_keyflow_notation_generation() {
-        let bytes = include_bytes!("../../../tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
         let ppq = midi.ppq();
 
@@ -2283,7 +2283,7 @@ mod tests {
 
     #[test]
     fn test_verse_chord_structure() {
-        let bytes = include_bytes!("../../../tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
         let ppq = midi.ppq();
 
@@ -2349,7 +2349,7 @@ mod tests {
 
     #[test]
     fn test_measure_keyflow_export() {
-        let bytes = include_bytes!("../../../tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
         let ppq = midi.ppq();
 
@@ -2368,8 +2368,7 @@ mod tests {
 
         // Print first 15 measures with chords
         // Note: absolute measures are already 1-indexed from tick_to_absolute_measure
-        let mut count = 0;
-        for (measure, measure_chords) in &measures {
+        for (count, (measure, measure_chords)) in measures.iter().enumerate() {
             if count >= 15 {
                 break;
             }
@@ -2380,7 +2379,6 @@ mod tests {
                 .collect();
 
             println!("M{:3}: | {} |", measure, keyflow_line.join(" "));
-            count += 1;
         }
 
         // Verify measure 4 (HITS) has Ab9t' - absolute measures are 1-indexed
@@ -2411,7 +2409,7 @@ mod tests {
     /// - 'tEbmaj (pushed triplet eighth, 3 beats long)
     #[test]
     fn test_chorus_chord_structure() {
-        let bytes = include_bytes!("../../../tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
         let ppq = midi.ppq();
 
@@ -2436,7 +2434,7 @@ mod tests {
             .iter()
             .filter(|c| {
                 let abs_measure = c.position.measure;
-                abs_measure >= 26 && abs_measure < 34
+                (26..34).contains(&abs_measure)
             })
             .collect();
 
@@ -2546,9 +2544,9 @@ mod keyflow_comparison_tests {
     /// 2. How keyflow normalizes those chord names
     #[test]
     fn test_midi_vs_keyflow_chord_naming() {
-        use crate::{Chord, Lexer};
+        use crate::{Chord, parsing::Lexer};
 
-        let bytes = include_bytes!("../../../tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
 
         let chords = midi.chord_markers();
@@ -2637,7 +2635,7 @@ mod keyflow_comparison_tests {
     /// This validates that chords are placed in the correct measures/beats.
     #[test]
     fn test_chord_position_accuracy() {
-        let bytes = include_bytes!("../../../tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
         let ppq = midi.ppq();
 
@@ -2719,7 +2717,7 @@ mod keyflow_comparison_tests {
         use crate::key::{KeySpelling, SpellingMode};
         use crate::primitives::MusicalNote;
 
-        let bytes = include_bytes!("../../../tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
         let ppq = midi.ppq();
 

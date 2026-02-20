@@ -486,6 +486,7 @@ pub fn layout_tie_with_obstacles(
 }
 
 /// Internal function to layout a slur or tie curve.
+#[allow(clippy::too_many_arguments)]
 fn layout_curve(
     start: &SlurEndpoint,
     end: &SlurEndpoint,
@@ -681,6 +682,7 @@ fn create_slur_paint_commands(
 /// Implements MuseScore's `avoidCollisions` algorithm from slurtielayout.cpp.
 /// The algorithm iteratively adjusts control points and endpoints to avoid
 /// obstacles under the slur.
+#[allow(clippy::too_many_arguments)]
 fn avoid_collisions(
     p1: &mut Point,
     cp1: &mut Point,

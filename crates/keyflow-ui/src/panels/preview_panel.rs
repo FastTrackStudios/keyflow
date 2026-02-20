@@ -15,7 +15,7 @@ use crate::{
     ChartLayoutManager, CHART_CURSOR_TICK, CHART_CURSOR_VISIBLE, CHART_SOURCE, SESSION_CHART_SOURCE,
 };
 
-use dock_dioxus::DOCK_LAYOUT;
+use dock_dioxus::DOCK_WORKSPACE;
 use dock_proto::PanelId;
 use session_ui::{
     ChartAreaBounds, PerfChartViewport, Session, ACTIVE_INDICES, ACTIVE_PLAYBACK_IS_PLAYING,
@@ -59,10 +59,10 @@ pub fn ChartPreviewPanel() -> Element {
         document::eval(r#"document.documentElement.classList.add('transparent-mode');"#);
     });
     use_drop(|| {
-        let layout = DOCK_LAYOUT.peek();
-        if !layout.panel_is_visible(PanelId::ChartEditor)
-            && !layout.panel_is_visible(PanelId::ChartPreview)
-        {
+        let workspace = DOCK_WORKSPACE.peek();
+        let chart_editor_visible = workspace.windows.values().any(|w| w.layout.panel_is_visible(PanelId::ChartEditor));
+        let chart_preview_visible = workspace.windows.values().any(|w| w.layout.panel_is_visible(PanelId::ChartPreview));
+        if !chart_editor_visible && !chart_preview_visible {
             document::eval(r#"document.documentElement.classList.remove('transparent-mode');"#);
         }
     });
@@ -91,37 +91,34 @@ pub fn ChartPreviewPanel() -> Element {
                 "#,
                 );
 
-                match result.await {
-                    Ok(value) => {
-                        let json_str = value
-                            .as_str()
-                            .map(|s| s.to_string())
-                            .unwrap_or_else(|| value.to_string());
+                if let Ok(value) = result.await {
+                    let json_str = value
+                        .as_str()
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| value.to_string());
 
-                        if json_str != "null" && json_str != "\"null\"" {
-                            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&json_str)
-                            {
-                                let x = parsed["x"].as_f64().unwrap_or(0.0);
-                                let y = parsed["y"].as_f64().unwrap_or(0.0);
-                                let width = parsed["width"].as_f64().unwrap_or(0.0);
-                                let height = parsed["height"].as_f64().unwrap_or(0.0);
-                                let dpr = parsed["dpr"].as_f64().unwrap_or(1.0);
+                    if json_str != "null" && json_str != "\"null\"" {
+                        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&json_str)
+                        {
+                            let x = parsed["x"].as_f64().unwrap_or(0.0);
+                            let y = parsed["y"].as_f64().unwrap_or(0.0);
+                            let width = parsed["width"].as_f64().unwrap_or(0.0);
+                            let height = parsed["height"].as_f64().unwrap_or(0.0);
+                            let dpr = parsed["dpr"].as_f64().unwrap_or(1.0);
 
-                                if width > 0.0 && height > 0.0 {
-                                    let current = *CHART_AREA_BOUNDS.peek();
-                                    if (current.x - x).abs() > 1.0
-                                        || (current.y - y).abs() > 1.0
-                                        || (current.width - width).abs() > 1.0
-                                        || (current.height - height).abs() > 1.0
-                                    {
-                                        *CHART_AREA_BOUNDS.write() =
-                                            ChartAreaBounds::new(x, y, width, height, dpr);
-                                    }
+                            if width > 0.0 && height > 0.0 {
+                                let current = *CHART_AREA_BOUNDS.peek();
+                                if (current.x - x).abs() > 1.0
+                                    || (current.y - y).abs() > 1.0
+                                    || (current.width - width).abs() > 1.0
+                                    || (current.height - height).abs() > 1.0
+                                {
+                                    *CHART_AREA_BOUNDS.write() =
+                                        ChartAreaBounds::new(x, y, width, height, dpr);
                                 }
                             }
                         }
                     }
-                    Err(_) => {}
                 }
             }
         });

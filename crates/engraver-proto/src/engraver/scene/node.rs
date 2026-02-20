@@ -1455,13 +1455,13 @@ mod tests {
 
             for system in 0..2 {
                 let global_system = (page_num - 1) * 2 + system;
-                let mut system_node = SceneNode::group(SemanticId::system(global_system as u64));
+                let mut system_node = SceneNode::group(SemanticId::system(global_system));
                 system_node.set_page(page_num as u32);
                 system_node.set_system(global_system as u32);
 
                 for beat in 0..4 {
                     let measure = global_system * 4 + beat;
-                    let mut chord = SceneNode::group(SemanticId::chord(measure as u64));
+                    let mut chord = SceneNode::group(SemanticId::chord(measure));
                     chord.set_page(page_num as u32);
                     chord.set_system(global_system as u32);
                     chord.set_measure(measure as u32);
@@ -1773,10 +1773,8 @@ mod tests {
         let mut unique_codepoints: std::collections::HashSet<u32> =
             std::collections::HashSet::new();
         for node in &smufl_nodes {
-            if let Some(info) = node.get_glyph_info() {
-                if let Some(cp) = info.codepoint {
-                    unique_codepoints.insert(cp);
-                }
+            if let Some(cp) = node.get_glyph_info().and_then(|info| info.codepoint) {
+                unique_codepoints.insert(cp);
             }
         }
 
@@ -1803,7 +1801,7 @@ mod tests {
         let chord_symbols = ["Gmaj7", "Dm7", "Cmaj7", "Am7"];
         for (idx, symbol) in chord_symbols.iter().enumerate() {
             let mut chord = SceneNode::group(SemanticId::chord_symbol(idx as u64, *symbol));
-            chord.set_text_glyph(*symbol, "MuseJazz");
+            chord.set_text_glyph(symbol, "MuseJazz");
             chord.set_element_type("chord_symbol");
             chord.set_measure(idx as u32);
             root.add_child(chord);
@@ -1814,16 +1812,16 @@ mod tests {
         for (idx, section) in sections.iter().enumerate() {
             let mut label =
                 SceneNode::group(SemanticId::rehearsal_mark(idx as u64 + 100, *section));
-            label.set_text_glyph(*section, "Helvetica Bold");
+            label.set_text_glyph(section, "Helvetica Bold");
             label.set_element_type("section_label");
             root.add_child(label);
         }
 
         // Lyrics should use readable serif
         let lyrics = ["Hel-", "lo", "world"];
-        for (idx, word) in lyrics.iter().enumerate() {
+        for word in lyrics.iter() {
             let mut lyric = SceneNode::new();
-            lyric.set_text_glyph(*word, "Times New Roman");
+            lyric.set_text_glyph(word, "Times New Roman");
             lyric.set_element_type("lyric");
             root.add_child(lyric);
         }
@@ -1908,10 +1906,8 @@ mod tests {
 
             for measure in 0..4 {
                 let chord_text = format!("{}maj7", ['C', 'D', 'E', 'F'][measure as usize]);
-                let mut chord = SceneNode::group(SemanticId::chord_symbol(
-                    (system * 4 + measure) as u64,
-                    &chord_text,
-                ));
+                let mut chord =
+                    SceneNode::group(SemanticId::chord_symbol(system * 4 + measure, &chord_text));
                 // All chords should use MuseJazz
                 chord.set_text_glyph(&chord_text, "MuseJazz");
                 chord.set_element_type("chord_symbol");
@@ -1982,10 +1978,11 @@ mod tests {
         let mut mismatches: Vec<(&SceneNode, String, String)> = Vec::new();
 
         for node in &chord_nodes {
-            if let Some(info) = node.get_glyph_info() {
-                if info.font_family != expected_chord_font {
-                    mismatches.push((node, info.content.clone(), info.font_family.clone()));
-                }
+            if let Some(info) = node
+                .get_glyph_info()
+                .filter(|i| i.font_family != expected_chord_font)
+            {
+                mismatches.push((node, info.content.clone(), info.font_family.clone()));
             }
         }
 

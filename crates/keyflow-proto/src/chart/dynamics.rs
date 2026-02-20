@@ -86,8 +86,8 @@ impl DynamicMarking {
 
         // Check for beat specification after the bracket
         let after_bracket = &s[close_bracket + 1..];
-        let beat = if after_bracket.starts_with(':') {
-            let beat_str = after_bracket[1..].trim();
+        let beat = if let Some(stripped) = after_bracket.strip_prefix(':') {
+            let beat_str = stripped.trim();
             Some(
                 beat_str
                     .parse::<u8>()

@@ -115,16 +115,14 @@ pub fn layout_lyrics(params: &LyricsParams, ctx: &LayoutContext) -> (LayoutData,
         }
     };
 
-    let mut commands = Vec::new();
-
     // Draw the text
-    commands.push(PaintCommand::text(
+    let commands = vec![PaintCommand::text(
         params.text.clone(),
         "serif", // Lyrics typically use serif font
         font_size,
         Point::new(x, y + text_height * 0.8), // Baseline adjustment
         Color::BLACK,
-    ));
+    )];
 
     // Calculate bounding box
     let bbox = Rect::new(x, y, x + text_width, y + text_height);
@@ -247,8 +245,9 @@ mod tests {
     use crate::engraver::style::MStyle;
 
     fn test_ctx() -> LayoutContext<'static> {
-        let style = Box::leak(Box::new(MStyle::default()));
-        LayoutContext::minimal(style)
+        use crate::engraver::layout::context::LayoutContextOwned;
+        let owned = Box::leak(Box::new(LayoutContextOwned::new_minimal(MStyle::default())));
+        owned.as_context()
     }
 
     #[test]

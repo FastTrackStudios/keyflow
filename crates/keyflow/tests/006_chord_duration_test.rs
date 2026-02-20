@@ -587,7 +587,7 @@ I_2. IV_2. vi_2. V_2.
     // measure 2: vi_2. (remaining 1 beat) + V_2. (3 beats)
     // Actually this is complex - let's just check it parses and has dotted notes
     let chorus = &chart.sections[3];
-    assert!(chorus.measures().len() >= 1);
+    assert!(!chorus.measures().is_empty());
 
     // Check first chord has dotted notation
     let first_chord = &chorus.measures()[0].chords[0];

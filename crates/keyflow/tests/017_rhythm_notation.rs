@@ -285,9 +285,9 @@ fn test_thirty_second_note() {
         .collect();
     for c in &c_chords[..4.min(c_chords.len())] {
         assert!(
-            (duration_beats(*c) - 0.125).abs() < 0.001,
+            (duration_beats(c) - 0.125).abs() < 0.001,
             "Thirty-second note should be 0.125 beats, got {}",
-            duration_beats(*c)
+            duration_beats(c)
         );
     }
 }
@@ -386,11 +386,11 @@ fn test_rest_eighth() {
     // C chords should be at beats 0, 1, 2, 3
     for (i, c) in c_chords.iter().enumerate() {
         assert!(
-            (beat_in_measure(*c) - i as f64).abs() < 0.001,
+            (beat_in_measure(c) - i as f64).abs() < 0.001,
             "C chord {} should be at beat {}, got {}",
             i,
             i,
-            beat_in_measure(*c)
+            beat_in_measure(c)
         );
     }
 }
@@ -665,12 +665,12 @@ fn test_tie_half_to_quarter() {
         "Tie test - C chords: {:?}",
         c_chords
             .iter()
-            .map(|c| (beat_in_measure(*c), duration_beats(*c)))
+            .map(|c| (beat_in_measure(c), duration_beats(c)))
             .collect::<Vec<_>>()
     );
 
     // Either single chord with 3 beats, or first chord with tie property
-    let total_c_duration: f64 = c_chords.iter().map(|c| duration_beats(*c)).sum();
+    let total_c_duration: f64 = c_chords.iter().map(|c| duration_beats(c)).sum();
     assert!(
         (total_c_duration - 3.0).abs() < 0.001,
         "Total C duration should be 3 beats, got {}",
@@ -692,7 +692,7 @@ fn test_tie_explicit_duration() {
         .filter(|c| c.full_symbol == "C")
         .collect();
 
-    let total_c_duration: f64 = c_chords.iter().map(|c| duration_beats(*c)).sum();
+    let total_c_duration: f64 = c_chords.iter().map(|c| duration_beats(c)).sum();
     println!("C_2~_4 total duration: {}", total_c_duration);
 }
 
@@ -760,7 +760,7 @@ fn test_rest_integration_sixteenth() {
         .iter()
         .filter(|c| c.full_symbol == "Em")
         .collect();
-    let total_em_duration: f64 = em_chords.iter().map(|c| duration_beats(*c)).sum();
+    let total_em_duration: f64 = em_chords.iter().map(|c| duration_beats(c)).sum();
 
     println!("Em_2.~_8. total duration: {}", total_em_duration);
 

@@ -756,7 +756,7 @@ mod tests {
         let mut count = 0;
 
         // Collect all squeeze levels
-        while let Some((stretch, squeeze)) = iter.next() {
+        for (stretch, squeeze) in iter.by_ref() {
             count += 1;
             // Stretch should decrease
             assert!(stretch >= 0.0);
