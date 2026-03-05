@@ -356,21 +356,26 @@ pub fn add_title_header(
     // Subtitle (medium, centered) - below the title with minimal spacing
     let subtitle_text = metadata
         .subtitle
-        .clone()
-        .unwrap_or_else(|| "Transcribed By: ______".to_string());
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+    let has_subtitle = subtitle_text.is_some();
     let subtitle_font_size = 12.0;
     let subtitle_y = title_y + subtitle_font_size + 2.0;
 
-    commands.push(PaintCommand::Text {
-        text: subtitle_text,
-        font_family: "sans-serif".to_string(),
-        font_size: subtitle_font_size,
-        position: kurbo::Point::new(center_x, subtitle_y),
-        color: Color::from_rgb8(100, 100, 100),
-        anchor: TextAnchor::Middle,
-        weight: FontWeight::Normal,
-        style: FontStyle::Italic,
-    });
+    if let Some(subtitle_text) = subtitle_text.as_ref() {
+        commands.push(PaintCommand::Text {
+            text: subtitle_text.clone(),
+            font_family: "sans-serif".to_string(),
+            font_size: subtitle_font_size,
+            position: kurbo::Point::new(center_x, subtitle_y),
+            color: Color::from_rgb8(100, 100, 100),
+            anchor: TextAnchor::Middle,
+            weight: FontWeight::Normal,
+            style: FontStyle::Italic,
+        });
+    }
 
     // Calculate header height
     let left_column_bottom = if tempo.is_some() {
@@ -378,7 +383,11 @@ pub fn add_title_header(
     } else {
         version_y + small_font_size
     };
-    current_y = subtitle_y.max(left_column_bottom);
+    current_y = if has_subtitle {
+        subtitle_y.max(left_column_bottom)
+    } else {
+        left_column_bottom
+    };
 
     if !commands.is_empty() {
         root.add_child(SceneNode::anonymous_leaf(commands));
@@ -612,21 +621,26 @@ pub fn add_title_header_with_count_in(
     // Subtitle (medium, centered) - below the title with minimal spacing
     let subtitle_text = metadata
         .subtitle
-        .clone()
-        .unwrap_or_else(|| "Transcribed By: ______".to_string());
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+    let has_subtitle = subtitle_text.is_some();
     let subtitle_font_size = 12.0;
     let subtitle_y = title_y + subtitle_font_size + 2.0;
 
-    commands.push(PaintCommand::Text {
-        text: subtitle_text,
-        font_family: "sans-serif".to_string(),
-        font_size: subtitle_font_size,
-        position: kurbo::Point::new(center_x, subtitle_y),
-        color: Color::from_rgb8(100, 100, 100),
-        anchor: TextAnchor::Middle,
-        weight: FontWeight::Normal,
-        style: FontStyle::Italic,
-    });
+    if let Some(subtitle_text) = subtitle_text.as_ref() {
+        commands.push(PaintCommand::Text {
+            text: subtitle_text.clone(),
+            font_family: "sans-serif".to_string(),
+            font_size: subtitle_font_size,
+            position: kurbo::Point::new(center_x, subtitle_y),
+            color: Color::from_rgb8(100, 100, 100),
+            anchor: TextAnchor::Middle,
+            weight: FontWeight::Normal,
+            style: FontStyle::Italic,
+        });
+    }
 
     if !commands.is_empty() {
         root.add_child(SceneNode::anonymous_leaf(commands));
@@ -639,7 +653,11 @@ pub fn add_title_header_with_count_in(
     } else {
         version_y + small_font_size
     };
-    current_y = subtitle_y.max(left_column_bottom);
+    current_y = if has_subtitle {
+        subtitle_y.max(left_column_bottom)
+    } else {
+        left_column_bottom
+    };
 
     // Return total header height (from margin top to current_y, plus bottom padding)
     // This padding creates space between header content and the first system
