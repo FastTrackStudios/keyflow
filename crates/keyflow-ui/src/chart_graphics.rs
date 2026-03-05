@@ -27,6 +27,7 @@ use anyrender::WindowRenderer;
 use anyrender_vello::{VelloRendererOptions, VelloWindowRenderer};
 use dioxus::desktop::tao::window::Window;
 use peniko::Color;
+use vello::AaConfig;
 
 /// Chart graphics context wrapping anyrender's VelloWindowRenderer.
 ///
@@ -39,23 +40,48 @@ pub struct ChartGraphics {
 }
 
 impl ChartGraphics {
+    fn antialiasing_from_env(var: &str, default: &str) -> AaConfig {
+        match std::env::var("KEYFLOW_AA")
+            .or_else(|_| std::env::var(var))
+            .unwrap_or_else(|_| default.to_string())
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "msaa16" => AaConfig::Msaa16,
+            "msaa8" => AaConfig::Msaa8,
+            _ => AaConfig::Area,
+        }
+    }
+
     /// Create a new ChartGraphics context for the given window.
     ///
     /// This initializes the Vello GPU renderer via anyrender.
     /// The window should have transparency enabled for the hybrid overlay to work.
     pub fn new(window: Arc<Window>, width: u32, height: u32) -> Self {
+        let current_aa = Self::antialiasing_from_env("KEYFLOW_AA_QUALITY", "msaa8");
+        tracing::info!("ChartGraphics AA mode: {:?}", current_aa);
+
         let mut renderer = VelloWindowRenderer::with_options(VelloRendererOptions {
             base_color: Color::TRANSPARENT,
+            antialiasing_method: current_aa,
             ..Default::default()
         });
 
-        renderer.resume(window, width, height);
+        renderer.resume(window.clone(), width, height);
 
         Self {
             renderer,
             width,
             height,
         }
+    }
+
+    /// Use lower AA while actively interacting (pan/zoom), higher AA when idle.
+    pub fn set_interaction_active(&mut self, active: bool) {
+        // Runtime renderer hot-swap can disrupt WebView layering in hybrid mode.
+        // Keep fixed AA for stability; runtime switching can be reintroduced behind
+        // a safer surface reconfiguration path.
+        let _ = active;
     }
 
     /// Resize the rendering surface.

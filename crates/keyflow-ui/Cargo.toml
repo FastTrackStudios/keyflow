@@ -14,7 +14,7 @@ engraver-proto = { workspace = true, features = ["engraver"] }
 
 # Backend-agnostic rendering abstraction
 anyrender = { workspace = true }
-anyrender_vello = { workspace = true, optional = true }
+anyrender_vello = { workspace = true, optional = true, features = ["log_frame_times"] }
 peniko = { workspace = true, optional = true }
 
 # Dioxus UI framework - use dioxus-native when native feature is enabled

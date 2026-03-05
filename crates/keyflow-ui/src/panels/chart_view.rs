@@ -4,6 +4,7 @@
 //! via `ChartLayoutManager` → `ChartGraphics` for WGPU.
 
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use dioxus::prelude::*;
 use kurbo::Affine;
@@ -21,7 +22,94 @@ use dock_dioxus::DOCK_WORKSPACE;
 use dock_proto::PanelId;
 use session_ui::{Session, ACTIVE_INDICES, ACTIVE_PLAYBACK_IS_PLAYING, ACTIVE_PLAYBACK_MUSICAL};
 
-use super::render_stats::FpsTracker;
+use super::render_stats::{FpsTracker, PerfCursorMotionState};
+
+struct ChartViewPerfWindow {
+    started: Instant,
+    frame_ms: Vec<f64>,
+    prep_ms_total: f64,
+    lock_wait_ms_total: f64,
+    render_ms_total: f64,
+    static_ms_total: f64,
+    overlay_ms_total: f64,
+    resize_count: u64,
+    lock_contention_frames: u64,
+}
+
+impl ChartViewPerfWindow {
+    fn new() -> Self {
+        Self {
+            started: Instant::now(),
+            frame_ms: Vec::with_capacity(1024),
+            prep_ms_total: 0.0,
+            lock_wait_ms_total: 0.0,
+            render_ms_total: 0.0,
+            static_ms_total: 0.0,
+            overlay_ms_total: 0.0,
+            resize_count: 0,
+            lock_contention_frames: 0,
+        }
+    }
+
+    fn record(
+        &mut self,
+        frame_ms: f64,
+        prep_ms: f64,
+        lock_wait_ms: f64,
+        render_ms: f64,
+        static_ms: f64,
+        overlay_ms: f64,
+        did_resize: bool,
+    ) {
+        self.frame_ms.push(frame_ms);
+        self.prep_ms_total += prep_ms;
+        self.lock_wait_ms_total += lock_wait_ms;
+        self.render_ms_total += render_ms;
+        self.static_ms_total += static_ms;
+        self.overlay_ms_total += overlay_ms;
+        if did_resize {
+            self.resize_count += 1;
+        }
+        if lock_wait_ms > 1.0 {
+            self.lock_contention_frames += 1;
+        }
+    }
+
+    fn maybe_flush_log(&mut self) {
+        if self.started.elapsed() < Duration::from_secs(5) || self.frame_ms.is_empty() {
+            return;
+        }
+
+        let frames = self.frame_ms.len() as f64;
+        let avg_frame_ms = self.frame_ms.iter().sum::<f64>() / frames;
+        let fps = if avg_frame_ms > 0.0 {
+            1000.0 / avg_frame_ms
+        } else {
+            0.0
+        };
+
+        let mut sorted = self.frame_ms.clone();
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let p95_idx = ((sorted.len() as f64 * 0.95).floor() as usize).min(sorted.len() - 1);
+        let p95_ms = sorted[p95_idx];
+
+        tracing::info!(
+            "ChartView perf (5s): fps={:.1}, avg={:.2}ms, p95={:.2}ms, prep={:.2}ms, lock_wait={:.2}ms, render={:.2}ms, static={:.2}ms, overlay={:.2}ms, resize={}, lock_contention_frames={}",
+            fps,
+            avg_frame_ms,
+            p95_ms,
+            self.prep_ms_total / frames,
+            self.lock_wait_ms_total / frames,
+            self.render_ms_total / frames,
+            self.static_ms_total / frames,
+            self.overlay_ms_total / frames,
+            self.resize_count,
+            self.lock_contention_frames,
+        );
+
+        *self = Self::new();
+    }
+}
 
 /// Chart Editor view — split editor with live WGPU chart preview.
 ///
@@ -33,7 +121,63 @@ pub fn ChartView() -> Element {
 
     // Enable transparent mode on mount
     use_effect(move || {
-        document::eval(r#"document.documentElement.classList.add('transparent-mode');"#);
+        document::eval(
+            r#"
+            document.documentElement.classList.add('transparent-mode');
+
+            if (!window.__keyflowBoundsInit) {
+                window.__keyflowBoundsInit = true;
+                window.__keyflowBoundsData = null;
+
+                const updateBounds = () => {
+                    const el = document.getElementById('chart-editor-preview');
+                    if (!el) {
+                        window.__keyflowBoundsData = null;
+                        return;
+                    }
+                    const rect = el.getBoundingClientRect();
+                    const dpr = window.devicePixelRatio || 1;
+                    window.__keyflowBoundsData = {
+                        x: rect.x * dpr,
+                        y: rect.y * dpr,
+                        width: rect.width * dpr,
+                        height: rect.height * dpr,
+                        dpr: dpr
+                    };
+                };
+
+                window.__keyflowUpdateBounds = updateBounds;
+                window.addEventListener('resize', updateBounds, { passive: true });
+                window.addEventListener('scroll', updateBounds, { passive: true });
+
+                const observeWhenReady = () => {
+                    const el = document.getElementById('chart-editor-preview');
+                    if (!el) {
+                        return false;
+                    }
+                    if (window.__keyflowBoundsObserver) {
+                        window.__keyflowBoundsObserver.disconnect();
+                    }
+                    const observer = new ResizeObserver(updateBounds);
+                    observer.observe(el);
+                    window.__keyflowBoundsObserver = observer;
+                    updateBounds();
+                    return true;
+                };
+
+                if (!observeWhenReady()) {
+                    const retry = setInterval(() => {
+                        if (observeWhenReady()) {
+                            clearInterval(retry);
+                        }
+                    }, 250);
+                    window.__keyflowBoundsRetry = retry;
+                }
+            } else if (window.__keyflowUpdateBounds) {
+                window.__keyflowUpdateBounds();
+            }
+            "#,
+        );
     });
 
     // Cleanup: remove transparent mode when component unmounts (if no other chart visible)
@@ -56,6 +200,28 @@ pub fn ChartView() -> Element {
 
     // Generation counter: bumped each time layout changes, so render effect re-fires.
     let mut layout_generation = use_signal(|| 0u64);
+    let cursor_frame_clock = use_signal(|| 0u64);
+    let cursor_motion =
+        use_hook(|| std::rc::Rc::new(std::cell::RefCell::new(PerfCursorMotionState::default())));
+    let interaction_until =
+        use_hook(|| std::rc::Rc::new(std::cell::RefCell::new(Instant::now())));
+    let last_viewport_state =
+        use_hook(|| std::rc::Rc::new(std::cell::RefCell::new(None::<(f64, f64, f64)>)));
+
+    // 120Hz local ticker for smooth cursor interpolation while transport is playing.
+    {
+        let mut frame_clock = cursor_frame_clock;
+        use_future(move || async move {
+            let mut interval = tokio::time::interval(Duration::from_millis(8));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                interval.tick().await;
+                if *ACTIVE_PLAYBACK_IS_PLAYING.peek() {
+                    frame_clock.set(frame_clock() + 1);
+                }
+            }
+        });
+    }
 
     // Layout effect: re-layout when source or preview mode changes.
     {
@@ -120,14 +286,20 @@ pub fn ChartView() -> Element {
 
     // FPS tracking: sliding window of frame times.
     let fps_state = use_hook(|| std::rc::Rc::new(std::cell::RefCell::new(FpsTracker::new())));
+    let perf_window = use_hook(|| std::rc::Rc::new(std::cell::RefCell::new(ChartViewPerfWindow::new())));
 
     // Render effect: re-renders when layout, viewport, or bounds change.
     {
         let graphics_clone = graphics.clone();
         let fps_tracker = fps_state.clone();
+        let cursor_motion = cursor_motion.clone();
+        let perf_window = perf_window.clone();
+        let interaction_until = interaction_until.clone();
+        let last_viewport_state = last_viewport_state.clone();
         use_effect(move || {
             let viewport = *CHART_VIEWPORT.read();
             let _gen = layout_generation();
+            let _frame_clock = cursor_frame_clock();
             let active_song_index = ACTIVE_INDICES.peek().song_index;
             let playback_musical = *ACTIVE_PLAYBACK_MUSICAL.read();
             let playback_is_playing = *ACTIVE_PLAYBACK_IS_PLAYING.read();
@@ -146,6 +318,23 @@ pub fn ChartView() -> Element {
                 }
 
                 let frame_start = std::time::Instant::now();
+                let now = Instant::now();
+                {
+                    let mut last = last_viewport_state.borrow_mut();
+                    let changed = match *last {
+                        Some((sx, sy, zoom)) => {
+                            (sx - viewport.scroll_x).abs() > 0.001
+                                || (sy - viewport.scroll_y).abs() > 0.001
+                                || (zoom - viewport.zoom).abs() > 0.0005
+                        }
+                        None => true,
+                    };
+                    if changed {
+                        *interaction_until.borrow_mut() = now + Duration::from_millis(250);
+                        *last = Some((viewport.scroll_x, viewport.scroll_y, viewport.zoom));
+                    }
+                }
+                let interaction_active = now < *interaction_until.borrow();
 
                 let base_scale = manager.fit_to_width_scale(bounds.width, bounds.dpr);
                 let pad = 20.0 * bounds.dpr;
@@ -184,12 +373,46 @@ pub fn ChartView() -> Element {
                             musical.beat - 1,
                             musical.subdivision,
                         ) {
-                            cursor_tick = playback_tick;
-                            if playback_tick != current_cursor_tick {
-                                *CHART_CURSOR_TICK.write() = playback_tick;
+                            let now = Instant::now();
+                            {
+                                let mut motion = cursor_motion.borrow_mut();
+                                if let (Some(prev_tick), Some(prev_time)) =
+                                    (motion.last_sample_tick, motion.last_sample_time)
+                                {
+                                    let dt = now.duration_since(prev_time).as_secs_f64();
+                                    if dt > 0.0 {
+                                        motion.velocity_ticks_per_sec =
+                                            (playback_tick - prev_tick) as f64 / dt;
+                                    }
+                                }
+                                motion.last_sample_tick = Some(playback_tick);
+                                motion.last_sample_time = Some(now);
                             }
                         }
                     }
+
+                    // Extrapolate cursor between transport packets for smooth motion.
+                    {
+                        let motion = cursor_motion.borrow();
+                        if let (Some(sample_tick), Some(sample_time)) =
+                            (motion.last_sample_tick, motion.last_sample_time)
+                        {
+                            let elapsed = Instant::now().duration_since(sample_time).as_secs_f64();
+                            let max_ahead = 480.0;
+                            let ahead = (motion.velocity_ticks_per_sec * elapsed)
+                                .clamp(-max_ahead, max_ahead);
+                            cursor_tick = (sample_tick as f64 + ahead).round() as i64;
+                        }
+                    }
+
+                    if cursor_tick != current_cursor_tick {
+                        *CHART_CURSOR_TICK.write() = cursor_tick;
+                    }
+                } else {
+                    let mut motion = cursor_motion.borrow_mut();
+                    motion.last_sample_tick = None;
+                    motion.last_sample_time = None;
+                    motion.velocity_ticks_per_sec = 0.0;
                 }
 
                 // Process click-to-position
@@ -246,7 +469,17 @@ pub fn ChartView() -> Element {
                     }
                 }
 
+                let prep_ms = frame_start.elapsed().as_secs_f64() * 1000.0;
+                let lock_wait_start = std::time::Instant::now();
+                let mut lock_wait_ms = 0.0;
+                let mut render_ms = 0.0;
+                let mut static_ms = 0.0;
+                let mut overlay_ms = 0.0;
+                let mut did_resize = false;
+
                 if let Ok(mut gfx) = graphics_clone.lock() {
+                    lock_wait_ms = lock_wait_start.elapsed().as_secs_f64() * 1000.0;
+                    gfx.set_interaction_active(interaction_active);
                     let win_size = dioxus::desktop::window().window.inner_size();
                     let (sw, sh) = gfx.size();
                     if sw != win_size.width || sh != win_size.height {
@@ -258,11 +491,24 @@ pub fn ChartView() -> Element {
                             win_size.height
                         );
                         gfx.resize(win_size.width, win_size.height);
+                        did_resize = true;
                     }
 
                     let dock_offset = Affine::translate((bounds.x, bounds.y));
+                    let render_start = std::time::Instant::now();
                     gfx.render_chart(|painter| {
-                        manager.render_to_scene(
+                        let static_start = std::time::Instant::now();
+                        manager.render_static_layer_to_scene(
+                            painter,
+                            bounds.width,
+                            bounds.height,
+                            dock_offset,
+                            transform,
+                        );
+                        static_ms = static_start.elapsed().as_secs_f64() * 1000.0;
+
+                        let overlay_start = std::time::Instant::now();
+                        manager.render_overlay_layer_to_scene(
                             painter,
                             bounds.width,
                             bounds.height,
@@ -271,12 +517,27 @@ pub fn ChartView() -> Element {
                             cursor_tick,
                             hover_point,
                         );
+                        overlay_ms = overlay_start.elapsed().as_secs_f64() * 1000.0;
                     });
+                    render_ms = render_start.elapsed().as_secs_f64() * 1000.0;
                 }
                 dioxus::desktop::window().window.request_redraw();
 
                 let frame_time_us = frame_start.elapsed().as_micros() as u64;
                 fps_tracker.borrow_mut().add_sample(frame_time_us);
+
+                let frame_ms = frame_start.elapsed().as_secs_f64() * 1000.0;
+                let mut perf = perf_window.borrow_mut();
+                perf.record(
+                    frame_ms,
+                    prep_ms,
+                    lock_wait_ms,
+                    render_ms,
+                    static_ms,
+                    overlay_ms,
+                    did_resize,
+                );
+                perf.maybe_flush_log();
             }
         });
     }
@@ -300,23 +561,11 @@ pub fn ChartView() -> Element {
     {
         use_future(move || async move {
             loop {
-                tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
                 let result = document::eval(
                     r#"
-                        const el = document.getElementById('chart-editor-preview');
-                        if (el) {
-                            const rect = el.getBoundingClientRect();
-                            const dpr = window.devicePixelRatio || 1;
-                            return JSON.stringify({
-                                x: rect.x * dpr,
-                                y: rect.y * dpr,
-                                width: rect.width * dpr,
-                                height: rect.height * dpr,
-                                dpr: dpr
-                            });
-                        }
-                        return "null";
+                        return JSON.stringify(window.__keyflowBoundsData || null);
                     "#,
                 );
 
@@ -359,7 +608,9 @@ pub fn ChartView() -> Element {
                         }
                     }
                     Err(e) => {
-                        tracing::debug!("Chart editor bounds eval: {:?}", e);
+                        if !format!("{:?}", e).contains("Finished") {
+                            tracing::debug!("Chart editor bounds eval: {:?}", e);
+                        }
                     }
                 }
             }
