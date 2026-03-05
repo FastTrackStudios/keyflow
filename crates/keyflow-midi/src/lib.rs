@@ -5,6 +5,8 @@
 
 pub use keyflow_proto as proto;
 
+pub mod guide;
+
 pub mod import {
     pub use engraver_proto::engraver::import::*;
 }
