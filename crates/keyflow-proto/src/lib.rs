@@ -10,6 +10,7 @@ pub mod api;
 pub mod chart;
 pub mod chord;
 pub mod core;
+pub mod guide;
 pub mod key;
 pub mod metadata;
 pub mod parsing;
@@ -50,6 +51,11 @@ pub use primitives::{
     RootNotation, ScaleDegreeToken,
 };
 
+pub use guide::{
+    ClickConfig, ClickEvent, ClickType, CountEvent, CountInConfig, CountInState, GuideConfig,
+    GuideEvent, SectionCueEvent,
+};
+
 pub use sections::{Section, SectionNumberer, SectionType};
 
 pub use time::{
@@ -66,6 +72,7 @@ pub use ast::{
 // Service types
 pub use services::{
     ChartParseService, ChartParseServiceClient, ChartParseServiceDispatcher, ChartService,
-    ChartServiceClient, ChartServiceDispatcher, ParseRequest, ParseResponse, ParserService,
-    ParserServiceClient, ParserServiceDispatcher,
+    ChartServiceClient, ChartServiceDispatcher, GuideRequest, GuideService, GuideServiceClient,
+    GuideServiceDispatcher, ParseRequest, ParseResponse, ParserService, ParserServiceClient,
+    ParserServiceDispatcher,
 };
