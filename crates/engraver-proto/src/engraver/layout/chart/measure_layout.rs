@@ -3,6 +3,8 @@
 //! This module provides functions for measure width distribution
 //! and system grouping.
 
+use super::spacing;
+
 /// Distribute available width among measures using spring physics.
 ///
 /// This implements MuseScore-style proportional spacing where measures with
@@ -148,6 +150,130 @@ pub fn distribute_measure_widths_with_mins(
     widths.extend(regular_widths);
 
     widths
+}
+
+/// Distribute available width among measures using spring-based justification.
+///
+/// Each measure gets a natural width based on its total duration stretch
+/// (sum of its beat segments' stretches). The spring model then distributes
+/// extra space so that measures with longer average note values expand more.
+///
+/// # Arguments
+/// * `stretches` - Total duration stretch for each regular measure
+/// * `count_in_measures` - Number of count-in measures (fixed width)
+/// * `total_width` - Total available width for all measures
+/// * `compact_scale` - Scale factor for count-in measures
+/// * `base_measure_width` - Base width per measure (for count-in sizing)
+/// * `min_widths` - Minimum widths for each regular measure (from collision detection)
+/// * `spatium` - Staff space in points
+/// * `slope` - Duration stretch slope
+/// * `density` - Spacing density
+///
+/// # Returns
+/// Vector of widths for each measure (count-in measures first, then regular)
+#[must_use]
+pub fn distribute_measure_widths_spring(
+    stretches: &[f64],
+    count_in_measures: usize,
+    total_width: f64,
+    compact_scale: f64,
+    base_measure_width: f64,
+    min_widths: &[f64],
+    spatium: f64,
+    slope: f64,
+    density: f64,
+) -> Vec<f64> {
+    if stretches.is_empty() {
+        return Vec::new();
+    }
+
+    // Count-in measures get fixed compact width
+    let count_in_width = base_measure_width * compact_scale;
+    let count_in_total = count_in_measures as f64 * count_in_width;
+    let available_for_regular = total_width - count_in_total;
+
+    let mut widths = Vec::with_capacity(count_in_measures + stretches.len());
+    for _ in 0..count_in_measures {
+        widths.push(count_in_width);
+    }
+
+    // Compute natural widths from stretches
+    let base_quarter_width = spacing::DEFAULT_QUARTER_NOTE_SPACE_SPATIUMS * spatium;
+    let mut regular_widths: Vec<f64> = stretches
+        .iter()
+        .enumerate()
+        .map(|(i, &stretch)| {
+            let natural = base_quarter_width * stretch / density.max(0.01);
+            let min = min_widths.get(i).copied().unwrap_or(0.0);
+            natural.max(min)
+        })
+        .collect();
+
+    let total_natural: f64 = regular_widths.iter().sum();
+    let extra = available_for_regular - total_natural;
+
+    if extra > 1.0 {
+        // Build springs for each measure
+        let mut springs: Vec<spacing::Spring> = stretches
+            .iter()
+            .enumerate()
+            .map(|(i, &stretch)| spacing::Spring::new(stretch.max(0.1), regular_widths[i], i))
+            .collect();
+
+        let results = spacing::stretch_segments_to_width(&mut springs, extra);
+        for (idx, new_width) in results {
+            let min = min_widths.get(idx).copied().unwrap_or(0.0);
+            regular_widths[idx] = new_width.max(min);
+        }
+    } else if extra < -1.0 {
+        // Need to compress — proportionally reduce widths above minimums
+        let compressible_total: f64 = regular_widths
+            .iter()
+            .enumerate()
+            .map(|(i, &w)| {
+                let min = min_widths.get(i).copied().unwrap_or(0.0);
+                (w - min).max(0.0)
+            })
+            .sum();
+
+        if compressible_total > 0.0 {
+            let ratio = (compressible_total + extra).max(0.0) / compressible_total;
+            for (i, w) in regular_widths.iter_mut().enumerate() {
+                let min = min_widths.get(i).copied().unwrap_or(0.0);
+                let compressible = (*w - min).max(0.0);
+                *w = min + compressible * ratio;
+            }
+        }
+    }
+
+    widths.extend(regular_widths);
+    widths
+}
+
+/// Check whether a system should be justified (stretched to fill line width).
+///
+/// Returns false for sparse last systems (below fill limit) to prevent
+/// ugly stretching of partially-filled final lines.
+///
+/// # Arguments
+/// * `content_width` - Current total width of content on the system
+/// * `target_width` - Target system width (full page width)
+/// * `fill_limit` - Minimum fill ratio to justify (default 0.3)
+/// * `is_last_system` - Whether this is the last system in a section
+#[must_use]
+pub fn should_justify_system(
+    content_width: f64,
+    target_width: f64,
+    fill_limit: f64,
+    is_last_system: bool,
+) -> bool {
+    if !is_last_system {
+        return true; // Always justify non-last systems
+    }
+    if target_width <= 0.0 {
+        return false;
+    }
+    content_width / target_width >= fill_limit
 }
 
 /// Group measures into systems based on maximum measures per system.
@@ -375,6 +501,85 @@ mod tests {
         assert_eq!(systems[0], vec![0]);
         assert_eq!(systems[1], vec![1]);
         assert_eq!(systems[2], vec![2]);
+    }
+
+    // --- Spring-based distribution ---
+
+    #[test]
+    fn test_spring_distribution_basic() {
+        // 4 measures with equal stretch — should get roughly equal widths
+        let stretches = vec![4.0, 4.0, 4.0, 4.0];
+        let widths = distribute_measure_widths_spring(
+            &stretches, 0, 400.0, 0.5, 100.0, &[], 5.0, 1.2, 1.0,
+        );
+
+        assert_eq!(widths.len(), 4);
+        let w0 = widths[0];
+        for &w in &widths[1..] {
+            assert!((w - w0).abs() < 1.0, "Equal stretches should give equal widths: {w} vs {w0}");
+        }
+    }
+
+    #[test]
+    fn test_spring_distribution_different_stretches() {
+        // Measure with more stretch should get more width
+        let stretches = vec![2.0, 6.0, 2.0, 6.0];
+        let widths = distribute_measure_widths_spring(
+            &stretches, 0, 400.0, 0.5, 100.0, &[], 5.0, 1.2, 1.0,
+        );
+
+        assert!(
+            widths[1] > widths[0],
+            "Higher stretch measure should be wider: {} vs {}",
+            widths[1], widths[0]
+        );
+        assert!(
+            widths[3] > widths[2],
+            "Higher stretch measure should be wider: {} vs {}",
+            widths[3], widths[2]
+        );
+    }
+
+    #[test]
+    fn test_spring_distribution_respects_mins() {
+        let stretches = vec![1.0, 1.0];
+        let min_widths = vec![150.0, 50.0]; // First measure needs at least 150pt
+        let widths = distribute_measure_widths_spring(
+            &stretches, 0, 300.0, 0.5, 100.0, &min_widths, 5.0, 1.2, 1.0,
+        );
+
+        assert!(
+            widths[0] >= 150.0,
+            "Should respect min_width: got {}",
+            widths[0]
+        );
+    }
+
+    #[test]
+    fn test_spring_distribution_with_count_in() {
+        let stretches = vec![4.0, 4.0];
+        let widths = distribute_measure_widths_spring(
+            &stretches, 1, 400.0, 0.5, 100.0, &[], 5.0, 1.2, 1.0,
+        );
+
+        // 1 count-in + 2 regular = 3 total
+        assert_eq!(widths.len(), 3);
+        assert!((widths[0] - 50.0).abs() < 0.001, "Count-in should be 50pt");
+    }
+
+    #[test]
+    fn test_should_justify_system() {
+        // Non-last system always justifies
+        assert!(should_justify_system(100.0, 400.0, 0.3, false));
+
+        // Last system above fill limit — justify
+        assert!(should_justify_system(200.0, 400.0, 0.3, true));
+
+        // Last system below fill limit — don't justify
+        assert!(!should_justify_system(100.0, 400.0, 0.3, true));
+
+        // Last system at exactly fill limit — justify
+        assert!(should_justify_system(120.0, 400.0, 0.3, true));
     }
 
     #[test]
