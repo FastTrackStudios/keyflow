@@ -276,6 +276,97 @@ pub fn should_justify_system(
     content_width / target_width >= fill_limit
 }
 
+/// Compute the minimum measure width scaled by time signature ratio.
+///
+/// For partial measures (e.g., a 2/4 pickup in a 4/4 chart), the minimum
+/// width is proportionally reduced: `min_width * (measure_ticks / timesig_ticks)`.
+/// Full measures get the full minimum width.
+///
+/// After computing the scaled minimum, if the measure's content width (from
+/// natural spacing) is less than the minimum, it will be stretched via the
+/// spring model during justification.
+///
+/// # Arguments
+/// * `min_measure_width` - Base minimum width for a full measure (from `LayoutParams`)
+/// * `measure_ticks` - Actual ticks in this measure
+/// * `timesig_ticks` - Ticks for the time signature's full bar
+///
+/// # Returns
+/// Scaled minimum width for this measure
+#[must_use]
+pub fn scaled_min_measure_width(
+    min_measure_width: f64,
+    measure_ticks: f64,
+    timesig_ticks: f64,
+) -> f64 {
+    if timesig_ticks <= 0.0 || measure_ticks <= 0.0 {
+        return min_measure_width;
+    }
+
+    let ratio = (measure_ticks / timesig_ticks).min(1.0); // Cap at 1.0 for full measures
+    min_measure_width * ratio
+}
+
+/// Enforce minimum measure widths on a set of measures.
+///
+/// For each measure, computes the duration-scaled minimum width and ensures
+/// the measure is at least that wide. Measures below the minimum are expanded,
+/// and the excess width is redistributed from other measures if possible.
+///
+/// # Arguments
+/// * `widths` - Current measure widths (will be adjusted in place)
+/// * `measure_ticks` - Duration of each measure in ticks
+/// * `timesig_ticks` - Ticks per full bar (from time signature)
+/// * `min_measure_width` - Base minimum width from layout params
+///
+/// # Returns
+/// Adjusted measure widths
+#[must_use]
+pub fn enforce_min_widths(
+    widths: &[f64],
+    measure_ticks: &[f64],
+    timesig_ticks: f64,
+    min_measure_width: f64,
+) -> Vec<f64> {
+    let mut result: Vec<f64> = widths.to_vec();
+    let mut deficit = 0.0;
+
+    // First pass: expand measures below their scaled minimum
+    for (i, w) in result.iter_mut().enumerate() {
+        let ticks = measure_ticks.get(i).copied().unwrap_or(timesig_ticks);
+        let min_w = scaled_min_measure_width(min_measure_width, ticks, timesig_ticks);
+        if *w < min_w {
+            deficit += min_w - *w;
+            *w = min_w;
+        }
+    }
+
+    // Second pass: if there's a deficit, proportionally shrink measures above min
+    if deficit > 0.0 {
+        let compressible: f64 = result
+            .iter()
+            .enumerate()
+            .map(|(i, &w)| {
+                let ticks = measure_ticks.get(i).copied().unwrap_or(timesig_ticks);
+                let min_w = scaled_min_measure_width(min_measure_width, ticks, timesig_ticks);
+                (w - min_w).max(0.0)
+            })
+            .sum();
+
+        if compressible > deficit {
+            let ratio = (compressible - deficit) / compressible;
+            for (i, w) in result.iter_mut().enumerate() {
+                let ticks = measure_ticks.get(i).copied().unwrap_or(timesig_ticks);
+                let min_w = scaled_min_measure_width(min_measure_width, ticks, timesig_ticks);
+                let excess = (*w - min_w).max(0.0);
+                *w = min_w + excess * ratio;
+            }
+        }
+    }
+
+    result
+}
+
 /// Group measures into systems based on maximum measures per system.
 ///
 /// # Arguments
@@ -588,5 +679,68 @@ mod tests {
         let systems = group_measures_into_systems_by_width(&min_widths, 400.0, 4);
 
         assert!(systems.is_empty());
+    }
+
+    // --- Minimum measure width ---
+
+    #[test]
+    fn test_scaled_min_width_full_measure() {
+        // 4/4 measure in 4/4 time → full min width
+        let min_w = scaled_min_measure_width(100.0, 1920.0, 1920.0);
+        assert!((min_w - 100.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_scaled_min_width_half_measure() {
+        // 2/4 pickup in 4/4 time → half min width
+        let min_w = scaled_min_measure_width(100.0, 960.0, 1920.0);
+        assert!((min_w - 50.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_scaled_min_width_quarter_pickup() {
+        // 1/4 pickup in 4/4 time → quarter min width
+        let min_w = scaled_min_measure_width(100.0, 480.0, 1920.0);
+        assert!((min_w - 25.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_scaled_min_width_capped_at_full() {
+        // Measure with more ticks than time sig → capped at full min width
+        let min_w = scaled_min_measure_width(100.0, 3840.0, 1920.0);
+        assert!((min_w - 100.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_enforce_min_widths_no_change() {
+        // All measures already above minimum
+        let widths = vec![150.0, 150.0, 150.0, 150.0];
+        let ticks = vec![1920.0; 4];
+        let result = enforce_min_widths(&widths, &ticks, 1920.0, 100.0);
+
+        for (i, &w) in result.iter().enumerate() {
+            assert!((w - widths[i]).abs() < 1e-6, "Measure {i} shouldn't change");
+        }
+    }
+
+    #[test]
+    fn test_enforce_min_widths_expands_narrow() {
+        // One narrow measure should be expanded, others compressed to compensate
+        let widths = vec![50.0, 150.0, 150.0, 150.0];
+        let ticks = vec![1920.0; 4]; // All full measures
+        let result = enforce_min_widths(&widths, &ticks, 1920.0, 100.0);
+
+        assert!(result[0] >= 100.0, "Narrow measure should be expanded to min: got {}", result[0]);
+    }
+
+    #[test]
+    fn test_enforce_min_widths_pickup_measure() {
+        // Pickup (2/4) gets half the min width
+        let widths = vec![30.0, 150.0, 150.0, 150.0];
+        let ticks = vec![960.0, 1920.0, 1920.0, 1920.0]; // First is pickup
+        let result = enforce_min_widths(&widths, &ticks, 1920.0, 100.0);
+
+        // Pickup min = 50.0, was 30.0 → should expand to 50.0
+        assert!(result[0] >= 50.0, "Pickup should expand to scaled min: got {}", result[0]);
     }
 }
