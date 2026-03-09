@@ -19,6 +19,7 @@ pub mod pipeline;
 pub mod prefix_renderer;
 pub mod rhythm_builder;
 pub mod section_layout;
+pub mod spacing;
 pub mod types;
 
 // Re-export new config types (ChartLayoutConfig is still defined locally for backward compatibility)

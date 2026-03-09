@@ -229,6 +229,7 @@ impl ChartLayoutConfig {
                 system_spacing: flat.system_spacing,
                 max_measures_per_system: flat.max_measures_per_system,
                 min_measure_width: flat.min_measure_width,
+                ..LayoutParams::default()
             },
             render: RenderOptions {
                 harmony_style: flat.harmony_style,

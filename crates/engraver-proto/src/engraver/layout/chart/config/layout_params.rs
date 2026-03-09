@@ -4,6 +4,7 @@
 //! These parameters don't affect rendering style or behavior.
 
 use crate::engraver::layout::chart::constants;
+use crate::engraver::layout::chart::spacing;
 use crate::engraver::layout::orchestrator::PageMargins;
 
 /// Layout parameters for chart rendering.
@@ -37,6 +38,26 @@ pub struct LayoutParams {
     ///
     /// Measures will not be narrower than this, even if content would allow.
     pub min_measure_width: f64,
+
+    /// Slope for the duration-to-space power law.
+    ///
+    /// Controls how aggressively longer notes get more horizontal space.
+    /// At slope=1.2: half note gets 1.2×, whole gets 1.44×, eighth gets 0.83×.
+    /// At slope=1.0: all durations get equal space (uniform spacing).
+    pub spacing_slope: f64,
+
+    /// Spacing density (divides natural width; higher = tighter).
+    ///
+    /// At 1.0 (default): standard spacing.
+    /// At 2.0: half the natural width (very tight).
+    pub spacing_density: f64,
+
+    /// Fill limit for last-system justification.
+    ///
+    /// Systems with fill ratio below this threshold are left ragged
+    /// (not stretched to fill the line). Prevents sparse final lines
+    /// from being stretched across the full width.
+    pub last_system_fill_limit: f64,
 }
 
 impl Default for LayoutParams {
@@ -52,6 +73,9 @@ impl Default for LayoutParams {
             system_spacing: constants::DEFAULT_SYSTEM_SPACING,
             max_measures_per_system: constants::DEFAULT_MAX_MEASURES_PER_SYSTEM,
             min_measure_width: constants::DEFAULT_MIN_MEASURE_WIDTH,
+            spacing_slope: spacing::DEFAULT_SPACING_SLOPE,
+            spacing_density: spacing::DEFAULT_SPACING_DENSITY,
+            last_system_fill_limit: spacing::DEFAULT_LAST_SYSTEM_FILL_LIMIT,
         }
     }
 }
@@ -123,6 +147,27 @@ impl LayoutParams {
     #[must_use]
     pub fn with_min_measure_width(mut self, min: f64) -> Self {
         self.min_measure_width = min;
+        self
+    }
+
+    /// Set the duration-to-space slope.
+    #[must_use]
+    pub fn with_spacing_slope(mut self, slope: f64) -> Self {
+        self.spacing_slope = slope;
+        self
+    }
+
+    /// Set the spacing density.
+    #[must_use]
+    pub fn with_spacing_density(mut self, density: f64) -> Self {
+        self.spacing_density = density;
+        self
+    }
+
+    /// Set the last-system fill limit.
+    #[must_use]
+    pub fn with_last_system_fill_limit(mut self, limit: f64) -> Self {
+        self.last_system_fill_limit = limit;
         self
     }
 }
