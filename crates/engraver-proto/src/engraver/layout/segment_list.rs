@@ -4,6 +4,7 @@
 //! providing efficient access and iteration for layout algorithms.
 
 use super::segment::{Segment, SegmentType};
+use crate::engraver::layout::chart::spacing;
 
 /// A container for segments within a measure.
 ///
@@ -279,6 +280,84 @@ impl SegmentList {
         }
     }
 
+    /// Compute x positions using duration-proportional natural widths and spring justification.
+    ///
+    /// For each ChordRest segment, computes a natural width based on its tick duration
+    /// using the power-law formula from `spacing::natural_width`. If the total natural
+    /// width is less than `available_width`, the excess is distributed via spring-based
+    /// justification so that longer-duration segments expand more.
+    ///
+    /// Non-ChordRest segments keep their existing widths.
+    ///
+    /// # Arguments
+    /// * `available_width` - Total width available for the measure's content
+    /// * `spatium` - Staff space in points
+    /// * `slope` - Duration stretch slope (e.g., 1.2)
+    /// * `density` - Spacing density (1.0 = normal)
+    /// * `stretch_reduction` - Squeeze multiplier (1.0 = normal)
+    pub fn compute_x_positions_proportional(
+        &mut self,
+        available_width: f64,
+        spatium: f64,
+        slope: f64,
+        density: f64,
+        stretch_reduction: f64,
+    ) {
+        if self.segments.is_empty() {
+            return;
+        }
+
+        // Phase 1: Compute natural widths for ChordRest segments
+        let mut total_natural = 0.0;
+        let mut total_non_cr = 0.0;
+
+        for segment in self.segments.iter_mut() {
+            if segment.seg_type.is_chord_rest() && segment.ticks > 0 {
+                let nat_w = spacing::natural_width(
+                    segment.ticks as f64,
+                    spatium,
+                    slope,
+                    density,
+                    stretch_reduction,
+                );
+                // Respect minimum width from collision detection
+                let w = nat_w.max(segment.min_width);
+                segment.width = w;
+                let stretch = spacing::duration_stretch(
+                    segment.ticks as f64,
+                    crate::engraver::layout::chart::constants::TICKS_PER_QUARTER,
+                    slope,
+                );
+                segment.stretch = stretch;
+                total_natural += w + segment.extra_leading_space + segment.spacing + segment.width_offset;
+            } else {
+                total_non_cr += segment.width + segment.extra_leading_space + segment.spacing + segment.width_offset;
+            }
+        }
+
+        // Phase 2: Spring justification if there's extra space
+        let cr_available = available_width - total_non_cr;
+        let extra = cr_available - total_natural;
+
+        if extra > 1.0 {
+            // Build springs from ChordRest segments
+            let mut springs: Vec<spacing::Spring> = Vec::new();
+            for (i, segment) in self.segments.iter().enumerate() {
+                if segment.seg_type.is_chord_rest() && segment.ticks > 0 {
+                    springs.push(spacing::Spring::new(segment.stretch, segment.width, i));
+                }
+            }
+
+            let results = spacing::stretch_segments_to_width(&mut springs, extra);
+            for (idx, new_width) in results {
+                self.segments[idx].width = new_width;
+            }
+        }
+
+        // Phase 3: Compute x positions from the final widths
+        self.compute_x_positions();
+    }
+
     /// Re-sort the segment list.
     /// Call this after modifying segment ticks or types.
     pub fn sort(&mut self) {
@@ -464,6 +543,112 @@ mod tests {
         assert!((list[0].x - 0.0).abs() < 1e-10);
         assert!((list[1].x - 50.0).abs() < 1e-10);
         assert!((list[2].x - 110.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_compute_x_positions_proportional_basic() {
+        let mut list = SegmentList::new();
+
+        // Quarter note (480 ticks) + half note (960 ticks) in 4/4
+        let mut seg1 = Segment::chord_rest(0, 480);
+        seg1.width = 10.0; // will be overwritten
+        let mut seg2 = Segment::chord_rest(480, 960);
+        seg2.width = 10.0; // will be overwritten
+
+        list.push(seg1);
+        list.push(seg2);
+
+        list.compute_x_positions_proportional(100.0, 5.0, 1.2, 1.0, 1.0);
+
+        // Half note should be wider than quarter
+        assert!(
+            list[1].width > list[0].width,
+            "Half note ({}) should be wider than quarter ({})",
+            list[1].width,
+            list[0].width
+        );
+
+        // Total should approximately fill available width
+        let total: f64 = list.iter().map(|s| s.width).sum();
+        assert!(
+            (total - 100.0).abs() < 1.0,
+            "Total width ({total}) should be close to available (100.0)"
+        );
+    }
+
+    #[test]
+    fn test_compute_x_positions_proportional_four_quarters() {
+        let mut list = SegmentList::new();
+
+        // 4 quarter notes — should get roughly equal width
+        for i in 0..4 {
+            let mut seg = Segment::chord_rest(i * 480, 480);
+            seg.width = 10.0;
+            list.push(seg);
+        }
+
+        list.compute_x_positions_proportional(100.0, 5.0, 1.2, 1.0, 1.0);
+
+        // All should have same width (equal durations)
+        let w0 = list[0].width;
+        for i in 1..4 {
+            assert!(
+                (list[i].width - w0).abs() < 0.01,
+                "All quarter notes should have same width: {} vs {}",
+                list[i].width,
+                w0
+            );
+        }
+    }
+
+    #[test]
+    fn test_compute_x_positions_proportional_respects_min_width() {
+        let mut list = SegmentList::new();
+
+        // Eighth note with a large min_width from chord collision
+        let mut seg1 = Segment::chord_rest(0, 240);
+        seg1.min_width = 50.0; // Chord symbol is wide
+        let mut seg2 = Segment::chord_rest(240, 240);
+        seg2.min_width = 0.0;
+
+        list.push(seg1);
+        list.push(seg2);
+
+        list.compute_x_positions_proportional(100.0, 5.0, 1.2, 1.0, 1.0);
+
+        assert!(
+            list[0].width >= 50.0,
+            "Should respect min_width: got {}",
+            list[0].width
+        );
+    }
+
+    #[test]
+    fn test_compute_x_positions_proportional_mixed_durations() {
+        let mut list = SegmentList::new();
+
+        // Dm7_8 C_8 Dm7(quarter) pattern — two eighths + one quarter
+        list.push(Segment::chord_rest(0, 240));   // eighth
+        list.push(Segment::chord_rest(240, 240));  // eighth
+        list.push(Segment::chord_rest(480, 480));  // quarter
+
+        list.compute_x_positions_proportional(100.0, 5.0, 1.2, 1.0, 1.0);
+
+        // Quarter should be wider than either eighth
+        assert!(
+            list[2].width > list[0].width,
+            "Quarter ({}) should be wider than eighth ({})",
+            list[2].width,
+            list[0].width
+        );
+
+        // Both eighths should be approximately equal
+        assert!(
+            (list[0].width - list[1].width).abs() < 0.01,
+            "Eighths should be equal: {} vs {}",
+            list[0].width,
+            list[1].width
+        );
     }
 
     #[test]
