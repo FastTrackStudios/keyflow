@@ -138,6 +138,14 @@ pub struct ChartLayoutConfig {
     /// When true (default), pages are positioned at (20, 20) with gaps for multi-page layouts.
     /// When false, the page is positioned at (0, 0) for single-page PDF export or edge-to-edge rendering.
     pub use_page_offsets: bool,
+    /// Duration-to-space power law slope (default 1.2).
+    /// Controls how aggressively longer notes get more space.
+    pub spacing_slope: f64,
+    /// Spacing density (default 1.0). Higher values = tighter spacing.
+    pub spacing_density: f64,
+    /// Fill limit for last system justification (default 0.3).
+    /// Systems below this fill ratio are left ragged.
+    pub last_system_fill_limit: f64,
 }
 
 impl Default for ChartLayoutConfig {
@@ -185,6 +193,9 @@ impl ChartLayoutConfig {
             min_chord_symbol_gap: DEFAULT_MIN_CHORD_SYMBOL_GAP,
             push_alters_rhythm: true, // Show accurate rhythm notation for pushes
             use_page_offsets: true,   // Add offsets for multi-page viewing
+            spacing_slope: spacing::DEFAULT_SPACING_SLOPE,
+            spacing_density: spacing::DEFAULT_SPACING_DENSITY,
+            last_system_fill_limit: spacing::DEFAULT_LAST_SYSTEM_FILL_LIMIT,
         }
     }
 
@@ -216,6 +227,9 @@ impl ChartLayoutConfig {
             min_chord_symbol_gap: DEFAULT_MIN_CHORD_SYMBOL_GAP,
             push_alters_rhythm: true, // Show accurate rhythm notation for pushes
             use_page_offsets: true,   // Keep offsets for interactive viewing
+            spacing_slope: spacing::DEFAULT_SPACING_SLOPE,
+            spacing_density: spacing::DEFAULT_SPACING_DENSITY,
+            last_system_fill_limit: spacing::DEFAULT_LAST_SYSTEM_FILL_LIMIT,
         }
     }
 
@@ -821,16 +835,15 @@ impl ChartLayoutEngine {
 
                 // Calculate base measure width based on mode
                 let base_measure_width = if self.config.snippet_mode {
-                    // Snippet mode: use ideal width based on content
-                    // 90pt per weight unit gives comfortable, readable spacing
-                    // (This is the "ideal" spacing; collision detection is the minimum floor)
-                    let ideal_width_per_weight = 90.0;
-                    let avg_weight = if measure_weights.is_empty() {
-                        1.0
-                    } else {
-                        measure_weights.iter().sum::<f64>() / measure_weights.len() as f64
-                    };
-                    ideal_width_per_weight * avg_weight.max(1.0)
+                    // Snippet mode: use duration-proportional natural width
+                    // for a quarter-note measure as the base unit
+                    spacing::natural_width(
+                        constants::TICKS_PER_QUARTER,
+                        self.config.spatium,
+                        self.config.spacing_slope,
+                        self.config.spacing_density,
+                        1.0,
+                    ) * 4.0 // 4 quarter notes per 4/4 measure
                 } else {
                     // Normal mode: distribute across available space
                     measures_area_width / max_measures as f64
@@ -846,12 +859,9 @@ impl ChartLayoutEngine {
                 // For full systems, distribute the entire measures_area_width
                 // For short systems, distribute only the proportional amount
                 let total_width_to_distribute = if self.config.snippet_mode {
-                    // Snippet mode: use ideal widths based on content weight
-                    // 90pt per weight unit provides comfortable spacing
-                    // Collision detection enforces minimum spacing as needed
-                    let weight_sum: f64 = measure_weights.iter().sum();
-                    let ideal_width_per_weight = 90.0;
-                    weight_sum * ideal_width_per_weight
+                    // Snippet mode: use duration-proportional natural widths
+                    // No justification stretching — just natural widths
+                    num_measures as f64 * base_measure_width
                 } else if is_short_system {
                     // Short system: only use width proportional to measure count
                     num_measures as f64 * base_measure_width
@@ -2805,7 +2815,8 @@ impl ChartLayoutEngine {
 
     /// Distribute available width among measures using spring physics.
     ///
-    /// Delegates to [`measure_layout::distribute_measure_widths_with_mins`].
+    /// Uses spring-based distribution when stretch values are available,
+    /// otherwise falls back to weight-proportional distribution.
     fn distribute_measure_widths(
         &self,
         weights: &[f64],
@@ -2815,13 +2826,21 @@ impl ChartLayoutEngine {
         base_measure_width: f64,
         min_widths: &[f64],
     ) -> Vec<f64> {
-        measure_layout::distribute_measure_widths_with_mins(
-            weights,
+        // Convert weights to stretch factors for spring distribution.
+        // Weights approximate duration-based content density, so they serve
+        // as reasonable stretch proxies for the spring model.
+        let stretches: Vec<f64> = weights.iter().map(|&w| w.max(0.1)).collect();
+
+        measure_layout::distribute_measure_widths_spring(
+            &stretches,
             count_in_measures,
             total_width,
             compact_scale,
             base_measure_width,
             min_widths,
+            self.config.spatium,
+            self.config.spacing_slope,
+            self.config.spacing_density,
         )
     }
 
