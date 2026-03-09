@@ -448,9 +448,9 @@ pub fn measure_measure_with_config(
 
     let font_size = style.root_size;
     // Minimum gap between chord symbols for min_width calculation.
-    // This is smaller than the collision detection gap because we rely on
-    // the first chord shifting left (overhang) rather than stretching the measure.
-    let min_gap = font_size * 0.25;
+    // Uses NON_KERNING semantics (MuseScore): adjacent chord symbols always
+    // maintain full padding, never compress against each other.
+    let min_gap = font_size * 0.35;
 
     // Collect visible chord widths and layout data
     let mut chord_widths = Vec::new();
@@ -510,7 +510,19 @@ pub fn measure_measure_with_config(
             };
             let extension_padding = if has_extension { font_size * 0.2 } else { 0.0 };
 
-            let width = (base_width + accidental_padding + extension_padding).max(font_size * 1.5);
+            // Push/pull indicator (apostrophe marks) needs extra horizontal space
+            let push_pull_padding = if chord
+                .push_pull
+                .as_ref()
+                .is_some_and(|(_, _)| true)
+            {
+                font_size * 0.3
+            } else {
+                0.0
+            };
+
+            let width = (base_width + accidental_padding + extension_padding + push_pull_padding)
+                .max(font_size * 1.5);
             chord_widths.push(width);
 
             // Create local-coordinate bounding box (origin at baseline-left)
@@ -631,7 +643,10 @@ pub fn measure_measure_with_config(
             .map(|c| (c.segment_index, c.text_width))
             .collect();
 
-        // For each pair of adjacent visible chords, compute segment minimums
+        // For each pair of adjacent visible chords, compute segment minimums.
+        // With duration-proportional spacing, intermediate segments may have
+        // very different widths. We distribute the required collision-prevention
+        // space across the segments between two chords.
         for i in 0..visible_chord_info.len() - 1 {
             let (idx1, width1) = visible_chord_info[i];
             let (idx2, _) = visible_chord_info[i + 1];
@@ -649,13 +664,38 @@ pub fn measure_measure_with_config(
                 width1
             };
 
-            // Required space for this chord + gap before next chord
+            // Required space for this chord + gap before next chord.
+            // NON_KERNING: chord symbols always maintain full padding.
             let required_space = effective_width + min_gap;
 
-            // The first segment needs to accommodate the chord width + gap
-            // (subsequent segments in the gap just need baseline width)
+            // Distribute required_space across the segments between the two chords.
+            // With proportional spacing, putting all space on the first segment
+            // isn't sufficient — a short-duration first segment might get less
+            // actual width than its min. Instead, apply the requirement to the
+            // first segment (which positions the chord) and set a small baseline
+            // for intermediate segments so they contribute minimum space.
             if idx1 < segment_mins.len() {
                 segment_mins[idx1] = segment_mins[idx1].max(required_space);
+            }
+
+            // For intermediate segments (between two chords), ensure a small
+            // baseline width so they're not zero-width in the min calculation.
+            // This prevents short-duration segments from being so narrow that
+            // their proportional contribution can't prevent chord collision.
+            let intermediate_baseline = min_gap * 0.5;
+            for seg_idx in (idx1 + 1)..idx2 {
+                if seg_idx < segment_mins.len() && segment_mins[seg_idx] == 0.0 {
+                    segment_mins[seg_idx] =
+                        segment_mins[seg_idx].max(intermediate_baseline);
+                }
+            }
+        }
+
+        // Handle the last visible chord: reserve space for its width + trailing
+        if let Some(&(last_idx, last_width)) = visible_chord_info.last() {
+            if last_idx < segment_mins.len() {
+                let trailing_for_last = last_width * 0.5; // Half-width trailing
+                segment_mins[last_idx] = segment_mins[last_idx].max(trailing_for_last);
             }
         }
 
