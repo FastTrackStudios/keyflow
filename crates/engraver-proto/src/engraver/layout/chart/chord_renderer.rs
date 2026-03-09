@@ -536,6 +536,8 @@ pub fn render_chord_symbols(
     let mut last_chord_symbol = previous_chord_symbol.map(String::from);
 
     let is_boundary = is_at_boundary(ctx.measure_idx, ctx.local_measure_idx);
+    let is_hits = ctx.section_name.eq_ignore_ascii_case("hits");
+    let mut hits_chord_shown = false;
 
     if ctx.measure_idx == 0 {
         tracing::debug!(
@@ -579,23 +581,7 @@ pub fn render_chord_symbols(
             && is_first_real
             && is_boundary;
 
-        // Check if duplicate
-        if should_hide_chord(
-            chord,
-            current_symbol,
-            last_chord_symbol.as_deref(),
-            is_pushed_at_boundary,
-            ctx.time_signature,
-            ctx.hide_repeated_chords,
-        ) {
-            last_chord_symbol = Some(current_symbol.clone());
-            continue;
-        }
-
-        // Update tracker
-        last_chord_symbol = Some(current_symbol.clone());
-
-        // Calculate segment index
+        // Calculate segment index (needed for both chord rendering and accent markers)
         let segment_idx = calculate_segment_index(
             measure,
             chord_idx,
@@ -605,6 +591,55 @@ pub fn render_chord_symbols(
             is_first_real,
             is_boundary,
         );
+
+        // Get segment x position
+        let segment_x = ctx
+            .segment_positions
+            .get(segment_idx)
+            .copied()
+            .unwrap_or_else(|| ctx.segment_positions.first().copied().unwrap_or(0.0));
+
+        let chord_x = ctx.measure_x + segment_x;
+
+        // Check if chord has regular accent (not AccentOnPush - that renders on spillback)
+        let has_regular_accent = chord.commands.iter().any(|c| matches!(c, Command::Accent));
+
+        // In Hits sections: show chord name only for the first chord, then just accents
+        let skip_chord_name = is_hits && hits_chord_shown;
+
+        if skip_chord_name {
+            // Hits: skip chord name but still render accent markers
+            last_chord_symbol = Some(current_symbol.clone());
+
+            if has_regular_accent {
+                let accent_node =
+                    create_accent_marker(chord_x, ctx.chord_y, ctx.spatium, id_counter);
+                id_counter += 1;
+                nodes.push(accent_node);
+            }
+            continue;
+        }
+
+        // Check if duplicate (skip for Hits — first-chord logic handles it)
+        if !is_hits
+            && should_hide_chord(
+                chord,
+                current_symbol,
+                last_chord_symbol.as_deref(),
+                is_pushed_at_boundary,
+                ctx.time_signature,
+                ctx.hide_repeated_chords,
+            )
+        {
+            last_chord_symbol = Some(current_symbol.clone());
+            continue;
+        }
+
+        // Update tracker
+        last_chord_symbol = Some(current_symbol.clone());
+        if is_hits {
+            hits_chord_shown = true;
+        }
 
         {
             let is_pushed = chord
@@ -626,18 +661,6 @@ pub fn render_chord_symbols(
             );
         }
 
-        // Get segment x position
-        let segment_x = ctx
-            .segment_positions
-            .get(segment_idx)
-            .copied()
-            .unwrap_or_else(|| ctx.segment_positions.first().copied().unwrap_or(0.0));
-
-        let chord_x = ctx.measure_x + segment_x;
-
-        // Check if chord has regular accent (not AccentOnPush - that renders on spillback)
-        // Only Command::Accent renders here; AccentOnPush renders on the spillback chord
-        let has_regular_accent = chord.commands.iter().any(|c| matches!(c, Command::Accent));
         let chord_y_offset = if has_regular_accent {
             // Move chord up by 0.5 spatium to make room for accent below
             -ctx.spatium * 0.5

@@ -5,7 +5,7 @@ edition = "2024"
 description = "Engraver types and rendering pipeline for Keyflow"
 
 [features]
-default = []
+default = ["engraver"]
 engraver = [
     "dep:anyrender",
     "dep:wgpu",

@@ -189,14 +189,16 @@ impl ChordMemory {
     /// Store a chord in section-local family memory.
     /// If in first section, also stores to global family memory.
     fn store_to_family_memory(&mut self, family_key: &str, full_symbol: &str) {
-        // Always store to section-local memory
+        // Only store the first occurrence per section (first-wins)
         self.section_family
-            .insert(family_key.to_string(), full_symbol.to_string());
+            .entry(family_key.to_string())
+            .or_insert_with(|| full_symbol.to_string());
 
-        // If first section, also store to global memory
+        // If first section, also store to global (first-wins)
         if self.is_first_section {
             self.global_family
-                .insert(family_key.to_string(), full_symbol.to_string());
+                .entry(family_key.to_string())
+                .or_insert_with(|| full_symbol.to_string());
         }
     }
 
@@ -215,7 +217,8 @@ impl ChordMemory {
     /// Remember a chord in global memory using family-aware key (legacy compatibility)
     fn remember_global_family(&mut self, family_key: &str, full_symbol: &str) {
         self.global_family
-            .insert(family_key.to_string(), full_symbol.to_string());
+            .entry(family_key.to_string())
+            .or_insert_with(|| full_symbol.to_string());
     }
 
     /// Remember a chord in section-specific memory using family-aware key (legacy compatibility)
@@ -227,7 +230,8 @@ impl ChordMemory {
     ) {
         // Store to section-local family memory instead of legacy section_specific
         self.section_family
-            .insert(family_key.to_string(), full_symbol.to_string());
+            .entry(family_key.to_string())
+            .or_insert_with(|| full_symbol.to_string());
     }
 
     /// Recall a chord from global memory using family-aware key
@@ -711,11 +715,15 @@ mod tests {
         let result = memory.process_chord("C", "Cm", "Cm", &verse, false, None);
         assert_eq!(result, "Cm");
 
-        // Extended chords with explicit quality store their own quality
+        // Extended chords with explicit quality return their own quality
         memory.process_chord("D", "Dmaj9", "Dmaj9", &verse, false, None);
         let result = memory.process_chord("D", "D7", "D7", &verse, false, None);
-        // D7 has explicit quality, so it stores D7 (overwrites Dmaj9)
+        // D7 has explicit quality, returns D7 (but memory keeps Dmaj9 — first-wins)
         assert_eq!(result, "D7");
+
+        // Basic D recalls the FIRST stored quality (Dmaj9), not the later D7
+        let result = memory.process_chord("D", "D", "D", &verse, false, None);
+        assert_eq!(result, "Dmaj9");
     }
 
     #[test]
@@ -819,19 +827,19 @@ mod tests {
         let verse = SectionType::Verse;
         let chorus = SectionType::Chorus;
 
-        // Define Cmaj7 in verse
+        // Define Cmaj7 in verse (first section — stores to both section + global)
         memory.process_chord("C", "Cmaj7", "Cmaj7", &verse, false, None);
 
-        // Define Cmaj9 in chorus (overwrites global family memory)
+        // Define Cmaj9 in chorus — first-wins: global keeps Cmaj7, section keeps Cmaj7
         memory.process_chord("C", "Cmaj9", "Cmaj9", &chorus, false, None);
 
-        // Clear verse and recall - basic chord recalls from global major family
-        // Global now has Cmaj9 (most recent)
+        // Clear verse and recall — basic chord recalls from global major family
+        // Global has Cmaj7 (first-wins)
         memory.clear_section(&verse);
         let result = memory.process_chord("C", "c", "C", &verse, false, None);
 
-        // Recalls from global major family (most recent = Cmaj9)
-        assert_eq!(result, "Cmaj9");
+        // Recalls from global major family (first = Cmaj7)
+        assert_eq!(result, "Cmaj7");
     }
 
     #[test]
@@ -843,13 +851,54 @@ mod tests {
         // Define Cmaj7 in verse
         memory.process_chord("C", "Cmaj7", "Cmaj7", &verse, false, None);
 
-        // Explicit quality in chorus should still work and update memory
+        // Explicit quality in chorus still returns its own quality
         let result = memory.process_chord("C", "Cmaj9", "Cmaj9", &chorus, false, None);
         assert_eq!(result, "Cmaj9");
 
-        // Basic chord recalls from family memory (now Cmaj9)
+        // Basic chord recalls from family memory (first-wins: Cmaj7)
         let result2 = memory.process_chord("C", "c", "C", &chorus, false, None);
-        assert_eq!(result2, "Cmaj9"); // Recalls from major family
+        assert_eq!(result2, "Cmaj7"); // Recalls first occurrence
+    }
+
+    #[test]
+    fn test_first_wins_chord_memory() {
+        let mut memory = ChordMemory::new();
+        let verse = SectionType::Verse;
+
+        // Dm7 is the first minor-family chord for D — stores Dm7
+        memory.enter_section();
+        let result = memory.process_chord("D", "Dm7", "Dm7", &verse, false, None);
+        assert_eq!(result, "Dm7");
+
+        // Dm9 appears later — returns Dm9 (explicit quality) but doesn't overwrite memory
+        let result = memory.process_chord("D", "Dm9", "Dm9", &verse, false, None);
+        assert_eq!(result, "Dm9");
+
+        // Basic Dm recalls the FIRST stored quality (Dm7), not the later Dm9
+        let result = memory.process_chord("D", "Dm", "Dm", &verse, false, None);
+        assert_eq!(result, "Dm7");
+    }
+
+    #[test]
+    fn test_first_wins_across_sections() {
+        let mut memory = ChordMemory::new();
+        let verse = SectionType::Verse;
+
+        // First section: Gm7 sets the memory
+        memory.enter_section();
+        memory.process_chord("G", "Gm7", "Gm7", &verse, false, None);
+        memory.complete_first_section();
+
+        // Second section: Gm9 appears first — sets NEW section memory
+        memory.enter_section();
+        memory.process_chord("G", "Gm9", "Gm9", &verse, false, None);
+
+        // Later Gm11 doesn't overwrite section memory (first-wins)
+        memory.process_chord("G", "Gm11", "Gm11", &verse, false, None);
+
+        // Basic Gm recalls section-first = Gm9 (not Gm11, not global Gm7)
+        let result = memory.process_chord("G", "Gm", "Gm", &verse, false, None);
+        assert_eq!(result, "Gm9");
     }
 
     #[test]

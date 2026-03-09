@@ -212,9 +212,11 @@ fn extract_from_explicit(
     let mut result = RhythmBuildResult::default();
     let mut triplet_group_start: Option<usize> = None;
     let mut triplet_group_ticks: i32 = 0;
+    let mut chord_count: usize = 0;
 
     // Triplets are grouped by beat: 3 triplet eighths = 480 ticks (one quarter note)
     const TRIPLET_BEAT_TICKS: i32 = 480;
+    const QUARTER_TICKS: i32 = 480;
 
     for element in elements.iter() {
         let (duration, is_rest, is_triplet) = extract_rhythm_parts(element);
@@ -222,6 +224,106 @@ fn extract_from_explicit(
         // Skip 0-duration elements (like space markers for push)
         if duration.ticks() <= 0 {
             continue;
+        }
+
+        // Check if this is a push chord that needs rhythm alteration
+        let is_push_chord = matches!(element, RhythmElement::Chord(c)
+            if c.push_pull.as_ref().is_some_and(|(is_push, _)| *is_push));
+        let is_first_chord = chord_count == 0;
+
+        // Internal push chord: split the previous beat to create the push anticipation
+        if config.push_alters_rhythm && is_push_chord && !is_first_chord {
+            if let RhythmElement::Chord(chord) = element
+                && let Some((_, amount)) = &chord.push_pull
+            {
+                // We need to carve out space from the previous rhythm entry
+                // to place the push anticipation
+                if let Some(last_entry) = result.entries.last()
+                    && last_entry.duration().ticks() >= QUARTER_TICKS
+                {
+                    let last_ticks = last_entry.duration().ticks();
+                    let was_rest = matches!(last_entry, RhythmEntry::Rest(_));
+
+                    // Remove the last entry
+                    result.entries.pop();
+
+                    // If the last entry was longer than a quarter, preserve the extra
+                    let remaining_ticks = last_ticks - QUARTER_TICKS;
+                    if remaining_ticks > 0 {
+                        let remaining_dur = ticks_to_duration(remaining_ticks);
+                        if was_rest {
+                            result.entries.push(RhythmEntry::Rest(remaining_dur));
+                        } else {
+                            result.entries.push(RhythmEntry::Note(remaining_dur));
+                        }
+                    }
+
+                    let start_idx = result.entries.len();
+                    let is_triplet_group = match (amount.base, amount.level) {
+                        (PushPullBase::Triplet, 1) => {
+                            if was_rest {
+                                result.entries.push(RhythmEntry::Rest(Duration::TripletQuarter));
+                            } else {
+                                result.entries.push(RhythmEntry::Note(Duration::TripletQuarter));
+                            }
+                            result.entries.push(RhythmEntry::Note(Duration::TripletEighth));
+                            true
+                        }
+                        (PushPullBase::Standard, 1) => {
+                            if was_rest {
+                                result.entries.push(RhythmEntry::Rest(Duration::Eighth));
+                            } else {
+                                result.entries.push(RhythmEntry::Note(Duration::Eighth));
+                            }
+                            result.entries.push(RhythmEntry::Note(Duration::Eighth));
+                            false
+                        }
+                        (PushPullBase::Standard, 2) => {
+                            if was_rest {
+                                result.entries.push(RhythmEntry::Rest(Duration::DottedEighth));
+                            } else {
+                                result.entries.push(RhythmEntry::Note(Duration::DottedEighth));
+                            }
+                            result.entries.push(RhythmEntry::Note(Duration::Sixteenth));
+                            false
+                        }
+                        _ => {
+                            if was_rest {
+                                result.entries.push(RhythmEntry::Rest(Duration::Eighth));
+                            } else {
+                                result.entries.push(RhythmEntry::Note(Duration::Eighth));
+                            }
+                            result.entries.push(RhythmEntry::Note(Duration::Eighth));
+                            false
+                        }
+                    };
+
+                    // Record internal push position (chord_idx -> segment_idx of push note)
+                    result
+                        .internal_push_positions
+                        .push((chord_count, result.entries.len() - 1));
+
+                    if is_triplet_group {
+                        result
+                            .tuplet_specs
+                            .push(TupletSpec::triplet(start_idx, result.entries.len()));
+                    }
+
+                    // Now add the remaining duration of the push chord itself
+                    // (the slash beats that follow the push)
+                    let push_chord_ticks = duration.ticks();
+                    if push_chord_ticks > QUARTER_TICKS {
+                        // The push chord has more duration beyond the push beat
+                        let extra_ticks = push_chord_ticks - QUARTER_TICKS;
+                        let extra_dur = ticks_to_duration(extra_ticks);
+                        result.entries.push(RhythmEntry::Note(extra_dur));
+                    }
+                    // If push chord is exactly 1 beat, the push subdivision already covers it
+
+                    chord_count += 1;
+                    continue;
+                }
+            }
         }
 
         // Track triplet groups for bracket rendering
@@ -245,6 +347,11 @@ fn extract_from_explicit(
             result.entries.push(RhythmEntry::Rest(duration));
         } else {
             result.entries.push(RhythmEntry::Note(duration));
+        }
+
+        // Track chord count for push position mapping
+        if matches!(element, RhythmElement::Chord(_)) {
+            chord_count += 1;
         }
 
         // Close triplet group if we've hit a beat boundary
@@ -788,8 +895,19 @@ fn extract_rhythm_parts(element: &RhythmElement) -> (Duration, bool, bool) {
             if let Some((lily, dotted, triplet)) = chord.rhythm.lily_parts() {
                 let dur = lily_syntax_to_duration(lily, dotted, triplet);
                 (dur, false, triplet)
+            } else if let ChordRhythm::Slashes { count, dotted, .. } = &chord.rhythm {
+                // Slashes in explicit measures: each slash = 1 quarter beat
+                // e.g., Dm7 /// = 3 quarter beats = DottedHalf
+                let ticks = *count as i32 * 480;
+                let dur = if *dotted {
+                    // Dotted slashes: add half again (e.g., /. = dotted quarter)
+                    ticks_to_duration(ticks + ticks / 2)
+                } else {
+                    ticks_to_duration(ticks)
+                };
+                (dur, false, false)
             } else {
-                // For Default/Slashes rhythm, use the chord's actual duration
+                // For Default rhythm, use the chord's actual duration
                 // Convert from MusicalDuration to notation Duration
                 let dur = duration_from_musical(&chord.duration);
                 (dur, false, false)
@@ -820,6 +938,22 @@ fn extract_rhythm_parts(element: &RhythmElement) -> (Duration, bool, bool) {
                 (dur, true, false)
             }
         }
+    }
+}
+
+/// Convert a tick count to the closest notation Duration.
+fn ticks_to_duration(ticks: i32) -> Duration {
+    match ticks {
+        0 => Duration::Quarter,
+        t if t >= 1920 => Duration::Whole,
+        t if t >= 1440 => Duration::DottedHalf,
+        t if t >= 960 => Duration::Half,
+        t if t >= 720 => Duration::DottedQuarter,
+        t if t >= 480 => Duration::Quarter,
+        t if t >= 360 => Duration::DottedEighth,
+        t if t >= 240 => Duration::Eighth,
+        t if t >= 120 => Duration::Sixteenth,
+        _ => Duration::ThirtySecond,
     }
 }
 

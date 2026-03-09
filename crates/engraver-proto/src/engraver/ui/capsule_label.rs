@@ -244,7 +244,7 @@ impl ComputedCapsuleLabel {
 /// Format a section label for display (like music_symbols example).
 ///
 /// Uses the following format:
-/// - Intro/Outro: Full name in uppercase ("INTRO", "OUTRO")
+/// - Intro/Outro/Breakdown/Hits: Full name in uppercase ("INTRO", "OUTRO", "BREAKDOWN", "HITS")
 /// - Other sections: Abbreviation + number ("VS 1", "CH 2", "BR 1")
 ///
 /// # Arguments
@@ -290,8 +290,12 @@ pub fn format_rehearsal_label_with_letter(
 ) -> String {
     let section_lower = section_type.to_lowercase();
 
-    // Intro and Outro use full name uppercase without number
-    if section_lower == "intro" || section_lower == "outro" {
+    // Intro, Outro, Breakdown, and Hits use full name uppercase without number
+    if section_lower == "intro"
+        || section_lower == "outro"
+        || section_lower == "breakdown"
+        || section_lower == "hits"
+    {
         return match letter {
             Some(l) => format!("{} {}", section_type.to_uppercase(), l),
             None => section_type.to_uppercase(),
@@ -337,6 +341,21 @@ mod tests {
     fn test_format_rehearsal_label_chorus() {
         assert_eq!(format_rehearsal_label("Chorus", "CH", Some(1)), "CH 1");
         assert_eq!(format_rehearsal_label("Chorus", "CH", Some(2)), "CH 2");
+    }
+
+    #[test]
+    fn test_format_rehearsal_label_breakdown() {
+        assert_eq!(format_rehearsal_label("Breakdown", "BD", None), "BREAKDOWN");
+        assert_eq!(
+            format_rehearsal_label("Breakdown", "BD", Some(1)),
+            "BREAKDOWN"
+        );
+    }
+
+    #[test]
+    fn test_format_rehearsal_label_hits() {
+        assert_eq!(format_rehearsal_label("Hits", "HT", None), "HITS");
+        assert_eq!(format_rehearsal_label("Hits", "HT", Some(1)), "HITS");
     }
 
     #[test]
