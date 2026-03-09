@@ -252,6 +252,155 @@ impl SqueezeParams {
     }
 }
 
+/// Result of a squeeze operation.
+#[derive(Debug, Clone)]
+pub struct SqueezeResult {
+    /// Adjusted segment widths after squeeze
+    pub widths: Vec<f64>,
+    /// The squeeze params that achieved the fit (or the last tried)
+    pub params: SqueezeParams,
+    /// Whether the content fits within the target width
+    pub fits: bool,
+}
+
+/// Compute segment widths for a measure given tick durations and squeeze parameters.
+///
+/// This is the core width computation that gets called repeatedly during squeeze.
+///
+/// # Arguments
+/// * `segment_ticks` - Duration of each segment in ticks
+/// * `min_widths` - Minimum width per segment (e.g. from chord collision prevention)
+/// * `spatium` - Staff space in points
+/// * `slope` - Duration stretch slope
+/// * `density` - Spacing density
+/// * `params` - Current squeeze parameters
+///
+/// # Returns
+/// Width for each segment
+#[must_use]
+pub fn compute_segment_widths(
+    segment_ticks: &[f64],
+    min_widths: &[f64],
+    spatium: f64,
+    slope: f64,
+    density: f64,
+    params: &SqueezeParams,
+) -> Vec<f64> {
+    segment_ticks
+        .iter()
+        .enumerate()
+        .map(|(i, &ticks)| {
+            let w = natural_width(ticks, spatium, slope, density, params.stretch_reduction);
+            let squeezed = w * params.squeeze_factor;
+            let min = min_widths.get(i).copied().unwrap_or(0.0);
+            squeezed.max(min)
+        })
+        .collect()
+}
+
+/// Squeeze a measure's segments to fit within a target width.
+///
+/// Uses two phases:
+/// - **Phase 1**: Iteratively reduce `squeeze_factor` and `stretch_reduction`,
+///   recomputing widths each step. Maintains proportional spacing.
+/// - **Phase 2**: Brute-force scale all widths uniformly until they fit.
+///   This may cause collisions as a last resort.
+///
+/// # Arguments
+/// * `segment_ticks` - Duration of each segment in ticks
+/// * `min_widths` - Minimum width per segment (from collision prevention)
+/// * `target_width` - Available width for this measure
+/// * `spatium` - Staff space in points
+/// * `slope` - Duration stretch slope
+/// * `density` - Spacing density
+///
+/// # Returns
+/// `SqueezeResult` with adjusted widths and whether it fit
+pub fn squeeze_to_fit(
+    segment_ticks: &[f64],
+    min_widths: &[f64],
+    target_width: f64,
+    spatium: f64,
+    slope: f64,
+    density: f64,
+) -> SqueezeResult {
+    // Start with no squeeze
+    let mut params = SqueezeParams::default();
+    let mut widths = compute_segment_widths(segment_ticks, min_widths, spatium, slope, density, &params);
+    let mut total: f64 = widths.iter().sum();
+
+    // Phase 1: iterative squeeze_factor + stretch_reduction reduction
+    while total > target_width {
+        match params.step() {
+            Some(next_params) => {
+                params = next_params;
+                widths = compute_segment_widths(
+                    segment_ticks, min_widths, spatium, slope, density, &params,
+                );
+                total = widths.iter().sum();
+            }
+            None => break, // Phase 1 exhausted
+        }
+    }
+
+    if total <= target_width {
+        return SqueezeResult {
+            widths,
+            params,
+            fits: true,
+        };
+    }
+
+    // Phase 2: brute-force uniform scaling
+    // Scale all widths proportionally, ignoring min_widths as last resort
+    let mut scale = 1.0;
+    while total > target_width && scale > WIDTH_REDUCTION_STEP {
+        scale -= WIDTH_REDUCTION_STEP;
+        widths = compute_segment_widths(
+            segment_ticks, min_widths, spatium, slope, density, &params,
+        )
+        .iter()
+        .map(|&w| w * scale)
+        .collect();
+        total = widths.iter().sum();
+    }
+
+    // Final fallback: force exact fit by uniform scaling
+    if total > target_width && total > 0.0 {
+        let final_scale = target_width / total;
+        widths.iter_mut().for_each(|w| *w *= final_scale);
+        total = target_width;
+    }
+
+    SqueezeResult {
+        widths,
+        params,
+        fits: total <= target_width,
+    }
+}
+
+/// Squeeze an entire system (multiple measures) to fit within a target width.
+///
+/// When all measures on a line exceed the target width, applies uniform squeeze
+/// across all measures proportionally.
+///
+/// # Arguments
+/// * `measure_widths` - Current width of each measure
+/// * `target_width` - Available system width
+///
+/// # Returns
+/// Adjusted measure widths, or `None` if no squeeze was needed
+#[must_use]
+pub fn squeeze_system(measure_widths: &[f64], target_width: f64) -> Option<Vec<f64>> {
+    let total: f64 = measure_widths.iter().sum();
+    if total <= target_width || total <= 0.0 {
+        return None; // No squeeze needed
+    }
+
+    let scale = target_width / total;
+    Some(measure_widths.iter().map(|&w| w * scale).collect())
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -475,5 +624,108 @@ mod tests {
             }
         }
         assert!(count >= 3, "Should have at least 3 steps");
+    }
+
+    // --- Squeeze Pipeline ---
+
+    #[test]
+    fn test_compute_segment_widths_basic() {
+        let ticks = vec![QUARTER, QUARTER, QUARTER, QUARTER];
+        let mins = vec![0.0; 4];
+        let widths = compute_segment_widths(&ticks, &mins, 5.0, 1.2, 1.0, &SqueezeParams::default());
+
+        // All quarters, so all should be equal
+        let expected = natural_width(QUARTER, 5.0, 1.2, 1.0, 1.0);
+        for w in &widths {
+            assert!((*w - expected).abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn test_compute_segment_widths_respects_min() {
+        let ticks = vec![EIGHTH, EIGHTH];
+        let mins = vec![30.0, 30.0]; // High mins
+        let widths = compute_segment_widths(&ticks, &mins, 5.0, 1.2, 1.0, &SqueezeParams::default());
+
+        // Natural width of eighth at spatium=5 is about 14.58, but min is 30
+        for w in &widths {
+            assert!(*w >= 30.0, "Width {w} should respect min 30.0");
+        }
+    }
+
+    #[test]
+    fn test_compute_segment_widths_with_squeeze() {
+        let ticks = vec![QUARTER];
+        let mins = vec![0.0];
+        let normal = compute_segment_widths(&ticks, &mins, 5.0, 1.2, 1.0, &SqueezeParams::default());
+        let squeezed = compute_segment_widths(
+            &ticks,
+            &mins,
+            5.0,
+            1.2,
+            1.0,
+            &SqueezeParams {
+                squeeze_factor: 0.5,
+                stretch_reduction: 0.5,
+            },
+        );
+
+        assert!(squeezed[0] < normal[0], "Squeezed should be smaller");
+    }
+
+    #[test]
+    fn test_squeeze_to_fit_no_squeeze_needed() {
+        // 4 quarters at spatium=5 → ~70pt total, target 200pt → no squeeze
+        let ticks = vec![QUARTER, QUARTER, QUARTER, QUARTER];
+        let mins = vec![0.0; 4];
+        let result = squeeze_to_fit(&ticks, &mins, 200.0, 5.0, 1.2, 1.0);
+
+        assert!(result.fits);
+        assert_eq!(result.params.squeeze_factor, 1.0);
+        assert_eq!(result.params.stretch_reduction, 1.0);
+    }
+
+    #[test]
+    fn test_squeeze_to_fit_phase1() {
+        // 4 quarters at spatium=5 → ~70pt total, target 50pt → needs squeeze
+        let ticks = vec![QUARTER, QUARTER, QUARTER, QUARTER];
+        let mins = vec![0.0; 4];
+        let result = squeeze_to_fit(&ticks, &mins, 50.0, 5.0, 1.2, 1.0);
+
+        assert!(result.fits);
+        assert!(result.params.squeeze_factor < 1.0, "Should have squeezed");
+        let total: f64 = result.widths.iter().sum();
+        assert!(total <= 50.0 + 1e-6, "Total {total} should fit in 50pt");
+    }
+
+    #[test]
+    fn test_squeeze_to_fit_phase2() {
+        // Very tight target — needs brute-force phase
+        let ticks = vec![QUARTER, QUARTER, QUARTER, QUARTER];
+        let mins = vec![0.0; 4];
+        let result = squeeze_to_fit(&ticks, &mins, 5.0, 5.0, 1.2, 1.0);
+
+        assert!(result.fits);
+        let total: f64 = result.widths.iter().sum();
+        assert!(total <= 5.0 + 1e-6, "Total {total} should fit in 5pt");
+    }
+
+    #[test]
+    fn test_squeeze_system_no_squeeze() {
+        let widths = vec![100.0, 120.0, 130.0];
+        let result = squeeze_system(&widths, 400.0);
+        assert!(result.is_none(), "No squeeze needed");
+    }
+
+    #[test]
+    fn test_squeeze_system_proportional() {
+        let widths = vec![100.0, 200.0];
+        let result = squeeze_system(&widths, 150.0).unwrap();
+
+        let total: f64 = result.iter().sum();
+        assert!((total - 150.0).abs() < 1e-6, "Should sum to target");
+        // Proportional: 100/300*150=50, 200/300*150=100
+        assert!((result[0] - 50.0).abs() < 1e-6);
+        assert!((result[1] - 100.0).abs() < 1e-6);
     }
 }
