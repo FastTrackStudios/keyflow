@@ -90,6 +90,12 @@ pub fn compute_section_letters(sections: &[crate::ChartSection]) -> HashMap<usiz
             continue;
         }
 
+        // Skip non-numbered section types (Intro, Outro, Solo, etc.)
+        // These show their full name + comment, so letters are redundant
+        if !section_type.should_number() {
+            continue;
+        }
+
         // Get a key for the section type (ignoring number)
         let type_key = section_type.key();
 

@@ -376,11 +376,15 @@ impl SectionType {
         let (input_without_quote, quoted_comment) = extract_quoted_comment(input);
         let input = input_without_quote.trim();
 
+        // Extract parenthetical comment: In (Drums), CH (Build), etc.
+        let (input_owned, paren_comment) = extract_paren_comment(input);
+        let input = input_owned.trim();
+
         // Check for preset modifier at the start: "Down CH 4"
         let (preset_comment, remaining_input) = extract_preset_modifier(input);
 
-        // Use the quoted comment if present, otherwise use preset comment
-        let comment = quoted_comment.or(preset_comment);
+        // Priority: quoted > parenthetical > preset
+        let comment = quoted_comment.or(paren_comment).or(preset_comment);
         let input = remaining_input;
 
         // Check for custom section with brackets: [Hits] or [SOLO Keys] 8
@@ -589,6 +593,26 @@ fn is_sub_label(s: &str) -> bool {
 /// Returns (input without quote, optional comment)
 /// Example: `CH 4 "Down"` -> (`CH 4`, Some("Down"))
 /// Example: `Interlude "Horns"` -> (`Interlude`, Some("Horns"))
+/// Extract a parenthetical comment from the input.
+///
+/// Examples:
+/// - `In (Drums)` → (`In`, Some("Drums"))
+/// - `CH (Build) 8` → (`CH  8`, Some("Build"))
+/// - `In (Band) x2` → (`In  x2`, Some("Band"))
+fn extract_paren_comment(input: &str) -> (String, Option<String>) {
+    if let Some(open) = input.find('(') {
+        if let Some(close) = input[open..].find(')') {
+            let close = open + close;
+            let comment = input[open + 1..close].trim().to_string();
+            let remaining = format!("{}{}", &input[..open], &input[close + 1..]);
+            if !comment.is_empty() {
+                return (remaining, Some(comment));
+            }
+        }
+    }
+    (input.to_string(), None)
+}
+
 fn extract_quoted_comment(input: &str) -> (&str, Option<String>) {
     // Look for a quoted string at the end
     if let Some(last_quote) = input.rfind('"') {

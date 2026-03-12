@@ -104,6 +104,26 @@ impl SectionNumberer {
                 self.pending_split = None; // Clear the pending flag
             }
         }
+
+        // Post-pass: suppress numbers for section types that only appear once.
+        // If the max number for a type is 1 (and no split letters), clear the number
+        // so "VS 1" becomes just "VS" when there's only one verse.
+        let mut max_numbers: HashMap<String, u32> = HashMap::new();
+        for section in sections.iter() {
+            if let Some(n) = section.number {
+                let key = section.section_type.full_name();
+                let entry = max_numbers.entry(key).or_insert(0);
+                *entry = (*entry).max(n);
+            }
+        }
+        for section in sections.iter_mut() {
+            if let Some(n) = section.number {
+                let key = section.section_type.full_name();
+                if max_numbers.get(&key) == Some(&1) && n == 1 && section.split_letter.is_none() {
+                    section.number = None;
+                }
+            }
+        }
     }
 }
 
@@ -226,12 +246,52 @@ mod tests {
         assert_eq!(sections[1].number, Some(1));
         assert_eq!(sections[1].split_letter, Some('b'));
 
-        // Chorus breaks the chain
-        assert_eq!(sections[2].number, Some(1));
+        // Chorus breaks the chain - only one chorus, so number is suppressed
+        assert_eq!(sections[2].number, None);
         assert_eq!(sections[2].split_letter, None);
 
         // Third verse is not consecutive, so it's Verse 2
         assert_eq!(sections[3].number, Some(2));
         assert_eq!(sections[3].split_letter, None);
+    }
+
+    #[test]
+    fn test_single_instance_number_suppressed() {
+        let mut numberer = SectionNumberer::new();
+
+        let mut sections = vec![
+            Section::new(SectionType::Intro),
+            Section::new(SectionType::Verse),
+            Section::new(SectionType::Chorus),
+            Section::new(SectionType::Outro),
+        ];
+
+        numberer.number_sections(&mut sections);
+
+        // Only one verse and one chorus — numbers should be suppressed
+        assert_eq!(sections[0].number, None); // Intro never numbered
+        assert_eq!(sections[1].number, None); // Single verse — suppressed
+        assert_eq!(sections[2].number, None); // Single chorus — suppressed
+        assert_eq!(sections[3].number, None); // Outro never numbered
+    }
+
+    #[test]
+    fn test_multiple_instances_still_numbered() {
+        let mut numberer = SectionNumberer::new();
+
+        let mut sections = vec![
+            Section::new(SectionType::Verse),
+            Section::new(SectionType::Chorus),
+            Section::new(SectionType::Verse),
+            Section::new(SectionType::Chorus),
+        ];
+
+        numberer.number_sections(&mut sections);
+
+        // Two verses and two choruses — numbers should remain
+        assert_eq!(sections[0].number, Some(1));
+        assert_eq!(sections[1].number, Some(1));
+        assert_eq!(sections[2].number, Some(2));
+        assert_eq!(sections[3].number, Some(2));
     }
 }

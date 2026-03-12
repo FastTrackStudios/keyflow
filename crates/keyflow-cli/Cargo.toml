@@ -1,0 +1,22 @@
+[package]
+name = "keyflow-cli"
+version.workspace = true
+edition.workspace = true
+description = "CLI tool for parsing and rendering Keyflow charts"
+
+[[bin]]
+name = "kf"
+path = "src/main.rs"
+
+[dependencies]
+keyflow = { workspace = true, features = ["text"] }
+keyflow-midi.workspace = true
+keyflow-proto = { workspace = true }
+engraver-proto = { workspace = true, default-features = false, features = ["engraver"] }
+
+clap = { version = "4", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+[lints]
+workspace = true

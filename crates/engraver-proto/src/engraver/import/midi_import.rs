@@ -1421,7 +1421,6 @@ fn is_section_marker(text: &str) -> bool {
     // Known section marker patterns
     let section_markers = [
         "SONGSTART",
-        "Count-In",
         "SONGEND",
         "ENDING",
         "END",
@@ -1911,11 +1910,10 @@ mod tests {
         let count_in = sections
             .iter()
             .find(|s| s.section_type == SectionType::CountIn);
-        assert!(count_in.is_some(), "Should have Count-In marker");
-        let count_in = count_in.unwrap();
-        // Count-in is at tick 3840, which is 1 measure before SONGSTART (11520)
-        // Relative to SONGSTART, this is -2 measures (or measure -2)
-        println!("\nCount-In at measure {}", count_in.position.measure);
+        assert!(
+            count_in.is_none(),
+            "Count-In should remain a cue marker, not a section marker"
+        );
 
         let songstart = sections
             .iter()

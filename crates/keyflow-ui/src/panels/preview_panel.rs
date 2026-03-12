@@ -8,12 +8,18 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use dioxus::prelude::*;
+use dioxus_core::Task;
 use kurbo::Affine;
 
 use crate::chart_graphics::ChartGraphics;
+use crate::chart_renderer::{A4_HEIGHT, A4_WIDTH};
 use crate::{
     ChartLayoutManager, CHART_CURSOR_TICK, CHART_CURSOR_VISIBLE, CHART_SOURCE, SESSION_CHART_SOURCE,
 };
+use engraver_proto::engraver::layout::chart::{
+    ChartLayoutConfig, ChartLayoutEngine, LayoutMode,
+};
+use engraver_proto::engraver::style::MStyle;
 
 use dock_dioxus::DOCK_WORKSPACE;
 use dock_proto::PanelId;
@@ -140,7 +146,10 @@ pub fn ChartPreviewPanel() -> Element {
     }
 
     // --- Layout effect: parse + layout chart when source changes ---
+    // Runs parse+layout on a background thread to keep the UI responsive.
     {
+        let mut layout_task: Signal<Option<Task>> = use_signal(|| None);
+
         use_effect(move || {
             let source = SESSION_CHART_SOURCE
                 .read()
@@ -152,23 +161,73 @@ pub fn ChartPreviewPanel() -> Element {
                 return;
             }
 
-            if let Some(ref manager_rc) = *perf_layout_manager.read() {
-                let mut manager = manager_rc.borrow_mut();
-                match manager.parse_and_layout(&source, bounds.width, false) {
-                    Ok(true) => {
-                        perf_layout_gen.set(perf_layout_gen() + 1);
-                        tracing::debug!(
-                            "ChartPreview layout done (gen {}), pages={}",
-                            perf_layout_gen(),
-                            manager.total_pages()
-                        );
+            let snippet_mode = false;
+
+            let (text_font, symbol_font) =
+                if let Some(ref manager_rc) = *perf_layout_manager.read() {
+                    let manager = manager_rc.borrow();
+                    if !manager.needs_layout(&source, snippet_mode) {
+                        return;
                     }
-                    Ok(false) => {}
-                    Err(e) => {
+                    manager.font_data()
+                } else {
+                    return;
+                };
+
+            // Cancel any in-flight layout task
+            if let Some(prev) = *layout_task.peek() {
+                prev.cancel();
+            }
+
+            let task = spawn(async move {
+                let source_clone = source.clone();
+                let result = tokio::task::spawn_blocking(move || {
+                    use std::sync::OnceLock;
+                    static BG_STYLE: OnceLock<&'static MStyle> = OnceLock::new();
+                    let style = *BG_STYLE.get_or_init(|| Box::leak(Box::new(MStyle::new())));
+
+                    let engine = ChartLayoutEngine::new(style, text_font, symbol_font);
+                    let chart =
+                        keyflow::parse(&source_clone).map_err(|e| format!("{}", e))?;
+
+                    let config = ChartLayoutConfig::master_rhythm().with_page_offsets(true);
+                    let mode = LayoutMode::Paginated {
+                        page_width: A4_WIDTH,
+                        page_height: A4_HEIGHT,
+                    };
+                    let layout_result = engine.layout_chart_with_config(&chart, &mode, &config);
+                    Ok::<_, String>((chart, layout_result))
+                })
+                .await;
+
+                match result {
+                    Ok(Ok((chart, layout_result))) => {
+                        if let Some(ref manager_rc) = *perf_layout_manager.read() {
+                            let mut manager = manager_rc.borrow_mut();
+                            manager.apply_precomputed_layout(
+                                chart,
+                                layout_result,
+                                &source,
+                                snippet_mode,
+                            );
+                            perf_layout_gen.set(perf_layout_gen() + 1);
+                            tracing::debug!(
+                                "ChartPreview layout done (gen {}), pages={} [background]",
+                                perf_layout_gen(),
+                                manager.total_pages()
+                            );
+                        }
+                    }
+                    Ok(Err(e)) => {
                         tracing::warn!("ChartPreview parse error: {}", e);
                     }
+                    Err(e) => {
+                        tracing::warn!("ChartPreview background layout panicked: {}", e);
+                    }
                 }
-            }
+            });
+
+            layout_task.set(Some(task));
         });
     }
 

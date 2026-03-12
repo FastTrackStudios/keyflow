@@ -73,12 +73,17 @@ pub fn generate_chart_text(midi: &MidiFile, config: &MidiChartConfig) -> String 
     output.push('\n');
 
     // Process each section
-    let section_lengths = calculate_section_lengths(&sections, songstart);
+    let section_lengths = calculate_section_lengths(
+        &sections,
+        &detected,
+        songstart,
+        ticks_per_measure,
+        midi.duration_ticks() as i64,
+    );
 
     for section in &section_lengths {
-        // Calculate tick range for this section
-        let section_start_tick = ((section.start_measure as i64) - 1) * ticks_per_measure;
-        let section_end_tick = section_start_tick + ((section.length as i64) * ticks_per_measure);
+        let section_start_tick = section.start_tick;
+        let section_end_tick = section.end_tick;
 
         // Detect if this section uses quarter push instead of triplet
         let section_push_type = detect_section_push_type(
@@ -599,7 +604,7 @@ fn should_use_triplet_push_from_detected(
 /// `is_pre_songstart` distinguishes opening HITS (uppercase) from closing Hits (title case).
 fn section_type_to_keyflow(section_type: MidiSectionType, is_pre_songstart: bool) -> &'static str {
     match section_type {
-        MidiSectionType::CountIn => "COUNT",
+        MidiSectionType::CountIn => "",
         MidiSectionType::Hits => {
             if is_pre_songstart {
                 "HITS"
@@ -663,6 +668,8 @@ struct SectionLayout {
     keyflow_type: String,
     start_measure: i32,
     length: i32,
+    start_tick: i64,
+    end_tick: i64,
     /// Original MIDI marker name (e.g., `Interlude B "HORNS"`).
     marker_name: String,
     /// Sub-label suffix from marker name (e.g., `"3A"` from `"CH 3A"`).
@@ -675,7 +682,10 @@ struct SectionLayout {
 /// Calculate section start measures and lengths from markers.
 fn calculate_section_lengths(
     sections: &[super::midi_import::SectionMarker],
+    detected_chords: &[DetectedChord],
     songstart_tick: u32,
+    ticks_per_measure: i64,
+    fallback_end_tick: i64,
 ) -> Vec<SectionLayout> {
     let mut result = Vec::new();
 
@@ -687,19 +697,29 @@ fn calculate_section_lengths(
         }
 
         let start_measure = section.position.measure;
+        let start_tick = i64::from(section.tick);
+        let next_section_tick = sections.iter().skip(i + 1).find_map(|next| {
+            let next_type = section_type_to_keyflow(next.section_type, next.tick <= songstart_tick);
+            (next.tick > section.tick && !next_type.is_empty()).then_some(i64::from(next.tick))
+        });
 
-        let end_measure = sections
+        let mut end_tick = next_section_tick.unwrap_or(fallback_end_tick);
+        if end_tick <= start_tick {
+            end_tick = start_tick + ticks_per_measure;
+        }
+
+        if let Some(last_chord_end) = detected_chords
             .iter()
-            .skip(i + 1)
-            .find(|next| next.position.measure > section.position.measure)
-            .map(|next| next.position.measure)
-            .unwrap_or(start_measure + 16);
+            .filter(|chord| chord.start_ppq < end_tick && chord.end_ppq > start_tick)
+            .map(|chord| chord.end_ppq)
+            .max()
+        {
+            end_tick = end_tick.max(last_chord_end);
+        }
 
-        let mut length = end_measure - start_measure;
-
-        // For choruses in this tune, enforce at least 7 measures to include both lines.
-        if keyflow_type == "CH" && length < 7 {
-            length = 7;
+        let mut length = ((end_tick - start_tick) + ticks_per_measure - 1) / ticks_per_measure;
+        if length < 1 {
+            length = 1;
         }
 
         // Extract sub-label from marker name (e.g., "3A" from "CH 3A").
@@ -709,7 +729,9 @@ fn calculate_section_lengths(
         result.push(SectionLayout {
             keyflow_type: keyflow_type.to_string(),
             start_measure,
-            length,
+            length: length as i32,
+            start_tick,
+            end_tick: start_tick + (length * ticks_per_measure),
             marker_name: section.name.clone(),
             sub_label,
             number: section.number,
@@ -1720,6 +1742,57 @@ fn format_measure(
         MeasureContent::Repeat => ".".to_string(),
         MeasureContent::Silence => "s1".to_string(),
         MeasureContent::Mixed(elements) => {
+            let chord_elements: Vec<_> = elements
+                .iter()
+                .filter_map(|elem| match elem {
+                    MeasureElement::Chord {
+                        symbol,
+                        beats,
+                        ticks,
+                        is_pushed,
+                        push_amount,
+                        is_accented,
+                        is_staccato,
+                    } => Some((
+                        symbol,
+                        beats,
+                        ticks,
+                        is_pushed,
+                        push_amount,
+                        is_accented,
+                        is_staccato,
+                    )),
+                    MeasureElement::Rest { .. } => None,
+                })
+                .collect();
+            let has_only_rests = !elements.is_empty() && chord_elements.is_empty();
+
+            if has_only_rests {
+                return "s1".to_string();
+            }
+
+            if chord_elements.len() == 1 {
+                let (symbol, _beats, ticks, is_pushed, push_amount, is_accented, is_staccato) =
+                    chord_elements[0];
+                let accent = if *is_accented { ">" } else { "" };
+                let chord_base = format_chord_with_push(
+                    accent,
+                    symbol,
+                    *is_pushed,
+                    push_amount,
+                    use_short_push,
+                    *is_staccato,
+                );
+                let half_beat = ticks_per_beat / 2;
+                if *ticks < half_beat {
+                    let suffix = format_duration_suffix_from_ticks(*ticks, ppq);
+                    return format!("{}{}", chord_base, suffix);
+                }
+                return chord_base;
+            }
+
+            let has_chords = !chord_elements.is_empty();
+
             let mut parts: Vec<String> = Vec::new();
 
             for (idx, elem) in elements.iter().enumerate() {
@@ -1776,6 +1849,14 @@ fn format_measure(
                             parts.push(format!("{}{}", chord_base, suffix));
                         } else if is_sole_chord && adjusted_beats >= beats_per_measure {
                             parts.push(chord_base);
+                        } else if !is_sole_chord && !is_last_element {
+                            let display_beats = adjusted_beats.max(1);
+                            let slashes = generate_slashes(display_beats);
+                            if slashes.is_empty() {
+                                parts.push(format!("{} /", chord_base));
+                            } else {
+                                parts.push(format!("{} {}", chord_base, slashes));
+                            }
                         } else if adjusted_beats <= 1 && !is_sole_chord && is_last_element {
                             // A 1-beat chord at the end of a multi-chord measure needs
                             // an explicit slash to avoid being parsed as a whole measure.
@@ -1795,6 +1876,9 @@ fn format_measure(
                         start_tick_in_measure,
                         ..
                     } => {
+                        if has_chords {
+                            continue;
+                        }
                         let rest_str =
                             format_rests_split_at_beats(*ticks, *start_tick_in_measure, ppq);
                         if !rest_str.is_empty() {
@@ -1804,7 +1888,11 @@ fn format_measure(
                 }
             }
 
-            parts.join(" ")
+            if parts.is_empty() {
+                "s1".to_string()
+            } else {
+                parts.join(" ")
+            }
         }
     }
 }
@@ -1852,12 +1940,18 @@ fn format_measures(
     midline_separator_at: Option<usize>,
 ) -> String {
     let mut result = String::new();
-    let mut measure_count = 0;
-    let mut just_inserted_separator = false;
 
     for (i, content) in measures.iter().enumerate() {
-        if i > 0 && measure_count % measures_per_line != 0 && !just_inserted_separator {
-            result.push(' ');
+        if i > 0 {
+            if i % measures_per_line == 0 {
+                result.push('\n');
+            } else if let Some(split_at) = midline_separator_at
+                && i % measures_per_line == split_at
+            {
+                result.push_str(" || ");
+            } else {
+                result.push_str(" | ");
+            }
         }
 
         result.push_str(&format_measure(
@@ -1866,21 +1960,7 @@ fn format_measures(
             use_short_push,
             ppq,
         ));
-        measure_count += 1;
-        just_inserted_separator = false;
 
-        if let Some(split_at) = midline_separator_at
-            && measure_count % measures_per_line == split_at
-            && i < measures.len() - 1
-        {
-            result.push_str(" | ");
-            just_inserted_separator = true;
-            continue;
-        }
-
-        if measure_count % measures_per_line == 0 && i < measures.len() - 1 {
-            result.push('\n');
-        }
     }
 
     result

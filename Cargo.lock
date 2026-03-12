@@ -4781,6 +4781,7 @@ dependencies = [
  "clap",
  "engraver-proto",
  "keyflow",
+ "keyflow-midi",
  "keyflow-proto",
  "tracing",
  "tracing-subscriber",

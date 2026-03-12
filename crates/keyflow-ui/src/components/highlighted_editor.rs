@@ -12,6 +12,11 @@ use keyflow_proto::highlighting::{Highlighter, Renderer, Theme};
 /// Renders a textarea with a syntax-highlighted code display underneath.
 /// The textarea is transparent so the highlighting shows through, and
 /// scroll positions are synchronized between the two layers.
+///
+/// The textarea is kept **uncontrolled** for normal user input — the browser
+/// manages cursor position and scroll state natively. The Dioxus `value` prop
+/// is only set on the initial render; subsequent external changes (e.g. loading
+/// an example) are pushed to the DOM via JS eval, which preserves cursor state.
 #[component]
 pub fn HighlightedEditor(
     /// The current source text.
@@ -26,12 +31,44 @@ pub fn HighlightedEditor(
     // while the debounced on_change only fires after 150ms of inactivity.
     let mut local_text = use_signal(|| source.clone());
 
-    // Sync local text when source prop changes from outside (e.g. example loaded)
+    // Track the source prop to detect external changes (e.g. example loaded).
     let mut last_source = use_signal(|| source.clone());
+    // Track whether the textarea DOM needs a programmatic value update.
+    let mut needs_dom_sync = use_signal(|| false);
+
     if *last_source.read() != source {
-        local_text.set(source.clone());
         last_source.set(source.clone());
+        // Only push to textarea if the external change differs from the user's local text
+        if *local_text.read() != source {
+            local_text.set(source.clone());
+            needs_dom_sync.set(true);
+        }
     }
+
+    // When an external source change arrives, push it to the textarea DOM via JS.
+    // This avoids Dioxus re-setting the `value` attribute (which resets cursor position).
+    use_effect(move || {
+        if *needs_dom_sync.read() {
+            let text = local_text.read().clone();
+            // Escape for JS string literal (backslash, backtick, ${)
+            let escaped = text
+                .replace('\\', "\\\\")
+                .replace('`', "\\`")
+                .replace("${", "\\${");
+            let js = format!(
+                r#"(function() {{
+                    var ta = document.getElementById('editor-textarea');
+                    if (ta) {{ ta.value = `{escaped}`; }}
+                }})();"#
+            );
+            #[cfg(feature = "web")]
+            dioxus::prelude::document::eval(&js);
+            #[cfg(feature = "native")]
+            dioxus_native::prelude::document::eval(&js);
+
+            needs_dom_sync.set(false);
+        }
+    });
 
     // Debounce task handle — cancelled and replaced on each keystroke
     let mut debounce_task: Signal<Option<Task>> = use_signal(|| None);
@@ -62,7 +99,10 @@ pub fn HighlightedEditor(
         theme.foreground.to_css()
     };
 
-    let display_text = local_text.read().clone();
+    // Initial value for the textarea — only used on first render.
+    // After that, user input keeps the DOM in sync naturally (uncontrolled),
+    // and external changes go through the JS eval effect above.
+    let initial_value = local_text.read().clone();
 
     rsx! {
         div {
@@ -83,10 +123,11 @@ pub fn HighlightedEditor(
                 id: "editor-textarea",
                 style: "background: transparent; color: transparent; caret-color: var(--foreground); tab-size: 4; font: inherit; line-height: inherit;",
                 spellcheck: false,
-                value: "{display_text}",
+                // Set initial value only — textarea is uncontrolled after mount
+                initial_value: "{initial_value}",
                 oninput: move |evt| {
                     let value = evt.value().clone();
-                    // Update local state immediately for responsive typing
+                    // Update local state immediately for responsive typing & highlighting
                     local_text.set(value.clone());
 
                     // Cancel any pending debounce task

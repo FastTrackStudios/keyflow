@@ -23,6 +23,7 @@ use engraver_proto::engraver::style::MStyle;
 use keyflow_proto::{Chart, ChartPosition};
 use kurbo::{Affine, Point, Rect};
 use std::collections::{HashMap, VecDeque};
+use std::sync::Arc;
 use peniko::{ImageAlphaType, ImageBrush, ImageData, ImageFormat, ImageQuality};
 use vello::peniko::{Color, Compose, Fill};
 
@@ -34,8 +35,8 @@ const POINTS_PER_INCH: f64 = 72.0;
 pub const DPI_SCALE: f64 = SCREEN_DPI / POINTS_PER_INCH;
 
 /// A4 page dimensions in points.
-const A4_WIDTH: f64 = 595.0;
-const A4_HEIGHT: f64 = 842.0;
+pub const A4_WIDTH: f64 = 595.0;
+pub const A4_HEIGHT: f64 = 842.0;
 
 /// Convert a time signature denominator to ticks per beat.
 ///
@@ -2152,5 +2153,67 @@ impl ChartLayoutManager {
         source.hash(&mut hasher);
         snippet_mode.hash(&mut hasher);
         hasher.finish()
+    }
+
+    /// Check whether a layout is needed for the given source and mode.
+    ///
+    /// Returns `true` if the (source, snippet_mode) hash differs from the
+    /// last successful layout. Used by the async layout path to avoid
+    /// spawning background work when nothing has changed.
+    pub fn needs_layout(&self, source: &str, snippet_mode: bool) -> bool {
+        let chart_hash = self.compute_chart_hash(source, snippet_mode);
+        self.layout_result.is_none() || chart_hash != self.last_chart_hash
+    }
+
+    /// Get the font data needed to create a background `ChartLayoutEngine`.
+    pub fn font_data(&self) -> (Arc<Vec<u8>>, Arc<Vec<u8>>) {
+        (
+            self.font_bundle.text_font_data().clone(),
+            self.font_bundle.symbol_font_data().clone(),
+        )
+    }
+
+    /// Apply a pre-computed layout result from a background thread.
+    ///
+    /// This does the same cache invalidation as `parse_and_layout`, but
+    /// accepts a chart + result that were computed off the main thread.
+    pub fn apply_precomputed_layout(
+        &mut self,
+        chart: Chart,
+        result: ChartLayoutResult,
+        source: &str,
+        snippet_mode: bool,
+    ) {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        source.hash(&mut hasher);
+        let source_hash = hasher.finish();
+
+        self.cached_chart = Some(chart);
+        self.last_source_hash = source_hash;
+        self.layout_result = Some(result);
+        self.last_chart_hash = self.compute_chart_hash(source, snippet_mode);
+        self.last_snippet_mode = snippet_mode;
+        self.cached_cursor_state = None;
+        self.cached_cursor_tick = i64::MIN;
+        self.cached_page_fragments.clear();
+        self.cached_page_base_fragments.clear();
+        self.cached_page_detail_fragments.clear();
+        self.cached_page_coarse_fragments.clear();
+        self.cached_transformed_fragments.clear();
+        self.transformed_fragment_order.clear();
+        self.cached_page_lod_images.clear();
+        self.page_lod_renderer = None;
+        self.cached_view_static_image = None;
+        self.cached_view_static_key = None;
+        self.last_view_static_key = None;
+        self.view_static_stable_frames = 0;
+        self.view_static_renderer = None;
+        self.last_transform_key = None;
+        self.transform_stable_frames = 0;
+        self.last_cull_key = None;
+        self.cached_visible_pages.clear();
+        self.cached_focus_page = None;
+        self.rebuild_page_geometry_cache();
     }
 }

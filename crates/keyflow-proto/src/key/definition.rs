@@ -122,8 +122,12 @@ impl Key {
         }
     }
 
-    /// Parse a key from a string (e.g., "#G", "bBb", "C")
-    /// Format: optional '#' or 'b' prefix + note name
+    /// Parse a key from a string.
+    ///
+    /// Supported formats:
+    /// - `#G` / `bBb` / `C`         — major key (sharp/flat prefix or bare note)
+    /// - `#Dm` / `Am` / `bBbm`      — minor key (`m` suffix)
+    /// - `#Dmin` / `Amin`            — minor key (`min` suffix)
     pub fn parse(s: &str) -> Result<Self, String> {
         let s = s.trim();
 
@@ -131,23 +135,41 @@ impl Key {
             return Err("Empty key string".to_string());
         }
 
-        // Check for # or b prefix (key signature notation)
-        let (root_str, is_major) = if s.starts_with('#') || s.starts_with('b') {
-            (&s[1..], true) // Sharp/flat prefix indicates major key
+        // Strip optional # or b prefix (key signature notation)
+        let after_prefix = if s.starts_with('#') || s.starts_with('b') {
+            &s[1..]
         } else {
-            (s, true) // Default to major
+            s
+        };
+
+        // Detect minor key suffix: "Dm", "Bbm", "Amin", "F#min"
+        let (root_str, is_minor) = if after_prefix.ends_with("min") {
+            (&after_prefix[..after_prefix.len() - 3], true)
+        } else if after_prefix.ends_with('m')
+            && !after_prefix.eq_ignore_ascii_case("abm")
+            && after_prefix.len() > 1
+        {
+            // "m" suffix indicates minor, but avoid false positive on note "Abm"
+            // which could be confused with Ab-minor vs the note Ab + stray m.
+            // We check: is the part before "m" a valid note?
+            let candidate = &after_prefix[..after_prefix.len() - 1];
+            if MusicalNote::from_string(candidate).is_some() {
+                (candidate, true)
+            } else {
+                (after_prefix, false)
+            }
+        } else {
+            (after_prefix, false)
         };
 
         // Parse the root note
         let root = MusicalNote::from_string(root_str)
             .ok_or_else(|| format!("Invalid note name: {}", root_str))?;
 
-        // For now, all keys are major (Ionian)
-        // TODO: Add support for minor keys (e.g., "bBbm" for Bb minor)
-        if is_major {
-            Ok(Self::major(root))
-        } else {
+        if is_minor {
             Ok(Self::minor(root))
+        } else {
+            Ok(Self::major(root))
         }
     }
 }
