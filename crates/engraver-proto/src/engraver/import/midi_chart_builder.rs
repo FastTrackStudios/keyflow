@@ -696,31 +696,39 @@ fn calculate_section_lengths(
             continue;
         }
 
-        let start_measure = section.position.measure;
+        let start_measure = section
+            .explicit_start_measure
+            .unwrap_or(section.position.measure);
         let start_tick = i64::from(section.tick);
         let next_section_tick = sections.iter().skip(i + 1).find_map(|next| {
             let next_type = section_type_to_keyflow(next.section_type, next.tick <= songstart_tick);
             (next.tick > section.tick && !next_type.is_empty()).then_some(i64::from(next.tick))
         });
 
-        let mut end_tick = next_section_tick.unwrap_or(fallback_end_tick);
-        if end_tick <= start_tick {
-            end_tick = start_tick + ticks_per_measure;
-        }
+        let (length, end_tick) = if let Some(explicit_length) = section.explicit_length {
+            let length = explicit_length.max(1) as i64;
+            (length, start_tick + (length * ticks_per_measure))
+        } else {
+            let mut end_tick = next_section_tick.unwrap_or(fallback_end_tick);
+            if end_tick <= start_tick {
+                end_tick = start_tick + ticks_per_measure;
+            }
 
-        if let Some(last_chord_end) = detected_chords
-            .iter()
-            .filter(|chord| chord.start_ppq < end_tick && chord.end_ppq > start_tick)
-            .map(|chord| chord.end_ppq)
-            .max()
-        {
-            end_tick = end_tick.max(last_chord_end);
-        }
+            if let Some(last_chord_end) = detected_chords
+                .iter()
+                .filter(|chord| chord.start_ppq < end_tick && chord.end_ppq > start_tick)
+                .map(|chord| chord.end_ppq)
+                .max()
+            {
+                end_tick = end_tick.max(last_chord_end);
+            }
 
-        let mut length = ((end_tick - start_tick) + ticks_per_measure - 1) / ticks_per_measure;
-        if length < 1 {
-            length = 1;
-        }
+            let mut length = ((end_tick - start_tick) + ticks_per_measure - 1) / ticks_per_measure;
+            if length < 1 {
+                length = 1;
+            }
+            (length, start_tick + (length * ticks_per_measure))
+        };
 
         // Extract sub-label from marker name (e.g., "3A" from "CH 3A").
         // Only keep it if it contains a letter (plain numbers like "1" are omitted).
@@ -731,7 +739,7 @@ fn calculate_section_lengths(
             start_measure,
             length: length as i32,
             start_tick,
-            end_tick: start_tick + (length * ticks_per_measure),
+            end_tick,
             marker_name: section.name.clone(),
             sub_label,
             number: section.number,
@@ -1945,11 +1953,8 @@ fn format_measures(
         if i > 0 {
             if i % measures_per_line == 0 {
                 result.push('\n');
-            } else if let Some(split_at) = midline_separator_at
-                && i % measures_per_line == split_at
-            {
-                result.push_str(" || ");
             } else {
+                let _ = midline_separator_at;
                 result.push_str(" | ");
             }
         }

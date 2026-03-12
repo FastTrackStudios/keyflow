@@ -705,21 +705,7 @@ impl MidiFile {
     /// Get section markers with absolute MIDI measure positions.
     #[must_use]
     pub fn section_markers_absolute(&self) -> Vec<SectionMarker> {
-        self.markers
-            .iter()
-            .filter(|m| is_section_marker(&m.text))
-            .map(|m| {
-                let position = self.tick_to_absolute_measure(m.tick);
-                let (section_type, number) = SectionType::from_marker_text(&m.text);
-                SectionMarker {
-                    tick: m.tick,
-                    name: m.text.clone(),
-                    position,
-                    section_type,
-                    number,
-                }
-            })
-            .collect()
+        self.collect_section_markers(|tick| self.tick_to_absolute_measure(tick))
     }
 
     /// Get key signature markers with absolute MIDI measure positions.
@@ -743,6 +729,60 @@ impl MidiFile {
     #[must_use]
     pub fn chord_markers_absolute(&self) -> Vec<ChordMarker> {
         self.chord_markers_with_position(|tick| self.tick_to_absolute_measure(tick))
+    }
+
+    fn collect_section_markers<F>(&self, mut position_for_tick: F) -> Vec<SectionMarker>
+    where
+        F: FnMut(u32) -> MusicalPosition,
+    {
+        let explicit = self
+            .markers
+            .iter()
+            .filter_map(|marker| parse_keyflow_section_metadata(&marker.text).map(|meta| (marker, meta)))
+            .map(|(marker, metadata)| {
+                let mut position = position_for_tick(marker.tick);
+                position.measure = metadata.start_measure;
+                let (section_type, number) = SectionType::from_marker_text(&metadata.name);
+                SectionMarker {
+                    tick: marker.tick,
+                    name: metadata.name,
+                    position,
+                    section_type,
+                    number,
+                    explicit_start_measure: Some(metadata.start_measure),
+                    explicit_length: Some(metadata.length),
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let explicit_keys = explicit
+            .iter()
+            .map(|marker| (marker.tick, marker.name.clone()))
+            .collect::<std::collections::HashSet<_>>();
+
+        let mut markers = self
+            .markers
+            .iter()
+            .filter(|marker| is_section_marker(&marker.text))
+            .filter(|marker| !explicit_keys.contains(&(marker.tick, marker.text.clone())))
+            .map(|marker| {
+                let position = position_for_tick(marker.tick);
+                let (section_type, number) = SectionType::from_marker_text(&marker.text);
+                SectionMarker {
+                    tick: marker.tick,
+                    name: marker.text.clone(),
+                    position,
+                    section_type,
+                    number,
+                    explicit_start_measure: None,
+                    explicit_length: None,
+                }
+            })
+            .collect::<Vec<_>>();
+
+        markers.extend(explicit);
+        markers.sort_by_key(|marker| marker.tick);
+        markers
     }
 }
 
@@ -1283,6 +1323,10 @@ pub struct SectionMarker {
     pub section_type: SectionType,
     /// Section number (e.g., "1" from "VS 1")
     pub number: Option<u32>,
+    /// Explicit start measure supplied by the exporter, if present.
+    pub explicit_start_measure: Option<i32>,
+    /// Explicit section length supplied by the exporter, if present.
+    pub explicit_length: Option<i32>,
 }
 
 /// Types of sections in a song.
@@ -1387,22 +1431,34 @@ impl MidiFile {
     /// Get section markers (structural markers like VS 1, CH 1, Intro, etc.).
     #[must_use]
     pub fn section_markers(&self) -> Vec<SectionMarker> {
-        self.markers
-            .iter()
-            .filter(|m| is_section_marker(&m.text))
-            .map(|m| {
-                let position = self.tick_to_musical_position(m.tick);
-                let (section_type, number) = SectionType::from_marker_text(&m.text);
-                SectionMarker {
-                    tick: m.tick,
-                    name: m.text.clone(),
-                    position,
-                    section_type,
-                    number,
-                }
-            })
-            .collect()
+        self.collect_section_markers(|tick| self.tick_to_musical_position(tick))
     }
+}
+
+struct KeyflowSectionMetadata {
+    name: String,
+    start_measure: i32,
+    length: i32,
+}
+
+fn parse_keyflow_section_metadata(text: &str) -> Option<KeyflowSectionMetadata> {
+    let mut parts = text.splitn(4, '\t');
+    if parts.next()? != "KFSECTION" {
+        return None;
+    }
+
+    let name = parts.next()?.trim().to_string();
+    if name.is_empty() {
+        return None;
+    }
+
+    let start_measure = parts.next()?.trim().parse::<i32>().ok()?;
+    let length = parts.next()?.trim().parse::<i32>().ok()?;
+    (length > 0).then_some(KeyflowSectionMetadata {
+        name,
+        start_measure,
+        length,
+    })
 }
 
 /// Check if a marker text looks like a section marker.
@@ -2849,5 +2905,39 @@ mod keyflow_comparison_tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn test_section_metadata_overrides_marker_measure_and_length() {
+        let midi = MidiFile::from_parts(
+            480,
+            vec![],
+            vec![],
+            vec![TimeSignatureEvent {
+                tick: 0,
+                numerator: 4,
+                denominator: 4,
+            }],
+            vec![
+                MarkerEvent {
+                    tick: 0,
+                    text: "VS 1".to_string(),
+                    marker_type: MarkerType::Marker,
+                },
+                MarkerEvent {
+                    tick: 0,
+                    text: "KFSECTION\tVS 1\t12\t16".to_string(),
+                    marker_type: MarkerType::Text,
+                },
+            ],
+            vec![],
+        );
+
+        let sections = midi.section_markers_absolute();
+        assert_eq!(sections.len(), 1);
+        assert_eq!(sections[0].name, "VS 1");
+        assert_eq!(sections[0].position.measure, 12);
+        assert_eq!(sections[0].explicit_start_measure, Some(12));
+        assert_eq!(sections[0].explicit_length, Some(16));
     }
 }
