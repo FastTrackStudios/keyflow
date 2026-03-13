@@ -23,11 +23,18 @@ keyflow-ui = { path = "crates/keyflow-ui" }
 engraver = { path = "crates/engraver" }
 engraver-proto = { path = "crates/engraver-proto" }
 
-# Facet reflection
-facet = { git = "https://github.com/facet-rs/facet", branch = "main" }
+# Facet reflection - use crates.io 0.43.x to match roam's constraint
+facet = { version = "0.44" }
+facet-core = { version = "0.44" }
+facet-format = { version = "0.44" }
+facet-json = { version = "0.44" }
+facet-postcard = { version = "0.44" }
+facet-pretty = { version = "0.44" }
+facet-value = { version = "0.44" }
+facet-yaml = { version = "0.44" }
 
 # Roam RPC framework (pinned — latest main needs peeps sub-crates not yet published)
-roam = { git = "https://github.com/bearcove/roam.git", rev = "30a8e10" }
+roam = { git = "https://github.com/bearcove/roam.git", branch = "main" }
 
 # Rendering
 anyrender = { git = "https://github.com/DioxusLabs/anyrender.git", branch = "main" }

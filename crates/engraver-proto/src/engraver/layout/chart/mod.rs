@@ -2612,16 +2612,28 @@ impl ChartLayoutEngine {
         let spatium = ctx.spatium();
         let mut min_widths = vec![0.0; num_segments];
 
-        // Build list of (segment_index, chord) by iterating rhythm_elements.
-        // This gets the ACTUAL segment position of each chord, not just the chord index.
-        // We track whether we've seen a real chord to identify spillback chords.
+        // Build list of (segment_index, chord) using cumulative beat positions.
+        // For slash notation, a chord with Slashes { count: 2 } occupies 2 segments,
+        // so the segment index must be computed from cumulative beat durations,
+        // not from the rhythm_elements array index.
         let mut seen_real_chord = false;
+        let mut cumulative_beats = 0usize;
         let visible_chords: Vec<_> = measure
             .rhythm_elements
             .iter()
-            .enumerate()
-            .filter_map(|(seg_idx, elem)| {
+            .filter_map(|elem| {
                 if let RhythmElement::Chord(chord) = elem {
+                    // Capture this chord's segment position BEFORE adding its duration
+                    let seg_idx = cumulative_beats;
+
+                    // Add this chord's beat duration to the running total
+                    let chord_beats = match &chord.rhythm {
+                        crate::chord::ChordRhythm::Slashes { count, .. } => *count as usize,
+                        crate::chord::ChordRhythm::Default => 1,
+                        _ => 1,
+                    };
+                    cumulative_beats += chord_beats;
+
                     // Skip invisible chords (spaces, rests represented as chords)
                     let is_visible = !chord.full_symbol.is_empty()
                         && chord.full_symbol != "s"
