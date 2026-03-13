@@ -89,8 +89,74 @@ Hits 4
 
 "#;
 
+/// Messengers of Hope - Evan Human.
+/// Demonstrates slash notation with half-beat chords and chromatic passing chords.
+pub const EXAMPLE_MESSAGES_OF_HOPE: &str = r#"Messengers of Hope - Evan Human
+4/4 66bpm #D
+IN
+D /// A/C# /
+
+IN
+Bm7  F#m7 Gmaj7
+F#m7 Gmaj7 Asus // !A // D //// ////
+
+VS "English"
+D // A/C# // Bm // A //
+G // A // D ////
+Bm // A/C# // Gmaj7 // F#m / Fm /
+Em // Gm / A /  D ////
+
+VS "Farsi"
+D // A/C# // Bm // A //
+G // A // D // C#m7b5 / F#7 /
+Bm // A // Gmaj7 // F#m / Fm /
+Em // Gm / A / D ////
+
+CH "English"
+Gmaj7 Asus // !A //
+Gmaj7 F#m // !F#m / Fm / Em7 ////
+Bm7 C Asus // !A //
+
+VS "Farsi"
+D // A/C# // Bm // A //
+G // A // D // C#m7b5 / F#7 /
+Bm // A // Gmaj7 // F#m / Fm /
+Em // Gm / A / !D ////
+
+CH "English"
+
+CH "English"
+
+INST
+Bm7 F#m7 Bm7 F#m7 x3
+Gmaj7 F#m7 Gmaj7 A
+
+VS "Farsi"
+D // A/C# // Bm7 // Am7 / D7 /
+G // Gm7 // !D ////
+Bm // A // Gmaj7 // F#m / Fm /
+Em // Gm / A / !D ////
+
+CH "Farsi"
+
+CH "Farsi"
+
+CH "English"
+
+CH "English"
+
+Outro "Verse"
+@vocals "English"
+D // A/C# // Bm // A //
+G // Gm // D ////
+@vocals "Farsi"
+D // A/C# // Bm // A //
+G // Gm // D ////
+
+"#;
+
 /// Default chart content for the editor.
-pub const DEFAULT_CHART: &str = EXAMPLE_THRILLER;
+pub const DEFAULT_CHART: &str = EXAMPLE_MESSAGES_OF_HOPE;
 
 /// Named example chart entry for the dropdown.
 pub struct ExampleChart {
@@ -107,5 +173,9 @@ pub const EXAMPLES: &[ExampleChart] = &[
     ExampleChart {
         name: "Thriller - Dirty Loops, Cory Wong",
         source: EXAMPLE_THRILLER,
+    },
+    ExampleChart {
+        name: "Messengers of Hope - Evan Human",
+        source: EXAMPLE_MESSAGES_OF_HOPE,
     },
 ];
