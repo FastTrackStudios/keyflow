@@ -19,6 +19,10 @@ pub mod sections;
 pub mod services;
 pub mod time;
 
+// Multi-block document support
+#[cfg(feature = "serde")]
+pub mod document;
+
 // AST module (for syntax tree types)
 pub mod ast;
 
@@ -29,10 +33,14 @@ pub mod highlighting;
 // Re-export common types for convenience
 pub use api::prelude as api_prelude;
 pub use chart::{
-    Chart, ChartIndex, ChartPosition, ChartSection, ChordInstance, DynamicMarking, ElementId,
-    KeyChange, Measure, NavigationType, SemanticRole, SourceLink, TempoChange, TextCue,
-    TimeSignatureChange,
+    Chart, ChartIndex, ChartPosition, ChartSection, ChordAttachment, ChordAttachmentType,
+    ChordInstance, ChordSyllableAligner, ChordSyllableMapping, DynamicMarking, ElementId, KeyChange,
+    LyricChordParser, LyricLine, LyricSyllable, Measure, NavigationType, SectionAlignment,
+    SemanticRole, SourceLink, SyllableParser, TempoChange, TextCue, TimeSignatureChange,
 };
+
+#[cfg(feature = "serde")]
+pub use document::{KfBlock, KfBlockKind, KfDocument};
 
 pub use chord::{
     Alteration, Chord, ChordDegree, ChordFamily, ChordParseError, ChordParseErrors, ChordQuality,

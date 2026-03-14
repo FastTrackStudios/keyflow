@@ -9,12 +9,14 @@
 
 // region:    --- Modules
 
+pub mod chordpro;
 pub mod chords;
 pub mod helpers;
 pub mod metadata;
 pub mod post_process;
 pub mod sections;
 
+pub use chordpro::parse_chordpro;
 pub use helpers::{LineOffsetMap, PushPullModifier, RepeatCount};
 
 // endregion: --- Modules

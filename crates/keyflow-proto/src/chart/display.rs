@@ -292,40 +292,13 @@ impl Chart {
                     }
                 }
 
-                // Display chords with their positions and durations for debugging
-                let mut chord_parts = Vec::new();
-                for chord in &measure.chords {
-                    let mut chord_text = String::new();
-
-                    // Show push/pull notation
-                    if let Some((is_push, _amount)) = chord.push_pull
-                        && is_push {
-                            chord_text.push('\'');
-                        }
-
-                    chord_text.push_str(&chord.full_symbol);
-
-                    // Show bass note for slash chords
-                    if let Some(ref bass) = chord.parsed.bass {
-                        chord_text.push_str(&format!("/{}", bass));
-                    }
-
-                    // Show pull notation
-                    if let Some((is_push, _amount)) = chord.push_pull
-                        && !is_push {
-                            chord_text.push('\'');
-                        }
-
-                    chord_parts.push(chord_text);
-                }
-
-                if !chord_parts.is_empty() {
+                if let Some(measure_content) = Chart::display_measure_parallel_content(measure) {
                     write!(
                         f,
                         "{}{}{}",
                         fmt.chord_color,
                         fmt.bold,
-                        chord_parts.join(" ")
+                        measure_content
                     )?;
                     write!(f, "{}", fmt.reset)?;
                 }
@@ -412,6 +385,49 @@ impl Chart {
 
         // Add border padding: "║ " at start (2 chars) + " " at end (1 char) = 3
         content_width + 3
+    }
+
+    fn display_measure_parallel_content(measure: &crate::chart::types::Measure) -> Option<String> {
+        let chord_parts: Vec<String> = measure
+            .chords
+            .iter()
+            .map(|chord| {
+                let mut chord_text = String::new();
+
+                if let Some((is_push, _amount)) = chord.push_pull
+                    && is_push
+                {
+                    chord_text.push('\'');
+                }
+
+                chord_text.push_str(&chord.full_symbol);
+
+                if let Some((is_push, _amount)) = chord.push_pull
+                    && !is_push
+                {
+                    chord_text.push('\'');
+                }
+
+                chord_text
+            })
+            .collect();
+
+        let melody_parts: Vec<String> = measure
+            .melodies
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect();
+
+        match (chord_parts.is_empty(), melody_parts.is_empty()) {
+            (false, false) => Some(format!(
+                "<< {} ; {} >>",
+                chord_parts.join(" "),
+                melody_parts.join(" ; ")
+            )),
+            (false, true) => Some(chord_parts.join(" ")),
+            (true, false) => Some(melody_parts.join(" ; ")),
+            (true, true) => None,
+        }
     }
 }
 

@@ -3,26 +3,29 @@
 //! Provides a system for notating melodic lines with pitches and rhythms.
 //!
 //! Syntax:
-//! - `m{ C_8 D_8 E_4 }` - inline melody block
-//! - `mainRiff = m{ C_8 D_8 E_4 }` - variable assignment
+//! - `m{ C8 D8 E4 }` - inline melody block
+//! - `m{ C_8 D_8 E_4 }` - inline melody block (legacy underscore form)
+//! - `mainRiff = m{ C8 D8 E4 }` - variable assignment
 //! - `$mainRiff` - variable reference
 //!
-//! Note format: `<pitch><modifiers>_<duration>`
+//! Note format: `<pitch><modifiers><duration>` or `<pitch><modifiers>_<duration>`
 //! - Pitch: C, D, E, F, G, A, B (with optional # or b) OR scale degrees 1-7
 //! - Octave modifiers: `'` to jump up an octave, `,` to drop down an octave
-//! - Octave: optional explicit number (overrides relative mode)
-//! - Duration: Lilypond-style (_4 = quarter, _8 = eighth, _16 = sixteenth, etc.)
+//! - Octave: optional explicit number (overrides relative mode, underscore form only)
+//! - Duration: Lilypond-style (4 = quarter, 8 = eighth, 16 = sixteenth, etc.)
+//! - Triplets: trailing `t` (e.g. `4t`, `8t`)
 //!
 //! Relative mode (default): Each note chooses the closest octave to the previous note.
 //! Use `'` or `,` to force octave jumps when the closest isn't what you want.
 //!
 //! Examples:
-//! - `C_4` - C quarter note (relative to previous)
-//! - `D#'_8` - D# eighth note, one octave up from closest
-//! - `Bb,_2` - Bb half note, one octave down from closest
+//! - `C4` - C quarter note (relative to previous)
+//! - `C_4` - C quarter note (legacy underscore form)
+//! - `D#'8` - D# eighth note, one octave up from closest
+//! - `Bb,2` - Bb half note, one octave down from closest
 //! - `C5_4` - C5 quarter note (explicit octave)
 //! - `3_8` - Scale degree 3 eighth note
-//! - `r_4` - quarter rest
+//! - `r4` - quarter rest
 
 use crate::time::AbsolutePosition;
 use facet::Facet;
@@ -75,6 +78,9 @@ pub struct MelodyNote {
     /// Is this note dotted?
     pub dotted: bool,
 
+    /// Is this a triplet duration?
+    pub triplet: bool,
+
     /// Original scale degree if parsed from number (1-7)
     pub scale_degree: Option<u8>,
 
@@ -91,6 +97,7 @@ impl MelodyNote {
             octave_modifier: OctaveModifier::None,
             duration,
             dotted: false,
+            triplet: false,
             scale_degree: None,
             position: None,
         }
@@ -104,6 +111,7 @@ impl MelodyNote {
             octave_modifier: OctaveModifier::None,
             duration,
             dotted: false,
+            triplet: false,
             scale_degree: None,
             position: None,
         }
@@ -200,7 +208,7 @@ impl MelodyNote {
 
     /// Parse a melody note from a string
     ///
-    /// Format: `<pitch><modifiers>_<duration>` or `<pitch><modifiers>_<duration>.`
+    /// Format: `<pitch><modifiers><duration>` or `<pitch><modifiers>_<duration>`
     ///
     /// Pitch can be:
     /// - Letter: C, D, E, F, G, A, B (case-insensitive)
@@ -226,29 +234,8 @@ impl MelodyNote {
             return Err("Empty note string".to_string());
         }
 
-        // Check for dotted
-        let (note_str, dotted) = if let Some(stripped) = s.strip_suffix('.') {
-            (stripped, true)
-        } else {
-            (s, false)
-        };
-
-        // Split on underscore to get pitch and duration
-        let parts: Vec<&str> = note_str.split('_').collect();
-        if parts.len() != 2 {
-            return Err(format!(
-                "Invalid note format '{}': expected <pitch>_<duration>",
-                s
-            ));
-        }
-
-        let pitch_part = parts[0];
-        let duration_str = parts[1];
-
-        // Parse duration
-        let duration: u8 = duration_str
-            .parse()
-            .map_err(|_| format!("Invalid duration: {}", duration_str))?;
+        let (pitch_part, duration, dotted, triplet, underscore_form) =
+            Self::split_pitch_and_duration(s)?;
 
         // Check for rest
         if pitch_part == "r" || pitch_part == "R" {
@@ -258,6 +245,7 @@ impl MelodyNote {
                 octave_modifier: OctaveModifier::None,
                 duration,
                 dotted,
+                triplet,
                 scale_degree: None,
                 position: None,
             });
@@ -296,10 +284,11 @@ impl MelodyNote {
 
             return Ok(MelodyNote {
                 pitch: final_pitch,
-                octave,
+                octave: if underscore_form { octave } else { None },
                 octave_modifier,
                 duration,
                 dotted,
+                triplet,
                 scale_degree: Some(degree),
                 position: None,
             });
@@ -334,13 +323,69 @@ impl MelodyNote {
 
         Ok(MelodyNote {
             pitch,
-            octave,
+            octave: if underscore_form { octave } else { None },
             octave_modifier,
             duration,
             dotted,
+            triplet,
             scale_degree: None,
             position: None,
         })
+    }
+
+    fn split_pitch_and_duration(s: &str) -> Result<(&str, u8, bool, bool, bool), String> {
+        if let Some((pitch_part, duration_part)) = s.split_once('_') {
+            let (duration, dotted, triplet) = Self::parse_duration_part(duration_part)?;
+            return Ok((pitch_part, duration, dotted, triplet, true));
+        }
+
+        let duration_start = s
+            .char_indices()
+            .rfind(|(_, c)| !c.is_ascii_digit() && *c != '.' && *c != 't')
+            .map(|(idx, c)| idx + c.len_utf8())
+            .unwrap_or(0);
+
+        if duration_start >= s.len() {
+            return Err(format!(
+                "Invalid note format '{}': expected <pitch><duration> or <pitch>_<duration>",
+                s
+            ));
+        }
+
+        let (pitch_part, duration_part) = s.split_at(duration_start);
+        if pitch_part.is_empty() || duration_part.is_empty() {
+            return Err(format!(
+                "Invalid note format '{}': expected <pitch><duration> or <pitch>_<duration>",
+                s
+            ));
+        }
+
+        let (duration, dotted, triplet) = Self::parse_duration_part(duration_part)?;
+        Ok((pitch_part, duration, dotted, triplet, false))
+    }
+
+    fn parse_duration_part(duration_part: &str) -> Result<(u8, bool, bool), String> {
+        let mut digits = String::new();
+        let mut dotted = false;
+        let mut triplet = false;
+
+        for c in duration_part.chars() {
+            match c {
+                '0'..='9' => digits.push(c),
+                '.' if !dotted => dotted = true,
+                't' if !triplet => triplet = true,
+                _ => return Err(format!("Invalid duration: {}", duration_part)),
+            }
+        }
+
+        if digits.is_empty() {
+            return Err(format!("Invalid duration: {}", duration_part));
+        }
+
+        let duration = digits
+            .parse()
+            .map_err(|_| format!("Invalid duration: {}", duration_part))?;
+        Ok((duration, dotted, triplet))
     }
 
     /// Parse octave modifier (`'` or `,`) from character iterator
@@ -378,7 +423,10 @@ impl MelodyNote {
 
     /// Get duration in beats (assuming quarter note = 1 beat)
     pub fn duration_beats(&self) -> f64 {
-        let base = 4.0 / self.duration as f64;
+        let mut base = 4.0 / self.duration as f64;
+        if self.triplet {
+            base *= 2.0 / 3.0;
+        }
         if self.dotted { base * 1.5 } else { base }
     }
 }
@@ -408,9 +456,17 @@ impl fmt::Display for MelodyNote {
             write!(f, "{}", oct)?;
         }
 
-        write!(f, "_{}", self.duration)?;
+        let prefer_bare_duration = self.octave.is_none() && self.scale_degree.is_none();
+        if prefer_bare_duration {
+            write!(f, "{}", self.duration)?;
+        } else {
+            write!(f, "_{}", self.duration)?;
+        }
         if self.dotted {
             write!(f, ".")?;
+        }
+        if self.triplet {
+            write!(f, "t")?;
         }
         Ok(())
     }
@@ -629,7 +685,7 @@ mod tests {
         assert_eq!(format!("{}", note), "D#5_8");
 
         let dotted = MelodyNote::parse("A_4.").unwrap();
-        assert_eq!(format!("{}", dotted), "A_4.");
+        assert_eq!(format!("{}", dotted), "A4.");
     }
 
     #[test]
@@ -658,10 +714,10 @@ mod tests {
     #[test]
     fn test_melody_display() {
         let melody = Melody::parse("C_8 D_8 E_4").unwrap();
-        assert_eq!(format!("{}", melody), "m{ C_8 D_8 E_4 }");
+        assert_eq!(format!("{}", melody), "m{ C8 D8 E4 }");
 
         let named = melody.with_name("riff");
-        assert_eq!(format!("{}", named), "riff = m{ C_8 D_8 E_4 }");
+        assert_eq!(format!("{}", named), "riff = m{ C8 D8 E4 }");
     }
 
     #[test]
@@ -812,10 +868,10 @@ mod tests {
     #[test]
     fn test_display_with_octave_modifier() {
         let note = MelodyNote::parse("C'_4").unwrap();
-        assert_eq!(format!("{}", note), "C'_4");
+        assert_eq!(format!("{}", note), "C'4");
 
         let note = MelodyNote::parse("D,_8").unwrap();
-        assert_eq!(format!("{}", note), "D,_8");
+        assert_eq!(format!("{}", note), "D,8");
     }
 
     #[test]
@@ -838,6 +894,20 @@ mod tests {
         assert_eq!(melody.notes[2].octave_modifier, OctaveModifier::Up);
         assert_eq!(melody.notes[3].pitch, "C");
         assert_eq!(melody.notes[3].octave_modifier, OctaveModifier::Down);
+    }
+
+    #[test]
+    fn test_parse_bare_lilypond_style_and_triplets() {
+        let melody = Melody::parse("G2 r4t F#4t F4t").unwrap();
+        assert_eq!(melody.notes.len(), 4);
+        assert_eq!(melody.notes[0].pitch, "G");
+        assert_eq!(melody.notes[0].duration, 2);
+        assert!(!melody.notes[0].triplet);
+        assert!(melody.notes[1].is_rest());
+        assert_eq!(melody.notes[1].duration, 4);
+        assert!(melody.notes[1].triplet);
+        assert_eq!(format!("{}", melody), "m{ G2 r4t F#4t F4t }");
+        assert!((melody.total_beats() - 4.0).abs() < 0.0001);
     }
 
     #[test]

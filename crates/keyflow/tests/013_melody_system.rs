@@ -55,6 +55,41 @@ Cmaj7/// m{ C_8 D_8 E_4 F_4 } Dm7///
 }
 
 #[test]
+fn test_parallel_measure_container_parses() {
+    let input = r#"
+Test Song - Artist
+120bpm 4/4 #C
+
+VS 4
+<< Cmaj7/// ; m{ r2 r4t Bb4t B4t } >> | Dm7///
+"#;
+
+    let chart = keyflow::parse(input).unwrap();
+    let first_measure = &chart.sections[0].measures()[0];
+
+    assert_eq!(first_measure.chords.len(), 1);
+    assert_eq!(first_measure.melodies.len(), 1);
+    assert_eq!(first_measure.chords[0].full_symbol, "Cmaj7");
+    assert_eq!(format!("{}", first_measure.melodies[0]), "m{ r2 r4t Bb4t B4t }");
+}
+
+#[test]
+fn test_parallel_measure_container_round_trips() {
+    let input = r#"
+Test Song - Artist
+120bpm 4/4 #C
+
+VS 4
+<< Cmaj7/// ; m{ r2 r4t Bb4t B4t } >> | Dm7///
+"#;
+
+    let chart = keyflow::parse(input).unwrap();
+    let rendered = format!("{}", chart);
+
+    assert!(rendered.contains("<< Cmaj7/// ; m{ r2 r4t Bb4t B4t } >>"));
+}
+
+#[test]
 fn test_melody_variable_reference() {
     let input = r#"
 Test Song - Artist

@@ -250,7 +250,12 @@ enum ChordOrRest {
 /// Detect chords from MIDI notes and respell to target key.
 fn detect_chords_from_notes(midi: &MidiFile, config: &MidiChartConfig) -> Vec<DetectedChord> {
     let ppq = midi.ppq();
-    let all_notes = midi.all_notes();
+    let harmony_channel = primary_harmony_channel(midi);
+    let all_notes: Vec<_> = midi
+        .all_notes()
+        .into_iter()
+        .filter(|note| harmony_channel.is_none_or(|channel| note.channel == channel))
+        .collect();
 
     let keyflow_notes: Vec<KeyflowMidiNote> = all_notes
         .iter()
@@ -288,6 +293,26 @@ fn detect_chords_from_notes(midi: &MidiFile, config: &MidiChartConfig) -> Vec<De
     }
 
     detected
+}
+
+fn primary_harmony_channel(midi: &MidiFile) -> Option<u8> {
+    let mut counts = std::collections::BTreeMap::<u8, usize>::new();
+    for note in midi.all_notes() {
+        *counts.entry(note.channel).or_default() += 1;
+    }
+
+    if counts.is_empty() {
+        return None;
+    }
+
+    if counts.contains_key(&0) {
+        return Some(0);
+    }
+
+    counts
+        .into_iter()
+        .max_by_key(|(channel, count)| (*count, std::cmp::Reverse(*channel)))
+        .map(|(channel, _)| channel)
 }
 
 /// Normalize chord spelling to use conventional/readable names.

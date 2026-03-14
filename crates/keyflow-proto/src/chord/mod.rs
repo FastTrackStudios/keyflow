@@ -16,6 +16,7 @@
 //! - [`midi`] - MIDI note detection
 
 pub mod alteration;
+pub mod chordpro;
 pub mod definition;
 pub mod degree;
 pub mod detail_level;
@@ -33,6 +34,9 @@ pub mod timing;
 mod transposition; // Internal module - extends Chord with transposition
 
 pub use alteration::Alteration;
+pub use chordpro::{
+    ChordProChunk, ChordProDirective, ChordProDocument, ChordProLine, ChordProSection,
+};
 pub use definition::Chord;
 pub use degree::ChordDegree;
 pub use detail_level::{DetailLevel, UpperStructure};

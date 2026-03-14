@@ -19,6 +19,12 @@ pub mod templates;
 pub mod track;
 pub mod types;
 
+// Lyric and chord-syllable alignment modules
+pub mod chord_syllable_alignment;
+pub mod lyric_chord_parser;
+pub mod lyrics;
+pub mod syllable_parser;
+
 pub use chart::Chart;
 pub use commands::Command;
 pub use cues::{InstrumentGroup, TextCue};
@@ -35,3 +41,11 @@ pub use source_link::SourceLink;
 pub use templates::TemplateManager;
 pub use track::{Track, TrackType};
 pub use types::{ChartSection, ChordInstance, Measure as TypesMeasure};
+
+// Lyric and chord-syllable alignment re-exports
+pub use chord_syllable_alignment::{
+    ChordAttachmentType, ChordSyllableAligner, ChordSyllableMapping, SectionAlignment,
+};
+pub use lyric_chord_parser::LyricChordParser;
+pub use lyrics::{ChordAttachment, LyricLine, LyricSyllable};
+pub use syllable_parser::SyllableParser;

@@ -735,11 +735,22 @@ impl<'a> ChartParser<'a> {
         // Check for repeat syntax at the end of the line (e.g., "6 5 4 4 x4")
         let (line_to_parse, repeat_count) = Self::extract_repeat_syntax(line);
 
+        if line_to_parse.contains("<<") {
+            return self.parse_parallel_chord_line(
+                line_to_parse,
+                repeat_count,
+                section_type,
+                section_measure_count,
+            );
+        }
+
+        let line_to_parse = Self::normalize_parallel_container_syntax(line_to_parse);
+
         // Preprocess: Calculate automatic durations for chords between measure separators
         // If chords are between | separators, split the measure evenly
         // e.g., "| G C |" → "G_2 C_2", "G C | D" → "G_2 C_2 D_1"
         let line_with_auto_durations =
-            Self::apply_auto_durations_between_separators(line_to_parse, beats_per_measure);
+            Self::apply_auto_durations_between_separators(&line_to_parse, beats_per_measure);
 
         let tokens_str: Vec<&str> = line_with_auto_durations.split_whitespace().collect();
         let mut measures: Vec<Measure> = Vec::new();
@@ -1759,6 +1770,186 @@ impl<'a> ChartParser<'a> {
         }
 
         Ok(measures)
+    }
+
+    fn normalize_parallel_container_syntax(input: &str) -> String {
+        let mut out = String::with_capacity(input.len());
+        let mut chars = input.chars().peekable();
+        let mut parallel_depth = 0usize;
+
+        while let Some(ch) = chars.next() {
+            if ch == '<' && chars.peek() == Some(&'<') {
+                chars.next();
+                parallel_depth += 1;
+                continue;
+            }
+
+            if ch == '>' && chars.peek() == Some(&'>') {
+                chars.next();
+                parallel_depth = parallel_depth.saturating_sub(1);
+                continue;
+            }
+
+            if parallel_depth > 0 && ch == ';' {
+                out.push(' ');
+            } else {
+                out.push(ch);
+            }
+        }
+
+        out
+    }
+
+    fn parse_parallel_chord_line(
+        &mut self,
+        line: &str,
+        repeat_count: RepeatCount,
+        section_type: &SectionType,
+        _section_measure_count: Option<usize>,
+    ) -> Result<Vec<Measure>, String> {
+        let measure_parts = Self::split_top_level_measures(line);
+        let mut measures = Vec::new();
+
+        for part in measure_parts {
+            let trimmed = part.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            if trimmed.starts_with("<<") && trimmed.ends_with(">>") {
+                measures.push(self.parse_parallel_measure(trimmed, section_type)?);
+            } else {
+                let mut parsed = self.parse_chord_line(trimmed, section_type, Some(1))?;
+                if let Some(measure) = parsed.into_iter().next() {
+                    measures.push(measure);
+                }
+            }
+        }
+
+        if let RepeatCount::Fixed(count) = repeat_count {
+            if count > 1 {
+                if let Some(last) = measures.last_mut() {
+                    last.repeat_count = count;
+                }
+            }
+        }
+
+        Ok(measures)
+    }
+
+    fn parse_parallel_measure(
+        &mut self,
+        measure_text: &str,
+        section_type: &SectionType,
+    ) -> Result<Measure, String> {
+        let inner = measure_text
+            .trim()
+            .strip_prefix("<<")
+            .and_then(|s| s.strip_suffix(">>"))
+            .ok_or_else(|| format!("Invalid parallel container: {}", measure_text))?
+            .trim();
+
+        let branches = Self::split_top_level_parallel_branches(inner);
+        let mut merged = Measure::new();
+
+        for branch in branches {
+            let trimmed = branch.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            let mut parsed = self.parse_chord_line(trimmed, section_type, Some(1))?;
+            let Some(branch_measure) = parsed.into_iter().next() else {
+                continue;
+            };
+
+            merged.chords.extend(branch_measure.chords);
+            merged.rhythm_elements.extend(branch_measure.rhythm_elements);
+            merged.rhythm_slashes.extend(branch_measure.rhythm_slashes);
+            merged.text_cues.extend(branch_measure.text_cues);
+            merged.dynamics.extend(branch_measure.dynamics);
+            merged.melodies.extend(branch_measure.melodies);
+            merged.repeat_count = merged.repeat_count.max(branch_measure.repeat_count);
+            merged.time_signature = branch_measure.time_signature;
+            if merged.source_span.is_none() {
+                merged.source_span = branch_measure.source_span;
+            }
+        }
+
+        Ok(merged)
+    }
+
+    fn split_top_level_measures(input: &str) -> Vec<String> {
+        let mut parts = Vec::new();
+        let mut current = String::new();
+        let mut chars = input.chars().peekable();
+        let mut parallel_depth = 0usize;
+        let mut brace_depth = 0usize;
+
+        while let Some(ch) = chars.next() {
+            if ch == '<' && chars.peek() == Some(&'<') {
+                parallel_depth += 1;
+                current.push('<');
+                current.push('<');
+                chars.next();
+                continue;
+            }
+
+            if ch == '>' && chars.peek() == Some(&'>') {
+                parallel_depth = parallel_depth.saturating_sub(1);
+                current.push('>');
+                current.push('>');
+                chars.next();
+                continue;
+            }
+
+            match ch {
+                '{' => brace_depth += 1,
+                '}' => brace_depth = brace_depth.saturating_sub(1),
+                '|' if parallel_depth == 0 && brace_depth == 0 => {
+                    parts.push(current.trim().to_string());
+                    current.clear();
+                    continue;
+                }
+                _ => {}
+            }
+
+            current.push(ch);
+        }
+
+        if !current.trim().is_empty() {
+            parts.push(current.trim().to_string());
+        }
+
+        parts
+    }
+
+    fn split_top_level_parallel_branches(input: &str) -> Vec<String> {
+        let mut parts = Vec::new();
+        let mut current = String::new();
+        let mut brace_depth = 0usize;
+        let mut chars = input.chars().peekable();
+
+        while let Some(ch) = chars.next() {
+            match ch {
+                '{' => brace_depth += 1,
+                '}' => brace_depth = brace_depth.saturating_sub(1),
+                ';' if brace_depth == 0 => {
+                    parts.push(current.trim().to_string());
+                    current.clear();
+                    continue;
+                }
+                _ => {}
+            }
+
+            current.push(ch);
+        }
+
+        if !current.trim().is_empty() {
+            parts.push(current.trim().to_string());
+        }
+
+        parts
     }
 }
 

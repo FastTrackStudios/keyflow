@@ -125,6 +125,42 @@ impl Chart {
         self.time_signature = Some(new_time_sig);
     }
 
+    fn format_measure_inline_content(&self, measure: &super::types::Measure) -> String {
+        let chord_parts: Vec<String> = measure
+            .chords
+            .iter()
+            .filter_map(|chord| {
+                let chord_str = self.format_chord_for_syntax(chord, &measure.time_signature);
+                (!chord_str.is_empty()).then_some(chord_str)
+            })
+            .collect();
+
+        let melody_parts: Vec<String> = measure
+            .melodies
+            .iter()
+            .map(|melody| {
+                if let Some(name) = &melody.name
+                    && self.melody_variables.get(name).is_some()
+                {
+                    format!("${}", name)
+                } else {
+                    format!("{}", melody)
+                }
+            })
+            .collect();
+
+        match (chord_parts.is_empty(), melody_parts.is_empty()) {
+            (false, false) => format!(
+                "<< {} ; {} >>",
+                chord_parts.join(" "),
+                melody_parts.join(" ; ")
+            ),
+            (false, true) => chord_parts.join(" "),
+            (true, false) => melody_parts.join(" "),
+            (true, true) => String::new(),
+        }
+    }
+
     /// Get the active key at a specific position
     pub fn key_at_position(&self, position: &AbsolutePosition) -> Option<&Key> {
         // Start with initial key
@@ -448,25 +484,9 @@ impl Chart {
                 }
             }
 
-            // Chords in this measure
-            for chord in &measure.chords {
-                let chord_str = self.format_chord_for_syntax(chord, &measure.time_signature);
-                if !chord_str.is_empty() {
-                    all_chords.push(chord_str);
-                }
-            }
-
-            // Melodies in this measure
-            for melody in &measure.melodies {
-                if let Some(name) = &melody.name {
-                    if self.melody_variables.get(name).is_some() {
-                        all_chords.push(format!("${}", name));
-                    } else {
-                        all_chords.push(format!("{}", melody));
-                    }
-                } else {
-                    all_chords.push(format!("{}", melody));
-                }
+            let measure_content = self.format_measure_inline_content(measure);
+            if !measure_content.is_empty() {
+                all_chords.push(measure_content);
             }
         }
 
@@ -531,33 +551,9 @@ impl Chart {
             }
         }
 
-        // Chords in this measure
-        let mut chord_parts = Vec::new();
-        for chord in &measure.chords {
-            let chord_str = self.format_chord_for_syntax(chord, &measure.time_signature);
-            if !chord_str.is_empty() {
-                chord_parts.push(chord_str);
-            }
-        }
-
-        // Add melodies inline (check if they're variable references or inline blocks)
-        for melody in &measure.melodies {
-            if let Some(name) = &melody.name {
-                // This is a named melody - check if it's in our variables
-                if self.melody_variables.get(name).is_some() {
-                    chord_parts.push(format!("${}", name));
-                } else {
-                    // Output as inline block
-                    chord_parts.push(format!("{}", melody));
-                }
-            } else {
-                // Anonymous melody - output as inline block
-                chord_parts.push(format!("{}", melody));
-            }
-        }
-
-        if !chord_parts.is_empty() {
-            output.push_str(&chord_parts.join(" "));
+        let measure_content = self.format_measure_inline_content(measure);
+        if !measure_content.is_empty() {
+            output.push_str(&measure_content);
 
             // Add measure separator at end of measure (except last in section)
             if measure_idx < section.measures().len() - 1 {
@@ -644,25 +640,9 @@ impl Chart {
                 }
             }
 
-            // Chords in this measure
-            for chord in &measure.chords {
-                let chord_str = self.format_chord_for_syntax(chord, &measure.time_signature);
-                if !chord_str.is_empty() {
-                    all_chords.push(chord_str);
-                }
-            }
-
-            // Melodies in this measure
-            for melody in &measure.melodies {
-                if let Some(name) = &melody.name {
-                    if self.melody_variables.get(name).is_some() {
-                        all_chords.push(format!("${}", name));
-                    } else {
-                        all_chords.push(format!("{}", melody));
-                    }
-                } else {
-                    all_chords.push(format!("{}", melody));
-                }
+            let measure_content = self.format_measure_inline_content(measure);
+            if !measure_content.is_empty() {
+                all_chords.push(measure_content);
             }
         }
 
@@ -726,30 +706,9 @@ impl Chart {
             }
         }
 
-        // Chords in this measure
-        let mut chord_parts = Vec::new();
-        for chord in &measure.chords {
-            let chord_str = self.format_chord_for_syntax(chord, &measure.time_signature);
-            if !chord_str.is_empty() {
-                chord_parts.push(chord_str);
-            }
-        }
-
-        // Add melodies inline
-        for melody in &measure.melodies {
-            if let Some(name) = &melody.name {
-                if self.melody_variables.get(name).is_some() {
-                    chord_parts.push(format!("${}", name));
-                } else {
-                    chord_parts.push(format!("{}", melody));
-                }
-            } else {
-                chord_parts.push(format!("{}", melody));
-            }
-        }
-
-        if !chord_parts.is_empty() {
-            output.push_str(&chord_parts.join(" "));
+        let measure_content = self.format_measure_inline_content(measure);
+        if !measure_content.is_empty() {
+            output.push_str(&measure_content);
 
             // Add measure separator at end of measure (except last in track)
             if measure_idx < measures.len() - 1 {
