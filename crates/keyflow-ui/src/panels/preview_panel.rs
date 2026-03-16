@@ -16,10 +16,8 @@ use crate::chart_renderer::{A4_HEIGHT, A4_WIDTH};
 use crate::{
     ChartLayoutManager, CHART_CURSOR_TICK, CHART_CURSOR_VISIBLE, CHART_SOURCE, SESSION_CHART_SOURCE,
 };
-use engraver_proto::engraver::layout::chart::{
-    ChartLayoutConfig, ChartLayoutEngine, LayoutMode,
-};
-use engraver_proto::engraver::style::MStyle;
+use keyflow::engraver::layout::chart::{ChartLayoutConfig, ChartLayoutEngine, LayoutMode};
+use keyflow::engraver::style::MStyle;
 
 use dock_dioxus::DOCK_WORKSPACE;
 use dock_proto::PanelId;

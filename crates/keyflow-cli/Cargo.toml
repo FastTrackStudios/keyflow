@@ -9,10 +9,7 @@ name = "kf"
 path = "src/main.rs"
 
 [dependencies]
-keyflow = { workspace = true, features = ["text"] }
-keyflow-midi.workspace = true
-keyflow-proto = { workspace = true }
-engraver-proto = { workspace = true, default-features = false, features = ["engraver"] }
+keyflow = { workspace = true, features = ["text", "midi", "engraver"] }
 
 clap = { version = "4", features = ["derive"] }
 tracing = "0.1"

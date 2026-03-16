@@ -20,19 +20,19 @@ fn new_offscreen_renderer(width: u32, height: u32) -> OffscreenRenderer {
 fn new_offscreen_renderer(_width: u32, _height: u32) -> OffscreenRenderer {
     anyrender::NullImageRenderer::new()
 }
-use engraver_proto::engraver::export::{PdfSerializer, SvgExportConfig, SvgSerializer};
-use engraver_proto::engraver::fonts::ChartFontBundle;
-use engraver_proto::engraver::layout::chart::cursor::{
+use keyflow::engraver::export::{PdfSerializer, SvgExportConfig, SvgSerializer};
+use keyflow::engraver::fonts::ChartFontBundle;
+use keyflow::engraver::layout::chart::cursor::{
     ChartCursor, CursorState, HighlightCommand, Rgba,
 };
-use engraver_proto::engraver::layout::chart::{
-    ChartLayoutConfig, ChartLayoutEngine, ChartLayoutResult, LayoutMode,
+use keyflow::engraver::layout::chart::{
+    BeatPosition, ChartLayoutConfig, ChartLayoutEngine, ChartLayoutResult, LayoutMode,
 };
-use engraver_proto::engraver::renderer::cursor_renderer::render_cursor_commands;
-use engraver_proto::engraver::renderer::scene_renderer::SceneRenderBuilder;
-use engraver_proto::engraver::scene::node::{metadata_keys, SceneNode};
-use engraver_proto::engraver::style::MStyle;
-use keyflow_proto::{Chart, ChartPosition};
+use keyflow::engraver::renderer::cursor_renderer::render_cursor_commands;
+use keyflow::engraver::renderer::scene_renderer::SceneRenderBuilder;
+use keyflow::engraver::scene::node::{metadata_keys, SceneNode};
+use keyflow::engraver::style::MStyle;
+use keyflow::{Chart, ChartPosition};
 use kurbo::{Affine, Point, Rect};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -1829,7 +1829,7 @@ impl ChartLayoutManager {
     fn render_beat_hover(
         &self,
         scene: &mut impl PaintScene,
-        beat: &engraver_proto::engraver::layout::chart::BeatPosition,
+        beat: &BeatPosition,
         scene_x: f64,
         transform: Affine,
     ) {

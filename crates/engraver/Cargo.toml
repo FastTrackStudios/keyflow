@@ -2,3 +2,15 @@
 name = "engraver"
 version = "0.1.0"
 edition = "2024"
+description = "Engraver facade — re-exports engraver-proto for chart layout and rendering"
+
+[features]
+default = ["engraver"]
+engraver = ["engraver-proto/engraver"]
+midi-import = ["engraver", "engraver-proto/midi-import"]
+
+[dependencies]
+engraver-proto = { path = "../engraver-proto", default-features = false }
+
+[lints]
+workspace = true

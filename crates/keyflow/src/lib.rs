@@ -6,7 +6,7 @@
 
 // Re-export all types from keyflow-proto for convenience
 #[cfg(feature = "engraver")]
-pub use engraver_proto as engraver;
+pub use engraver;
 #[cfg(feature = "midi")]
 pub use keyflow_midi as midi;
 pub use keyflow_proto::*;
@@ -105,6 +105,14 @@ pub fn parse<T: IntoChart>(
     source: T,
 ) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError> {
     source.into_chart()
+}
+
+/// Parse a .kf document (potentially multi-block) and return the Chart from the keyflow block.
+#[cfg(feature = "text")]
+pub fn parse_document(
+    input: &str,
+) -> std::result::Result<(keyflow_proto::Chart, keyflow_proto::document::KfDocument), String> {
+    keyflow_text::chart::parse_document(input)
 }
 
 // Local modules

@@ -5,12 +5,8 @@ edition = "2021"
 description = "Dioxus UI components for Keyflow chart editing"
 
 [dependencies]
-# Keyflow parsing and types
-keyflow = { workspace = true, features = ["text"] }
-keyflow-proto = { workspace = true, features = ["serde", "highlighting"] }
-
-# Engraver for chart layout and rendering
-engraver-proto = { workspace = true, features = ["engraver"] }
+# Keyflow parsing, types, and engraver (all through the facade)
+keyflow = { workspace = true, features = ["text", "engraver", "highlighting"] }
 
 # Backend-agnostic rendering abstraction
 anyrender = { workspace = true }

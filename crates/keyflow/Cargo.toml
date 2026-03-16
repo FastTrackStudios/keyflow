@@ -8,8 +8,9 @@ description = "Music theory and chord parsing - re-exports from keyflow-proto"
 default = ["text"]
 text = ["dep:keyflow-text"]
 midi = ["dep:keyflow-midi"]
-engraver = ["dep:engraver-proto"]
-midi-import = ["engraver", "engraver-proto/midi-import"]
+engraver = ["dep:engraver"]
+highlighting = ["keyflow-proto/highlighting", "keyflow-text?/highlighting"]
+midi-import = ["engraver", "engraver/midi-import"]
 
 [dependencies]
 # Core dependencies
@@ -20,7 +21,7 @@ regex = "1.11.3"
 derive_more = { version = "1.0", features = ["debug", "display", "from", "error"] }
 
 # DAW and facet (WASM compatible)
-daw-control = { workspace = true }
+daw-proto = { workspace = true }
 facet = { workspace = true }
 helgoboss-midi = "0.4.0"
 
@@ -28,7 +29,7 @@ helgoboss-midi = "0.4.0"
 keyflow-proto = { path = "../keyflow-proto" }
 keyflow-text = { path = "../keyflow-text", optional = true }
 keyflow-midi = { path = "../keyflow-midi", optional = true }
-engraver-proto = { path = "../engraver-proto", optional = true, default-features = false, features = ["engraver"] }
+engraver = { path = "../engraver", optional = true, default-features = false, features = ["engraver"] }
 
 # WASM-specific dependencies
 [target.'cfg(target_arch = "wasm32")'.dependencies]
@@ -41,6 +42,8 @@ uuid = { version = "1.0", features = ["v4"] }
 
 [dev-dependencies]
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+dawfile-reaper = { workspace = true }
+engraver = { path = "../engraver", features = ["engraver", "midi-import"] }
 
 [lints]
 workspace = true

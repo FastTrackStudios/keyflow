@@ -14,14 +14,10 @@ unused = "allow"
 [workspace.lints.clippy]
 
 [workspace.dependencies]
-# Internal crates
+# Public crates (facade + UI)
 keyflow = { path = "crates/keyflow" }
-keyflow-proto = { path = "crates/keyflow-proto" }
-keyflow-text = { path = "crates/keyflow-text" }
-keyflow-midi = { path = "crates/keyflow-midi" }
 keyflow-ui = { path = "crates/keyflow-ui" }
 engraver = { path = "crates/engraver" }
-engraver-proto = { path = "crates/engraver-proto" }
 
 # Facet reflection - use crates.io 0.43.x to match roam's constraint
 facet = { version = "0.44" }

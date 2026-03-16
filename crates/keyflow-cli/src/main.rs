@@ -2,13 +2,14 @@ use std::io::Read;
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
-use engraver_proto::engraver::export::pdf::PdfSerializer;
-use engraver_proto::engraver::export::svg::{SvgExportConfig, SvgSerializer};
-use engraver_proto::engraver::fonts::ChartFontBundle;
-use engraver_proto::engraver::layout::chart::{
-    ChartLayoutConfig, ChartLayoutEngine, LayoutMode,
+use keyflow::engraver::export::pdf::PdfSerializer;
+use keyflow::engraver::export::svg::{SvgExportConfig, SvgSerializer};
+use keyflow::engraver::fonts::ChartFontBundle;
+use keyflow::engraver::layout::chart::{
+    ChartLayoutConfig, ChartLayoutEngine, ChartLayoutResult, LayoutMode,
 };
-use engraver_proto::engraver::style::MStyle;
+use keyflow::engraver::style::MStyle;
+use keyflow::Chart;
 
 /// A4 page dimensions in points.
 const A4_WIDTH: f64 = 595.0;
@@ -91,18 +92,18 @@ fn read_bytes(input: &str) -> Result<Vec<u8>, String> {
     }
 }
 
-fn parse_chart(source: &str) -> Result<keyflow_proto::Chart, String> {
+fn parse_chart(source: &str) -> Result<Chart, String> {
     keyflow::parse(source).map_err(|e| format!("{e}"))
 }
 
-fn parse_midi_chart(input: &str) -> Result<keyflow_proto::Chart, String> {
+fn parse_midi_chart(input: &str) -> Result<Chart, String> {
     let bytes = read_bytes(input)?;
-    keyflow_midi::parse_midi_bytes(&bytes)
+    keyflow::midi::parse_midi_bytes(&bytes)
 }
 
 fn generate_midi_chart_text(input: &str) -> Result<String, String> {
     let bytes = read_bytes(input)?;
-    keyflow_midi::generate_chart_text_from_midi_bytes(&bytes)
+    keyflow::midi::generate_chart_text_from_midi_bytes(&bytes)
 }
 
 struct LayoutPipeline {
@@ -123,8 +124,8 @@ impl LayoutPipeline {
 
     fn layout(
         &self,
-        chart: &keyflow_proto::Chart,
-    ) -> engraver_proto::engraver::layout::chart::ChartLayoutResult {
+        chart: &Chart,
+    ) -> ChartLayoutResult {
         let config = ChartLayoutConfig::master_rhythm().with_page_offsets(true);
         let mode = LayoutMode::Paginated {
             page_width: A4_WIDTH,
@@ -135,7 +136,7 @@ impl LayoutPipeline {
 
     fn export_svg_pages(
         &self,
-        result: &engraver_proto::engraver::layout::chart::ChartLayoutResult,
+        result: &ChartLayoutResult,
     ) -> Vec<String> {
         let mut pages = Vec::with_capacity(result.pages.len());
         for page in &result.pages {
@@ -165,7 +166,7 @@ impl LayoutPipeline {
 
     fn export_pdf(
         &self,
-        result: &engraver_proto::engraver::layout::chart::ChartLayoutResult,
+        result: &ChartLayoutResult,
     ) -> Result<Vec<u8>, String> {
         let svg_pages = self.export_svg_pages(result);
         let symbol_font = self.font_bundle.symbol_font_data();

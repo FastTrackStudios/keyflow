@@ -5,7 +5,7 @@
 
 use crate::prelude::*;
 use dioxus_core::Task;
-use keyflow_proto::highlighting::{Highlighter, Renderer, Theme};
+use keyflow::highlighting::{Highlighter, Renderer, Theme};
 
 /// Highlighted editor component.
 ///

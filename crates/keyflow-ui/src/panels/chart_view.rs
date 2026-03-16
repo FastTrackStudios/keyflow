@@ -19,10 +19,8 @@ use crate::{
     CHART_EDITOR_BOUNDS, CHART_HOVER_SCENE_POINT, CHART_PAGE_INFO, CHART_PREVIEW_MODE,
     CHART_RENDER_STATS, CHART_SOURCE, CHART_VIEWPORT,
 };
-use engraver_proto::engraver::layout::chart::{
-    ChartLayoutConfig, ChartLayoutEngine, LayoutMode,
-};
-use engraver_proto::engraver::style::MStyle;
+use keyflow::engraver::layout::chart::{ChartLayoutConfig, ChartLayoutEngine, LayoutMode};
+use keyflow::engraver::style::MStyle;
 
 use dock_dioxus::DOCK_WORKSPACE;
 use dock_proto::PanelId;
