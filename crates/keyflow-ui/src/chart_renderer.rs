@@ -7,7 +7,19 @@
 use crate::signals::{PageMeta, SystemMeta};
 use anyrender::{ImageRenderer, PaintScene, Scene as RecordedScene};
 use anyrender::{Paint, recording::RenderCommand};
-use anyrender_vello::VelloImageRenderer;
+#[cfg(feature = "anyrender_vello")]
+type OffscreenRenderer = anyrender_vello::VelloImageRenderer;
+#[cfg(not(feature = "anyrender_vello"))]
+type OffscreenRenderer = anyrender::NullImageRenderer;
+
+#[cfg(feature = "anyrender_vello")]
+fn new_offscreen_renderer(width: u32, height: u32) -> OffscreenRenderer {
+    anyrender_vello::VelloImageRenderer::new(width, height)
+}
+#[cfg(not(feature = "anyrender_vello"))]
+fn new_offscreen_renderer(_width: u32, _height: u32) -> OffscreenRenderer {
+    anyrender::NullImageRenderer::new()
+}
 use engraver_proto::engraver::export::{PdfSerializer, SvgExportConfig, SvgSerializer};
 use engraver_proto::engraver::fonts::ChartFontBundle;
 use engraver_proto::engraver::layout::chart::cursor::{
@@ -508,13 +520,13 @@ pub struct ChartLayoutManager {
     /// Low-detail rasterized pages for non-focused pages at far zoom.
     cached_page_lod_images: HashMap<PageLodKey, ImageBrush>,
     /// Offscreen renderer for generating low-detail page rasters.
-    page_lod_renderer: Option<VelloImageRenderer>,
+    page_lod_renderer: Option<OffscreenRenderer>,
     /// Cached full static viewport image for settled camera states.
     cached_view_static_image: Option<ImageBrush>,
     cached_view_static_key: Option<ViewStaticKey>,
     last_view_static_key: Option<ViewStaticKey>,
     view_static_stable_frames: u8,
-    view_static_renderer: Option<VelloImageRenderer>,
+    view_static_renderer: Option<OffscreenRenderer>,
     enable_view_static_cache: bool,
     enable_pretransformed_fragments: bool,
     last_transform_key: Option<TransformStabilityKey>,
@@ -748,7 +760,7 @@ impl ChartLayoutManager {
 
         let renderer = self
             .view_static_renderer
-            .get_or_insert_with(|| VelloImageRenderer::new(image_width, image_height));
+            .get_or_insert_with(|| new_offscreen_renderer(image_width, image_height));
         renderer.resize(image_width, image_height);
 
         let mut pixels = Vec::new();
@@ -1342,7 +1354,7 @@ impl ChartLayoutManager {
 
         let renderer = self
             .page_lod_renderer
-            .get_or_insert_with(|| VelloImageRenderer::new(image_width, image_height));
+            .get_or_insert_with(|| new_offscreen_renderer(image_width, image_height));
         renderer.resize(image_width, image_height);
 
         let sx = image_width as f64 / page_w;

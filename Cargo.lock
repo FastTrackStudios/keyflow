@@ -426,6 +426,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "anyrender_vello_hybrid"
+version = "0.2.2"
+source = "git+https://github.com/DioxusLabs/anyrender.git?branch=main#0691c2d4168aae1db6507465faafda30978442c7"
+dependencies = [
+ "anyrender 0.7.0",
+ "debug_timer",
+ "kurbo 0.13.0",
+ "peniko 0.6.0",
+ "pollster 0.4.0",
+ "rustc-hash 2.1.1",
+ "vello_common 0.0.6",
+ "vello_hybrid",
+ "wgpu 27.0.1",
+ "wgpu_context 0.3.1",
+]
+
+[[package]]
 name = "app_units"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1929,6 +1946,19 @@ dependencies = [
  "actions-proto",
  "facet",
  "roam",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "dawfile-reaper"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "daw-proto",
+ "libc",
+ "nom 8.0.0",
+ "rayon",
+ "serde",
  "thiserror 2.0.18",
 ]
 
@@ -4762,6 +4792,7 @@ dependencies = [
  "color-eyre",
  "colored",
  "daw-control",
+ "dawfile-reaper",
  "derive_more 1.0.0",
  "engraver-proto",
  "facet",
@@ -4828,6 +4859,7 @@ version = "0.1.0"
 dependencies = [
  "anyrender 0.7.0",
  "anyrender_vello 0.7.1",
+ "anyrender_vello_hybrid",
  "daw-proto",
  "dioxus",
  "dioxus-native",
@@ -4839,12 +4871,16 @@ dependencies = [
  "kurbo 0.13.0",
  "lucide-dioxus 2.566.0",
  "peniko 0.6.0",
+ "rustc-hash 2.1.1",
  "serde_json",
  "session",
  "session-ui",
  "tokio",
  "tracing",
  "vello 0.7.0",
+ "vello_common 0.0.6",
+ "vello_hybrid",
+ "web-sys",
 ]
 
 [[package]]
@@ -6571,6 +6607,7 @@ version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9a2b6aadb221872732e87d465213e9be5af2849b0e8cc5300a8ba98fffa2e00a"
 dependencies = [
+ "bytemuck",
  "color",
  "kurbo 0.13.0",
  "linebender_resource_handle",
@@ -9620,13 +9657,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "vello_common"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1bd1a4c633ce09e7d713df1a6e036644a125e15e0c169cfb5180ddf5836ca04b"
+dependencies = [
+ "bytemuck",
+ "fearless_simd",
+ "hashbrown 0.16.1",
+ "log",
+ "peniko 0.6.0",
+ "png",
+ "skrifa 0.40.0",
+ "smallvec 1.15.1",
+]
+
+[[package]]
 name = "vello_cpu"
 version = "0.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b0bd1fcf9c1814f17a491e07113623d44e3ec1125a9f3401f5e047d6d326da21"
 dependencies = [
  "bytemuck",
- "vello_common",
+ "vello_common 0.0.4",
 ]
 
 [[package]]
@@ -9656,6 +9709,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "vello_hybrid"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5660521c83853e94316c484d31c757aa40bbab4cfcbf5afdb4270e827c4db699"
+dependencies = [
+ "bytemuck",
+ "guillotiere",
+ "hashbrown 0.16.1",
+ "js-sys",
+ "log",
+ "thiserror 2.0.18",
+ "vello_common 0.0.6",
+ "vello_sparse_shaders",
+ "web-sys",
+ "wgpu 27.0.1",
+]
+
+[[package]]
 name = "vello_shaders"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9679,6 +9750,15 @@ dependencies = [
  "naga 27.0.3",
  "thiserror 2.0.18",
  "vello_encoding 0.7.0",
+]
+
+[[package]]
+name = "vello_sparse_shaders"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d84ceb248d455e90199f37bf3e3dab63bbe10ad75c0b0556611a9ad094ef1b6b"
+dependencies = [
+ "naga 27.0.3",
 ]
 
 [[package]]

@@ -49,13 +49,19 @@ pub mod examples;
 pub mod layouts;
 pub mod signals;
 
-#[cfg(feature = "desktop-panels")]
+#[cfg(any(
+    feature = "desktop-panels",
+    all(feature = "wasm-panels", target_arch = "wasm32"),
+))]
 pub mod chart_graphics;
 #[cfg(feature = "desktop-panels")]
 pub mod panels;
 
 // Re-export key types for convenience
-#[cfg(feature = "desktop-panels")]
+#[cfg(any(
+    feature = "desktop-panels",
+    all(feature = "wasm-panels", target_arch = "wasm32"),
+))]
 pub use chart_graphics::ChartGraphics;
 pub use chart_renderer::{ChartLayoutManager, SceneHitResult};
 pub use layouts::ChartEditorLayout;
