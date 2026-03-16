@@ -1,175 +1,41 @@
 //! Section Color Palette
 //!
 //! Provides semantic colors for sections based on their type.
-//! Uses the shared color-palette crate for consistency across the app.
+//! Colors are sourced from [`music_catalog`] — the single source of truth
+//! for section colors across FastTrackStudio.
 //!
 //! ## Color Philosophy
 //!
 //! - **Bright variants** (400/500 shades): Used for progress bars, boundaries, active elements
 //! - **Muted variants** (200 shades): Used for backgrounds, inactive states, pre/post sections
 //! - **Text colors** (800 shades): Used for text on muted backgrounds
-//!
-//! ## Section Color Mapping
-//!
-//! | Section Type | Color Family | Reasoning |
-//! |---|---|---|
-//! | Intro | Orange | Warm, welcoming start |
-//! | Verse | Emerald | Fresh, natural progression |
-//! | Chorus | Blue | Strong, memorable hook |
-//! | Bridge | Violet | Contrast, transitional |
-//! | Outro | Amber | Warm conclusion |
-//! | Instrumental | Orange (light) | Related to intro |
-//! | Interlude | Yellow | Bright pause |
-//! | Vamp | Lime | Repeated/improvisation section |
-//! | Pre-*/Post-* | Lighter shade of parent | Visual hierarchy |
-//! | Hits/Breakdown | Slate | Neutral |
-//! | Custom | Slate | Neutral with border |
 
 use super::SectionType;
-use color_palette::Color;
 
-/// Section color configuration using the unified Color type
-#[derive(Debug, Clone, Copy)]
-pub struct SectionColors {
-    /// Bright color (for progress bars, active elements)
-    pub bright: Color,
-    /// Muted color (for backgrounds, inactive states)
-    pub muted: Color,
-    /// Text color (for text on muted backgrounds)
-    pub text: Color,
-}
+// Re-export the SectionColorSet from music-catalog as SectionColors for backward compatibility
+pub use music_catalog::sections::SectionColorSet as SectionColors;
 
-impl SectionColors {
-    /// Create a new section color set
-    pub const fn new(bright: Color, muted: Color, text: Color) -> Self {
-        Self {
-            bright,
-            muted,
-            text,
-        }
-    }
+// Re-export the UI palettes from music-catalog
+pub use music_catalog::sections::ui_palettes as palettes;
 
-    /// Get bright color as CSS rgb() string
-    #[must_use]
-    pub fn bright_css(&self) -> String {
-        self.bright.to_css_rgb()
-    }
-
-    /// Get muted color as CSS rgb() string
-    #[must_use]
-    pub fn muted_css(&self) -> String {
-        self.muted.to_css_rgb()
-    }
-
-    /// Get text color as CSS rgb() string
-    #[must_use]
-    pub fn text_css(&self) -> String {
-        self.text.to_css_rgb()
-    }
-
-    /// Get bright color as hex string (#RRGGBB)
-    #[must_use]
-    pub fn bright_hex(&self) -> String {
-        self.bright.to_hex_string()
-    }
-
-    /// Get muted color as hex string (#RRGGBB)
-    #[must_use]
-    pub fn muted_hex(&self) -> String {
-        self.muted.to_hex_string()
-    }
-
-    /// Get text color as hex string (#RRGGBB)
-    #[must_use]
-    pub fn text_hex(&self) -> String {
-        self.text.to_hex_string()
-    }
-}
-
-/// Predefined section color palettes using color-palette constants
-pub mod palettes {
-    use super::SectionColors;
-    use color_palette::palette;
-
-    /// Orange palette for Intro/Instrumental sections
-    pub const ORANGE: SectionColors = SectionColors::new(
-        palette::orange::S400,
-        palette::orange::S200,
-        palette::orange::S800,
-    );
-
-    /// Emerald palette for Verse sections
-    pub const EMERALD: SectionColors = SectionColors::new(
-        palette::emerald::S400,
-        palette::emerald::S200,
-        palette::emerald::S800,
-    );
-
-    /// Blue palette for Chorus sections
-    pub const BLUE: SectionColors = SectionColors::new(
-        palette::blue::S500,
-        palette::blue::S200,
-        palette::blue::S800,
-    );
-
-    /// Violet palette for Bridge sections
-    pub const VIOLET: SectionColors = SectionColors::new(
-        palette::violet::S400,
-        palette::violet::S200,
-        palette::violet::S800,
-    );
-
-    /// Amber palette for Outro sections
-    pub const AMBER: SectionColors = SectionColors::new(
-        palette::amber::S400,
-        palette::amber::S200,
-        palette::amber::S800,
-    );
-
-    /// Yellow palette for Interlude sections
-    pub const YELLOW: SectionColors = SectionColors::new(
-        palette::yellow::S400,
-        palette::yellow::S200,
-        palette::yellow::S800,
-    );
-
-    /// Rose palette for Solo sections
-    pub const ROSE: SectionColors = SectionColors::new(
-        palette::rose::S400,
-        palette::rose::S200,
-        palette::rose::S800,
-    );
-
-    /// Slate palette for neutral/utility sections
-    pub const SLATE: SectionColors = SectionColors::new(
-        palette::slate::S400,
-        palette::slate::S200,
-        palette::slate::S800,
-    );
-
-    /// Lime palette for Vamp sections
-    pub const LIME: SectionColors = SectionColors::new(
-        palette::lime::S400,
-        palette::lime::S200,
-        palette::lime::S800,
-    );
-}
-
-/// Get semantic colors for a section type
+/// Get semantic colors for a section type.
+///
+/// Uses the canonical palettes from [`music_catalog`] to ensure consistency
+/// with auto-coloring in REAPER and other FTS tools.
 #[must_use]
 pub fn colors_for_section_type(section_type: &SectionType) -> SectionColors {
     use palettes::*;
 
     match section_type {
         // Main sections - distinct colors for each
-        SectionType::Intro => ORANGE,
-        SectionType::Verse => EMERALD,
-        SectionType::Chorus => BLUE,
-        SectionType::Bridge => VIOLET,
-        SectionType::Outro => AMBER,
-        SectionType::Instrumental => ORANGE,
-        SectionType::Solo => ROSE,
-        SectionType::Interlude => YELLOW,
+        SectionType::Intro => INTRO,
+        SectionType::Verse => VERSE,
+        SectionType::Chorus => CHORUS,
+        SectionType::Bridge => BRIDGE,
+        SectionType::Outro => OUTRO,
+        SectionType::Instrumental => INSTRUMENTAL,
+        SectionType::Solo => SOLO,
+        SectionType::Interlude => INTERLUDE,
 
         // Pre/Post sections - use parent section's muted as bright
         SectionType::Pre(inner) | SectionType::Post(inner) => {
@@ -182,7 +48,7 @@ pub fn colors_for_section_type(section_type: &SectionType) -> SectionColors {
         }
 
         // Vamp sections - lime (repeated/improvisation)
-        SectionType::Vamp => LIME,
+        SectionType::Vamp => VAMP,
 
         // Utility sections - neutral colors
         SectionType::CountIn | SectionType::End => SLATE,
@@ -221,8 +87,8 @@ mod tests {
     #[test]
     fn test_color_conversions() {
         let colors = colors_for_section_type(&SectionType::Intro);
-        // Orange 400 = 0xFB923C
-        assert_eq!(colors.bright_hex(), "#fb923c");
-        assert_eq!(colors.bright_css(), "rgb(251, 146, 60)");
+        // Sky 400 = Intro color from music-catalog
+        let intro_color = music_catalog::sections::colors::INTRO;
+        assert_eq!(colors.bright, intro_color);
     }
 }

@@ -589,7 +589,33 @@ impl<'a> ChartParser<'a> {
                         }
                     }
                     TrackType::Lyrics => {
-                        // TODO: implement lyrics tracks
+                        // Parse lyrics content - join all lines
+                        let combined = track_lines.join(" ");
+                        let trimmed = combined.trim();
+                        if !trimmed.is_empty() {
+                            // Try {Chord}syllable format first
+                            let lyric_line =
+                                if trimmed.contains('{') && trimmed.contains('}') {
+                                    let parser =
+                                        crate::chart::LyricChordParser::new();
+                                    parser.parse(trimmed).unwrap_or_else(|_| {
+                                        crate::chart::LyricLine::parse_simple(trimmed)
+                                    })
+                                } else if trimmed.contains('[')
+                                    && trimmed.contains(']')
+                                {
+                                    // Try [Chord] inline format via SyllableParser
+                                    crate::chart::SyllableParser::new().parse(trimmed)
+                                } else {
+                                    // Plain text fallback
+                                    crate::chart::LyricLine::parse_simple(trimmed)
+                                };
+                            let mut track = Track::lyrics(lyric_line);
+                            if let Some(name) = track_name {
+                                track = track.with_name(name);
+                            }
+                            tracks.push(track);
+                        }
                     }
                 }
             }

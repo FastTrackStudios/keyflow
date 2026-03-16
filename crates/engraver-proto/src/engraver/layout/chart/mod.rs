@@ -2061,7 +2061,15 @@ impl ChartLayoutEngine {
         let _beats_per_measure = time_signature.0 as f64;
 
         // Check if the measure has explicit chord rhythms (Lily, Rest, Space notation)
-        let has_explicit_chord_rhythm = rhythm_builder::measure_has_explicit_chord_rhythm(measure);
+        // Staccato chords also produce explicit-style rhythm (eighth hit + rests)
+        // so they need to preserve the Note/Rest distinction in the entries.
+        let has_staccato_chords = measure.chords.iter().any(|c| {
+            c.commands
+                .iter()
+                .any(|cmd| matches!(cmd, crate::chart::commands::Command::Staccato))
+        });
+        let has_explicit_chord_rhythm =
+            rhythm_builder::measure_has_explicit_chord_rhythm(measure) || has_staccato_chords;
 
         // Check if there are triplet spillbacks that need rhythmic processing
         let has_triplet_spillbacks = spillbacks.is_some_and(|spills| {

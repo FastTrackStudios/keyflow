@@ -157,6 +157,13 @@ fn chord_complexity_score(info: &ChordInfo, rotated_pcs: &HashSet<u8>) -> i32 {
         score += 10;
     }
 
+    // Penalize excessive additions — chords like "sus2add11" or "sus4add9"
+    // are almost always a wrong root interpretation. Each addition beyond
+    // the first adds complexity.
+    if info.additions.len() > 1 {
+        score += (info.additions.len() as i32 - 1) * 12;
+    }
+
     score
 }
 

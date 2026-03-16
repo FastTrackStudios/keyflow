@@ -40,6 +40,8 @@ pub struct MidiFile {
     markers: Vec<MarkerEvent>,
     /// Track names
     track_names: Vec<Option<String>>,
+    /// Swing ratio (0.5 = straight, 0.667 = triplet swing, None = unknown)
+    swing: Option<f64>,
 }
 
 /// A single MIDI track with notes and metadata.
@@ -309,6 +311,7 @@ impl MidiFile {
             time_signatures,
             markers,
             track_names,
+            swing: None,
         })
     }
 
@@ -326,6 +329,7 @@ impl MidiFile {
         time_signatures: Vec<TimeSignatureEvent>,
         markers: Vec<MarkerEvent>,
         track_names: Vec<Option<String>>,
+        swing: Option<f64>,
     ) -> Self {
         Self {
             ppq,
@@ -334,6 +338,7 @@ impl MidiFile {
             time_signatures,
             markers,
             track_names,
+            swing,
         }
     }
 
@@ -341,6 +346,12 @@ impl MidiFile {
     #[must_use]
     pub fn ppq(&self) -> u32 {
         self.ppq
+    }
+
+    /// Get the swing ratio (0.5 = straight, 0.667 = triplet, None = unknown).
+    #[must_use]
+    pub fn swing(&self) -> Option<f64> {
+        self.swing
     }
 
     /// Get all tracks with note data.
@@ -1348,8 +1359,10 @@ pub enum SectionType {
     Chorus,
     /// Bridge
     Bridge,
-    /// Instrumental break/solo
+    /// Instrumental break
     Instrumental,
+    /// Solo section (e.g., trumpet solo, guitar solo)
+    Solo,
     /// Interlude (transitional section)
     Interlude,
     /// Outro/ending
@@ -1397,7 +1410,8 @@ impl SectionType {
             "PC" | "PRE" | "PRE-CHORUS" | "PRECHORUS" => Self::PreChorus,
             "IN" | "INTRO" => Self::Intro,
             "OUT" | "OUTRO" => Self::Outro,
-            "INST" | "SOLO" | "INSTRUMENTAL" => Self::Instrumental,
+            "INST" | "INSTRUMENTAL" => Self::Instrumental,
+            "SOLO" => Self::Solo,
             "INT" | "INTERLUDE" => Self::Interlude,
             _ => {
                 // Check for longer patterns
@@ -1415,7 +1429,9 @@ impl SectionType {
                     Self::Outro
                 } else if text_lower.contains("interlude") {
                     Self::Interlude
-                } else if text_lower.contains("solo") || text_lower.contains("inst") {
+                } else if text_lower.contains("solo") {
+                    Self::Solo
+                } else if text_lower.contains("inst") {
                     Self::Instrumental
                 } else {
                     Self::Other
@@ -1495,6 +1511,7 @@ fn is_section_marker(text: &str) -> bool {
         "Pre-Chorus",
         "Interlude",
         "Solo",
+        "SOLO",
         "Break",
         "Tag",
         "Coda",
@@ -1514,10 +1531,12 @@ fn is_section_marker(text: &str) -> bool {
     }
 
     // Also match patterns like "Intro \"Groove\"" (intro with description)
+    // and "Guitar Solo", "Trumpet Solo" etc.
     text_lower.starts_with("intro")
         || text_lower.starts_with("verse")
         || text_lower.starts_with("chorus")
         || text_lower.starts_with("bridge")
+        || text_lower.contains("solo")
 }
 
 /// Check if a marker text looks like a chord symbol.
@@ -2065,7 +2084,7 @@ mod tests {
             },
         ];
 
-        let midi = MidiFile::from_parts(ppq, vec![], vec![], vec![], markers, vec![]);
+        let midi = MidiFile::from_parts(ppq, vec![], vec![], vec![], markers, vec![], None);
 
         let keys = midi.key_signature_markers_absolute();
         assert_eq!(keys.len(), 3);
@@ -2931,6 +2950,7 @@ mod keyflow_comparison_tests {
                 },
             ],
             vec![],
+            None,
         );
 
         let sections = midi.section_markers_absolute();

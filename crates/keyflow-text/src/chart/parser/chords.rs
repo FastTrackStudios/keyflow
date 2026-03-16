@@ -5,6 +5,7 @@
 
 use super::helpers::{PushPullModifier, RepeatCount};
 use super::ChartParser;
+use keyflow_proto::chart::commands::Command;
 use crate::chart::cues::TextCue;
 use crate::chart::dynamics::DynamicMarking;
 use crate::chart::melody::Melody;
@@ -384,6 +385,8 @@ impl<'a> ChartParser<'a> {
         line: &str,
         beats_per_measure: f64,
     ) -> String {
+        use keyflow_proto::chart::commands::Command;
+
         // Check if line has any separators - if not, return as-is
         if !line.contains('|') {
             return line.to_string();
@@ -424,6 +427,7 @@ impl<'a> ChartParser<'a> {
                     // Count as chord if it's not a command, cue, or other special token
                     // Dot repeats ARE counted - they occupy time in the measure
                     !t.starts_with('/') && !t.starts_with('@') && !t.starts_with('"')
+                        && Command::parse_stop_token(t).is_none()
                 })
                 .count();
 
@@ -440,6 +444,7 @@ impl<'a> ChartParser<'a> {
                             && !t.starts_with('"')
                             && !t.contains('_')
                             && **t != "." // Dot repeats handle their own duration
+                            && Command::parse_stop_token(t).is_none()
                     })
                     .count()
             };
@@ -486,12 +491,14 @@ impl<'a> ChartParser<'a> {
                     segment_result.push(' ');
                 }
 
-                // Check if this is a chord (not a command, cue, dot repeat, etc.)
+                // Check if this is a chord (not a command, cue, dot repeat, stop token, etc.)
                 let is_dot_repeat = *token == ".";
+                let is_stop_token = Command::parse_stop_token(token).is_some();
                 if !token.starts_with('/')
                     && !token.starts_with('@')
                     && !token.starts_with('"')
                     && !is_dot_repeat
+                    && !is_stop_token
                 {
                     // Check if token already has a duration
                     if token.contains('_') {
@@ -726,7 +733,7 @@ impl<'a> ChartParser<'a> {
         section_type: &SectionType,
         section_measure_count: Option<usize>,
     ) -> Result<Vec<Measure>, String> {
-        use crate::chart::commands::Command;
+        use keyflow_proto::chart::commands::Command;
         use crate::chart::types::TempoChange;
 
         let mut time_sig = self.time_signature.unwrap_or(TimeSignature::common_time());
@@ -758,6 +765,7 @@ impl<'a> ChartParser<'a> {
         let mut current_measure_beats = 0.0;
         let mut pending_cue: Option<TextCue> = None;
         let mut pending_dynamic: Option<DynamicMarking> = None;
+        let mut pending_stop: Option<Command> = None;
         let mut just_processed_separator = false; // Track if we just processed a | separator
         let mut measure_was_created_by_separator = false; // Track if current measure was created by |
         let mut in_melody_block = false; // Track if we're inside a m{...} block
@@ -1318,6 +1326,43 @@ impl<'a> ChartParser<'a> {
                 continue;
             }
 
+            // Check for stop sign tokens (e.g., "!STOP", "!STOPGROOVE")
+            // Position depends on context:
+            //   !STOP C  → Stop (before) on C — "stop, then hit C"
+            //   C !STOP  → StopAfter on C — "hit C, then stop"
+            if let Some(stop_cmd) = Command::parse_stop_token(token_str) {
+                // If there's already a chord in this measure, attach as "after" to it
+                if let Some(last) = current_measure.chords.last_mut() {
+                    last.commands.push(stop_cmd.clone().to_stop_after());
+                    // Also update rhythm_elements for consistency
+                    if let Some(crate::chart::types::RhythmElement::Chord(c)) =
+                        current_measure.rhythm_elements.last_mut()
+                    {
+                        c.commands.push(stop_cmd.to_stop_after());
+                    }
+                } else if !just_processed_separator && !measure_was_created_by_separator {
+                    // Current measure is empty but NOT because of a `|` separator —
+                    // it was auto-pushed when the previous chord filled the measure.
+                    // (e.g., "C !STOP" where C's auto-duration fills the measure)
+                    if let Some(prev_measure) = measures.last_mut() {
+                        if let Some(last) = prev_measure.chords.last_mut() {
+                            last.commands.push(stop_cmd.clone().to_stop_after());
+                        }
+                        if let Some(crate::chart::types::RhythmElement::Chord(c)) =
+                            prev_measure.rhythm_elements.last_mut()
+                        {
+                            c.commands.push(stop_cmd.to_stop_after());
+                        }
+                    } else {
+                        pending_stop = Some(stop_cmd);
+                    }
+                } else {
+                    // After a `|` separator — pend for the next chord (renders before)
+                    pending_stop = Some(stop_cmd);
+                }
+                continue;
+            }
+
             // Check for tempo change (e.g., "->140bpm", "->120")
             if token_str.starts_with("->") {
                 if let Some(new_tempo) = TempoChange::parse_syntax(token_str) {
@@ -1638,6 +1683,11 @@ impl<'a> ChartParser<'a> {
                     }
                     just_processed_separator = false; // Reset flag after processing chord
                     measure_was_created_by_separator = false; // Reset flag - measure now has content
+
+                    // Attach pending stop command to this chord
+                    if let Some(stop_cmd) = pending_stop.take() {
+                        chord.commands.push(stop_cmd);
+                    }
 
                     // Store as last chord for dot repeat
                     last_chord = Some(chord.clone());
@@ -1972,7 +2022,7 @@ impl<'a> ChartParser<'a> {
         time_sig: TimeSignature,
         source_span: Option<TextSpan>,
     ) -> Result<ChordInstance, String> {
-        use crate::chart::commands::Command;
+        use keyflow_proto::chart::commands::Command;
         use crate::chord::Chord;
 
         // Check for accent prefix (>) BEFORE push - indicates accent on the pushed beat
@@ -1983,16 +2033,30 @@ impl<'a> ChartParser<'a> {
             (false, token)
         };
 
+        // Check for staccato prefix (.) AFTER accent, BEFORE push
+        // Supports: .C (staccato chord), >.'C (accented staccato push), .'C (staccato push)
+        let (is_staccato, token_after_staccato) =
+            if token_after_leading_accent.starts_with('.') {
+                (
+                    true,
+                    token_after_leading_accent
+                        .strip_prefix('.')
+                        .unwrap_or(token_after_leading_accent),
+                )
+            } else {
+                (false, token_after_leading_accent)
+            };
+
         // Check for one-time override (prefix !)
-        let (is_override, token_clean) = if token_after_leading_accent.starts_with('!') {
+        let (is_override, token_clean) = if token_after_staccato.starts_with('!') {
             (
                 true,
-                token_after_leading_accent
+                token_after_staccato
                     .strip_prefix('!')
-                    .unwrap_or(token_after_leading_accent),
+                    .unwrap_or(token_after_staccato),
             )
         } else {
-            (false, token_after_leading_accent)
+            (false, token_after_staccato)
         };
 
         // Check for push notation (leading apostrophes with optional triplet/tuplet: 'C, ''Em, 'tC, ':5C)
@@ -2139,6 +2203,11 @@ impl<'a> ChartParser<'a> {
             instance = instance.add_command(Command::Accent);
         }
 
+        // Add staccato command if present (.C, >.'C, .'C)
+        if is_staccato {
+            instance = instance.add_command(Command::Staccato);
+        }
+
         Ok(instance)
     }
 }
@@ -2231,7 +2300,7 @@ mod tests {
 
     #[test]
     fn test_accent_prefix_parsing() {
-        use crate::chart::commands::Command;
+        use keyflow_proto::chart::commands::Command;
         use crate::sections::SectionType;
 
         // Test that >C parses as C with an accent command
@@ -2273,7 +2342,7 @@ VS
 
     #[test]
     fn test_accent_on_push_and_downbeat_parsing() {
-        use crate::chart::commands::Command;
+        use keyflow_proto::chart::commands::Command;
         use crate::sections::SectionType;
 
         // Test that >'C parses as AccentOnPush (accent on anticipation)
@@ -2385,7 +2454,7 @@ VS
 
     #[test]
     fn test_accent_not_in_chord_memory() {
-        use crate::chart::commands::Command;
+        use keyflow_proto::chart::commands::Command;
         use crate::sections::SectionType;
 
         // With the new chord memory behavior:
@@ -2473,7 +2542,7 @@ VS
 
     #[test]
     fn test_accent_preserved_in_section_template() {
-        use crate::chart::commands::Command;
+        use keyflow_proto::chart::commands::Command;
         use crate::sections::SectionType;
 
         // Accents CAN be committed to section memory (templates).
@@ -2529,7 +2598,7 @@ VS
 
     #[test]
     fn test_push_duration_then_accent() {
-        use crate::chart::commands::Command;
+        use keyflow_proto::chart::commands::Command;
 
         // '_4>F7 = push with quarter duration, then accent (accent on downbeat)
         // >'_4F7 = accent before push (accent on pushed beat)

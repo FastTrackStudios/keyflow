@@ -14,8 +14,9 @@ thiserror.workspace = true
 roam.workspace = true
 tracing.workspace = true
 serde = { workspace = true, optional = true }
-daw-control = { workspace = true }
+daw-proto = { workspace = true }
 color-palette = { workspace = true }
+music-catalog = { workspace = true }
 uuid = { version = "1", features = ["v4", "serde"] }
 helgoboss-midi = "0.4.0"
 

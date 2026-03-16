@@ -396,7 +396,14 @@ impl Chart {
                         }
                     }
                     TrackType::Lyrics => {
-                        // TODO: implement lyrics serialization
+                        if let Some(lyric_line) = &track.lyrics {
+                            if lyric_line.has_chords() {
+                                output.push_str(&lyric_line.to_chord_text());
+                            } else {
+                                output.push_str(&lyric_line.full_text());
+                            }
+                            output.push('\n');
+                        }
                     }
                 }
             }
@@ -844,6 +851,15 @@ impl Chart {
                     // Both accent types output the same inline syntax
                     // The distinction is in parsing order (>'C vs '>C)
                     output.push_str("->");
+                }
+                super::commands::Command::Staccato => {
+                    // Staccato is encoded as '.' prefix in the token, not inline
+                }
+                super::commands::Command::Stop
+                | super::commands::Command::StopAfter
+                | super::commands::Command::StopGroove
+                | super::commands::Command::StopGrooveAfter => {
+                    // Stop commands are standalone tokens (!STOP), not inline
                 }
             }
         }

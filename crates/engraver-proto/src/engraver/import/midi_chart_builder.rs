@@ -26,6 +26,9 @@ pub struct MidiChartConfig {
     pub key_root: Option<String>,
     /// Override title (if None, tries to extract from MIDI).
     pub title: Option<String>,
+    /// Swing ratio override (0.5 = straight, 0.667 = triplet).
+    /// If None, uses the value from `MidiFile::swing()`.
+    pub swing: Option<f64>,
 }
 
 /// Generate a Keyflow chart text string from a parsed MIDI file.
@@ -44,11 +47,19 @@ pub fn generate_chart_text(midi: &MidiFile, config: &MidiChartConfig) -> String 
     let beats_per_measure = time_sig.0 as i32;
     let ticks_per_measure = (ppq as i64) * (beats_per_measure as i64);
 
-    // Detect chords from MIDI notes
-    let detected = detect_chords_from_notes(midi, config);
+    // Resolve swing: config override > MIDI file value
+    let swing = config.swing.or(midi.swing());
+
+    // Detect chords from MIDI notes (dequantized if swing is known)
+    let detected = detect_chords_from_notes(midi, config, swing);
 
     // Determine if we should use /push = triplet
-    let use_triplet_setting = should_use_triplet_push_from_detected(&detected, ppq, songstart);
+    // If swing is triplet (~0.667), we know it's a triplet feel — skip heuristic
+    let use_triplet_setting = if swing.is_some_and(|s| (s - 0.6667).abs() < 0.05) {
+        true
+    } else {
+        should_use_triplet_push_from_detected(&detected, ppq, songstart)
+    };
 
     let mut output = String::new();
 
@@ -69,6 +80,14 @@ pub fn generate_chart_text(midi: &MidiFile, config: &MidiChartConfig) -> String 
     ));
     if use_triplet_setting {
         output.push_str("/push = triplet\n");
+    }
+    // Emit swing setting if known
+    if let Some(s) = swing {
+        if (s - 0.6667).abs() < 0.05 {
+            output.push_str("/swing = triplet\n");
+        } else if (s - 0.5).abs() > 0.01 {
+            output.push_str(&format!("/swing = {:.4}\n", s));
+        }
     }
     output.push('\n');
 
@@ -97,6 +116,8 @@ pub fn generate_chart_text(midi: &MidiFile, config: &MidiChartConfig) -> String 
         // Section header with optional sub-label, measure count, and quoted name
         let quoted_name = if section.keyflow_type == "Interlude" {
             extract_quoted_name(&section.marker_name)
+        } else if section.keyflow_type == "SOLO" {
+            extract_solo_instrument(&section.marker_name)
         } else {
             None
         };
@@ -157,7 +178,7 @@ pub fn generate_chart_text(midi: &MidiFile, config: &MidiChartConfig) -> String 
 
         // Layout preferences: default 4 measures per line; long instrumentals keep 8 with a midline bar.
         let (measures_per_line, midline_separator_at) =
-            if section.keyflow_type == "INST" && section.length >= 8 {
+            if matches!(section.keyflow_type.as_str(), "INST" | "SOLO") && section.length >= 8 {
                 (8usize, Some(4usize))
             } else {
                 (4usize, None)
@@ -224,6 +245,28 @@ fn compress_repeated_lines(input: &str) -> String {
 }
 
 // ============================================================================
+// Swing Dequantization
+// ============================================================================
+
+/// Snap a swung tick position back to the straight grid.
+///
+/// Within each beat, if the tick falls near `swing_ratio * beat_ticks` (the
+/// swung upbeat position), snap it to the straight upbeat at `beat_ticks / 2`.
+fn dequantize_tick(tick: i64, ppq: u32, swing_ratio: f64) -> i64 {
+    let beat_ticks = ppq as i64;
+    let pos_in_beat = tick.rem_euclid(beat_ticks);
+    let beat_start = tick - pos_in_beat;
+    let swing_pos = (swing_ratio * beat_ticks as f64).round() as i64;
+    let straight_pos = beat_ticks / 2;
+    let tolerance = ppq as i64 / 12; // ~80 ticks at 960 PPQ
+    if (pos_in_beat - swing_pos).abs() < tolerance {
+        beat_start + straight_pos
+    } else {
+        tick
+    }
+}
+
+// ============================================================================
 // Chord Detection
 // ============================================================================
 
@@ -248,7 +291,12 @@ enum ChordOrRest {
 }
 
 /// Detect chords from MIDI notes and respell to target key.
-fn detect_chords_from_notes(midi: &MidiFile, config: &MidiChartConfig) -> Vec<DetectedChord> {
+/// If `swing` is provided, dequantizes note positions before chord detection.
+fn detect_chords_from_notes(
+    midi: &MidiFile,
+    config: &MidiChartConfig,
+    swing: Option<f64>,
+) -> Vec<DetectedChord> {
     let ppq = midi.ppq();
     let harmony_channel = primary_harmony_channel(midi);
     let all_notes: Vec<_> = midi
@@ -260,10 +308,17 @@ fn detect_chords_from_notes(midi: &MidiFile, config: &MidiChartConfig) -> Vec<De
     let keyflow_notes: Vec<KeyflowMidiNote> = all_notes
         .iter()
         .map(|n| {
+            let (start, end) = if let Some(ratio) = swing {
+                let s = dequantize_tick(n.start_tick as i64, ppq, ratio);
+                let e = dequantize_tick((n.start_tick + n.duration_ticks) as i64, ppq, ratio);
+                (s, e)
+            } else {
+                (n.start_tick as i64, (n.start_tick + n.duration_ticks) as i64)
+            };
             KeyflowMidiNote::new(
                 n.pitch,
-                n.start_tick as i64,
-                (n.start_tick + n.duration_ticks) as i64,
+                start,
+                end,
                 n.channel,
                 n.velocity,
             )
@@ -436,10 +491,15 @@ fn detect_push_pull_for_chord(
         )
     } else if (subdivision as i32 - straight_eighth as i32).unsigned_abs() < tolerance {
         // Straight eighth — at the "and" of the beat.
-        // In triplet-based songs, this is just syncopation, not a push.
+        // In triplet-based songs, only mark as a push when the chord crosses into
+        // the next beat (a genuine anticipation). Brief syncopations that stay
+        // within the beat are left unmarked.
         // In straight-eighth songs, mark as push if the chord crosses into the next beat.
-        let treat_as_push =
-            !is_triplet_song && (crosses_beat || (short_duration && ends_at_next_beat));
+        let treat_as_push = if is_triplet_song {
+            crosses_beat
+        } else {
+            crosses_beat || (short_duration && ends_at_next_beat)
+        };
         (
             treat_as_push,
             if treat_as_push {
@@ -643,6 +703,7 @@ fn section_type_to_keyflow(section_type: MidiSectionType, is_pre_songstart: bool
         MidiSectionType::Chorus => "CH",
         MidiSectionType::Bridge => "BR",
         MidiSectionType::Instrumental => "INST",
+        MidiSectionType::Solo => "SOLO",
         MidiSectionType::Interlude => "Interlude",
         MidiSectionType::Outro => "Outro",
         MidiSectionType::SongStart | MidiSectionType::Title | MidiSectionType::Other => "",
@@ -655,7 +716,7 @@ fn section_type_to_keyflow(section_type: MidiSectionType, is_pre_songstart: bool
 fn should_show_measure_count(keyflow_type: &str) -> bool {
     matches!(
         keyflow_type,
-        "COUNT" | "INST" | "Interlude" | "Outro" | "Hits" | "CH"
+        "COUNT" | "INST" | "SOLO" | "Interlude" | "Outro" | "Hits" | "CH"
     )
 }
 
@@ -677,6 +738,34 @@ fn extract_sub_label(marker_name: &str) -> Option<String> {
     } else {
         None
     }
+}
+
+/// Extract an instrument name from a SOLO marker.
+///
+/// Supports parenthesized names: `"SOLO A (Trumpet)"` → `Some("Trumpet")`.
+/// Also supports trailing words after SOLO + optional letter/number:
+/// `"Guitar Solo"` → `Some("Guitar")`, `"SOLO Keys"` → `Some("Keys")`.
+fn extract_solo_instrument(marker_name: &str) -> Option<String> {
+    // Try parenthesized instrument: "SOLO A (Trumpet)" or "Solo B (Trumpet)"
+    if let Some(open) = marker_name.find('(') {
+        if let Some(close) = marker_name[open..].find(')') {
+            let instrument = marker_name[open + 1..open + close].trim();
+            if !instrument.is_empty() {
+                return Some(instrument.to_string());
+            }
+        }
+    }
+
+    // Try "Instrument SOLO" pattern (e.g., "Guitar Solo", "Trumpet Solo")
+    let lower = marker_name.to_lowercase();
+    if let Some(pos) = lower.find("solo") {
+        let before = marker_name[..pos].trim();
+        if !before.is_empty() && !before.chars().all(|c| c.is_ascii_digit()) {
+            return Some(before.to_string());
+        }
+    }
+
+    None
 }
 
 /// Extract a quoted subsection name from a MIDI marker name.
@@ -973,6 +1062,18 @@ fn build_rhythm_elements(
             is_staccato_pushed = false;
         }
 
+        // General staccato detection for non-pushed chords:
+        // A chord is staccato if it's significantly shorter than one beat.
+        // This catches verse stabs and intro hits that land on the beat but release quickly.
+        // Threshold: chord duration <= half a beat (eighth note or less in 4/4).
+        let is_staccato = if is_staccato_pushed {
+            true
+        } else if !is_pushed && !is_continuing && actual_duration <= ticks_per_beat / 2 {
+            true
+        } else {
+            false
+        };
+
         // For very short chords (< triplet eighth), quantize the end to grid
         let is_very_short = actual_duration < triplet_eighth;
         let quantized_end = if is_continuing {
@@ -991,7 +1092,7 @@ fn build_rhythm_elements(
             is_pushed,
             push_amount,
             is_accented,
-            is_staccato: is_staccato_pushed,
+            is_staccato,
         });
 
         current_pos = quantized_end;
@@ -1206,11 +1307,12 @@ enum MeasureElement {
 }
 
 /// Generate slash notation for beats.
+/// Each slash represents one beat: `//` = 2 beats, `///` = 3 beats.
 fn generate_slashes(beats: i32) -> String {
     if beats <= 1 {
         String::new()
     } else {
-        "/".repeat((beats - 1) as usize)
+        "/".repeat(beats as usize)
     }
 }
 
@@ -1292,7 +1394,7 @@ fn build_measures(
             }
         }
 
-        for elem in elements {
+        for (elem_idx, elem) in elements.iter().enumerate() {
             match elem {
                 ChordOrRest::Chord {
                     symbol,
@@ -1324,15 +1426,59 @@ fn build_measures(
                         }
                     }
 
+                    // In rhythm charts, a chord sustains until the next chord starts.
+                    // Extend chord_end to the next chord's start (within this measure)
+                    // so that short note-offs don't create false gaps.
+                    // In rhythm charts, extend chord to fill until the next chord change.
+                    // Find the next chord that starts in this measure after this one.
+                    let this_start = *start_ppq;
+                    let next_chord_start_in_measure = elements[elem_idx + 1..]
+                        .iter()
+                        .filter_map(|e| match e {
+                            ChordOrRest::Chord {
+                                start_ppq: next_s, ..
+                            } => {
+                                if *next_s > this_start && *next_s >= measure_start && *next_s < measure_end {
+                                    Some(*next_s)
+                                } else {
+                                    None
+                                }
+                            }
+                            _ => None,
+                        })
+                        .next();
+                    // Extend to next chord's target beat, or measure end if last chord.
+                    // For pushed chords, the target beat is the beat they anticipate
+                    // (ceiling of their position), not the beat they start from (floor).
+                    let effective_end = if let Some(next_start) = next_chord_start_in_measure {
+                        let pos = next_start - measure_start;
+                        let target_beat = if pos % ticks_per_beat == 0 {
+                            pos // already on a beat
+                        } else {
+                            (pos / ticks_per_beat + 1) * ticks_per_beat // ceiling to next beat
+                        };
+                        (target_beat + measure_start).min(measure_end)
+                    } else {
+                        // Last chord in measure — extend to fill
+                        measure_end
+                    };
+
                     let chord_start_clamped = (*start_ppq).max(measure_start);
-                    let chord_end_clamped = (*end_ppq).min(measure_end);
+                    let chord_end_clamped = effective_end;
                     let duration_ticks = chord_end_clamped - chord_start_clamped;
 
                     let chord_end_in_measure =
                         (chord_end_clamped - measure_start).min(ticks_per_measure);
                     let end_beat =
                         ((chord_end_in_measure + ticks_per_beat - 1) / ticks_per_beat) as i32;
-                    let duration_beats = (end_beat - start_beat).max(1);
+                    // For pushed chords, count display beats from the target beat
+                    // (the beat they anticipate into), not their actual start position.
+                    let display_start_beat = if *is_pushed {
+                        (start_beat + 1).min(end_beat)
+                    } else {
+                        start_beat
+                    };
+                    let duration_beats = (end_beat - display_start_beat).max(1);
 
                     // Add rest if there's a gap before this chord
                     let gap_ticks = chord_start_clamped - current_tick;
@@ -1357,7 +1503,7 @@ fn build_measures(
                         is_staccato: *is_staccato,
                     });
 
-                    current_beat = start_beat + duration_beats;
+                    current_beat = display_start_beat + duration_beats;
                     current_tick = chord_end_clamped;
                 }
                 ChordOrRest::Rest {
@@ -1396,16 +1542,31 @@ fn build_measures(
             }
         }
 
-        // Fill remaining beats
+        // Fill remaining beats: extend last chord to fill the measure,
+        // or add trailing rest if the measure has no chords.
         if !measure_elements.is_empty() && current_beat < beats_per_measure {
-            let remaining_ticks = measure_end - current_tick;
-            let start_pos = current_tick - measure_start;
             let remaining_beats = beats_per_measure - current_beat;
-            measure_elements.push(MeasureElement::Rest {
-                beats: remaining_beats,
-                ticks: remaining_ticks,
-                start_tick_in_measure: start_pos,
-            });
+            let last_is_chord = matches!(
+                measure_elements.last(),
+                Some(MeasureElement::Chord { .. })
+            );
+            if last_is_chord {
+                // Extend the last chord to fill the remaining beats
+                if let Some(MeasureElement::Chord { beats, ticks, .. }) =
+                    measure_elements.last_mut()
+                {
+                    *beats += remaining_beats;
+                    *ticks += measure_end - current_tick;
+                }
+            } else {
+                let remaining_ticks = measure_end - current_tick;
+                let start_pos = current_tick - measure_start;
+                measure_elements.push(MeasureElement::Rest {
+                    beats: remaining_beats,
+                    ticks: remaining_ticks,
+                    start_tick_in_measure: start_pos,
+                });
+            }
         }
 
         // Convert to MeasureContent
@@ -1862,9 +2023,8 @@ fn format_measure(
                             )
                         });
 
-                        if !*is_pushed && next_is_pushed {
-                            adjusted_beats += 1;
-                        }
+                        // (Pushed chords borrow from the preceding chord's last beat;
+                        //  the preceding chord's beat count already includes that beat.)
 
                         let chord_count = elements
                             .iter()

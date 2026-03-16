@@ -17,6 +17,7 @@ fn generate_thriller_chart() -> String {
     let config = MidiChartConfig {
         key_root: Some("Eb".to_string()),
         title: Some("Thriller - Dirty Loops, Cory Wong\nTranscribed By: Cody Wright".to_string()),
+        swing: midi.swing(),
     };
     generate_chart_text(&midi, &config)
 }

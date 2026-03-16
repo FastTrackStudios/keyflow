@@ -4,7 +4,7 @@
 //! Supports both chart parsing (measure_count, is_subsection) and DAW integration (positions, id, etc.)
 
 use super::section_type::SectionType;
-use daw_control::{Position, Tempo, TimePosition, TimeSignature};
+use daw_proto::{Position, Tempo, TimePosition, TimeSignature};
 use facet::Facet;
 use std::collections::HashMap;
 
@@ -167,9 +167,9 @@ impl Section {
         name: String,
         number: Option<u32>,
         bpm: f64,
-        time_signature: daw_control::TimeSignature,
+        time_signature: daw_proto::TimeSignature,
     ) -> Result<Self, String> {
-        use daw_control::TimePosition;
+        use daw_proto::TimePosition;
 
         if start_seconds >= end_seconds {
             return Err(format!(

@@ -78,6 +78,30 @@ impl LyricLine {
         Self { syllables }
     }
 
+    /// Check if any syllables have chord attachments
+    pub fn has_chords(&self) -> bool {
+        self.syllables.iter().any(|s| s.chord.is_some())
+    }
+
+    /// Serialize with {Chord}syllable format (for round-tripping)
+    pub fn to_chord_text(&self) -> String {
+        let mut result = String::new();
+        for (i, syl) in self.syllables.iter().enumerate() {
+            if let Some(chord) = &syl.chord {
+                result.push('{');
+                result.push_str(chord);
+                result.push('}');
+            }
+            result.push_str(&syl.text);
+            if syl.hyphen_after {
+                result.push('-');
+            } else if i < self.syllables.len() - 1 {
+                result.push(' ');
+            }
+        }
+        result
+    }
+
     /// Get the full lyric text (with hyphens for melisma)
     pub fn full_text(&self) -> String {
         let mut result = String::new();

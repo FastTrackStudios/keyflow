@@ -47,7 +47,55 @@ impl<'a> ChartParser<'a> {
         // Generate rhythm slashes for empty beats in each measure
         self.generate_rhythm_slashes();
 
+        // Compute chord-syllable alignments for sections with both chords and lyrics
+        self.compute_alignments();
+
         // TODO: Handle template recall
+    }
+
+    /// Compute chord-syllable alignments for sections that have both chord and lyrics tracks
+    pub(super) fn compute_alignments(&mut self) {
+        use crate::chart::chord_syllable_alignment::ChordSyllableAligner;
+        use crate::chart::track::TrackType;
+
+        for section in &mut self.sections {
+            // Check if this section has both a chord track and a lyrics track
+            let has_chords = section
+                .tracks
+                .iter()
+                .any(|t| t.track_type == TrackType::Chords && !t.measures.is_empty());
+            let has_lyrics = section.tracks.iter().any(|t| {
+                t.track_type == TrackType::Lyrics
+                    && t.lyrics
+                        .as_ref()
+                        .is_some_and(|l| !l.syllables.is_empty())
+            });
+
+            if !has_chords || !has_lyrics {
+                continue;
+            }
+
+            // Collect all chords from the chord track
+            let chords: Vec<_> = section
+                .measures()
+                .iter()
+                .flat_map(|m| m.chords.iter())
+                .filter(|c| c.full_symbol != "s") // Skip space placeholders
+                .cloned()
+                .collect();
+
+            // Get lyrics from the lyrics track
+            let syllables = section
+                .lyrics_track()
+                .and_then(|t| t.lyrics.as_ref())
+                .map(|l| &l.syllables);
+
+            if let Some(syllables) = syllables {
+                if let Ok(alignment) = ChordSyllableAligner::align(&chords, syllables) {
+                    section.alignment = Some(alignment);
+                }
+            }
+        }
     }
 
     /// Apply push/pull timing adjustments

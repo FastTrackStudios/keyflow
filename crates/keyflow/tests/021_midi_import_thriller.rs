@@ -1352,6 +1352,7 @@ fn section_type_to_keyflow(section_type: MidiSectionType) -> &'static str {
         MidiSectionType::Chorus => "CH",
         MidiSectionType::Bridge => "BR",
         MidiSectionType::Instrumental => "INST",
+        MidiSectionType::Solo => "SOLO",
         MidiSectionType::Interlude => "Interlude",
         MidiSectionType::Outro => "OUT",
         MidiSectionType::SongStart | MidiSectionType::Title | MidiSectionType::Other => "",

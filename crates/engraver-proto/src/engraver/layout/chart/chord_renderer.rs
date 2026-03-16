@@ -328,6 +328,202 @@ fn create_accent_marker(segment_x: f64, chord_y: f64, spatium: f64, id: u64) -> 
     node
 }
 
+/// Create a staccato marker node for staccato chords.
+///
+/// Renders the SMuFL staccato articulation glyph (·) above the rhythm slash notehead.
+/// Staccato indicates a short, detached chord hit — common in intro stabs and rhythmic figures.
+/// Positioned similarly to accents but uses a smaller dot glyph closer to the notehead.
+///
+/// # Arguments
+/// * `segment_x` - X position of the rhythm segment (slash position) for horizontal centering
+/// * `chord_y` - Y position of chord symbol baseline (used to derive staff position)
+/// * `spatium` - Staff space for sizing and positioning
+/// * `id` - Unique ID for the node
+fn create_staccato_marker(segment_x: f64, chord_y: f64, spatium: f64, id: u64) -> SceneNode {
+    use super::constants::{ARTICULATION_MAG, ARTICULATION_MIN_DISTANCE_SPATIUMS, CHORD_Y_OFFSET};
+
+    // SMuFL articStaccatoAbove: U+E4A2
+    let staccato_glyph = '\u{E4A2}';
+    let color = Color::from_rgba8(0xCC, 0x00, 0x00, 0xFF); // Red — matches accent markers
+
+    // Size relative to spatium (with articulation magnification factor)
+    let font_size = spatium * 1.2 * ARTICULATION_MAG;
+
+    // Calculate staff Y position from chord_y
+    let staff_y = chord_y - CHORD_Y_OFFSET;
+
+    // Position staccato just above the top staff line (same region as accent)
+    // Staccato sits closer to the notehead than accent per convention
+    let staccato_y = staff_y - ARTICULATION_MIN_DISTANCE_SPATIUMS * spatium;
+
+    // Horizontally center on the rhythm slash
+    let staccato_x = segment_x + spatium * 0.5;
+
+    let paint = PaintCommand::glyph(
+        staccato_glyph,
+        kurbo::Point::new(staccato_x, staccato_y),
+        font_size,
+        color,
+    );
+
+    let mut node = SceneNode::leaf(SemanticId::new(ElementType::Articulation, id), vec![paint]);
+    node.set_element_type("staccato");
+    node
+}
+
+/// Stop sign color (red, like a real stop sign)
+fn stop_sign_color() -> Color {
+    Color::from_rgba8(0xCC, 0x00, 0x00, 0xFF)
+}
+
+/// Stop sign text color (white text on red background)
+fn stop_sign_text_color() -> Color {
+    Color::from_rgba8(0xFF, 0xFF, 0xFF, 0xFF)
+}
+
+/// Stop sign border color (white border like a real stop sign)
+fn stop_sign_border_color() -> Color {
+    Color::from_rgba8(0xFF, 0xFF, 0xFF, 0xFF)
+}
+
+/// Build an octagon BezPath centered at (cx, cy) with the given radius.
+/// Rotated so the top and bottom edges are flat (like a real stop sign).
+fn octagon_path(cx: f64, cy: f64, radius: f64) -> kurbo::BezPath {
+    use kurbo::{BezPath, Point};
+    let mut path = BezPath::new();
+    for i in 0..8 {
+        let angle = std::f64::consts::PI / 8.0 + (i as f64) * std::f64::consts::PI / 4.0;
+        let px = cx + radius * angle.cos();
+        let py = cy + radius * angle.sin();
+        if i == 0 {
+            path.move_to(Point::new(px, py));
+        } else {
+            path.line_to(Point::new(px, py));
+        }
+    }
+    path.close_path();
+    path
+}
+
+/// Create a stop sign marker node (octagonal shape with "STOP" text).
+///
+/// Rendered inline at chord symbol level, positioned before or after the chord.
+/// - Before (`!STOP C`): stop sign to the left of the chord — "stop, then hit C"
+/// - After (`C !STOP`): stop sign to the right of the chord — "hit C, then stop"
+///
+/// # Arguments
+/// * `chord_bounds` - Bounding box of the chord symbol for positioning
+/// * `chord_y` - Y position of chord symbol baseline
+/// * `spatium` - Staff space for sizing and positioning
+/// * `after` - If true, position after (right of) the chord; if false, before (left)
+/// * `id` - Unique ID for the node
+fn create_stop_marker(
+    chord_bounds: Rect,
+    chord_y: f64,
+    spatium: f64,
+    after: bool,
+    id: u64,
+) -> SceneNode {
+    use kurbo::Point;
+
+    // Size the stop sign to match chord text height
+    let size = spatium * 1.4; // Radius — roughly matches chord symbol height
+    let border_width = spatium * 0.15;
+    let gap = spatium * 0.5; // Gap between stop sign and chord
+
+    // Center vertically on the chord text (baseline + half ascent)
+    let center_y = chord_y - spatium * 0.6;
+
+    // Horizontal: before or after the chord symbol
+    let center_x = if after {
+        chord_bounds.x1 + gap + size
+    } else {
+        chord_bounds.x0 - gap - size
+    };
+
+    let outer = octagon_path(center_x, center_y, size);
+    let inner = octagon_path(center_x, center_y, size - border_width * 1.5);
+
+    let mut paints = Vec::new();
+
+    // White border (outer octagon)
+    paints.push(PaintCommand::filled_path(outer, stop_sign_border_color()));
+    // Red fill (inner octagon)
+    paints.push(PaintCommand::filled_path(inner, stop_sign_color()));
+    // "STOP" text centered in the octagon
+    paints.push(PaintCommand::text_centered(
+        "STOP",
+        "MuseJazz Text",
+        spatium * 0.85,
+        Point::new(center_x, center_y + spatium * 0.28),
+        stop_sign_text_color(),
+    ));
+
+    let mut node = SceneNode::leaf(SemanticId::new(ElementType::Articulation, id), paints);
+    node.set_element_type("stop_sign");
+    node
+}
+
+/// Create a stop groove marker node (circular shape with "STOP" text).
+///
+/// Rendered inline at chord symbol level, positioned before or after the chord.
+/// Same positioning logic as `create_stop_marker` but with a circular shape.
+///
+/// # Arguments
+/// * `chord_bounds` - Bounding box of the chord symbol for positioning
+/// * `chord_y` - Y position of chord symbol baseline
+/// * `spatium` - Staff space for sizing and positioning
+/// * `after` - If true, position after (right of) the chord; if false, before (left)
+/// * `id` - Unique ID for the node
+fn create_stop_groove_marker(
+    chord_bounds: Rect,
+    chord_y: f64,
+    spatium: f64,
+    after: bool,
+    id: u64,
+) -> SceneNode {
+    use kurbo::Point;
+
+    let radius = spatium * 1.4;
+    let border_width = spatium * 0.15;
+    let gap = spatium * 0.5;
+
+    let center_y = chord_y - spatium * 0.6;
+
+    let center_x = if after {
+        chord_bounds.x1 + gap + radius
+    } else {
+        chord_bounds.x0 - gap - radius
+    };
+
+    let mut paints = Vec::new();
+
+    // White border circle (outer)
+    paints.push(PaintCommand::filled_circle(
+        Point::new(center_x, center_y),
+        radius,
+        stop_sign_border_color(),
+    ));
+    // Red fill circle (inner)
+    paints.push(PaintCommand::filled_circle(
+        Point::new(center_x, center_y),
+        radius - border_width * 1.5,
+        stop_sign_color(),
+    ));
+    // "STOP" text centered in the circle
+    paints.push(PaintCommand::text_centered(
+        "STOP",
+        "MuseJazz Text",
+        spatium * 0.8,
+        Point::new(center_x, center_y + spatium * 0.28),
+        stop_sign_text_color(),
+    ));
+
+    let mut node = SceneNode::leaf(SemanticId::new(ElementType::Articulation, id), paints);
+    node.set_element_type("stop_groove");
+    node
+}
+
 /// Determine if a chord should be skipped (is a space/rest placeholder).
 #[must_use]
 pub fn is_placeholder_chord(symbol: &str) -> bool {
@@ -384,29 +580,26 @@ pub fn calculate_segment_index(
         return 0;
     }
 
-    // Check if this is an internal pushed chord (pushed but not spillback)
-    let is_internal_push = chord
-        .push_pull
-        .as_ref()
-        .is_some_and(|(is_push, _)| *is_push)
-        && !is_first_real
-        && !internal_push_positions.is_empty();
-
-    if is_internal_push {
-        // Internal pushed chord - look up precomputed segment
+    // Check precomputed segment positions (used by internal pushes AND staccato measures)
+    if !internal_push_positions.is_empty() {
         if let Some((_, seg_idx)) = internal_push_positions
             .iter()
             .find(|(c_idx, _)| *c_idx == chord_idx)
         {
             return *seg_idx;
         }
-        // Fallback
-        return chord_idx.min(segment_positions.len().saturating_sub(1));
     }
 
     // Check for explicit rhythm elements
     if !measure.rhythm_elements.is_empty() {
-        let has_explicit_rhythm = measure_has_explicit_chord_rhythm(measure);
+        // Also treat staccato measures as explicit rhythm for segment mapping
+        let has_staccato = measure.chords.iter().any(|c| {
+            c.commands
+                .iter()
+                .any(|cmd| matches!(cmd, Command::Staccato))
+        });
+        let has_explicit_rhythm =
+            measure_has_explicit_chord_rhythm(measure) || has_staccato;
 
         if has_explicit_rhythm {
             // Explicit rhythm: find chord's index in rhythm_elements
@@ -603,12 +796,13 @@ pub fn render_chord_symbols(
 
         // Check if chord has regular accent (not AccentOnPush - that renders on spillback)
         let has_regular_accent = chord.commands.iter().any(|c| matches!(c, Command::Accent));
+        let has_staccato = chord.commands.iter().any(|c| matches!(c, Command::Staccato));
 
-        // In Hits sections: show chord name only for the first chord, then just accents
+        // In Hits sections: show chord name only for the first chord, then just accents/staccatos
         let skip_chord_name = is_hits && hits_chord_shown;
 
         if skip_chord_name {
-            // Hits: skip chord name but still render accent markers
+            // Hits: skip chord name but still render articulation markers
             last_chord_symbol = Some(current_symbol.clone());
 
             if has_regular_accent {
@@ -616,6 +810,31 @@ pub fn render_chord_symbols(
                     create_accent_marker(chord_x, ctx.chord_y, ctx.spatium, id_counter);
                 id_counter += 1;
                 nodes.push(accent_node);
+            }
+            if has_staccato {
+                let staccato_node =
+                    create_staccato_marker(chord_x, ctx.chord_y, ctx.spatium, id_counter);
+                id_counter += 1;
+                nodes.push(staccato_node);
+            }
+            // Stop signs in Hits: use a synthetic bounds around the beat position
+            let synth_bounds = Rect::new(
+                chord_x,
+                ctx.chord_y - ctx.spatium * 1.5,
+                chord_x + ctx.spatium * 2.0,
+                ctx.chord_y,
+            );
+            for cmd in &chord.commands {
+                if cmd.is_stop() {
+                    let after = cmd.is_stop_after();
+                    let node = if cmd.is_stop_sign() {
+                        create_stop_marker(synth_bounds, ctx.chord_y, ctx.spatium, after, id_counter)
+                    } else {
+                        create_stop_groove_marker(synth_bounds, ctx.chord_y, ctx.spatium, after, id_counter)
+                    };
+                    id_counter += 1;
+                    nodes.push(node);
+                }
             }
             continue;
         }
@@ -661,8 +880,8 @@ pub fn render_chord_symbols(
             );
         }
 
-        let chord_y_offset = if has_regular_accent {
-            // Move chord up by 0.5 spatium to make room for accent below
+        let chord_y_offset = if has_regular_accent || has_staccato {
+            // Move chord up by 0.5 spatium to make room for articulation below
             -ctx.spatium * 0.5
         } else {
             0.0
@@ -732,6 +951,40 @@ pub fn render_chord_symbols(
             let accent_node = create_accent_marker(chord_x, ctx.chord_y, ctx.spatium, id_counter);
             id_counter += 1;
             nodes.push(accent_node);
+        }
+
+        // Add staccato marker (dot above the rhythm slash notehead)
+        if has_staccato {
+            let staccato_node =
+                create_staccato_marker(chord_x, ctx.chord_y, ctx.spatium, id_counter);
+            id_counter += 1;
+            nodes.push(staccato_node);
+        }
+
+        // Add stop sign / stop groove markers inline with chord symbols
+        for cmd in &chord.commands {
+            if cmd.is_stop() {
+                let after = cmd.is_stop_after();
+                let node = if cmd.is_stop_sign() {
+                    create_stop_marker(
+                        layout_data.bounds,
+                        ctx.chord_y,
+                        ctx.spatium,
+                        after,
+                        id_counter,
+                    )
+                } else {
+                    create_stop_groove_marker(
+                        layout_data.bounds,
+                        ctx.chord_y,
+                        ctx.spatium,
+                        after,
+                        id_counter,
+                    )
+                };
+                id_counter += 1;
+                nodes.push(node);
+            }
         }
     }
 

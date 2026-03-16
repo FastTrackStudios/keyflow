@@ -2,6 +2,7 @@
 //!
 //! Defines the core data structures for chart representation
 
+use super::chord_syllable_alignment::SectionAlignment;
 use super::commands::Command;
 use super::cues::TextCue;
 use super::dynamics::DynamicMarking;
@@ -491,6 +492,9 @@ pub struct ChartSection {
 
     /// If from template, the span of the original template definition
     pub template_span: Option<TextSpan>,
+
+    /// Chord-syllable alignment (computed in post-processing when both chords and lyrics exist)
+    pub alignment: Option<SectionAlignment>,
 }
 
 impl ChartSection {
@@ -501,6 +505,7 @@ impl ChartSection {
             from_template: false,
             source_span: None,
             template_span: None,
+            alignment: None,
         }
     }
 
@@ -541,6 +546,7 @@ impl ChartSection {
             from_template: true,
             source_span: None,
             template_span: None,
+            alignment: None,
         }
     }
 
@@ -557,6 +563,7 @@ impl ChartSection {
             from_template: true,
             source_span: Some(source_span),
             template_span: Some(template_span),
+            alignment: None,
         }
     }
 
@@ -607,6 +614,13 @@ impl ChartSection {
         self.tracks
             .iter()
             .filter(|t| t.track_type == TrackType::Rhythm)
+    }
+
+    /// Get the first lyrics track (if any)
+    pub fn lyrics_track(&self) -> Option<&Track> {
+        self.tracks
+            .iter()
+            .find(|t| t.track_type == TrackType::Lyrics)
     }
 
     /// Add a melody track to this section

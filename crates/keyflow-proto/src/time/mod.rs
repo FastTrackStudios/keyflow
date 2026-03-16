@@ -5,8 +5,8 @@
 
 pub mod duration;
 
-// Re-export DAW primitives (re-exported at daw_control root)
-pub use daw_control::{
+// Re-export DAW primitives (re-exported at daw_proto root)
+pub use daw_proto::{
     MidiPosition, MusicalPosition, Position, Tempo, TimePosition, TimeRange, TimeSignature,
 };
 

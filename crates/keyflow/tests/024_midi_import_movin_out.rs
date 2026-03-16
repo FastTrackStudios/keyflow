@@ -22,6 +22,7 @@ fn generate_movin_out_chart() -> String {
         title: Some(
             "Movin' Out - Sammy Rae & The Friends\nTranscribed By: Cody Wright".to_string(),
         ),
+        swing: midi.swing(),
     };
     generate_chart_text(&midi, &config)
 }

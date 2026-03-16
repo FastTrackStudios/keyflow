@@ -35,4 +35,26 @@ pub fn parse_chart(input: &str) -> Result<Chart, String> {
     Ok(chart)
 }
 
+/// Parse a .kf document (potentially multi-block) and return the Chart from the keyflow block.
+///
+/// If the document has `--- keyflow ---` / `--- chordpro ---` delimiters, only the
+/// keyflow block is parsed into a Chart. If no delimiters, the entire content is parsed.
+pub fn parse_document(
+    input: &str,
+) -> Result<(Chart, keyflow_proto::document::KfDocument), String> {
+    let doc = parser::parse_kf_document(input)?;
+
+    // Find the keyflow block content to parse
+    let keyflow_content = if doc.is_plain_keyflow() {
+        doc.blocks[0].content.clone()
+    } else {
+        doc.find_block("keyflow")
+            .map(|b| b.content.clone())
+            .unwrap_or_default()
+    };
+
+    let chart = parse_chart(&keyflow_content)?;
+    Ok((chart, doc))
+}
+
 pub mod parser;

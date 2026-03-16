@@ -162,6 +162,14 @@ pub fn detect_chords_from_midi_notes(
     let mut active_notes: Vec<ActiveNote> = Vec::new();
     let mut chord_min_eppq: Option<i64> = None;
 
+    // Overlap tolerance: notes from a previous chord that end within this many ticks
+    // AFTER a new note starts are treated as "already ended". This prevents micro-overlaps
+    // (common in DAW MIDI where note-offs trail by a few ticks) from merging two separate
+    // chord voicings into a single garbage cluster.
+    // Use a small fraction of min_chord_duration to avoid interfering with legitimate
+    // simultaneous notes.
+    let overlap_tolerance = (min_chord_duration_ppq / 4).max(1);
+
     // Process notes sequentially (like Lil Chordbox's GetChords)
     for note_info in &sorted_notes {
         let note = ActiveNote {
@@ -175,6 +183,54 @@ pub fn detect_chords_from_midi_notes(
         chord_min_eppq = chord_min_eppq
             .map(|min| min.min(note.end_ppq))
             .or(Some(note.end_ppq));
+
+        // Pre-clean: when a new note starts AFTER existing notes began (not simultaneous),
+        // remove any active notes that end within a small tolerance of this note's start.
+        // This catches DAW micro-overlaps where chord A's note-offs trail a few ticks
+        // into chord B's note-ons.
+        if !active_notes.is_empty() {
+            // Only apply overlap cleanup when the new note started clearly after the
+            // existing active notes (at least 1 tick later). Notes starting at the same
+            // time are part of the same chord.
+            let earliest_active_start = active_notes
+                .iter()
+                .map(|n| n.start_ppq)
+                .min()
+                .unwrap_or(0);
+            if note.start_ppq > earliest_active_start {
+                let mut cleaned = Vec::new();
+                let mut new_min: Option<i64> = None;
+                for active_note in &active_notes {
+                    if active_note.end_ppq > note.start_ppq + overlap_tolerance {
+                        // Note is clearly still active (well beyond tolerance)
+                        cleaned.push(active_note.clone());
+                        new_min = new_min
+                            .map(|min| min.min(active_note.end_ppq))
+                            .or(Some(active_note.end_ppq));
+                    }
+                    // Notes ending within tolerance of the new note's start are dropped
+                }
+                if cleaned.len() < active_notes.len() {
+                    // Some notes were cleaned up — finalize the previous chord
+                    if active_notes.len() >= 2 {
+                        if let Some(chord) = build_chord_from_notes(
+                            &active_notes,
+                            chord_min_eppq.unwrap_or(0),
+                            note.start_ppq,
+                            min_chord_duration_ppq,
+                        ) {
+                            chords.push(chord);
+                        }
+                    }
+                    active_notes = cleaned;
+                    chord_min_eppq = new_min;
+                    // Update with new note
+                    chord_min_eppq = chord_min_eppq
+                        .map(|min| min.min(note.end_ppq))
+                        .or(Some(note.end_ppq));
+                }
+            }
+        }
 
         // If this note starts after or at the earliest end time, process existing active notes
         if note.start_ppq >= chord_min_eppq.unwrap_or(0) {
@@ -401,7 +457,11 @@ fn apply_midi_octave_adjustments(
     // Handle add4 vs add11 based on octave
     if chord.family.is_none() {
         if chord.extensions.eleventh.is_some() {
-            if third_and_fourth_same_octave {
+            // For sus4 chords, the 4th IS the 11th (same pitch class 5).
+            // Converting the extension to add11 would be redundant — just drop it.
+            if matches!(chord.quality, ChordQuality::Suspended(SuspendedType::Fourth)) {
+                chord.extensions.eleventh = None;
+            } else if third_and_fourth_same_octave {
                 // Both 3rd and 4th in same octave - convert to add4
                 chord.additions.push(ChordDegree::Fourth);
                 chord.extensions.eleventh = None;
@@ -427,7 +487,11 @@ fn apply_midi_octave_adjustments(
     // When we have root, 5th, and 2nd/9th but no 3rd, use "2" naming
     let has_root = semitones.contains(&0);
     let has_fifth = pitch_classes.contains(&7);
-    let has_second = pitch_classes.contains(&2);
+    // Only treat as "second" if the actual semitone 2 is present (same octave as root).
+    // Pitch class 2 from a 9th (semitone 14) should NOT trigger the power+2nd pattern,
+    // because the note is in a higher octave and is better interpreted as part of an
+    // extended chord (sus4add9, 11th, etc.) rather than a sus2.
+    let has_second = semitones.contains(&2);
     let has_third = pitch_classes.contains(&3) || pitch_classes.contains(&4);
 
     // Handle power chord with second (sus2-like voicing)

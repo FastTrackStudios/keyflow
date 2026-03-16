@@ -6,8 +6,8 @@
 //! 3. Enable synced playback, lyric slides, and interactive charts
 
 use keyflow_proto::{
-    ChordSyllableAligner, LyricLine, LyricSyllable, SyllableParser, ChordInstance,
-    AbsolutePosition, MusicalDuration
+    AbsolutePosition, ChordInstance, ChordSyllableAligner, LyricLine, LyricSyllable,
+    MusicalDuration, SyllableParser,
 };
 
 fn main() {
@@ -65,10 +65,7 @@ fn main() {
     for (i, chord) in chords.iter().enumerate() {
         println!(
             "  [{}] {} at beat {} (duration: {} beats)",
-            i,
-            chord.full_symbol,
-            chord.position.beat,
-            chord.duration.beat
+            i, chord.full_symbol, chord.position.beat, chord.duration.beat
         );
     }
 
@@ -76,7 +73,10 @@ fn main() {
     println!("\n🔗 Aligning chords to syllables...");
     match ChordSyllableAligner::align(&chords, &lyric_line.syllables) {
         Ok(alignment) => {
-            println!("✓ Alignment successful: {} mappings\n", alignment.mappings.len());
+            println!(
+                "✓ Alignment successful: {} mappings\n",
+                alignment.mappings.len()
+            );
 
             // Display alignment
             for mapping in &alignment.mappings {

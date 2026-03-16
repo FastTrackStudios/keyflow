@@ -13,6 +13,8 @@ pub struct ChartSettings {
     settings: HashMap<ChartSetting, SettingValue>,
     /// Default push/pull base (standard, triplet, or tuplet)
     pub push_mode: PushPullBase,
+    /// Swing ratio for MIDI playback (0.5 = straight, 0.6667 = triplet)
+    pub swing: Option<f64>,
 }
 
 /// Available chart settings
@@ -31,6 +33,8 @@ pub enum ChartSetting {
     /// When enabled (default), pushed chords create triplet/syncopated notation.
     /// When disabled, pushed chords show apostrophe markers on chord symbols instead.
     PushAltersRhythm,
+    /// Swing ratio for MIDI playback (0.5 = straight, 0.6667 = triplet swing)
+    Swing,
 }
 
 /// Setting value types
@@ -55,6 +59,7 @@ impl ChartSettings {
         Self {
             settings,
             push_mode: PushPullBase::Standard,
+            swing: None,
         }
     }
 
@@ -72,10 +77,11 @@ impl ChartSettings {
             let (k, v) = line.split_at(eq_pos);
             (k.trim().to_uppercase(), v[1..].trim().to_string())
         } else {
-            // No '=' found - try space-separated format for PUSH
+            // No '=' found - try space-separated format for PUSH/SWING
             let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 2 && parts[0].to_uppercase() == "PUSH" {
-                ("PUSH".to_string(), parts[1..].join(" "))
+            let upper = parts.first().map(|s| s.to_uppercase());
+            if parts.len() >= 2 && matches!(upper.as_deref(), Some("PUSH") | Some("SWING")) {
+                (upper.unwrap(), parts[1..].join(" "))
             } else {
                 return Err(format!(
                     "Invalid setting format: '{}'. Expected /SETTING=value or /push <mode>",
@@ -110,6 +116,20 @@ impl ChartSettings {
                     ChartSetting::PushAltersRhythm,
                     SettingValue::Bool(bool_value),
                 );
+                Ok(())
+            }
+            "SWING" => {
+                let swing_value = match value.to_lowercase().as_str() {
+                    "triplet" => 0.6667,
+                    "straight" | "none" => 0.5,
+                    _ => value.parse::<f64>().map_err(|_| {
+                        format!(
+                            "Invalid swing value: '{}'. Expected 'triplet', 'straight', or a number",
+                            value
+                        )
+                    })?,
+                };
+                self.swing = Some(swing_value);
                 Ok(())
             }
             _ => Err(format!("Unknown setting: '{}'", key)),
@@ -270,6 +290,7 @@ impl ChartSettings {
         ChartSettingsCheckpoint {
             settings: self.settings.clone(),
             push_mode: self.push_mode,
+            swing: self.swing,
         }
     }
 
@@ -278,6 +299,7 @@ impl ChartSettings {
     pub fn restore(&mut self, checkpoint: ChartSettingsCheckpoint) {
         self.settings = checkpoint.settings;
         self.push_mode = checkpoint.push_mode;
+        self.swing = checkpoint.swing;
     }
 }
 
@@ -287,6 +309,7 @@ impl ChartSettings {
 pub struct ChartSettingsCheckpoint {
     settings: HashMap<ChartSetting, SettingValue>,
     push_mode: PushPullBase,
+    swing: Option<f64>,
 }
 
 impl ChartSetting {
@@ -297,6 +320,7 @@ impl ChartSetting {
             ChartSetting::PushMode => "PUSH",
             ChartSetting::AutoRhythmSlashes => "AUTO_RHYTHM_SLASHES",
             ChartSetting::PushAltersRhythm => "PUSH_ALTERS_RHYTHM",
+            ChartSetting::Swing => "SWING",
         }
     }
 }

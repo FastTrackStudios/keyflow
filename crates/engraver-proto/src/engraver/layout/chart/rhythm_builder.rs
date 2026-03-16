@@ -343,7 +343,22 @@ fn extract_from_explicit(
         }
 
         // Create RhythmEntry
-        if is_rest {
+        // For staccato chords, replace with quarter-note hit + rests filling the remaining duration
+        let is_staccato_chord = matches!(element, RhythmElement::Chord(c)
+            if c.commands.iter().any(|cmd| matches!(cmd, crate::chart::commands::Command::Staccato)));
+
+        if is_staccato_chord && duration.ticks() > Duration::Quarter.ticks() {
+            // Record chord→segment mapping so chord renderer places symbol at the Note
+            let note_entry_idx = result.entries.len();
+            result
+                .internal_push_positions
+                .push((chord_count, note_entry_idx));
+
+            // Staccato: quarter note hit + rests for the remainder
+            result.entries.push(RhythmEntry::Note(Duration::Quarter));
+            let remaining = duration.ticks() - Duration::Quarter.ticks();
+            fill_rests(&mut result.entries, remaining);
+        } else if is_rest {
             result.entries.push(RhythmEntry::Rest(duration));
         } else {
             result.entries.push(RhythmEntry::Note(duration));
@@ -553,6 +568,17 @@ fn extract_from_slash(
     spillbacks: Option<&[PushSpillback]>,
     config: &RhythmBuildConfig,
 ) -> RhythmBuildResult {
+    use crate::chart::commands::Command;
+
+    // Check if any chord in the measure has staccato — if so, use staccato rhythm pattern
+    let has_staccato = chords
+        .iter()
+        .any(|c| c.commands.iter().any(|cmd| matches!(cmd, Command::Staccato)));
+
+    if has_staccato {
+        return extract_staccato_rhythm(chords, config);
+    }
+
     let mut result = RhythmBuildResult::default();
 
     // Count non-pushed chords to determine number of beats
@@ -722,6 +748,147 @@ fn extract_from_slash(
 
     result.total_ticks = result.entries.iter().map(|e| e.duration().ticks()).sum();
     result
+}
+
+/// Extract staccato rhythm for a measure with staccato chords.
+///
+/// Staccato chords render as a short hit (eighth note) followed by rests filling
+/// the remaining duration. For a 4/4 measure with a single staccato chord:
+///   eighth note + eighth rest + quarter rest + half rest
+///
+/// This gives the visual appearance of a short, detached chord hit followed by silence.
+fn extract_staccato_rhythm(
+    chords: &[crate::ChordInstance],
+    config: &RhythmBuildConfig,
+) -> RhythmBuildResult {
+    use crate::chart::commands::Command;
+
+    let mut result = RhythmBuildResult::default();
+    let measure_ticks = calculate_measure_ticks(config.time_signature);
+
+    let mut current_ticks: i32 = 0;
+
+    for (chord_idx, chord) in chords.iter().enumerate() {
+        let is_staccato = chord
+            .commands
+            .iter()
+            .any(|cmd| matches!(cmd, Command::Staccato));
+
+        let chord_beats = match &chord.rhythm {
+            ChordRhythm::Slashes { count, .. } => *count as i32,
+            _ => 1,
+        };
+        let chord_ticks = chord_beats * 480; // quarter = 480 ticks
+
+        // Record the rhythm entry index where this chord's Note lands
+        // so the chord renderer can place the chord symbol at the right segment
+        let note_entry_idx = result.entries.len();
+        result
+            .internal_push_positions
+            .push((chord_idx, note_entry_idx));
+
+        if is_staccato {
+            // Staccato hit: quarter note (480 ticks)
+            result.entries.push(RhythmEntry::Note(Duration::Quarter));
+            let remaining = chord_ticks - 480;
+
+            // Fill remaining duration with beat-boundary-aware rests
+            fill_rests(&mut result.entries, remaining);
+        } else {
+            // Non-staccato chord in same measure: standard quarter beats
+            for _ in 0..chord_beats {
+                result.entries.push(RhythmEntry::Note(Duration::Quarter));
+            }
+        }
+
+        current_ticks += chord_ticks;
+    }
+
+    // If we haven't filled the measure, pad with quarter rests
+    let remaining = measure_ticks - current_ticks;
+    if remaining > 0 {
+        fill_rests(&mut result.entries, remaining);
+    }
+
+    result.total_ticks = result.entries.iter().map(|e| e.duration().ticks()).sum();
+    result
+}
+
+/// Fill a duration with rests that respect beat boundaries.
+///
+/// Follows MuseScore's approach: split at the strongest beat boundary crossed.
+/// Given a starting tick offset within the measure (from prior entries) and a
+/// remaining duration to fill, emits rests that never cross a beat boundary.
+///
+/// For `current_tick=240` (mid-beat-1) with 1680 ticks remaining in 4/4:
+///   eighth rest (240)  — completes beat 1
+///   quarter rest (480) — beat 2
+///   half rest (960)    — beats 3–4
+fn fill_rests_at(entries: &mut Vec<RhythmEntry>, current_tick: i32, remaining_ticks: i32) {
+    const QUARTER: i32 = 480;
+
+    // Available rest durations from largest to smallest
+    let rest_durations: &[(Duration, i32)] = &[
+        (Duration::Whole, 1920),
+        (Duration::Half, 960),
+        (Duration::Quarter, 480),
+        (Duration::Eighth, 240),
+        (Duration::Sixteenth, 120),
+    ];
+
+    let mut pos = current_tick;
+    let end = current_tick + remaining_ticks;
+
+    while pos < end {
+        let left = end - pos;
+
+        // Distance to the next beat boundary (quarter-note grid)
+        let beat_offset = pos % QUARTER;
+        let to_next_beat = if beat_offset == 0 { QUARTER } else { QUARTER - beat_offset };
+
+        // The maximum we can emit without crossing the next beat boundary.
+        // If we're on a beat and the remaining is >= a full beat, we can use
+        // multi-beat rests (half, whole) as long as they align to their own grid.
+        let max_span = if beat_offset == 0 {
+            // On a beat — check how many aligned beats we can span
+            // A half rest (2 beats) needs to start on an even beat
+            // A whole rest (4 beats) needs to start on beat 0
+            let beat_index = pos / QUARTER;
+            if left >= 1920 && beat_index % 4 == 0 {
+                1920 // whole rest, aligned to bar start
+            } else if left >= 960 && beat_index % 2 == 0 {
+                960 // half rest, aligned to even beat
+            } else {
+                to_next_beat.min(left)
+            }
+        } else {
+            to_next_beat.min(left)
+        };
+
+        // Find the largest single rest that fits within max_span
+        let mut found = false;
+        for &(ref dur, ticks) in rest_durations {
+            if ticks <= max_span {
+                entries.push(RhythmEntry::Rest(dur.clone()));
+                pos += ticks;
+                found = true;
+                break;
+            }
+        }
+
+        if !found {
+            // Shouldn't happen, but safety: advance by smallest unit
+            entries.push(RhythmEntry::Rest(Duration::Sixteenth));
+            pos += 120;
+        }
+    }
+}
+
+/// Convenience wrapper: fill rests starting from tick 0 (used in extract_staccato_rhythm)
+fn fill_rests(entries: &mut Vec<RhythmEntry>, remaining_ticks: i32) {
+    // Calculate current tick position from existing entries
+    let current_tick: i32 = entries.iter().map(|e| e.duration().ticks()).sum();
+    fill_rests_at(entries, current_tick, remaining_ticks);
 }
 
 // ============================================================================

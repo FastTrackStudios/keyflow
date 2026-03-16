@@ -19,6 +19,7 @@
 //! [melody] m{ C_8 D_8 E_4 F_4 G_4 A_4 B_4 C'_4 }
 //! ```
 
+use super::lyrics::LyricLine;
 use super::melody::Melody;
 use super::types::Measure;
 use facet::Facet;
@@ -98,6 +99,9 @@ pub struct Track {
 
     /// For Melody tracks: the melody content spanning the section
     pub melody: Option<Melody>,
+
+    /// For Lyrics tracks: the lyric line with syllables and optional chord attachments
+    pub lyrics: Option<LyricLine>,
 }
 
 impl Track {
@@ -108,6 +112,7 @@ impl Track {
             name: None,
             measures,
             melody: None,
+            lyrics: None,
         }
     }
 
@@ -118,6 +123,7 @@ impl Track {
             name: None,
             measures: Vec::new(),
             melody: Some(melody),
+            lyrics: None,
         }
     }
 
@@ -128,6 +134,18 @@ impl Track {
             name: None,
             measures,
             melody: None,
+            lyrics: None,
+        }
+    }
+
+    /// Create a new lyrics track
+    pub fn lyrics(lyric_line: LyricLine) -> Self {
+        Self {
+            track_type: TrackType::Lyrics,
+            name: None,
+            measures: Vec::new(),
+            melody: None,
+            lyrics: Some(lyric_line),
         }
     }
 
@@ -150,6 +168,7 @@ impl Default for Track {
             name: None,
             measures: Vec::new(),
             melody: None,
+            lyrics: None,
         }
     }
 }
