@@ -590,6 +590,7 @@ fn parse_melody_pitch(pitch: &str) -> Option<(PitchClass, i8, Accidental)> {
         "#" => (1, Accidental::Sharp),
         "bb" => (-2, Accidental::DoubleFlat),
         "b" => (-1, Accidental::Flat),
+        "n" => (0, Accidental::Natural),
         "" => (0, Accidental::None),
         _ => (0, Accidental::None),
     };

@@ -1043,12 +1043,19 @@ impl MeasureBuilder {
                     stem_dir,
                 } => {
                     // Build beam notes with computed X positions (per-note lines)
+                    // Offset X by accidental width so beam stems align with noteheads
                     let beam_notes: Vec<BeamNote> = notes
                         .iter()
                         .map(|info| {
                             let x = find_chord_x(info.tick);
+                            // Account for accidental width pushing notehead right
+                            let acc_offset = if info.accidental != Accidental::None {
+                                info.accidental.width() * spatium + spatium * 0.15
+                            } else {
+                                0.0
+                            };
                             BeamNote {
-                                x,
+                                x: x + acc_offset,
                                 line: info.line,
                                 duration: info.duration.to_note_duration(),
                                 stem_direction: *stem_dir,

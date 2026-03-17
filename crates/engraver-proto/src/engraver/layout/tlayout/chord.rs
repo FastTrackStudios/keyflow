@@ -161,6 +161,18 @@ pub fn layout_chord(params: &ChordParams, ctx: &LayoutContext) -> (LayoutData, S
     // Calculate which noteheads need to be offset (for seconds)
     let notehead_offsets = calculate_notehead_offsets(&sorted_notes, stem_dir);
 
+    // Calculate the X offset from accidentals on the first note
+    // (the stem must be shifted right by this amount to align with the notehead)
+    let accidental_x_offset = {
+        // Use the widest accidental in the chord
+        let max_acc_width = sorted_notes
+            .iter()
+            .filter(|n| n.accidental != Accidental::None)
+            .map(|n| n.accidental.width() * spatium + spatium * 0.15)
+            .fold(0.0f64, f64::max);
+        max_acc_width
+    };
+
     // Layout each note
     for (i, note) in sorted_notes.iter().enumerate() {
         let note_params = NoteParams {
@@ -203,6 +215,7 @@ pub fn layout_chord(params: &ChordParams, ctx: &LayoutContext) -> (LayoutData, S
             params.head_type,
             params.duration,
             spatium,
+            accidental_x_offset,
         );
 
         let stem_node = SceneNode::anonymous_leaf(stem_commands);
@@ -217,6 +230,7 @@ pub fn layout_chord(params: &ChordParams, ctx: &LayoutContext) -> (LayoutData, S
                 params.duration,
                 params.head_type,
                 spatium,
+                accidental_x_offset,
             );
 
             if !flag_commands.is_empty() {
@@ -347,6 +361,7 @@ fn draw_stem(
     head_type: NoteHeadType,
     duration: NoteDuration,
     spatium: f64,
+    notehead_x_offset: f64,
 ) -> Vec<PaintCommand> {
     // Early return if no notes (shouldn't happen but guard against panic)
     let (Some(top_note), Some(bottom_note)) = (notes.last(), notes.first()) else {
@@ -376,7 +391,8 @@ fn draw_stem(
             } else {
                 (STEM_UP_SE_X, STEM_UP_SE_Y)
             };
-            let x = anchor_x * spatium - stem_width / 2.0;
+            // Shift stem right by accidental offset so it aligns with the notehead
+            let x = notehead_x_offset + anchor_x * spatium - stem_width / 2.0;
             let y_offset = -anchor_y * spatium;
             let start = bottom_y + y_offset;
             let end = top_y - stem_length;
@@ -391,7 +407,8 @@ fn draw_stem(
             } else {
                 (STEM_DOWN_NW_X, STEM_DOWN_NW_Y)
             };
-            let x = anchor_x * spatium + stem_width / 2.0;
+            // Shift stem right by accidental offset so it aligns with the notehead
+            let x = notehead_x_offset + anchor_x * spatium + stem_width / 2.0;
             let y_offset = -anchor_y * spatium;
             let start = top_y + y_offset;
             let end = bottom_y + stem_length;
@@ -416,6 +433,7 @@ fn draw_flags(
     duration: NoteDuration,
     head_type: NoteHeadType,
     spatium: f64,
+    notehead_x_offset: f64,
 ) -> Vec<PaintCommand> {
     let flag_count = duration.flag_count();
     if flag_count == 0 {
@@ -439,7 +457,7 @@ fn draw_flags(
             } else {
                 STEM_UP_SE_X
             };
-            let x = anchor_x * spatium - stem_width / 2.0;
+            let x = notehead_x_offset + anchor_x * spatium - stem_width / 2.0;
             let top_y = -top_note.line as f64 * spatium / 2.0;
             let y = top_y - stem_length;
             let g = match flag_count {
@@ -457,7 +475,7 @@ fn draw_flags(
             } else {
                 STEM_DOWN_NW_X
             };
-            let x = anchor_x * spatium + stem_width / 2.0;
+            let x = notehead_x_offset + anchor_x * spatium + stem_width / 2.0;
             let bottom_y = -bottom_note.line as f64 * spatium / 2.0;
             let y = bottom_y + stem_length;
             let g = match flag_count {

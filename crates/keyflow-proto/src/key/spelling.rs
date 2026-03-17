@@ -129,6 +129,11 @@ impl KeySpelling {
         Self::new(root, false)
     }
 
+    /// Whether this key prefers flat spellings (e.g., Bb, Eb, Ab).
+    pub fn prefers_flat(&self) -> bool {
+        !self.prefers_sharps
+    }
+
     /// Determine if a key uses sharps or flats and how many
     fn determine_key_type(root: &MusicalNote, is_major: bool) -> (bool, i8) {
         // Get the semitone and adjust for minor keys (relative major is 3 semitones up)

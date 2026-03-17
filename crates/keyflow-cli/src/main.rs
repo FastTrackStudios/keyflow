@@ -249,7 +249,13 @@ fn run(cli: Cli) -> Result<(), String> {
                         .iter()
                         .map(|c| c.full_symbol.clone())
                         .collect();
-                    println!("  Measure {}: [{}]", j, chords.join(", "));
+                    let melody_info = if measure.melodies.is_empty() {
+                        String::new()
+                    } else {
+                        let total_notes: usize = measure.melodies.iter().map(|m| m.notes.len()).sum();
+                        format!(" + {} melody ({} notes)", measure.melodies.len(), total_notes)
+                    };
+                    println!("  Measure {}: [{}]{}", j, chords.join(", "), melody_info);
                 }
                 println!();
             }

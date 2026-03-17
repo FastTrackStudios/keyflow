@@ -308,10 +308,10 @@ impl MelodyNote {
             return Err(format!("Invalid pitch letter: {}", pitch_letter));
         }
 
-        // Check for accidental
+        // Check for accidental (# = sharp, b = flat, n = natural)
         let mut pitch = pitch_letter;
         if let Some(&c) = chars.peek()
-            && (c == '#' || c == 'b') {
+            && (c == '#' || c == 'b' || c == 'n') {
                 pitch.push(chars.next().unwrap());
             }
 

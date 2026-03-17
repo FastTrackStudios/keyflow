@@ -402,8 +402,10 @@ fn determine_beam_direction(notes: &[BeamNote]) -> StemDirection {
     // Calculate average line position
     let avg_line: f64 = notes.iter().map(|n| n.line as f64).sum::<f64>() / notes.len() as f64;
 
-    // Standard rule: stem up if average is below middle line
-    if avg_line >= 0.0 {
+    // Standard rule: stem up if average is below middle line.
+    // Notes exactly on the middle line (avg == 0) get stem Up by convention.
+    // Must match StemDirection::resolve() in chord.rs for consistency.
+    if avg_line > 0.0 {
         StemDirection::Down
     } else {
         StemDirection::Up
