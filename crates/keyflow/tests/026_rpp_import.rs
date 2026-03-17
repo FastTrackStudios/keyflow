@@ -166,6 +166,84 @@ fn rpp_to_midi_file(project: &dawfile_reaper::ReaperProject) -> MidiFile {
         channel: Some(0),
     };
 
+    // --- Extract LINES track for melody data ---
+    let mut tracks = vec![midi_track];
+    let mut track_names: Vec<Option<String>> = vec![Some("CHORDS".to_string())];
+
+    if let Some(lines_track) = project.tracks.iter().find(|t| t.name == "LINES") {
+        let mut line_notes: Vec<MidiNote> = Vec::new();
+
+        // LINES track may have multiple items (one per section)
+        for lines_item in &lines_track.items {
+            let lines_item_offset =
+                (lines_item.position * ppq as f64 * bpm / 60.0).round() as u32;
+
+            if let Some(lines_midi) = lines_item
+                .takes
+                .iter()
+                .filter_map(|take| take.source.as_ref())
+                .find_map(|src| src.midi_data.as_ref())
+            {
+                let mut local_tick: u32 = 0;
+                let mut pending: std::collections::HashMap<(u8, u8), (u32, u8)> =
+                    std::collections::HashMap::new();
+
+                for evt in &lines_midi.event_stream {
+                    local_tick += evt.delta_ticks();
+                    let timeline_tick = local_tick + lines_item_offset;
+
+                    if let MidiSourceEvent::Midi(midi_evt) = evt {
+                        let channel = midi_evt.channel();
+                        match midi_evt.event_type() {
+                            MidiEventType::NoteOn => {
+                                let pitch = midi_evt.bytes[1];
+                                let velocity = midi_evt.bytes[2];
+                                if velocity > 0 {
+                                    pending.insert((pitch, channel), (timeline_tick, velocity));
+                                } else if let Some((start, vel)) =
+                                    pending.remove(&(pitch, channel))
+                                {
+                                    line_notes.push(MidiNote {
+                                        pitch,
+                                        velocity: vel,
+                                        start_tick: start,
+                                        duration_ticks: timeline_tick.saturating_sub(start),
+                                        channel: 1, // Use channel 1 for LINES
+                                    });
+                                }
+                            }
+                            MidiEventType::NoteOff => {
+                                let pitch = midi_evt.bytes[1];
+                                if let Some((start, vel)) = pending.remove(&(pitch, channel)) {
+                                    line_notes.push(MidiNote {
+                                        pitch,
+                                        velocity: vel,
+                                        start_tick: start,
+                                        duration_ticks: timeline_tick.saturating_sub(start),
+                                        channel: 1,
+                                    });
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+
+        line_notes.sort_by_key(|n| (n.start_tick, n.pitch));
+
+        if !line_notes.is_empty() {
+            tracks.push(MidiTrack {
+                index: 1,
+                name: Some("LINES".to_string()),
+                notes: line_notes,
+                channel: Some(1),
+            });
+            track_names.push(Some("LINES".to_string()));
+        }
+    }
+
     // --- Section markers (time-based → tick-based) ---
     let seconds_to_tick = |secs: f64| -> u32 { (secs * ppq as f64 * bpm / 60.0).round() as u32 };
 
@@ -197,11 +275,11 @@ fn rpp_to_midi_file(project: &dawfile_reaper::ReaperProject) -> MidiFile {
 
     MidiFile::from_parts(
         ppq,
-        vec![midi_track],
+        tracks,
         tempo_map,
         time_signatures,
         all_markers,
-        vec![Some("CHORDS".to_string())],
+        track_names,
         swing,
     )
 }

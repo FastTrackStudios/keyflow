@@ -381,6 +381,17 @@ impl MidiFile {
         all
     }
 
+    /// Get all notes as references, sorted by start tick.
+    pub fn all_notes_ref(&self) -> Vec<&MidiNote> {
+        let mut all: Vec<&MidiNote> = self
+            .tracks
+            .iter()
+            .flat_map(|t| t.notes.iter())
+            .collect();
+        all.sort_by_key(|n| n.start_tick);
+        all
+    }
+
     /// Get the tempo map.
     #[must_use]
     pub fn tempo_map(&self) -> &[TempoEvent] {

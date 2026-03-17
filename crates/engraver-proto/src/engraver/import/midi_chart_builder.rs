@@ -12,7 +12,9 @@ use crate::key::{KeySpelling, SpellingMode};
 use crate::primitives::MusicalNote;
 use crate::primitives::note::Note;
 
-use super::midi_import::{MidiFile, SectionType as MidiSectionType};
+use crate::engraver::model::Pitch;
+
+use super::midi_import::{MidiFile, MidiNote, SectionType as MidiSectionType};
 
 // ============================================================================
 // Public API
@@ -197,6 +199,29 @@ pub fn generate_chart_text(midi: &MidiFile, config: &MidiChartConfig) -> String 
             midline_separator_at,
         );
 
+        // For INST/SOLO sections with only silence, try extracting melody from MIDI notes
+        let section_content = if section_content.trim().chars().all(|c| c == 's' || c == '1' || c == '|' || c == ' ' || c == '\n')
+            && matches!(section.keyflow_type.as_str(), "INST" | "SOLO")
+        {
+            if let Some(melody_content) = extract_melody_for_section(
+                midi,
+                section_start_tick,
+                section_end_tick,
+                section.length as usize,
+                ppq,
+                beats_per_measure,
+                measures_per_line,
+                config.key_root.as_deref(),
+                swing,
+            ) {
+                melody_content
+            } else {
+                section_content
+            }
+        } else {
+            section_content
+        };
+
         if section_content.is_empty() {
             output.push_str("%\n");
         } else {
@@ -209,6 +234,311 @@ pub fn generate_chart_text(midi: &MidiFile, config: &MidiChartConfig) -> String 
     }
 
     output
+}
+
+/// Extract melody notes from raw MIDI data for a section and format as m{} blocks.
+///
+/// For INST/SOLO sections that have no chord voicings (only single-note lines),
+/// this extracts the melody and generates one m{} block per measure.
+///
+/// Returns formatted chart lines with melody blocks, or None if no melody found.
+fn extract_melody_for_section(
+    midi: &MidiFile,
+    section_start_tick: i64,
+    section_end_tick: i64,
+    section_length: usize,
+    ppq: u32,
+    beats_per_measure: i32,
+    measures_per_line: usize,
+    key_root: Option<&str>,
+    swing: Option<f64>,
+) -> Option<String> {
+    let ticks_per_measure = ppq as i64 * beats_per_measure as i64;
+
+    // Get all notes in this section from ANY track (melody may be on LINES track,
+    // not the harmony/CHORDS track)
+    let all_notes = midi.all_notes();
+    let section_notes: Vec<&MidiNote> = all_notes
+        .iter()
+        .filter(|n| {
+            let t = n.start_tick as i64;
+            t >= section_start_tick && t < section_end_tick
+        })
+        .collect();
+
+    if section_notes.is_empty() {
+        return None;
+    }
+
+    // Build key spelling for note names
+    let key_spelling = key_root
+        .and_then(|k| MusicalNote::from_string(k))
+        .map(|note| KeySpelling::major(&note));
+
+    // Quantize all note onsets to the nearest eighth-note grid, then derive
+    // durations from grid positions (MuseScore-style MIDI import approach).
+    // This produces clean rhythms instead of erratic durations from raw timing.
+    let eighth = ppq as i64 / 2; // ticks per eighth note
+    let quarter = ppq as i64;
+
+    // Step 1: Dequantize swing and snap to eighth-note grid.
+    // For melody transcription, we snap ALL onsets to the nearest eighth-note
+    // grid position. This handles swing (where off-beat eighths are delayed)
+    // and minor timing variations from live performance.
+    let mut grid_onsets: Vec<(i64, &MidiNote)> = section_notes
+        .iter()
+        .map(|note| {
+            let raw = note.start_tick as i64;
+            // For swing: move the off-beat note back to the straight position
+            let straight = if let Some(ratio) = swing {
+                // Use wider tolerance for melody dequantization
+                let beat_ticks = ppq as i64;
+                let pos_in_beat = raw.rem_euclid(beat_ticks);
+                let beat_start = raw - pos_in_beat;
+                let swing_pos = (ratio * beat_ticks as f64).round() as i64;
+                let straight_pos = beat_ticks / 2;
+                let tolerance = ppq as i64 / 6; // wider tolerance for melody (~160 ticks at 960 PPQ)
+                if (pos_in_beat - swing_pos).abs() < tolerance {
+                    beat_start + straight_pos
+                } else {
+                    raw
+                }
+            } else {
+                raw
+            };
+            // Snap to nearest eighth-note grid position
+            let grid_pos = ((straight - section_start_tick + eighth / 2) / eighth) * eighth
+                + section_start_tick;
+            (grid_pos, *note)
+        })
+        .collect();
+
+    // Deduplicate: if multiple notes land on the same grid position, keep highest pitch
+    grid_onsets.sort_by_key(|(pos, note)| (*pos, std::cmp::Reverse(note.pitch)));
+    grid_onsets.dedup_by_key(|(pos, _)| *pos);
+
+    // Step 2: Build melody tokens from grid positions
+    // Track accidental state per pitch class within each measure to add naturals
+    // when an accidental is cancelled (e.g., Bb followed by B natural needs ♮).
+    let mut melody_tokens = Vec::new();
+    let section_end_grid = section_end_tick;
+
+    // Map from diatonic pitch class (0-6 for C-B) to active accidental alteration.
+    // Initialize from key signature so that e.g. in Bb major, B and E start as flat.
+    // When B natural appears, it needs a natural sign to cancel the key signature flat.
+    let key_sig_accidentals: std::collections::HashMap<u8, i8> = {
+        let mut map = std::collections::HashMap::new();
+        if let Some(ref ks) = key_spelling {
+            // Check each diatonic pitch class against the key signature
+            use crate::engraver::model::PitchClass;
+            for &pc in &[PitchClass::C, PitchClass::D, PitchClass::E, PitchClass::F, PitchClass::G, PitchClass::A, PitchClass::B] {
+                // Build a pitch at octave 4 and check if the key signature alters it
+                let midi_natural = pc.base_midi() + 48; // octave 4
+                let pitch_from_key = Pitch::from_midi(midi_natural);
+                // Check if this pitch class has an accidental in the key
+                // by looking at the key spelling for this pitch class's chromatic position
+                if ks.prefers_flat() {
+                    // Flat keys: check if the natural pitch is raised in the scale
+                    // Bb major: Bb, Eb are flat (B=flat, E=flat)
+                    // Order of flats: B, E, A, D, G, C, F
+                    let flat_order = [PitchClass::B, PitchClass::E, PitchClass::A, PitchClass::D, PitchClass::G, PitchClass::C, PitchClass::F];
+                    // Count flats from key root
+                    let num_flats = match key_root.unwrap_or("C") {
+                        "F" => 1, "Bb" => 2, "Eb" => 3, "Ab" => 4, "Db" => 5, "Gb" => 6,
+                        _ => 0,
+                    };
+                    for &flat_pc in flat_order.iter().take(num_flats) {
+                        map.insert(flat_pc.staff_offset() as u8, -1);
+                    }
+                } else {
+                    // Sharp keys: F#, C#, G#, D#, A#, E#, B#
+                    let sharp_order = [PitchClass::F, PitchClass::C, PitchClass::G, PitchClass::D, PitchClass::A, PitchClass::E, PitchClass::B];
+                    let num_sharps = match key_root.unwrap_or("C") {
+                        "G" => 1, "D" => 2, "A" => 3, "E" => 4, "B" => 5, "F#" => 6,
+                        _ => 0,
+                    };
+                    for &sharp_pc in sharp_order.iter().take(num_sharps) {
+                        map.insert(sharp_pc.staff_offset() as u8, 1);
+                    }
+                }
+                let _ = pitch_from_key; // suppress unused
+            }
+        }
+        map
+    };
+
+    let mut active_accidentals = key_sig_accidentals.clone();
+    let mut current_measure_start = section_start_tick;
+
+    for (ni, (onset, note)) in grid_onsets.iter().enumerate() {
+        // Reset accidental tracking at measure boundaries (back to key signature defaults)
+        let measure_idx = ((*onset - section_start_tick) / ticks_per_measure) as usize;
+        let this_measure_start = section_start_tick + (measure_idx as i64) * ticks_per_measure;
+        if this_measure_start != current_measure_start {
+            active_accidentals = key_sig_accidentals.clone();
+            current_measure_start = this_measure_start;
+        }
+
+        let pitch = Pitch::from_midi(note.pitch);
+        let mut pitch_name = format_pitch_name(&pitch, key_spelling.as_ref());
+
+        // Check if we need a natural sign to cancel a previous accidental
+        let pitch_class = note.pitch % 12; // 0-11
+        let diatonic_class = pitch.class.staff_offset() as u8; // 0-6 (C-B)
+        let current_alteration = pitch.alteration;
+
+        if let Some(&prev_alt) = active_accidentals.get(&diatonic_class) {
+            // Same pitch class appeared before in this measure with a different accidental
+            if prev_alt != current_alteration && current_alteration == 0 {
+                // Previous had accidental, this one is natural — add natural sign
+                pitch_name.push('n'); // 'n' for natural in melody notation
+            }
+        }
+
+        // Track this note's accidental state
+        if current_alteration != 0 {
+            active_accidentals.insert(diatonic_class, current_alteration);
+        } else if active_accidentals.contains_key(&diatonic_class) {
+            // Natural cancels previous accidental
+            active_accidentals.remove(&diatonic_class);
+        }
+
+        // Add rest at start if first note doesn't land on beat 1
+        if ni == 0 && *onset > section_start_tick {
+            let gap = onset - section_start_tick;
+            if gap >= eighth {
+                let rest_dur = grid_ticks_to_duration(gap, ppq);
+                melody_tokens.push(format!("r_{}", rest_dur));
+            }
+        }
+
+        // Duration = onset-to-onset interval, or section end for last note.
+        // In jazz, notes are played short (staccato) but notated at the rhythmic
+        // grid value — no rests between connected eighth notes.
+        let next_onset = if ni + 1 < grid_onsets.len() {
+            grid_onsets[ni + 1].0
+        } else {
+            section_end_grid
+        };
+        let duration_ticks = (next_onset - onset).max(eighth);
+
+        let dur_str = grid_ticks_to_duration(duration_ticks, ppq);
+        let octave = pitch.octave.0;
+        melody_tokens.push(format!("{}{}_{}", pitch_name, octave, dur_str));
+    }
+
+    if melody_tokens.is_empty() {
+        return None;
+    }
+
+    let melody_block = format!("m{{ {} }}", melody_tokens.join(" "));
+
+    // Generate section output: first measure has the melody block attached,
+    // remaining measures use dot repeats (the melody spills across them)
+    let mut output = String::new();
+    for i in 0..section_length {
+        if i > 0 && i % measures_per_line == 0 {
+            output.push('\n');
+        }
+        if i % measures_per_line == 0 {
+            output.push_str("| ");
+        }
+        if i == 0 {
+            // First measure gets the melody block — expand_melodies_across_measures
+            // will distribute it across all measures
+            output.push_str(&format!(". {}", melody_block));
+        } else {
+            output.push_str(".");
+        }
+        output.push_str(" | ");
+    }
+
+    Some(output)
+}
+
+/// Format a Pitch as a note name string (e.g., "C", "Bb", "F#").
+fn format_pitch_name(pitch: &Pitch, key_spelling: Option<&KeySpelling>) -> String {
+    // Get the base note name from the pitch class
+    let base = match pitch.class {
+        crate::engraver::model::PitchClass::C => "C",
+        crate::engraver::model::PitchClass::D => "D",
+        crate::engraver::model::PitchClass::E => "E",
+        crate::engraver::model::PitchClass::F => "F",
+        crate::engraver::model::PitchClass::G => "G",
+        crate::engraver::model::PitchClass::A => "A",
+        crate::engraver::model::PitchClass::B => "B",
+    };
+
+    let acc = match pitch.alteration {
+        1 => {
+            // Check if we should spell as flat instead
+            if let Some(ks) = key_spelling {
+                if ks.prefers_flat() { return format_as_flat(pitch); }
+            }
+            "#"
+        }
+        -1 => "b",
+        2 => "##",
+        -2 => "bb",
+        _ => "",
+    };
+
+    format!("{}{}", base, acc)
+}
+
+/// Re-spell a sharp pitch as its enharmonic flat equivalent.
+fn format_as_flat(pitch: &Pitch) -> String {
+    // Sharp notes → flat enharmonic: C# → Db, D# → Eb, F# → Gb, G# → Ab, A# → Bb
+    match pitch.class {
+        crate::engraver::model::PitchClass::C => "Db".to_string(),
+        crate::engraver::model::PitchClass::D => "Eb".to_string(),
+        crate::engraver::model::PitchClass::F => "Gb".to_string(),
+        crate::engraver::model::PitchClass::G => "Ab".to_string(),
+        crate::engraver::model::PitchClass::A => "Bb".to_string(),
+        _ => format!("{}#", match pitch.class {
+            crate::engraver::model::PitchClass::E => "E",
+            crate::engraver::model::PitchClass::B => "B",
+            _ => "?",
+        }),
+    }
+}
+
+/// Convert grid-quantized tick duration to a LilyPond duration string.
+/// Durations are exact multiples of eighth notes from the grid.
+/// For melody lines, prefer eighth notes (beamable) over quarters where possible.
+fn grid_ticks_to_duration(ticks: i64, ppq: u32) -> String {
+    let eighth = ppq as i64 / 2;
+    let eighths = ((ticks + eighth / 2) / eighth).max(1); // count of eighth notes
+
+    match eighths {
+        1 => "8".to_string(),            // 1 eighth
+        2 => "4".to_string(),            // 2 eighths = quarter
+        3 => ".4".to_string(),           // 3 eighths = dotted quarter
+        4 => "2".to_string(),            // 4 eighths = half
+        5..=6 => ".2".to_string(),       // ~6 eighths = dotted half
+        7..=8 => "1".to_string(),        // 8 eighths = whole
+        _ => "1".to_string(),            // longer = whole (ties handled by expand)
+    }
+}
+
+/// Like grid_ticks_to_duration but for melody contexts where we prefer
+/// keeping notes as eighths for better beaming. Only uses quarter/longer
+/// when the gap is clearly >= 2 eighths.
+fn melody_grid_ticks_to_duration(ticks: i64, ppq: u32) -> String {
+    let eighth = ppq as i64 / 2;
+    let eighths = ((ticks + eighth / 2) / eighth).max(1);
+
+    match eighths {
+        1 => "8".to_string(),
+        // For melody: 2 eighths could be two separate eighths with a rest,
+        // or a quarter. Use quarter only for longer gaps.
+        2 => "4".to_string(),
+        3 => ".4".to_string(),
+        4 => "2".to_string(),
+        5..=6 => ".2".to_string(),
+        7..=8 => "1".to_string(),
+        _ => "1".to_string(),
+    }
 }
 
 /// Compress consecutive identical lines by appending ` xN` (e.g., "line" → "line x2").
