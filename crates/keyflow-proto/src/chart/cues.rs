@@ -37,6 +37,28 @@ impl InstrumentGroup {
             _ => InstrumentGroup::Custom(s.to_string()),
         }
     }
+
+    /// Get the RGBA color for this instrument group.
+    ///
+    /// Colors match the FastTrack Studio instrument palette:
+    /// - All: Red
+    /// - Keys: Green
+    /// - Drums: Orange
+    /// - Bass: Purple
+    /// - Guitar: Dark Blue
+    /// - Vocals: Teal
+    /// - Custom: Gray
+    pub fn color_rgba(&self) -> (u8, u8, u8, u8) {
+        match self {
+            InstrumentGroup::All => (0xCC, 0x00, 0x00, 0xFF),     // Red
+            InstrumentGroup::Keys => (0x22, 0x8B, 0x22, 0xFF),    // Forest green
+            InstrumentGroup::Drums => (0xE6, 0x7E, 0x22, 0xFF),   // Orange
+            InstrumentGroup::Bass => (0x7B, 0x2D, 0x8E, 0xFF),    // Purple
+            InstrumentGroup::Guitar => (0x1A, 0x3C, 0x8E, 0xFF),  // Dark blue
+            InstrumentGroup::Vocals => (0x00, 0x80, 0x80, 0xFF),  // Teal
+            InstrumentGroup::Custom(_) => (0x66, 0x66, 0x66, 0xFF), // Gray
+        }
+    }
 }
 
 impl fmt::Display for InstrumentGroup {

@@ -426,36 +426,35 @@ fn create_stop_marker(
 ) -> SceneNode {
     use kurbo::Point;
 
-    // Size the stop sign to match chord text height
-    let size = spatium * 1.4; // Radius — roughly matches chord symbol height
-    let border_width = spatium * 0.15;
-    let gap = spatium * 0.5; // Gap between stop sign and chord
+    let size = spatium * 2.4; // Outer radius — slightly larger for breathing room
+    let red_border = spatium * 0.2; // Thin red outer ring
+    let white_band = spatium * 0.15; // White inset band
+    let gap = spatium * 0.5;
 
-    // Center vertically on the chord text (baseline + half ascent)
-    let center_y = chord_y - spatium * 0.6;
-
-    // Horizontal: before or after the chord symbol
+    let center_y = chord_y - spatium * 1.0;
     let center_x = if after {
         chord_bounds.x1 + gap + size
     } else {
         chord_bounds.x0 - gap - size
     };
 
+    // Layer 1: Red outer octagon (the thin red border)
     let outer = octagon_path(center_x, center_y, size);
-    let inner = octagon_path(center_x, center_y, size - border_width * 1.5);
+    // Layer 2: White inset band
+    let white = octagon_path(center_x, center_y, size - red_border);
+    // Layer 3: Red fill (main body inside the white band)
+    let inner = octagon_path(center_x, center_y, size - red_border - white_band);
 
     let mut paints = Vec::new();
-
-    // White border (outer octagon)
-    paints.push(PaintCommand::filled_path(outer, stop_sign_border_color()));
-    // Red fill (inner octagon)
+    paints.push(PaintCommand::filled_path(outer, stop_sign_color()));
+    paints.push(PaintCommand::filled_path(white, stop_sign_border_color()));
     paints.push(PaintCommand::filled_path(inner, stop_sign_color()));
-    // "STOP" text centered in the octagon
+    // "STOP" text centered — sized to leave padding inside the white band
     paints.push(PaintCommand::text_centered(
         "STOP",
-        "MuseJazz Text",
-        spatium * 0.85,
-        Point::new(center_x, center_y + spatium * 0.28),
+        "FreeSans",
+        spatium * 1.2,
+        Point::new(center_x, center_y + spatium * 0.38),
         stop_sign_text_color(),
     ));
 
@@ -484,44 +483,120 @@ fn create_stop_groove_marker(
 ) -> SceneNode {
     use kurbo::Point;
 
-    let radius = spatium * 1.4;
-    let border_width = spatium * 0.15;
+    let radius = spatium * 2.4;
+    let red_border = spatium * 0.2;
+    let white_band = spatium * 0.15;
     let gap = spatium * 0.5;
 
-    let center_y = chord_y - spatium * 0.6;
-
+    // Same vertical alignment as stop marker
+    let center_y = chord_y - spatium * 1.0;
     let center_x = if after {
         chord_bounds.x1 + gap + radius
     } else {
         chord_bounds.x0 - gap - radius
     };
 
+    let center = Point::new(center_x, center_y);
     let mut paints = Vec::new();
 
-    // White border circle (outer)
+    // Layer 1: Red outer circle (thin red border)
+    paints.push(PaintCommand::filled_circle(center, radius, stop_sign_color()));
+    // Layer 2: White inset band
     paints.push(PaintCommand::filled_circle(
-        Point::new(center_x, center_y),
-        radius,
+        center,
+        radius - red_border,
         stop_sign_border_color(),
     ));
-    // Red fill circle (inner)
+    // Layer 3: Red fill (main body)
     paints.push(PaintCommand::filled_circle(
-        Point::new(center_x, center_y),
-        radius - border_width * 1.5,
+        center,
+        radius - red_border - white_band,
         stop_sign_color(),
     ));
-    // "STOP" text centered in the circle
+    // Two-line text: "STOP" / "GROOVE" — sized to leave padding inside the white band
+    let line_spacing = spatium * 0.8;
     paints.push(PaintCommand::text_centered(
         "STOP",
-        "MuseJazz Text",
-        spatium * 0.8,
-        Point::new(center_x, center_y + spatium * 0.28),
+        "FreeSans",
+        spatium * 0.9,
+        Point::new(center_x, center_y - spatium * 0.05),
+        stop_sign_text_color(),
+    ));
+    paints.push(PaintCommand::text_centered(
+        "GROOVE",
+        "FreeSans",
+        spatium * 0.62,
+        Point::new(center_x, center_y + line_spacing),
         stop_sign_text_color(),
     ));
 
     let mut node = SceneNode::leaf(SemanticId::new(ElementType::Articulation, id), paints);
     node.set_element_type("stop_groove");
     node
+}
+
+/// Render text cues for a measure below the staff.
+///
+/// Cues are instrument-specific directions like `@keys "synth here"` that render
+/// in the instrument's color below the staff. Text uses MuseJazzText font with
+/// an underline in the same color (overline when rendered above staff).
+pub fn render_text_cues(
+    cues: &[crate::chart::cues::TextCue],
+    measure_x: f64,
+    _measure_width: f64,
+    staff_y: f64,
+    staff_height: f64,
+    spatium: f64,
+    text_metrics: &crate::engraver::layout::text_metrics::TextFontMetrics,
+    id_counter: &mut u64,
+) -> Vec<SceneNode> {
+    let mut nodes = Vec::new();
+    let font_size = spatium * 2.4;
+    let line_thickness = spatium * 0.12;
+    // Position below the staff with padding
+    let base_y = staff_y + staff_height + spatium * 3.0;
+
+    for (i, cue) in cues.iter().enumerate() {
+        let (r, g, b, a) = cue.group.color_rgba();
+        let color = Color::from_rgba8(r, g, b, a);
+
+        // Just the text — color is enough to identify the instrument
+        let display_text = &cue.text;
+
+        // Stack multiple cues vertically
+        let cue_y = base_y + (i as f64) * spatium * 2.8;
+        let text_x = measure_x + spatium * 0.3;
+
+        let mut paints = Vec::new();
+
+        // Text in MuseJazzText font
+        paints.push(PaintCommand::text(
+            display_text,
+            "MuseJazz Text",
+            font_size,
+            kurbo::Point::new(text_x, cue_y),
+            color,
+        ));
+
+        // Underline: use actual font metrics for precise text width
+        let text_width = text_metrics.horizontal_advance(display_text, font_size);
+        let line_y = cue_y + spatium * 0.4;
+        let line_end_x = text_x + text_width;
+        paints.push(PaintCommand::line(
+            kurbo::Point::new(text_x, line_y),
+            kurbo::Point::new(line_end_x, line_y),
+            color,
+            line_thickness,
+        ));
+
+        let mut node =
+            SceneNode::leaf(SemanticId::new(ElementType::Articulation, *id_counter), paints);
+        node.set_element_type("text_cue");
+        *id_counter += 1;
+        nodes.push(node);
+    }
+
+    nodes
 }
 
 /// Determine if a chord should be skipped (is a space/rest placeholder).

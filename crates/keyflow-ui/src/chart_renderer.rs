@@ -1146,7 +1146,7 @@ impl ChartLayoutManager {
 
         let layout = self.layout_result.as_ref()?;
         let page = layout.pages.iter().find(|p| p.number == page_number)?;
-        let started = std::time::Instant::now();
+        let started = web_time::Instant::now();
         let page_rect = Rect::new(
             page.x_offset,
             page.y_offset,
