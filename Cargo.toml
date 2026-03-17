@@ -60,3 +60,23 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2.0"
 tracing = { version = "0.1", features = ["std"] }
+
+# ── Local development overrides ──────────────────────────────────────
+# Uncomment to use local checkouts instead of GitHub.
+#
+# [patch."https://github.com/FastTrackStudios/daw.git"]
+# daw-control = { path = "../daw/crates/daw-control" }
+# daw-proto = { path = "../daw/crates/daw-proto" }
+# dawfile-reaper = { path = "../daw/crates/dawfile-reaper" }
+#
+# [patch."https://github.com/FastTrackStudios/dynamic-template.git"]
+# color-palette = { path = "../dynamic-template/crates/color-palette" }
+# music-catalog = { path = "../dynamic-template/crates/music-catalog" }
+#
+# [patch."https://github.com/FastTrackStudios/FastTrackStudio.git"]
+# session = { path = "../FastTrackStudio/crates/session/session" }
+# session-ui = { path = "../FastTrackStudio/crates/session/session-ui" }
+#
+# [patch."https://github.com/FastTrackStudios/dock-dioxus.git"]
+# dock-dioxus = { path = "../dock-dioxus/crates/dock-dioxus" }
+# dock-proto = { path = "../dock-dioxus/crates/dock-proto" }
