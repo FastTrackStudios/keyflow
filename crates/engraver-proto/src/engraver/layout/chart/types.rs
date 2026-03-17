@@ -6,7 +6,9 @@
 use std::collections::HashMap;
 
 use crate::engraver::layout::orchestrator::{PageLayout, PageMargins};
+use crate::engraver::layout::tlayout::Accidental;
 use crate::engraver::model::{DurationKind, NoteHead};
+use crate::engraver::model::{Octave, Pitch, PitchClass};
 use crate::engraver::notation::Duration;
 use crate::engraver::scene::node::SceneNode;
 
@@ -496,6 +498,10 @@ pub struct MelodyNoteSegment {
     pub tie_to_next: bool,
     /// True if this is a rest
     pub is_rest: bool,
+    /// Resolved absolute octave (None for rests)
+    pub octave: Option<u8>,
+    /// Resolved accidental for rendering
+    pub accidental: Accidental,
 }
 
 impl MelodyNoteSegment {
@@ -553,6 +559,149 @@ impl MeasureMelodyData {
     }
 }
 
+// ============================================================================
+// Melody Pitch Helpers
+// ============================================================================
+
+/// Parse a melody pitch string into (PitchClass, alteration, Accidental).
+///
+/// Handles pitch names like "C", "F#", "Bb", "D##", "Ebb".
+/// Returns None for rests ("r").
+fn parse_melody_pitch(pitch: &str) -> Option<(PitchClass, i8, Accidental)> {
+    if pitch == "r" || pitch.is_empty() {
+        return None;
+    }
+
+    let first = pitch.chars().next()?;
+    let class = match first.to_ascii_uppercase() {
+        'C' => PitchClass::C,
+        'D' => PitchClass::D,
+        'E' => PitchClass::E,
+        'F' => PitchClass::F,
+        'G' => PitchClass::G,
+        'A' => PitchClass::A,
+        'B' => PitchClass::B,
+        _ => return None,
+    };
+
+    let suffix = &pitch[first.len_utf8()..];
+    let (alteration, accidental) = match suffix {
+        "##" | "x" => (2, Accidental::DoubleSharp),
+        "#" => (1, Accidental::Sharp),
+        "bb" => (-2, Accidental::DoubleFlat),
+        "b" => (-1, Accidental::Flat),
+        "" => (0, Accidental::None),
+        _ => (0, Accidental::None),
+    };
+
+    Some((class, alteration, accidental))
+}
+
+/// Resolve the octave for a melody note using relative-pitch logic.
+///
+/// Given the previous note's pitch class and octave, find the octave for the
+/// new note that places it closest (within a 4th) to the previous note.
+/// Then apply octave modifier (Up = +1, Down = -1).
+fn resolve_relative_octave(
+    new_class: PitchClass,
+    prev_class: PitchClass,
+    prev_octave: u8,
+    octave_modifier: crate::chart::melody::OctaveModifier,
+) -> u8 {
+    // Calculate the diatonic interval (in scale steps) from prev to new
+    let prev_step = prev_class.staff_offset(); // 0-6
+    let new_step = new_class.staff_offset(); // 0-6
+
+    // Try same octave, one above, one below — pick closest
+    let candidates = [
+        prev_octave.wrapping_sub(1),
+        prev_octave,
+        prev_octave + 1,
+    ];
+
+    let prev_pos = prev_step + (prev_octave as i32) * 7;
+    let mut best_octave = prev_octave;
+    let mut best_dist = i32::MAX;
+
+    for &oct in &candidates {
+        if oct > 9 { continue; } // sanity
+        let pos = new_step + (oct as i32) * 7;
+        let dist = (pos - prev_pos).abs();
+        if dist < best_dist {
+            best_dist = dist;
+            best_octave = oct;
+        }
+    }
+
+    // Apply octave modifier
+    match octave_modifier {
+        crate::chart::melody::OctaveModifier::Up => best_octave.saturating_add(1),
+        crate::chart::melody::OctaveModifier::Down => best_octave.saturating_sub(1),
+        crate::chart::melody::OctaveModifier::None => best_octave,
+    }
+}
+
+/// Convert a melody pitch string + resolved octave to a staff line position
+/// and accidental for treble clef rendering.
+///
+/// Staff line 0 = middle line (B4 in treble clef).
+/// Positive = up, negative = down.
+pub fn melody_pitch_to_line(pitch: &str, octave: u8) -> (i32, Accidental) {
+    let Some((class, alteration, accidental)) = parse_melody_pitch(pitch) else {
+        return (0, Accidental::None); // fallback for unparseable
+    };
+
+    let p = Pitch::with_alteration(class, Octave::new(octave as i8), alteration);
+    // staff_position() returns position relative to middle C (C4 = 0)
+    // In treble clef, B4 (staff_position = 6) is the middle line (line 0)
+    let staff_pos = p.staff_position();
+    let line = staff_pos - 6; // B4 (pos 6) → line 0
+
+    (line, accidental)
+}
+
+/// Compute extra vertical space needed above and below the staff
+/// for melody notes that extend beyond the 5-line staff.
+///
+/// Returns `(extra_above, extra_below)` in points.
+/// The staff spans lines -4 (bottom, E4) to +4 (top, F5).
+/// Notes outside this range need ledger lines and extra vertical space.
+pub fn melody_note_extent(melody_data: &MeasureMelodyData, spatium: f64) -> (f64, f64) {
+    let mut max_line: i32 = 0;
+    let mut min_line: i32 = 0;
+
+    for seg in &melody_data.segments {
+        if seg.is_rest { continue; }
+        if let Some(oct) = seg.octave {
+            let (line, _) = melody_pitch_to_line(&seg.pitch, oct);
+            max_line = max_line.max(line);
+            min_line = min_line.min(line);
+        }
+    }
+
+    // Staff top line = line +4, bottom line = line -4
+    // Each line unit = half a spatium
+    let half_sp = spatium / 2.0;
+
+    // Extra space above: notes above line +4 (top staff line)
+    // Add 0.5 spatium padding for notehead clearance
+    let extra_above = if max_line > 5 {
+        (max_line - 4) as f64 * half_sp + spatium * 0.5
+    } else {
+        0.0
+    };
+
+    // Extra space below: notes below line -4 (bottom staff line)
+    // Add 0.5 spatium padding for notehead clearance
+    let extra_below = if min_line < -5 {
+        (-4 - min_line) as f64 * half_sp + spatium * 0.5
+    } else {
+        0.0
+    };
+
+    (extra_above, extra_below)
+}
+
 /// Expands melodies across measure boundaries.
 ///
 /// This processes all melodies in a chart section and distributes them
@@ -584,6 +733,11 @@ pub fn expand_melodies_across_measures(
             let mut current_measure = measure_idx;
             let mut beats_remaining_in_measure = beats_per_measure;
 
+            // Track running pitch state for relative octave resolution
+            // Start at C4 (middle C) as the reference point
+            let mut ref_class = PitchClass::C;
+            let mut ref_octave: u8 = 4;
+
             // Check if this measure already has melody content (from previous spillover)
             if let Some(existing) = result.get(&current_measure) {
                 beats_remaining_in_measure = beats_per_measure - existing.total_beats;
@@ -593,6 +747,26 @@ pub fn expand_melodies_across_measures(
                 let note_beats = note.duration_beats();
                 let mut beats_to_place = note_beats;
                 let mut is_first_segment = true;
+
+                // Resolve pitch and octave for this note
+                let (resolved_octave, resolved_accidental) = if note.is_rest() {
+                    (None, Accidental::None)
+                } else if let Some((class, _alteration, accidental)) = parse_melody_pitch(&note.pitch) {
+                    // Determine octave: explicit or relative
+                    let octave = if let Some(explicit_oct) = note.octave {
+                        explicit_oct
+                    } else {
+                        resolve_relative_octave(class, ref_class, ref_octave, note.octave_modifier)
+                    };
+
+                    // Update reference state for next note
+                    ref_class = class;
+                    ref_octave = octave;
+
+                    (Some(octave), accidental)
+                } else {
+                    (None, Accidental::None)
+                };
 
                 while beats_to_place > 0.001 {
                     // Get or create melody data for current measure
@@ -620,6 +794,8 @@ pub fn expand_melodies_across_measures(
                         tie_from_previous: !is_first_segment,
                         tie_to_next: !is_last_segment && !note.is_rest(),
                         is_rest: note.is_rest(),
+                        octave: resolved_octave,
+                        accidental: resolved_accidental,
                     };
 
                     measure_data.segments.push(segment);
@@ -632,6 +808,59 @@ pub fn expand_melodies_across_measures(
                     if measure_data.total_beats >= beats_per_measure - 0.001 {
                         current_measure += 1;
                         beats_remaining_in_measure = beats_per_measure;
+                    }
+                }
+            }
+        }
+    }
+
+    // Smart octave centering: shift all notes so the median sits near the
+    // middle of the treble staff (B4, staff_position 6, line 0).
+    // Only apply when no notes had explicit octave annotations.
+    {
+        // Collect all staff positions across all measures
+        let mut positions: Vec<i32> = Vec::new();
+        let mut has_explicit_octave = false;
+
+        for data in result.values() {
+            for seg in &data.segments {
+                if seg.is_rest { continue; }
+                if let Some(oct) = seg.octave {
+                    let (line, _) = melody_pitch_to_line(&seg.pitch, oct);
+                    positions.push(line);
+                }
+            }
+        }
+
+        // Check if any of the original melody notes had explicit octaves
+        for measure in section_measures {
+            for melody in &measure.melodies {
+                for note in &melody.notes {
+                    if note.octave.is_some() {
+                        has_explicit_octave = true;
+                    }
+                }
+            }
+        }
+
+        if !has_explicit_octave && positions.len() >= 2 {
+            positions.sort();
+            let median = positions[positions.len() / 2];
+
+            // Target: median near line 0 (B4, middle of treble staff)
+            // Each octave = 7 staff positions
+            let octave_shift = ((0 - median) as f64 / 7.0).round() as i8;
+
+            if octave_shift != 0 {
+                tracing::debug!(
+                    "[melody-centering] Shifting all octaves by {} (median line was {})",
+                    octave_shift, median
+                );
+                for data in result.values_mut() {
+                    for seg in &mut data.segments {
+                        if let Some(ref mut oct) = seg.octave {
+                            *oct = (*oct as i8 + octave_shift).max(0) as u8;
+                        }
                     }
                 }
             }

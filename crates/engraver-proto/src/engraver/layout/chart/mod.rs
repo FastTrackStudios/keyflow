@@ -30,7 +30,8 @@ pub use config::{BehavioralFlags, DEFAULT_MIN_CHORD_SYMBOL_GAP, LayoutParams, Re
 // Re-export main types for convenience
 pub use types::{
     BeatPosition, ChartLayoutResult, LayoutMode, MeasureMelodyData, MelodyNoteSegment,
-    PageLayoutMetrics, expand_melodies_across_measures, slash_glyph_for_ticks,
+    PageLayoutMetrics, expand_melodies_across_measures, melody_note_extent,
+    melody_pitch_to_line, slash_glyph_for_ticks,
 };
 
 // Re-export rhythm types from chart module (canonical source)
@@ -680,7 +681,17 @@ impl ChartLayoutEngine {
                 // so repeated chords are always visible at the start of each line
                 previous_chord_symbol = None;
 
-                let system_height = staff_height + 30.0; // Staff + chord space
+                // Compute extra space for melody notes extending beyond the staff
+                let mut melody_extra_above = 0.0f64;
+                let mut melody_extra_below = 0.0f64;
+                for &m_idx in measure_indices {
+                    if let Some(md) = melody_data_map.get(&m_idx) {
+                        let (above, below) = melody_note_extent(md, self.config.spatium);
+                        melody_extra_above = melody_extra_above.max(above);
+                        melody_extra_below = melody_extra_below.max(below);
+                    }
+                }
+                let system_height = staff_height + 30.0 + melody_extra_above + melody_extra_below;
 
                 // Check for page overflow (don't include spacing - last system doesn't need it)
                 if page_y + system_height > self.config.margins.top + content_height {
@@ -776,7 +787,8 @@ impl ChartLayoutEngine {
                 }
 
                 // Calculate staff_y (after potential header adjustment)
-                let staff_y = page_offset_y + page_y;
+                // Shift down by melody_extra_above to make room for high notes
+                let staff_y = page_offset_y + page_y + melody_extra_above;
 
                 // Calculate system prefix width (clef + key sig + time sig) FIRST
                 // Needed to determine staff line width for short systems
@@ -894,7 +906,8 @@ impl ChartLayoutEngine {
                     actual_system_width,
                 )));
 
-                let chord_y = staff_y - 8.0; // Above staff
+                // Place chord symbols above the highest note content (MuseScore skyline approach)
+                let chord_y = staff_y - 8.0 - melody_extra_above;
 
                 // Add section label for first system of section (skip for count-in)
                 if sys_idx == 0 && chart_section.section.section_type.should_show_header() {
@@ -1133,6 +1146,23 @@ impl ChartLayoutEngine {
                             id_counter = spillback_result.next_id;
                         }
 
+                        // Render text cues below the staff
+                        if !measure.text_cues.is_empty() {
+                            let cue_nodes = chord_renderer::render_text_cues(
+                                &measure.text_cues,
+                                measure_x,
+                                this_measure_width,
+                                staff_y,
+                                staff_height,
+                                self.config.spatium,
+                                &text_metrics,
+                                &mut id_counter,
+                            );
+                            for node in cue_nodes {
+                                root.add_child(node);
+                            }
+                        }
+
                         measure_x += this_measure_width;
 
                         // Barline after every measure
@@ -1344,8 +1374,20 @@ impl ChartLayoutEngine {
                 // so repeated chords are always visible at the start of each line
                 previous_chord_symbol = None;
 
-                let staff_y = total_height;
-                let system_height = staff_height + 30.0;
+                // Compute extra space for melody notes extending beyond the staff
+                let mut melody_extra_above = 0.0f64;
+                let mut melody_extra_below = 0.0f64;
+                for &m_idx in measure_indices {
+                    if let Some(md) = melody_data_map.get(&m_idx) {
+                        let (above, below) = melody_note_extent(md, self.config.spatium);
+                        melody_extra_above = melody_extra_above.max(above);
+                        melody_extra_below = melody_extra_below.max(below);
+                    }
+                }
+
+                // Shift staff down by extra_above to make room for high notes
+                let staff_y = total_height + melody_extra_above;
+                let system_height = staff_height + 30.0 + melody_extra_above + melody_extra_below;
 
                 // Calculate system prefix width (clef + key sig + time sig) FIRST
                 // Needed to determine staff line width for short systems
@@ -1441,7 +1483,8 @@ impl ChartLayoutEngine {
                     actual_system_width,
                 )));
 
-                let chord_y = staff_y - 8.0;
+                // Place chord symbols above the highest note content (MuseScore skyline approach)
+                let chord_y = staff_y - 8.0 - melody_extra_above;
 
                 // Add section label for first system of section (skip for count-in)
                 if sys_idx == 0 && chart_section.section.section_type.should_show_header() {
@@ -1610,6 +1653,23 @@ impl ChartLayoutEngine {
                             }
                             previous_chord_symbol = spillback_result.last_chord_symbol;
                             id_counter = spillback_result.next_id;
+                        }
+
+                        // Render text cues below the staff
+                        if !measure.text_cues.is_empty() {
+                            let cue_nodes = chord_renderer::render_text_cues(
+                                &measure.text_cues,
+                                measure_x,
+                                this_measure_width,
+                                staff_y,
+                                staff_height,
+                                self.config.spatium,
+                                &text_metrics,
+                                &mut id_counter,
+                            );
+                            for node in cue_nodes {
+                                root.add_child(node);
+                            }
                         }
 
                         measure_x += this_measure_width;
@@ -2172,8 +2232,9 @@ impl ChartLayoutEngine {
             })
             .collect();
 
-        // Capture spillback positions from rhythm result for chord rendering
+        // Capture spillback positions and note pitches from rhythm result
         let spillback_positions = rhythm_result.spillback_positions.clone();
+        let note_pitches = rhythm_result.note_pitches.clone();
 
         // Convert RhythmBuildResult to the format expected by MeasureBuilder
         let (rhythm_entries, full_rhythm, _rhythm_ticks, tuplet_specs, internal_push_positions) =
@@ -2259,6 +2320,11 @@ impl ChartLayoutEngine {
         // Apply head type overrides for mixed melody/slash notation
         if !head_type_overrides.is_empty() {
             builder = builder.head_type_overrides(head_type_overrides);
+        }
+
+        // Apply per-note pitch information for melody rendering
+        if !note_pitches.is_empty() {
+            builder = builder.note_pitches(note_pitches);
         }
 
         // Use rhythmic (slash) notation when:
@@ -2476,14 +2542,18 @@ impl ChartLayoutEngine {
             .filter(|seg| seg.seg_type.contains(SegmentType::CHORD_REST))
             .collect();
 
-        // Staff line 0 is the middle line (B4 in treble clef)
-        // For melody notes, we'll use a fixed position for now
-        let note_y = 2.0 * spatium; // Middle of staff
-
         for (i, segment) in melody_data.segments.iter().enumerate() {
             if segment.is_rest {
                 continue; // Rests don't have ties
             }
+
+            // Compute Y position from resolved pitch, or fall back to middle of staff
+            let note_y = if let Some(oct) = segment.octave {
+                let (line, _) = melody_pitch_to_line(&segment.pitch, oct);
+                -(line as f64) * spatium / 2.0
+            } else {
+                2.0 * spatium // Midline fallback
+            };
 
             // Get the corresponding segment position
             if let Some(seg) = chord_segments.get(i) {

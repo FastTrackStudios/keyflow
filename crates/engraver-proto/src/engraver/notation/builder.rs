@@ -135,6 +135,10 @@ pub struct MeasureBuilder {
     /// Minimum widths for chord/rest segments (e.g., from chord symbol widths).
     /// If provided, these are applied as minimum widths per segment index.
     segment_min_widths: Vec<f64>,
+    /// Per-note pitch information for melody rendering.
+    /// When set, overrides the default note_line with per-note staff positions and accidentals.
+    /// Parallel to rhythm entries — Some((line, accidental)) for pitched notes, None for default.
+    note_pitches: Vec<Option<(i32, Accidental)>>,
 }
 
 impl Default for MeasureBuilder {
@@ -163,6 +167,7 @@ impl MeasureBuilder {
             tuplet_groups: Vec::new(),
             compact: false,
             segment_min_widths: Vec::new(),
+            note_pitches: Vec::new(),
         }
     }
 
@@ -181,6 +186,16 @@ impl MeasureBuilder {
     #[must_use]
     pub fn segment_min_widths(mut self, widths: Vec<f64>) -> Self {
         self.segment_min_widths = widths;
+        self
+    }
+
+    /// Set per-note pitch information for melody rendering.
+    ///
+    /// Each entry corresponds to a rhythm entry. `Some((line, accidental))` overrides
+    /// the default note line; `None` uses the mode's default line.
+    #[must_use]
+    pub fn note_pitches(mut self, pitches: Vec<Option<(i32, Accidental)>>) -> Self {
+        self.note_pitches = pitches;
         self
     }
 
@@ -497,6 +512,14 @@ impl MeasureBuilder {
         let stem_dir = self.mode.default_stem_direction();
         let note_line = self.mode.default_line();
 
+        // Helper to get per-note pitch (line + accidental) for melody notes
+        let get_note_pitch = |idx: usize| -> (i32, Accidental) {
+            self.note_pitches
+                .get(idx)
+                .and_then(|opt| *opt)
+                .unwrap_or((note_line, Accidental::None))
+        };
+
         // Helper to get head type for a specific note index
         // Auto-stemless notes use slash noteheads, others use override or default
         let get_head_type = |idx: usize| -> NoteHeadType {
@@ -623,14 +646,15 @@ impl MeasureBuilder {
                         .unwrap_or(false);
 
                     let note_head_type = get_head_type(rhythm_index);
+                    let (actual_line, actual_acc) = get_note_pitch(rhythm_index);
                     let (_, chord_node) = layout_chord(
                         &ChordParams {
                             id,
                             duration: dur.to_note_duration(),
                             head_type: note_head_type,
                             notes: vec![ChordNote {
-                                line: note_line,
-                                accidental: Accidental::None,
+                                line: actual_line,
+                                accidental: actual_acc,
                                 tie: false,
                             }],
                             stem_direction: stem_dir,
@@ -672,10 +696,13 @@ impl MeasureBuilder {
                     segment_vec.push(seg);
 
                     // Store info for beam layout (x position will be set after spacing)
+                    let (beam_line, beam_acc) = get_note_pitch(rhythm_index);
                     beam_notes.push(BeamNoteInfo {
                         id,
                         tick: current_tick,
                         duration: *dur,
+                        line: beam_line,
+                        accidental: beam_acc,
                     });
 
                     current_tick += dur.ticks();
@@ -688,7 +715,6 @@ impl MeasureBuilder {
                     notes: beam_notes,
                     head_type: beam_head_type,
                     stem_dir,
-                    note_line,
                 });
             } else {
                 // Multiple non-flagged notes - individual chords
@@ -709,14 +735,15 @@ impl MeasureBuilder {
                         .unwrap_or(false);
 
                     let note_head_type = get_head_type(rhythm_index);
+                    let (actual_line, actual_acc) = get_note_pitch(rhythm_index);
                     let (_, chord_node) = layout_chord(
                         &ChordParams {
                             id,
                             duration: dur.to_note_duration(),
                             head_type: note_head_type,
                             notes: vec![ChordNote {
-                                line: note_line,
-                                accidental: Accidental::None,
+                                line: actual_line,
+                                accidental: actual_acc,
                                 tie: false,
                             }],
                             stem_direction: stem_dir,
@@ -911,6 +938,7 @@ impl MeasureBuilder {
         elements: &[SceneElement],
     ) -> SceneNode {
         let spatium = ctx.spatium();
+        let note_line = self.mode.default_line();
         let mut root = SceneNode::group(SemanticId::new(ElementType::Measure, self.id_base));
 
         // Helper to find segment X by tick and type
@@ -1013,16 +1041,15 @@ impl MeasureBuilder {
                     notes,
                     head_type,
                     stem_dir,
-                    note_line,
                 } => {
-                    // Build beam notes with computed X positions
+                    // Build beam notes with computed X positions (per-note lines)
                     let beam_notes: Vec<BeamNote> = notes
                         .iter()
                         .map(|info| {
                             let x = find_chord_x(info.tick);
                             BeamNote {
                                 x,
-                                line: *note_line,
+                                line: info.line,
                                 duration: info.duration.to_note_duration(),
                                 stem_direction: *stem_dir,
                                 head_type: *head_type,
@@ -1030,17 +1057,19 @@ impl MeasureBuilder {
                         })
                         .collect();
 
-                    // Layout noteheads
+                    // Layout noteheads (each with its own line and accidental)
                     for info in notes {
                         let x = find_chord_x(info.tick);
+                        let has_pitch = info.line != note_line || info.accidental != Accidental::None;
                         let (_, note_node) = layout_note(
                             &NoteParams {
                                 id: info.id,
                                 duration: info.duration.to_note_duration(),
                                 head_type: *head_type,
-                                line: *note_line,
+                                line: info.line,
+                                accidental: info.accidental,
                                 dots: info.duration.dots(),
-                                ledger_lines: false,
+                                ledger_lines: has_pitch,
                                 ..Default::default()
                             },
                             ctx,
@@ -1200,6 +1229,10 @@ struct BeamNoteInfo {
     id: u64,
     tick: i32,
     duration: Duration,
+    /// Per-note staff line (for melody pitch rendering)
+    line: i32,
+    /// Per-note accidental (for melody pitch rendering)
+    accidental: Accidental,
 }
 
 /// A group of notes that should be beamed together.
@@ -1247,7 +1280,6 @@ enum SceneElement {
         notes: Vec<BeamNoteInfo>,
         head_type: NoteHeadType,
         stem_dir: StemDirection,
-        note_line: i32,
     },
 }
 

@@ -415,6 +415,26 @@ impl<'a> ChartParser<'a> {
             // Count ALL chords, even those with explicit durations, to calculate segment duration
             let tokens: Vec<&str> = segment.split_whitespace().collect();
 
+            // Build a mask of which tokens are inside m{...} melody blocks
+            // so we can skip them for chord counting and duration assignment
+            let mut in_melody = false;
+            let melody_mask: Vec<bool> = tokens
+                .iter()
+                .map(|t| {
+                    if t.starts_with("m{") {
+                        in_melody = true;
+                        return true; // the m{ token itself is part of the melody
+                    }
+                    if in_melody {
+                        if t.contains('}') {
+                            in_melody = false;
+                        }
+                        return true;
+                    }
+                    false
+                })
+                .collect();
+
             // Check if segment has standalone slashes (e.g., "/", "//", "///", "////")
             // If so, don't apply auto-duration - the slashes provide duration info
             let has_standalone_slashes = tokens
@@ -423,7 +443,10 @@ impl<'a> ChartParser<'a> {
 
             let chord_count = tokens
                 .iter()
-                .filter(|t| {
+                .enumerate()
+                .filter(|(i, t)| {
+                    // Skip tokens inside melody blocks
+                    if melody_mask[*i] { return false; }
                     // Count as chord if it's not a command, cue, or other special token
                     // Dot repeats ARE counted - they occupy time in the measure
                     !t.starts_with('/') && !t.starts_with('@') && !t.starts_with('"')
@@ -431,14 +454,21 @@ impl<'a> ChartParser<'a> {
                 })
                 .count();
 
+            // Check if segment has melody blocks — don't apply auto-duration to melody measures
+            // as it would make the chord look like explicit rhythm notation
+            let has_melody_block = melody_mask.iter().any(|&m| m);
+
             // Count chords WITHOUT explicit durations (these need auto-duration)
-            // If segment has standalone slashes, skip auto-duration entirely
-            let chords_needing_duration = if has_standalone_slashes {
-                0 // Don't apply auto-duration when slashes are present
+            // If segment has standalone slashes or melody blocks, skip auto-duration entirely
+            let chords_needing_duration = if has_standalone_slashes || has_melody_block {
+                0 // Don't apply auto-duration when slashes or melodies are present
             } else {
                 tokens
                     .iter()
-                    .filter(|t| {
+                    .enumerate()
+                    .filter(|(i, t)| {
+                        // Skip tokens inside melody blocks
+                        if melody_mask[*i] { return false; }
                         !t.starts_with('/')
                             && !t.starts_with('@')
                             && !t.starts_with('"')
@@ -486,9 +516,15 @@ impl<'a> ChartParser<'a> {
 
             // Rebuild segment with durations
             let mut segment_result = String::new();
-            for token in &tokens {
+            for (tok_idx, token) in tokens.iter().enumerate() {
                 if !segment_result.is_empty() {
                     segment_result.push(' ');
+                }
+
+                // Keep melody block tokens as-is (no duration mangling)
+                if melody_mask[tok_idx] {
+                    segment_result.push_str(token);
+                    continue;
                 }
 
                 // Check if this is a chord (not a command, cue, dot repeat, stop token, etc.)
@@ -769,6 +805,7 @@ impl<'a> ChartParser<'a> {
         let mut just_processed_separator = false; // Track if we just processed a | separator
         let mut measure_was_created_by_separator = false; // Track if current measure was created by |
         let mut in_melody_block = false; // Track if we're inside a m{...} block
+        let mut melody_search_offset = 0usize; // Cursor for finding successive m{ blocks in line_to_parse
         let mut last_chord: Option<ChordInstance> = None; // Track last chord for dot repeat
         let mut measure_has_slash_rhythm = false; // Track if current measure has chords with slash rhythm
         let mut last_token_was_slash = false; // Track for slash accumulation (consecutive slashes accumulate)
@@ -1249,20 +1286,30 @@ impl<'a> ChartParser<'a> {
             // Check for inline melody block (e.g., "m{ C_8 D_8 E_4 }")
             if token_str.starts_with("m{") {
                 in_melody_block = true;
-                // Find the full melody block in the original line
-                if let Some(m_pos) = line_to_parse.find("m{") {
-                    let melody_start = &line_to_parse[m_pos..];
+                // Find the full melody block in the original line (advancing cursor for successive blocks)
+                if let Some(m_pos) = line_to_parse[melody_search_offset..].find("m{") {
+                    let abs_pos = melody_search_offset + m_pos;
+                    let melody_start = &line_to_parse[abs_pos..];
                     // Find the closing brace
                     if let Some(close_pos) = melody_start.find('}') {
                         let melody_str = &melody_start[..close_pos + 1];
+                        // Advance cursor past this melody block for next search
+                        melody_search_offset = abs_pos + close_pos + 1;
                         match Melody::parse_block(melody_str) {
                             Ok((name, melody)) => {
                                 if let Some(var_name) = name {
                                     // Store as a variable
                                     self.melody_variables.set(var_name, melody.clone());
                                 }
-                                // Attach melody to current measure
-                                current_measure.melodies.push(melody);
+                                // Attach melody to current measure.
+                                // If the current measure is empty (chord filled the previous
+                                // measure exactly and it was auto-pushed), attach to the
+                                // last pushed measure instead.
+                                if current_measure.chords.is_empty() && !measures.is_empty() {
+                                    measures.last_mut().unwrap().melodies.push(melody);
+                                } else {
+                                    current_measure.melodies.push(melody);
+                                }
                             }
                             Err(e) => {
                                 tracing::warn!(
@@ -2477,16 +2524,6 @@ VS
             .filter(|s| s.section.section_type == SectionType::Verse)
             .collect();
 
-        eprintln!(
-            "All sections: {:?}",
-            chart
-                .sections
-                .iter()
-                .map(|s| format!("{:?}", s.section.section_type))
-                .collect::<Vec<_>>()
-        );
-        eprintln!("Verse sections: {}", verse_sections.len());
-
         assert!(
             !verse_sections.is_empty(),
             "Should have at least 1 verse section"
@@ -2629,10 +2666,6 @@ BR
             .collect();
         assert!(!m0_chords.is_empty(), "Measure 0 should have chords");
         let f7 = &m0_chords[0];
-        eprintln!(
-            "F7 chord: symbol='{}' commands={:?} push_pull={:?}",
-            f7.full_symbol, f7.commands, f7.push_pull
-        );
         assert_eq!(f7.full_symbol, "F7", "Should be F7");
         assert!(f7.push_pull.is_some(), "F7 should have push");
         assert!(
@@ -2656,10 +2689,6 @@ BR
             .collect();
         assert!(!m1_chords.is_empty(), "Measure 1 should have chords");
         let g7 = &m1_chords[0];
-        eprintln!(
-            "G7 chord: symbol='{}' commands={:?} push_pull={:?}",
-            g7.full_symbol, g7.commands, g7.push_pull
-        );
         assert_eq!(g7.full_symbol, "G7", "Should be G7");
         assert!(g7.push_pull.is_some(), "G7 should have push");
         assert!(

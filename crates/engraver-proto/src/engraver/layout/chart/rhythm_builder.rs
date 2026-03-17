@@ -15,6 +15,7 @@
 use crate::chart::types::{Measure, RhythmElement};
 use crate::chord::{ChordRhythm, LilySyntax, PushPullBase};
 use crate::engraver::model::DurationKind;
+use crate::engraver::layout::tlayout::Accidental;
 use crate::engraver::notation::{Duration, RhythmEntry, TupletRatio, TupletSpec};
 use crate::time::{MusicalPositionExt, TimeSignatureExt};
 
@@ -107,6 +108,9 @@ pub struct RhythmBuildResult {
     /// Internal push positions: (chord_idx, rhythm_idx).
     /// Maps pushed chords to their rhythm entry positions within this measure.
     pub internal_push_positions: Vec<(usize, usize)>,
+    /// Per-note pitch information for melody rendering.
+    /// Parallel to `entries` — Some((staff_line, accidental)) for pitched notes, None for rests/slashes.
+    pub note_pitches: Vec<Option<(i32, Accidental)>>,
 }
 
 
@@ -520,6 +524,8 @@ fn extract_from_explicit(
 /// Melody segments come from `expand_melodies_across_measures()` and represent
 /// notes that may have been split at barlines.
 fn extract_from_melody(data: &MeasureMelodyData) -> RhythmBuildResult {
+    use super::types::melody_pitch_to_line;
+
     let mut result = RhythmBuildResult::default();
     let num_melody_notes = data.segments.len();
 
@@ -527,8 +533,17 @@ fn extract_from_melody(data: &MeasureMelodyData) -> RhythmBuildResult {
         let duration = segment.to_duration();
         if segment.is_rest {
             result.entries.push(RhythmEntry::Rest(duration));
+            result.note_pitches.push(None);
         } else {
             result.entries.push(RhythmEntry::Note(duration));
+
+            // Resolve pitch to staff line if we have octave info
+            if let Some(octave) = segment.octave {
+                let (line, acc) = melody_pitch_to_line(&segment.pitch, octave);
+                result.note_pitches.push(Some((line, acc)));
+            } else {
+                result.note_pitches.push(None);
+            }
         }
         // Head type override will be None for melody notes (use default head)
         result.head_type_overrides.push(None);
@@ -906,6 +921,7 @@ fn fill_to_measure(result: &mut RhythmBuildResult, config: &RhythmBuildConfig) {
 
         // Track if we have head_type_overrides (from melody extraction)
         let had_overrides = !result.head_type_overrides.is_empty();
+        let had_pitches = !result.note_pitches.is_empty();
 
         for _ in 0..num_quarters {
             result.entries.push(RhythmEntry::Note(Duration::Quarter));
@@ -915,6 +931,11 @@ fn fill_to_measure(result: &mut RhythmBuildResult, config: &RhythmBuildConfig) {
                 result
                     .head_type_overrides
                     .push(Some(NoteHeadOverride::Slash));
+            }
+
+            // Fill notes have no pitch (they're slash fills)
+            if had_pitches {
+                result.note_pitches.push(None);
             }
         }
 
