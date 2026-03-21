@@ -50,8 +50,8 @@ daw-proto = { git = "https://github.com/FastTrackStudios/daw.git", branch = "mai
 dawfile-reaper = { git = "https://github.com/FastTrackStudios/daw.git", branch = "main" }
 color-palette = { git = "https://github.com/FastTrackStudios/dynamic-template.git", branch = "main" }
 music-catalog = { git = "https://github.com/FastTrackStudios/dynamic-template.git", branch = "main" }
-session = { git = "https://github.com/FastTrackStudios/FastTrackStudio.git", branch = "main" }
-session-ui = { git = "https://github.com/FastTrackStudios/FastTrackStudio.git", branch = "main" }
+session = { git = "https://github.com/FastTrackStudios/session.git", branch = "main" }
+session-ui = { git = "https://github.com/FastTrackStudios/session.git", branch = "main" }
 dock-dioxus = { git = "https://github.com/FastTrackStudios/dock-dioxus.git", branch = "main" }
 dock-proto = { git = "https://github.com/FastTrackStudios/dock-dioxus.git", branch = "main" }
 
@@ -73,9 +73,9 @@ tracing = { version = "0.1", features = ["std"] }
 # color-palette = { path = "../dynamic-template/crates/color-palette" }
 # music-catalog = { path = "../dynamic-template/crates/music-catalog" }
 #
-# [patch."https://github.com/FastTrackStudios/FastTrackStudio.git"]
-# session = { path = "../FastTrackStudio/crates/session/session" }
-# session-ui = { path = "../FastTrackStudio/crates/session/session-ui" }
+[patch."https://github.com/FastTrackStudios/session.git"]
+session = { path = "../session/crates/session" }
+session-ui = { path = "../session/crates/session-ui" }
 #
 # [patch."https://github.com/FastTrackStudios/dock-dioxus.git"]
 # dock-dioxus = { path = "../dock-dioxus/crates/dock-dioxus" }
