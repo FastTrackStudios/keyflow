@@ -113,6 +113,7 @@ dependencies = [
 [[package]]
 name = "actions-proto"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/input_actions.git?branch=main#df9b403073844e8ec03ddca964eb88ca1aef0435"
 dependencies = [
  "convert_case 0.6.0",
  "facet",
@@ -1312,6 +1313,7 @@ dependencies = [
 [[package]]
 name = "color-palette"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/dynamic-template.git?branch=main#3942238eeaa6532d43cf59686540c743c7d0c855"
 dependencies = [
  "facet",
  "thiserror 2.0.18",
@@ -1790,6 +1792,7 @@ checksum = "be1e0bca6c3637f992fc1cc7cbc52a78c1ef6db076dbf1059c4323d6a2048376"
 [[package]]
 name = "daw"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#245f532686dd6b5d6dcb9be99b65df254f30ea37"
 dependencies = [
  "daw-control",
  "daw-proto",
@@ -1799,6 +1802,7 @@ dependencies = [
 [[package]]
 name = "daw-control"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#245f532686dd6b5d6dcb9be99b65df254f30ea37"
 dependencies = [
  "daw-proto",
  "eyre",
@@ -1812,6 +1816,7 @@ dependencies = [
 [[package]]
 name = "daw-proto"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#245f532686dd6b5d6dcb9be99b65df254f30ea37"
 dependencies = [
  "actions-proto",
  "facet",
@@ -1822,6 +1827,7 @@ dependencies = [
 [[package]]
 name = "dawfile-reaper"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/daw.git?branch=main#245f532686dd6b5d6dcb9be99b65df254f30ea37"
 dependencies = [
  "anyhow",
  "daw-proto",
@@ -2411,6 +2417,7 @@ checksum = "780955b8b195a21ab8e4ac6b60dd1dbdcec1dc6c51c0617964b08c81785e12c9"
 [[package]]
 name = "dock-dioxus"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/dock-dioxus.git?branch=main#1216192edbf039bc5a9b70b02ceda2e293255a9a"
 dependencies = [
  "dioxus",
  "dock-proto",
@@ -2424,6 +2431,7 @@ dependencies = [
 [[package]]
 name = "dock-proto"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/dock-dioxus.git?branch=main#1216192edbf039bc5a9b70b02ceda2e293255a9a"
 dependencies = [
  "facet",
  "facet-json",
@@ -2523,9 +2531,9 @@ dependencies = [
  "facet",
  "getrandom 0.2.17",
  "helgoboss-midi",
- "keyflow",
- "keyflow-proto",
- "keyflow-text",
+ "keyflow 0.1.0",
+ "keyflow-proto 0.1.0",
+ "keyflow-text 0.1.0",
  "kurbo 0.13.0",
  "log",
  "lopdf 0.36.0",
@@ -3120,6 +3128,7 @@ dependencies = [
 [[package]]
 name = "fts-ui"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/fts-ui.git?branch=main#67b09858b8cd1bd9fc41769f6a97d1423c80c0c9"
 dependencies = [
  "dioxus",
  "dioxus-primitives",
@@ -4277,11 +4286,30 @@ dependencies = [
  "getrandom 0.2.17",
  "helgoboss-midi",
  "keyflow-midi",
- "keyflow-proto",
- "keyflow-text",
+ "keyflow-proto 0.1.0",
+ "keyflow-text 0.1.0",
  "regex",
  "tracing",
  "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "keyflow"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/keyflow.git?branch=main#00c81abf2a8488273b28857e7d6b8c748cec49aa"
+dependencies = [
+ "color-eyre",
+ "colored",
+ "daw-proto",
+ "derive_more 1.0.0",
+ "facet",
+ "getrandom 0.2.17",
+ "helgoboss-midi",
+ "keyflow-proto 0.1.0 (git+https://github.com/FastTrackStudios/keyflow.git?branch=main)",
+ "keyflow-text 0.1.0 (git+https://github.com/FastTrackStudios/keyflow.git?branch=main)",
+ "regex",
+ "tracing",
  "uuid",
 ]
 
@@ -4290,7 +4318,7 @@ name = "keyflow-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
- "keyflow",
+ "keyflow 0.1.0",
  "tracing",
  "tracing-subscriber",
 ]
@@ -4300,8 +4328,8 @@ name = "keyflow-midi"
 version = "0.1.0"
 dependencies = [
  "engraver",
- "keyflow-proto",
- "keyflow-text",
+ "keyflow-proto 0.1.0",
+ "keyflow-text 0.1.0",
 ]
 
 [[package]]
@@ -4312,7 +4340,24 @@ dependencies = [
  "daw-proto",
  "facet",
  "helgoboss-midi",
- "keyflow-text",
+ "keyflow-text 0.1.0",
+ "music-catalog",
+ "roam",
+ "serde",
+ "thiserror 2.0.18",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "keyflow-proto"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/keyflow.git?branch=main#00c81abf2a8488273b28857e7d6b8c748cec49aa"
+dependencies = [
+ "color-palette",
+ "daw-proto",
+ "facet",
+ "helgoboss-midi",
  "music-catalog",
  "roam",
  "serde",
@@ -4325,7 +4370,16 @@ dependencies = [
 name = "keyflow-text"
 version = "0.1.0"
 dependencies = [
- "keyflow-proto",
+ "keyflow-proto 0.1.0",
+ "tracing",
+]
+
+[[package]]
+name = "keyflow-text"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/keyflow.git?branch=main#00c81abf2a8488273b28857e7d6b8c748cec49aa"
+dependencies = [
+ "keyflow-proto 0.1.0 (git+https://github.com/FastTrackStudios/keyflow.git?branch=main)",
  "tracing",
 ]
 
@@ -4341,7 +4395,7 @@ dependencies = [
  "dioxus-native",
  "dock-dioxus",
  "dock-proto",
- "keyflow",
+ "keyflow 0.1.0",
  "kurbo 0.13.0",
  "lucide-dioxus 2.566.0",
  "peniko 0.6.0",
@@ -4953,26 +5007,17 @@ version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac52dcc0ff5b4710a66626370b1bf85ba3d924fd8019e8cfa100e8dafffda4ad"
 dependencies = [
- "moire-macros-noop 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "moire-tokio 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "moire-wasm 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "moire"
-version = "1.0.0"
-source = "git+https://github.com/bearcove/peeps?branch=main#156ecf2aa166d6304d371d17ea0f09820dcdf29f"
-dependencies = [
  "moire-macros",
- "moire-macros-noop 1.0.0 (git+https://github.com/bearcove/peeps?branch=main)",
- "moire-tokio 1.0.0 (git+https://github.com/bearcove/peeps?branch=main)",
- "moire-wasm 1.0.0 (git+https://github.com/bearcove/peeps?branch=main)",
+ "moire-macros-noop",
+ "moire-tokio",
+ "moire-wasm",
 ]
 
 [[package]]
 name = "moire-macros"
 version = "1.0.0"
-source = "git+https://github.com/bearcove/peeps?branch=main#156ecf2aa166d6304d371d17ea0f09820dcdf29f"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c494331faed7953b795b7769a84e9272e6f59e34ddceebadba4715b245957bc2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4986,11 +5031,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92ccdc0bf403f5ecf29c09e8e9f178caed89a914ea032e0c2d99d3824b78892d"
 
 [[package]]
-name = "moire-macros-noop"
-version = "1.0.0"
-source = "git+https://github.com/bearcove/peeps?branch=main#156ecf2aa166d6304d371d17ea0f09820dcdf29f"
-
-[[package]]
 name = "moire-runtime"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5000,26 +5040,10 @@ dependencies = [
  "facet",
  "facet-json",
  "facet-value",
- "moire-trace-capture 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "moire-trace-types 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "moire-types 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "moire-wire 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "tokio",
-]
-
-[[package]]
-name = "moire-runtime"
-version = "1.0.0"
-source = "git+https://github.com/bearcove/peeps?branch=main#156ecf2aa166d6304d371d17ea0f09820dcdf29f"
-dependencies = [
- "ctor",
- "facet",
- "facet-json",
- "facet-value",
- "moire-trace-capture 1.0.0 (git+https://github.com/bearcove/peeps?branch=main)",
- "moire-trace-types 1.0.0 (git+https://github.com/bearcove/peeps?branch=main)",
- "moire-types 1.0.0 (git+https://github.com/bearcove/peeps?branch=main)",
- "moire-wire 1.0.0 (git+https://github.com/bearcove/peeps?branch=main)",
+ "moire-trace-capture",
+ "moire-trace-types",
+ "moire-types",
+ "moire-wire",
  "tokio",
 ]
 
@@ -5030,20 +5054,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fdb30c43038ce71c727da5a4ff01d09dd4c823486cc17b3b08661420d0ceda43"
 dependencies = [
  "ctor",
- "moire-runtime 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "moire-types 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "parking_lot",
- "tokio",
-]
-
-[[package]]
-name = "moire-tokio"
-version = "1.0.0"
-source = "git+https://github.com/bearcove/peeps?branch=main#156ecf2aa166d6304d371d17ea0f09820dcdf29f"
-dependencies = [
- "ctor",
- "moire-runtime 1.0.0 (git+https://github.com/bearcove/peeps?branch=main)",
- "moire-types 1.0.0 (git+https://github.com/bearcove/peeps?branch=main)",
+ "moire-runtime",
+ "moire-types",
  "parking_lot",
  "tokio",
 ]
@@ -5055,16 +5067,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6685ebbdee1253529c9074c41d8288504b640ffe8c21176ce464fef5c5c00c38"
 dependencies = [
  "libc",
- "moire-trace-types 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "moire-trace-capture"
-version = "1.0.0"
-source = "git+https://github.com/bearcove/peeps?branch=main#156ecf2aa166d6304d371d17ea0f09820dcdf29f"
-dependencies = [
- "libc",
- "moire-trace-types 1.0.0 (git+https://github.com/bearcove/peeps?branch=main)",
+ "moire-trace-types",
 ]
 
 [[package]]
@@ -5077,14 +5080,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "moire-trace-types"
-version = "1.0.0"
-source = "git+https://github.com/bearcove/peeps?branch=main#156ecf2aa166d6304d371d17ea0f09820dcdf29f"
-dependencies = [
- "facet",
-]
-
-[[package]]
 name = "moire-types"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5092,17 +5087,7 @@ checksum = "667b2fc41e30d3b0f7d0d29e978d3f473afaf0e0be355202eead317e35ace200"
 dependencies = [
  "facet",
  "facet-value",
- "moire-trace-types 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "moire-types"
-version = "1.0.0"
-source = "git+https://github.com/bearcove/peeps?branch=main#156ecf2aa166d6304d371d17ea0f09820dcdf29f"
-dependencies = [
- "facet",
- "facet-value",
- "moire-trace-types 1.0.0 (git+https://github.com/bearcove/peeps?branch=main)",
+ "moire-trace-types",
 ]
 
 [[package]]
@@ -5117,22 +5102,7 @@ dependencies = [
  "futures-channel",
  "futures-util",
  "gloo-timers",
- "moire-types 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "wasm-bindgen-futures",
-]
-
-[[package]]
-name = "moire-wasm"
-version = "1.0.0"
-source = "git+https://github.com/bearcove/peeps?branch=main#156ecf2aa166d6304d371d17ea0f09820dcdf29f"
-dependencies = [
- "async-channel",
- "async-lock",
- "event-listener",
- "futures-channel",
- "futures-util",
- "gloo-timers",
- "moire-types 1.0.0 (git+https://github.com/bearcove/peeps?branch=main)",
+ "moire-types",
  "wasm-bindgen-futures",
 ]
 
@@ -5144,24 +5114,14 @@ checksum = "bf0ec84eeb2e23a83339cf5edc9d5a3a9ec5849416bd4051951fba416ea3e0f7"
 dependencies = [
  "facet",
  "facet-json",
- "moire-trace-types 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "moire-types 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "moire-wire"
-version = "1.0.0"
-source = "git+https://github.com/bearcove/peeps?branch=main#156ecf2aa166d6304d371d17ea0f09820dcdf29f"
-dependencies = [
- "facet",
- "facet-json",
- "moire-trace-types 1.0.0 (git+https://github.com/bearcove/peeps?branch=main)",
- "moire-types 1.0.0 (git+https://github.com/bearcove/peeps?branch=main)",
+ "moire-trace-types",
+ "moire-types",
 ]
 
 [[package]]
 name = "music-catalog"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/dynamic-template.git?branch=main#3942238eeaa6532d43cf59686540c743c7d0c855"
 dependencies = [
  "color-palette",
 ]
@@ -6831,7 +6791,7 @@ dependencies = [
  "facet-postcard",
  "facet-reflect",
  "getrandom 0.3.4",
- "moire 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "moire",
  "roam-types",
  "smallvec 1.15.1",
  "tokio",
@@ -7282,8 +7242,8 @@ dependencies = [
  "chrono",
  "daw",
  "eyre",
- "keyflow",
- "moire 1.0.0 (git+https://github.com/bearcove/peeps?branch=main)",
+ "keyflow 0.1.0 (git+https://github.com/FastTrackStudios/keyflow.git?branch=main)",
+ "moire",
  "rayon",
  "roam",
  "rustc-hash 2.1.1",
@@ -7305,7 +7265,7 @@ dependencies = [
  "facet",
  "futures",
  "gloo-timers",
- "keyflow",
+ "keyflow 0.1.0 (git+https://github.com/FastTrackStudios/keyflow.git?branch=main)",
  "roam",
  "serde",
  "thiserror 2.0.18",
@@ -8689,6 +8649,7 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 [[package]]
 name = "utils"
 version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/FastTrackStudio.git?branch=main#ffd32071542550116c371018f1cf876d742ca6e1"
 dependencies = [
  "facet",
  "serde",

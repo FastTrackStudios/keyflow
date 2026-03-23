@@ -11,7 +11,7 @@ highlighting = []
 [dependencies]
 facet.workspace = true
 thiserror.workspace = true
-roam.workspace = true
+vox.workspace = true
 tracing.workspace = true
 serde = { workspace = true, optional = true }
 daw-proto = { workspace = true }

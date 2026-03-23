@@ -1,7 +1,7 @@
 //! Services module - Service trait definitions for Keyflow
 
 use facet::Facet;
-use roam::service;
+use vox::service;
 
 /// Service for chart operations
 #[service]
