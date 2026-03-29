@@ -30,7 +30,7 @@ facet-value = { version = "0.44" }
 facet-yaml = { version = "0.44" }
 
 # Roam RPC framework (pinned — latest main needs peeps sub-crates not yet published)
-vox = { git = "https://github.com/bearcove/vox.git", rev = "53bff48" }
+vox = { git = "https://github.com/Codys-Wright/vox.git", rev = "2a2f793b" }
 
 # Rendering
 anyrender = { git = "https://github.com/DioxusLabs/anyrender.git", branch = "main" }
