@@ -19,7 +19,7 @@ dioxus = { version = "0.7.2", optional = true }
 dioxus-native = { workspace = true, optional = true }
 
 # Vello scene types (for building scenes to hand off to ChartGraphics)
-vello = "0.7"
+vello = "0.8"
 vello_hybrid = { workspace = true, optional = true }
 kurbo = { workspace = true }
 

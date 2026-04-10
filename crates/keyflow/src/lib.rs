@@ -13,6 +13,8 @@ pub use keyflow_proto::*;
 #[cfg(feature = "text")]
 pub use keyflow_text as text;
 
+pub mod daw_module;
+
 #[derive(Debug, Clone)]
 pub enum KeyflowSourceError {
     Text(String),
