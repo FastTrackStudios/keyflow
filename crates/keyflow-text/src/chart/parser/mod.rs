@@ -10,6 +10,7 @@
 // region:    --- Modules
 
 pub mod chordpro;
+mod chordpro_integration;
 pub mod chords;
 pub mod document;
 pub mod helpers;
@@ -18,6 +19,7 @@ pub mod post_process;
 pub mod sections;
 
 pub use chordpro::parse_chordpro;
+pub use chordpro_integration::merge_chordpro_into_chart;
 pub use document::parse_kf_document;
 pub use helpers::{LineOffsetMap, PushPullModifier, RepeatCount};
 

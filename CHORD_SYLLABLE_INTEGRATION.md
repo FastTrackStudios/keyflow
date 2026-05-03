@@ -10,6 +10,8 @@ This document describes the complete implementation for assigning chords to spec
 - Parse `.kf` files with `--- blockname ---` delimiters
 - Support: `keyflow`, `chordpro`, `voicings`, and custom blocks
 - Fully backward-compatible with plain `.kf` files
+- `keyflow` remains the master rhythm chart; `chordpro` blocks can be
+  layered on top for lyric/chord placement.
 
 ### 2. **Syllable-Aware Lyrics** (`chart/lyrics.rs`)
 - `LyricLine`: Container for syllables
@@ -19,6 +21,8 @@ This document describes the complete implementation for assigning chords to spec
   - Attachment type (before word, on syllable, between, etc.)
   - Word boundary markers
   - Timing information (measure + beat)
+- `LyricLine` metadata now records source format, sync level, source label,
+  singer, and part so the same section can carry multiple vocal/lyric layers.
 
 ### 3. **Syllable Parsing** (`chart/syllable_parser.rs`)
 - **Knuth-Liang hyphenation** (when feature enabled)
@@ -118,6 +122,42 @@ t=1.0s: Display "down", play A# notes
 ```
 
 ## Format Specification
+
+### Multi-Block `.kf` With ChordPro Lyrics
+
+The `.kf` file can hold a keyflow rhythm block plus one or more ChordPro lyric
+blocks:
+
+```text
+--- keyflow ---
+120bpm 4/4 #C
+VS 1: | 1 4 5 1 |
+CH 1: | 4 5 1 1 |
+
+--- chordpro ---
+{sov: singer=lead part=Lead sync=words}
+[C]Twinkle, [F]little [C]star
+{eov}
+{soc: singer=lead part=Lead sync=slides}
+[F]How I [C]wonder
+{eoc}
+
+--- chordpro ---
+{sov: singer=harmony part=Harmony sync=syllables}
+[C]Twin-kle, [F]lit-tle [C]star
+{eov}
+```
+
+Rules:
+- The `keyflow` block is the timing source of truth for section structure and
+  chord rhythms.
+- Each `chordpro` block is a lyric layer over that rhythm chart. A second
+  `chordpro` block can attach another singer, part, translation, or sync
+  granularity to the same sections.
+- ChordPro environments (`{sov}`, `{soc}`, `{sob}`) attach to matching keyflow
+  Verse/Chorus/Bridge sections in source order.
+- Environment labels can carry lightweight metadata:
+  `singer=<id>`, `part=<name>`, and `sync=section|slides|words|syllables`.
 
 ### Chord Assignment Syntax in `.kf` Files
 

@@ -61,8 +61,7 @@ impl SyllableParser {
                 if let Some(chord) = inline_chords.get(word_index) {
                     if syl_index == 0 {
                         // Attach to first syllable of word
-                        syllable =
-                            syllable.with_chord(chord.clone(), ChordAttachment::BeforeWord);
+                        syllable = syllable.with_chord(chord.clone(), ChordAttachment::BeforeWord);
                     }
                 }
 
@@ -77,7 +76,7 @@ impl SyllableParser {
             word_index += 1;
         }
 
-        LyricLine { syllables }
+        LyricLine::new(syllables)
     }
 
     /// Extract inline chord notation: `[C]word [G]word`

@@ -34,9 +34,10 @@ pub mod highlighting;
 pub use api::prelude as api_prelude;
 pub use chart::{
     Chart, ChartIndex, ChartPosition, ChartSection, ChordAttachment, ChordAttachmentType,
-    ChordInstance, ChordSyllableAligner, ChordSyllableMapping, DynamicMarking, ElementId, KeyChange,
-    LyricChordParser, LyricLine, LyricSyllable, Measure, NavigationType, SectionAlignment,
-    SemanticRole, SourceLink, SyllableParser, TempoChange, TextCue, TimeSignatureChange,
+    ChordInstance, ChordSyllableAligner, ChordSyllableMapping, DynamicMarking, ElementId,
+    KeyChange, LyricChordParser, LyricLine, LyricSourceFormat, LyricSyllable, LyricSyncLevel,
+    Measure, NavigationType, SectionAlignment, SemanticRole, SourceLink, SyllableParser,
+    TempoChange, TextCue, TimeSignatureChange,
 };
 
 #[cfg(feature = "serde")]

@@ -7,6 +7,7 @@ edition = "2024"
 default = ["serde"]
 serde = ["dep:serde"]
 highlighting = []
+syllable-splitting = []
 
 [dependencies]
 facet.workspace = true

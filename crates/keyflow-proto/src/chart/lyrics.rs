@@ -6,24 +6,102 @@
 
 use facet::Facet;
 
+/// Where a lyric line came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Facet, Default)]
+#[repr(u8)]
+pub enum LyricSourceFormat {
+    /// Standard `[lyrics]` content in the keyflow block.
+    #[default]
+    Keyflow,
+    /// ChordPro `[C]lyric` content from a `--- chordpro ---` block.
+    ChordPro,
+    /// Imported or generated lyric content whose original format is unknown.
+    Unknown,
+}
+
+/// The granularity this lyric line is intended to sync at.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Facet, Default)]
+#[repr(u8)]
+pub enum LyricSyncLevel {
+    /// Whole-section lyric presence/cueing.
+    Section,
+    /// Slide/page level lyric grouping, like presentation software.
+    Slide,
+    /// Word-level lyric timing.
+    Word,
+    /// Syllable-level lyric timing.
+    #[default]
+    Syllable,
+}
+
 /// A complete line of lyrics for a section
 #[derive(Debug, Clone, PartialEq, Facet)]
 pub struct LyricLine {
     /// Individual syllables with timing and chord attachment info
     pub syllables: Vec<LyricSyllable>,
+
+    /// Source format used to create this line.
+    pub source_format: LyricSourceFormat,
+
+    /// Intended sync granularity for this line.
+    pub sync_level: LyricSyncLevel,
+
+    /// Human-readable label from the source, such as a ChordPro environment label.
+    pub label: Option<String>,
+
+    /// Optional singer/person assignment for multi-vocal arrangements.
+    pub singer: Option<String>,
+
+    /// Optional musical part assignment, such as lead, harmony, or response.
+    pub part: Option<String>,
 }
 
 impl LyricLine {
     /// Create a new lyric line from syllables
     pub fn new(syllables: Vec<LyricSyllable>) -> Self {
-        Self { syllables }
+        Self {
+            syllables,
+            source_format: LyricSourceFormat::Keyflow,
+            sync_level: LyricSyncLevel::Syllable,
+            label: None,
+            singer: None,
+            part: None,
+        }
     }
 
     /// Create an empty lyric line
     pub fn empty() -> Self {
-        Self {
-            syllables: Vec::new(),
-        }
+        Self::new(Vec::new())
+    }
+
+    /// Mark the source format for this lyric line.
+    pub fn with_source_format(mut self, source_format: LyricSourceFormat) -> Self {
+        self.source_format = source_format;
+        self
+    }
+
+    /// Mark the intended sync level for this lyric line.
+    pub fn with_sync_level(mut self, sync_level: LyricSyncLevel) -> Self {
+        self.sync_level = sync_level;
+        self
+    }
+
+    /// Set a human-readable source label.
+    pub fn with_label(mut self, label: impl Into<String>) -> Self {
+        self.label = Some(label.into());
+        self
+    }
+
+    /// Set the singer/person assignment.
+    pub fn with_singer(mut self, singer: impl Into<String>) -> Self {
+        self.singer = Some(singer.into());
+        self
+    }
+
+    /// Set the musical part assignment.
+    pub fn with_part(mut self, part: impl Into<String>) -> Self {
+        self.part = Some(part.into());
+        self
     }
 
     /// Parse a simple lyric line (whitespace-separated syllables)
@@ -75,7 +153,7 @@ impl LyricLine {
             }
         }
 
-        Self { syllables }
+        Self::new(syllables)
     }
 
     /// Check if any syllables have chord attachments
@@ -185,11 +263,7 @@ impl LyricSyllable {
     }
 
     /// Create a syllable with timing information
-    pub fn with_timing(
-        text: impl Into<String>,
-        measure_index: usize,
-        beat: f32,
-    ) -> Self {
+    pub fn with_timing(text: impl Into<String>, measure_index: usize, beat: f32) -> Self {
         Self {
             text: text.into(),
             hyphen_after: false,

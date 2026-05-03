@@ -10,6 +10,7 @@ highlighting = ["keyflow-proto/highlighting"]
 
 [dependencies]
 keyflow-proto = { path = "../keyflow-proto" }
+keyflow-chordpro = { path = "../keyflow-chordpro" }
 tracing = { workspace = true }
 
 [lints]
