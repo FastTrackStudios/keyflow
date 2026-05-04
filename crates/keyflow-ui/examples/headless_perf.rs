@@ -97,17 +97,83 @@ fn parse_args() -> Result<Config, String> {
                 cfg.chart_path = Some(PathBuf::from(v));
             }
             "--example" => cfg.example = args.next().ok_or("--example requires a value")?,
-            "--width" => cfg.width = args.next().ok_or("--width requires a value")?.parse().map_err(|_| "invalid --width")?,
-            "--height" => cfg.height = args.next().ok_or("--height requires a value")?.parse().map_err(|_| "invalid --height")?,
-            "--dpr" => cfg.dpr = args.next().ok_or("--dpr requires a value")?.parse().map_err(|_| "invalid --dpr")?,
-            "--zoom" => cfg.zoom = args.next().ok_or("--zoom requires a value")?.parse().map_err(|_| "invalid --zoom")?,
-            "--zoom-delta" => cfg.zoom_delta = args.next().ok_or("--zoom-delta requires a value")?.parse().map_err(|_| "invalid --zoom-delta")?,
-            "--scroll-x" => cfg.scroll_x = args.next().ok_or("--scroll-x requires a value")?.parse().map_err(|_| "invalid --scroll-x")?,
-            "--scroll-y" => cfg.scroll_y = args.next().ok_or("--scroll-y requires a value")?.parse().map_err(|_| "invalid --scroll-y")?,
-            "--pan-dx" => cfg.pan_dx = args.next().ok_or("--pan-dx requires a value")?.parse().map_err(|_| "invalid --pan-dx")?,
-            "--pan-dy" => cfg.pan_dy = args.next().ok_or("--pan-dy requires a value")?.parse().map_err(|_| "invalid --pan-dy")?,
-            "--frames" => cfg.frames = args.next().ok_or("--frames requires a value")?.parse().map_err(|_| "invalid --frames")?,
-            "--warmup" => cfg.warmup = args.next().ok_or("--warmup requires a value")?.parse().map_err(|_| "invalid --warmup")?,
+            "--width" => {
+                cfg.width = args
+                    .next()
+                    .ok_or("--width requires a value")?
+                    .parse()
+                    .map_err(|_| "invalid --width")?
+            }
+            "--height" => {
+                cfg.height = args
+                    .next()
+                    .ok_or("--height requires a value")?
+                    .parse()
+                    .map_err(|_| "invalid --height")?
+            }
+            "--dpr" => {
+                cfg.dpr = args
+                    .next()
+                    .ok_or("--dpr requires a value")?
+                    .parse()
+                    .map_err(|_| "invalid --dpr")?
+            }
+            "--zoom" => {
+                cfg.zoom = args
+                    .next()
+                    .ok_or("--zoom requires a value")?
+                    .parse()
+                    .map_err(|_| "invalid --zoom")?
+            }
+            "--zoom-delta" => {
+                cfg.zoom_delta = args
+                    .next()
+                    .ok_or("--zoom-delta requires a value")?
+                    .parse()
+                    .map_err(|_| "invalid --zoom-delta")?
+            }
+            "--scroll-x" => {
+                cfg.scroll_x = args
+                    .next()
+                    .ok_or("--scroll-x requires a value")?
+                    .parse()
+                    .map_err(|_| "invalid --scroll-x")?
+            }
+            "--scroll-y" => {
+                cfg.scroll_y = args
+                    .next()
+                    .ok_or("--scroll-y requires a value")?
+                    .parse()
+                    .map_err(|_| "invalid --scroll-y")?
+            }
+            "--pan-dx" => {
+                cfg.pan_dx = args
+                    .next()
+                    .ok_or("--pan-dx requires a value")?
+                    .parse()
+                    .map_err(|_| "invalid --pan-dx")?
+            }
+            "--pan-dy" => {
+                cfg.pan_dy = args
+                    .next()
+                    .ok_or("--pan-dy requires a value")?
+                    .parse()
+                    .map_err(|_| "invalid --pan-dy")?
+            }
+            "--frames" => {
+                cfg.frames = args
+                    .next()
+                    .ok_or("--frames requires a value")?
+                    .parse()
+                    .map_err(|_| "invalid --frames")?
+            }
+            "--warmup" => {
+                cfg.warmup = args
+                    .next()
+                    .ok_or("--warmup requires a value")?
+                    .parse()
+                    .map_err(|_| "invalid --warmup")?
+            }
             "--snippet" => cfg.snippet_mode = true,
             "--overlay" => cfg.overlay = true,
             x => return Err(format!("unknown argument: {}", x)),
@@ -159,7 +225,8 @@ fn main() -> Result<(), String> {
         cfg.overlay
     );
 
-    let mut manager = ChartLayoutManager::new().map_err(|e| format!("manager init failed: {}", e))?;
+    let mut manager =
+        ChartLayoutManager::new().map_err(|e| format!("manager init failed: {}", e))?;
 
     let layout_start = Instant::now();
     manager.parse_and_layout(&source, cfg.width as f64, cfg.snippet_mode)?;

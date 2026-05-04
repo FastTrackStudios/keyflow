@@ -8,6 +8,12 @@ description = "Dioxus UI components for Keyflow chart editing"
 # Keyflow parsing, types, and engraver (all through the facade)
 keyflow = { workspace = true, features = ["text", "engraver", "highlighting"] }
 
+# FTS shared design system (Button, Card, Tabs, Input, Tooltip, Theme, etc.).
+# The chart **renderer** stays raw (Vello scene mounts under
+# `chart_graphics.rs` / `chart_renderer.rs`); everything else — toolbars,
+# panels, editor chrome, status footer — should compose `fts-ui` primitives.
+fts-ui = { workspace = true }
+
 # Backend-agnostic rendering abstraction
 anyrender = { workspace = true }
 anyrender_vello = { workspace = true, optional = true, features = ["log_frame_times"] }
@@ -19,7 +25,7 @@ dioxus = { version = "0.7.2", optional = true }
 dioxus-native = { workspace = true, optional = true }
 
 # Vello scene types (for building scenes to hand off to ChartGraphics)
-vello = "0.8"
+vello = "0.7"
 vello_hybrid = { workspace = true, optional = true }
 kurbo = { workspace = true }
 
@@ -55,7 +61,7 @@ web-time = "1.1.0"
 [features]
 default = ["web"]
 # Web/desktop (WebView-based) rendering
-web = ["dioxus", "desktop-panels"]
+web = ["dioxus", "dioxus/desktop", "desktop-panels"]
 # Native GPU-accelerated rendering via Blitz
 native = ["dioxus-native", "desktop-panels"]
 # Desktop panel components (ChartView, ChartPreviewPanel) with full app dependencies

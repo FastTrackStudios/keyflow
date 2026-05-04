@@ -5,8 +5,8 @@
 //! (no WASM canvas methods — produces `vello::Scene` for the app to render).
 
 use crate::signals::{PageMeta, SystemMeta};
+use anyrender::{recording::RenderCommand, Paint};
 use anyrender::{ImageRenderer, PaintScene, Scene as RecordedScene};
-use anyrender::{Paint, recording::RenderCommand};
 #[cfg(feature = "anyrender_vello")]
 type OffscreenRenderer = anyrender_vello::VelloImageRenderer;
 #[cfg(not(feature = "anyrender_vello"))]
@@ -22,9 +22,7 @@ fn new_offscreen_renderer(_width: u32, _height: u32) -> OffscreenRenderer {
 }
 use keyflow::engraver::export::{PdfSerializer, SvgExportConfig, SvgSerializer};
 use keyflow::engraver::fonts::ChartFontBundle;
-use keyflow::engraver::layout::chart::cursor::{
-    ChartCursor, CursorState, HighlightCommand, Rgba,
-};
+use keyflow::engraver::layout::chart::cursor::{ChartCursor, CursorState, HighlightCommand, Rgba};
 use keyflow::engraver::layout::chart::{
     BeatPosition, ChartLayoutConfig, ChartLayoutEngine, ChartLayoutResult, LayoutMode,
 };
@@ -34,9 +32,9 @@ use keyflow::engraver::scene::node::{metadata_keys, SceneNode};
 use keyflow::engraver::style::MStyle;
 use keyflow::{Chart, ChartPosition};
 use kurbo::{Affine, Point, Rect};
+use peniko::{ImageAlphaType, ImageBrush, ImageData, ImageFormat, ImageQuality};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
-use peniko::{ImageAlphaType, ImageBrush, ImageData, ImageFormat, ImageQuality};
 use vello::peniko::{Color, Compose, Fill};
 
 /// Screen DPI for rendering.
@@ -353,7 +351,9 @@ fn replay_recorded_scene(
                 RenderCommand::PushLayer(cmd) => {
                     target.push_layer(cmd.blend, cmd.alpha, cmd.transform, &cmd.clip)
                 }
-                RenderCommand::PushClipLayer(cmd) => target.push_clip_layer(cmd.transform, &cmd.clip),
+                RenderCommand::PushClipLayer(cmd) => {
+                    target.push_clip_layer(cmd.transform, &cmd.clip)
+                }
                 RenderCommand::PopLayer => target.pop_layer(),
                 RenderCommand::Stroke(cmd) => target.stroke(
                     &cmd.style,
@@ -575,7 +575,9 @@ impl ChartLayoutManager {
         // Don't build the offscreen cache while the camera is actively changing.
         // Once the view is stable for >=2 frames, build and reuse.
         if self.view_static_stable_frames >= 2 {
-            if let Some(image) = self.ensure_view_static_image(width, height, offset, transform, view_key) {
+            if let Some(image) =
+                self.ensure_view_static_image(width, height, offset, transform, view_key)
+            {
                 scene.draw_image(image.as_ref(), Affine::IDENTITY);
                 return;
             }
@@ -608,7 +610,8 @@ impl ChartLayoutManager {
         let clip_rect = Rect::new(0.0, 0.0, width, height);
         scene.push_layer(Compose::SrcOver, 1.0, offset, &clip_rect);
 
-        let (visible_pages, focus_page) = self.visible_and_focus_for_viewport(width, height, transform);
+        let (visible_pages, focus_page) =
+            self.visible_and_focus_for_viewport(width, height, transform);
         let visible_page_count = visible_pages.len();
         let use_multi_page_lod = visible_page_count >= 3;
         let scene_transform = offset * transform;
@@ -617,30 +620,24 @@ impl ChartLayoutManager {
         let [a, b, c, d, _, _] = scene_transform.as_coeffs();
         let effective_scale = (a * d - b * c).abs().sqrt();
         for page_number in visible_pages {
-            let page_geom = self
-                .page_geometry
-                .get(&page_number)
-                .copied()
-                .or_else(|| {
-                    self.layout_result
-                        .as_ref()
-                        .and_then(|l| l.pages.iter().find(|p| p.number == page_number))
-                        .map(|p| (p.x_offset, p.y_offset, p.width, p.height))
-                });
+            let page_geom = self.page_geometry.get(&page_number).copied().or_else(|| {
+                self.layout_result
+                    .as_ref()
+                    .and_then(|l| l.pages.iter().find(|p| p.number == page_number))
+                    .map(|p| (p.x_offset, p.y_offset, p.width, p.height))
+            });
             let Some((page_x, page_y, page_w, page_h)) = page_geom else {
                 continue;
             };
             let projected_page_width = page_w * effective_scale;
             let is_focused = focus_page.is_some_and(|focused| focused == page_number);
 
-            if let Some(tier) =
-                self.lod_tier_for_page(
-                    projected_page_width,
-                    visible_page_count,
-                    use_multi_page_lod,
-                    is_focused,
-                )
-            {
+            if let Some(tier) = self.lod_tier_for_page(
+                projected_page_width,
+                visible_page_count,
+                use_multi_page_lod,
+                is_focused,
+            ) {
                 let image_transform = |image: &ImageBrush| {
                     scene_transform
                         * Affine::translate((page_x, page_y))
@@ -687,9 +684,7 @@ impl ChartLayoutManager {
                 }
             }
 
-            let prefer_coarse = use_multi_page_lod
-                && is_focused
-                && effective_scale < 0.55;
+            let prefer_coarse = use_multi_page_lod && is_focused && effective_scale < 0.55;
             let fragment_kind = if prefer_coarse {
                 PageFragmentKind::Coarse
             } else {
@@ -1216,8 +1211,10 @@ impl ChartLayoutManager {
 
         self.cached_page_fragments.insert(page_number, fragment);
         self.cached_page_base_fragments.insert(page_number, base);
-        self.cached_page_detail_fragments.insert(page_number, detail);
-        self.cached_page_coarse_fragments.insert(page_number, coarse);
+        self.cached_page_detail_fragments
+            .insert(page_number, detail);
+        self.cached_page_coarse_fragments
+            .insert(page_number, coarse);
         self.cached_page_fragments.get(&page_number)
     }
 
@@ -1342,7 +1339,9 @@ impl ChartLayoutManager {
             PageLodLayer::Full => PageFragmentKind::Full,
             PageLodLayer::Detail => PageFragmentKind::Detail,
         };
-        let fragment = self.page_fragment_for_kind(page_number, fragment_kind)?.clone();
+        let fragment = self
+            .page_fragment_for_kind(page_number, fragment_kind)?
+            .clone();
 
         let lod_scale = std::env::var("KEYFLOW_PAGE_LOD_SCALE")
             .ok()
@@ -1525,18 +1524,20 @@ impl ChartLayoutManager {
 
         let mut svg_pages = Vec::with_capacity(layout.pages.len());
         for page in &layout.pages {
-            let config = SvgExportConfig::for_page(
-                page.x_offset,
-                page.y_offset,
-                page.width,
-                page.height,
-            )
-            .with_embedded_font("Bravura", self.font_bundle.symbol_font_data().as_ref().clone())
-            .with_embedded_font(
-                "MuseJazzText",
-                self.font_bundle.text_font_data().as_ref().clone(),
-            )
-            .with_embedded_font("FreeSans", self.font_bundle.aux_font_data().as_ref().clone());
+            let config =
+                SvgExportConfig::for_page(page.x_offset, page.y_offset, page.width, page.height)
+                    .with_embedded_font(
+                        "Bravura",
+                        self.font_bundle.symbol_font_data().as_ref().clone(),
+                    )
+                    .with_embedded_font(
+                        "MuseJazzText",
+                        self.font_bundle.text_font_data().as_ref().clone(),
+                    )
+                    .with_embedded_font(
+                        "FreeSans",
+                        self.font_bundle.aux_font_data().as_ref().clone(),
+                    );
 
             let mut serializer = SvgSerializer::new(config);
             svg_pages.push(serializer.serialize(&layout.scene));
@@ -1573,18 +1574,20 @@ impl ChartLayoutManager {
 
         let mut pages = Vec::with_capacity(layout.pages.len());
         for page in &layout.pages {
-            let config = SvgExportConfig::for_page(
-                page.x_offset,
-                page.y_offset,
-                page.width,
-                page.height,
-            )
-            .with_embedded_font("Bravura", self.font_bundle.symbol_font_data().as_ref().clone())
-            .with_embedded_font(
-                "MuseJazzText",
-                self.font_bundle.text_font_data().as_ref().clone(),
-            )
-            .with_embedded_font("FreeSans", self.font_bundle.aux_font_data().as_ref().clone());
+            let config =
+                SvgExportConfig::for_page(page.x_offset, page.y_offset, page.width, page.height)
+                    .with_embedded_font(
+                        "Bravura",
+                        self.font_bundle.symbol_font_data().as_ref().clone(),
+                    )
+                    .with_embedded_font(
+                        "MuseJazzText",
+                        self.font_bundle.text_font_data().as_ref().clone(),
+                    )
+                    .with_embedded_font(
+                        "FreeSans",
+                        self.font_bundle.aux_font_data().as_ref().clone(),
+                    );
             let mut serializer = SvgSerializer::new(config);
             pages.push(serializer.serialize(&layout.scene));
         }

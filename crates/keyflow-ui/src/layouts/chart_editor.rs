@@ -123,6 +123,21 @@ fn compute_zoom_for_level(
 /// 3. Rendering the resulting `vello::Scene` to `ChartGraphics` at `CHART_EDITOR_BOUNDS`
 #[component]
 pub fn ChartEditorLayout() -> Element {
+    // Wrap the whole editor in `ThemeProvider` so theme tokens
+    // (`--destructive`, `--warning`, etc.) are defined for child CSS,
+    // and so `fts-ui` components pick up the active preset.
+    // `ToastProvider` lets descendants call `use_toast()`.
+    let theme_state = use_signal(default_theme_state);
+    rsx! {
+        ThemeProvider {
+            state: theme_state,
+            toast::ToastProvider { ChartEditorLayoutInner {} }
+        }
+    }
+}
+
+#[component]
+fn ChartEditorLayoutInner() -> Element {
     let source = CHART_SOURCE.read().clone();
     let preview_mode = *CHART_PREVIEW_MODE.read();
 
@@ -166,70 +181,51 @@ pub fn ChartEditorLayout() -> Element {
                     div {
                         class: "flex items-center gap-2",
 
-                        // Custom examples dropdown
-                        div {
-                            class: "relative",
-
-                            // Dropdown trigger button
-                            button {
-                                class: "flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-border bg-secondary text-secondary-foreground hover:bg-accent hover:text-accent-foreground transition-colors",
-                                onclick: move |evt| {
-                                    evt.stop_propagation();
-                                    let current = *examples_open.read();
-                                    examples_open.set(!current);
-                                },
-                                span { "{EXAMPLES[*selected_example.read()].name}" }
-                                // Chevron icon
-                                svg {
-                                    width: "12",
-                                    height: "12",
-                                    view_box: "0 0 24 24",
-                                    fill: "none",
-                                    stroke: "currentColor",
-                                    stroke_width: "2",
-                                    stroke_linecap: "round",
-                                    stroke_linejoin: "round",
-                                    path { d: "m6 9 6 6 6-6" }
+                        // Examples dropdown — fts-ui primitive-backed
+                        // (handles open/close + keyboard nav + focus
+                        // management; we just feed in items).
+                        Dropdown {
+                            open: *examples_open.read(),
+                            on_open_change: Callback::new(move |open: bool| {
+                                examples_open.set(open);
+                            }),
+                            DropdownTrigger {
+                                Button {
+                                    variant: ButtonVariant::Secondary,
+                                    size: ButtonSize::Small,
+                                    span { "{EXAMPLES[*selected_example.read()].name}" }
+                                    fts_ui::lucide_dioxus::ChevronDown { size: 12 }
                                 }
                             }
-
-                            // Dropdown menu
-                            if *examples_open.read() {
-                                div {
-                                    class: "absolute left-0 top-full mt-1 w-48 rounded-lg shadow-lg border border-border bg-popover text-popover-foreground z-50 overflow-hidden",
-
-                                    div {
-                                        class: "py-1",
-                                        for (i, example) in EXAMPLES.iter().enumerate() {
-                                            button {
-                                                class: if i == *selected_example.read() {
-                                                    "w-full text-left text-xs px-3 py-2 bg-accent text-accent-foreground"
-                                                } else {
-                                                    "w-full text-left text-xs px-3 py-2 text-popover-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-                                                },
-                                                onclick: move |evt| {
-                                                    evt.stop_propagation();
-                                                    selected_example.set(i);
-                                                    if let Some(example) = EXAMPLES.get(i) {
-                                                        *CHART_SOURCE.write() = example.source.to_string();
-                                                    }
-                                                    examples_open.set(false);
-                                                },
-                                                "{example.name}"
+                            DropdownContent {
+                                width: "w-48".to_string(),
+                                for (i, example) in EXAMPLES.iter().enumerate() {
+                                    DropdownItem {
+                                        key: "{i}",
+                                        value: example.name.to_string(),
+                                        index: i,
+                                        on_select: Callback::new(move |_: String| {
+                                            selected_example.set(i);
+                                            if let Some(example) = EXAMPLES.get(i) {
+                                                *CHART_SOURCE.write() =
+                                                    example.source.to_string();
                                             }
-                                        }
+                                            examples_open.set(false);
+                                        }),
+                                        "{example.name}"
                                     }
                                 }
                             }
                         }
 
                         // Reset button
-                        button {
-                            class: "text-xs text-muted-foreground hover:text-foreground px-2 py-1.5 rounded-md hover:bg-accent transition-colors",
-                            onclick: move |_| {
+                        Button {
+                            variant: ButtonVariant::Ghost,
+                            size: ButtonSize::Small,
+                            on_click: Callback::new(move |_| {
                                 *CHART_SOURCE.write() = examples::DEFAULT_CHART.to_string();
                                 selected_example.set(1);
-                            },
+                            }),
                             "Reset"
                         }
                     }
@@ -261,12 +257,15 @@ pub fn ChartEditorLayout() -> Element {
                         // FPS counter
                         {
                             let stats = *CHART_RENDER_STATS.read();
+                            // Theme-token colors: success/warning/destructive
+                            // resolve through ThemeProvider so light/dark
+                            // and custom themes Just Work.
                             let fps_color = if stats.fps >= 55.0 {
-                                "text-green-400"
+                                "text-success"
                             } else if stats.fps >= 25.0 {
-                                "text-yellow-400"
+                                "text-warning"
                             } else {
-                                "text-red-400"
+                                "text-destructive"
                             };
                             rsx! {
                                 span {
@@ -281,7 +280,7 @@ pub fn ChartEditorLayout() -> Element {
                             let cursor_pos = CHART_CURSOR_POSITION.read();
                             rsx! {
                                 span {
-                                    class: "text-xs font-mono text-blue-400 select-none",
+                                    class: "text-xs font-mono text-info select-none",
                                     title: "Musical position (Measure.Beat.Ticks)",
                                     "{cursor_pos}"
                                 }
@@ -291,7 +290,7 @@ pub fn ChartEditorLayout() -> Element {
                         // Parse error indicator
                         if let Some(error) = &*parse_error.read() {
                             span {
-                                class: "flex items-center gap-1 text-xs text-red-400 truncate max-w-xs",
+                                class: "flex items-center gap-1 text-xs text-destructive truncate max-w-xs",
                                 title: "{error}",
                                 // Warning icon
                                 svg {
@@ -322,26 +321,17 @@ pub fn ChartEditorLayout() -> Element {
                                         class: "flex items-center gap-0.5 ml-1",
 
                                         // Previous page
-                                        button {
-                                            class: "p-1 rounded hover:bg-accent transition-colors disabled:opacity-30 disabled:cursor-default",
+                                        Button {
+                                            variant: ButtonVariant::Ghost,
+                                            size: ButtonSize::Small,
                                             disabled: current <= 1,
-                                            onclick: move |_| {
+                                            on_click: Callback::new(move |_| {
                                                 let cp = CHART_PAGE_INFO.read().current_page;
                                                 if cp > 1 {
                                                     navigate_to_page(cp - 1);
                                                 }
-                                            },
-                                            svg {
-                                                width: "14",
-                                                height: "14",
-                                                view_box: "0 0 24 24",
-                                                fill: "none",
-                                                stroke: "currentColor",
-                                                stroke_width: "2",
-                                                stroke_linecap: "round",
-                                                stroke_linejoin: "round",
-                                                path { d: "m15 18-6-6 6-6" }
-                                            }
+                                            }),
+                                            fts_ui::lucide_dioxus::ChevronLeft { size: 14 }
                                         }
 
                                         // Page indicator
@@ -351,28 +341,19 @@ pub fn ChartEditorLayout() -> Element {
                                         }
 
                                         // Next page
-                                        button {
-                                            class: "p-1 rounded hover:bg-accent transition-colors disabled:opacity-30 disabled:cursor-default",
+                                        Button {
+                                            variant: ButtonVariant::Ghost,
+                                            size: ButtonSize::Small,
                                             disabled: current >= total,
-                                            onclick: move |_| {
+                                            on_click: Callback::new(move |_| {
                                                 let info = CHART_PAGE_INFO.read();
                                                 if info.current_page < info.total_pages {
                                                     let next = info.current_page + 1;
                                                     drop(info);
                                                     navigate_to_page(next);
                                                 }
-                                            },
-                                            svg {
-                                                width: "14",
-                                                height: "14",
-                                                view_box: "0 0 24 24",
-                                                fill: "none",
-                                                stroke: "currentColor",
-                                                stroke_width: "2",
-                                                stroke_linecap: "round",
-                                                stroke_linejoin: "round",
-                                                path { d: "m9 18 6-6-6-6" }
-                                            }
+                                            }),
+                                            fts_ui::lucide_dioxus::ChevronRight { size: 14 }
                                         }
                                     }
                                 }
@@ -389,81 +370,55 @@ pub fn ChartEditorLayout() -> Element {
                             {
                                 let page_info = CHART_PAGE_INFO.read();
                                 let current_level = page_info.zoom_level;
+                                let zoom_value = match current_level {
+                                    SemanticZoomLevel::FullPage => "page",
+                                    SemanticZoomLevel::HalfPage => "half",
+                                    SemanticZoomLevel::SystemView => "3line",
+                                    SemanticZoomLevel::LineView => "2line",
+                                    _ => "page",
+                                }
+                                .to_string();
                                 rsx! {
-                                    div {
-                                        class: "flex items-center gap-0.5 rounded-md border border-border bg-secondary p-0.5",
-
-                                        button {
-                                            class: if current_level == SemanticZoomLevel::FullPage {
-                                                "text-xs px-2 py-1 rounded bg-primary text-primary-foreground font-medium transition-colors"
-                                            } else {
-                                                "text-xs px-2 py-1 rounded text-muted-foreground hover:text-foreground transition-colors"
-                                            },
-                                            onclick: move |_| { apply_semantic_zoom(SemanticZoomLevel::FullPage); },
-                                            "Page"
-                                        }
-
-                                        button {
-                                            class: if current_level == SemanticZoomLevel::HalfPage {
-                                                "text-xs px-2 py-1 rounded bg-primary text-primary-foreground font-medium transition-colors"
-                                            } else {
-                                                "text-xs px-2 py-1 rounded text-muted-foreground hover:text-foreground transition-colors"
-                                            },
-                                            onclick: move |_| { apply_semantic_zoom(SemanticZoomLevel::HalfPage); },
-                                            "Half"
-                                        }
-
-                                        button {
-                                            class: if current_level == SemanticZoomLevel::SystemView {
-                                                "text-xs px-2 py-1 rounded bg-primary text-primary-foreground font-medium transition-colors"
-                                            } else {
-                                                "text-xs px-2 py-1 rounded text-muted-foreground hover:text-foreground transition-colors"
-                                            },
-                                            onclick: move |_| { apply_semantic_zoom(SemanticZoomLevel::SystemView); },
-                                            "3-Line"
-                                        }
-
-                                        button {
-                                            class: if current_level == SemanticZoomLevel::LineView {
-                                                "text-xs px-2 py-1 rounded bg-primary text-primary-foreground font-medium transition-colors"
-                                            } else {
-                                                "text-xs px-2 py-1 rounded text-muted-foreground hover:text-foreground transition-colors"
-                                            },
-                                            onclick: move |_| { apply_semantic_zoom(SemanticZoomLevel::LineView); },
-                                            "2-Line"
-                                        }
+                                    SegmentedControl {
+                                        size: SegmentedControlSize::Small,
+                                        value: zoom_value,
+                                        options: vec![
+                                            ("page".into(), "Page".into()),
+                                            ("half".into(), "Half".into()),
+                                            ("3line".into(), "3-Line".into()),
+                                            ("2line".into(), "2-Line".into()),
+                                        ],
+                                        on_change: Callback::new(move |v: String| {
+                                            let level = match v.as_str() {
+                                                "page" => SemanticZoomLevel::FullPage,
+                                                "half" => SemanticZoomLevel::HalfPage,
+                                                "3line" => SemanticZoomLevel::SystemView,
+                                                "2line" => SemanticZoomLevel::LineView,
+                                                _ => SemanticZoomLevel::FullPage,
+                                            };
+                                            apply_semantic_zoom(level);
+                                        }),
                                     }
                                 }
                             }
                         }
 
                         // Preview mode toggle (segmented control)
-                        div {
-                            class: "flex items-center gap-0.5 rounded-md border border-border bg-secondary p-0.5",
-
-                            button {
-                                class: if preview_mode == PreviewMode::Snippet {
-                                    "text-xs px-2.5 py-1 rounded bg-primary text-primary-foreground font-medium transition-colors"
-                                } else {
-                                    "text-xs px-2.5 py-1 rounded text-muted-foreground hover:text-foreground transition-colors"
-                                },
-                                onclick: move |_| {
-                                    *CHART_PREVIEW_MODE.write() = PreviewMode::Snippet;
-                                },
-                                "Snippet"
-                            }
-
-                            button {
-                                class: if preview_mode == PreviewMode::Page {
-                                    "text-xs px-2.5 py-1 rounded bg-primary text-primary-foreground font-medium transition-colors"
-                                } else {
-                                    "text-xs px-2.5 py-1 rounded text-muted-foreground hover:text-foreground transition-colors"
-                                },
-                                onclick: move |_| {
-                                    *CHART_PREVIEW_MODE.write() = PreviewMode::Page;
-                                },
-                                "Page (A4)"
-                            }
+                        SegmentedControl {
+                            value: match preview_mode {
+                                PreviewMode::Snippet => "snippet".to_string(),
+                                PreviewMode::Page => "page".to_string(),
+                            },
+                            options: vec![
+                                ("snippet".into(), "Snippet".into()),
+                                ("page".into(), "Page (A4)".into()),
+                            ],
+                            on_change: Callback::new(move |v: String| {
+                                *CHART_PREVIEW_MODE.write() = match v.as_str() {
+                                    "page" => PreviewMode::Page,
+                                    _ => PreviewMode::Snippet,
+                                };
+                            }),
                         }
                     }
                 }

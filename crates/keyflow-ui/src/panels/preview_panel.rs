@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 
 use dioxus::prelude::*;
 use dioxus_core::Task;
+use fts_ui::prelude::{Button, ButtonSize, ButtonVariant};
 use kurbo::Affine;
 
 use crate::chart_graphics::ChartGraphics;
@@ -64,8 +65,14 @@ pub fn ChartPreviewPanel() -> Element {
     });
     use_drop(|| {
         let workspace = DOCK_WORKSPACE.peek();
-        let chart_editor_visible = workspace.windows.values().any(|w| w.layout.panel_is_visible(PanelId::ChartEditor));
-        let chart_preview_visible = workspace.windows.values().any(|w| w.layout.panel_is_visible(PanelId::ChartPreview));
+        let chart_editor_visible = workspace
+            .windows
+            .values()
+            .any(|w| w.layout.panel_is_visible(PanelId::ChartEditor));
+        let chart_preview_visible = workspace
+            .windows
+            .values()
+            .any(|w| w.layout.panel_is_visible(PanelId::ChartPreview));
         if !chart_editor_visible && !chart_preview_visible {
             document::eval(r#"document.documentElement.classList.remove('transparent-mode');"#);
         }
@@ -102,8 +109,7 @@ pub fn ChartPreviewPanel() -> Element {
                         .unwrap_or_else(|| value.to_string());
 
                     if json_str != "null" && json_str != "\"null\"" {
-                        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&json_str)
-                        {
+                        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&json_str) {
                             let x = parsed["x"].as_f64().unwrap_or(0.0);
                             let y = parsed["y"].as_f64().unwrap_or(0.0);
                             let width = parsed["width"].as_f64().unwrap_or(0.0);
@@ -161,16 +167,16 @@ pub fn ChartPreviewPanel() -> Element {
 
             let snippet_mode = false;
 
-            let (text_font, symbol_font) =
-                if let Some(ref manager_rc) = *perf_layout_manager.read() {
-                    let manager = manager_rc.borrow();
-                    if !manager.needs_layout(&source, snippet_mode) {
-                        return;
-                    }
-                    manager.font_data()
-                } else {
+            let (text_font, symbol_font) = if let Some(ref manager_rc) = *perf_layout_manager.read()
+            {
+                let manager = manager_rc.borrow();
+                if !manager.needs_layout(&source, snippet_mode) {
                     return;
-                };
+                }
+                manager.font_data()
+            } else {
+                return;
+            };
 
             // Cancel any in-flight layout task
             if let Some(prev) = *layout_task.peek() {
@@ -185,8 +191,7 @@ pub fn ChartPreviewPanel() -> Element {
                     let style = *BG_STYLE.get_or_init(|| Box::leak(Box::new(MStyle::new())));
 
                     let engine = ChartLayoutEngine::new(style, text_font, symbol_font);
-                    let chart =
-                        keyflow::parse(&source_clone).map_err(|e| format!("{}", e))?;
+                    let chart = keyflow::parse(&source_clone).map_err(|e| format!("{}", e))?;
 
                     let config = ChartLayoutConfig::master_rhythm().with_page_offsets(true);
                     let mode = LayoutMode::Paginated {
@@ -565,22 +570,15 @@ pub fn ChartPreviewPanel() -> Element {
             if !perf_vp.auto_follow {
                 div {
                     class: "absolute top-4 left-4 z-10",
-                    button {
-                        class: "bg-card/80 backdrop-blur-sm rounded-lg px-3 py-2 shadow-lg text-sm text-muted-foreground hover:text-foreground hover:bg-card/90 transition-colors flex items-center gap-2",
-                        onclick: move |_| {
+                    Button {
+                        variant: ButtonVariant::Ghost,
+                        size: ButtonSize::Small,
+                        class: "bg-card/80 backdrop-blur-sm shadow-lg".to_string(),
+                        on_click: Callback::new(move |_| {
                             *PERF_CHART_VIEWPORT.write() = PerfChartViewport::default();
-                        },
-                        svg {
-                            width: "14",
-                            height: "14",
-                            view_box: "0 0 24 24",
-                            fill: "none",
-                            stroke: "currentColor",
-                            stroke_width: "2",
-                            stroke_linecap: "round",
-                            stroke_linejoin: "round",
-                            path { d: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" }
-                            path { d: "M3 3v5h5" }
+                        }),
+                        fts_ui::lucide_dioxus::RotateCcw {
+                            size: 14,
                         }
                         "Reset View"
                     }

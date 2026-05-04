@@ -187,8 +187,14 @@ pub fn ChartView() -> Element {
     // Cleanup: remove transparent mode when component unmounts (if no other chart visible)
     use_drop(move || {
         let workspace = DOCK_WORKSPACE.peek();
-        let chart_editor_visible = workspace.windows.values().any(|w| w.layout.panel_is_visible(PanelId::ChartEditor));
-        let chart_preview_visible = workspace.windows.values().any(|w| w.layout.panel_is_visible(PanelId::ChartPreview));
+        let chart_editor_visible = workspace
+            .windows
+            .values()
+            .any(|w| w.layout.panel_is_visible(PanelId::ChartEditor));
+        let chart_preview_visible = workspace
+            .windows
+            .values()
+            .any(|w| w.layout.panel_is_visible(PanelId::ChartPreview));
         if !chart_editor_visible && !chart_preview_visible {
             document::eval(r#"document.documentElement.classList.remove('transparent-mode');"#);
         }
@@ -207,8 +213,7 @@ pub fn ChartView() -> Element {
     let cursor_frame_clock = use_signal(|| 0u64);
     let cursor_motion =
         use_hook(|| std::rc::Rc::new(std::cell::RefCell::new(PerfCursorMotionState::default())));
-    let interaction_until =
-        use_hook(|| std::rc::Rc::new(std::cell::RefCell::new(Instant::now())));
+    let interaction_until = use_hook(|| std::rc::Rc::new(std::cell::RefCell::new(Instant::now())));
     let last_viewport_state =
         use_hook(|| std::rc::Rc::new(std::cell::RefCell::new(None::<(f64, f64, f64)>)));
 
@@ -273,8 +278,7 @@ pub fn ChartView() -> Element {
 
                     let engine = ChartLayoutEngine::new(style, text_font, symbol_font);
 
-                    let chart = keyflow::parse(&source_clone)
-                        .map_err(|e| format!("{}", e))?;
+                    let chart = keyflow::parse(&source_clone).map_err(|e| format!("{}", e))?;
 
                     let (mode, config) = if snippet_mode {
                         let config = ChartLayoutConfig::snippet().with_page_offsets(true);
@@ -314,8 +318,7 @@ pub fn ChartView() -> Element {
                                 layout_generation()
                             );
 
-                            let base_scale =
-                                manager.fit_to_width_scale(bounds.width, bounds.dpr);
+                            let base_scale = manager.fit_to_width_scale(bounds.width, bounds.dpr);
                             *CHART_BASE_SCALE.write() = base_scale;
 
                             if let Some(metadata) = manager.page_metadata() {
@@ -339,8 +342,7 @@ pub fn ChartView() -> Element {
                                         manager.layout_result().and_then(|r| r.pages.first())
                                     {
                                         if page.height > 0.0 && base_scale > 0.0 {
-                                            let zoom =
-                                                bounds.height / (page.height * base_scale);
+                                            let zoom = bounds.height / (page.height * base_scale);
                                             let mut vp = CHART_VIEWPORT.write();
                                             vp.zoom = zoom.clamp(0.1, 8.0);
                                             vp.zoom_level = SemanticZoomLevel::FullPage;
@@ -365,7 +367,8 @@ pub fn ChartView() -> Element {
 
     // FPS tracking: sliding window of frame times.
     let fps_state = use_hook(|| std::rc::Rc::new(std::cell::RefCell::new(FpsTracker::new())));
-    let perf_window = use_hook(|| std::rc::Rc::new(std::cell::RefCell::new(ChartViewPerfWindow::new())));
+    let perf_window =
+        use_hook(|| std::rc::Rc::new(std::cell::RefCell::new(ChartViewPerfWindow::new())));
 
     // Render effect: re-renders when layout, viewport, or bounds change.
     {

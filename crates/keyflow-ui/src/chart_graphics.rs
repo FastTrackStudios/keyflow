@@ -143,11 +143,7 @@ mod wasm {
         /// Initializes a WebGL2 rendering context from the canvas.
         pub fn new_web(canvas: &HtmlCanvasElement, width: u32, height: u32) -> Self {
             let renderer = WebGlRenderer::new(canvas);
-            let scene = Scene::new_with(
-                width as u16,
-                height as u16,
-                RenderSettings::default(),
-            );
+            let scene = Scene::new_with(width as u16, height as u16, RenderSettings::default());
             tracing::info!("ChartGraphics WebGL: {}x{}", width, height);
 
             Self {
@@ -163,11 +159,7 @@ mod wasm {
         pub fn resize(&mut self, width: u32, height: u32) {
             self.width = width;
             self.height = height;
-            self.scene = Scene::new_with(
-                width as u16,
-                height as u16,
-                RenderSettings::default(),
-            );
+            self.scene = Scene::new_with(width as u16, height as u16, RenderSettings::default());
         }
 
         /// Check if the renderer is active (always true for WebGL once created).
@@ -191,10 +183,8 @@ mod wasm {
             // Build the scene via the PaintScene-compatible painter.
             // WebGlImageManager borrows &mut renderer, so scope it.
             {
-                let image_manager = WebGlImageManager::new(
-                    &mut self.renderer,
-                    &mut self.cached_images,
-                );
+                let image_manager =
+                    WebGlImageManager::new(&mut self.renderer, &mut self.cached_images);
                 let mut painter = WebGlScenePainter::new(&mut self.scene, image_manager);
                 draw_fn(&mut painter);
             }
