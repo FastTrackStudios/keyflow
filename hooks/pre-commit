@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
 set -eux
-cargo install --git https://github.com/bearcove/capn capn
-capn
+CAPN_BIN=/home/cody/.local/bin/capn
+test -x "$CAPN_BIN"
+"$CAPN_BIN"
