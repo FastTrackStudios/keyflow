@@ -3,6 +3,7 @@
 //! This module provides a single RootNotation type that can represent any of the three
 //! ways to specify a chord root, while preserving the original format for display.
 
+use super::accidental::Accidental;
 use super::note::{MusicalNote, MusicalNoteToken, Note};
 use super::roman_numeral::RomanNumeralToken;
 use facet::Facet;
@@ -20,10 +21,17 @@ pub enum RomanCase {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Facet)]
 #[repr(u8)]
 pub enum RootFormat {
-    /// Scale degree (1-7)
-    ScaleDegree(u8),
-    /// Roman numeral (I-VII or i-vii)
-    RomanNumeral { degree: u8, case: RomanCase },
+    /// Scale degree (1-7) with optional accidental (e.g. `b3`, `#4`)
+    ScaleDegree {
+        degree: u8,
+        accidental: Option<Accidental>,
+    },
+    /// Roman numeral (I-VII or i-vii) with optional leading accidental (e.g. `bIII`, `#IV`)
+    RomanNumeral {
+        degree: u8,
+        case: RomanCase,
+        accidental: Option<Accidental>,
+    },
     /// Explicit note name (C, D#, Eb, etc.)
     NoteName(String),
     /// Empty/rest - no root note (used for rhythm-only entries like rests)
@@ -53,27 +61,36 @@ impl RootNotation {
     }
 
     /// Create from a scale degree with optional accidental
-    pub fn from_scale_degree(
-        degree: u8,
-        _accidental: Option<super::accidental::Accidental>,
-    ) -> Self {
+    pub fn from_scale_degree(degree: u8, accidental: Option<Accidental>) -> Self {
         assert!((1..=7).contains(&degree), "Scale degree must be 1-7");
         Self {
             resolved_note: None, // Needs key context to resolve
-            original_format: RootFormat::ScaleDegree(degree),
+            original_format: RootFormat::ScaleDegree { degree, accidental },
         }
-        // TODO: Store accidental information in RootFormat::ScaleDegree if needed
     }
 
-    /// Create from a roman numeral
+    /// Create from a roman numeral (no accidental)
     pub fn from_roman_numeral(degree: u8, case: RomanCase) -> Self {
+        Self::from_roman_numeral_with_accidental(degree, case, None)
+    }
+
+    /// Create from a roman numeral with optional leading accidental
+    pub fn from_roman_numeral_with_accidental(
+        degree: u8,
+        case: RomanCase,
+        accidental: Option<Accidental>,
+    ) -> Self {
         assert!(
             (1..=7).contains(&degree),
             "Roman numeral degree must be 1-7"
         );
         Self {
             resolved_note: None, // Needs key context to resolve
-            original_format: RootFormat::RomanNumeral { degree, case },
+            original_format: RootFormat::RomanNumeral {
+                degree,
+                case,
+                accidental,
+            },
         }
     }
 
@@ -97,19 +114,29 @@ impl RootNotation {
     }
 
     /// Parse from a string (auto-detect format)
+    ///
+    /// Recognizes optional leading `b`, `bb`, `#`, `##` accidental for scale degrees
+    /// and Roman numerals (e.g. `b3`, `#IV`, `bbVII`).
     pub fn from_string(s: &str) -> Option<Self> {
-        // Try scale degree (single digit 1-7)
-        if let Ok(degree) = s.parse::<u8>()
-            && (1..=7).contains(&degree) {
-                return Some(Self::from_scale_degree(degree, None));
-            }
+        // Key-relative forms own the leading lowercase-`b` / `#` grammar
+        // (`b3`, `#IV`). Try them before note names so `b3` doesn't get parsed
+        // as a B-something note. Note names start with uppercase A-G and so
+        // never have a leading-accidental prefix in this scheme.
+        let (accidental, rest) = split_leading_accidental(s);
 
-        // Try roman numeral
-        if let Some((degree, case)) = Self::parse_roman_numeral(s) {
-            return Some(Self::from_roman_numeral(degree, case));
+        if let Ok(degree) = rest.parse::<u8>()
+            && (1..=7).contains(&degree)
+        {
+            return Some(Self::from_scale_degree(degree, accidental));
         }
 
-        // Try note name
+        if let Some((degree, case)) = Self::parse_roman_numeral(rest) {
+            return Some(Self::from_roman_numeral_with_accidental(
+                degree, case, accidental,
+            ));
+        }
+
+        // Fall back to note name (e.g. "Eb", "F#", "C")
         if let Some(note) = MusicalNote::from_string(s) {
             return Some(Self::from_note_name(note));
         }
@@ -117,8 +144,11 @@ impl RootNotation {
         None
     }
 
-    /// Parse a roman numeral string
+    /// Parse a roman numeral string (no accidental prefix)
     fn parse_roman_numeral(s: &str) -> Option<(u8, RomanCase)> {
+        if s.is_empty() {
+            return None;
+        }
         let upper = s.to_uppercase();
         let case = if s.chars().all(|c| !c.is_lowercase() || !c.is_alphabetic()) {
             RomanCase::Upper
@@ -144,8 +174,18 @@ impl RootNotation {
     pub fn is_key_relative(&self) -> bool {
         matches!(
             self.original_format,
-            RootFormat::ScaleDegree(_) | RootFormat::RomanNumeral { .. }
+            RootFormat::ScaleDegree { .. } | RootFormat::RomanNumeral { .. }
         )
+    }
+
+    /// Get the accidental modifier on a key-relative root, if any.
+    /// Returns `None` for note names, `Empty`, or unmodified scale degrees / numerals.
+    pub fn accidental(&self) -> Option<Accidental> {
+        match &self.original_format {
+            RootFormat::ScaleDegree { accidental, .. }
+            | RootFormat::RomanNumeral { accidental, .. } => *accidental,
+            _ => None,
+        }
     }
 
     /// Get the roman case if this is a roman numeral root
@@ -191,15 +231,20 @@ impl RootNotation {
         // For scale degrees and roman numerals, need a key
         let key = key?;
 
-        let degree = match &self.original_format {
-            RootFormat::ScaleDegree(d) => *d,
-            RootFormat::RomanNumeral { degree, .. } => *degree,
+        let (degree, accidental) = match &self.original_format {
+            RootFormat::ScaleDegree { degree, accidental } => (*degree, *accidental),
+            RootFormat::RomanNumeral {
+                degree, accidental, ..
+            } => (*degree, *accidental),
             RootFormat::NoteName(_) => unreachable!(),
             RootFormat::Empty => return None, // Empty root has no note
         };
 
         let resolved = key.get_scale_degree(degree)?;
-        Some(MusicalNote::new(resolved.name(), resolved.semitone()))
+        Some(apply_accidental(
+            MusicalNote::new(resolved.name(), resolved.semitone()),
+            accidental,
+        ))
     }
 
     /// Resolve to an actual note given a key context
@@ -209,9 +254,11 @@ impl RootNotation {
             return Ok(note);
         }
 
-        let degree = match &self.original_format {
-            RootFormat::ScaleDegree(d) => *d,
-            RootFormat::RomanNumeral { degree, .. } => *degree,
+        let (degree, accidental) = match &self.original_format {
+            RootFormat::ScaleDegree { degree, accidental } => (*degree, *accidental),
+            RootFormat::RomanNumeral {
+                degree, accidental, ..
+            } => (*degree, *accidental),
             RootFormat::NoteName(_) => {
                 return Err("Note name should already be resolved".to_string());
             }
@@ -224,9 +271,10 @@ impl RootNotation {
             .get_scale_degree(degree)
             .ok_or_else(|| format!("Could not resolve scale degree {} in key", degree))?;
 
-        // Convert Box<dyn Note> to MusicalNote
-        // We need to extract the MusicalNote from the Box<dyn Note>
-        let note = MusicalNote::new(resolved.name(), resolved.semitone());
+        let note = apply_accidental(
+            MusicalNote::new(resolved.name(), resolved.semitone()),
+            accidental,
+        );
         self.resolved_note = Some(note);
 
         Ok(self.resolved_note.as_ref().unwrap())
@@ -235,7 +283,7 @@ impl RootNotation {
     /// Get the scale degree if this is a key-relative notation (1-7)
     pub fn scale_degree(&self) -> Option<u8> {
         match &self.original_format {
-            RootFormat::ScaleDegree(d) => Some(*d),
+            RootFormat::ScaleDegree { degree, .. } => Some(*degree),
             RootFormat::RomanNumeral { degree, .. } => Some(*degree),
             RootFormat::NoteName(_) | RootFormat::Empty => None,
         }
@@ -269,11 +317,54 @@ impl RootNotation {
     }
 }
 
+/// Strip a leading accidental marker (`bb`, `b`, `##`, `#`) from `s` and return
+/// the parsed accidental (if any) plus the rest of the string.
+fn split_leading_accidental(s: &str) -> (Option<Accidental>, &str) {
+    if let Some(rest) = s.strip_prefix("bb") {
+        (Some(Accidental::DoubleFlat), rest)
+    } else if let Some(rest) = s.strip_prefix("##") {
+        (Some(Accidental::DoubleSharp), rest)
+    } else if let Some(rest) = s.strip_prefix('b') {
+        (Some(Accidental::Flat), rest)
+    } else if let Some(rest) = s.strip_prefix('#') {
+        (Some(Accidental::Sharp), rest)
+    } else {
+        (None, s)
+    }
+}
+
+fn accidental_prefix(acc: Option<Accidental>) -> &'static str {
+    match acc {
+        Some(a) => a.to_str(),
+        None => "",
+    }
+}
+
+/// Apply an accidental's semitone offset to `note`, returning a new `MusicalNote`.
+/// Re-spells using sharps when raising and flats when lowering, to mirror common
+/// roman-numeral conventions (`b3` → flatted, `#4` → sharped).
+fn apply_accidental(note: MusicalNote, acc: Option<Accidental>) -> MusicalNote {
+    let Some(acc) = acc else { return note };
+    let offset = acc.semitone_offset();
+    if offset == 0 {
+        return note;
+    }
+    let new_semitone = ((note.semitone() as i16 + offset as i16).rem_euclid(12)) as u8;
+    let prefer_sharp = offset > 0;
+    MusicalNote::from_semitone(new_semitone, prefer_sharp)
+}
+
 impl fmt::Display for RootNotation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let display_str = match &self.original_format {
-            RootFormat::ScaleDegree(d) => d.to_string(),
-            RootFormat::RomanNumeral { degree, case } => {
+            RootFormat::ScaleDegree { degree, accidental } => {
+                format!("{}{}", accidental_prefix(*accidental), degree)
+            }
+            RootFormat::RomanNumeral {
+                degree,
+                case,
+                accidental,
+            } => {
                 let base = match *degree {
                     1 => "I",
                     2 => "II",
@@ -284,10 +375,11 @@ impl fmt::Display for RootNotation {
                     7 => "VII",
                     _ => "?",
                 };
-                match case {
+                let numeral = match case {
                     RomanCase::Upper => base.to_string(),
                     RomanCase::Lower => base.to_lowercase(),
-                }
+                };
+                format!("{}{}", accidental_prefix(*accidental), numeral)
             }
             RootFormat::NoteName(name) => name.clone(),
             RootFormat::Empty => String::new(), // Empty display for rests
@@ -348,6 +440,50 @@ mod tests {
         let root = RootNotation::from_string("Eb").unwrap();
         assert!(!root.is_key_relative());
         assert_eq!(format!("{}", root), "Eb");
+    }
+
+    #[test]
+    fn test_scale_degree_with_accidental_round_trips() {
+        let root = RootNotation::from_scale_degree(3, Some(Accidental::Flat));
+        assert_eq!(root.accidental(), Some(Accidental::Flat));
+        assert_eq!(format!("{}", root), "b3");
+
+        let parsed = RootNotation::from_string("b3").unwrap();
+        assert_eq!(parsed.accidental(), Some(Accidental::Flat));
+        assert_eq!(parsed.scale_degree(), Some(3));
+        assert_eq!(format!("{}", parsed), "b3");
+
+        let sharp = RootNotation::from_string("#4").unwrap();
+        assert_eq!(sharp.accidental(), Some(Accidental::Sharp));
+        assert_eq!(format!("{}", sharp), "#4");
+    }
+
+    #[test]
+    fn test_roman_numeral_with_accidental_round_trips() {
+        let parsed = RootNotation::from_string("bIII").unwrap();
+        assert_eq!(parsed.accidental(), Some(Accidental::Flat));
+        assert_eq!(parsed.scale_degree(), Some(3));
+        assert_eq!(format!("{}", parsed), "bIII");
+
+        let parsed = RootNotation::from_string("#iv").unwrap();
+        assert_eq!(parsed.accidental(), Some(Accidental::Sharp));
+        assert_eq!(format!("{}", parsed), "#iv");
+    }
+
+    #[test]
+    fn test_accidental_applied_on_resolve() {
+        use crate::key::{Key, scale::ScaleMode};
+        // C major: scale degree 3 = E. b3 should resolve to Eb.
+        let key = Key::new(MusicalNote::from_string("C").unwrap(), ScaleMode::ionian());
+
+        let plain = RootNotation::from_scale_degree(3, None);
+        let flat = RootNotation::from_scale_degree(3, Some(Accidental::Flat));
+
+        let plain_note = plain.resolve(Some(&key)).unwrap();
+        let flat_note = flat.resolve(Some(&key)).unwrap();
+
+        assert_eq!(plain_note.semitone(), 4); // E
+        assert_eq!(flat_note.semitone(), 3); // Eb
     }
 
     #[test]

@@ -106,19 +106,21 @@ impl MeasureExpression {
         // Try addition (8+1)
         // Find the last + or - that isn't at the start (to handle expressions, not signs)
         if let Some(pos) = input.rfind('+')
-            && pos > 0 {
-                let left = input[..pos].parse::<usize>().ok()?;
-                let right = input[pos + 1..].parse::<usize>().ok()?;
-                return Some(left + right);
-            }
+            && pos > 0
+        {
+            let left = input[..pos].parse::<usize>().ok()?;
+            let right = input[pos + 1..].parse::<usize>().ok()?;
+            return Some(left + right);
+        }
 
         // Try subtraction (8-1)
         if let Some(pos) = input.rfind('-')
-            && pos > 0 {
-                let left = input[..pos].parse::<usize>().ok()?;
-                let right = input[pos + 1..].parse::<usize>().ok()?;
-                return left.checked_sub(right);
-            }
+            && pos > 0
+        {
+            let left = input[..pos].parse::<usize>().ok()?;
+            let right = input[pos + 1..].parse::<usize>().ok()?;
+            return left.checked_sub(right);
+        }
 
         None
     }
@@ -148,7 +150,6 @@ impl MeasureExpression {
         }
     }
 }
-
 
 impl std::fmt::Display for MeasureExpression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

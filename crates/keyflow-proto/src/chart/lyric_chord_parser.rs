@@ -162,7 +162,9 @@ mod tests {
     #[test]
     fn test_extract_chord_assignments() {
         let parser = LyricChordParser::new();
-        let (clean, assignments) = parser.extract_chord_assignments("{Gm}Slow {A#}down").unwrap();
+        let (clean, assignments) = parser
+            .extract_chord_assignments("{Gm}Slow {A#}down")
+            .unwrap();
 
         assert_eq!(clean, "Slow down");
         assert_eq!(assignments.len(), 2);
@@ -178,10 +180,7 @@ mod tests {
         // Check that syllables have chords attached
         let slow_syllable = line.syllables.iter().find(|s| s.text == "Slow");
         assert!(slow_syllable.is_some());
-        assert_eq!(
-            slow_syllable.unwrap().chord,
-            Some("Gm".to_string())
-        );
+        assert_eq!(slow_syllable.unwrap().chord, Some("Gm".to_string()));
     }
 
     #[test]

@@ -263,10 +263,11 @@ impl Chord {
             self.root = RootNotation::from_note_name(respelled);
             // Also respell bass if present
             if let Some(bass) = &self.bass
-                && let Some(bass_note) = bass.resolved_note() {
-                    let respelled_bass = key_spelling.respell(bass_note, mode);
-                    self.bass = Some(RootNotation::from_note_name(respelled_bass));
-                }
+                && let Some(bass_note) = bass.resolved_note()
+            {
+                let respelled_bass = key_spelling.respell(bass_note, mode);
+                self.bass = Some(RootNotation::from_note_name(respelled_bass));
+            }
             self.normalize();
         }
     }

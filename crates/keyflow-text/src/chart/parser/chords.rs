@@ -5,7 +5,6 @@
 
 use super::helpers::{PushPullModifier, RepeatCount};
 use super::ChartParser;
-use keyflow_proto::chart::commands::Command;
 use crate::chart::cues::TextCue;
 use crate::chart::dynamics::DynamicMarking;
 use crate::chart::melody::Melody;
@@ -21,6 +20,7 @@ use crate::time::{
     AbsolutePosition, MusicalDuration, MusicalPosition, MusicalPositionExt, TimeSignature,
     TimeSignatureExt,
 };
+use keyflow_proto::chart::commands::Command;
 
 // region:    --- Token Helpers
 
@@ -446,10 +446,17 @@ impl<'a> ChartParser<'a> {
                 .enumerate()
                 .filter(|(i, t)| {
                     // Skip tokens inside melody blocks
-                    if melody_mask[*i] { return false; }
-                    // Count as chord if it's not a command, cue, or other special token
-                    // Dot repeats ARE counted - they occupy time in the measure
-                    !t.starts_with('/') && !t.starts_with('@') && !t.starts_with('"')
+                    if melody_mask[*i] {
+                        return false;
+                    }
+                    // Count as chord if it's not a command, cue, or other special token.
+                    // Dot repeats ARE counted - they occupy time in the measure.
+                    // `$name` melody-variable recall is NOT a chord — it shouldn't
+                    // shrink the chord-duration share for the real chords in the bar.
+                    !t.starts_with('/')
+                        && !t.starts_with('@')
+                        && !t.starts_with('"')
+                        && !t.starts_with('$')
                         && Command::parse_stop_token(t).is_none()
                 })
                 .count();
@@ -468,10 +475,13 @@ impl<'a> ChartParser<'a> {
                     .enumerate()
                     .filter(|(i, t)| {
                         // Skip tokens inside melody blocks
-                        if melody_mask[*i] { return false; }
+                        if melody_mask[*i] {
+                            return false;
+                        }
                         !t.starts_with('/')
                             && !t.starts_with('@')
                             && !t.starts_with('"')
+                            && !t.starts_with('$')
                             && !t.contains('_')
                             && **t != "." // Dot repeats handle their own duration
                             && Command::parse_stop_token(t).is_none()
@@ -527,12 +537,14 @@ impl<'a> ChartParser<'a> {
                     continue;
                 }
 
-                // Check if this is a chord (not a command, cue, dot repeat, stop token, etc.)
+                // Check if this is a chord (not a command, cue, dot repeat, stop token,
+                // or `$name` melody-variable recall — those must round-trip unchanged).
                 let is_dot_repeat = *token == ".";
                 let is_stop_token = Command::parse_stop_token(token).is_some();
                 if !token.starts_with('/')
                     && !token.starts_with('@')
                     && !token.starts_with('"')
+                    && !token.starts_with('$')
                     && !is_dot_repeat
                     && !is_stop_token
                 {
@@ -761,16 +773,34 @@ impl<'a> ChartParser<'a> {
         Ok(measures)
     }
 
-    /// Parse a line of chords into measures
-    #[allow(clippy::too_many_lines)]
+    /// Parse a line of chords into measures.
+    ///
+    /// Spans recorded for each chord token are byte-relative to `line` (with
+    /// line/column = 0). When a parser is processing a sub-slice of a larger
+    /// source line (parallel containers, repeats), use
+    /// [`Self::parse_chord_line_with_offset`] to shift those spans into the
+    /// original-line coordinate system.
     pub(super) fn parse_chord_line(
         &mut self,
         line: &str,
         section_type: &SectionType,
         section_measure_count: Option<usize>,
     ) -> Result<Vec<Measure>, String> {
-        use keyflow_proto::chart::commands::Command;
+        self.parse_chord_line_with_offset(line, section_type, section_measure_count, 0)
+    }
+
+    /// Same as [`Self::parse_chord_line`] but shifts every emitted token span
+    /// by `line_byte_offset` so spans line up with the surrounding source.
+    #[allow(clippy::too_many_lines)]
+    pub(super) fn parse_chord_line_with_offset(
+        &mut self,
+        line: &str,
+        section_type: &SectionType,
+        section_measure_count: Option<usize>,
+        line_byte_offset: usize,
+    ) -> Result<Vec<Measure>, String> {
         use crate::chart::types::TempoChange;
+        use keyflow_proto::chart::commands::Command;
 
         let mut time_sig = self.time_signature.unwrap_or(TimeSignature::common_time());
         let mut beats_per_measure = time_sig.numerator as f64;
@@ -778,12 +808,20 @@ impl<'a> ChartParser<'a> {
         // Check for repeat syntax at the end of the line (e.g., "6 5 4 4 x4")
         let (line_to_parse, repeat_count) = Self::extract_repeat_syntax(line);
 
+        // Byte offset of `line_to_parse` within the original `line` (always 0
+        // unless `extract_repeat_syntax` trimmed a prefix). Combined with the
+        // outer offset, this lets every emitted token span be expressed in the
+        // original document's byte coordinates.
+        let trim_offset = (line_to_parse.as_ptr() as usize).saturating_sub(line.as_ptr() as usize);
+        let outer_offset = line_byte_offset + trim_offset;
+
         if line_to_parse.contains("<<") {
             return self.parse_parallel_chord_line(
                 line_to_parse,
                 repeat_count,
                 section_type,
                 section_measure_count,
+                outer_offset,
             );
         }
 
@@ -796,6 +834,17 @@ impl<'a> ChartParser<'a> {
             Self::apply_auto_durations_between_separators(&line_to_parse, beats_per_measure);
 
         let tokens_str: Vec<&str> = line_with_auto_durations.split_whitespace().collect();
+
+        // Byte spans of each whitespace-separated token in the *pre-auto-duration* line.
+        // `apply_auto_durations_between_separators` only appends `_N` suffixes to existing
+        // tokens (it does not add, remove, or reorder them), so token-index 1:1 mapping
+        // back to `line_to_parse` is safe for the non-parallel path. Spans are
+        // line-relative; line/column resolution to the original document is the caller's
+        // responsibility.
+        let original_token_spans: Vec<TextSpan> = tokenize_with_spans(&line_to_parse)
+            .into_iter()
+            .map(|s| TextSpan::new(s.start + outer_offset, s.len))
+            .collect();
         let mut measures: Vec<Measure> = Vec::new();
         let mut current_measure = Measure::new();
         let mut current_measure_beats = 0.0;
@@ -1272,11 +1321,19 @@ impl<'a> ChartParser<'a> {
                 // If not a tied chord, fall through to normal slash handling below
             }
 
-            // Check for melody variable reference (e.g., "$mainRiff")
+            // Check for melody variable reference (e.g., "$mainRiff").
+            //
+            // If the previous chord auto-completed the measure (whole-note,
+            // half-note that filled remaining beats, etc.), `current_measure`
+            // is empty here; attach the recalled melody to the most recently
+            // pushed measure instead. Mirrors the inline `m{...}` branch.
             if let Some(var_name) = token_str.strip_prefix('$') {
                 if let Some(melody) = self.melody_variables.get(var_name).cloned() {
-                    // Attach the melody to the current measure
-                    current_measure.melodies.push(melody);
+                    if current_measure.chords.is_empty() && !measures.is_empty() {
+                        measures.last_mut().unwrap().melodies.push(melody);
+                    } else {
+                        current_measure.melodies.push(melody);
+                    }
                 } else {
                     tracing::warn!("Unknown melody variable '{}'", var_name);
                 }
@@ -1479,9 +1536,20 @@ impl<'a> ChartParser<'a> {
 
             if looks_like_key_sig {
                 if let Ok(new_key) = Key::parse(token_str) {
-                    // Track key change
-                    let position = AbsolutePosition::at_beginning(); // TODO: Calculate actual position
-                    let section_index = 0; // TODO: Track current section index
+                    // Section index = number of sections already pushed onto the chart
+                    // (the in-progress section hasn't been pushed yet).
+                    let section_index = self.chart.sections.len();
+
+                    // Position is line-relative: measures finished in this line plus
+                    // beats into the current measure. Cross-line carryover within a
+                    // single section is not yet tracked here — see parse_section_measures.
+                    let beats_into_section =
+                        (measures.len() as f64) * beats_per_measure + current_measure_beats;
+                    let position = AbsolutePosition::new(
+                        MusicalDuration::from_beats(beats_into_section, time_sig),
+                        section_index,
+                    );
+
                     let key_change = KeyChange::new(
                         position,
                         self.current_key.clone(),
@@ -1672,9 +1740,10 @@ impl<'a> ChartParser<'a> {
                 continue;
             }
 
-            // Parse chord
-            // TODO: Compute source_span from line offset map and token position
-            match self.parse_chord_token(token_str, section_type, time_sig, None) {
+            // Parse chord. Pass through the token's byte span in the original line
+            // (line-relative) so diagnostics can point at real source positions.
+            let token_span = original_token_spans.get(token_idx).copied();
+            match self.parse_chord_token(token_str, section_type, time_sig, token_span) {
                 Ok(mut chord) => {
                     let mut chord_beats = chord.duration.to_beats(time_sig);
 
@@ -1806,16 +1875,45 @@ impl<'a> ChartParser<'a> {
                     .map(|chord| chord.duration.to_beats(time_sig))
                     .sum();
 
-                // Get section length in measures
+                // Get section length in measures. Inference fallbacks (in order):
+                //   1. Explicit count from the section header (e.g. `VS 16`).
+                //   2. Most recent prior section of the same type (chart.sections).
+                //   3. The chart's section_measure_memory (set by earlier sections).
+                //   4. Bail out with the same error as before.
                 let section_measures = if let Some(count) = section_measure_count {
                     count
-                } else {
-                    // If no explicit measure count, we can't calculate auto-repeat
-                    // This is a limitation - x^ requires an explicit section length
-                    return Err(
-                        "Cannot use x^ without explicit section measure count (e.g., 'VS 16')"
-                            .to_string(),
+                } else if let Some(prior_count) = self
+                    .chart
+                    .sections
+                    .iter()
+                    .rev()
+                    .find(|s| s.section.section_type == *section_type)
+                    .map(|s| s.measures().len())
+                    .filter(|&n| n > 0)
+                {
+                    tracing::debug!(
+                        "x^: inferred section length {} measures from prior {:?}",
+                        prior_count,
+                        section_type
                     );
+                    prior_count
+                } else if let Some(&remembered) = self
+                    .chart
+                    .section_measure_memory
+                    .get(section_type)
+                    .filter(|&&n| n > 0)
+                {
+                    tracing::debug!(
+                        "x^: inferred section length {} measures from section_measure_memory",
+                        remembered
+                    );
+                    remembered
+                } else {
+                    return Err(format!(
+                        "Cannot use x^ without explicit section measure count \
+                         (no prior {:?} section to infer from). Add a count: e.g. 'VS 16'",
+                        section_type
+                    ));
                 };
 
                 // Convert section length to beats
@@ -1903,20 +2001,33 @@ impl<'a> ChartParser<'a> {
         repeat_count: RepeatCount,
         section_type: &SectionType,
         _section_measure_count: Option<usize>,
+        line_byte_offset: usize,
     ) -> Result<Vec<Measure>, String> {
-        let measure_parts = Self::split_top_level_measures(line);
+        let measure_parts = Self::split_top_level_measures_spanned(line);
         let mut measures = Vec::new();
 
-        for part in measure_parts {
-            let trimmed = part.trim();
+        for (part_offset, part) in measure_parts {
+            let trimmed_full = part.as_str();
+            let trim_left = trimmed_full.len() - trimmed_full.trim_start().len();
+            let trimmed = trimmed_full.trim();
             if trimmed.is_empty() {
                 continue;
             }
+            let measure_offset = line_byte_offset + part_offset + trim_left;
 
             if trimmed.starts_with("<<") && trimmed.ends_with(">>") {
-                measures.push(self.parse_parallel_measure(trimmed, section_type)?);
+                measures.push(self.parse_parallel_measure(
+                    trimmed,
+                    section_type,
+                    measure_offset,
+                )?);
             } else {
-                let mut parsed = self.parse_chord_line(trimmed, section_type, Some(1))?;
+                let mut parsed = self.parse_chord_line_with_offset(
+                    trimmed,
+                    section_type,
+                    Some(1),
+                    measure_offset,
+                )?;
                 if let Some(measure) = parsed.into_iter().next() {
                     measures.push(measure);
                 }
@@ -1938,30 +2049,45 @@ impl<'a> ChartParser<'a> {
         &mut self,
         measure_text: &str,
         section_type: &SectionType,
+        measure_byte_offset: usize,
     ) -> Result<Measure, String> {
-        let inner = measure_text
-            .trim()
+        let trimmed_outer = measure_text.trim();
+        // Offset of `trimmed_outer` within `measure_text`.
+        let outer_lead = measure_text.len() - measure_text.trim_start().len();
+
+        let inner_with_caps = trimmed_outer
             .strip_prefix("<<")
             .and_then(|s| s.strip_suffix(">>"))
-            .ok_or_else(|| format!("Invalid parallel container: {}", measure_text))?
-            .trim();
+            .ok_or_else(|| format!("Invalid parallel container: {}", measure_text))?;
+        let inner = inner_with_caps.trim();
+        // Offset of `inner` within `measure_text`: outer trim + "<<" + inner trim.
+        let inner_lead = inner_with_caps.len() - inner_with_caps.trim_start().len();
+        let inner_offset = measure_byte_offset + outer_lead + 2 /* "<<" */ + inner_lead;
 
-        let branches = Self::split_top_level_parallel_branches(inner);
+        let branches = Self::split_top_level_parallel_branches_spanned(inner);
         let mut merged = Measure::new();
 
-        for branch in branches {
+        for (branch_offset, branch) in branches {
+            let trim_left = branch.len() - branch.trim_start().len();
             let trimmed = branch.trim();
             if trimmed.is_empty() {
                 continue;
             }
 
-            let mut parsed = self.parse_chord_line(trimmed, section_type, Some(1))?;
+            let mut parsed = self.parse_chord_line_with_offset(
+                trimmed,
+                section_type,
+                Some(1),
+                inner_offset + branch_offset + trim_left,
+            )?;
             let Some(branch_measure) = parsed.into_iter().next() else {
                 continue;
             };
 
             merged.chords.extend(branch_measure.chords);
-            merged.rhythm_elements.extend(branch_measure.rhythm_elements);
+            merged
+                .rhythm_elements
+                .extend(branch_measure.rhythm_elements);
             merged.rhythm_slashes.extend(branch_measure.rhythm_slashes);
             merged.text_cues.extend(branch_measure.text_cues);
             merged.dynamics.extend(branch_measure.dynamics);
@@ -2048,6 +2174,132 @@ impl<'a> ChartParser<'a> {
 
         parts
     }
+
+    /// Like `split_top_level_measures`, but also returns the byte offset of
+    /// each emitted part within `input`. Splits on `|` only at parallel-depth
+    /// 0 and brace-depth 0, identical to the un-spanned version.
+    /// Whitespace is preserved in the returned slice (callers re-trim and
+    /// account for the leading whitespace when computing absolute offsets).
+    fn split_top_level_measures_spanned(input: &str) -> Vec<(usize, String)> {
+        let mut parts: Vec<(usize, String)> = Vec::new();
+        let mut current = String::new();
+        let mut current_start: usize = 0;
+        let mut last_byte_consumed: usize = 0;
+        let mut parallel_depth = 0usize;
+        let mut brace_depth = 0usize;
+        let bytes = input.as_bytes();
+        let mut i = 0;
+
+        while i < bytes.len() {
+            let b = bytes[i];
+            // Two-byte tokens `<<` / `>>` first.
+            if b == b'<' && bytes.get(i + 1) == Some(&b'<') {
+                parallel_depth += 1;
+                if current.is_empty() {
+                    current_start = i;
+                }
+                current.push('<');
+                current.push('<');
+                i += 2;
+                last_byte_consumed = i;
+                continue;
+            }
+            if b == b'>' && bytes.get(i + 1) == Some(&b'>') {
+                parallel_depth = parallel_depth.saturating_sub(1);
+                if current.is_empty() {
+                    current_start = i;
+                }
+                current.push('>');
+                current.push('>');
+                i += 2;
+                last_byte_consumed = i;
+                continue;
+            }
+
+            match b {
+                b'{' => brace_depth += 1,
+                b'}' => brace_depth = brace_depth.saturating_sub(1),
+                b'|' if parallel_depth == 0 && brace_depth == 0 => {
+                    if !current.trim().is_empty() {
+                        parts.push((current_start, std::mem::take(&mut current)));
+                    } else {
+                        current.clear();
+                    }
+                    i += 1;
+                    last_byte_consumed = i;
+                    continue;
+                }
+                _ => {}
+            }
+
+            // Push character (handle multi-byte by slicing original input).
+            let ch_end = next_utf8_boundary(input, i);
+            if current.is_empty() {
+                current_start = i;
+            }
+            current.push_str(&input[i..ch_end]);
+            i = ch_end;
+            last_byte_consumed = i;
+        }
+        let _ = last_byte_consumed;
+
+        if !current.trim().is_empty() {
+            parts.push((current_start, current));
+        }
+        parts
+    }
+
+    /// Like `split_top_level_parallel_branches`, but with byte offsets.
+    /// Splits on `;` at brace-depth 0.
+    fn split_top_level_parallel_branches_spanned(input: &str) -> Vec<(usize, String)> {
+        let mut parts: Vec<(usize, String)> = Vec::new();
+        let mut current = String::new();
+        let mut current_start: usize = 0;
+        let mut brace_depth = 0usize;
+        let bytes = input.as_bytes();
+        let mut i = 0;
+
+        while i < bytes.len() {
+            let b = bytes[i];
+            match b {
+                b'{' => brace_depth += 1,
+                b'}' => brace_depth = brace_depth.saturating_sub(1),
+                b';' if brace_depth == 0 => {
+                    if !current.trim().is_empty() {
+                        parts.push((current_start, std::mem::take(&mut current)));
+                    } else {
+                        current.clear();
+                    }
+                    i += 1;
+                    continue;
+                }
+                _ => {}
+            }
+
+            let ch_end = next_utf8_boundary(input, i);
+            if current.is_empty() {
+                current_start = i;
+            }
+            current.push_str(&input[i..ch_end]);
+            i = ch_end;
+        }
+
+        if !current.trim().is_empty() {
+            parts.push((current_start, current));
+        }
+        parts
+    }
+}
+
+/// Find the byte index of the next UTF-8 char boundary at or after `start`.
+/// `start` must already be a valid char boundary in `s`.
+fn next_utf8_boundary(s: &str, start: usize) -> usize {
+    let bytes = s.as_bytes();
+    let mut end = start + 1;
+    while end < bytes.len() && !s.is_char_boundary(end) {
+        end += 1;
+    }
+    end
 }
 
 // endregion: --- Chord Line Parsing
@@ -2069,8 +2321,8 @@ impl<'a> ChartParser<'a> {
         time_sig: TimeSignature,
         source_span: Option<TextSpan>,
     ) -> Result<ChordInstance, String> {
-        use keyflow_proto::chart::commands::Command;
         use crate::chord::Chord;
+        use keyflow_proto::chart::commands::Command;
 
         // Check for accent prefix (>) BEFORE push - indicates accent on the pushed beat
         // Supports: >'C (accent on the anticipation beat 4.66)
@@ -2082,17 +2334,16 @@ impl<'a> ChartParser<'a> {
 
         // Check for staccato prefix (.) AFTER accent, BEFORE push
         // Supports: .C (staccato chord), >.'C (accented staccato push), .'C (staccato push)
-        let (is_staccato, token_after_staccato) =
-            if token_after_leading_accent.starts_with('.') {
-                (
-                    true,
-                    token_after_leading_accent
-                        .strip_prefix('.')
-                        .unwrap_or(token_after_leading_accent),
-                )
-            } else {
-                (false, token_after_leading_accent)
-            };
+        let (is_staccato, token_after_staccato) = if token_after_leading_accent.starts_with('.') {
+            (
+                true,
+                token_after_leading_accent
+                    .strip_prefix('.')
+                    .unwrap_or(token_after_leading_accent),
+            )
+        } else {
+            (false, token_after_leading_accent)
+        };
 
         // Check for one-time override (prefix !)
         let (is_override, token_clean) = if token_after_staccato.starts_with('!') {
@@ -2269,6 +2520,113 @@ mod tests {
     use super::*;
     use crate::chart::parse_chart;
 
+    /// Helper: parse a chord line in isolation and return the parsed measures.
+    fn parse_line(line: &str) -> Vec<crate::chart::types::Measure> {
+        let mut chart = crate::chart::Chart::new();
+        let mut parser = ChartParser::new(&mut chart);
+        parser
+            .parse_chord_line(line, &SectionType::Verse, Some(1))
+            .expect("parse_chord_line failed")
+    }
+
+    fn collect_chord_spans(
+        measures: &[crate::chart::types::Measure],
+    ) -> Vec<(String, Option<crate::parsing::TextSpan>)> {
+        let mut out = Vec::new();
+        for m in measures {
+            for c in &m.chords {
+                out.push((c.original_token.clone(), c.source_span));
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn melody_variable_dollar_recall_attaches_stored_riff() {
+        // Pre-load a melody variable directly, then call parse_chord_line so we
+        // exercise the recall path independently of section / inline-content
+        // dispatch quirks.
+        use crate::chart::Melody;
+        let mut chart = crate::chart::Chart::new();
+        let melody = Melody::parse("C_8 D_8 E_4").expect("parse melody");
+        chart.melody_variables.set("mainRiff".to_string(), melody);
+
+        let mut parser = ChartParser::new(&mut chart);
+        let measures = parser
+            .parse_chord_line("| 1 $mainRiff |", &SectionType::Verse, Some(1))
+            .expect("parse_chord_line failed");
+
+        let total_melodies: usize = measures.iter().map(|m| m.melodies.len()).sum();
+        assert!(
+            total_melodies > 0,
+            "$mainRiff should attach a melody (got 0 across {} measures)",
+            measures.len()
+        );
+    }
+
+    #[test]
+    fn section_template_recall_replays_prior_chorus() {
+        // CH 4 defines a 4-measure progression. A later bare `CH` recalls it.
+        let input = "\
+CH 4: 1 4 5 1
+VS 4: 6 5 4 1
+CH 4:
+";
+        let chart = parse_chart(input).expect("parse_chart should succeed");
+        let chs: Vec<_> = chart
+            .sections
+            .iter()
+            .filter(|s| matches!(s.section.section_type, SectionType::Chorus))
+            .collect();
+        assert_eq!(chs.len(), 2, "expected two CH sections");
+        let recalled = chs[1];
+        assert!(
+            !recalled.measures().is_empty(),
+            "second CH should be filled by template recall, got {} measures",
+            recalled.measures().len()
+        );
+    }
+
+    #[test]
+    fn parallel_container_token_spans_resolve_to_original_line() {
+        // Two branches in a single parallel measure; verify each chord's span
+        // points at the right slice of the original input.
+        let line = "<< C7 ; F7 >>";
+        let measures = parse_line(line);
+        let spans = collect_chord_spans(&measures);
+        // Find C7 and F7 spans.
+        let c_span = spans
+            .iter()
+            .find(|(t, _)| t == "C7")
+            .and_then(|(_, s)| *s)
+            .expect("C7 span");
+        let f_span = spans
+            .iter()
+            .find(|(t, _)| t == "F7")
+            .and_then(|(_, s)| *s)
+            .expect("F7 span");
+        assert_eq!(&line[c_span.as_range()], "C7");
+        assert_eq!(&line[f_span.as_range()], "F7");
+    }
+
+    #[test]
+    fn parallel_container_token_spans_across_multiple_measures() {
+        // Plain measure followed by a parallel-container measure.
+        let line = "Am | << Dm7 ; G7 >> | Cmaj7";
+        let measures = parse_line(line);
+        let spans = collect_chord_spans(&measures);
+        for (token, span) in &spans {
+            let span = span.expect("every chord token should have a span");
+            assert_eq!(
+                &line[span.as_range()],
+                token,
+                "span for {} resolved to {}",
+                token,
+                &line[span.as_range()]
+            );
+        }
+    }
+
     #[test]
     fn test_duration_push_parsing_ambiguous_cases() {
         // Test '_44 - scale degree 4 pushed by quarter note
@@ -2347,8 +2705,8 @@ mod tests {
 
     #[test]
     fn test_accent_prefix_parsing() {
-        use keyflow_proto::chart::commands::Command;
         use crate::sections::SectionType;
+        use keyflow_proto::chart::commands::Command;
 
         // Test that >C parses as C with an accent command
         let input = r#"
@@ -2389,8 +2747,8 @@ VS
 
     #[test]
     fn test_accent_on_push_and_downbeat_parsing() {
-        use keyflow_proto::chart::commands::Command;
         use crate::sections::SectionType;
+        use keyflow_proto::chart::commands::Command;
 
         // Test that >'C parses as AccentOnPush (accent on anticipation)
         // and '>C parses as Accent (accent on downbeat)
@@ -2501,8 +2859,8 @@ VS
 
     #[test]
     fn test_accent_not_in_chord_memory() {
-        use keyflow_proto::chart::commands::Command;
         use crate::sections::SectionType;
+        use keyflow_proto::chart::commands::Command;
 
         // With the new chord memory behavior:
         // - Basic chords (C, Cm) don't participate in memory at all
@@ -2579,8 +2937,8 @@ VS
 
     #[test]
     fn test_accent_preserved_in_section_template() {
-        use keyflow_proto::chart::commands::Command;
         use crate::sections::SectionType;
+        use keyflow_proto::chart::commands::Command;
 
         // Accents CAN be committed to section memory (templates).
         // If we define VS with >C, then recall VS, the accent should be preserved.
@@ -2707,3 +3065,49 @@ BR
 }
 
 // endregion: --- Tests
+
+/// Walk `line` and return a `TextSpan` for each whitespace-separated token,
+/// in order. Spans are byte offsets relative to `line` (line/column = 0).
+fn tokenize_with_spans(line: &str) -> Vec<TextSpan> {
+    let bytes = line.as_bytes();
+    let mut spans = Vec::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        // Skip whitespace
+        while i < bytes.len() && (bytes[i] as char).is_whitespace() {
+            i += 1;
+        }
+        if i >= bytes.len() {
+            break;
+        }
+        let start = i;
+        while i < bytes.len() && !(bytes[i] as char).is_whitespace() {
+            i += 1;
+        }
+        spans.push(TextSpan::new(start, i - start));
+    }
+    spans
+}
+
+#[cfg(test)]
+mod span_helper_tests {
+    use super::tokenize_with_spans;
+
+    #[test]
+    fn tokenize_with_spans_matches_split_whitespace() {
+        let line = "  G_2  C_2 |  Am ";
+        let spans = tokenize_with_spans(line);
+        let toks: Vec<&str> = line.split_whitespace().collect();
+        assert_eq!(spans.len(), toks.len());
+        for (span, tok) in spans.iter().zip(toks.iter()) {
+            assert_eq!(&line[span.as_range()], *tok);
+            assert_eq!(span.len, tok.len());
+        }
+    }
+
+    #[test]
+    fn tokenize_with_spans_handles_empty_and_whitespace_only() {
+        assert!(tokenize_with_spans("").is_empty());
+        assert!(tokenize_with_spans("   \t  ").is_empty());
+    }
+}

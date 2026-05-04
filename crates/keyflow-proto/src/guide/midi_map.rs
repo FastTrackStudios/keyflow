@@ -74,10 +74,10 @@ pub fn section_type_midi_note(section_type: &SectionType) -> Option<u8> {
             SectionType::Chorus => Some(91), // G6 — Post-Chorus
             _ => None,
         },
-        SectionType::Breakdown => Some(92),  // G#6
-        SectionType::Interlude => Some(93),  // A6
-        SectionType::Solo => Some(96),       // C7
-        SectionType::Vamp => Some(97),       // C#7
+        SectionType::Breakdown => Some(92), // G#6
+        SectionType::Interlude => Some(93), // A6
+        SectionType::Solo => Some(96),      // C7
+        SectionType::Vamp => Some(97),      // C#7
         SectionType::Custom(name) => custom_section_midi_note(name),
         SectionType::CountIn | SectionType::End | SectionType::Hits => None,
     }
@@ -90,12 +90,12 @@ pub fn section_type_midi_note(section_type: &SectionType) -> Option<u8> {
 fn custom_section_midi_note(name: &str) -> Option<u8> {
     // Case-insensitive matching
     match name.to_lowercase().as_str() {
-        "tag" => Some(94),         // A#6
-        "ending" => Some(95),      // B6
-        "turnaround" => Some(98),  // D7
-        "refrain" => Some(99),     // D#7
-        "rap" => Some(100),        // E7
-        "acapella" => Some(101),   // F7
+        "tag" => Some(94),          // A#6
+        "ending" => Some(95),       // B6
+        "turnaround" => Some(98),   // D7
+        "refrain" => Some(99),      // D#7
+        "rap" => Some(100),         // E7
+        "acapella" => Some(101),    // F7
         "exhortation" => Some(102), // F#7
         _ => None,
     }

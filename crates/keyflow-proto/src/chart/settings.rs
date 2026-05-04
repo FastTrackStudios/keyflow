@@ -174,15 +174,16 @@ impl ChartSettings {
                 // Try to parse as a tuplet number (3, 5, 7, 9, etc.)
                 // Only if there's no suffix (otherwise it would have matched duration)
                 if suffix.is_none()
-                    && let Ok(n) = num_part.parse::<u8>() {
-                        if n == 3 {
-                            return Ok(PushPullBase::Triplet);
-                        }
-                        if n >= 4 {
-                            // Numbers >= 4 that aren't valid LilySyntax (handled above) are tuplets
-                            return Ok(PushPullBase::Tuplet(n));
-                        }
+                    && let Ok(n) = num_part.parse::<u8>()
+                {
+                    if n == 3 {
+                        return Ok(PushPullBase::Triplet);
                     }
+                    if n >= 4 {
+                        // Numbers >= 4 that aren't valid LilySyntax (handled above) are tuplets
+                        return Ok(PushPullBase::Tuplet(n));
+                    }
+                }
 
                 Err(format!(
                     "Invalid push mode: '{}'. Expected 'standard', 'triplet', duration (4, 8t, 16.), or tuplet number",

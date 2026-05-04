@@ -151,9 +151,10 @@ impl ChordMemory {
 
         // Second character might be an accidental (# or b)
         if let Some(c) = chars.next()
-            && (c == '#' || c == 'b') {
-                root.push(c);
-            }
+            && (c == '#' || c == 'b')
+        {
+            root.push(c);
+        }
 
         root
     }
@@ -434,11 +435,12 @@ impl ChordMemory {
         // Check if this is a scale degree (1-7)
         if let Ok(degree) = root.parse::<usize>()
             && (1..=7).contains(&degree)
-                && let Some(_chord) = chords.get(degree - 1) {
-                    // For scale degrees, the quality is implied by the key
-                    // Don't append any quality suffix - just return the root
-                    return Some(root.to_string());
-                }
+            && let Some(_chord) = chords.get(degree - 1)
+        {
+            // For scale degrees, the quality is implied by the key
+            // Don't append any quality suffix - just return the root
+            return Some(root.to_string());
+        }
 
         // Check if this is a Roman numeral
         let root_upper = root.to_uppercase();
@@ -533,9 +535,10 @@ impl ChordMemory {
 
         // If second char is 'b' or '#', quality starts at index 2
         if let Some(c) = second
-            && (c == 'b' || c == '#') {
-                return &normalized[2..];
-            }
+            && (c == 'b' || c == '#')
+        {
+            return &normalized[2..];
+        }
 
         // Otherwise, quality starts at index 1
         &normalized[1..]
@@ -549,9 +552,10 @@ impl ChordMemory {
         if let Some(section_type) = section_type {
             let section_key = section_type.full_name();
             if let Some(section_mem) = self.section_specific.get(&section_key)
-                && let Some(symbol) = section_mem.get(&root_lower) {
-                    return Some(symbol.clone());
-                }
+                && let Some(symbol) = section_mem.get(&root_lower)
+            {
+                return Some(symbol.clone());
+            }
         }
 
         // Fall back to global memory

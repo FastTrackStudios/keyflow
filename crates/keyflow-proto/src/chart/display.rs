@@ -293,13 +293,7 @@ impl Chart {
                 }
 
                 if let Some(measure_content) = Chart::display_measure_parallel_content(measure) {
-                    write!(
-                        f,
-                        "{}{}{}",
-                        fmt.chord_color,
-                        fmt.bold,
-                        measure_content
-                    )?;
+                    write!(f, "{}{}{}", fmt.chord_color, fmt.bold, measure_content)?;
                     write!(f, "{}", fmt.reset)?;
                 }
 
@@ -497,26 +491,26 @@ impl std::fmt::Display for Chart {
 
                             // Push/pull notation
                             if let Some((is_push, amount)) = &chord.push_pull
-                                && *is_push {
-                                    // Check if this push matches the default
-                                    let matches_default = self
-                                        .default_push_amount
-                                        .as_ref()
-                                        .map(|default| {
-                                            // Compare the push amounts
-                                            format!("{:?}", amount) == format!("{:?}", default)
-                                        })
-                                        .unwrap_or(false);
+                                && *is_push
+                            {
+                                // Check if this push matches the default
+                                let matches_default = self
+                                    .default_push_amount
+                                    .as_ref()
+                                    .map(|default| {
+                                        // Compare the push amounts
+                                        format!("{:?}", amount) == format!("{:?}", default)
+                                    })
+                                    .unwrap_or(false);
 
-                                    if matches_default {
-                                        // Just use apostrophe
-                                        chord_text.push('\'');
-                                    } else {
-                                        // Use full notation with amount
-                                        chord_text
-                                            .push_str(&Chart::format_push_pull_amount(amount));
-                                    }
+                                if matches_default {
+                                    // Just use apostrophe
+                                    chord_text.push('\'');
+                                } else {
+                                    // Use full notation with amount
+                                    chord_text.push_str(&Chart::format_push_pull_amount(amount));
                                 }
+                            }
 
                             chord_text.push_str(&chord.full_symbol);
 
@@ -525,9 +519,10 @@ impl std::fmt::Display for Chart {
 
                             // Pull notation (always show amount for pulls)
                             if let Some((is_push, _amount)) = &chord.push_pull
-                                && !*is_push {
-                                    chord_text.push('\'');
-                                }
+                                && !*is_push
+                            {
+                                chord_text.push('\'');
+                            }
 
                             // Add rhythm notation
                             // - Explicit durations attach directly: Ab9_8t

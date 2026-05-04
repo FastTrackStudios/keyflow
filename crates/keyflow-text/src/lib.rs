@@ -34,3 +34,9 @@ pub mod highlighting {
 }
 
 pub mod api;
+
+/// IDE engine: structured diagnostics, completion, hover.
+///
+/// See module docs for the design. Powers both the in-process Dioxus editor
+/// and the future LSP server.
+pub mod ide;

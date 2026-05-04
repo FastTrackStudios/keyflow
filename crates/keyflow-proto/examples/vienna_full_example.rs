@@ -44,12 +44,7 @@ You're so [Gm]ambitious for a juvenile
     println!("✓ Document parsed: {} blocks\n", doc.blocks.len());
 
     for (i, block) in doc.blocks.iter().enumerate() {
-        println!(
-            "  Block {}: {} ({:?})",
-            i + 1,
-            block.name,
-            block.kind
-        );
+        println!("  Block {}: {} ({:?})", i + 1, block.name, block.kind);
     }
 
     // Step 2: Extract keyflow block and parse lyrics
@@ -71,10 +66,7 @@ You're so [Gm]ambitious for a juvenile
                     .map(|c| format!(" → {}", c))
                     .unwrap_or_default();
 
-                println!("  [{}] '{}'{}",
-                    i,
-                    syl.text,
-                    chord_marker);
+                println!("  [{}] '{}'{}", i, syl.text, chord_marker);
             }
 
             // Step 3: Create mock chords for alignment demo
@@ -91,9 +83,7 @@ You're so [Gm]ambitious for a juvenile
             for (i, chord) in chords.iter().enumerate() {
                 println!(
                     "  [{}] {} at beat {}",
-                    i,
-                    chord.full_symbol,
-                    chord.position.total_duration.beat
+                    i, chord.full_symbol, chord.position.total_duration.beat
                 );
             }
 
@@ -199,15 +189,11 @@ fn parse_kf_document(content: &str) -> Result<KfDocument, String> {
     Ok(keyflow_proto::KfDocument { blocks })
 }
 
-fn create_mock_chord(
-    symbol: &str,
-    measure: i32,
-    beat: i32,
-) -> keyflow_proto::ChordInstance {
+fn create_mock_chord(symbol: &str, measure: i32, beat: i32) -> keyflow_proto::ChordInstance {
     use keyflow_proto::{
+        AbsolutePosition, MusicalDuration,
         chord::{ChordQuality, ChordRhythm},
         primitives::{MusicalNote, RootNotation},
-        AbsolutePosition, MusicalDuration,
     };
 
     // Extract root letter from symbol (e.g., "Gm" → "G", "A#" → "A#", "F" → "F")
@@ -218,10 +204,8 @@ fn create_mock_chord(
     let root_note = MusicalNote::from_string(&root_str).unwrap_or_else(|| MusicalNote::c());
     let root = RootNotation::from_note_name(root_note.clone());
 
-    let parsed = keyflow_proto::Chord::new(
-        RootNotation::from_note_name(root_note),
-        ChordQuality::Major,
-    );
+    let parsed =
+        keyflow_proto::Chord::new(RootNotation::from_note_name(root_note), ChordQuality::Major);
 
     keyflow_proto::ChordInstance {
         root,

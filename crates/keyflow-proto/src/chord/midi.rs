@@ -192,11 +192,7 @@ pub fn detect_chords_from_midi_notes(
             // Only apply overlap cleanup when the new note started clearly after the
             // existing active notes (at least 1 tick later). Notes starting at the same
             // time are part of the same chord.
-            let earliest_active_start = active_notes
-                .iter()
-                .map(|n| n.start_ppq)
-                .min()
-                .unwrap_or(0);
+            let earliest_active_start = active_notes.iter().map(|n| n.start_ppq).min().unwrap_or(0);
             if note.start_ppq > earliest_active_start {
                 let mut cleaned = Vec::new();
                 let mut new_min: Option<i64> = None;
@@ -241,9 +237,10 @@ pub fn detect_chords_from_midi_notes(
                     chord_min_eppq.unwrap_or(0),
                     note.start_ppq,
                     min_chord_duration_ppq,
-                ) {
-                    chords.push(chord);
-                }
+                )
+            {
+                chords.push(chord);
+            }
 
             // Remove notes that have ended before or at this note's start time
             // Use >= instead of > to ensure notes ending exactly when new note starts are removed
@@ -292,9 +289,10 @@ pub fn detect_chords_from_midi_notes(
             chord_min_eppq.unwrap_or(0),
             i64::MAX,
             min_chord_duration_ppq,
-        ) {
-            chords.push(chord);
-        }
+        )
+    {
+        chords.push(chord);
+    }
 
     // Merge consecutive identical chords (like Lil Chordbox)
     // But don't merge if chords start exactly when the previous one ends (separate musical events)
@@ -459,7 +457,10 @@ fn apply_midi_octave_adjustments(
         if chord.extensions.eleventh.is_some() {
             // For sus4 chords, the 4th IS the 11th (same pitch class 5).
             // Converting the extension to add11 would be redundant — just drop it.
-            if matches!(chord.quality, ChordQuality::Suspended(SuspendedType::Fourth)) {
+            if matches!(
+                chord.quality,
+                ChordQuality::Suspended(SuspendedType::Fourth)
+            ) {
                 chord.extensions.eleventh = None;
             } else if third_and_fourth_same_octave {
                 // Both 3rd and 4th in same octave - convert to add4
@@ -473,14 +474,15 @@ fn apply_midi_octave_adjustments(
         }
 
         // Also handle case where we have 3rd and 4th in same octave but no extension detected
-        if third_and_fourth_same_octave && chord.extensions.eleventh.is_none()
+        if third_and_fourth_same_octave
+            && chord.extensions.eleventh.is_none()
             && !chord.additions.contains(&ChordDegree::Fourth)
-                && !chord.additions.contains(&ChordDegree::Eleventh)
-                && has_fourth
-                && has_major_third
-            {
-                chord.additions.push(ChordDegree::Fourth);
-            }
+            && !chord.additions.contains(&ChordDegree::Eleventh)
+            && has_fourth
+            && has_major_third
+        {
+            chord.additions.push(ChordDegree::Fourth);
+        }
     }
 
     // Handle "D2" style chords: power chord with 2nd

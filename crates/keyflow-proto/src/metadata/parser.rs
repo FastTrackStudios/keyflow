@@ -65,20 +65,21 @@ impl SongMetadata {
     fn extract_subtitle_from_parentheses(title: &str) -> (String, Option<String>) {
         // Find the last opening parenthesis to handle nested parens
         if let Some(open_paren) = title.rfind('(')
-            && let Some(close_paren) = title[open_paren..].find(')') {
-                let subtitle = title[open_paren + 1..open_paren + close_paren].trim();
-                let title_without_subtitle = title[..open_paren].trim();
+            && let Some(close_paren) = title[open_paren..].find(')')
+        {
+            let subtitle = title[open_paren + 1..open_paren + close_paren].trim();
+            let title_without_subtitle = title[..open_paren].trim();
 
-                // Return subtitle if non-empty, but always strip parentheses from title
-                return (
-                    title_without_subtitle.to_string(),
-                    if subtitle.is_empty() {
-                        None
-                    } else {
-                        Some(subtitle.to_string())
-                    },
-                );
-            }
+            // Return subtitle if non-empty, but always strip parentheses from title
+            return (
+                title_without_subtitle.to_string(),
+                if subtitle.is_empty() {
+                    None
+                } else {
+                    Some(subtitle.to_string())
+                },
+            );
+        }
 
         (title.to_string(), None)
     }

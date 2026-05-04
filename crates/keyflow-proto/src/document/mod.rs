@@ -22,9 +22,9 @@ impl KfDocument {
 
     /// Find a block by name (case-insensitive)
     pub fn find_block(&self, name: &str) -> Option<&KfBlock> {
-        self.blocks.iter().find(|b| {
-            b.name.eq_ignore_ascii_case(name)
-        })
+        self.blocks
+            .iter()
+            .find(|b| b.name.eq_ignore_ascii_case(name))
     }
 
     /// Get all blocks of a specific kind

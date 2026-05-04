@@ -422,60 +422,57 @@ impl Section {
         }
     }
 
-    /// Calculate the length of the section in measures
-    /// Uses the musical positions from start_position and end_position
-    /// Assumes 4/4 time signature (4 beats per measure)
-    /// Returns None if musical positions are not available
-    pub fn length_measures(&self) -> Option<f64> {
-        if let (Some(start_pos), Some(end_pos)) = (&self.start_position, &self.end_position) {
-            let start_musical = start_pos.musical.as_ref()?;
-            let end_musical = end_pos.musical.as_ref()?;
+    /// Calculate the length of the section in measures, given the project's time signature.
+    ///
+    /// Uses the musical positions from `start_position` / `end_position`. The time signature
+    /// is required to convert any sub-bar beat / subdivision remainder into a fractional measure.
+    /// Returns `None` if musical positions are missing.
+    pub fn length_measures(&self, time_signature: &TimeSignature) -> Option<f64> {
+        let (start_pos, end_pos) = (self.start_position.as_ref()?, self.end_position.as_ref()?);
+        let start_musical = start_pos.musical.as_ref()?;
+        let end_musical = end_pos.musical.as_ref()?;
 
-            // Calculate beats per measure from time signature (default to 4/4)
-            // TODO: Get actual time signature from song/project metadata
-            let beats_per_measure = 4.0;
-
-            // Convert musical positions to total measures
-            // measure + (beat + subdivision/1000) / beats_per_measure
-            let start_measures = start_musical.measure as f64
-                + (start_musical.beat as f64 + start_musical.subdivision as f64 / 1000.0)
-                    / beats_per_measure;
-
-            let end_measures = end_musical.measure as f64
-                + (end_musical.beat as f64 + end_musical.subdivision as f64 / 1000.0)
-                    / beats_per_measure;
-
-            let length = end_measures - start_measures;
-            if length > 0.0 { Some(length) } else { None }
-        } else {
-            None
+        let beats_per_measure = time_signature.beats_per_measure();
+        if beats_per_measure <= 0.0 {
+            return None;
         }
+
+        let to_measures = |m: &daw_proto::MusicalPosition| {
+            m.measure as f64 + (m.beat as f64 + m.subdivision as f64 / 1000.0) / beats_per_measure
+        };
+
+        let length = to_measures(end_musical) - to_measures(start_musical);
+        (length > 0.0).then_some(length)
     }
 
     /// Validate section data
     pub fn validate(&self) -> Result<(), String> {
         if let (Some(start), Some(end)) = (self.start_seconds(), self.end_seconds())
-            && start >= end {
-                return Err(format!(
-                    "Invalid time range: start ({}) >= end ({})",
-                    start, end
-                ));
-            }
+            && start >= end
+        {
+            return Err(format!(
+                "Invalid time range: start ({}) >= end ({})",
+                start, end
+            ));
+        }
 
         if let Some(ref name) = self.name
-            && name.trim().is_empty() {
-                return Err("Section name cannot be empty".to_string());
-            }
+            && name.trim().is_empty()
+        {
+            return Err("Section name cannot be empty".to_string());
+        }
 
         if let Some(start) = self.start_seconds()
-            && start < 0.0 {
-                return Err("Section start time cannot be negative".to_string());
-            }
+            && start < 0.0
+        {
+            return Err("Section start time cannot be negative".to_string());
+        }
 
         if let Some(num) = self.number
-            && num == 0 {
-                return Err("Section number must be greater than 0".to_string());
-            }
+            && num == 0
+        {
+            return Err("Section number must be greater than 0".to_string());
+        }
 
         Ok(())
     }

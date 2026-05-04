@@ -96,15 +96,14 @@ impl SectionAlignment {
 
     /// Get the chord that covers a given time position
     pub fn chord_at_position(&self, position: &AbsolutePosition) -> Option<&ChordSyllableMapping> {
-        self.mappings
-            .iter()
-            .find(|m| &m.chord_position == position)
+        self.mappings.iter().find(|m| &m.chord_position == position)
     }
 
     /// Sort mappings by chord position for sequential processing
     pub fn sort_by_position(&mut self) {
-        self.mappings
-            .sort_by(|a, b| ChordSyllableAligner::compare_positions(&a.chord_position, &b.chord_position));
+        self.mappings.sort_by(|a, b| {
+            ChordSyllableAligner::compare_positions(&a.chord_position, &b.chord_position)
+        });
     }
 }
 
@@ -267,10 +266,7 @@ impl ChordSyllableAligner {
         })
     }
 
-    fn compare_positions(
-        a: &AbsolutePosition,
-        b: &AbsolutePosition,
-    ) -> std::cmp::Ordering {
+    fn compare_positions(a: &AbsolutePosition, b: &AbsolutePosition) -> std::cmp::Ordering {
         (
             a.section_index,
             a.total_duration.measure,

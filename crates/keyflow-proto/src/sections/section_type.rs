@@ -313,13 +313,15 @@ impl SectionType {
 
         // Try to parse Pre/Post
         if let Some(rest) = s_lower.strip_prefix("pre-")
-            && let Ok(inner) = Self::parse(rest) {
-                return Ok(SectionType::Pre(Box::new(inner)));
-            }
+            && let Ok(inner) = Self::parse(rest)
+        {
+            return Ok(SectionType::Pre(Box::new(inner)));
+        }
         if let Some(rest) = s_lower.strip_prefix("post-")
-            && let Ok(inner) = Self::parse(rest) {
-                return Ok(SectionType::Post(Box::new(inner)));
-            }
+            && let Ok(inner) = Self::parse(rest)
+        {
+            return Ok(SectionType::Post(Box::new(inner)));
+        }
 
         Err(format!(
             "Unknown section type: '{}' - supported types: verse, chorus, bridge, intro, outro, instrumental, solo, count, hits, interlude, breakdown, vamp, pre-*, post-*",

@@ -260,17 +260,19 @@ impl Chord {
         // Step 4b: Check for "sus" after family/extensions for "7sus4" format
         // This handles chords like "G7sus4" or "C9sus4" where sus comes after the 7th
         let mut quality = quality.0;
-        if consumed < tokens.len() && family.is_some()
+        if consumed < tokens.len()
+            && family.is_some()
             && let Ok((sus_quality, sus_consumed)) =
                 Self::parse_suspended_suffix(&tokens[consumed..])
-                && matches!(sus_quality, ChordQuality::Suspended(_)) {
-                    quality = sus_quality;
-                    consumed += sus_consumed;
-                    debug!(
-                        "Parsed suspended suffix (7sus4 format): {:?}, consumed {}",
-                        quality, sus_consumed
-                    );
-                }
+            && matches!(sus_quality, ChordQuality::Suspended(_))
+        {
+            quality = sus_quality;
+            consumed += sus_consumed;
+            debug!(
+                "Parsed suspended suffix (7sus4 format): {:?}, consumed {}",
+                quality, sus_consumed
+            );
+        }
 
         // Step 5: Parse alterations (b5, #5, b9, #9, #11, b13) if present
         let alterations = if consumed < tokens.len() {
@@ -302,23 +304,26 @@ impl Chord {
         // Also handle 6/9 chords (C6/9, Cm6/9)
         let mut is_sixth_chord = false;
         let mut is_six_nine = false;
-        if consumed < tokens.len() && family.is_none()
+        if consumed < tokens.len()
+            && family.is_none()
             && let TokenType::Number(n) = &tokens[consumed].token_type
-                && n == "6" {
-                    is_sixth_chord = true;
-                    consumed += 1;
-                    debug!("Found sixth chord notation at position {}", consumed);
+            && n == "6"
+        {
+            is_sixth_chord = true;
+            consumed += 1;
+            debug!("Found sixth chord notation at position {}", consumed);
 
-                    // Check for "/9" after the "6"
-                    if consumed + 1 < tokens.len()
-                        && let TokenType::Slash = tokens[consumed].token_type
-                            && let TokenType::Number(num) = &tokens[consumed + 1].token_type
-                                && num == "9" {
-                                    is_six_nine = true;
-                                    consumed += 2; // Skip "/" and "9"
-                                    debug!("Found 6/9 chord notation");
-                                }
-                }
+            // Check for "/9" after the "6"
+            if consumed + 1 < tokens.len()
+                && let TokenType::Slash = tokens[consumed].token_type
+                && let TokenType::Number(num) = &tokens[consumed + 1].token_type
+                && num == "9"
+            {
+                is_six_nine = true;
+                consumed += 2; // Skip "/" and "9"
+                debug!("Found 6/9 chord notation");
+            }
+        }
 
         // Step 7: Parse additions (add9, add11) if present
         let mut additions = if consumed < tokens.len() {
@@ -364,17 +369,17 @@ impl Chord {
         if consumed < tokens.len()
             && let Ok((Some(slash_family), slash_consumed)) =
                 Self::parse_slash_family(&tokens[consumed..])
-            {
-                // Override or set the family from slash notation
-                if final_family.is_none() {
-                    final_family = Some(slash_family);
-                }
-                consumed += slash_consumed;
-                debug!(
-                    "Parsed slash family: {:?}, total consumed: {}",
-                    slash_family, consumed
-                );
+        {
+            // Override or set the family from slash notation
+            if final_family.is_none() {
+                final_family = Some(slash_family);
             }
+            consumed += slash_consumed;
+            debug!(
+                "Parsed slash family: {:?}, total consumed: {}",
+                slash_family, consumed
+            );
+        }
 
         // Step 9b: Parse slash chord (bass note) if present
         let bass = if consumed < tokens.len() {
@@ -467,26 +472,29 @@ impl Chord {
                         if let TokenType::Letter('j') = tokens[2].token_type {
                             // Look ahead for a number (7, 9, 11, 13)
                             if consumed + 3 < tokens.len()
-                                && let TokenType::Number(_) = tokens[3].token_type {
-                                    // It's "maj7", "maj9", etc. - don't consume, return Major quality with 0 tokens
-                                    return Ok((ChordQuality::Major, 0));
-                                }
+                                && let TokenType::Number(_) = tokens[3].token_type
+                            {
+                                // It's "maj7", "maj9", etc. - don't consume, return Major quality with 0 tokens
+                                return Ok((ChordQuality::Major, 0));
+                            }
                             // Just "maj" without a number - consume it as quality
                             return Ok((ChordQuality::Major, 3));
                         }
                     } else if !is_upper {
                         // Check for "min7", "min9", etc.
                         if let TokenType::Letter('i') = tokens[1].token_type
-                            && let TokenType::Letter('n') = tokens[2].token_type {
-                                // Look ahead for a number
-                                if consumed + 3 < tokens.len()
-                                    && let TokenType::Number(_) = tokens[3].token_type {
-                                        // It's "min7", "min9", etc. - don't consume, return Minor quality with 0 tokens
-                                        return Ok((ChordQuality::Minor, 0));
-                                    }
-                                // Just "min" without a number
-                                return Ok((ChordQuality::Minor, 3));
+                            && let TokenType::Letter('n') = tokens[2].token_type
+                        {
+                            // Look ahead for a number
+                            if consumed + 3 < tokens.len()
+                                && let TokenType::Number(_) = tokens[3].token_type
+                            {
+                                // It's "min7", "min9", etc. - don't consume, return Minor quality with 0 tokens
+                                return Ok((ChordQuality::Minor, 0));
                             }
+                            // Just "min" without a number
+                            return Ok((ChordQuality::Minor, 3));
+                        }
                     }
                 }
 
@@ -510,9 +518,10 @@ impl Chord {
             TokenType::Letter('d') => {
                 if consumed + 2 < tokens.len()
                     && let TokenType::Letter('i') = tokens[1].token_type
-                        && let TokenType::Letter('m') = tokens[2].token_type {
-                            return Ok((ChordQuality::Diminished, 3)); // "dim"
-                        }
+                    && let TokenType::Letter('m') = tokens[2].token_type
+                {
+                    return Ok((ChordQuality::Diminished, 3)); // "dim"
+                }
                 // Not "dim" - don't consume, let other parsers handle it
                 Ok((ChordQuality::Major, 0))
             }
@@ -526,9 +535,10 @@ impl Chord {
             TokenType::Letter('a') => {
                 if consumed + 2 < tokens.len()
                     && let TokenType::Letter('u') = tokens[1].token_type
-                        && let TokenType::Letter('g') = tokens[2].token_type {
-                            return Ok((ChordQuality::Augmented, 3)); // "aug"
-                        }
+                    && let TokenType::Letter('g') = tokens[2].token_type
+                {
+                    return Ok((ChordQuality::Augmented, 3)); // "aug"
+                }
                 // Not "aug" - don't consume, let additions parser handle it
                 Ok((ChordQuality::Major, 0))
             }
@@ -541,31 +551,32 @@ impl Chord {
             TokenType::Letter('s') => {
                 if consumed + 2 < tokens.len()
                     && let TokenType::Letter('u') = tokens[1].token_type
-                        && let TokenType::Letter('s') = tokens[2].token_type {
-                            consumed = 3; // "sus"
+                    && let TokenType::Letter('s') = tokens[2].token_type
+                {
+                    consumed = 3; // "sus"
 
-                            // Check for "sus2" or "sus4"
-                            if consumed < tokens.len() {
-                                match &tokens[consumed].token_type {
-                                    TokenType::Number(n) if n == "2" => {
-                                        return Ok((
-                                            ChordQuality::Suspended(SuspendedType::Second),
-                                            consumed + 1,
-                                        ));
-                                    }
-                                    TokenType::Number(n) if n == "4" => {
-                                        return Ok((
-                                            ChordQuality::Suspended(SuspendedType::Fourth),
-                                            consumed + 1,
-                                        ));
-                                    }
-                                    _ => {}
-                                }
+                    // Check for "sus2" or "sus4"
+                    if consumed < tokens.len() {
+                        match &tokens[consumed].token_type {
+                            TokenType::Number(n) if n == "2" => {
+                                return Ok((
+                                    ChordQuality::Suspended(SuspendedType::Second),
+                                    consumed + 1,
+                                ));
                             }
-
-                            // Just "sus" defaults to sus4
-                            return Ok((ChordQuality::Suspended(SuspendedType::Fourth), consumed));
+                            TokenType::Number(n) if n == "4" => {
+                                return Ok((
+                                    ChordQuality::Suspended(SuspendedType::Fourth),
+                                    consumed + 1,
+                                ));
+                            }
+                            _ => {}
                         }
+                    }
+
+                    // Just "sus" defaults to sus4
+                    return Ok((ChordQuality::Suspended(SuspendedType::Fourth), consumed));
+                }
                 // Not "sus" - don't consume, let other parsers handle it
                 Ok((ChordQuality::Major, 0))
             }
@@ -626,24 +637,24 @@ impl Chord {
             // Check for "add"
             if consumed + 2 < tokens.len()
                 && let TokenType::Letter('a') = tokens[consumed].token_type
-                    && let TokenType::Letter('d') = tokens[consumed + 1].token_type
-                        && let TokenType::Letter('d') = tokens[consumed + 2].token_type {
-                            consumed += 3; // "add"
+                && let TokenType::Letter('d') = tokens[consumed + 1].token_type
+                && let TokenType::Letter('d') = tokens[consumed + 2].token_type
+            {
+                consumed += 3; // "add"
 
-                            // Parse the degree number
-                            if consumed < tokens.len()
-                                && let TokenType::Number(n) = &tokens[consumed].token_type
-                                    && let Some(degree) =
-                                        ChordDegree::from_number(n.parse().ok().unwrap_or(0))
-                                    {
-                                        additions.push(degree);
-                                        consumed += 1;
-                                        continue;
-                                    }
-                            // "add" found but no valid number, back up and stop
-                            consumed -= 3;
-                            break;
-                        }
+                // Parse the degree number
+                if consumed < tokens.len()
+                    && let TokenType::Number(n) = &tokens[consumed].token_type
+                    && let Some(degree) = ChordDegree::from_number(n.parse().ok().unwrap_or(0))
+                {
+                    additions.push(degree);
+                    consumed += 1;
+                    continue;
+                }
+                // "add" found but no valid number, back up and stop
+                consumed -= 3;
+                break;
+            }
 
             // No more additions
             break;
@@ -710,12 +721,12 @@ impl Chord {
                 // Parse the degree number
                 if consumed < tokens.len()
                     && let TokenType::Number(n) = &tokens[consumed].token_type
-                        && let Some(degree) = ChordDegree::from_number(n.parse().ok().unwrap_or(0))
-                        {
-                            omissions.push(degree);
-                            consumed += 1;
-                            continue;
-                        }
+                    && let Some(degree) = ChordDegree::from_number(n.parse().ok().unwrap_or(0))
+                {
+                    omissions.push(degree);
+                    consumed += 1;
+                    continue;
+                }
                 // Keyword found but no valid number, back up and stop
                 consumed -= len;
                 break;
@@ -742,23 +753,24 @@ impl Chord {
 
         // Check for slash
         if consumed < tokens.len()
-            && let TokenType::Slash = tokens[consumed].token_type {
-                consumed += 1;
+            && let TokenType::Slash = tokens[consumed].token_type
+        {
+            consumed += 1;
 
-                // Parse the bass note (same as parsing root)
-                if consumed < tokens.len() {
-                    match root::parse_root(&tokens[consumed..]) {
-                        Ok(result) => {
-                            consumed += result.tokens_consumed;
-                            return Ok((Some(result.root), consumed));
-                        }
-                        Err(_) => {
-                            // Slash found but no valid root, back up
-                            return Ok((None, 0));
-                        }
+            // Parse the bass note (same as parsing root)
+            if consumed < tokens.len() {
+                match root::parse_root(&tokens[consumed..]) {
+                    Ok(result) => {
+                        consumed += result.tokens_consumed;
+                        return Ok((Some(result.root), consumed));
+                    }
+                    Err(_) => {
+                        // Slash found but no valid root, back up
+                        return Ok((None, 0));
                     }
                 }
             }
+        }
 
         Ok((None, 0))
     }
@@ -789,19 +801,21 @@ impl Chord {
                 &tokens[3].token_type,
                 &tokens[4].token_type,
             )
-                && n == "7" {
-                    return Ok((Some(ChordFamily::Major7), 5));
-                }
+            && n == "7"
+        {
+            return Ok((Some(ChordFamily::Major7), 5));
+        }
 
         // Check for "m7" after slash (minor-major 7th or just minor 7th context)
         if tokens.len() >= 3
             && let (TokenType::Letter('m'), TokenType::Number(n)) =
                 (&tokens[1].token_type, &tokens[2].token_type)
-                && n == "7" {
-                    // /m7 in context like "Caug/m7" would be unusual
-                    // but "Cm/maj7" means minor with major 7th
-                    return Ok((Some(ChordFamily::MinorMajor7), 3));
-                }
+            && n == "7"
+        {
+            // /m7 in context like "Caug/m7" would be unusual
+            // but "Cm/maj7" means minor with major 7th
+            return Ok((Some(ChordFamily::MinorMajor7), 3));
+        }
 
         Ok((None, 0))
     }
@@ -824,23 +838,18 @@ impl Chord {
 
             // Check for "2" or "4" after "sus"
             if consumed < tokens.len()
-                && let TokenType::Number(n) = &tokens[consumed].token_type {
-                    match n.as_str() {
-                        "2" => {
-                            return Ok((
-                                ChordQuality::Suspended(SuspendedType::Second),
-                                consumed + 1,
-                            ));
-                        }
-                        "4" => {
-                            return Ok((
-                                ChordQuality::Suspended(SuspendedType::Fourth),
-                                consumed + 1,
-                            ));
-                        }
-                        _ => {}
+                && let TokenType::Number(n) = &tokens[consumed].token_type
+            {
+                match n.as_str() {
+                    "2" => {
+                        return Ok((ChordQuality::Suspended(SuspendedType::Second), consumed + 1));
                     }
+                    "4" => {
+                        return Ok((ChordQuality::Suspended(SuspendedType::Fourth), consumed + 1));
+                    }
+                    _ => {}
                 }
+            }
 
             // Just "sus" defaults to sus4
             return Ok((ChordQuality::Suspended(SuspendedType::Fourth), consumed));
@@ -1054,29 +1063,32 @@ impl std::fmt::Display for Chord {
                 }
                 // Show altered extensions separately
                 if let Some(qual) = self.extensions.ninth
-                    && qual != ExtensionQuality::Natural {
-                        match qual {
-                            ExtensionQuality::Flat => write!(f, "b9")?,
-                            ExtensionQuality::Sharp => write!(f, "#9")?,
-                            _ => {}
-                        }
+                    && qual != ExtensionQuality::Natural
+                {
+                    match qual {
+                        ExtensionQuality::Flat => write!(f, "b9")?,
+                        ExtensionQuality::Sharp => write!(f, "#9")?,
+                        _ => {}
                     }
+                }
                 if let Some(qual) = self.extensions.eleventh
-                    && qual != ExtensionQuality::Natural {
-                        match qual {
-                            ExtensionQuality::Flat => write!(f, "b11")?,
-                            ExtensionQuality::Sharp => write!(f, "#11")?,
-                            _ => {}
-                        }
+                    && qual != ExtensionQuality::Natural
+                {
+                    match qual {
+                        ExtensionQuality::Flat => write!(f, "b11")?,
+                        ExtensionQuality::Sharp => write!(f, "#11")?,
+                        _ => {}
                     }
+                }
                 if let Some(qual) = self.extensions.thirteenth
-                    && qual != ExtensionQuality::Natural {
-                        match qual {
-                            ExtensionQuality::Flat => write!(f, "b13")?,
-                            ExtensionQuality::Sharp => write!(f, "#13")?,
-                            _ => {}
-                        }
+                    && qual != ExtensionQuality::Natural
+                {
+                    match qual {
+                        ExtensionQuality::Flat => write!(f, "b13")?,
+                        ExtensionQuality::Sharp => write!(f, "#13")?,
+                        _ => {}
                     }
+                }
             } else {
                 // Non-major family or no extensions
                 // The highest natural extension masks the seventh
@@ -1098,29 +1110,32 @@ impl std::fmt::Display for Chord {
                     }
                     // Show altered extensions separately
                     if let Some(qual) = self.extensions.ninth
-                        && qual != ExtensionQuality::Natural {
-                            match qual {
-                                ExtensionQuality::Flat => write!(f, "b9")?,
-                                ExtensionQuality::Sharp => write!(f, "#9")?,
-                                _ => {}
-                            }
+                        && qual != ExtensionQuality::Natural
+                    {
+                        match qual {
+                            ExtensionQuality::Flat => write!(f, "b9")?,
+                            ExtensionQuality::Sharp => write!(f, "#9")?,
+                            _ => {}
                         }
+                    }
                     if let Some(qual) = self.extensions.eleventh
-                        && qual != ExtensionQuality::Natural {
-                            match qual {
-                                ExtensionQuality::Flat => write!(f, "b11")?,
-                                ExtensionQuality::Sharp => write!(f, "#11")?,
-                                _ => {}
-                            }
+                        && qual != ExtensionQuality::Natural
+                    {
+                        match qual {
+                            ExtensionQuality::Flat => write!(f, "b11")?,
+                            ExtensionQuality::Sharp => write!(f, "#11")?,
+                            _ => {}
                         }
+                    }
                     if let Some(qual) = self.extensions.thirteenth
-                        && qual != ExtensionQuality::Natural {
-                            match qual {
-                                ExtensionQuality::Flat => write!(f, "b13")?,
-                                ExtensionQuality::Sharp => write!(f, "#13")?,
-                                _ => {}
-                            }
+                        && qual != ExtensionQuality::Natural
+                    {
+                        match qual {
+                            ExtensionQuality::Flat => write!(f, "b13")?,
+                            ExtensionQuality::Sharp => write!(f, "#13")?,
+                            _ => {}
                         }
+                    }
                 }
             }
         } else {
@@ -1136,29 +1151,32 @@ impl std::fmt::Display for Chord {
                 }
                 // Show altered extensions separately
                 if let Some(qual) = self.extensions.ninth
-                    && qual != ExtensionQuality::Natural {
-                        match qual {
-                            ExtensionQuality::Flat => write!(f, "b9")?,
-                            ExtensionQuality::Sharp => write!(f, "#9")?,
-                            _ => {}
-                        }
+                    && qual != ExtensionQuality::Natural
+                {
+                    match qual {
+                        ExtensionQuality::Flat => write!(f, "b9")?,
+                        ExtensionQuality::Sharp => write!(f, "#9")?,
+                        _ => {}
                     }
+                }
                 if let Some(qual) = self.extensions.eleventh
-                    && qual != ExtensionQuality::Natural {
-                        match qual {
-                            ExtensionQuality::Flat => write!(f, "b11")?,
-                            ExtensionQuality::Sharp => write!(f, "#11")?,
-                            _ => {}
-                        }
+                    && qual != ExtensionQuality::Natural
+                {
+                    match qual {
+                        ExtensionQuality::Flat => write!(f, "b11")?,
+                        ExtensionQuality::Sharp => write!(f, "#11")?,
+                        _ => {}
                     }
+                }
                 if let Some(qual) = self.extensions.thirteenth
-                    && qual != ExtensionQuality::Natural {
-                        match qual {
-                            ExtensionQuality::Flat => write!(f, "b13")?,
-                            ExtensionQuality::Sharp => write!(f, "#13")?,
-                            _ => {}
-                        }
+                    && qual != ExtensionQuality::Natural
+                {
+                    match qual {
+                        ExtensionQuality::Flat => write!(f, "b13")?,
+                        ExtensionQuality::Sharp => write!(f, "#13")?,
+                        _ => {}
                     }
+                }
             }
         }
 

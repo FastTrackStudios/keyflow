@@ -1,7 +1,19 @@
-//! ChordPro format support
+//! ChordPro format support — **legacy compact view**.
 //!
-//! Represents chord-over-lyrics notation as defined in the ChordPro standard.
-//! Format: `{title: ...}` directives and `[Chord]Lyric` inline notation.
+//! These types are now a *projection* of the comprehensive ChordPro 6.07
+//! AST defined in the dedicated `keyflow-chordpro` crate. They are kept as
+//! a stable target for existing callers, but new code should depend on
+//! `keyflow-chordpro` directly to access:
+//!
+//! - typed `DirectiveKind` (covers every directive in the cheat sheet)
+//! - `[*annotation]` markers
+//! - `{define}` chord definitions with frets / fingers / keys
+//! - conditional directives (`{title-en: …}`)
+//! - line continuation with `\`
+//! - `\uXXXX` escape expansion
+//! - source spans for editor / LSP integration
+//!
+//! See `keyflow_text::chart::parser::parse_chordpro` for the bridge.
 
 use facet::Facet;
 

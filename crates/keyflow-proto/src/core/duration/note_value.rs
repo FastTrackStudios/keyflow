@@ -23,8 +23,9 @@ use facet::Facet;
 /// | ThirtySecond | 60 | 0.125 |
 /// | SixtyFourth | 30 | 0.0625 |
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, Facet)]
-#[derive(Default)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, Facet, Default,
+)]
 pub enum NoteValue {
     /// Whole note (semibreve) - 4 beats in 4/4
     Whole,
@@ -152,7 +153,6 @@ impl<const PPQ: u32> ToTicks<PPQ> for NoteValue {
         Ticks(self.base_ticks_at_ppq::<PPQ>() as i64)
     }
 }
-
 
 impl std::fmt::Display for NoteValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

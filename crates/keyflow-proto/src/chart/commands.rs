@@ -67,7 +67,7 @@ impl Command {
         match self {
             Command::Fermata => "𝄐",                        // Unicode fermata symbol
             Command::Accent | Command::AccentOnPush => ">", // Accent symbol
-            Command::Staccato => ".",                        // Staccato dot
+            Command::Staccato => ".",                       // Staccato dot
             Command::Stop | Command::StopAfter => "🛑",     // Stop sign
             Command::StopGroove | Command::StopGrooveAfter => "⭕", // Stop groove (circle)
         }
@@ -237,7 +237,10 @@ mod tests {
     #[test]
     fn test_to_stop_after() {
         assert_eq!(Command::Stop.to_stop_after(), Command::StopAfter);
-        assert_eq!(Command::StopGroove.to_stop_after(), Command::StopGrooveAfter);
+        assert_eq!(
+            Command::StopGroove.to_stop_after(),
+            Command::StopGrooveAfter
+        );
         // Non-stop commands pass through unchanged
         assert_eq!(Command::Accent.to_stop_after(), Command::Accent);
     }

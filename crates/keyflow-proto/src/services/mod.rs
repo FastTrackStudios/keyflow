@@ -70,8 +70,5 @@ pub trait GuideService {
     /// Generate all guide events for a section's count-in region.
     ///
     /// Returns a list of `GuideEvent`s sorted by position.
-    async fn generate_count_in_events(
-        &self,
-        request: GuideRequest,
-    ) -> Vec<crate::GuideEvent>;
+    async fn generate_count_in_events(&self, request: GuideRequest) -> Vec<crate::GuideEvent>;
 }

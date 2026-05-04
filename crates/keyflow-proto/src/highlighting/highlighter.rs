@@ -415,9 +415,7 @@ impl Highlighter {
 
         // Measure count or expression (if present)
         let remaining = &line[pos..];
-        let count_end = remaining
-            .find(['"', ';'])
-            .unwrap_or(remaining.len());
+        let count_end = remaining.find(['"', ';']).unwrap_or(remaining.len());
         let count_str = remaining[..count_end].trim();
 
         if !count_str.is_empty() {
@@ -596,25 +594,26 @@ impl Highlighter {
 
                     // Look ahead for duration number and modifiers
                     if i + 1 < tokens.len()
-                        && let TokenType::Number(num) = &tokens[i + 1].token_type {
-                            len += num.len();
-                            i += 1;
+                        && let TokenType::Number(num) = &tokens[i + 1].token_type
+                    {
+                        len += num.len();
+                        i += 1;
 
-                            // Check for dot or triplet marker
-                            while i + 1 < tokens.len() {
-                                match &tokens[i + 1].token_type {
-                                    TokenType::Dot => {
-                                        len += 1;
-                                        i += 1;
-                                    }
-                                    TokenType::Letter('t') => {
-                                        len += 1;
-                                        i += 1;
-                                    }
-                                    _ => break,
+                        // Check for dot or triplet marker
+                        while i + 1 < tokens.len() {
+                            match &tokens[i + 1].token_type {
+                                TokenType::Dot => {
+                                    len += 1;
+                                    i += 1;
                                 }
+                                TokenType::Letter('t') => {
+                                    len += 1;
+                                    i += 1;
+                                }
+                                _ => break,
                             }
                         }
+                    }
 
                     spans.push(HighlightSpan::from_range(
                         start_pos,
@@ -714,17 +713,19 @@ impl Highlighter {
                         // Look for duration after r/s
                         let mut rest_len = 1;
                         if i + 1 < tokens.len()
-                            && let TokenType::Number(num) = &tokens[i + 1].token_type {
-                                rest_len += num.len();
-                                i += 1;
+                            && let TokenType::Number(num) = &tokens[i + 1].token_type
+                        {
+                            rest_len += num.len();
+                            i += 1;
 
-                                // Check for triplet marker
-                                if i + 1 < tokens.len()
-                                    && let TokenType::Letter('t') = &tokens[i + 1].token_type {
-                                        rest_len += 1;
-                                        i += 1;
-                                    }
+                            // Check for triplet marker
+                            if i + 1 < tokens.len()
+                                && let TokenType::Letter('t') = &tokens[i + 1].token_type
+                            {
+                                rest_len += 1;
+                                i += 1;
                             }
+                        }
 
                         spans.push(HighlightSpan::from_range(start_pos, rest_len, kind));
                     } else if *c == 'm' && Self::is_after_root(&tokens, i) {
@@ -1034,28 +1035,28 @@ impl Highlighter {
                     if idx + 3 < tokens.len()
                         && let (TokenType::Letter('a'), TokenType::Letter('j')) =
                             (&tokens[idx + 2].token_type, &tokens[idx + 3].token_type)
-                        {
-                            spans.push(HighlightSpan::from_range(
-                                next.pos,
-                                3,
-                                HighlightKind::Quality,
-                            ));
-                            idx += 3;
-                            continue;
-                        }
+                    {
+                        spans.push(HighlightSpan::from_range(
+                            next.pos,
+                            3,
+                            HighlightKind::Quality,
+                        ));
+                        idx += 3;
+                        continue;
+                    }
                     // Check for "min"
                     if idx + 3 < tokens.len()
                         && let (TokenType::Letter('i'), TokenType::Letter('n')) =
                             (&tokens[idx + 2].token_type, &tokens[idx + 3].token_type)
-                        {
-                            spans.push(HighlightSpan::from_range(
-                                next.pos,
-                                3,
-                                HighlightKind::Quality,
-                            ));
-                            idx += 3;
-                            continue;
-                        }
+                    {
+                        spans.push(HighlightSpan::from_range(
+                            next.pos,
+                            3,
+                            HighlightKind::Quality,
+                        ));
+                        idx += 3;
+                        continue;
+                    }
                     // Just 'm' for minor
                     spans.push(HighlightSpan::from_range(
                         next.pos,
@@ -1069,15 +1070,15 @@ impl Highlighter {
                     if idx + 3 < tokens.len()
                         && let (TokenType::Letter('i'), TokenType::Letter('m')) =
                             (&tokens[idx + 2].token_type, &tokens[idx + 3].token_type)
-                        {
-                            spans.push(HighlightSpan::from_range(
-                                next.pos,
-                                3,
-                                HighlightKind::Quality,
-                            ));
-                            idx += 3;
-                            continue;
-                        }
+                    {
+                        spans.push(HighlightSpan::from_range(
+                            next.pos,
+                            3,
+                            HighlightKind::Quality,
+                        ));
+                        idx += 3;
+                        continue;
+                    }
                     break;
                 }
                 // Augmented: aug
@@ -1085,15 +1086,15 @@ impl Highlighter {
                     if idx + 3 < tokens.len()
                         && let (TokenType::Letter('u'), TokenType::Letter('g')) =
                             (&tokens[idx + 2].token_type, &tokens[idx + 3].token_type)
-                        {
-                            spans.push(HighlightSpan::from_range(
-                                next.pos,
-                                3,
-                                HighlightKind::Quality,
-                            ));
-                            idx += 3;
-                            continue;
-                        }
+                    {
+                        spans.push(HighlightSpan::from_range(
+                            next.pos,
+                            3,
+                            HighlightKind::Quality,
+                        ));
+                        idx += 3;
+                        continue;
+                    }
                     break;
                 }
                 // Suspended: sus, sus2, sus4
@@ -1101,25 +1102,25 @@ impl Highlighter {
                     if idx + 3 < tokens.len()
                         && let (TokenType::Letter('u'), TokenType::Letter('s')) =
                             (&tokens[idx + 2].token_type, &tokens[idx + 3].token_type)
-                        {
-                            // Check for sus2 or sus4
-                            let sus_len = if idx + 4 < tokens.len() {
-                                if let TokenType::Number(n) = &tokens[idx + 4].token_type {
-                                    if n == "2" || n == "4" { 4 } else { 3 }
-                                } else {
-                                    3
-                                }
+                    {
+                        // Check for sus2 or sus4
+                        let sus_len = if idx + 4 < tokens.len() {
+                            if let TokenType::Number(n) = &tokens[idx + 4].token_type {
+                                if n == "2" || n == "4" { 4 } else { 3 }
                             } else {
                                 3
-                            };
-                            spans.push(HighlightSpan::from_range(
-                                next.pos,
-                                sus_len,
-                                HighlightKind::Quality,
-                            ));
-                            idx += sus_len;
-                            continue;
-                        }
+                            }
+                        } else {
+                            3
+                        };
+                        spans.push(HighlightSpan::from_range(
+                            next.pos,
+                            sus_len,
+                            HighlightKind::Quality,
+                        ));
+                        idx += sus_len;
+                        continue;
+                    }
                     break;
                 }
                 // Major: M, Maj
@@ -1127,15 +1128,15 @@ impl Highlighter {
                     if idx + 3 < tokens.len()
                         && let (TokenType::Letter('a'), TokenType::Letter('j')) =
                             (&tokens[idx + 2].token_type, &tokens[idx + 3].token_type)
-                        {
-                            spans.push(HighlightSpan::from_range(
-                                next.pos,
-                                3,
-                                HighlightKind::Quality,
-                            ));
-                            idx += 3;
-                            continue;
-                        }
+                    {
+                        spans.push(HighlightSpan::from_range(
+                            next.pos,
+                            3,
+                            HighlightKind::Quality,
+                        ));
+                        idx += 3;
+                        continue;
+                    }
                     // Just 'M' for major
                     spans.push(HighlightSpan::from_range(
                         next.pos,

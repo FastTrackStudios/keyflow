@@ -469,7 +469,12 @@ impl Chart {
 
         // Output chords from each measure in the pattern
         let mut all_chords = Vec::new();
-        for (idx, measure) in measures.iter().enumerate().take(end_idx + 1).skip(start_idx) {
+        for (idx, measure) in measures
+            .iter()
+            .enumerate()
+            .take(end_idx + 1)
+            .skip(start_idx)
+        {
             // Check for key/time sig changes
             let position = self.calculate_position(section_idx, idx);
             for key_change in &self.key_changes {
@@ -625,7 +630,12 @@ impl Chart {
 
         // Output chords from each measure in the pattern
         let mut all_chords = Vec::new();
-        for (idx, measure) in measures.iter().enumerate().take(end_idx + 1).skip(start_idx) {
+        for (idx, measure) in measures
+            .iter()
+            .enumerate()
+            .take(end_idx + 1)
+            .skip(start_idx)
+        {
             // Check for key/time sig changes
             let position = self.calculate_position(section_idx, idx);
             for key_change in &self.key_changes {
@@ -825,9 +835,10 @@ impl Chart {
 
         // Push notation (leading apostrophes with optional triplet/tuplet)
         if let Some((is_push, amount)) = &chord.push_pull
-            && *is_push {
-                output.push_str(&Self::format_push_pull_amount(amount));
-            }
+            && *is_push
+        {
+            output.push_str(&Self::format_push_pull_amount(amount));
+        }
 
         // Chord symbol (use full_symbol which preserves the original format)
         output.push_str(&chord.full_symbol);
@@ -837,9 +848,10 @@ impl Chart {
 
         // Pull notation (trailing apostrophes with optional triplet/tuplet)
         if let Some((is_push, amount)) = &chord.push_pull
-            && !is_push {
-                output.push_str(&Self::format_push_pull_amount(amount));
-            }
+            && !is_push
+        {
+            output.push_str(&Self::format_push_pull_amount(amount));
+        }
 
         // Commands
         for command in &chord.commands {

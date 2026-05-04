@@ -30,19 +30,13 @@ fn main() {
     }
 
     // Step 2: Create chord instances with timing
-    let chords = vec![
-        create_mock_chord("Gm", 0, 0),
-        create_mock_chord("A#", 0, 2),
-    ];
+    let chords = vec![create_mock_chord("Gm", 0, 0), create_mock_chord("A#", 0, 2)];
 
     println!("\n🎵 Created {} chords:", chords.len());
     for (i, chord) in chords.iter().enumerate() {
         println!(
             "  [{}] {} at beat {} (duration: {} beats)",
-            i,
-            chord.full_symbol,
-            chord.position.total_duration.beat,
-            chord.duration.beat
+            i, chord.full_symbol, chord.position.total_duration.beat, chord.duration.beat
         );
     }
 
@@ -140,10 +134,8 @@ fn create_mock_chord(symbol: &str, measure: i32, beat: i32) -> ChordInstance {
     let root_note = MusicalNote::from_string(&root_str).unwrap_or_else(|| MusicalNote::c());
     let root = RootNotation::from_note_name(root_note.clone());
 
-    let parsed = keyflow_proto::Chord::new(
-        RootNotation::from_note_name(root_note),
-        ChordQuality::Major,
-    );
+    let parsed =
+        keyflow_proto::Chord::new(RootNotation::from_note_name(root_note), ChordQuality::Major);
 
     ChordInstance {
         root,

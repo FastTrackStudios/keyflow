@@ -50,7 +50,14 @@ impl<'a> ChartParser<'a> {
         // Compute chord-syllable alignments for sections with both chords and lyrics
         self.compute_alignments();
 
-        // TODO: Handle template recall
+        // Note: Template recall is performed at *parse time*, not in post-processing:
+        //   - Section-level recall: `parser/sections.rs` calls
+        //     `self.templates.recall_transposed(&section_type, current_key)` when
+        //     a section header is followed by empty content (and a prior
+        //     same-type section has been stored as a template).
+        //   - Melody-variable recall: `$name` tokens are expanded inline by
+        //     `parser/chords.rs` via `self.melody_variables.get(name)`.
+        // No post-processing pass is required.
     }
 
     /// Compute chord-syllable alignments for sections that have both chord and lyrics tracks
@@ -66,9 +73,7 @@ impl<'a> ChartParser<'a> {
                 .any(|t| t.track_type == TrackType::Chords && !t.measures.is_empty());
             let has_lyrics = section.tracks.iter().any(|t| {
                 t.track_type == TrackType::Lyrics
-                    && t.lyrics
-                        .as_ref()
-                        .is_some_and(|l| !l.syllables.is_empty())
+                    && t.lyrics.as_ref().is_some_and(|l| !l.syllables.is_empty())
             });
 
             if !has_chords || !has_lyrics {
