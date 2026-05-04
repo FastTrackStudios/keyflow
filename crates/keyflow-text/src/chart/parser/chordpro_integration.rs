@@ -37,7 +37,7 @@ use keyflow_proto::sections::SectionType;
 pub fn merge_chordpro_into_chart(chart: &mut Chart, kc: &KcDocument) -> usize {
     merge_metadata(chart, kc);
 
-    // Group ChordPro lines into (env, label, lyric_lines) blocks. We
+    // Group ChordPro lines into (section, label, lyric_lines) blocks. We
     // ignore implicit (no-environment) lines for now — those are
     // typically lead-in directives, not lyric content.
     let mut blocks: Vec<(SectionType, Option<String>, Vec<LyricLine>)> = Vec::new();
@@ -69,7 +69,7 @@ pub fn merge_chordpro_into_chart(chart: &mut Chart, kc: &KcDocument) -> usize {
                 _ => {}
             },
             Line::Lyric { chunks, .. } => {
-                if current_env.is_some() {
+                if current_env.is_some() && lyric_chunks_have_text(chunks) {
                     current_lines.push(lyric_line_from_chunks(chunks));
                 }
             }
@@ -91,16 +91,13 @@ pub fn merge_chordpro_into_chart(chart: &mut Chart, kc: &KcDocument) -> usize {
     let mut cursors: HashMap<SectionType, usize> = HashMap::new();
     let mut attached = 0usize;
     for (target_type, label, lines) in blocks {
-        if lines.is_empty() {
-            continue;
-        }
         let cursor = cursors.entry(target_type.clone()).or_insert(0);
         let Some((section_idx, section)) = chart
             .sections
             .iter_mut()
             .enumerate()
             .skip(*cursor)
-            .find(|(_, s)| s.section.section_type == target_type)
+            .find(|(_, s)| section_types_match(&s.section.section_type, &target_type))
         else {
             // No matching keyflow section. Drop the lyric block silently —
             // a future revision can surface this as a diagnostic.
@@ -128,6 +125,9 @@ pub fn merge_chordpro_into_chart(chart: &mut Chart, kc: &KcDocument) -> usize {
                 last.line_break_after = true;
             }
             merged.syllables.extend(l.syllables);
+            attached += 1;
+        }
+        if merged.syllables.is_empty() {
             attached += 1;
         }
         let track_name = label
@@ -164,7 +164,11 @@ fn flush_block(
         KcEnv::Verse => SectionType::Verse,
         KcEnv::Chorus => SectionType::Chorus,
         KcEnv::Bridge => SectionType::Bridge,
-        KcEnv::Tab | KcEnv::Grid | KcEnv::Section => {
+        KcEnv::Section => label
+            .as_deref()
+            .and_then(section_type_from_label)
+            .unwrap_or(SectionType::Custom("Section".to_string())),
+        KcEnv::Tab | KcEnv::Grid => {
             lines.clear();
             *label = None;
             return; // Not a lyric environment
@@ -172,9 +176,28 @@ fn flush_block(
     };
     let lyric_lines = std::mem::take(lines);
     let lbl = label.take();
-    if !lyric_lines.is_empty() {
-        blocks.push((target_type, lbl, lyric_lines));
-    }
+    blocks.push((target_type, lbl, lyric_lines));
+}
+
+fn section_type_from_label(label: &str) -> Option<SectionType> {
+    let first = label
+        .split_whitespace()
+        .find(|word| !word.contains('=') && !word.starts_with('('))?
+        .trim_matches(|c: char| !c.is_alphanumeric() && c != '-');
+    SectionType::parse(first).ok()
+}
+
+fn lyric_chunks_have_text(chunks: &[keyflow_chordpro::ChordChunk]) -> bool {
+    chunks.iter().any(|chunk| !chunk.text.trim().is_empty())
+}
+
+fn section_types_match(chart_type: &SectionType, chordpro_type: &SectionType) -> bool {
+    chart_type == chordpro_type
+        || matches!(
+            (chart_type, chordpro_type),
+            (SectionType::Instrumental, SectionType::Interlude)
+                | (SectionType::Interlude, SectionType::Instrumental)
+        )
 }
 
 /// Build a `LyricLine` from a sequence of ChordPro chord/lyric chunks.
@@ -590,6 +613,49 @@ VS 1: | 1 4 |
     }
 
     #[test]
+    fn chordpro_chord_only_sections_attach_blank_lyric_tracks() {
+        use crate::chart::parse_document;
+
+        let doc_text = "\
+--- keyflow ---
+Intro
+1 4
+
+INST
+4 4
+
+--- chordpro ---
+Intro:
+[G] [C]
+
+Interlude (2x):
+[C] [D] [G]
+";
+        let (chart, _doc) = parse_document(doc_text).expect("parse_document");
+        let intro = chart
+            .sections
+            .iter()
+            .find(|s| s.section.section_type == SectionType::Intro)
+            .unwrap();
+        let inst = chart
+            .sections
+            .iter()
+            .find(|s| s.section.section_type == SectionType::Instrumental)
+            .unwrap();
+
+        for section in [intro, inst] {
+            let lyrics = section
+                .tracks
+                .iter()
+                .find(|t| t.track_type == TrackType::Lyrics)
+                .and_then(|t| t.lyrics.as_ref())
+                .unwrap();
+            assert!(lyrics.syllables.is_empty());
+            assert_eq!(lyrics.sync_level, LyricSyncLevel::Line);
+        }
+    }
+
+    #[test]
     fn build_my_life_example_parses_with_line_sync() {
         use crate::chart::parse_document;
 
@@ -610,6 +676,19 @@ VS 1: | 1 4 |
         assert_eq!(chart.metadata.title.as_deref(), Some("Build My Life"));
         assert_eq!(chart.metadata.artist.as_deref(), Some("Housefires"));
         assert_eq!(lyrics.sync_level, LyricSyncLevel::Line);
+
+        let intro = chart
+            .sections
+            .iter()
+            .find(|s| s.section.section_type == SectionType::Intro)
+            .unwrap();
+        let intro_lyrics = intro
+            .tracks
+            .iter()
+            .find(|t| t.track_type == TrackType::Lyrics)
+            .and_then(|t| t.lyrics.as_ref())
+            .unwrap();
+        assert!(intro_lyrics.syllables.is_empty());
 
         let lines = lyrics.derive_segments(LyricSyncLevel::Line);
         assert_eq!(lines.len(), 4);
