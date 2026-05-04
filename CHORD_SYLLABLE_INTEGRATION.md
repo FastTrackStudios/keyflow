@@ -143,6 +143,12 @@ CH 1: | 4 5 1 1 |
 {eoc}
 
 --- chordpro ---
+{sov: singer=bgv part=Response sync=lines}
+[C]First response line
+[F]Second response line
+{eov}
+
+--- chordpro ---
 {sov: singer=harmony part=Harmony sync=syllables}
 [C]Twin-kle, [F]lit-tle [C]star
 {eov}
@@ -157,7 +163,11 @@ Rules:
 - ChordPro environments (`{sov}`, `{soc}`, `{sob}`) attach to matching keyflow
   Verse/Chorus/Bridge sections in source order.
 - Environment labels can carry lightweight metadata:
-  `singer=<id>`, `part=<name>`, and `sync=section|slides|words|syllables`.
+  `singer=<id>`, `part=<name>`, and
+  `sync=section|slides|lines|words|syllables`.
+- More detailed lyric sync can derive coarser views: syllables derive words,
+  source line boundaries derive lines, words can derive slides, and any of
+  those can derive a section-level cue.
 
 ### Chord Assignment Syntax in `.kf` Files
 

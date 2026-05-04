@@ -116,13 +116,16 @@ pub fn merge_chordpro_into_chart(chart: &mut Chart, kc: &KcDocument) -> usize {
         let mut merged = LyricLine::empty()
             .with_source_format(LyricSourceFormat::ChordPro)
             .with_sync_level(LyricSyncLevel::Syllable);
-        for (i, l) in lines.into_iter().enumerate() {
+        for (i, mut l) in lines.into_iter().enumerate() {
             if i > 0 && !merged.syllables.is_empty() {
                 // Mark a soft word boundary by marking the next syllable
                 // as word-initial.
                 if let Some(last) = merged.syllables.last_mut() {
                     last.hyphen_after = false;
                 }
+            }
+            if let Some(last) = l.syllables.last_mut() {
+                last.line_break_after = true;
             }
             merged.syllables.extend(l.syllables);
             attached += 1;
@@ -177,8 +180,12 @@ fn flush_block(
 /// Build a `LyricLine` from a sequence of ChordPro chord/lyric chunks.
 fn lyric_line_from_chunks(chunks: &[keyflow_chordpro::ChordChunk]) -> LyricLine {
     let mut syllables: Vec<LyricSyllable> = Vec::new();
+    let mut previous_chunk_ended_with_whitespace = false;
     for chunk in chunks {
         let chord_str = chunk.chord.clone();
+        let continues_previous_word = !chunk.text.starts_with(char::is_whitespace)
+            && !previous_chunk_ended_with_whitespace
+            && !syllables.is_empty();
         // Split text into whitespace-separated syllables. The first
         // syllable in a chunk inherits the chunk's chord (via the
         // chord-syllable aligner's expected shape).
@@ -205,7 +212,8 @@ fn lyric_line_from_chunks(chunks: &[keyflow_chordpro::ChordChunk]) -> LyricLine 
                         chord_attachment: None,
                         measure_index: 0,
                         beat: 0.0,
-                        word_initial: i == 0,
+                        word_initial: i == 0 && !continues_previous_word,
+                        line_break_after: false,
                     });
                     first_in_chunk = false;
                 }
@@ -221,7 +229,8 @@ fn lyric_line_from_chunks(chunks: &[keyflow_chordpro::ChordChunk]) -> LyricLine 
                     chord_attachment: None,
                     measure_index: 0,
                     beat: 0.0,
-                    word_initial: true,
+                    word_initial: !continues_previous_word || !first_in_chunk,
+                    line_break_after: false,
                 });
                 first_in_chunk = false;
             }
@@ -238,7 +247,11 @@ fn lyric_line_from_chunks(chunks: &[keyflow_chordpro::ChordChunk]) -> LyricLine 
                 measure_index: 0,
                 beat: 0.0,
                 word_initial: true,
+                line_break_after: false,
             });
+        }
+        if let Some(last) = chunk.text.chars().last() {
+            previous_chunk_ended_with_whitespace = last.is_whitespace();
         }
     }
     LyricLine::new(syllables)
@@ -275,6 +288,7 @@ fn parse_sync_level(value: &str) -> Option<LyricSyncLevel> {
     match value.to_ascii_lowercase().as_str() {
         "section" | "per-section" | "per_section" => Some(LyricSyncLevel::Section),
         "slide" | "slides" => Some(LyricSyncLevel::Slide),
+        "line" | "lines" => Some(LyricSyncLevel::Line),
         "word" | "words" => Some(LyricSyncLevel::Word),
         "syllable" | "syllables" => Some(LyricSyncLevel::Syllable),
         _ => None,
@@ -517,5 +531,89 @@ VS 1: | 1 4 |
         assert_eq!(harmony.sync_level, LyricSyncLevel::Slide);
         assert_eq!(harmony.singer.as_deref(), Some("harmony"));
         assert_eq!(harmony.part.as_deref(), Some("Harmony"));
+    }
+
+    #[test]
+    fn chordpro_line_sync_preserves_source_lines() {
+        use crate::chart::parse_document;
+
+        let doc_text = "\
+--- keyflow ---
+VS 1: | 1 4 |
+
+--- chordpro ---
+{sov: Verse 1 sync=lines}
+[C]First [F]line
+[G]Second [C]line
+{eov}
+";
+        let (chart, _doc) = parse_document(doc_text).expect("parse_document");
+        let verse = chart
+            .sections
+            .iter()
+            .find(|s| s.section.section_type == SectionType::Verse)
+            .unwrap();
+        let lyrics = verse
+            .tracks
+            .iter()
+            .find(|t| t.track_type == TrackType::Lyrics)
+            .and_then(|t| t.lyrics.as_ref())
+            .unwrap();
+
+        assert_eq!(lyrics.sync_level, LyricSyncLevel::Line);
+        let lines = lyrics.derive_segments(LyricSyncLevel::Line);
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0].text, "First line");
+        assert_eq!(lines[1].text, "Second line");
+    }
+
+    #[test]
+    fn chordpro_chords_inside_words_keep_word_text_intact() {
+        let line = lyric_line_from_chunks(
+            &keyflow_chordpro::parse("[G]Worthy of every so[C/G]ng")
+                .unwrap()
+                .lines
+                .iter()
+                .find_map(|line| match line {
+                    Line::Lyric { chunks, .. } => Some(chunks.clone()),
+                    _ => None,
+                })
+                .unwrap(),
+        );
+
+        let words = line.derive_segments(LyricSyncLevel::Word);
+        assert!(words.iter().any(|word| word.text == "song"));
+        assert!(line
+            .syllables
+            .iter()
+            .any(|syl| syl.text == "ng" && syl.chord.as_deref() == Some("C/G")));
+    }
+
+    #[test]
+    fn build_my_life_example_parses_with_line_sync() {
+        use crate::chart::parse_document;
+
+        let input = include_str!("../../../../../examples/build_my_life.kf");
+        let (chart, _doc) = parse_document(input).expect("parse_document");
+        let verse = chart
+            .sections
+            .iter()
+            .find(|s| s.section.section_type == SectionType::Verse)
+            .unwrap();
+        let lyrics = verse
+            .tracks
+            .iter()
+            .find(|t| t.track_type == TrackType::Lyrics)
+            .and_then(|t| t.lyrics.as_ref())
+            .unwrap();
+
+        assert_eq!(chart.metadata.title.as_deref(), Some("Build My Life"));
+        assert_eq!(chart.metadata.artist.as_deref(), Some("Housefires"));
+        assert_eq!(lyrics.sync_level, LyricSyncLevel::Line);
+
+        let lines = lyrics.derive_segments(LyricSyncLevel::Line);
+        assert_eq!(lines.len(), 4);
+        assert!(lines[0].text.contains("Worthy of every song"));
+        assert!(lines[3].text.contains("We live for You"));
     }
 }
