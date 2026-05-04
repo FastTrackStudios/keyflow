@@ -93,6 +93,51 @@ fn meta_dispatch_and_aliases() {
 }
 
 #[test]
+fn plain_metadata_and_section_headings_parse_as_directives() {
+    let doc = parse_ok(
+        "\
+Title: Build My Life
+Artist: Housefires
+Key: [G]
+Original Key: G
+Book: Camp 2022
+
+Verse 1:
+[G]Worthy of every so[C/G]ng
+
+Chorus:
+[Cmaj9]Holy, there is no one [Am7]like You
+",
+    );
+
+    assert_eq!(doc.title(), Some("Build My Life"));
+    assert_eq!(doc.artist(), Some("Housefires"));
+    assert_eq!(doc.key(), Some("G"));
+
+    let metas: Vec<_> = doc
+        .directives()
+        .filter_map(|d| match &d.kind {
+            DirectiveKind::Meta(m) => Some((m.item.as_str(), m.value.as_str())),
+            _ => None,
+        })
+        .collect();
+    assert!(metas.contains(&("original_key", "G")));
+    assert!(metas.contains(&("book", "Camp 2022")));
+
+    let starts: Vec<_> = doc
+        .directives()
+        .filter_map(|d| match &d.kind {
+            DirectiveKind::StartOfEnvironment { env, label } => {
+                Some((env.as_str(), label.as_deref().unwrap_or("")))
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(starts[0], ("verse", "Verse 1 sync=lines"));
+    assert_eq!(starts[1], ("chorus", "Chorus sync=lines"));
+}
+
+#[test]
 fn line_continuation_joins_next_line() {
     // Continuation strips leading whitespace on the joined line.
     let doc = parse_ok("[C]Twinkle, twinkle, \\\n  [F]little [C]star\n");

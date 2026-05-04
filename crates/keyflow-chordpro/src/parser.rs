@@ -103,6 +103,10 @@ fn parse_one_line(line: &str, line_span: Span, opts: &ParseOptions) -> Option<Li
         return Some(Line::Directive(d));
     }
 
+    if let Some(d) = try_parse_plain_heading(trimmed, line_span, trim_offset) {
+        return Some(Line::Directive(d));
+    }
+
     let chunks = parse_lyric_chunks(line, line_span);
     Some(Line::Lyric {
         chunks,
@@ -137,6 +141,80 @@ fn try_parse_directive(line: &str, line_span: Span, trim_offset: usize) -> Optio
         kind,
         condition,
         span,
+    })
+}
+
+fn try_parse_plain_heading(line: &str, line_span: Span, trim_offset: usize) -> Option<Directive> {
+    let (name_raw, value_raw) = line.split_once(':')?;
+    if name_raw.contains('[') || name_raw.contains(']') {
+        return None;
+    }
+
+    let name = name_raw.trim();
+    if name.is_empty() {
+        return None;
+    }
+
+    let span = Span::new(line_span.start + trim_offset, line.len());
+
+    if let Some(kind) = classify_plain_section_heading(name) {
+        return Some(Directive {
+            kind,
+            condition: None,
+            span,
+        });
+    }
+
+    let normalized = normalize_plain_metadata_name(name)?;
+    let mut value = value_raw.trim().to_string();
+    if normalized == "key" {
+        value = value
+            .strip_prefix('[')
+            .and_then(|s| s.strip_suffix(']'))
+            .unwrap_or(&value)
+            .to_string();
+    }
+
+    let kind = match normalized.as_str() {
+        "title" => DirectiveKind::Title(value),
+        "subtitle" => DirectiveKind::Subtitle(value),
+        item => DirectiveKind::Meta(MetaItem {
+            item: item.to_string(),
+            value,
+        }),
+    };
+
+    Some(Directive {
+        kind,
+        condition: None,
+        span,
+    })
+}
+
+fn normalize_plain_metadata_name(name: &str) -> Option<String> {
+    let normalized = name.trim().to_ascii_lowercase().replace([' ', '-'], "_");
+    match normalized.as_str() {
+        "title" | "artist" | "key" | "original_key" | "book" | "subtitle" | "composer"
+        | "copyright" | "year" | "tempo" | "time" | "capo" => Some(normalized),
+        _ => None,
+    }
+}
+
+fn classify_plain_section_heading(name: &str) -> Option<DirectiveKind> {
+    let first = name.split_whitespace().next()?.to_ascii_lowercase();
+    let env = match first.as_str() {
+        "verse" => Environment::Verse,
+        "chorus" => Environment::Chorus,
+        "bridge" => Environment::Bridge,
+        "intro" | "interlude" | "instrumental" | "inst" | "outro" | "solo" | "vamp" => {
+            Environment::Section
+        }
+        _ => return None,
+    };
+
+    Some(DirectiveKind::StartOfEnvironment {
+        env,
+        label: Some(format!("{name} sync=lines")),
     })
 }
 

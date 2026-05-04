@@ -135,12 +135,15 @@ VS 1: | 1 4 5 1 |
 CH 1: | 4 5 1 1 |
 
 --- chordpro ---
-{sov: singer=lead part=Lead sync=words}
+Title: Twinkle
+Artist: Traditional
+Key: [C]
+
+Verse 1:
 [C]Twinkle, [F]little [C]star
-{eov}
-{soc: singer=lead part=Lead sync=slides}
+
+Chorus:
 [F]How I [C]wonder
-{eoc}
 
 --- chordpro ---
 {sov: singer=bgv part=Response sync=lines}
@@ -162,6 +165,9 @@ Rules:
   granularity to the same sections.
 - ChordPro environments (`{sov}`, `{soc}`, `{sob}`) attach to matching keyflow
   Verse/Chorus/Bridge sections in source order.
+- Plain worship-chart headings like `Verse 1:`, `Chorus:`, and `Bridge:` are
+  also accepted; each heading starts a section that is inferred to continue
+  until the next heading.
 - Environment labels can carry lightweight metadata:
   `singer=<id>`, `part=<name>`, and
   `sync=section|slides|lines|words|syllables`.

@@ -115,7 +115,7 @@ pub fn merge_chordpro_into_chart(chart: &mut Chart, kc: &KcDocument) -> usize {
         // lyrics track handles multi-line content).
         let mut merged = LyricLine::empty()
             .with_source_format(LyricSourceFormat::ChordPro)
-            .with_sync_level(LyricSyncLevel::Syllable);
+            .with_sync_level(LyricSyncLevel::Line);
         for (i, mut l) in lines.into_iter().enumerate() {
             if i > 0 && !merged.syllables.is_empty() {
                 // Mark a soft word boundary by marking the next syllable
@@ -256,7 +256,7 @@ fn lyric_line_from_chunks(chunks: &[keyflow_chordpro::ChordChunk]) -> LyricLine 
     }
     LyricLine::new(syllables)
         .with_source_format(LyricSourceFormat::ChordPro)
-        .with_sync_level(LyricSyncLevel::Syllable)
+        .with_sync_level(LyricSyncLevel::Line)
 }
 
 fn apply_label_metadata(line: &mut LyricLine, label: &str) {
