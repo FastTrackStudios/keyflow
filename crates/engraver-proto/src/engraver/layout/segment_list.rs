@@ -329,9 +329,13 @@ impl SegmentList {
                     slope,
                 );
                 segment.stretch = stretch;
-                total_natural += w + segment.extra_leading_space + segment.spacing + segment.width_offset;
+                total_natural +=
+                    w + segment.extra_leading_space + segment.spacing + segment.width_offset;
             } else {
-                total_non_cr += segment.width + segment.extra_leading_space + segment.spacing + segment.width_offset;
+                total_non_cr += segment.width
+                    + segment.extra_leading_space
+                    + segment.spacing
+                    + segment.width_offset;
             }
         }
 
@@ -628,9 +632,9 @@ mod tests {
         let mut list = SegmentList::new();
 
         // Dm7_8 C_8 Dm7(quarter) pattern — two eighths + one quarter
-        list.push(Segment::chord_rest(0, 240));   // eighth
-        list.push(Segment::chord_rest(240, 240));  // eighth
-        list.push(Segment::chord_rest(480, 480));  // quarter
+        list.push(Segment::chord_rest(0, 240)); // eighth
+        list.push(Segment::chord_rest(240, 240)); // eighth
+        list.push(Segment::chord_rest(480, 480)); // quarter
 
         list.compute_x_positions_proportional(100.0, 5.0, 1.2, 1.0, 1.0);
 

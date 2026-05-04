@@ -1067,7 +1067,8 @@ impl MeasureBuilder {
                     // Layout noteheads (each with its own line and accidental)
                     for info in notes {
                         let x = find_chord_x(info.tick);
-                        let has_pitch = info.line != note_line || info.accidental != Accidental::None;
+                        let has_pitch =
+                            info.line != note_line || info.accidental != Accidental::None;
                         let (_, note_node) = layout_note(
                             &NoteParams {
                                 id: info.id,

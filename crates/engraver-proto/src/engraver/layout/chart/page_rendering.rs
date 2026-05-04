@@ -563,35 +563,36 @@ pub fn add_title_header_with_count_in(
     let mut count_in_height = 0.0;
     let mut count_in_beat_geos = Vec::new();
     if let Some(config) = count_in
-        && config.num_measures > 0 {
-            let snippet_config = CountInSnippetConfig {
-                beats_per_measure: config.beats_per_measure,
-                beat_unit: config.beat_unit,
-                num_measures: config.num_measures,
-                spatium,
-                scale: 0.6, // 60% of normal size for header snippet
-            };
+        && config.num_measures > 0
+    {
+        let snippet_config = CountInSnippetConfig {
+            beats_per_measure: config.beats_per_measure,
+            beat_unit: config.beat_unit,
+            num_measures: config.num_measures,
+            spatium,
+            scale: 0.6, // 60% of normal size for header snippet
+        };
 
-            // Position snippet to the right of tempo indicator
-            let snippet_x = tempo_end_x + 8.0; // Closer horizontal spacing
+        // Position snippet to the right of tempo indicator
+        let snippet_x = tempo_end_x + 8.0; // Closer horizontal spacing
 
-            // Vertically center the snippet's staff with the tempo text
-            // Tempo text visual center is ~40% above its baseline
-            // Snippet staff center is at snippet_y + staff_height/2
-            let scaled_spatium = spatium * 0.6; // Match the snippet's scale
-            let staff_height = scaled_spatium * 4.0;
-            let tempo_text_center = tempo_y - tempo_font_size * 0.4;
-            let snippet_y = tempo_text_center - staff_height / 2.0;
+        // Vertically center the snippet's staff with the tempo text
+        // Tempo text visual center is ~40% above its baseline
+        // Snippet staff center is at snippet_y + staff_height/2
+        let scaled_spatium = spatium * 0.6; // Match the snippet's scale
+        let staff_height = scaled_spatium * 4.0;
+        let tempo_text_center = tempo_y - tempo_font_size * 0.4;
+        let snippet_y = tempo_text_center - staff_height / 2.0;
 
-            let snippet_result = count_in_renderer::render_count_in_snippet(
-                &snippet_config,
-                kurbo::Point::new(snippet_x, snippet_y),
-            );
+        let snippet_result = count_in_renderer::render_count_in_snippet(
+            &snippet_config,
+            kurbo::Point::new(snippet_x, snippet_y),
+        );
 
-            root.add_child(snippet_result.node);
-            count_in_height = snippet_result.height;
-            count_in_beat_geos = snippet_result.beat_geometries;
-        }
+        root.add_child(snippet_result.node);
+        count_in_height = snippet_result.height;
+        count_in_beat_geos = snippet_result.beat_geometries;
+    }
 
     // Composer/Artist - right aligned
     let mut commands = Vec::new();

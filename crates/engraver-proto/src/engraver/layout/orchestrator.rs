@@ -665,17 +665,18 @@ impl<'a> LayoutEngine<'a> {
 
             // Layout music elements
             if let Some(part) = score.parts.first()
-                && let Some(measure) = part.measures.get(measure_idx) {
-                    let content_area = measure_width - element_x - self.config.spatium * 0.5;
-                    let elements_node = self.layout_measure_elements(
-                        measure,
-                        ctx,
-                        element_x,
-                        content_area,
-                        measure_idx as u64,
-                    );
-                    measure_node.add_child(elements_node);
-                }
+                && let Some(measure) = part.measures.get(measure_idx)
+            {
+                let content_area = measure_width - element_x - self.config.spatium * 0.5;
+                let elements_node = self.layout_measure_elements(
+                    measure,
+                    ctx,
+                    element_x,
+                    content_area,
+                    measure_idx as u64,
+                );
+                measure_node.add_child(elements_node);
+            }
 
             // Right barline
             let right_barline = self.create_barline(measure_width, is_last);
@@ -918,17 +919,18 @@ impl<'a> LayoutEngine<'a> {
 
             // Layout music elements from the score
             if let Some(part) = score.parts.first()
-                && let Some(measure) = part.measures.get(measure_idx) {
-                    let content_area = measure_width - element_x - self.config.spatium * 0.5;
-                    let elements_node = self.layout_measure_elements(
-                        measure,
-                        ctx,
-                        element_x,
-                        content_area,
-                        measure_idx as u64,
-                    );
-                    measure_node.add_child(elements_node);
-                }
+                && let Some(measure) = part.measures.get(measure_idx)
+            {
+                let content_area = measure_width - element_x - self.config.spatium * 0.5;
+                let elements_node = self.layout_measure_elements(
+                    measure,
+                    ctx,
+                    element_x,
+                    content_area,
+                    measure_idx as u64,
+                );
+                measure_node.add_child(elements_node);
+            }
 
             // Right barline
             let right_barline = self.create_barline(measure_width, is_last);

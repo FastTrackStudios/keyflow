@@ -330,9 +330,10 @@ impl SvgSerializer {
 
         // Add semantic ID attributes
         if self.config.include_semantic_ids
-            && let Some(id) = &node.id {
-                self.write_semantic_attrs(id);
-            }
+            && let Some(id) = &node.id
+        {
+            self.write_semantic_attrs(id);
+        }
 
         // Add metadata attributes (escape values for XML safety)
         for (key, value) in &node.metadata {

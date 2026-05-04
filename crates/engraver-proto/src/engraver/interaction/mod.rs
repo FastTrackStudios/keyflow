@@ -6,14 +6,18 @@
 //! - Editing operations
 //! - Undo/redo
 
-use crate::engraver::scene::GraphicalObjectId;
+use crate::engraver::scene::SemanticId;
 use kurbo::Point;
 
 /// Selection state.
+///
+/// Holds the set of currently-selected scene-graph elements, identified by
+/// `SemanticId`. Multi-select is supported; uniqueness is enforced by
+/// equality on `SemanticId`.
 #[derive(Debug, Clone, Default)]
 pub struct Selection {
     /// Currently selected objects
-    pub selected: Vec<GraphicalObjectId>,
+    pub selected: Vec<SemanticId>,
 }
 
 impl Selection {
@@ -29,27 +33,39 @@ impl Selection {
         self.selected.is_empty()
     }
 
+    /// Number of selected objects.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.selected.len()
+    }
+
+    /// Whether `id` is currently selected.
+    #[must_use]
+    pub fn contains(&self, id: &SemanticId) -> bool {
+        self.selected.contains(id)
+    }
+
     /// Clear the selection.
     pub fn clear(&mut self) {
         self.selected.clear();
     }
 
-    /// Select a single object.
-    pub fn select(&mut self, id: GraphicalObjectId) {
+    /// Select a single object (replaces any existing selection).
+    pub fn select(&mut self, id: SemanticId) {
         self.selected.clear();
         self.selected.push(id);
     }
 
-    /// Add to selection (for multi-select).
-    pub fn add(&mut self, id: GraphicalObjectId) {
+    /// Add to the selection (for multi-select). No-op if already selected.
+    pub fn add(&mut self, id: SemanticId) {
         if !self.selected.contains(&id) {
             self.selected.push(id);
         }
     }
 
-    /// Toggle selection.
-    pub fn toggle(&mut self, id: GraphicalObjectId) {
-        if let Some(pos) = self.selected.iter().position(|&x| x == id) {
+    /// Toggle selection of `id`: remove if present, add if not.
+    pub fn toggle(&mut self, id: SemanticId) {
+        if let Some(pos) = self.selected.iter().position(|x| x == &id) {
             self.selected.remove(pos);
         } else {
             self.selected.push(id);
@@ -103,5 +119,42 @@ impl InteractionState {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engraver::scene::id::ElementType;
+
+    fn id(n: u64) -> SemanticId {
+        SemanticId::new(ElementType::Chord, n)
+    }
+
+    #[test]
+    fn selection_select_replaces() {
+        let mut s = Selection::new();
+        s.select(id(1));
+        s.select(id(2));
+        assert_eq!(s.len(), 1);
+        assert!(s.contains(&id(2)));
+    }
+
+    #[test]
+    fn selection_add_dedupes() {
+        let mut s = Selection::new();
+        s.add(id(1));
+        s.add(id(1));
+        s.add(id(2));
+        assert_eq!(s.len(), 2);
+    }
+
+    #[test]
+    fn selection_toggle_round_trips() {
+        let mut s = Selection::new();
+        s.toggle(id(1));
+        assert!(s.contains(&id(1)));
+        s.toggle(id(1));
+        assert!(s.is_empty());
     }
 }

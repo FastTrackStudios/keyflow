@@ -935,11 +935,13 @@ fn min_accidental_to_chord_distance(acc: &AccidentalInfo, ctx: &LayoutContext) -
         // Sharp and natural need extra padding near ledger lines
         if (acc.accidental_type == AccidentalType::Sharp
             || acc.accidental_type == AccidentalType::Natural)
-            && ledger.y0 > acc.shape.top && ledger.y1 < acc.shape.bottom {
-                let dist = acc.shape.right - ledger.x0
-                    + config.sharp_and_natural_ledger_line_padding * spatium;
-                min_dist = min_dist.max(dist);
-            }
+            && ledger.y0 > acc.shape.top
+            && ledger.y1 < acc.shape.bottom
+        {
+            let dist = acc.shape.right - ledger.x0
+                + config.sharp_and_natural_ledger_line_padding * spatium;
+            min_dist = min_dist.max(dist);
+        }
     }
 
     min_dist
@@ -1024,9 +1026,10 @@ fn align_octaves(accidentals: &mut [AccidentalInfo], ctx: &LayoutContext) {
         let mut octave_indices: Vec<usize> = vec![i];
         for oct_id in octave_ids {
             if let Some(idx) = accidentals.iter().position(|a| a.id == oct_id)
-                && !already_aligned.contains(&accidentals[idx].id) {
-                    octave_indices.push(idx);
-                }
+                && !already_aligned.contains(&accidentals[idx].id)
+            {
+                octave_indices.push(idx);
+            }
         }
 
         if octave_indices.len() < 2 {

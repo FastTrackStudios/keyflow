@@ -623,9 +623,10 @@ impl PdfSerializer {
             // Collect all objects (excluding Catalog, Pages, and Outlines)
             for (id, object) in doc.objects {
                 if let Ok(type_name) = object.type_name()
-                    && (type_name == b"Catalog" || type_name == b"Outlines") {
-                        continue; // Skip catalog and outlines, we'll create our own
-                    }
+                    && (type_name == b"Catalog" || type_name == b"Outlines")
+                {
+                    continue; // Skip catalog and outlines, we'll create our own
+                }
                 all_objects.insert(id, object);
             }
         }
@@ -651,9 +652,10 @@ impl PdfSerializer {
         // Update each page's Parent to point to our new Pages object
         for page_id in &all_pages {
             if let Ok(page_obj) = merged_doc.get_object_mut(*page_id)
-                && let Object::Dictionary(dict) = page_obj {
-                    dict.set("Parent", Object::Reference(pages_id));
-                }
+                && let Object::Dictionary(dict) = page_obj
+            {
+                dict.set("Parent", Object::Reference(pages_id));
+            }
         }
 
         // Create Pages dictionary
@@ -1483,7 +1485,6 @@ fn ellipse_to_line_points(cx: f64, cy: f64, rx: f64, ry: f64) -> Vec<LinePoint> 
 
     points
 }
-
 
 #[cfg(test)]
 mod tests {

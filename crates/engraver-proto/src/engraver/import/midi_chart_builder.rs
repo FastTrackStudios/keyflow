@@ -20,6 +20,29 @@ use super::midi_import::{MidiFile, MidiNote, SectionType as MidiSectionType};
 // Public API
 // ============================================================================
 
+/// Quantization grid for melody-note onset / duration detection.
+///
+/// `Auto` (the default) inspects the smallest IOI (inter-onset interval)
+/// in each section and picks the appropriate grid:
+/// - any IOI ≤ a triplet-eighth (with tolerance) → `Triplet`
+/// - any IOI < a straight eighth                → `Sixteenth`
+/// - else                                        → `Eighth`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MelodyGrid {
+    /// Auto-detect from onset patterns in each section (default).
+    #[default]
+    Auto,
+    /// Snap onsets to the nearest eighth-note. Coarse, but stable for
+    /// simple melodies that are mostly on the beat or off-beat.
+    Eighth,
+    /// Snap onsets to the nearest sixteenth-note. Better for lines that
+    /// mix sixteenths and eighths.
+    Sixteenth,
+    /// Snap onsets to the nearest eighth-note triplet (PPQ/3 ticks).
+    /// For triplet-feel material.
+    Triplet,
+}
+
 /// Configuration for MIDI chart building.
 #[derive(Default)]
 pub struct MidiChartConfig {
@@ -31,6 +54,10 @@ pub struct MidiChartConfig {
     /// Swing ratio override (0.5 = straight, 0.667 = triplet).
     /// If None, uses the value from `MidiFile::swing()`.
     pub swing: Option<f64>,
+    /// Quantization grid for melody onset / duration detection.
+    /// Defaults to `Auto`, which picks per-section based on the actual
+    /// onset spacing in the MIDI data.
+    pub melody_grid: MelodyGrid,
 }
 
 /// Generate a Keyflow chart text string from a parsed MIDI file.
@@ -200,7 +227,10 @@ pub fn generate_chart_text(midi: &MidiFile, config: &MidiChartConfig) -> String 
         );
 
         // For INST/SOLO sections with only silence, try extracting melody from MIDI notes
-        let section_content = if section_content.trim().chars().all(|c| c == 's' || c == '1' || c == '|' || c == ' ' || c == '\n')
+        let section_content = if section_content
+            .trim()
+            .chars()
+            .all(|c| c == 's' || c == '1' || c == '|' || c == ' ' || c == '\n')
             && matches!(section.keyflow_type.as_str(), "INST" | "SOLO")
         {
             if let Some(melody_content) = extract_melody_for_section(
@@ -213,6 +243,7 @@ pub fn generate_chart_text(midi: &MidiFile, config: &MidiChartConfig) -> String 
                 measures_per_line,
                 config.key_root.as_deref(),
                 swing,
+                config.melody_grid,
             ) {
                 melody_content
             } else {
@@ -242,6 +273,7 @@ pub fn generate_chart_text(midi: &MidiFile, config: &MidiChartConfig) -> String 
 /// this extracts the melody and generates one m{} block per measure.
 ///
 /// Returns formatted chart lines with melody blocks, or None if no melody found.
+#[allow(clippy::too_many_arguments)]
 fn extract_melody_for_section(
     midi: &MidiFile,
     section_start_tick: i64,
@@ -252,6 +284,7 @@ fn extract_melody_for_section(
     measures_per_line: usize,
     key_root: Option<&str>,
     swing: Option<f64>,
+    melody_grid: MelodyGrid,
 ) -> Option<String> {
     let ticks_per_measure = ppq as i64 * beats_per_measure as i64;
 
@@ -275,10 +308,14 @@ fn extract_melody_for_section(
         .and_then(|k| MusicalNote::from_string(k))
         .map(|note| KeySpelling::major(&note));
 
-    // Quantize all note onsets to the nearest eighth-note grid, then derive
-    // durations from grid positions (MuseScore-style MIDI import approach).
-    // This produces clean rhythms instead of erratic durations from raw timing.
-    let eighth = ppq as i64 / 2; // ticks per eighth note
+    // Resolve the actual quantization grid for this section. Auto inspects
+    // onset spacing in the section and picks a grid that won't lose detail.
+    let resolved_grid = resolve_melody_grid(&section_notes, ppq, melody_grid);
+    let grid_unit = resolved_grid.tick_unit(ppq);
+
+    // Legacy aliases used elsewhere in the function. `eighth` here is the
+    // quantization unit for snapping; `quarter` is unchanged.
+    let eighth = grid_unit;
     let quarter = ppq as i64;
 
     // Step 1: Dequantize swing and snap to eighth-note grid.
@@ -331,7 +368,15 @@ fn extract_melody_for_section(
         if let Some(ref ks) = key_spelling {
             // Check each diatonic pitch class against the key signature
             use crate::engraver::model::PitchClass;
-            for &pc in &[PitchClass::C, PitchClass::D, PitchClass::E, PitchClass::F, PitchClass::G, PitchClass::A, PitchClass::B] {
+            for &pc in &[
+                PitchClass::C,
+                PitchClass::D,
+                PitchClass::E,
+                PitchClass::F,
+                PitchClass::G,
+                PitchClass::A,
+                PitchClass::B,
+            ] {
                 // Build a pitch at octave 4 and check if the key signature alters it
                 let midi_natural = pc.base_midi() + 48; // octave 4
                 let pitch_from_key = Pitch::from_midi(midi_natural);
@@ -341,10 +386,23 @@ fn extract_melody_for_section(
                     // Flat keys: check if the natural pitch is raised in the scale
                     // Bb major: Bb, Eb are flat (B=flat, E=flat)
                     // Order of flats: B, E, A, D, G, C, F
-                    let flat_order = [PitchClass::B, PitchClass::E, PitchClass::A, PitchClass::D, PitchClass::G, PitchClass::C, PitchClass::F];
+                    let flat_order = [
+                        PitchClass::B,
+                        PitchClass::E,
+                        PitchClass::A,
+                        PitchClass::D,
+                        PitchClass::G,
+                        PitchClass::C,
+                        PitchClass::F,
+                    ];
                     // Count flats from key root
                     let num_flats = match key_root.unwrap_or("C") {
-                        "F" => 1, "Bb" => 2, "Eb" => 3, "Ab" => 4, "Db" => 5, "Gb" => 6,
+                        "F" => 1,
+                        "Bb" => 2,
+                        "Eb" => 3,
+                        "Ab" => 4,
+                        "Db" => 5,
+                        "Gb" => 6,
                         _ => 0,
                     };
                     for &flat_pc in flat_order.iter().take(num_flats) {
@@ -352,9 +410,22 @@ fn extract_melody_for_section(
                     }
                 } else {
                     // Sharp keys: F#, C#, G#, D#, A#, E#, B#
-                    let sharp_order = [PitchClass::F, PitchClass::C, PitchClass::G, PitchClass::D, PitchClass::A, PitchClass::E, PitchClass::B];
+                    let sharp_order = [
+                        PitchClass::F,
+                        PitchClass::C,
+                        PitchClass::G,
+                        PitchClass::D,
+                        PitchClass::A,
+                        PitchClass::E,
+                        PitchClass::B,
+                    ];
                     let num_sharps = match key_root.unwrap_or("C") {
-                        "G" => 1, "D" => 2, "A" => 3, "E" => 4, "B" => 5, "F#" => 6,
+                        "G" => 1,
+                        "D" => 2,
+                        "A" => 3,
+                        "E" => 4,
+                        "B" => 5,
+                        "F#" => 6,
                         _ => 0,
                     };
                     for &sharp_pc in sharp_order.iter().take(num_sharps) {
@@ -407,7 +478,7 @@ fn extract_melody_for_section(
         if ni == 0 && *onset > section_start_tick {
             let gap = onset - section_start_tick;
             if gap >= eighth {
-                let rest_dur = grid_ticks_to_duration(gap, ppq);
+                let rest_dur = grid_ticks_to_duration_with_grid(gap, ppq, resolved_grid);
                 melody_tokens.push(format!("r_{}", rest_dur));
             }
         }
@@ -422,7 +493,7 @@ fn extract_melody_for_section(
         };
         let duration_ticks = (next_onset - onset).max(eighth);
 
-        let dur_str = grid_ticks_to_duration(duration_ticks, ppq);
+        let dur_str = grid_ticks_to_duration_with_grid(duration_ticks, ppq, resolved_grid);
         let octave = pitch.octave.0;
         melody_tokens.push(format!("{}{}_{}", pitch_name, octave, dur_str));
     }
@@ -473,7 +544,9 @@ fn format_pitch_name(pitch: &Pitch, key_spelling: Option<&KeySpelling>) -> Strin
         1 => {
             // Check if we should spell as flat instead
             if let Some(ks) = key_spelling {
-                if ks.prefers_flat() { return format_as_flat(pitch); }
+                if ks.prefers_flat() {
+                    return format_as_flat(pitch);
+                }
             }
             "#"
         }
@@ -495,29 +568,144 @@ fn format_as_flat(pitch: &Pitch) -> String {
         crate::engraver::model::PitchClass::F => "Gb".to_string(),
         crate::engraver::model::PitchClass::G => "Ab".to_string(),
         crate::engraver::model::PitchClass::A => "Bb".to_string(),
-        _ => format!("{}#", match pitch.class {
-            crate::engraver::model::PitchClass::E => "E",
-            crate::engraver::model::PitchClass::B => "B",
-            _ => "?",
-        }),
+        _ => format!(
+            "{}#",
+            match pitch.class {
+                crate::engraver::model::PitchClass::E => "E",
+                crate::engraver::model::PitchClass::B => "B",
+                _ => "?",
+            }
+        ),
     }
 }
 
 /// Convert grid-quantized tick duration to a LilyPond duration string.
 /// Durations are exact multiples of eighth notes from the grid.
 /// For melody lines, prefer eighth notes (beamable) over quarters where possible.
+/// A concrete (non-Auto) quantization grid resolved for a specific section.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ResolvedMelodyGrid {
+    Eighth,
+    Sixteenth,
+    Triplet,
+}
+
+impl ResolvedMelodyGrid {
+    fn tick_unit(self, ppq: u32) -> i64 {
+        match self {
+            Self::Eighth => ppq as i64 / 2,
+            Self::Sixteenth => ppq as i64 / 4,
+            Self::Triplet => ppq as i64 / 3,
+        }
+    }
+}
+
+/// Pick the best resolved grid for a set of section notes given a user
+/// preference (`Auto` triggers detection).
+fn resolve_melody_grid(notes: &[&MidiNote], ppq: u32, requested: MelodyGrid) -> ResolvedMelodyGrid {
+    match requested {
+        MelodyGrid::Eighth => return ResolvedMelodyGrid::Eighth,
+        MelodyGrid::Sixteenth => return ResolvedMelodyGrid::Sixteenth,
+        MelodyGrid::Triplet => return ResolvedMelodyGrid::Triplet,
+        MelodyGrid::Auto => {}
+    }
+
+    if notes.len() < 2 {
+        return ResolvedMelodyGrid::Eighth;
+    }
+
+    // Compute consecutive IOIs (inter-onset intervals).
+    let mut starts: Vec<i64> = notes.iter().map(|n| n.start_tick as i64).collect();
+    starts.sort_unstable();
+    let mut min_ioi = i64::MAX;
+    for w in starts.windows(2) {
+        let d = w[1] - w[0];
+        if d > 0 && d < min_ioi {
+            min_ioi = d;
+        }
+    }
+    if min_ioi == i64::MAX {
+        return ResolvedMelodyGrid::Eighth;
+    }
+
+    let eighth = ppq as i64 / 2;
+    let sixteenth = ppq as i64 / 4;
+    let triplet_eighth = ppq as i64 / 3;
+    let tol = (ppq as i64) / 16; // ~30 ticks at 480 PPQ — a fairly tight tolerance.
+
+    // Triplet wins if any IOI is within tolerance of a triplet-eighth.
+    if (min_ioi - triplet_eighth).abs() <= tol {
+        return ResolvedMelodyGrid::Triplet;
+    }
+    // Sixteenth wins if any IOI is materially shorter than a straight eighth.
+    if min_ioi + tol < eighth && min_ioi >= sixteenth - tol {
+        return ResolvedMelodyGrid::Sixteenth;
+    }
+    ResolvedMelodyGrid::Eighth
+}
+
+/// Map a measured tick gap to a keyflow duration token using the resolved
+/// grid. Picks dotted forms when the gap is 1.5×, 3×, or 7× the grid unit
+/// to preserve dotted-note rhythms (e.g., dotted-quarter from a sixteenth grid).
+fn grid_ticks_to_duration_with_grid(ticks: i64, ppq: u32, grid: ResolvedMelodyGrid) -> String {
+    let unit = grid.tick_unit(ppq);
+    let units = ((ticks + unit / 2) / unit).max(1);
+    match grid {
+        ResolvedMelodyGrid::Eighth => match units {
+            1 => "8",
+            2 => "4",
+            3 => ".4",
+            4 => "2",
+            5..=6 => ".2",
+            7..=8 => "1",
+            _ => "1",
+        }
+        .to_string(),
+        ResolvedMelodyGrid::Sixteenth => match units {
+            1 => "16",
+            2 => "8",
+            3 => ".8", // dotted eighth
+            4 => "4",
+            6 => ".4", // dotted quarter
+            8 => "2",
+            12 => ".2", // dotted half
+            16 => "1",
+            // Fallbacks for awkward in-between counts: round to nearest standard
+            // value rather than emitting weird tuplets.
+            5 => "4",
+            7 => ".4",
+            9..=11 => "2",
+            13..=15 => ".2",
+            _ => "1",
+        }
+        .to_string(),
+        ResolvedMelodyGrid::Triplet => match units {
+            // 8t = eighth-triplet, 4t = quarter (= 2 triplet eighths), etc.
+            1 => "8t",
+            2 => "4t",
+            3 => "8", // 3 triplet-eighths = 1 quarter-equivalent
+            4 => "2t",
+            6 => "4",
+            8 => "1t",
+            12 => "2",
+            _ => "4t",
+        }
+        .to_string(),
+    }
+}
+
 fn grid_ticks_to_duration(ticks: i64, ppq: u32) -> String {
     let eighth = ppq as i64 / 2;
     let eighths = ((ticks + eighth / 2) / eighth).max(1); // count of eighth notes
 
     match eighths {
-        1 => "8".to_string(),            // 1 eighth
-        2 => "4".to_string(),            // 2 eighths = quarter
-        3 => ".4".to_string(),           // 3 eighths = dotted quarter
-        4 => "2".to_string(),            // 4 eighths = half
-        5..=6 => ".2".to_string(),       // ~6 eighths = dotted half
-        7..=8 => "1".to_string(),        // 8 eighths = whole
-        _ => "1".to_string(),            // longer = whole (ties handled by expand)
+        1 => "8".to_string(),      // 1 eighth
+        2 => "4".to_string(),      // 2 eighths = quarter
+        3 => ".4".to_string(),     // 3 eighths = dotted quarter
+        4 => "2".to_string(),      // 4 eighths = half
+        5..=6 => ".2".to_string(), // ~6 eighths = dotted half
+        7..=8 => "1".to_string(),  // 8 eighths = whole
+        _ => "1".to_string(),      // longer = whole (ties handled by expand)
     }
 }
 
@@ -643,15 +831,12 @@ fn detect_chords_from_notes(
                 let e = dequantize_tick((n.start_tick + n.duration_ticks) as i64, ppq, ratio);
                 (s, e)
             } else {
-                (n.start_tick as i64, (n.start_tick + n.duration_ticks) as i64)
+                (
+                    n.start_tick as i64,
+                    (n.start_tick + n.duration_ticks) as i64,
+                )
             };
-            KeyflowMidiNote::new(
-                n.pitch,
-                start,
-                end,
-                n.channel,
-                n.velocity,
-            )
+            KeyflowMidiNote::new(n.pitch, start, end, n.channel, n.velocity)
         })
         .collect();
 
@@ -1290,6 +1475,48 @@ fn build_rhythm_elements(
     }
 
     if section_chords.is_empty() {
+        // Last-resort carryover: only fire when the section is *genuinely* silent
+        // (no detected chord overlaps it at all, even fractionally). The
+        // pickup / continuing logic above already covers boundary-overlap
+        // cases; the bug we're fixing here is the case where chord detection
+        // splits a held chord into multiple `DetectedChord`s and the last
+        // one ends just before this section starts.
+        let ticks_per_measure = ticks_per_beat * 4;
+        let any_overlap = detected_chords
+            .iter()
+            .any(|c| c.end_ppq > section_start_tick && c.start_ppq < section_end_tick);
+
+        if !any_overlap {
+            // Bounded look-back: at most one section length (or 8 measures at
+            // 4/4), whichever is larger, to avoid grabbing arbitrarily-old
+            // chords.
+            let look_back_window =
+                (section_end_tick - section_start_tick).max(ticks_per_measure * 8);
+            let look_back_floor = section_start_tick - look_back_window;
+
+            let recent_chord = detected_chords
+                .iter()
+                .filter(|c| c.end_ppq <= section_start_tick && c.end_ppq >= look_back_floor)
+                .max_by_key(|c| c.end_ppq);
+
+            if let Some(c) = recent_chord {
+                // Synthesize a sustained version of that chord covering the
+                // section. Treated as continuing (no fresh attack), no push,
+                // no staccato; the accent is dropped because the original
+                // attack lives in the prior section.
+                elements.push(ChordOrRest::Chord {
+                    symbol: c.chord.normalized.clone(),
+                    start_ppq: section_start_tick,
+                    end_ppq: section_end_tick,
+                    is_pushed: false,
+                    push_amount: None,
+                    is_accented: false,
+                    is_staccato: false,
+                });
+                return elements;
+            }
+        }
+
         let duration = section_end_tick - section_start_tick;
         if duration > 0 {
             elements.push(ChordOrRest::Rest {
@@ -1768,7 +1995,10 @@ fn build_measures(
                             ChordOrRest::Chord {
                                 start_ppq: next_s, ..
                             } => {
-                                if *next_s > this_start && *next_s >= measure_start && *next_s < measure_end {
+                                if *next_s > this_start
+                                    && *next_s >= measure_start
+                                    && *next_s < measure_end
+                                {
                                     Some(*next_s)
                                 } else {
                                     None
@@ -1876,10 +2106,8 @@ fn build_measures(
         // or add trailing rest if the measure has no chords.
         if !measure_elements.is_empty() && current_beat < beats_per_measure {
             let remaining_beats = beats_per_measure - current_beat;
-            let last_is_chord = matches!(
-                measure_elements.last(),
-                Some(MeasureElement::Chord { .. })
-            );
+            let last_is_chord =
+                matches!(measure_elements.last(), Some(MeasureElement::Chord { .. }));
             if last_is_chord {
                 // Extend the last chord to fill the remaining beats
                 if let Some(MeasureElement::Chord { beats, ticks, .. }) =
@@ -2480,8 +2708,88 @@ fn format_measures(
             use_short_push,
             ppq,
         ));
-
     }
 
     result
+}
+
+#[cfg(test)]
+mod melody_grid_tests {
+    use super::*;
+
+    fn note(start: u32, dur: u32, pitch: u8) -> MidiNote {
+        MidiNote {
+            pitch,
+            velocity: 100,
+            start_tick: start,
+            duration_ticks: dur,
+            channel: 0,
+        }
+    }
+
+    #[test]
+    fn auto_picks_sixteenth_when_min_ioi_is_a_sixteenth() {
+        let ppq = 480;
+        // Onsets at 0, 120, 240, 360 (sixteenth-grid spacing).
+        let n = [
+            note(0, 120, 60),
+            note(120, 120, 62),
+            note(240, 120, 64),
+            note(360, 120, 65),
+        ];
+        let refs: Vec<&MidiNote> = n.iter().collect();
+        let g = resolve_melody_grid(&refs, ppq, MelodyGrid::Auto);
+        assert_eq!(g, ResolvedMelodyGrid::Sixteenth);
+    }
+
+    #[test]
+    fn auto_picks_eighth_for_eighth_only_lines() {
+        let ppq = 480;
+        let n = [note(0, 240, 60), note(240, 240, 62), note(480, 240, 64)];
+        let refs: Vec<&MidiNote> = n.iter().collect();
+        let g = resolve_melody_grid(&refs, ppq, MelodyGrid::Auto);
+        assert_eq!(g, ResolvedMelodyGrid::Eighth);
+    }
+
+    #[test]
+    fn auto_picks_triplet_when_min_ioi_is_triplet_eighth() {
+        let ppq = 480;
+        let triplet_eighth = ppq / 3;
+        let n = [
+            note(0, triplet_eighth, 60),
+            note(triplet_eighth, triplet_eighth, 62),
+            note(triplet_eighth * 2, triplet_eighth, 64),
+        ];
+        let refs: Vec<&MidiNote> = n.iter().collect();
+        let g = resolve_melody_grid(&refs, ppq, MelodyGrid::Auto);
+        assert_eq!(g, ResolvedMelodyGrid::Triplet);
+    }
+
+    #[test]
+    fn duration_table_dotted_quarter_from_sixteenth_grid() {
+        let ppq = 480;
+        let dotted_quarter_ticks = (ppq as i64 * 3) / 2; // 720 ticks = 6 sixteenths
+        let s = grid_ticks_to_duration_with_grid(
+            dotted_quarter_ticks,
+            ppq,
+            ResolvedMelodyGrid::Sixteenth,
+        );
+        assert_eq!(s, ".4");
+    }
+
+    #[test]
+    fn duration_table_dotted_eighth_from_sixteenth_grid() {
+        let ppq = 480;
+        let dotted_eighth = (ppq as i64 * 3) / 4; // 360 ticks = 3 sixteenths
+        let s = grid_ticks_to_duration_with_grid(dotted_eighth, ppq, ResolvedMelodyGrid::Sixteenth);
+        assert_eq!(s, ".8");
+    }
+
+    #[test]
+    fn duration_table_triplet_eighth() {
+        let ppq = 480;
+        let triplet_eighth = ppq as i64 / 3;
+        let s = grid_ticks_to_duration_with_grid(triplet_eighth, ppq, ResolvedMelodyGrid::Triplet);
+        assert_eq!(s, "8t");
+    }
 }

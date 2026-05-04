@@ -94,14 +94,15 @@ pub fn render_cursor_commands(
                 color,
             } => {
                 if let Some(font) = font
-                    && let Some(path) = get_glyph_path(font, *codepoint, *font_size) {
-                        // Font outlines are Y-up; screen is Y-down → flip Y
-                        let glyph_transform = transform
-                            * Affine::translate((*x, *y))
-                            * Affine::scale_non_uniform(1.0, -1.0);
-                        let stroke = Stroke::new(*stroke_width);
-                        scene.stroke(&stroke, glyph_transform, rgba_to_color(*color), None, &path);
-                    }
+                    && let Some(path) = get_glyph_path(font, *codepoint, *font_size)
+                {
+                    // Font outlines are Y-up; screen is Y-down → flip Y
+                    let glyph_transform = transform
+                        * Affine::translate((*x, *y))
+                        * Affine::scale_non_uniform(1.0, -1.0);
+                    let stroke = Stroke::new(*stroke_width);
+                    scene.stroke(&stroke, glyph_transform, rgba_to_color(*color), None, &path);
+                }
             }
 
             HighlightCommand::FillGlyph {
@@ -112,18 +113,19 @@ pub fn render_cursor_commands(
                 color,
             } => {
                 if let Some(font) = font
-                    && let Some(path) = get_glyph_path(font, *codepoint, *font_size) {
-                        let glyph_transform = transform
-                            * Affine::translate((*x, *y))
-                            * Affine::scale_non_uniform(1.0, -1.0);
-                        scene.fill(
-                            Fill::NonZero,
-                            glyph_transform,
-                            rgba_to_color(*color),
-                            None,
-                            &path,
-                        );
-                    }
+                    && let Some(path) = get_glyph_path(font, *codepoint, *font_size)
+                {
+                    let glyph_transform = transform
+                        * Affine::translate((*x, *y))
+                        * Affine::scale_non_uniform(1.0, -1.0);
+                    scene.fill(
+                        Fill::NonZero,
+                        glyph_transform,
+                        rgba_to_color(*color),
+                        None,
+                        &path,
+                    );
+                }
             }
         }
     }

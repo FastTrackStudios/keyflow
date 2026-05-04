@@ -83,20 +83,52 @@ pub enum NoteHeadType {
     Triangle,
 }
 
+/// Glyph style for long-duration slash noteheads (half / whole / double-whole).
+///
+/// Quarter-and-shorter slashes always use the filled horizontal slash glyph;
+/// only longer notes have a real choice between two engraving conventions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SlashLongStyle {
+    /// Large white diamond (U+E104). Common in jazz lead sheets / Berklee style.
+    #[default]
+    Diamond,
+    /// White slash glyphs (U+E102 / U+E103 / U+E10A).
+    /// Closer to the filled-slash short-duration look.
+    WhiteSlash,
+}
+
 impl NoteHeadType {
-    /// Get the SMuFL glyph for this notehead type and duration.
+    /// Get the SMuFL glyph for this notehead type and duration, using the
+    /// default `SlashLongStyle` for slash heads.
     #[must_use]
     pub const fn glyph(&self, duration: NoteDuration) -> char {
+        self.glyph_with_slash_style(duration, SlashLongStyle::Diamond)
+    }
+
+    /// Get the SMuFL glyph for this notehead type and duration, with a chosen
+    /// `SlashLongStyle` for half / whole / double-whole slash heads.
+    #[must_use]
+    pub const fn glyph_with_slash_style(
+        &self,
+        duration: NoteDuration,
+        slash_long_style: SlashLongStyle,
+    ) -> char {
         match self {
             Self::Normal => duration.notehead_glyph(),
             Self::Slash => match duration {
-                // Use large white diamond for half/whole in rhythmic notation
-                // U+E104 noteheadSlashDiamondWhite (use ss08 for oversized variant)
-                // TODO: Make this configurable (diamond vs white slash)
-                NoteDuration::DoubleWhole | NoteDuration::Whole | NoteDuration::Half => {
-                    glyphs::NOTEHEAD_SLASH_DIAMOND_WHITE
-                }
-                // Quarter and shorter use filled slash
+                NoteDuration::DoubleWhole => match slash_long_style {
+                    SlashLongStyle::Diamond => glyphs::NOTEHEAD_SLASH_DIAMOND_WHITE,
+                    SlashLongStyle::WhiteSlash => glyphs::NOTEHEAD_SLASH_WHITE_DOUBLE_WHOLE,
+                },
+                NoteDuration::Whole => match slash_long_style {
+                    SlashLongStyle::Diamond => glyphs::NOTEHEAD_SLASH_DIAMOND_WHITE,
+                    SlashLongStyle::WhiteSlash => glyphs::NOTEHEAD_SLASH_WHITE_WHOLE,
+                },
+                NoteDuration::Half => match slash_long_style {
+                    SlashLongStyle::Diamond => glyphs::NOTEHEAD_SLASH_DIAMOND_WHITE,
+                    SlashLongStyle::WhiteSlash => glyphs::NOTEHEAD_SLASH_WHITE_HALF,
+                },
+                // Quarter and shorter always use filled slash regardless of style.
                 _ => glyphs::NOTEHEAD_SLASH_HORIZONTAL,
             },
             // Fallback to normal noteheads for unimplemented types
@@ -219,6 +251,13 @@ pub struct NoteParams {
     pub offset_x: f64,
     /// Whether to draw ledger lines
     pub ledger_lines: bool,
+    /// Width (in spatiums) reserved for the chord's shared accidental column.
+    ///
+    /// When `Some(w)`, the accidental is right-aligned within a column of width `w`
+    /// (so all noteheads in the chord land at the same X regardless of accidental
+    /// width). When `None`, the accidental is drawn flush at x = 0 (single-note
+    /// behavior).
+    pub accidental_column_width: Option<f64>,
 }
 
 impl Default for NoteParams {
@@ -232,6 +271,7 @@ impl Default for NoteParams {
             dots: 0,
             offset_x: 0.0,
             ledger_lines: true,
+            accidental_column_width: None,
         }
     }
 }
@@ -250,16 +290,28 @@ pub fn layout_note(params: &NoteParams, ctx: &LayoutContext) -> (LayoutData, Sce
     // Positive lines go up, negative go down
     let y = -params.line as f64 * staff_line_distance / 2.0;
 
-    // Start X at 0, adjusted for accidentals
-    let mut x = 0.0;
+    // Reserved chord-wide accidental column width (in pixels), if any.
+    // When set, the notehead lands at `column_px + gap` regardless of this note's
+    // accidental width — keeping all noteheads in a chord in the same column.
+    let column_px = params
+        .accidental_column_width
+        .map(|w| w * spatium)
+        .unwrap_or(0.0);
 
+    let mut x = 0.0;
     let mut commands = Vec::new();
     let mut total_width = 0.0;
 
     // Draw accidental if present
     if let Some(acc_glyph) = params.accidental.glyph() {
         let acc_width = params.accidental.width() * spatium;
-        let acc_x = x;
+        // Right-align the accidental inside the column so the gap-to-notehead
+        // is consistent across the chord.
+        let acc_x = if column_px > 0.0 {
+            column_px - acc_width
+        } else {
+            0.0
+        };
 
         commands.push(PaintCommand::glyph(
             acc_glyph,
@@ -267,10 +319,19 @@ pub fn layout_note(params: &NoteParams, ctx: &LayoutContext) -> (LayoutData, Sce
             spatium,
             Color::BLACK,
         ));
-
-        x += acc_width + spatium * 0.15; // Small gap after accidental
-        total_width += acc_width + spatium * 0.15;
     }
+
+    // Notehead start X: column width + gap (column-aware) or this-note's
+    // accidental width + gap (single-note behavior).
+    let acc_advance = if column_px > 0.0 {
+        column_px + spatium * 0.15
+    } else if params.accidental.glyph().is_some() {
+        params.accidental.width() * spatium + spatium * 0.15
+    } else {
+        0.0
+    };
+    x += acc_advance;
+    total_width += acc_advance;
 
     // Draw notehead
     let notehead_x = x + params.offset_x;
@@ -462,6 +523,88 @@ mod tests {
         assert!(node.commands.len() >= 2);
         // Bounding box should be wider with accidental
         assert!(layout.bbox.width() > ctx.spatium());
+    }
+
+    #[test]
+    fn test_slash_long_style_diamond_vs_white_slash() {
+        // Half-duration slash: diamond (default) vs white-slash glyph
+        let diamond =
+            NoteHeadType::Slash.glyph_with_slash_style(NoteDuration::Half, SlashLongStyle::Diamond);
+        let white = NoteHeadType::Slash
+            .glyph_with_slash_style(NoteDuration::Half, SlashLongStyle::WhiteSlash);
+        assert_eq!(diamond, glyphs::NOTEHEAD_SLASH_DIAMOND_WHITE);
+        assert_eq!(white, glyphs::NOTEHEAD_SLASH_WHITE_HALF);
+        assert_ne!(diamond, white);
+
+        // Quarter-duration: style doesn't matter, always filled slash
+        let q_d = NoteHeadType::Slash
+            .glyph_with_slash_style(NoteDuration::Quarter, SlashLongStyle::Diamond);
+        let q_w = NoteHeadType::Slash
+            .glyph_with_slash_style(NoteDuration::Quarter, SlashLongStyle::WhiteSlash);
+        assert_eq!(q_d, glyphs::NOTEHEAD_SLASH_HORIZONTAL);
+        assert_eq!(q_w, glyphs::NOTEHEAD_SLASH_HORIZONTAL);
+
+        // Default `glyph()` preserves the legacy diamond behavior
+        let default_half = NoteHeadType::Slash.glyph(NoteDuration::Half);
+        assert_eq!(default_half, diamond);
+    }
+
+    #[test]
+    fn test_accidental_column_aligns_noteheads() {
+        // When two notes share an accidental column, the notehead Xs must match
+        // regardless of whether each note carries an accidental or not.
+        let ctx = test_ctx();
+        let column = Accidental::Sharp.width(); // wider than no-accidental case
+
+        let with_acc = layout_note(
+            &NoteParams {
+                id: 100,
+                duration: NoteDuration::Quarter,
+                line: 0,
+                accidental: Accidental::Sharp,
+                accidental_column_width: Some(column),
+                ..Default::default()
+            },
+            &ctx,
+        );
+        let without_acc = layout_note(
+            &NoteParams {
+                id: 101,
+                duration: NoteDuration::Quarter,
+                line: 2,
+                accidental: Accidental::None,
+                accidental_column_width: Some(column),
+                ..Default::default()
+            },
+            &ctx,
+        );
+
+        // The last command on each is the notehead glyph (dots/ledgers may follow
+        // but neither test note has them). Find the notehead by glyph kind.
+        fn notehead_x(node: &SceneNode) -> f64 {
+            for cmd in &node.commands {
+                if let PaintCommand::Glyph {
+                    position,
+                    codepoint,
+                    ..
+                } = cmd
+                    && matches!(
+                        *codepoint,
+                        glyphs::NOTEHEAD_BLACK | glyphs::NOTEHEAD_HALF | glyphs::NOTEHEAD_WHOLE
+                    )
+                {
+                    return position.x;
+                }
+            }
+            panic!("no notehead glyph found in node");
+        }
+
+        let x_with = notehead_x(&with_acc.1);
+        let x_without = notehead_x(&without_acc.1);
+        assert!(
+            (x_with - x_without).abs() < 1e-6,
+            "notehead Xs should match across accidental column: with={x_with}, without={x_without}"
+        );
     }
 
     #[test]

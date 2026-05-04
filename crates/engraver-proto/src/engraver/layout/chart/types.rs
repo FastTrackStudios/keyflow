@@ -614,18 +614,16 @@ fn resolve_relative_octave(
     let new_step = new_class.staff_offset(); // 0-6
 
     // Try same octave, one above, one below — pick closest
-    let candidates = [
-        prev_octave.wrapping_sub(1),
-        prev_octave,
-        prev_octave + 1,
-    ];
+    let candidates = [prev_octave.wrapping_sub(1), prev_octave, prev_octave + 1];
 
     let prev_pos = prev_step + (prev_octave as i32) * 7;
     let mut best_octave = prev_octave;
     let mut best_dist = i32::MAX;
 
     for &oct in &candidates {
-        if oct > 9 { continue; } // sanity
+        if oct > 9 {
+            continue;
+        } // sanity
         let pos = new_step + (oct as i32) * 7;
         let dist = (pos - prev_pos).abs();
         if dist < best_dist {
@@ -672,7 +670,9 @@ pub fn melody_note_extent(melody_data: &MeasureMelodyData, spatium: f64) -> (f64
     let mut min_line: i32 = 0;
 
     for seg in &melody_data.segments {
-        if seg.is_rest { continue; }
+        if seg.is_rest {
+            continue;
+        }
         if let Some(oct) = seg.octave {
             let (line, _) = melody_pitch_to_line(&seg.pitch, oct);
             max_line = max_line.max(line);
@@ -752,7 +752,9 @@ pub fn expand_melodies_across_measures(
                 // Resolve pitch and octave for this note
                 let (resolved_octave, resolved_accidental) = if note.is_rest() {
                     (None, Accidental::None)
-                } else if let Some((class, _alteration, accidental)) = parse_melody_pitch(&note.pitch) {
+                } else if let Some((class, _alteration, accidental)) =
+                    parse_melody_pitch(&note.pitch)
+                {
                     // Determine octave: explicit or relative
                     let octave = if let Some(explicit_oct) = note.octave {
                         explicit_oct
@@ -825,7 +827,9 @@ pub fn expand_melodies_across_measures(
 
         for data in result.values() {
             for seg in &data.segments {
-                if seg.is_rest { continue; }
+                if seg.is_rest {
+                    continue;
+                }
                 if let Some(oct) = seg.octave {
                     let (line, _) = melody_pitch_to_line(&seg.pitch, oct);
                     positions.push(line);
@@ -847,20 +851,46 @@ pub fn expand_melodies_across_measures(
         if !has_explicit_octave && positions.len() >= 2 {
             positions.sort();
             let median = positions[positions.len() / 2];
+            let min = *positions.first().unwrap();
+            let max = *positions.last().unwrap();
+            let range = max - min;
 
-            // Target: median near line 0 (B4, middle of treble staff)
-            // Each octave = 7 staff positions
-            let octave_shift = ((0 - median) as f64 / 7.0).round() as i8;
+            // Range-aware centering: if the melody intentionally spans more than
+            // ~2 octaves (14 staff positions), the user has chosen a wide range
+            // on purpose — don't drag the whole line up or down. Likewise, if
+            // the median is already within ~half an octave of the staff center,
+            // skip the shift (avoids cosmetic moves that surprise users).
+            const WIDE_RANGE_LINES: i32 = 14;
+            const ALREADY_CENTERED_LINES: i32 = 4;
 
-            if octave_shift != 0 {
+            if range > WIDE_RANGE_LINES {
                 tracing::debug!(
-                    "[melody-centering] Shifting all octaves by {} (median line was {})",
-                    octave_shift, median
+                    "[melody-centering] Skipping shift: range {} > {} (deliberately wide melody)",
+                    range,
+                    WIDE_RANGE_LINES
                 );
-                for data in result.values_mut() {
-                    for seg in &mut data.segments {
-                        if let Some(ref mut oct) = seg.octave {
-                            *oct = (*oct as i8 + octave_shift).max(0) as u8;
+            } else if median.abs() <= ALREADY_CENTERED_LINES {
+                tracing::debug!(
+                    "[melody-centering] Skipping shift: median {} already near staff center",
+                    median
+                );
+            } else {
+                // Target: median near line 0 (B4, middle of treble staff).
+                // Each octave = 7 staff positions.
+                let octave_shift = ((0 - median) as f64 / 7.0).round() as i8;
+
+                if octave_shift != 0 {
+                    tracing::debug!(
+                        "[melody-centering] Shifting all octaves by {} (median line was {}, range {})",
+                        octave_shift,
+                        median,
+                        range
+                    );
+                    for data in result.values_mut() {
+                        for seg in &mut data.segments {
+                            if let Some(ref mut oct) = seg.octave {
+                                *oct = (*oct as i8 + octave_shift).max(0) as u8;
+                            }
                         }
                     }
                 }

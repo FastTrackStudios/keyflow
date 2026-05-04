@@ -511,11 +511,7 @@ pub fn measure_measure_with_config(
             let extension_padding = if has_extension { font_size * 0.2 } else { 0.0 };
 
             // Push/pull indicator (apostrophe marks) needs extra horizontal space
-            let push_pull_padding = if chord
-                .push_pull
-                .as_ref()
-                .is_some_and(|(_, _)| true)
-            {
+            let push_pull_padding = if chord.push_pull.as_ref().is_some_and(|(_, _)| true) {
                 font_size * 0.3
             } else {
                 0.0
@@ -685,8 +681,7 @@ pub fn measure_measure_with_config(
             let intermediate_baseline = min_gap * 0.5;
             for seg_idx in (idx1 + 1)..idx2 {
                 if seg_idx < segment_mins.len() && segment_mins[seg_idx] == 0.0 {
-                    segment_mins[seg_idx] =
-                        segment_mins[seg_idx].max(intermediate_baseline);
+                    segment_mins[seg_idx] = segment_mins[seg_idx].max(intermediate_baseline);
                 }
             }
         }

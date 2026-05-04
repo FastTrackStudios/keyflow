@@ -326,7 +326,8 @@ pub fn squeeze_to_fit(
 ) -> SqueezeResult {
     // Start with no squeeze
     let mut params = SqueezeParams::default();
-    let mut widths = compute_segment_widths(segment_ticks, min_widths, spatium, slope, density, &params);
+    let mut widths =
+        compute_segment_widths(segment_ticks, min_widths, spatium, slope, density, &params);
     let mut total: f64 = widths.iter().sum();
 
     // Phase 1: iterative squeeze_factor + stretch_reduction reduction
@@ -335,7 +336,12 @@ pub fn squeeze_to_fit(
             Some(next_params) => {
                 params = next_params;
                 widths = compute_segment_widths(
-                    segment_ticks, min_widths, spatium, slope, density, &params,
+                    segment_ticks,
+                    min_widths,
+                    spatium,
+                    slope,
+                    density,
+                    &params,
                 );
                 total = widths.iter().sum();
             }
@@ -356,12 +362,11 @@ pub fn squeeze_to_fit(
     let mut scale = 1.0;
     while total > target_width && scale > WIDTH_REDUCTION_STEP {
         scale -= WIDTH_REDUCTION_STEP;
-        widths = compute_segment_widths(
-            segment_ticks, min_widths, spatium, slope, density, &params,
-        )
-        .iter()
-        .map(|&w| w * scale)
-        .collect();
+        widths =
+            compute_segment_widths(segment_ticks, min_widths, spatium, slope, density, &params)
+                .iter()
+                .map(|&w| w * scale)
+                .collect();
         total = widths.iter().sum();
     }
 
@@ -420,34 +425,49 @@ mod tests {
     #[test]
     fn test_quarter_note_stretch_is_one() {
         let stretch = duration_stretch(QUARTER, QUARTER, 1.2);
-        assert!((stretch - 1.0).abs() < 1e-10, "Quarter note stretch should be 1.0, got {stretch}");
+        assert!(
+            (stretch - 1.0).abs() < 1e-10,
+            "Quarter note stretch should be 1.0, got {stretch}"
+        );
     }
 
     #[test]
     fn test_half_note_stretch() {
         let stretch = duration_stretch(HALF, QUARTER, 1.2);
-        assert!((stretch - 1.2).abs() < 1e-10, "Half note stretch should be 1.2, got {stretch}");
+        assert!(
+            (stretch - 1.2).abs() < 1e-10,
+            "Half note stretch should be 1.2, got {stretch}"
+        );
     }
 
     #[test]
     fn test_whole_note_stretch() {
         let stretch = duration_stretch(WHOLE, QUARTER, 1.2);
         let expected = 1.2_f64.powi(2); // 1.44
-        assert!((stretch - expected).abs() < 1e-10, "Whole note stretch should be {expected}, got {stretch}");
+        assert!(
+            (stretch - expected).abs() < 1e-10,
+            "Whole note stretch should be {expected}, got {stretch}"
+        );
     }
 
     #[test]
     fn test_eighth_note_stretch() {
         let stretch = duration_stretch(EIGHTH, QUARTER, 1.2);
         let expected = 1.0 / 1.2; // ~0.833
-        assert!((stretch - expected).abs() < 1e-10, "Eighth note stretch should be {expected}, got {stretch}");
+        assert!(
+            (stretch - expected).abs() < 1e-10,
+            "Eighth note stretch should be {expected}, got {stretch}"
+        );
     }
 
     #[test]
     fn test_sixteenth_note_stretch() {
         let stretch = duration_stretch(SIXTEENTH, QUARTER, 1.2);
         let expected = 1.2_f64.powf(-2.0); // ~0.694
-        assert!((stretch - expected).abs() < 1e-6, "16th note stretch should be ~{expected}, got {stretch}");
+        assert!(
+            (stretch - expected).abs() < 1e-6,
+            "16th note stretch should be ~{expected}, got {stretch}"
+        );
     }
 
     #[test]
@@ -488,7 +508,10 @@ mod tests {
         let spatium = 5.0;
         let width = natural_width(QUARTER, spatium, 1.2, 1.0, 1.0);
         let expected = 3.5 * spatium; // 17.5
-        assert!((width - expected).abs() < 1e-10, "Quarter natural width should be {expected}, got {width}");
+        assert!(
+            (width - expected).abs() < 1e-10,
+            "Quarter natural width should be {expected}, got {width}"
+        );
     }
 
     #[test]
@@ -496,7 +519,10 @@ mod tests {
         let spatium = 5.0;
         let width = natural_width(HALF, spatium, 1.2, 1.0, 1.0);
         let expected = 3.5 * spatium * 1.2; // 21.0
-        assert!((width - expected).abs() < 1e-10, "Half natural width should be {expected}, got {width}");
+        assert!(
+            (width - expected).abs() < 1e-10,
+            "Half natural width should be {expected}, got {width}"
+        );
     }
 
     #[test]
@@ -504,7 +530,10 @@ mod tests {
         let spatium = 5.0;
         let normal = natural_width(QUARTER, spatium, 1.2, 1.0, 1.0);
         let dense = natural_width(QUARTER, spatium, 1.2, 2.0, 1.0);
-        assert!((dense - normal / 2.0).abs() < 1e-10, "Density 2.0 should halve width");
+        assert!(
+            (dense - normal / 2.0).abs() < 1e-10,
+            "Density 2.0 should halve width"
+        );
     }
 
     #[test]
@@ -512,7 +541,10 @@ mod tests {
         let spatium = 5.0;
         let normal = natural_width(QUARTER, spatium, 1.2, 1.0, 1.0);
         let squeezed = natural_width(QUARTER, spatium, 1.2, 1.0, 0.5);
-        assert!((squeezed - normal * 0.5).abs() < 1e-10, "stretch_reduction 0.5 should halve width");
+        assert!(
+            (squeezed - normal * 0.5).abs() < 1e-10,
+            "stretch_reduction 0.5 should halve width"
+        );
     }
 
     // --- Spring Model ---
@@ -545,7 +577,11 @@ mod tests {
 
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].0, 0);
-        assert!((results[0].1 - 80.0).abs() < 1e-10, "Single spring should absorb all extra: got {}", results[0].1);
+        assert!(
+            (results[0].1 - 80.0).abs() < 1e-10,
+            "Single spring should absorb all extra: got {}",
+            results[0].1
+        );
     }
 
     #[test]
@@ -558,7 +594,7 @@ mod tests {
 
         let mut springs = vec![
             Spring::new(eighth_stretch, 14.58, 0), // eighth note width
-            Spring::new(half_stretch, 21.0, 1),     // half note width
+            Spring::new(half_stretch, 21.0, 1),    // half note width
         ];
 
         let results = stretch_segments_to_width(&mut springs, 20.0);
@@ -632,7 +668,8 @@ mod tests {
     fn test_compute_segment_widths_basic() {
         let ticks = vec![QUARTER, QUARTER, QUARTER, QUARTER];
         let mins = vec![0.0; 4];
-        let widths = compute_segment_widths(&ticks, &mins, 5.0, 1.2, 1.0, &SqueezeParams::default());
+        let widths =
+            compute_segment_widths(&ticks, &mins, 5.0, 1.2, 1.0, &SqueezeParams::default());
 
         // All quarters, so all should be equal
         let expected = natural_width(QUARTER, 5.0, 1.2, 1.0, 1.0);
@@ -645,7 +682,8 @@ mod tests {
     fn test_compute_segment_widths_respects_min() {
         let ticks = vec![EIGHTH, EIGHTH];
         let mins = vec![30.0, 30.0]; // High mins
-        let widths = compute_segment_widths(&ticks, &mins, 5.0, 1.2, 1.0, &SqueezeParams::default());
+        let widths =
+            compute_segment_widths(&ticks, &mins, 5.0, 1.2, 1.0, &SqueezeParams::default());
 
         // Natural width of eighth at spatium=5 is about 14.58, but min is 30
         for w in &widths {
@@ -657,7 +695,8 @@ mod tests {
     fn test_compute_segment_widths_with_squeeze() {
         let ticks = vec![QUARTER];
         let mins = vec![0.0];
-        let normal = compute_segment_widths(&ticks, &mins, 5.0, 1.2, 1.0, &SqueezeParams::default());
+        let normal =
+            compute_segment_widths(&ticks, &mins, 5.0, 1.2, 1.0, &SqueezeParams::default());
         let squeezed = compute_segment_widths(
             &ticks,
             &mins,

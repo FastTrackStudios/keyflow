@@ -54,8 +54,7 @@ impl KeySigType {
 }
 
 /// Clef-dependent position data for key signatures.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ClefContext {
     /// Treble clef
     #[default]
@@ -67,7 +66,6 @@ pub enum ClefContext {
     /// Tenor clef
     Tenor,
 }
-
 
 impl ClefContext {
     /// Get the staff lines for sharps in order (F#, C#, G#, D#, A#, E#, B#).
@@ -95,8 +93,7 @@ impl ClefContext {
 }
 
 /// Key signature layout parameters.
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct KeySigParams {
     /// Unique identifier
     pub id: u64,
@@ -110,7 +107,6 @@ pub struct KeySigParams {
     pub prev_key: Option<KeySigType>,
 }
 
-
 /// Layout a key signature.
 #[must_use]
 pub fn layout_keysig(params: &KeySigParams, ctx: &LayoutContext) -> (LayoutData, SceneNode) {
@@ -122,32 +118,33 @@ pub fn layout_keysig(params: &KeySigParams, ctx: &LayoutContext) -> (LayoutData,
 
     // First, show naturals if this is a key change
     if params.show_naturals
-        && let Some(prev_key) = &params.prev_key {
-            let naturals = calculate_naturals(prev_key, &params.key);
-            let positions = if prev_key.has_sharps() {
-                params.clef.sharp_positions()
-            } else {
-                params.clef.flat_positions()
-            };
+        && let Some(prev_key) = &params.prev_key
+    {
+        let naturals = calculate_naturals(prev_key, &params.key);
+        let positions = if prev_key.has_sharps() {
+            params.clef.sharp_positions()
+        } else {
+            params.clef.flat_positions()
+        };
 
-            for i in 0..naturals {
-                let line = positions[i as usize];
-                let y = -line as f64 * spatium / 2.0;
+        for i in 0..naturals {
+            let line = positions[i as usize];
+            let y = -line as f64 * spatium / 2.0;
 
-                commands.push(PaintCommand::glyph(
-                    ACCIDENTAL_NATURAL,
-                    Point::new(x, y),
-                    spatium,
-                    Color::BLACK,
-                ));
+            commands.push(PaintCommand::glyph(
+                ACCIDENTAL_NATURAL,
+                Point::new(x, y),
+                spatium,
+                Color::BLACK,
+            ));
 
-                x += accidental_spacing * 0.8; // Naturals slightly closer
-            }
-
-            if naturals > 0 {
-                x += spatium * 0.3; // Gap before new key
-            }
+            x += accidental_spacing * 0.8; // Naturals slightly closer
         }
+
+        if naturals > 0 {
+            x += spatium * 0.3; // Gap before new key
+        }
+    }
 
     // Now draw the new key signature
     match params.key {

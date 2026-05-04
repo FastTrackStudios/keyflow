@@ -4,6 +4,7 @@
 //! page breaks when content exceeds page height.
 
 use crate::engraver::layout::chart::constants;
+use crate::engraver::layout::chart::page_rendering;
 use crate::engraver::layout::chart::pipeline::{LayoutAdapter, LayoutState};
 use crate::engraver::layout::chart::types::ChartLayoutResult;
 use crate::engraver::layout::orchestrator::{PageLayout, PageMargins};
@@ -65,7 +66,6 @@ impl PaginatedAdapter {
     }
 
     /// Calculate the Y offset for a page number (0-indexed internally).
-    #[allow(dead_code)]
     fn page_y_offset(&self, page_index: u32) -> f64 {
         self.page_offset_y + (page_index as f64) * (self.page_height + self.page_gap)
     }
@@ -98,15 +98,23 @@ impl LayoutAdapter for PaginatedAdapter {
         content_height > available_height
     }
 
-    fn handle_boundary(&mut self, _root: &mut SceneNode, state: &mut LayoutState) {
+    fn handle_boundary(&mut self, root: &mut SceneNode, state: &mut LayoutState) {
         // Finish current page
         self.finish_current_page(state);
 
         // Start new page
         state.start_new_page(self.margins.top);
 
-        // TODO: Add page background for new page when full pipeline is implemented
-        // This requires page_rendering utilities from the main chart module
+        // Paint the new page's background (white paper + drop shadow) at its offset.
+        let page_index = state.page_number.saturating_sub(1);
+        let page_y = self.page_y_offset(page_index);
+        page_rendering::add_page_background(
+            root,
+            self.page_offset_x,
+            page_y,
+            self.page_width,
+            self.page_height,
+        );
     }
 
     fn finalize(mut self, root: SceneNode, mut state: LayoutState) -> ChartLayoutResult {
@@ -131,9 +139,18 @@ impl LayoutAdapter for PaginatedAdapter {
         }
     }
 
-    fn add_background(&mut self, _root: &mut SceneNode, _state: &LayoutState) {
-        // TODO: Add page background when full pipeline is implemented
-        // This requires page_rendering utilities from the main chart module
+    fn add_background(&mut self, root: &mut SceneNode, state: &LayoutState) {
+        // Paint the *first* page background. Subsequent pages are painted in
+        // `handle_boundary` as the layout advances.
+        let page_index = state.page_number.saturating_sub(1);
+        let page_y = self.page_y_offset(page_index);
+        page_rendering::add_page_background(
+            root,
+            self.page_offset_x,
+            page_y,
+            self.page_width,
+            self.page_height,
+        );
     }
 }
 

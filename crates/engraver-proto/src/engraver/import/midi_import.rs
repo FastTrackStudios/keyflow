@@ -383,11 +383,7 @@ impl MidiFile {
 
     /// Get all notes as references, sorted by start tick.
     pub fn all_notes_ref(&self) -> Vec<&MidiNote> {
-        let mut all: Vec<&MidiNote> = self
-            .tracks
-            .iter()
-            .flat_map(|t| t.notes.iter())
-            .collect();
+        let mut all: Vec<&MidiNote> = self.tracks.iter().flat_map(|t| t.notes.iter()).collect();
         all.sort_by_key(|n| n.start_tick);
         all
     }
@@ -760,7 +756,9 @@ impl MidiFile {
         let explicit = self
             .markers
             .iter()
-            .filter_map(|marker| parse_keyflow_section_metadata(&marker.text).map(|meta| (marker, meta)))
+            .filter_map(|marker| {
+                parse_keyflow_section_metadata(&marker.text).map(|meta| (marker, meta))
+            })
             .map(|(marker, metadata)| {
                 let mut position = position_for_tick(marker.tick);
                 position.measure = metadata.start_measure;
@@ -1596,13 +1594,196 @@ fn is_chord_marker(text: &str) -> bool {
 }
 
 fn parse_key_signature_marker(text: &str) -> Option<Key> {
-    let trimmed = text.trim();
-    let looks_like_key_sig =
-        trimmed.len() <= 4 && (trimmed.starts_with('#') || trimmed.starts_with('b'));
-    if !looks_like_key_sig {
+    let raw = text.trim();
+
+    // Optional `KEY:` / `Key:` / `key:` prefix from DAW marker tracks. When
+    // present, we trust the user's intent and accept a wide range of forms
+    // (`KEY: Em`, `Key: F# minor`, etc.).
+    let (had_explicit_prefix, stripped) = match raw
+        .strip_prefix("KEY:")
+        .or_else(|| raw.strip_prefix("Key:"))
+        .or_else(|| raw.strip_prefix("key:"))
+    {
+        Some(rest) => (true, rest.trim()),
+        None => (false, raw),
+    };
+
+    // Original keyflow-style sigs (`#G`, `bBb`). Always accepted.
+    let looks_like_keyflow_sig =
+        stripped.len() <= 4 && (stripped.starts_with('#') || stripped.starts_with('b'));
+    if looks_like_keyflow_sig && let Ok(k) = keyflow_text::api::parse::key(stripped) {
+        return Some(k);
+    }
+
+    // Mode-qualified forms with an explicit suffix word (`F# minor`,
+    // `Bb major`, `Em ionian`, …). The suffix word is a strong musical
+    // signal, so we accept these regardless of `KEY:` prefix.
+    if let Some(normalized) = normalize_key_text_with_explicit_mode(stripped)
+        && let Ok(k) = keyflow_text::api::parse::key(&normalized)
+    {
+        return Some(k);
+    }
+
+    // Bare forms (`C`, `Em`, `F#`, `Bb`) only when the user opted in via
+    // `KEY:` prefix, OR the string is short and clearly a musical token.
+    // This avoids parsing section markers like `CH 1`, `VS 2`, `INST` as
+    // keys (`MusicalNote::from_string` is permissive enough to swallow
+    // arbitrary text starting with a note letter).
+    if had_explicit_prefix && let Ok(k) = keyflow_text::api::parse::key(stripped) {
+        return Some(k);
+    }
+
+    None
+}
+
+/// Try to interpret `s` as `<root> <mode-word>` (case-insensitive). Returns the
+/// keyflow-canonical form (e.g. `F#m` for `F# minor`) only when an explicit
+/// mode suffix is present; bare strings without a mode word return `None`.
+fn normalize_key_text_with_explicit_mode(s: &str) -> Option<String> {
+    let s = s.trim();
+    let lower = s.to_lowercase();
+    for (suffix, is_minor) in [
+        (" major", false),
+        (" maj", false),
+        (" ionian", false),
+        (" minor", true),
+        (" min", true),
+        (" aeolian", true),
+    ] {
+        if let Some(stripped) = lower.strip_suffix(suffix) {
+            let head = s[..stripped.len()].trim();
+            if head.is_empty() {
+                return None;
+            }
+            return Some(if is_minor {
+                format!("{}m", head)
+            } else {
+                head.to_string()
+            });
+        }
+    }
+    None
+}
+
+/// Detect the most likely musical key for a MIDI file.
+///
+/// Resolution order:
+/// 1. Any text/marker meta event whose body parses as a key (`KEY: Em`,
+///    `#G`, `Bb major`, etc.) — earliest such marker wins.
+/// 2. The standard MIDI key-signature meta event (already exposed via
+///    `key_signature_markers_absolute()`).
+/// 3. Krumhansl-Schmuckler pitch-class correlation against all 24 major /
+///    minor keys.
+///
+/// Returns `None` only when the file has no notes and no usable markers.
+#[must_use]
+pub fn detect_key(midi: &MidiFile) -> Option<Key> {
+    // (1) Marker-text scan. Any marker whose text resolves through our
+    // augmented `parse_key_signature_marker` wins.
+    for marker in midi.markers() {
+        if let Some(k) = parse_key_signature_marker(&marker.text) {
+            return Some(k);
+        }
+    }
+
+    // (2) MIDI key-signature meta events.
+    if let Some(first) = midi.key_signature_markers_absolute().into_iter().next() {
+        return Some(first.key);
+    }
+
+    // (3) Pitch-class correlation.
+    detect_key_by_pitch_class(&midi.all_notes())
+}
+
+/// Krumhansl-Schmuckler pitch-class key estimation.
+///
+/// Builds a 12-bin pitch-class histogram weighted by note duration and
+/// correlates it against the standard major / minor profiles, returning the
+/// key with the highest correlation.
+#[must_use]
+pub fn detect_key_by_pitch_class(notes: &[MidiNote]) -> Option<Key> {
+    if notes.is_empty() {
         return None;
     }
-    keyflow_text::api::parse::key(trimmed).ok()
+
+    // Duration-weighted PC histogram.
+    let mut hist = [0.0f64; 12];
+    for n in notes {
+        let pc = (n.pitch as usize) % 12;
+        hist[pc] += n.duration_ticks.max(1) as f64;
+    }
+
+    // Krumhansl-Kessler key profiles (well-established perceptual weights).
+    const MAJOR: [f64; 12] = [
+        6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88,
+    ];
+    const MINOR: [f64; 12] = [
+        6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17,
+    ];
+
+    let correlate = |profile: &[f64; 12], shift: usize| -> f64 {
+        let mut hist_sum = 0.0;
+        let mut prof_sum = 0.0;
+        for i in 0..12 {
+            hist_sum += hist[i];
+            prof_sum += profile[i];
+        }
+        let hist_mean = hist_sum / 12.0;
+        let prof_mean = prof_sum / 12.0;
+        let mut num = 0.0;
+        let mut hist_sq = 0.0;
+        let mut prof_sq = 0.0;
+        for i in 0..12 {
+            let h = hist[(i + shift) % 12] - hist_mean;
+            let p = profile[i] - prof_mean;
+            num += h * p;
+            hist_sq += h * h;
+            prof_sq += p * p;
+        }
+        let denom = (hist_sq * prof_sq).sqrt();
+        if denom == 0.0 { 0.0 } else { num / denom }
+    };
+
+    // Best (mode, root_pc, score) over 24 keys.
+    let mut best: Option<(bool, usize, f64)> = None;
+    for tonic in 0..12 {
+        let major_score = correlate(&MAJOR, tonic);
+        let minor_score = correlate(&MINOR, tonic);
+        for &(is_major, score) in &[(true, major_score), (false, minor_score)] {
+            if best.is_none_or(|(_, _, b)| score > b) {
+                best = Some((is_major, tonic, score));
+            }
+        }
+    }
+
+    let (is_major, tonic_pc, _) = best?;
+    let pc_name = pc_to_keyflow_text(tonic_pc, is_major);
+    let key_text = if is_major {
+        pc_name
+    } else {
+        format!("{}m", pc_name)
+    };
+    keyflow_text::api::parse::key(&key_text).ok()
+}
+
+/// Convert a pitch-class (0-11) to a keyflow note name, picking the spelling
+/// (sharp vs flat) that matches the typical key-signature convention for that
+/// PC and mode (e.g. PC=1 → `Db` major but `C#` minor).
+fn pc_to_keyflow_text(pc: usize, is_major: bool) -> String {
+    // Standard circle-of-fifths spellings for the 12 keys, separately for
+    // major and minor, chosen to minimize accidental count in the key sig.
+    const MAJOR_SPELLING: [&str; 12] = [
+        "C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B",
+    ];
+    const MINOR_SPELLING: [&str; 12] = [
+        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "Bb", "B",
+    ];
+    let table = if is_major {
+        MAJOR_SPELLING
+    } else {
+        MINOR_SPELLING
+    };
+    table[pc % 12].to_string()
 }
 
 fn respell_chord_name_for_key(chord_name: &str, key: &Key) -> String {
@@ -1736,6 +1917,69 @@ mod tests {
             channel: 0,
         };
         assert_eq!(note2.note_name(), "A4");
+    }
+
+    fn note(pitch: u8, ticks: u32) -> MidiNote {
+        MidiNote {
+            pitch,
+            velocity: 100,
+            start_tick: 0,
+            duration_ticks: ticks,
+            channel: 0,
+        }
+    }
+
+    #[test]
+    fn detect_key_by_pitch_class_c_major() {
+        // C major scale, two octaves, weighted toward tonic / dominant.
+        let mut notes = Vec::new();
+        let scale_pcs = [0, 2, 4, 5, 7, 9, 11];
+        for &pc in &scale_pcs {
+            notes.push(note(60 + pc, 480)); // octave 4
+            notes.push(note(72 + pc, 480)); // octave 5
+        }
+        // Add weight to tonic (C) and dominant (G).
+        for _ in 0..6 {
+            notes.push(note(60, 960));
+            notes.push(note(67, 960));
+        }
+        let key = detect_key_by_pitch_class(&notes).expect("detected key");
+        assert!(
+            format!("{}", key).starts_with('C'),
+            "expected C-rooted key, got {}",
+            key
+        );
+    }
+
+    #[test]
+    #[allow(clippy::needless_range_loop)]
+    fn detect_key_by_pitch_class_a_minor_prefers_minor() {
+        // Notes that fit A natural minor; should outscore C major
+        // because the histogram is weighted to A and E.
+        let mut notes = Vec::new();
+        let scale_pcs = [9, 11, 0, 2, 4, 5, 7]; // A B C D E F G
+        for &pc in &scale_pcs {
+            notes.push(note(57 + (pc + 3) % 12, 480));
+        }
+        for _ in 0..8 {
+            notes.push(note(57, 1200)); // A
+            notes.push(note(64, 800)); // E
+        }
+        let key = detect_key_by_pitch_class(&notes).expect("detected key");
+        // Accept either A natural or A harmonic spelling; just verify root.
+        assert!(
+            format!("{}", key).starts_with('A'),
+            "expected A-rooted key, got {}",
+            key
+        );
+    }
+
+    #[test]
+    fn parse_key_signature_marker_handles_extended_forms() {
+        assert!(parse_key_signature_marker("KEY: Em").is_some());
+        assert!(parse_key_signature_marker("Bb major").is_some());
+        assert!(parse_key_signature_marker("F# minor").is_some());
+        assert!(parse_key_signature_marker("#G").is_some());
     }
 
     #[test]

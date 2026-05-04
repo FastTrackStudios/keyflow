@@ -419,12 +419,7 @@ fn split_into_lines(text: &str, available_width: f64, char_width_ratio: f64) -> 
     let parts: Vec<&str> = text.split_whitespace().collect();
     if let (Some(last), true) = (parts.last(), parts.len() >= 2) {
         // Check if last part is a single letter A-Z (section identifier)
-        if last.len() == 1
-            && last
-                .chars()
-                .next()
-                .is_some_and(|c| c.is_ascii_uppercase())
-        {
+        if last.len() == 1 && last.chars().next().is_some_and(|c| c.is_ascii_uppercase()) {
             // Put section letter on its own line
             let main_text: String = parts[..parts.len() - 1].join(" ");
             lines.push(main_text);

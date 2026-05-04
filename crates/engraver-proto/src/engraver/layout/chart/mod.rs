@@ -30,8 +30,8 @@ pub use config::{BehavioralFlags, DEFAULT_MIN_CHORD_SYMBOL_GAP, LayoutParams, Re
 // Re-export main types for convenience
 pub use types::{
     BeatPosition, ChartLayoutResult, LayoutMode, MeasureMelodyData, MelodyNoteSegment,
-    PageLayoutMetrics, expand_melodies_across_measures, melody_note_extent,
-    melody_pitch_to_line, slash_glyph_for_ticks,
+    PageLayoutMetrics, expand_melodies_across_measures, melody_note_extent, melody_pitch_to_line,
+    slash_glyph_for_ticks,
 };
 
 // Re-export rhythm types from chart module (canonical source)
@@ -147,6 +147,30 @@ pub struct ChartLayoutConfig {
     /// Fill limit for last system justification (default 0.3).
     /// Systems below this fill ratio are left ragged.
     pub last_system_fill_limit: f64,
+    /// Whether to draw tie arcs across barlines for melody notes that were
+    /// split by `expand_melodies_across_measures`. Default `true` (standard
+    /// notation). Set to `false` for lead-sheet styles where the second piece
+    /// is rendered as a fresh attack without a tie.
+    pub draw_melody_barline_ties: bool,
+    /// Beam-grouping strategy for melody eighths/sixteenths within a measure.
+    /// Default `Standard` (break at every beat in 4/4). `JazzHalfBar` groups
+    /// across beat-2 / beat-4 boundaries (eighths in beats 1-2 and 3-4 form
+    /// single beam groups), as is common in jazz lead sheets. `FullBar`
+    /// groups all eighths in a measure into one beam (highly compressed).
+    pub beam_grouping: BeamGroupingMode,
+}
+
+/// Beam grouping strategy for melody notes within a measure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BeamGroupingMode {
+    /// Break beams at every beat boundary (standard classical convention).
+    #[default]
+    Standard,
+    /// Group eighths within each half-bar (beats 1-2 and 3-4 in 4/4).
+    /// Common in jazz lead sheets.
+    JazzHalfBar,
+    /// Beam every eighth/sixteenth in the measure together. Compressed.
+    FullBar,
 }
 
 impl Default for ChartLayoutConfig {
@@ -197,6 +221,8 @@ impl ChartLayoutConfig {
             spacing_slope: spacing::DEFAULT_SPACING_SLOPE,
             spacing_density: spacing::DEFAULT_SPACING_DENSITY,
             last_system_fill_limit: spacing::DEFAULT_LAST_SYSTEM_FILL_LIMIT,
+            draw_melody_barline_ties: true,
+            beam_grouping: BeamGroupingMode::Standard,
         }
     }
 
@@ -231,6 +257,8 @@ impl ChartLayoutConfig {
             spacing_slope: spacing::DEFAULT_SPACING_SLOPE,
             spacing_density: spacing::DEFAULT_SPACING_DENSITY,
             last_system_fill_limit: spacing::DEFAULT_LAST_SYSTEM_FILL_LIMIT,
+            draw_melody_barline_ties: true,
+            beam_grouping: BeamGroupingMode::Standard,
         }
     }
 
@@ -650,28 +678,28 @@ impl ChartLayoutEngine {
             });
             if let Some(next_section) = next_non_compact_section
                 && let Some(mut spillback) = detect_section_start_spillback(next_section.measures())
-                {
-                    // Adjust beat position based on this section's last measure time signature
-                    if let Some(last_measure) = chart_section.measures().last() {
-                        let ts = last_measure.time_signature;
-                        spillback.beat_position = (ts.0 as usize).saturating_sub(1);
-                    }
-                    let last_measure_idx = chart_section.measures().len().saturating_sub(1);
-
-                    debug!(
-                        "[cross-section-spillback] Section {} -> {} spillback: '{}' at measure {} beat {}",
-                        chart_section.section.section_type.full_name(),
-                        next_section.section.section_type.full_name(),
-                        spillback.chord_symbol,
-                        last_measure_idx,
-                        spillback.beat_position
-                    );
-
-                    push_spillback_map
-                        .entry(last_measure_idx)
-                        .or_default()
-                        .push(spillback);
+            {
+                // Adjust beat position based on this section's last measure time signature
+                if let Some(last_measure) = chart_section.measures().last() {
+                    let ts = last_measure.time_signature;
+                    spillback.beat_position = (ts.0 as usize).saturating_sub(1);
                 }
+                let last_measure_idx = chart_section.measures().len().saturating_sub(1);
+
+                debug!(
+                    "[cross-section-spillback] Section {} -> {} spillback: '{}' at measure {} beat {}",
+                    chart_section.section.section_type.full_name(),
+                    next_section.section.section_type.full_name(),
+                    spillback.chord_symbol,
+                    last_measure_idx,
+                    spillback.beat_position
+                );
+
+                push_spillback_map
+                    .entry(last_measure_idx)
+                    .or_default()
+                    .push(spillback);
+            }
 
             // Group measures into systems (count-based for consistent layout)
             let systems = self.group_measures_into_systems(chart_section.measures(), content_width);
@@ -738,6 +766,7 @@ impl ChartLayoutEngine {
                     // Add title header on first page only
                     // Include count-in snippet in header instead of on first system
                     if !title_header_added {
+                        let has_pushed_first_chord = chart_first_chord_is_pushed(chart);
                         let (header_height, count_in_geos) = self.add_title_header(
                             &mut root,
                             page_x,
@@ -747,6 +776,7 @@ impl ChartLayoutEngine {
                             chart.tempo.as_ref(),
                             count_in_measures,
                             time_signature,
+                            has_pushed_first_chord,
                         );
                         page_y += header_height;
                         title_header_added = true;
@@ -906,7 +936,12 @@ impl ChartLayoutEngine {
                     actual_system_width,
                 )));
 
-                // Place chord symbols above the highest note content (MuseScore skyline approach)
+                // System-wide chord-symbol Y baseline (used as a fallback for the
+                // section label and for measures without melodies). Per-measure
+                // chord_y is computed inside the measure loop below using each
+                // measure's local melody extent, so a single high note in one
+                // measure no longer pushes chord symbols up across the whole
+                // system.
                 let chord_y = staff_y - 8.0 - melody_extra_above;
 
                 // Add section label for first system of section (skip for count-in)
@@ -973,6 +1008,14 @@ impl ChartLayoutEngine {
                     if let Some(measure) = chart_section.measures().get(measure_idx) {
                         // Get preprocessed melody data for this measure (handles spillover)
                         let melody_data = melody_data_map.get(&measure_idx);
+
+                        // Per-measure chord-symbol Y: use this measure's own melody
+                        // extent rather than the system-wide max, so adjacent low
+                        // measures don't get pushed up by one high measure.
+                        let this_measure_extra_above = melody_data
+                            .map(|md| melody_note_extent(md, self.config.spatium).0)
+                            .unwrap_or(0.0);
+                        let this_chord_y = staff_y - 8.0 - this_measure_extra_above;
 
                         // Get distributed width for this measure
                         let this_measure_width = distributed_widths
@@ -1097,7 +1140,7 @@ impl ChartLayoutEngine {
                         let chord_ctx = chord_renderer::ChordRenderContext {
                             measure_x,
                             measure_width: this_measure_width,
-                            chord_y,
+                            chord_y: this_chord_y,
                             page_number: Some(page_number),
                             global_system_index,
                             measure_idx,
@@ -1262,6 +1305,17 @@ impl ChartLayoutEngine {
         // Track previous chord to hide duplicates
         let mut previous_chord_symbol: Option<String> = None;
 
+        // Beat position collection for cursor / highlight rendering / DAW transport sync.
+        let mut beat_positions: Vec<BeatPosition> = Vec::new();
+
+        // Tempo / tick bookkeeping (same conventions as paginated path):
+        // 480 ticks per quarter note. Continuous mode has no count-in synthesis,
+        // so the song timeline starts at t=0, tick=0.
+        let tempo_bpm = chart.tempo.map(|t| t.bpm).unwrap_or(120.0);
+        let seconds_per_tick = (60.0 / tempo_bpm) / 480.0;
+        let mut cumulative_time = 0.0f64;
+        let mut cumulative_ticks = 0i64;
+
         // Pre-compute section letters for consecutive repeats
         let section_letters = self.compute_section_letters(&chart.sections);
 
@@ -1353,18 +1407,18 @@ impl ChartLayoutEngine {
             });
             if let Some(next_section) = next_non_compact_section
                 && let Some(mut spillback) = detect_section_start_spillback(next_section.measures())
-                {
-                    // Adjust beat position based on this section's last measure time signature
-                    if let Some(last_measure) = chart_section.measures().last() {
-                        let ts = last_measure.time_signature;
-                        spillback.beat_position = (ts.0 as usize).saturating_sub(1);
-                    }
-                    let last_measure_idx = chart_section.measures().len().saturating_sub(1);
-                    push_spillback_map
-                        .entry(last_measure_idx)
-                        .or_default()
-                        .push(spillback);
+            {
+                // Adjust beat position based on this section's last measure time signature
+                if let Some(last_measure) = chart_section.measures().last() {
+                    let ts = last_measure.time_signature;
+                    spillback.beat_position = (ts.0 as usize).saturating_sub(1);
                 }
+                let last_measure_idx = chart_section.measures().len().saturating_sub(1);
+                push_spillback_map
+                    .entry(last_measure_idx)
+                    .or_default()
+                    .push(spillback);
+            }
 
             // Group measures into systems (count-based for consistent layout)
             let systems = self.group_measures_into_systems(chart_section.measures(), content_width);
@@ -1547,6 +1601,12 @@ impl ChartLayoutEngine {
                     if let Some(measure) = chart_section.measures().get(measure_idx) {
                         let melody_data = melody_data_map.get(&measure_idx);
 
+                        // Per-measure chord-symbol Y (see paginated path for rationale).
+                        let this_measure_extra_above = melody_data
+                            .map(|md| melody_note_extent(md, self.config.spatium).0)
+                            .unwrap_or(0.0);
+                        let this_chord_y = staff_y - 8.0 - this_measure_extra_above;
+
                         // Get distributed width for this measure
                         let this_measure_width = distributed_widths
                             .get(local_measure_idx)
@@ -1598,6 +1658,58 @@ impl ChartLayoutEngine {
                             root.add_child(measure_num_node);
                         }
 
+                        // Collect beat positions from actual segment data (mirrors paginated path).
+                        // Required for DAW transport sync and cursor highlighting in scroll mode.
+                        let measure_time_start = cumulative_time;
+                        let measure_tick_start = cumulative_ticks;
+                        for (beat_idx, segment) in measure_result
+                            .segments
+                            .iter_type(SegmentType::CHORD_REST)
+                            .enumerate()
+                        {
+                            let time_start =
+                                measure_time_start + (segment.tick as f64 * seconds_per_tick);
+                            let time_end = measure_time_start
+                                + ((segment.tick + segment.ticks) as f64 * seconds_per_tick);
+                            let absolute_tick = measure_tick_start + segment.tick as i64;
+                            let has_stem = segment.ticks < 960;
+                            let flag_count = match segment.ticks {
+                                t if t >= 480 => 0,
+                                t if t >= 240 => 1,
+                                t if t >= 120 => 2,
+                                t if t >= 60 => 3,
+                                _ => 4,
+                            };
+                            beat_positions.push(BeatPosition {
+                                page: 1, // continuous mode has no real pages
+                                system: global_system_index,
+                                measure: global_measure_index,
+                                beat: beat_idx,
+                                tick: segment.tick,
+                                duration_ticks: segment.ticks,
+                                absolute_tick,
+                                x: measure_x + segment.x,
+                                width: segment.width,
+                                staff_y,
+                                staff_height,
+                                time_start,
+                                time_end,
+                                glyph_codepoint: Some(slash_glyph_for_ticks(segment.ticks)),
+                                glyph_size: self.config.spatium,
+                                glyph_y: staff_y + staff_height / 2.0,
+                                has_stem,
+                                stem_up: true,
+                                flag_count,
+                                time_signature,
+                            });
+                        }
+
+                        // Advance song-time cursor by the measure's full duration.
+                        let measure_duration_ticks =
+                            time_signature.0 as i32 * (1920 / time_signature.1 as i32);
+                        cumulative_time += measure_duration_ticks as f64 * seconds_per_tick;
+                        cumulative_ticks += measure_duration_ticks as i64;
+
                         // Render chord symbols using chord_renderer module
                         // Look up pre-computed measurements for this measure
                         let global_idx = global_section_measure_offset + measure_idx;
@@ -1606,7 +1718,7 @@ impl ChartLayoutEngine {
                         let chord_ctx = chord_renderer::ChordRenderContext {
                             measure_x,
                             measure_width: this_measure_width,
-                            chord_y,
+                            chord_y: this_chord_y,
                             page_number: None, // Continuous mode has no pages
                             global_system_index,
                             measure_idx,
@@ -1700,7 +1812,7 @@ impl ChartLayoutEngine {
             pages: Vec::new(),
             total_height,
             total_width: width,
-            beat_positions: Vec::new(), // TODO: collect beat positions for continuous mode
+            beat_positions,
         }
     }
 
@@ -1998,13 +2110,14 @@ impl ChartLayoutEngine {
         tempo: Option<&crate::time::Tempo>,
         count_in_measures: usize,
         time_signature: (u8, u8),
+        has_pushed_first_chord: bool,
     ) -> (f64, Vec<count_in_renderer::CountInBeatGeometry>) {
         let count_in_config = if count_in_measures > 0 {
             Some(page_rendering::CountInHeaderConfig {
                 num_measures: count_in_measures,
                 beats_per_measure: time_signature.0,
                 beat_unit: time_signature.1,
-                has_pushed_chord: false, // TODO: detect pushed chord on beat 1
+                has_pushed_chord: has_pushed_first_chord,
             })
         } else {
             None
@@ -2152,10 +2265,9 @@ impl ChartLayoutEngine {
                 if chord.full_symbol == "s" {
                     continue;
                 }
-                let is_triplet_push =
-                    chord.push_pull.as_ref().is_some_and(|(is_push, amount)| {
-                        *is_push && amount.base == crate::chord::PushPullBase::Triplet
-                    });
+                let is_triplet_push = chord.push_pull.as_ref().is_some_and(|(is_push, amount)| {
+                    *is_push && amount.base == crate::chord::PushPullBase::Triplet
+                });
                 // Only count as internal if we've accumulated some beats (not at beat 0)
                 if is_triplet_push && cumulative_beats > 0 {
                     found_internal = true;
@@ -2371,8 +2483,11 @@ impl ChartLayoutEngine {
         // Set spillback positions for placing spillback chords at correct triplet positions
         result.spillback_positions = spillback_positions;
 
-        // Add ties for cross-barline notes
-        if let Some(data) = melody_data {
+        // Add ties for cross-barline notes (configurable — lead-sheet styles
+        // sometimes prefer the second piece to render as a fresh attack).
+        if self.config.draw_melody_barline_ties
+            && let Some(data) = melody_data
+        {
             self.add_melody_ties(&mut result, data, ctx);
         }
 
@@ -4495,3 +4610,22 @@ C G Am F | C G
 }
 
 // endregion: --- Tests
+
+/// Detect whether the chart's *first* chord (skipping count-in / compact
+/// sections) carries a push (anticipation) flag. Used to render the count-in
+/// snippet's beat-4 indicator when the song starts on a pushed chord.
+fn chart_first_chord_is_pushed(chart: &crate::chart::Chart) -> bool {
+    use crate::sections::SectionType;
+    chart
+        .sections
+        .iter()
+        .find(|s| {
+            !s.section.section_type.is_compact()
+                && !matches!(s.section.section_type, SectionType::End)
+        })
+        .and_then(|s| s.measures().iter().find(|m| !m.chords.is_empty()))
+        .and_then(|m| m.chords.first())
+        .and_then(|c| c.push_pull)
+        .map(|(is_push, _)| is_push)
+        .unwrap_or(false)
+}

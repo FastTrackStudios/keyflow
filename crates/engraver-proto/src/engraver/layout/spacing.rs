@@ -526,9 +526,10 @@ impl HorizontalSpacing {
         let mut cr_count = 0;
         for i in 0..collision_index {
             if let Some(seg) = segments.get(i)
-                && seg.ticks > 0 {
-                    cr_count += 1;
-                }
+                && seg.ticks > 0
+            {
+                cr_count += 1;
+            }
         }
 
         if cr_count == 0 {
@@ -540,9 +541,10 @@ impl HorizontalSpacing {
 
         for i in 0..collision_index {
             if let Some(seg) = segments.get_mut(i)
-                && seg.ticks > 0 {
-                    seg.width += per_segment;
-                }
+                && seg.ticks > 0
+            {
+                seg.width += per_segment;
+            }
         }
     }
 }

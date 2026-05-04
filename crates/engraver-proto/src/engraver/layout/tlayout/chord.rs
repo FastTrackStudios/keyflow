@@ -161,16 +161,21 @@ pub fn layout_chord(params: &ChordParams, ctx: &LayoutContext) -> (LayoutData, S
     // Calculate which noteheads need to be offset (for seconds)
     let notehead_offsets = calculate_notehead_offsets(&sorted_notes, stem_dir);
 
-    // Calculate the X offset from accidentals on the first note
-    // (the stem must be shifted right by this amount to align with the notehead)
-    let accidental_x_offset = {
-        // Use the widest accidental in the chord
-        let max_acc_width = sorted_notes
-            .iter()
-            .filter(|n| n.accidental != Accidental::None)
-            .map(|n| n.accidental.width() * spatium + spatium * 0.15)
-            .fold(0.0f64, f64::max);
-        max_acc_width
+    // Shared accidental column for the chord. All accidentals are right-aligned
+    // inside a column of `max_acc_width_sp` spatiums; every notehead then lands
+    // at the same X regardless of which accidental (if any) it carries.
+    let max_acc_width_sp = sorted_notes
+        .iter()
+        .filter(|n| n.accidental != Accidental::None)
+        .map(|n| n.accidental.width())
+        .fold(0.0f64, f64::max);
+    let has_any_accidental = max_acc_width_sp > 0.0;
+    let column_width_param = has_any_accidental.then_some(max_acc_width_sp);
+    // Stem / notehead X offset (in pixels): column width + gap.
+    let accidental_x_offset = if has_any_accidental {
+        max_acc_width_sp * spatium + spatium * 0.15
+    } else {
+        0.0
     };
 
     // Layout each note
@@ -184,6 +189,7 @@ pub fn layout_chord(params: &ChordParams, ctx: &LayoutContext) -> (LayoutData, S
             dots: if i == 0 { params.dots } else { 0 }, // Only first note gets dots
             offset_x: notehead_offsets[i],
             ledger_lines: i == 0 || i == sorted_notes.len() - 1, // Only top/bottom get ledgers
+            accidental_column_width: column_width_param,
         };
 
         let (note_layout, note_node) = layout_note(&note_params, ctx);

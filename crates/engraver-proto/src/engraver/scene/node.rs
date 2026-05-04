@@ -469,6 +469,43 @@ impl SceneNode {
         self.find_first(|node| node.id.as_ref() == Some(id))
     }
 
+    /// Hit-test the subtree rooted at this node and return the deepest visible
+    /// descendant whose world-space `bounds` contain `point`.
+    ///
+    /// Walks depth-first; the first leaf-most match wins. Invisible nodes (and
+    /// their subtrees) are skipped. Nodes with zero-area `bounds` are skipped
+    /// for the containment check but their children are still traversed.
+    #[must_use]
+    pub fn hit_test(&self, point: Point) -> Option<&SceneNode> {
+        self.hit_test_recursive(point, kurbo::Affine::IDENTITY)
+    }
+
+    fn hit_test_recursive(
+        &self,
+        point: Point,
+        parent_transform: kurbo::Affine,
+    ) -> Option<&SceneNode> {
+        if !self.visible {
+            return None;
+        }
+        let world_transform = parent_transform * self.transform;
+
+        // Recurse into children first so deeper hits take precedence over ancestors.
+        for child in self.children.iter().rev() {
+            if let Some(found) = child.hit_test_recursive(point, world_transform) {
+                return Some(found);
+            }
+        }
+
+        if self.bounds.width() > 0.0 && self.bounds.height() > 0.0 {
+            let world_bounds = world_transform.transform_rect_bbox(self.bounds);
+            if world_bounds.contains(point) {
+                return Some(self);
+            }
+        }
+        None
+    }
+
     /// Count total number of nodes in the subtree.
     #[must_use]
     pub fn node_count(&self) -> usize {
@@ -1085,6 +1122,55 @@ mod tests {
         let node = SceneNode::leaf(SemanticId::chord(1), commands);
         assert_eq!(node.commands.len(), 1);
         assert!(!node.bounds.is_zero_area());
+    }
+
+    #[test]
+    fn test_hit_test_returns_deepest_match() {
+        // Outer 0..100 x 0..100, child at (10,10)..(30,30) (positioned via transform).
+        let mut outer =
+            SceneNode::group(SemanticId::measure(1)).with_bounds(Rect::new(0.0, 0.0, 100.0, 100.0));
+        let inner = SceneNode::leaf(
+            SemanticId::chord(1),
+            vec![PaintCommand::line(
+                Point::new(0.0, 0.0),
+                Point::new(20.0, 20.0),
+                Color::BLACK,
+                1.0,
+            )],
+        )
+        .with_bounds(Rect::new(0.0, 0.0, 20.0, 20.0))
+        .with_transform(Affine::translate((10.0, 10.0)));
+        outer.add_child(inner);
+
+        // Hit inside the inner child's world bounds → deepest match wins.
+        let hit = outer.hit_test(Point::new(15.0, 15.0)).unwrap();
+        assert_eq!(
+            hit.id.as_ref().unwrap().element_type,
+            ElementType::Chord,
+            "expected chord (deepest hit), got {:?}",
+            hit.id
+        );
+
+        // Hit only in outer (outside child) → outer matches.
+        let hit = outer.hit_test(Point::new(80.0, 80.0)).unwrap();
+        assert_eq!(hit.id.as_ref().unwrap().element_type, ElementType::Measure);
+
+        // Miss entirely.
+        assert!(outer.hit_test(Point::new(200.0, 200.0)).is_none());
+    }
+
+    #[test]
+    fn test_hit_test_skips_invisible() {
+        let mut outer =
+            SceneNode::group(SemanticId::measure(1)).with_bounds(Rect::new(0.0, 0.0, 100.0, 100.0));
+        let invisible_child = SceneNode::leaf(SemanticId::chord(1), vec![])
+            .with_bounds(Rect::new(0.0, 0.0, 50.0, 50.0))
+            .with_visible(false);
+        outer.add_child(invisible_child);
+
+        // Click would hit the invisible child first, but it's skipped → falls back to outer.
+        let hit = outer.hit_test(Point::new(10.0, 10.0)).unwrap();
+        assert_eq!(hit.id.as_ref().unwrap().element_type, ElementType::Measure);
     }
 
     #[test]

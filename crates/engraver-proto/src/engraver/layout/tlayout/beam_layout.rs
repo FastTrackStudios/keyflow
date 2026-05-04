@@ -431,8 +431,11 @@ fn calculate_beam_position(
     let first = &notes[0];
     let last = &notes[notes.len() - 1];
 
-    let first_y = first.y_center(spatium);
-    let last_y = last.y_center(spatium);
+    // Use the stem-attachment anchor Y, not the notehead center, so stem-length math
+    // is correct for any notehead type. Slash heads, for example, anchor up to 1sp
+    // off-center, which would otherwise leave beams 1sp too close to the staff.
+    let first_y = stem_anchor_y(first, stem_dir, spatium);
+    let last_y = stem_anchor_y(last, stem_dir, spatium);
 
     // Get the beam anchor X positions (where the beam will be drawn)
     let first_anchor_x = chord_beam_anchor_x(first, stem_dir, ChordBeamAnchorType::Start, spatium);
@@ -496,7 +499,9 @@ fn calculate_beam_position(
     // Collision avoidance: ensure all inner notes have minimum stem length
     // This is MuseScore's offsetBeamToRemoveCollisions algorithm
     for note in notes.iter() {
-        let note_y = note.y_center(spatium);
+        // Stem-anchor Y (not notehead center) so non-standard heads (slash, X) get
+        // the same effective stem length as normal noteheads.
+        let note_y = stem_anchor_y(note, stem_dir, spatium);
         let note_stem_x = chord_beam_anchor_x(note, stem_dir, ChordBeamAnchorType::Middle, spatium);
         let t = (note_stem_x - first_anchor_x) / run;
         let beam_at_note = start_y + t * (end_y - start_y);
@@ -723,6 +728,12 @@ fn stem_x_for_note(note: &BeamNote, stem_dir: StemDirection, spatium: f64) -> f6
 /// Our rendering uses Y-down (screen coordinates) where positive Y is downward.
 /// The glyph renderer applies `Affine::scale_non_uniform(1.0, -1.0)` to flip Y.
 /// Therefore, SMuFL Y coordinates must be negated for our coordinate system.
+/// Y position of a note's stem attachment point in beam coordinates.
+/// Equals the notehead center Y plus the stem anchor offset for the head type.
+fn stem_anchor_y(note: &BeamNote, stem_dir: StemDirection, spatium: f64) -> f64 {
+    note.y_center(spatium) + stem_y_offset(stem_dir, note.head_type, spatium)
+}
+
 fn stem_y_offset(stem_dir: StemDirection, head_type: NoteHeadType, spatium: f64) -> f64 {
     let (up_y, down_y) = if head_type == NoteHeadType::Slash {
         (SLASH_STEM_UP_SE_Y, SLASH_STEM_DOWN_NW_Y)
@@ -936,9 +947,10 @@ fn find_beam_segments(notes: &[BeamNote], level: usize) -> Vec<(usize, usize)> {
 
     // Handle segment at end
     if let Some(start) = segment_start
-        && notes.len() > start + 1 {
-            segments.push((start, notes.len() - 1));
-        }
+        && notes.len() > start + 1
+    {
+        segments.push((start, notes.len() - 1));
+    }
 
     // For primary beam (level 0), ensure we have at least one segment spanning all notes
     if level == 0 && segments.is_empty() && notes.len() >= 2 {

@@ -70,8 +70,7 @@ impl Default for TimeSigType {
 }
 
 /// Time signature layout parameters.
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct TimeSigParams {
     /// Unique identifier
     pub id: u64,
@@ -80,7 +79,6 @@ pub struct TimeSigParams {
     /// Large time signature (spans entire staff height)
     pub large: bool,
 }
-
 
 /// Get the SMuFL glyph for a digit.
 const fn digit_glyph(digit: u8) -> char {

@@ -600,14 +600,16 @@ mod tests {
     fn test_spring_distribution_basic() {
         // 4 measures with equal stretch — should get roughly equal widths
         let stretches = vec![4.0, 4.0, 4.0, 4.0];
-        let widths = distribute_measure_widths_spring(
-            &stretches, 0, 400.0, 0.5, 100.0, &[], 5.0, 1.2, 1.0,
-        );
+        let widths =
+            distribute_measure_widths_spring(&stretches, 0, 400.0, 0.5, 100.0, &[], 5.0, 1.2, 1.0);
 
         assert_eq!(widths.len(), 4);
         let w0 = widths[0];
         for &w in &widths[1..] {
-            assert!((w - w0).abs() < 1.0, "Equal stretches should give equal widths: {w} vs {w0}");
+            assert!(
+                (w - w0).abs() < 1.0,
+                "Equal stretches should give equal widths: {w} vs {w0}"
+            );
         }
     }
 
@@ -615,19 +617,20 @@ mod tests {
     fn test_spring_distribution_different_stretches() {
         // Measure with more stretch should get more width
         let stretches = vec![2.0, 6.0, 2.0, 6.0];
-        let widths = distribute_measure_widths_spring(
-            &stretches, 0, 400.0, 0.5, 100.0, &[], 5.0, 1.2, 1.0,
-        );
+        let widths =
+            distribute_measure_widths_spring(&stretches, 0, 400.0, 0.5, 100.0, &[], 5.0, 1.2, 1.0);
 
         assert!(
             widths[1] > widths[0],
             "Higher stretch measure should be wider: {} vs {}",
-            widths[1], widths[0]
+            widths[1],
+            widths[0]
         );
         assert!(
             widths[3] > widths[2],
             "Higher stretch measure should be wider: {} vs {}",
-            widths[3], widths[2]
+            widths[3],
+            widths[2]
         );
     }
 
@@ -636,7 +639,15 @@ mod tests {
         let stretches = vec![1.0, 1.0];
         let min_widths = vec![150.0, 50.0]; // First measure needs at least 150pt
         let widths = distribute_measure_widths_spring(
-            &stretches, 0, 300.0, 0.5, 100.0, &min_widths, 5.0, 1.2, 1.0,
+            &stretches,
+            0,
+            300.0,
+            0.5,
+            100.0,
+            &min_widths,
+            5.0,
+            1.2,
+            1.0,
         );
 
         assert!(
@@ -649,9 +660,8 @@ mod tests {
     #[test]
     fn test_spring_distribution_with_count_in() {
         let stretches = vec![4.0, 4.0];
-        let widths = distribute_measure_widths_spring(
-            &stretches, 1, 400.0, 0.5, 100.0, &[], 5.0, 1.2, 1.0,
-        );
+        let widths =
+            distribute_measure_widths_spring(&stretches, 1, 400.0, 0.5, 100.0, &[], 5.0, 1.2, 1.0);
 
         // 1 count-in + 2 regular = 3 total
         assert_eq!(widths.len(), 3);
@@ -730,7 +740,11 @@ mod tests {
         let ticks = vec![1920.0; 4]; // All full measures
         let result = enforce_min_widths(&widths, &ticks, 1920.0, 100.0);
 
-        assert!(result[0] >= 100.0, "Narrow measure should be expanded to min: got {}", result[0]);
+        assert!(
+            result[0] >= 100.0,
+            "Narrow measure should be expanded to min: got {}",
+            result[0]
+        );
     }
 
     #[test]
@@ -741,6 +755,10 @@ mod tests {
         let result = enforce_min_widths(&widths, &ticks, 1920.0, 100.0);
 
         // Pickup min = 50.0, was 30.0 → should expand to 50.0
-        assert!(result[0] >= 50.0, "Pickup should expand to scaled min: got {}", result[0]);
+        assert!(
+            result[0] >= 50.0,
+            "Pickup should expand to scaled min: got {}",
+            result[0]
+        );
     }
 }

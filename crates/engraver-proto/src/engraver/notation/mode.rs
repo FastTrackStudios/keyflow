@@ -24,7 +24,7 @@ impl NotationMode {
         match self {
             Self::Standard => NoteHeadType::Normal,
             Self::Rhythmic => NoteHeadType::Slash,
-            Self::Percussion => NoteHeadType::Normal, // TODO: X noteheads
+            Self::Percussion => NoteHeadType::X,
             Self::Tablature => NoteHeadType::Normal,
         }
     }

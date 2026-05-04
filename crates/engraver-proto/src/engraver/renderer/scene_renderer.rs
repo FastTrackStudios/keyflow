@@ -528,16 +528,17 @@ impl<'a> VelloSceneRenderer<'a> {
 
         // Try to render actual glyph outline from font
         if let Some(font) = self.font
-            && let Some(path) = self.get_glyph_path(font, codepoint, font_size) {
-                // Font outlines are Y-up, but screen coordinates are Y-down
-                // Apply position and flip Y axis
-                let glyph_transform = transform
-                    * Affine::translate(position.to_vec2())
-                    * Affine::scale_non_uniform(1.0, -1.0);
+            && let Some(path) = self.get_glyph_path(font, codepoint, font_size)
+        {
+            // Font outlines are Y-up, but screen coordinates are Y-down
+            // Apply position and flip Y axis
+            let glyph_transform = transform
+                * Affine::translate(position.to_vec2())
+                * Affine::scale_non_uniform(1.0, -1.0);
 
-                scene.fill(Fill::NonZero, glyph_transform, color, None, &path);
-                return;
-            }
+            scene.fill(Fill::NonZero, glyph_transform, color, None, &path);
+            return;
+        }
 
         // Fallback: draw placeholder rectangle (visual size matches glyph)
         let placeholder = Rect::new(
@@ -619,61 +620,62 @@ impl<'a> VelloSceneRenderer<'a> {
 
         // Try to render with the resolved font
         if let Some(font_data) = font_data
-            && let Some(font_ref) = to_font_ref(font_data) {
-                // Use screen font size for glyph metrics so advances match the rendered size
-                let size = skrifa::instance::Size::new(screen_font_size as f32);
-                let charmap = font_ref.charmap();
-                let glyph_metrics = font_ref.glyph_metrics(size, LocationRef::default());
+            && let Some(font_ref) = to_font_ref(font_data)
+        {
+            // Use screen font size for glyph metrics so advances match the rendered size
+            let size = skrifa::instance::Size::new(screen_font_size as f32);
+            let charmap = font_ref.charmap();
+            let glyph_metrics = font_ref.glyph_metrics(size, LocationRef::default());
 
-                // Build glyph list with positions relative to origin
-                let mut glyphs = Vec::new();
-                let mut pen_x = 0.0_f32;
+            // Build glyph list with positions relative to origin
+            let mut glyphs = Vec::new();
+            let mut pen_x = 0.0_f32;
 
-                for ch in text.chars() {
-                    if ch == '\n' {
-                        continue; // Skip newlines for single-line text
-                    }
-                    let gid = charmap.map(ch).unwrap_or_default();
-                    let advance = glyph_metrics.advance_width(gid).unwrap_or_default();
-
-                    glyphs.push(Glyph {
-                        id: gid.to_u32(),
-                        x: pen_x,
-                        y: 0.0, // Baseline is at y=0 relative to position
-                    });
-
-                    pen_x += advance;
+            for ch in text.chars() {
+                if ch == '\n' {
+                    continue; // Skip newlines for single-line text
                 }
+                let gid = charmap.map(ch).unwrap_or_default();
+                let advance = glyph_metrics.advance_width(gid).unwrap_or_default();
 
-                // Calculate anchor offset based on total text width
-                let total_width = pen_x as f64;
-                let anchor_offset = match anchor {
-                    TextAnchor::Start => 0.0,
-                    TextAnchor::Middle => -total_width / 2.0,
-                    TextAnchor::End => -total_width,
-                };
+                glyphs.push(Glyph {
+                    id: gid.to_u32(),
+                    x: pen_x,
+                    y: 0.0, // Baseline is at y=0 relative to position
+                });
 
-                // Use translation-only transform at the screen position with anchor offset
-                // This avoids double-scaling the glyph positions
-                let text_transform = Affine::translate(
-                    (screen_position + kurbo::Vec2::new(anchor_offset, 0.0)).to_vec2(),
-                );
-
-                scene.draw_glyphs(
-                    font_data,
-                    screen_font_size as f32,
-                    false,          // hint
-                    &[],            // normalized_coords
-                    Fill::NonZero,  // style
-                    color,          // brush
-                    1.0,            // brush_alpha
-                    text_transform, // transform
-                    None,           // glyph_transform
-                    glyphs.into_iter(),
-                );
-
-                return;
+                pen_x += advance;
             }
+
+            // Calculate anchor offset based on total text width
+            let total_width = pen_x as f64;
+            let anchor_offset = match anchor {
+                TextAnchor::Start => 0.0,
+                TextAnchor::Middle => -total_width / 2.0,
+                TextAnchor::End => -total_width,
+            };
+
+            // Use translation-only transform at the screen position with anchor offset
+            // This avoids double-scaling the glyph positions
+            let text_transform = Affine::translate(
+                (screen_position + kurbo::Vec2::new(anchor_offset, 0.0)).to_vec2(),
+            );
+
+            scene.draw_glyphs(
+                font_data,
+                screen_font_size as f32,
+                false,          // hint
+                &[],            // normalized_coords
+                Fill::NonZero,  // style
+                color,          // brush
+                1.0,            // brush_alpha
+                text_transform, // transform
+                None,           // glyph_transform
+                glyphs.into_iter(),
+            );
+
+            return;
+        }
 
         // Fallback: draw placeholder rectangles
         let char_width = font_size * 0.6;

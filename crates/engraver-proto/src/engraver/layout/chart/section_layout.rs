@@ -101,10 +101,11 @@ pub fn compute_section_letters(sections: &[crate::ChartSection]) -> HashMap<usiz
 
         // Check if this continues the current run
         if let Some((last_key, indices)) = runs.last_mut()
-            && *last_key == type_key {
-                indices.push(idx);
-                continue;
-            }
+            && *last_key == type_key
+        {
+            indices.push(idx);
+            continue;
+        }
 
         // Start a new run
         runs.push((type_key, vec![idx]));

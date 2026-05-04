@@ -500,7 +500,11 @@ fn create_stop_groove_marker(
     let mut paints = Vec::new();
 
     // Layer 1: Red outer circle (thin red border)
-    paints.push(PaintCommand::filled_circle(center, radius, stop_sign_color()));
+    paints.push(PaintCommand::filled_circle(
+        center,
+        radius,
+        stop_sign_color(),
+    ));
     // Layer 2: White inset band
     paints.push(PaintCommand::filled_circle(
         center,
@@ -589,8 +593,10 @@ pub fn render_text_cues(
             line_thickness,
         ));
 
-        let mut node =
-            SceneNode::leaf(SemanticId::new(ElementType::Articulation, *id_counter), paints);
+        let mut node = SceneNode::leaf(
+            SemanticId::new(ElementType::Articulation, *id_counter),
+            paints,
+        );
         node.set_element_type("text_cue");
         *id_counter += 1;
         nodes.push(node);
@@ -673,8 +679,7 @@ pub fn calculate_segment_index(
                 .iter()
                 .any(|cmd| matches!(cmd, Command::Staccato))
         });
-        let has_explicit_rhythm =
-            measure_has_explicit_chord_rhythm(measure) || has_staccato;
+        let has_explicit_rhythm = measure_has_explicit_chord_rhythm(measure) || has_staccato;
 
         if has_explicit_rhythm {
             // Explicit rhythm: find chord's index in rhythm_elements
@@ -871,7 +876,10 @@ pub fn render_chord_symbols(
 
         // Check if chord has regular accent (not AccentOnPush - that renders on spillback)
         let has_regular_accent = chord.commands.iter().any(|c| matches!(c, Command::Accent));
-        let has_staccato = chord.commands.iter().any(|c| matches!(c, Command::Staccato));
+        let has_staccato = chord
+            .commands
+            .iter()
+            .any(|c| matches!(c, Command::Staccato));
 
         // In Hits sections: show chord name only for the first chord, then just accents/staccatos
         let skip_chord_name = is_hits && hits_chord_shown;
@@ -903,9 +911,21 @@ pub fn render_chord_symbols(
                 if cmd.is_stop() {
                     let after = cmd.is_stop_after();
                     let node = if cmd.is_stop_sign() {
-                        create_stop_marker(synth_bounds, ctx.chord_y, ctx.spatium, after, id_counter)
+                        create_stop_marker(
+                            synth_bounds,
+                            ctx.chord_y,
+                            ctx.spatium,
+                            after,
+                            id_counter,
+                        )
                     } else {
-                        create_stop_groove_marker(synth_bounds, ctx.chord_y, ctx.spatium, after, id_counter)
+                        create_stop_groove_marker(
+                            synth_bounds,
+                            ctx.chord_y,
+                            ctx.spatium,
+                            after,
+                            id_counter,
+                        )
                     };
                     id_counter += 1;
                     nodes.push(node);

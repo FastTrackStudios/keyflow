@@ -18,7 +18,7 @@ mod midi_chart_builder;
 pub use keyflow_import::import_chart;
 
 #[cfg(feature = "midi-import")]
-pub use midi_chart_builder::{MidiChartConfig, generate_chart_text};
+pub use midi_chart_builder::{MelodyGrid, MidiChartConfig, generate_chart_text};
 
 #[cfg(feature = "midi-import")]
 pub use midi_import::{

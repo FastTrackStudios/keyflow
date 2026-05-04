@@ -392,33 +392,6 @@ impl LayoutContextOwned {
 
 // endregion: --- Layout Context Owned
 
-// region:    --- Deprecated API (for migration)
-
-impl<'a> LayoutContext<'a> {
-    /// Create a minimal layout context with just style information.
-    ///
-    /// # Deprecated
-    ///
-    /// This method leaks memory. Use `LayoutContextOwned::new_minimal()` instead.
-    #[deprecated(
-        since = "0.2.0",
-        note = "Use LayoutContextOwned::new_minimal() instead"
-    )]
-    #[must_use]
-    pub fn minimal(style: &'a MStyle) -> Self {
-        // Leak a default Score, Config, and SMuFLFont
-        let score = Box::leak(Box::new(Score::default()));
-        let font = Box::leak(Box::new(SMuFLFont::empty()));
-        let config = Box::leak(Box::new(LayoutConfiguration::default()));
-        Self {
-            config,
-            score,
-            style,
-            font,
-        }
-    }
-}
-
 impl<'a> LayoutContext<'a> {
     /// Create a minimal layout context for testing.
     ///
