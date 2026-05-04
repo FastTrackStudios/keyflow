@@ -35,9 +35,9 @@ pub use api::prelude as api_prelude;
 pub use chart::{
     Chart, ChartIndex, ChartPosition, ChartSection, ChordAttachment, ChordAttachmentType,
     ChordInstance, ChordSyllableAligner, ChordSyllableMapping, DynamicMarking, ElementId,
-    KeyChange, LyricChordParser, LyricLine, LyricSourceFormat, LyricSyllable, LyricSyncLevel,
-    Measure, NavigationType, SectionAlignment, SemanticRole, SourceLink, SyllableParser,
-    TempoChange, TextCue, TimeSignatureChange,
+    KeyChange, LyricChordParser, LyricLine, LyricSegment, LyricSourceFormat, LyricSyllable,
+    LyricSyncLevel, Measure, NavigationType, SectionAlignment, SemanticRole, SourceLink,
+    SyllableParser, TempoChange, TextCue, TimeSignatureChange,
 };
 
 #[cfg(feature = "serde")]

@@ -47,5 +47,7 @@ pub use chord_syllable_alignment::{
     ChordAttachmentType, ChordSyllableAligner, ChordSyllableMapping, SectionAlignment,
 };
 pub use lyric_chord_parser::LyricChordParser;
-pub use lyrics::{ChordAttachment, LyricLine, LyricSourceFormat, LyricSyllable, LyricSyncLevel};
+pub use lyrics::{
+    ChordAttachment, LyricLine, LyricSegment, LyricSourceFormat, LyricSyllable, LyricSyncLevel,
+};
 pub use syllable_parser::SyllableParser;

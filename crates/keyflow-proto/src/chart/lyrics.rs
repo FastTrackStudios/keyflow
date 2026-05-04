@@ -34,6 +34,47 @@ pub enum LyricSyncLevel {
     Syllable,
 }
 
+/// A derived lyric segment at a requested sync granularity.
+#[derive(Debug, Clone, PartialEq, Facet)]
+pub struct LyricSegment {
+    /// Segment granularity.
+    pub level: LyricSyncLevel,
+
+    /// Display text for this segment.
+    pub text: String,
+
+    /// First syllable index covered by this segment.
+    pub start_syllable: usize,
+
+    /// Exclusive end syllable index covered by this segment.
+    pub end_syllable: usize,
+
+    /// Start measure inherited from the first covered syllable.
+    pub measure_index: usize,
+
+    /// Start beat inherited from the first covered syllable.
+    pub beat: f32,
+}
+
+impl LyricSegment {
+    fn new(
+        level: LyricSyncLevel,
+        text: String,
+        start_syllable: usize,
+        end_syllable: usize,
+        first: &LyricSyllable,
+    ) -> Self {
+        Self {
+            level,
+            text,
+            start_syllable,
+            end_syllable,
+            measure_index: first.measure_index,
+            beat: first.beat,
+        }
+    }
+}
+
 /// A complete line of lyrics for a section
 #[derive(Debug, Clone, PartialEq, Facet)]
 pub struct LyricLine {
@@ -193,6 +234,115 @@ impl LyricLine {
         }
         result
     }
+
+    /// Derive lyric segments for a coarser sync level.
+    ///
+    /// The source of truth remains the most detailed available syllable list:
+    /// - syllables are direct one-syllable segments;
+    /// - words are reconstructed from `word_initial` and `hyphen_after`;
+    /// - slides are grouped from words using simple presentation heuristics;
+    /// - section is a single segment spanning the full line.
+    pub fn derive_segments(&self, level: LyricSyncLevel) -> Vec<LyricSegment> {
+        match level {
+            LyricSyncLevel::Syllable => self.derive_syllable_segments(),
+            LyricSyncLevel::Word => self.derive_word_segments(),
+            LyricSyncLevel::Slide => self.derive_slide_segments(),
+            LyricSyncLevel::Section => self.derive_section_segments(),
+        }
+    }
+
+    /// Derive one segment per syllable.
+    pub fn derive_syllable_segments(&self) -> Vec<LyricSegment> {
+        self.syllables
+            .iter()
+            .enumerate()
+            .map(|(idx, syl)| {
+                LyricSegment::new(
+                    LyricSyncLevel::Syllable,
+                    syl.text.clone(),
+                    idx,
+                    idx + 1,
+                    syl,
+                )
+            })
+            .collect()
+    }
+
+    /// Derive words from syllables.
+    pub fn derive_word_segments(&self) -> Vec<LyricSegment> {
+        let mut out = Vec::new();
+        let mut start: Option<usize> = None;
+
+        for idx in 0..self.syllables.len() {
+            let syl = &self.syllables[idx];
+            if start.is_none() || (syl.word_initial && idx != start.unwrap()) {
+                if let Some(s) = start {
+                    push_word_segment(&mut out, &self.syllables, s, idx);
+                }
+                start = Some(idx);
+            }
+
+            if !syl.hyphen_after {
+                if let Some(s) = start.take() {
+                    push_word_segment(&mut out, &self.syllables, s, idx + 1);
+                }
+            }
+        }
+
+        if let Some(s) = start {
+            push_word_segment(&mut out, &self.syllables, s, self.syllables.len());
+        }
+
+        out
+    }
+
+    /// Derive slide-level groups from words.
+    ///
+    /// Heuristics are intentionally conservative and deterministic:
+    /// - break after strong punctuation (`.`, `!`, `?`, `;`, `:`);
+    /// - otherwise keep slides to about eight words;
+    /// - if a comma appears after at least four words, it can end a slide.
+    pub fn derive_slide_segments(&self) -> Vec<LyricSegment> {
+        let words = self.derive_word_segments();
+        if words.is_empty() {
+            return Vec::new();
+        }
+
+        let mut out = Vec::new();
+        let mut slide_start = 0usize;
+        let mut words_in_slide = 0usize;
+
+        for (idx, word) in words.iter().enumerate() {
+            words_in_slide += 1;
+            let punctuation_break = ends_with_strong_break(&word.text);
+            let comma_break = words_in_slide >= 4 && word.text.ends_with(',');
+            let length_break = words_in_slide >= 8;
+            let is_last = idx + 1 == words.len();
+
+            if punctuation_break || comma_break || length_break || is_last {
+                push_slide_segment(&mut out, &words, slide_start, idx + 1);
+                slide_start = idx + 1;
+                words_in_slide = 0;
+            }
+        }
+
+        out
+    }
+
+    /// Derive one section-level segment.
+    pub fn derive_section_segments(&self) -> Vec<LyricSegment> {
+        let Some(first) = self.syllables.first() else {
+            return Vec::new();
+        };
+
+        vec![LyricSegment::new(
+            LyricSyncLevel::Section,
+            self.full_text(),
+            0,
+            self.syllables.len(),
+            first,
+        )]
+    }
 }
 
 impl Default for LyricLine {
@@ -295,6 +445,70 @@ impl LyricSyllable {
     }
 }
 
+fn push_word_segment(
+    out: &mut Vec<LyricSegment>,
+    syllables: &[LyricSyllable],
+    start: usize,
+    end: usize,
+) {
+    if start >= end || start >= syllables.len() {
+        return;
+    }
+
+    let mut text = String::new();
+    for (offset, syl) in syllables[start..end].iter().enumerate() {
+        if offset > 0 && !text.ends_with('-') {
+            text.push('-');
+        }
+        text.push_str(&syl.text);
+        if syl.hyphen_after {
+            text.push('-');
+        }
+    }
+
+    out.push(LyricSegment::new(
+        LyricSyncLevel::Word,
+        text,
+        start,
+        end,
+        &syllables[start],
+    ));
+}
+
+fn push_slide_segment(
+    out: &mut Vec<LyricSegment>,
+    words: &[LyricSegment],
+    start_word: usize,
+    end_word: usize,
+) {
+    if start_word >= end_word || start_word >= words.len() {
+        return;
+    }
+
+    let first = &words[start_word];
+    let last = &words[end_word - 1];
+    out.push(LyricSegment {
+        level: LyricSyncLevel::Slide,
+        text: words[start_word..end_word]
+            .iter()
+            .map(|w| w.text.as_str())
+            .collect::<Vec<_>>()
+            .join(" "),
+        start_syllable: first.start_syllable,
+        end_syllable: last.end_syllable,
+        measure_index: first.measure_index,
+        beat: first.beat,
+    });
+}
+
+fn ends_with_strong_break(text: &str) -> bool {
+    text.ends_with('.')
+        || text.ends_with('!')
+        || text.ends_with('?')
+        || text.ends_with(';')
+        || text.ends_with(':')
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -329,5 +543,52 @@ mod tests {
         // Note: we'll get "Twinkle-twinkle little" since syllables are joined
         let text = line.full_text();
         assert!(text.contains("Twinkle") && text.contains("twinkle"));
+    }
+
+    #[test]
+    fn derives_words_from_syllables() {
+        let line = LyricLine::parse_simple("A-ma-zing grace");
+        let words = line.derive_word_segments();
+
+        assert_eq!(words.len(), 2);
+        assert_eq!(words[0].text, "A-ma-zing");
+        assert_eq!(words[0].start_syllable, 0);
+        assert_eq!(words[0].end_syllable, 3);
+        assert_eq!(words[1].text, "grace");
+        assert_eq!(words[1].start_syllable, 3);
+        assert_eq!(words[1].end_syllable, 4);
+    }
+
+    #[test]
+    fn derives_slides_from_words_with_punctuation() {
+        let line = LyricLine::parse_simple("Amazing grace, how sweet the sound. That saved me.");
+        let slides = line.derive_slide_segments();
+
+        assert_eq!(slides.len(), 2);
+        assert_eq!(slides[0].text, "Amazing grace, how sweet the sound.");
+        assert_eq!(slides[0].start_syllable, 0);
+        assert_eq!(slides[1].text, "That saved me.");
+        assert_eq!(slides[1].end_syllable, line.syllables.len());
+    }
+
+    #[test]
+    fn derives_section_from_any_detailed_line() {
+        let line = LyricLine::parse_simple("A-ma-zing grace");
+        let sections = line.derive_segments(LyricSyncLevel::Section);
+
+        assert_eq!(sections.len(), 1);
+        assert_eq!(sections[0].text, "A-ma-zing grace");
+        assert_eq!(sections[0].start_syllable, 0);
+        assert_eq!(sections[0].end_syllable, line.syllables.len());
+    }
+
+    #[test]
+    fn derives_syllable_segments_directly() {
+        let line = LyricLine::parse_simple("A-ma");
+        let syllables = line.derive_segments(LyricSyncLevel::Syllable);
+
+        assert_eq!(syllables.len(), 2);
+        assert_eq!(syllables[0].text, "A");
+        assert_eq!(syllables[1].text, "ma");
     }
 }
