@@ -164,9 +164,12 @@ fn full_count_beat(
     time_sig_den: i32,
     full_count_odd_time: bool,
 ) -> Option<u8> {
-    if let Some(n) =
-        calculate_odd_time_count(beat_index, beats_per_measure, time_sig_den, full_count_odd_time)
-    {
+    if let Some(n) = calculate_odd_time_count(
+        beat_index,
+        beats_per_measure,
+        time_sig_den,
+        full_count_odd_time,
+    ) {
         return Some(n as u8);
     }
     if beat_index >= 1 && beat_index <= beats_per_measure {
@@ -300,7 +303,15 @@ mod tests {
             .collect();
         assert_eq!(
             counts,
-            vec![Some(1), Some(2), Some(3), Some(1), Some(2), Some(3), Some(4)]
+            vec![
+                Some(1),
+                Some(2),
+                Some(3),
+                Some(1),
+                Some(2),
+                Some(3),
+                Some(4)
+            ]
         );
     }
 

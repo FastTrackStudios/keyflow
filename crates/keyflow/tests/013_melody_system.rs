@@ -70,7 +70,10 @@ VS 4
     assert_eq!(first_measure.chords.len(), 1);
     assert_eq!(first_measure.melodies.len(), 1);
     assert_eq!(first_measure.chords[0].full_symbol, "Cmaj7");
-    assert_eq!(format!("{}", first_measure.melodies[0]), "m{ r2 r4t Bb4t B4t }");
+    assert_eq!(
+        format!("{}", first_measure.melodies[0]),
+        "m{ r2 r4t Bb4t B4t }"
+    );
 }
 
 #[test]

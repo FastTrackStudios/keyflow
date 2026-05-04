@@ -15,7 +15,9 @@ fn main() {
             println!(
                 "{} start_measure={} length={:?}",
                 section.name,
-                section.explicit_start_measure.unwrap_or(section.position.measure),
+                section
+                    .explicit_start_measure
+                    .unwrap_or(section.position.measure),
                 section.explicit_length
             );
         }
@@ -33,7 +35,9 @@ fn main() {
         .find(|s| s.name == section_name)
         .unwrap_or_else(|| panic!("section not found: {section_name}"));
 
-    let start_measure = section.explicit_start_measure.unwrap_or(section.position.measure);
+    let start_measure = section
+        .explicit_start_measure
+        .unwrap_or(section.position.measure);
     let target_measure = start_measure + local_measure - 1;
     let start_tick = i64::from(section.tick) + (i64::from(local_measure - 1) * ticks_per_measure);
     let end_tick = start_tick + ticks_per_measure;

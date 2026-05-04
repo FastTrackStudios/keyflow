@@ -71,12 +71,7 @@ C G Am F
 
     let chart = parse_chart(input).expect("Failed to parse chart");
     let section = &chart.sections[0];
-    let lyric_line = section
-        .lyrics_track()
-        .unwrap()
-        .lyrics
-        .as_ref()
-        .unwrap();
+    let lyric_line = section.lyrics_track().unwrap().lyrics.as_ref().unwrap();
 
     // "A-ma-zing" splits into 3 syllables, then "grace", "how", "sweet" = 6 total
     assert_eq!(lyric_line.syllables.len(), 6);

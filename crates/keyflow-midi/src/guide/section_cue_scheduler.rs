@@ -64,8 +64,6 @@ mod tests {
             replace_beat_one: true,
         };
         // CountIn has no MIDI mapping
-        assert!(
-            SectionCueScheduler::schedule(0.0, &SectionType::CountIn, None, &config).is_none()
-        );
+        assert!(SectionCueScheduler::schedule(0.0, &SectionType::CountIn, None, &config).is_none());
     }
 }

@@ -8,7 +8,6 @@ use std::fs;
 use std::path::PathBuf;
 
 use dawfile_reaper::{MidiEventType, MidiSourceEvent};
-use keyflow::chord::{detect_chords_from_midi_notes, MidiNote as KeyflowMidiNote};
 use engraver::export::pdf::PdfSerializer;
 use engraver::export::svg::{SvgExportConfig, SvgSerializer};
 use engraver::fonts::ChartFontBundle;
@@ -18,6 +17,7 @@ use engraver::import::{
 };
 use engraver::layout::chart::{ChartLayoutConfig, ChartLayoutEngine, LayoutMode};
 use engraver::style::MStyle;
+use keyflow::chord::{detect_chords_from_midi_notes, MidiNote as KeyflowMidiNote};
 
 const A4_WIDTH: f64 = 595.0;
 const A4_HEIGHT: f64 = 842.0;
@@ -29,9 +29,11 @@ fn output_dir() -> PathBuf {
 }
 
 fn load_rpp() -> dawfile_reaper::ReaperProject {
-    let rpp_text =
-        fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/vienna_couch.rpp"))
-            .expect("read RPP fixture");
+    let rpp_text = fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/vienna_couch.rpp"
+    ))
+    .expect("read RPP fixture");
     dawfile_reaper::parse_project_text(&rpp_text).expect("parse RPP")
 }
 
@@ -85,8 +87,7 @@ fn rpp_to_midi_file(project: &dawfile_reaper::ReaperProject) -> MidiFile {
     // The MIDI item starts at a position on the timeline (in seconds).
     // All MIDI ticks are relative to the item start, so we must offset them
     // to get absolute timeline positions that align with section markers.
-    let item_offset_ticks =
-        (chords_item.position * ppq as f64 * bpm / 60.0).round() as u32;
+    let item_offset_ticks = (chords_item.position * ppq as f64 * bpm / 60.0).round() as u32;
 
     // --- Extract notes and chord names from event_stream (preserves interleaved order) ---
     let mut notes: Vec<MidiNote> = Vec::new();
@@ -121,13 +122,10 @@ fn rpp_to_midi_file(project: &dawfile_reaper::ReaperProject) -> MidiFile {
                         let pitch = midi_evt.bytes[1];
                         let velocity = midi_evt.bytes[2];
                         if velocity > 0 {
-                            pending_notes
-                                .insert((pitch, channel), (timeline_tick, velocity));
+                            pending_notes.insert((pitch, channel), (timeline_tick, velocity));
                         } else {
                             // velocity 0 note-on = note-off
-                            if let Some((start, vel)) =
-                                pending_notes.remove(&(pitch, channel))
-                            {
+                            if let Some((start, vel)) = pending_notes.remove(&(pitch, channel)) {
                                 notes.push(MidiNote {
                                     pitch,
                                     velocity: vel,
@@ -140,8 +138,7 @@ fn rpp_to_midi_file(project: &dawfile_reaper::ReaperProject) -> MidiFile {
                     }
                     MidiEventType::NoteOff => {
                         let pitch = midi_evt.bytes[1];
-                        if let Some((start, vel)) = pending_notes.remove(&(pitch, channel))
-                        {
+                        if let Some((start, vel)) = pending_notes.remove(&(pitch, channel)) {
                             notes.push(MidiNote {
                                 pitch,
                                 velocity: vel,
@@ -175,8 +172,7 @@ fn rpp_to_midi_file(project: &dawfile_reaper::ReaperProject) -> MidiFile {
 
         // LINES track may have multiple items (one per section)
         for lines_item in &lines_track.items {
-            let lines_item_offset =
-                (lines_item.position * ppq as f64 * bpm / 60.0).round() as u32;
+            let lines_item_offset = (lines_item.position * ppq as f64 * bpm / 60.0).round() as u32;
 
             if let Some(lines_midi) = lines_item
                 .takes
@@ -200,8 +196,7 @@ fn rpp_to_midi_file(project: &dawfile_reaper::ReaperProject) -> MidiFile {
                                 let velocity = midi_evt.bytes[2];
                                 if velocity > 0 {
                                     pending.insert((pitch, channel), (timeline_tick, velocity));
-                                } else if let Some((start, vel)) =
-                                    pending.remove(&(pitch, channel))
+                                } else if let Some((start, vel)) = pending.remove(&(pitch, channel))
                                 {
                                     line_notes.push(MidiNote {
                                         pitch,
@@ -352,8 +347,14 @@ fn test_vienna_rpp_to_midi_file() {
     let midi = rpp_to_midi_file(&project);
 
     assert_eq!(midi.ppq(), 960);
-    assert!(midi.swing().is_some(), "should have swing value from CFGEDIT");
-    assert!((midi.swing().unwrap() - 0.6667).abs() < 0.01, "swing should be triplet");
+    assert!(
+        midi.swing().is_some(),
+        "should have swing value from CFGEDIT"
+    );
+    assert!(
+        (midi.swing().unwrap() - 0.6667).abs() < 0.01,
+        "swing should be triplet"
+    );
     assert!((midi.initial_tempo() - 140.0).abs() < 0.01);
     assert_eq!(midi.initial_time_signature(), (4, 4));
     assert!(!midi.tracks().is_empty());
@@ -436,18 +437,14 @@ fn test_vienna_rpp_to_pdf() {
     // Export SVG pages
     let mut svg_pages = Vec::with_capacity(result.pages.len());
     for page in &result.pages {
-        let svg_config = SvgExportConfig::for_page(
-            page.x_offset,
-            page.y_offset,
-            page.width,
-            page.height,
-        )
-        .with_embedded_font("Bravura", font_bundle.symbol_font_data().as_ref().clone())
-        .with_embedded_font(
-            "MuseJazzText",
-            font_bundle.text_font_data().as_ref().clone(),
-        )
-        .with_embedded_font("FreeSans", font_bundle.aux_font_data().as_ref().clone());
+        let svg_config =
+            SvgExportConfig::for_page(page.x_offset, page.y_offset, page.width, page.height)
+                .with_embedded_font("Bravura", font_bundle.symbol_font_data().as_ref().clone())
+                .with_embedded_font(
+                    "MuseJazzText",
+                    font_bundle.text_font_data().as_ref().clone(),
+                )
+                .with_embedded_font("FreeSans", font_bundle.aux_font_data().as_ref().clone());
         let mut serializer = SvgSerializer::new(svg_config);
         svg_pages.push(serializer.serialize(&result.scene));
     }
@@ -489,7 +486,12 @@ fn test_chord_detection_voicings() {
 
     // D11 (VS 1: D4 G4 A4 C5 E5) — 5-note voicing, should be D11
     let d11_5 = detect(&[62, 67, 69, 72, 76], "D11 (5-note)");
-    assert!(d11_5.iter().any(|s| s.contains("D11") || s.contains("D7sus4")), "D11 5-note");
+    assert!(
+        d11_5
+            .iter()
+            .any(|s| s.contains("D11") || s.contains("D7sus4")),
+        "D11 5-note"
+    );
 
     // D11 (VS 2: D4 G4 A4 C5) — 4-note voicing, currently D7sus4
     let d11_4 = detect(&[62, 67, 69, 72], "D11 (4-note)");
@@ -497,7 +499,11 @@ fn test_chord_detection_voicings() {
 
     // Eb11/Ab (Ab3 Db4 Eb4 Bb4) — sus4add9 with Ab root (Eb7sus4/Ab with Eb root)
     let eb11 = detect(&[56, 61, 63, 70], "Eb11/Ab");
-    assert!(eb11.iter().any(|s| s.contains("sus4")), "Eb11/Ab should be sus4-based, got {:?}", eb11);
+    assert!(
+        eb11.iter().any(|s| s.contains("sus4")),
+        "Eb11/Ab should be sus4-based, got {:?}",
+        eb11
+    );
     println!("  Eb11/Ab detected as: {:?}", eb11);
 
     // Gbmaj (Gb3 Bb3 Db4)

@@ -60,9 +60,7 @@ impl ClickScheduler {
                         ClickType::Beat
                     };
                     // Only emit beat if beat_enabled, or accent if accent_enabled on beat 1
-                    if (is_accent && config.accent_enabled)
-                        || (!is_accent && config.beat_enabled)
-                    {
+                    if (is_accent && config.accent_enabled) || (!is_accent && config.beat_enabled) {
                         events.push(ClickEvent {
                             click_type,
                             position_quarters: pos,
@@ -149,7 +147,9 @@ impl ClickScheduler {
             a.position_quarters
                 .partial_cmp(&b.position_quarters)
                 .unwrap_or(std::cmp::Ordering::Equal)
-                .then_with(|| click_type_priority(a.click_type).cmp(&click_type_priority(b.click_type)))
+                .then_with(|| {
+                    click_type_priority(a.click_type).cmp(&click_type_priority(b.click_type))
+                })
         });
 
         // Deduplicate: if two events are at the same position, keep only the highest priority
@@ -362,13 +362,22 @@ mod tests {
         let config = make_config(true, true, false, false);
         let events = ClickScheduler::schedule(0.0, 2.0, 0.0, &ts(4, 4), &config);
 
-        let accent = events.iter().find(|e| e.click_type == ClickType::Accent).unwrap();
+        let accent = events
+            .iter()
+            .find(|e| e.click_type == ClickType::Accent)
+            .unwrap();
         assert_eq!(accent.midi_note, 60); // CLICK_ACCENT
 
-        let beat = events.iter().find(|e| e.click_type == ClickType::Beat).unwrap();
+        let beat = events
+            .iter()
+            .find(|e| e.click_type == ClickType::Beat)
+            .unwrap();
         assert_eq!(beat.midi_note, 61); // CLICK_BEAT
 
-        let eighth = events.iter().find(|e| e.click_type == ClickType::Eighth).unwrap();
+        let eighth = events
+            .iter()
+            .find(|e| e.click_type == ClickType::Eighth)
+            .unwrap();
         assert_eq!(eighth.midi_note, 62); // CLICK_EIGHTH
     }
 

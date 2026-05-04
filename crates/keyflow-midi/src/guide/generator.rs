@@ -43,13 +43,17 @@ impl GuideGenerator {
 
         // Generate click and count events for each measure
         for measure_idx in 0..total_measures {
-            let measure_start =
-                count_in_start_quarters + measure_idx as f64 * quarters_per_measure;
+            let measure_start = count_in_start_quarters + measure_idx as f64 * quarters_per_measure;
             let measure_end = measure_start + quarters_per_measure;
 
             // Click events for this measure
-            let click_events =
-                ClickScheduler::schedule(measure_start, measure_end, measure_start, time_sig, click_config);
+            let click_events = ClickScheduler::schedule(
+                measure_start,
+                measure_end,
+                measure_start,
+                time_sig,
+                click_config,
+            );
 
             for click in click_events {
                 // If guide replaces beat 1 and this is beat 1 of the first measure,
@@ -156,20 +160,18 @@ impl GuideGenerator {
             return events;
         }
 
-        let total_body_measures =
-            ((section_end_quarters - section_start_quarters) / quarters_per_measure).ceil()
-                as usize;
+        let total_body_measures = ((section_end_quarters - section_start_quarters)
+            / quarters_per_measure)
+            .ceil() as usize;
 
         let has_section_cue = guide_config.enabled
             && guide_config.replace_beat_one
             && midi_map::section_type_midi_note(section_type).is_some();
 
         for measure_idx in 0..total_body_measures {
-            let measure_start =
-                section_start_quarters + measure_idx as f64 * quarters_per_measure;
+            let measure_start = section_start_quarters + measure_idx as f64 * quarters_per_measure;
             // Clamp the last measure to section_end to avoid overshooting
-            let measure_end =
-                (measure_start + quarters_per_measure).min(section_end_quarters);
+            let measure_end = (measure_start + quarters_per_measure).min(section_end_quarters);
 
             let click_events = ClickScheduler::schedule(
                 measure_start,
@@ -258,8 +260,8 @@ mod tests {
     fn test_generate_1_measure_4_4() {
         let (click, count, guide) = default_configs();
         let events = GuideGenerator::generate(
-            4.0,  // section starts at beat 4
-            0.0,  // count-in starts at beat 0
+            4.0, // section starts at beat 4
+            0.0, // count-in starts at beat 0
             &ts(4, 4),
             120.0,
             &SectionType::Verse,
@@ -285,7 +287,10 @@ mod tests {
 
         assert_eq!(cue_count, 1, "should have 1 section cue");
         // Beat 1 is replaced by guide, so 3 beat clicks remain
-        assert_eq!(click_count, 3, "should have 3 click events (beat 1 replaced)");
+        assert_eq!(
+            click_count, 3,
+            "should have 3 click events (beat 1 replaced)"
+        );
         assert_eq!(count_count, 4, "should have 4 count events");
     }
 
@@ -357,9 +362,9 @@ mod tests {
         let (click, count, guide) = default_configs();
         // 1-measure count-in (qn 0–4), 2-measure body (qn 4–12)
         let events = GuideGenerator::generate_section(
-            4.0,   // section_start
-            12.0,  // section_end (2 measures of 4/4)
-            0.0,   // count_in_start
+            4.0,  // section_start
+            12.0, // section_end (2 measures of 4/4)
+            0.0,  // count_in_start
             &ts(4, 4),
             120.0,
             &SectionType::Verse,
@@ -374,7 +379,11 @@ mod tests {
             .iter()
             .filter(|e| matches!(e, GuideEvent::Click(c) if c.position_quarters >= 4.0 - 1e-9))
             .collect();
-        assert_eq!(body_clicks.len(), 7, "body should have 7 click events (3 + 4)");
+        assert_eq!(
+            body_clicks.len(),
+            7,
+            "body should have 7 click events (3 + 4)"
+        );
     }
 
     #[test]
@@ -382,7 +391,7 @@ mod tests {
         let (click, count, guide) = default_configs();
         let events = GuideGenerator::generate_section(
             4.0,
-            8.0,  // 1 body measure
+            8.0, // 1 body measure
             0.0,
             &ts(4, 4),
             120.0,
@@ -403,9 +412,14 @@ mod tests {
         // No click at position 4.0 (replaced by cue)
         let click_at_4: Vec<_> = events
             .iter()
-            .filter(|e| matches!(e, GuideEvent::Click(c) if (c.position_quarters - 4.0).abs() < 1e-9))
+            .filter(
+                |e| matches!(e, GuideEvent::Click(c) if (c.position_quarters - 4.0).abs() < 1e-9),
+            )
             .collect();
-        assert!(click_at_4.is_empty(), "beat 1 click should be replaced by section cue");
+        assert!(
+            click_at_4.is_empty(),
+            "beat 1 click should be replaced by section cue"
+        );
     }
 
     #[test]
@@ -442,7 +456,11 @@ mod tests {
             .iter()
             .filter(|e| matches!(e, GuideEvent::Count(c) if (c.position_quarters - 4.0).abs() < 1e-9 && c.count_number == 1))
             .collect();
-        assert_eq!(count_at_4.len(), 1, "should have count '1' fallback at body beat 1");
+        assert_eq!(
+            count_at_4.len(),
+            1,
+            "should have count '1' fallback at body beat 1"
+        );
     }
 
     #[test]
@@ -478,7 +496,11 @@ mod tests {
             .iter()
             .filter(|e| matches!(e, GuideEvent::Click(c) if c.position_quarters >= 4.0 - 1e-9))
             .collect();
-        assert_eq!(body_clicks.len(), 16, "4 body measures × 4 beats = 16 clicks");
+        assert_eq!(
+            body_clicks.len(),
+            16,
+            "4 body measures × 4 beats = 16 clicks"
+        );
     }
 
     #[test]

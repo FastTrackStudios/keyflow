@@ -8,8 +8,12 @@ use daw::module::{ActionDef, DawModule, ModuleContext};
 pub struct KeyflowModule;
 
 impl DawModule for KeyflowModule {
-    fn name(&self) -> &str { "keyflow" }
-    fn display_name(&self) -> &str { "Keyflow" }
+    fn name(&self) -> &str {
+        "keyflow"
+    }
+    fn display_name(&self) -> &str {
+        "Keyflow"
+    }
 
     fn actions(&self) -> Vec<ActionDef> {
         // Keyflow is a library — no REAPER actions.

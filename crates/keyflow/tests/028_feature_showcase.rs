@@ -88,18 +88,14 @@ OU 4
     // Export SVG pages
     let mut svg_pages = Vec::with_capacity(result.pages.len());
     for page in &result.pages {
-        let svg_config = SvgExportConfig::for_page(
-            page.x_offset,
-            page.y_offset,
-            page.width,
-            page.height,
-        )
-        .with_embedded_font("Bravura", font_bundle.symbol_font_data().as_ref().clone())
-        .with_embedded_font(
-            "MuseJazzText",
-            font_bundle.text_font_data().as_ref().clone(),
-        )
-        .with_embedded_font("FreeSans", font_bundle.aux_font_data().as_ref().clone());
+        let svg_config =
+            SvgExportConfig::for_page(page.x_offset, page.y_offset, page.width, page.height)
+                .with_embedded_font("Bravura", font_bundle.symbol_font_data().as_ref().clone())
+                .with_embedded_font(
+                    "MuseJazzText",
+                    font_bundle.text_font_data().as_ref().clone(),
+                )
+                .with_embedded_font("FreeSans", font_bundle.aux_font_data().as_ref().clone());
         let mut serializer = SvgSerializer::new(svg_config);
         svg_pages.push(serializer.serialize(&result.scene));
     }

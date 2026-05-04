@@ -16,7 +16,10 @@ const A4_WIDTH: f64 = 595.0;
 const A4_HEIGHT: f64 = 842.0;
 
 #[derive(Parser)]
-#[command(name = "kf", about = "Keyflow chart CLI — parse, inspect, and render charts")]
+#[command(
+    name = "kf",
+    about = "Keyflow chart CLI — parse, inspect, and render charts"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -122,10 +125,7 @@ impl LayoutPipeline {
         })
     }
 
-    fn layout(
-        &self,
-        chart: &Chart,
-    ) -> ChartLayoutResult {
+    fn layout(&self, chart: &Chart) -> ChartLayoutResult {
         let config = ChartLayoutConfig::master_rhythm().with_page_offsets(true);
         let mode = LayoutMode::Paginated {
             page_width: A4_WIDTH,
@@ -134,40 +134,30 @@ impl LayoutPipeline {
         self.engine.layout_chart_with_config(chart, &mode, &config)
     }
 
-    fn export_svg_pages(
-        &self,
-        result: &ChartLayoutResult,
-    ) -> Vec<String> {
+    fn export_svg_pages(&self, result: &ChartLayoutResult) -> Vec<String> {
         let mut pages = Vec::with_capacity(result.pages.len());
         for page in &result.pages {
-            let config = SvgExportConfig::for_page(
-                page.x_offset,
-                page.y_offset,
-                page.width,
-                page.height,
-            )
-            .with_embedded_font(
-                "Bravura",
-                self.font_bundle.symbol_font_data().as_ref().clone(),
-            )
-            .with_embedded_font(
-                "MuseJazzText",
-                self.font_bundle.text_font_data().as_ref().clone(),
-            )
-            .with_embedded_font(
-                "FreeSans",
-                self.font_bundle.aux_font_data().as_ref().clone(),
-            );
+            let config =
+                SvgExportConfig::for_page(page.x_offset, page.y_offset, page.width, page.height)
+                    .with_embedded_font(
+                        "Bravura",
+                        self.font_bundle.symbol_font_data().as_ref().clone(),
+                    )
+                    .with_embedded_font(
+                        "MuseJazzText",
+                        self.font_bundle.text_font_data().as_ref().clone(),
+                    )
+                    .with_embedded_font(
+                        "FreeSans",
+                        self.font_bundle.aux_font_data().as_ref().clone(),
+                    );
             let mut serializer = SvgSerializer::new(config);
             pages.push(serializer.serialize(&result.scene));
         }
         pages
     }
 
-    fn export_pdf(
-        &self,
-        result: &ChartLayoutResult,
-    ) -> Result<Vec<u8>, String> {
+    fn export_pdf(&self, result: &ChartLayoutResult) -> Result<Vec<u8>, String> {
         let svg_pages = self.export_svg_pages(result);
         let symbol_font = self.font_bundle.symbol_font_data();
         let text_font = self.font_bundle.text_font_data();
@@ -209,8 +199,14 @@ fn run(cli: Cli) -> Result<(), String> {
 
             // Print metadata
             println!("=== Chart Structure ===\n");
-            println!("Title:    {}", chart.metadata.title.as_deref().unwrap_or("(none)"));
-            println!("Artist:   {}", chart.metadata.artist.as_deref().unwrap_or("(none)"));
+            println!(
+                "Title:    {}",
+                chart.metadata.title.as_deref().unwrap_or("(none)")
+            );
+            println!(
+                "Artist:   {}",
+                chart.metadata.artist.as_deref().unwrap_or("(none)")
+            );
             if let Some(tempo) = &chart.tempo {
                 println!("Tempo:    {}", tempo);
             }
@@ -252,8 +248,13 @@ fn run(cli: Cli) -> Result<(), String> {
                     let melody_info = if measure.melodies.is_empty() {
                         String::new()
                     } else {
-                        let total_notes: usize = measure.melodies.iter().map(|m| m.notes.len()).sum();
-                        format!(" + {} melody ({} notes)", measure.melodies.len(), total_notes)
+                        let total_notes: usize =
+                            measure.melodies.iter().map(|m| m.notes.len()).sum();
+                        format!(
+                            " + {} melody ({} notes)",
+                            measure.melodies.len(),
+                            total_notes
+                        )
                     };
                     println!("  Measure {}: [{}]{}", j, chords.join(", "), melody_info);
                 }
@@ -330,10 +331,7 @@ fn run(cli: Cli) -> Result<(), String> {
                     .file_stem()
                     .and_then(|s| s.to_str())
                     .unwrap_or("chart");
-                let ext = output
-                    .extension()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("svg");
+                let ext = output.extension().and_then(|s| s.to_str()).unwrap_or("svg");
                 let dir = output.parent().unwrap_or(std::path::Path::new("."));
 
                 for (i, svg) in svg_pages.iter().enumerate() {

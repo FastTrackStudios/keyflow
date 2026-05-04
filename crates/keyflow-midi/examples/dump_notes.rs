@@ -21,7 +21,10 @@ fn main() {
         let end = start + note.duration_ticks as i64;
         let raw_measure = (start / ticks_per_measure) + 1;
         if (range.0..=range.1).contains(&raw_measure) {
-            println!("raw_measure={} start={} end={} dur={} ch={} pitch={}", raw_measure, start, end, note.duration_ticks, note.channel, note.pitch);
+            println!(
+                "raw_measure={} start={} end={} dur={} ch={} pitch={}",
+                raw_measure, start, end, note.duration_ticks, note.channel, note.pitch
+            );
         }
     }
 }

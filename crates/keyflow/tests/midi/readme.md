@@ -54,3 +54,29 @@ We consider the importer healthy when:
 
 Large, exact-output assertions should live in `cells/keyflow/keyflow/tests/*.rs` fixtures.
 This folder is the **discovery corpus** that feeds those regression tests.
+
+## Snapshot harness
+
+Each `.mid` in this folder also has a deterministic chart-text snapshot
+written next to it as `<basename>.kf`. The snapshot is the output of
+`generate_chart_text(&midi, &MidiChartConfig)` — i.e. the full
+import-and-format pipeline. The tests live in
+`crates/keyflow-midi/tests/snapshot_harness.rs` and are gated with
+`#[ignore]` because the corpus may not be present in every clone.
+
+```bash
+# Verify all snapshots match (won't run without --ignored).
+cargo test -p keyflow-midi -- --ignored snapshot_
+
+# After a deliberate output change, regenerate:
+KEYFLOW_UPDATE_SNAPSHOTS=1 cargo test -p keyflow-midi -- --ignored snapshot_
+```
+
+CI should run the verify mode whenever the corpus is checked in. A
+panicking diff (first 30 differing lines + count) makes accidental
+regressions obvious in PR output.
+
+The complementary `assert_marker_chords_match` tests in
+`midi_song_*.rs` verify *semantic* alignment with each MIDI's own chord
+markers; the snapshot harness verifies *output stability* of the whole
+chart-text pipeline.
