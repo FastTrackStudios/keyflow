@@ -17,3 +17,4 @@ btca resources   # list all available resources
 | `facet` | facet-rs/facet | Rust reflection — shapes, derive macros, serialization, pretty-printing |
 | `figue` | bearcove/figue | Config parsing from CLI args, env vars, and config files using facet reflection |
 | `styx` | bearcove/styx | Cleaner serialization format — alternative to JSON/YAML with schema support |
+| `capn` | bearcove/capn | Git pre-commit/pre-push automation for formatting and validation |

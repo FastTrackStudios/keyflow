@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -eux
+cargo install --git https://github.com/bearcove/capn
+capn pre-push
