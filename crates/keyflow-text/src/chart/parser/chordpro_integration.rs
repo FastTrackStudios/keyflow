@@ -621,7 +621,7 @@ VS 1: | 1 4 |
 Intro
 1 4
 
-INST
+Interlude
 4 4
 
 --- chordpro ---
@@ -637,13 +637,13 @@ Interlude (2x):
             .iter()
             .find(|s| s.section.section_type == SectionType::Intro)
             .unwrap();
-        let inst = chart
+        let interlude = chart
             .sections
             .iter()
-            .find(|s| s.section.section_type == SectionType::Instrumental)
+            .find(|s| s.section.section_type == SectionType::Interlude)
             .unwrap();
 
-        for section in [intro, inst] {
+        for section in [intro, interlude] {
             let lyrics = section
                 .tracks
                 .iter()
