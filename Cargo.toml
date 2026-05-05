@@ -50,6 +50,7 @@ dioxus-native = "0.7.1"
 # Sibling repos
 daw = { git = "https://github.com/FastTrackStudios/daw.git", branch = "main" }
 daw-control = { git = "https://github.com/FastTrackStudios/daw.git", branch = "main" }
+daw-module = { git = "https://github.com/FastTrackStudios/daw.git", branch = "main" }
 daw-proto = { git = "https://github.com/FastTrackStudios/daw.git", branch = "main" }
 dawfile-reaper = { git = "https://github.com/FastTrackStudios/daw.git", branch = "main" }
 color-palette = { git = "https://github.com/FastTrackStudios/dynamic-template.git", branch = "main" }
@@ -71,6 +72,7 @@ tracing = { version = "0.1", features = ["std"] }
 [patch."https://github.com/FastTrackStudios/daw.git"]
 daw = { path = "../daw/crates/daw" }
 daw-control = { path = "../daw/crates/daw-control" }
+daw-module = { path = "../daw/crates/daw-module" }
 daw-proto = { path = "../daw/crates/daw-proto" }
 dawfile-reaper = { path = "../daw/crates/dawfile-reaper" }
 #

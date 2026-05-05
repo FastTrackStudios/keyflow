@@ -3,7 +3,7 @@
 //! Keyflow is a pure data library (chart parsing, engraving) — no actions.
 //! The module is registered for discoverability and future extension.
 
-use daw::module::{ActionDef, DawModule, ModuleContext};
+use daw_module::{ActionDef, DawModule, ModuleContext};
 
 pub struct KeyflowModule;
 
