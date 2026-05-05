@@ -22,18 +22,18 @@ engraver = { path = "crates/engraver" }
 # FastTrack Studio shared design system. Lives in the sibling fts-ui repo.
 fts-ui = { path = "../fts-ui/crates/fts-ui" }
 
-# Facet reflection - use crates.io 0.44.x to match vox's constraint
-facet = { version = "0.44" }
-facet-core = { version = "0.44" }
-facet-format = { version = "0.44" }
-facet-json = { version = "0.44" }
-facet-postcard = { version = "0.44" }
-facet-pretty = { version = "0.44" }
-facet-value = { version = "0.44" }
-facet-yaml = { version = "0.44" }
+# Facet reflection — align the stack to the current 0.46 line.
+facet = { version = "0.46" }
+facet-core = { version = "0.46" }
+facet-format = { version = "0.47" }
+facet-json = { version = "0.46" }
+facet-postcard = { version = "0.46" }
+facet-pretty = { version = "0.46" }
+facet-value = { version = "0.46" }
+facet-yaml = { version = "0.46" }
 
 # VOX service framework (pinned to FastTrackStudios fork)
-vox = { git = "https://github.com/Codys-Wright/vox.git", rev = "ccb46b5416100d38430cb082d71bf0377428c241" }
+vox = { git = "https://github.com/Codys-Wright/vox.git", rev = "5ce8cdd9" }
 
 # Rendering
 anyrender = { git = "https://github.com/DioxusLabs/anyrender.git", branch = "main" }
@@ -82,6 +82,9 @@ dawfile-reaper = { path = "../daw/crates/dawfile-reaper" }
 session = { path = "../session/crates/session" }
 session-ui = { path = "../session/crates/session-ui" }
 #
+# [patch."https://github.com/FastTrackStudios/input_actions.git"]
+# actions-proto = { path = "../input_actions/crates/actions-proto" }
+#
 # [patch."https://github.com/FastTrackStudios/dock-dioxus.git"]
 # dock-dioxus = { path = "../dock-dioxus/crates/dock-dioxus" }
 # dock-proto = { path = "../dock-dioxus/crates/dock-proto" }
@@ -96,11 +99,11 @@ fts-ui = { path = "../fts-ui/crates/fts-ui" }
 # Redirect bearcove/vox.git transitive deps to the FTS fork so the workspace
 # resolves a single vox/facet stack.
 [patch."https://github.com/bearcove/vox.git"]
-vox = { git = "https://github.com/Codys-Wright/vox.git", rev = "ccb46b5416100d38430cb082d71bf0377428c241" }
-vox-core = { git = "https://github.com/Codys-Wright/vox.git", rev = "ccb46b5416100d38430cb082d71bf0377428c241" }
-vox-types = { git = "https://github.com/Codys-Wright/vox.git", rev = "ccb46b5416100d38430cb082d71bf0377428c241" }
-vox-postcard = { git = "https://github.com/Codys-Wright/vox.git", rev = "ccb46b5416100d38430cb082d71bf0377428c241" }
-vox-schema = { git = "https://github.com/Codys-Wright/vox.git", rev = "ccb46b5416100d38430cb082d71bf0377428c241" }
-vox-service-macros = { git = "https://github.com/Codys-Wright/vox.git", rev = "ccb46b5416100d38430cb082d71bf0377428c241" }
-vox-macros-core = { git = "https://github.com/Codys-Wright/vox.git", rev = "ccb46b5416100d38430cb082d71bf0377428c241" }
-vox-macros-parse = { git = "https://github.com/Codys-Wright/vox.git", rev = "ccb46b5416100d38430cb082d71bf0377428c241" }
+vox = { git = "https://github.com/Codys-Wright/vox.git", rev = "5ce8cdd9" }
+vox-core = { git = "https://github.com/Codys-Wright/vox.git", rev = "5ce8cdd9" }
+vox-types = { git = "https://github.com/Codys-Wright/vox.git", rev = "5ce8cdd9" }
+vox-postcard = { git = "https://github.com/Codys-Wright/vox.git", rev = "5ce8cdd9" }
+vox-schema = { git = "https://github.com/Codys-Wright/vox.git", rev = "5ce8cdd9" }
+vox-service-macros = { git = "https://github.com/Codys-Wright/vox.git", rev = "5ce8cdd9" }
+vox-macros-core = { git = "https://github.com/Codys-Wright/vox.git", rev = "5ce8cdd9" }
+vox-macros-parse = { git = "https://github.com/Codys-Wright/vox.git", rev = "5ce8cdd9" }
