@@ -7,6 +7,8 @@
 // Re-export all types from keyflow-proto for convenience
 #[cfg(feature = "engraver")]
 pub use engraver;
+#[cfg(feature = "live")]
+pub use keyflow_live as live;
 #[cfg(feature = "midi")]
 pub use keyflow_midi as midi;
 pub use keyflow_proto::*;

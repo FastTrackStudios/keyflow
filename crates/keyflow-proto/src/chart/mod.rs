@@ -10,6 +10,7 @@ pub mod index;
 pub mod measure;
 pub mod melody;
 pub mod memory;
+pub mod notations;
 pub mod position;
 pub mod rhythm;
 pub mod semantic_role;
@@ -25,7 +26,7 @@ pub mod lyric_chord_parser;
 pub mod lyrics;
 pub mod syllable_parser;
 
-pub use chart::Chart;
+pub use chart::{Chart, ChartClef};
 pub use commands::Command;
 pub use cues::{InstrumentGroup, TextCue};
 pub use dynamics::DynamicMarking;
@@ -33,6 +34,10 @@ pub use index::{ChartIndex, ElementId};
 pub use measure::{KeyChange, Measure, RhythmSlash, TempoChange, TimeSignatureChange};
 pub use melody::{Melody, MelodyNote, MelodyVariables, OctaveModifier};
 pub use memory::ChordMemory;
+pub use notations::{
+    BarlineStyle, Dynamic, DynamicLevel, FiguredBass, FiguredBassRow, Hairpin, HairpinKind,
+    Placement, RepeatMark, StaffText, Volta,
+};
 pub use position::ChartPosition;
 pub use rhythm::{BeatStructure, ResolvedRhythm, SectionRhythms, Spillback};
 pub use semantic_role::{NavigationType, SemanticRole};

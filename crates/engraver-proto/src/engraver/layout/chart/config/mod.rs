@@ -216,6 +216,7 @@ impl ChartLayoutConfig {
             show_measure_numbers: self.render.show_measure_numbers,
             measure_number_offset: self.render.measure_number_offset,
             count_in_measures: self.render.count_in_measures,
+            count_in_uses_negative_numbers: self.render.count_in_uses_negative_numbers,
         }
     }
 
@@ -236,6 +237,7 @@ impl ChartLayoutConfig {
                 show_measure_numbers: flat.show_measure_numbers,
                 measure_number_offset: flat.measure_number_offset,
                 count_in_measures: flat.count_in_measures,
+                count_in_uses_negative_numbers: flat.count_in_uses_negative_numbers,
             },
             behavior: BehavioralFlags {
                 hide_repeated_chords: flat.hide_repeated_chords,
@@ -276,6 +278,9 @@ pub struct FlatChartLayoutConfig {
     pub measure_number_offset: i32,
     /// Number of count-in measures.
     pub count_in_measures: u8,
+    /// Whether count-in measures number as -(N-1)..0 (true) or sequentially
+    /// (false). See [`RenderOptions::count_in_uses_negative_numbers`].
+    pub count_in_uses_negative_numbers: bool,
 }
 
 impl Default for FlatChartLayoutConfig {

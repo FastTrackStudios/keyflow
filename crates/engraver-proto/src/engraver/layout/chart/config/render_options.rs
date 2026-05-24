@@ -34,6 +34,18 @@ pub struct RenderOptions {
     /// Determined by the distance between Count-In marker and SONGSTART marker.
     /// Count-in measures are the N measures immediately before measure 1.
     pub count_in_measures: u8,
+
+    /// How count-in measures participate in measure numbering.
+    ///
+    /// - `false` (default): count-in measures get sequential numbers (1, 2)
+    ///   and the first non-count-in measure is `count_in_measures + 1`.
+    ///   This matches imported charts (Finale / Sibelius / MuseXML) where
+    ///   the click-count bars *are* part of the printed measure count, so a
+    ///   chart with two count-in bars puts the first real chord on m. 3.
+    /// - `true`: count-in measures number as `-(count_in_measures - 1) .. 0`
+    ///   so the first real measure is 1 regardless of count-in length.
+    ///   This is the historical keyflow / DAW workflow.
+    pub count_in_uses_negative_numbers: bool,
 }
 
 impl Default for RenderOptions {
@@ -43,6 +55,7 @@ impl Default for RenderOptions {
             show_measure_numbers: true,
             measure_number_offset: 0,
             count_in_measures: 0,
+            count_in_uses_negative_numbers: false,
         }
     }
 }
@@ -62,6 +75,7 @@ impl RenderOptions {
             show_measure_numbers: false,
             measure_number_offset: 0,
             count_in_measures: 0,
+            count_in_uses_negative_numbers: false,
         }
     }
 
@@ -103,10 +117,19 @@ impl RenderOptions {
 
     /// Get the display measure number for a given actual measure index.
     ///
-    /// This accounts for the measure number offset.
+    /// Accounts for [`measure_number_offset`] and the
+    /// [`count_in_uses_negative_numbers`] setting. When negative-numbering
+    /// is on, the first `count_in_measures` measures count down to 0 and
+    /// the first non-count-in measure is `1`.
     #[must_use]
     pub fn display_measure_number(&self, actual_index: usize) -> i32 {
-        actual_index as i32 + 1 + self.measure_number_offset
+        let raw = actual_index as i32 + 1;
+        let shifted = if self.count_in_uses_negative_numbers && self.count_in_measures > 0 {
+            raw - self.count_in_measures as i32
+        } else {
+            raw
+        };
+        shifted + self.measure_number_offset
     }
 
     /// Check if count-in should be rendered.

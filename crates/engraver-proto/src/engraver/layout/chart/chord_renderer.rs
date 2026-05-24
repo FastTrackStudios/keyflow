@@ -99,6 +99,10 @@ pub struct ChordRenderContext<'a> {
     /// Maps (rhythm_index, chord_symbol) for chords from next measure pushing back.
     /// Used to place spillback chords at correct triplet positions.
     pub spillback_positions: &'a [(usize, String)],
+    /// Per-rhythm-entry notehead stack bounds `(min_line, max_line)`.
+    /// Used to lift chord symbols just enough to clear the music at the
+    /// same beat position.
+    pub note_line_stacks: &'a [Option<(i32, i32)>],
 }
 
 /// Result of chord symbol rendering.
@@ -106,6 +110,12 @@ pub struct ChordRenderContext<'a> {
 pub struct ChordRenderResult {
     /// Rendered chord nodes.
     pub nodes: Vec<SceneNode>,
+    /// Final world-space chord symbol bounds after collision adjustments.
+    ///
+    /// Staff-attached notation uses these as skyline obstacles so text,
+    /// dynamics, figured bass, and hairpins avoid the actual chord symbols
+    /// instead of a coarse measure-wide band.
+    pub chord_bounds: Vec<Rect>,
     /// Updated previous chord symbol (for duplicate detection).
     pub last_chord_symbol: Option<String>,
     /// Next ID counter value.
@@ -303,8 +313,7 @@ fn create_accent_marker(segment_x: f64, chord_y: f64, spatium: f64, id: u64) -> 
     let font_size = spatium * 1.2 * ARTICULATION_MAG;
 
     // Calculate staff Y position from chord_y
-    // chord_y = staff_y + CHORD_Y_OFFSET (where CHORD_Y_OFFSET is -8.0)
-    // So staff_y = chord_y - CHORD_Y_OFFSET = chord_y + 8.0
+    // chord_y = staff_y + CHORD_Y_OFFSET.
     let staff_y = chord_y - CHORD_Y_OFFSET;
 
     // Position accent just above the top staff line
@@ -555,7 +564,7 @@ pub fn render_text_cues(
     id_counter: &mut u64,
 ) -> Vec<SceneNode> {
     let mut nodes = Vec::new();
-    let font_size = spatium * 2.4;
+    let font_size = spatium * 2.6;
     let line_thickness = spatium * 0.12;
     // Position below the staff with padding
     let base_y = staff_y + staff_height + spatium * 3.0;
@@ -647,6 +656,7 @@ pub fn calculate_segment_index(
     internal_push_positions: &[(usize, usize)],
     is_first_real: bool,
     is_boundary: bool,
+    time_signature: (u8, u8),
 ) -> usize {
     // Check if this is a pushed chord at a boundary
     let is_pushed_at_boundary = chord
@@ -736,6 +746,16 @@ pub fn calculate_segment_index(
             .min(segment_positions.len().saturating_sub(1));
     }
 
+    if !segment_positions.is_empty() {
+        let beat = chord.position.beats() as f64 + chord.position.subdivisions() as f64 / 1000.0;
+        let beats_per_segment = f64::from(time_signature.0) / segment_positions.len() as f64;
+        if beats_per_segment > 0.0 {
+            return (beat / beats_per_segment)
+                .round()
+                .clamp(0.0, (segment_positions.len() - 1) as f64) as usize;
+        }
+    }
+
     // Simple measure - calculate segment from cumulative chord beats
     let mut cumulative_beats = 0usize;
     for (idx, c) in measure.chords.iter().enumerate() {
@@ -789,6 +809,114 @@ pub fn should_hide_chord(
     previous_symbol == Some(current_symbol)
 }
 
+fn chord_lift_for_note_stack(note_stack: Option<(i32, i32)>, spatium: f64) -> f64 {
+    let Some((_, max_line)) = note_stack else {
+        return 0.0;
+    };
+
+    // Top staff line is +4. Notes above it need ledger space; notes within
+    // the staff still get a graded lift so ascending melodies visibly nudge
+    // chord symbols upward without returning to the old oversized offsets.
+    let staff_lift = (max_line + 4).max(0) as f64 * spatium * 0.025;
+    let ledger_lift = (max_line - 4).max(0) as f64 * spatium * 0.12;
+    staff_lift + ledger_lift
+}
+
+fn normalize_chord_lifts(lifts: &[f64]) -> f64 {
+    if lifts.len() < 2 || lifts.iter().any(|lift| *lift <= 0.0) {
+        return 0.0;
+    }
+
+    lifts.iter().copied().fold(f64::INFINITY, f64::min)
+}
+
+fn chord_lift_bias_for_measure(
+    ctx: &ChordRenderContext<'_>,
+    measure: &Measure,
+    is_boundary: bool,
+) -> f64 {
+    let lifts = measure
+        .chords
+        .iter()
+        .enumerate()
+        .filter_map(|(chord_idx, chord)| {
+            if is_placeholder_chord(&chord.full_symbol) {
+                return None;
+            }
+
+            let is_first_real = is_first_real_chord(&measure.chords, chord_idx);
+            if chord
+                .push_pull
+                .as_ref()
+                .is_some_and(|(is_push, _)| *is_push)
+                && is_first_real
+                && !is_boundary
+            {
+                return None;
+            }
+
+            let segment_idx = calculate_segment_index(
+                measure,
+                chord_idx,
+                chord,
+                ctx.segment_positions,
+                ctx.internal_push_positions,
+                is_first_real,
+                is_boundary,
+                ctx.time_signature,
+            );
+            Some(chord_lift_for_note_stack(
+                ctx.note_line_stacks.get(segment_idx).copied().flatten(),
+                ctx.spatium,
+            ))
+        })
+        .collect::<Vec<_>>();
+
+    normalize_chord_lifts(&lifts)
+}
+
+fn chord_symbol_anchor_offset(
+    params: &crate::engraver::layout::tlayout::HarmonyParams,
+    style: &HarmonyStyle,
+    use_compact_anchor: bool,
+) -> f64 {
+    if params.root_accidental.is_empty() || !use_compact_anchor {
+        return 0.0;
+    }
+
+    // In crowded chord runs, compact accidental roots like F#m7 and C#m can
+    // reclaim a root-letter width by putting the accidental near the beat.
+    // Isolated chords stay left-aligned to the beat.
+    let root_width = params.root.chars().count() as f64 * style.root_size * 0.56;
+    -root_width
+}
+
+fn has_nearby_following_visible_chord(
+    measure: &Measure,
+    chord_idx: usize,
+    current_beat: f64,
+    threshold_beats: f64,
+) -> bool {
+    measure
+        .chords
+        .iter()
+        .skip(chord_idx + 1)
+        .filter(|chord| !is_placeholder_chord(&chord.full_symbol))
+        .map(chord_beat_position)
+        .find(|beat| *beat > current_beat)
+        .is_some_and(|beat| beat - current_beat <= threshold_beats)
+}
+
+fn chord_beat_position(chord: &ChordInstance) -> f64 {
+    chord.position.beats() as f64 + chord.position.subdivisions() as f64 / 1000.0
+}
+
+fn chord_x_from_musical_position(ctx: &ChordRenderContext<'_>, chord: &ChordInstance) -> f64 {
+    let measure_beats = f64::from(ctx.time_signature.0).max(1.0);
+    let beat = chord_beat_position(chord).clamp(0.0, measure_beats);
+    ctx.measure_x + ctx.measure_width * (beat / measure_beats)
+}
+
 /// Render chord symbols for a measure with automatic collision detection.
 ///
 /// This handles all the complex logic for determining which chords to render,
@@ -811,6 +939,7 @@ pub fn render_chord_symbols(
     let is_boundary = is_at_boundary(ctx.measure_idx, ctx.local_measure_idx);
     let is_hits = ctx.section_name.eq_ignore_ascii_case("hits");
     let mut hits_chord_shown = false;
+    let note_lift_bias = chord_lift_bias_for_measure(ctx, measure, is_boundary);
 
     if ctx.measure_idx == 0 {
         tracing::debug!(
@@ -863,16 +992,20 @@ pub fn render_chord_symbols(
             ctx.internal_push_positions,
             is_first_real,
             is_boundary,
+            ctx.time_signature,
         );
 
-        // Get segment x position
+        // Get segment x position for metadata/collision context. Chord symbols
+        // themselves use their musical beat position below so a chord at beat 4
+        // still has a beat-4 anchor even when the melody only has one long note
+        // segment at beat 1.
         let segment_x = ctx
             .segment_positions
             .get(segment_idx)
             .copied()
             .unwrap_or_else(|| ctx.segment_positions.first().copied().unwrap_or(0.0));
 
-        let chord_x = ctx.measure_x + segment_x;
+        let chord_x = chord_x_from_musical_position(ctx, chord);
 
         // Check if chord has regular accent (not AccentOnPush - that renders on spillback)
         let has_regular_accent = chord.commands.iter().any(|c| matches!(c, Command::Accent));
@@ -975,6 +1108,11 @@ pub fn render_chord_symbols(
             );
         }
 
+        let note_lift = (chord_lift_for_note_stack(
+            ctx.note_line_stacks.get(segment_idx).copied().flatten(),
+            ctx.spatium,
+        ) - note_lift_bias)
+            .max(0.0);
         let chord_y_offset = if has_regular_accent || has_staccato {
             // Move chord up by 0.5 spatium to make room for articulation below
             -ctx.spatium * 0.5
@@ -984,7 +1122,40 @@ pub fn render_chord_symbols(
 
         // Create harmony params
         let mut params = super::chord_layout::chord_to_harmony_params(chord, ctx.harmony_style);
-        params.position = kurbo::Point::new(chord_x, ctx.chord_y + chord_y_offset);
+        // Vertical-bass slash chords stack root / rule / bass top-to-bottom,
+        // so the rendered glyph extends roughly one root-size below its
+        // baseline. Lift the baseline enough for staff clearance, but keep
+        // stacked slash chords in the chord lane instead of letting them float
+        // into the previous system.
+        let vertical_bass_lift = if chord.parsed.bass_vertical {
+            ctx.harmony_style.root_size * 0.65
+        } else {
+            0.0
+        };
+        let compact_anchor = has_nearby_following_visible_chord(
+            measure,
+            chord_idx,
+            chord_beat_position(chord),
+            1.25,
+        );
+        let chord_x_offset = chord_symbol_anchor_offset(&params, ctx.harmony_style, compact_anchor);
+        tracing::debug!(
+            target: "engraver_proto::engraver::layout::chart::chord",
+            measure = ctx.measure_idx,
+            chord_idx,
+            symbol = current_symbol,
+            beat_x = chord_x,
+            chord_x_offset,
+            compact_anchor,
+            note_lift,
+            note_lift_bias,
+            vertical_bass_lift,
+            "[chord-placement] anchor adjustment"
+        );
+        params.position = kurbo::Point::new(
+            chord_x + chord_x_offset,
+            ctx.chord_y + chord_y_offset - vertical_bass_lift - note_lift,
+        );
         params.id = id_counter;
         id_counter += 1;
 
@@ -992,10 +1163,19 @@ pub fn render_chord_symbols(
 
         // Store bounds info for collision detection
         // layout_harmony returns bounds already in world coordinates (includes params.position)
+        // layout_harmony's bounds are layout extents. Pad them slightly for
+        // collision resolution so adjacent chord ink never kisses/overlaps
+        // when glyph metrics are optimistic for jazz/SMuFL text runs.
+        let collision_bounds = Rect::new(
+            layout_data.bounds.x0 - ctx.spatium * 0.5,
+            layout_data.bounds.y0,
+            layout_data.bounds.x1 + ctx.spatium * 0.5,
+            layout_data.bounds.y1,
+        );
         chord_bounds_info.push(ChordBoundsInfo {
             node_idx: nodes.len(),
             original_x: chord_x,
-            world_bounds: layout_data.bounds,
+            world_bounds: collision_bounds,
         });
 
         // Add metadata
@@ -1097,6 +1277,8 @@ pub fn render_chord_symbols(
         );
     }
 
+    let mut chord_bound_adjustments = vec![0.0; chord_bounds_info.len()];
+
     if ctx.min_chord_symbol_gap > 0.0 && chord_bounds_info.len() >= 2 {
         let collision_result = resolve_chord_collisions(
             &chord_bounds_info,
@@ -1112,6 +1294,7 @@ pub fn render_chord_symbols(
         );
 
         if collision_result.had_collisions {
+            chord_bound_adjustments = collision_result.adjustments.clone();
             // Apply adjustments to nodes
             for (bounds_info, &adjustment) in chord_bounds_info
                 .iter()
@@ -1125,8 +1308,23 @@ pub fn render_chord_symbols(
         }
     }
 
+    let chord_bounds = chord_bounds_info
+        .iter()
+        .zip(chord_bound_adjustments.iter())
+        .map(|(bounds_info, adjustment)| {
+            let bounds = bounds_info.world_bounds;
+            Rect::new(
+                bounds.x0 + *adjustment,
+                bounds.y0,
+                bounds.x1 + *adjustment,
+                bounds.y1,
+            )
+        })
+        .collect();
+
     ChordRenderResult {
         nodes,
+        chord_bounds,
         last_chord_symbol,
         next_id: id_counter,
     }
@@ -1220,6 +1418,7 @@ pub fn render_spillback_chords(
 
     ChordRenderResult {
         nodes,
+        chord_bounds: Vec::new(),
         last_chord_symbol,
         next_id: id_counter,
     }
@@ -1228,6 +1427,30 @@ pub fn render_spillback_chords(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::chord::{Chord, ChordQuality, ChordRhythm};
+    use crate::primitives::RootNotation;
+    use crate::time::{AbsolutePosition, MusicalDuration, MusicalPosition};
+
+    fn chord_at(symbol: &str, beat: u32, subdivisions: u32) -> ChordInstance {
+        let root = RootNotation::from_string("F").expect("test root should parse");
+        ChordInstance::new(
+            root.clone(),
+            symbol.to_string(),
+            Chord::new(root, ChordQuality::Major),
+            ChordRhythm::Default,
+            symbol.to_string(),
+            MusicalDuration::new(0, 1, 0),
+            AbsolutePosition::new(
+                MusicalPosition::try_new(0, beat as i32, subdivisions as i32).unwrap(),
+                0,
+            ),
+        )
+    }
+
+    fn chord_at_chart_beat(symbol: &str, beat: u32, subdivisions: u32) -> ChordInstance {
+        assert!(beat >= 1, "chart beats are one-based");
+        chord_at(symbol, beat - 1, subdivisions)
+    }
 
     #[test]
     fn test_is_placeholder_chord() {
@@ -1236,6 +1459,17 @@ mod tests {
         assert!(is_placeholder_chord("r"));
         assert!(!is_placeholder_chord("C"));
         assert!(!is_placeholder_chord("Am7"));
+    }
+
+    #[test]
+    fn positive_short_duration_repeated_chord_still_shows_as_hit() {
+        let mut chord = chord_at_chart_beat("F#m7", 1, 0);
+        chord.duration = MusicalDuration::new(0, 0, 500);
+
+        assert!(
+            !should_hide_chord(&chord, "F#m7", Some("F#m7"), false, (6, 8), true,),
+            "positive short-duration hits should stay visible even when repeated"
+        );
     }
 
     #[test]
@@ -1249,6 +1483,270 @@ mod tests {
 
         // Neither
         assert!(!is_at_boundary(5, 2));
+    }
+
+    #[test]
+    fn chord_segment_index_uses_musical_position_for_compound_meter() {
+        let segment_positions = vec![0.0, 60.0, 120.0, 180.0];
+        let measure = Measure {
+            time_signature: (6, 8),
+            chords: vec![
+                chord_at("F#m7", 0, 0),
+                chord_at("G#m7", 1, 500),
+                chord_at("Amaj7", 3, 0),
+                chord_at("B", 4, 500),
+            ],
+            ..Default::default()
+        };
+
+        let indices: Vec<usize> = measure
+            .chords
+            .iter()
+            .enumerate()
+            .map(|(idx, chord)| {
+                calculate_segment_index(
+                    &measure,
+                    idx,
+                    chord,
+                    &segment_positions,
+                    &[],
+                    idx == 0,
+                    false,
+                    measure.time_signature,
+                )
+            })
+            .collect();
+
+        assert_eq!(indices, vec![0, 1, 2, 3]);
+    }
+
+    #[test]
+    fn chord_lift_increases_with_ascending_note_stack() {
+        let spatium = 5.0;
+        let first = chord_lift_for_note_stack(Some((-5, 6)), spatium);
+        let second = chord_lift_for_note_stack(Some((-4, 8)), spatium);
+        let third = chord_lift_for_note_stack(Some((-3, 10)), spatium);
+        let fourth = chord_lift_for_note_stack(Some((-2, 12)), spatium);
+
+        assert!(second > first, "second chord should lift above first");
+        assert!(third > second, "third chord should lift above second");
+        assert!(fourth > third, "fourth chord should lift above third");
+
+        let minimum_visible_step = spatium * 0.25;
+        assert!(
+            second - first >= minimum_visible_step,
+            "second chord lift should be visibly higher than first; got delta {}",
+            second - first
+        );
+        assert!(
+            third - second >= minimum_visible_step,
+            "third chord lift should be visibly higher than second; got delta {}",
+            third - second
+        );
+        assert!(
+            fourth - third >= minimum_visible_step,
+            "fourth chord lift should be visibly higher than third; got delta {}",
+            fourth - third
+        );
+        assert!(
+            fourth - first >= spatium * 0.8,
+            "ascending LOTF chord run should have a visible total staircase; got spread {}",
+            fourth - first
+        );
+        assert!(
+            fourth < spatium * 1.4,
+            "note-driven chord lift should stay subtle; got {fourth}"
+        );
+    }
+
+    #[test]
+    fn chord_lift_normalization_keeps_first_ascending_chord_low() {
+        let spatium = 5.0;
+        let raw_lifts = [
+            chord_lift_for_note_stack(Some((-5, 6)), spatium),
+            chord_lift_for_note_stack(Some((-4, 8)), spatium),
+            chord_lift_for_note_stack(Some((-3, 10)), spatium),
+            chord_lift_for_note_stack(Some((-2, 12)), spatium),
+        ];
+
+        let bias = normalize_chord_lifts(&raw_lifts);
+        let normalized = raw_lifts.map(|lift| (lift - bias).max(0.0));
+
+        assert_eq!(
+            normalized[0], 0.0,
+            "first chord in an ascending run should remain at the default height"
+        );
+        assert!(
+            normalized[1] < raw_lifts[1],
+            "second chord should be stair-stepped relative to the run, not globally raised"
+        );
+        assert!(
+            normalized[1] > normalized[0]
+                && normalized[2] > normalized[1]
+                && normalized[3] > normalized[2],
+            "normalized lifts should preserve the ascending staircase"
+        );
+        assert!(
+            normalized[3] - normalized[0] >= spatium * 0.8,
+            "normalized staircase should remain visible; got spread {}",
+            normalized[3] - normalized[0]
+        );
+    }
+
+    #[test]
+    fn chord_anchor_keeps_single_letter_roots_beat_left_aligned() {
+        let style = HarmonyStyle::default().with_root_size(20.0);
+
+        let b = parse_chord("B");
+        assert_eq!(chord_symbol_anchor_offset(&b, &style, false), 0.0);
+
+        let a_maj7 = parse_chord("Amaj7");
+        assert_eq!(chord_symbol_anchor_offset(&a_maj7, &style, false), 0.0);
+    }
+
+    #[test]
+    fn chord_anchor_keeps_isolated_accidental_roots_left_aligned() {
+        let style = HarmonyStyle::default().with_root_size(20.0);
+        let f_sharp_min = parse_chord("F#m7");
+
+        assert_eq!(chord_symbol_anchor_offset(&f_sharp_min, &style, false), 0.0);
+    }
+
+    #[test]
+    fn chord_anchor_places_accidental_near_beat_for_crowded_compact_accidental_roots() {
+        let style = HarmonyStyle::default().with_root_size(20.0);
+        let f_sharp_min = parse_chord("F#m7");
+        let offset = chord_symbol_anchor_offset(&f_sharp_min, &style, true);
+
+        assert!(
+            offset < -10.0,
+            "F#m7 should shift left so the # aligns near the beat; got {offset}"
+        );
+        assert!(
+            offset > -13.0,
+            "F#m7 anchor shift should be root-letter sized, not root+accidental+quality sized; got {offset}"
+        );
+
+        let c_sharp_min = parse_chord("C#m");
+        assert_eq!(
+            chord_symbol_anchor_offset(&c_sharp_min, &style, true),
+            offset
+        );
+    }
+
+    #[test]
+    fn nearby_following_chord_enables_compact_anchor() {
+        let measure = Measure {
+            chords: vec![
+                chord_at_chart_beat("C#m", 1, 0),
+                chord_at_chart_beat("B", 2, 0),
+            ],
+            ..Default::default()
+        };
+
+        assert!(has_nearby_following_visible_chord(
+            &measure,
+            0,
+            chord_beat_position(&measure.chords[0]),
+            1.25
+        ));
+    }
+
+    #[test]
+    fn distant_following_chord_keeps_left_anchor() {
+        let measure = Measure {
+            chords: vec![
+                chord_at_chart_beat("C#m", 1, 0),
+                chord_at_chart_beat("B", 4, 0),
+            ],
+            ..Default::default()
+        };
+
+        assert!(!has_nearby_following_visible_chord(
+            &measure,
+            0,
+            chord_beat_position(&measure.chords[0]),
+            1.25
+        ));
+    }
+
+    #[test]
+    fn lotf_measure_7_chords_use_musical_beat_positions() {
+        let segment_positions = vec![0.0, 120.0];
+        let measure = Measure {
+            time_signature: (6, 8),
+            chords: vec![
+                chord_at_chart_beat("C#m", 1, 0),
+                chord_at_chart_beat("B/C#", 4, 0),
+            ],
+            ..Default::default()
+        };
+
+        let c_sharp_minor_idx = calculate_segment_index(
+            &measure,
+            0,
+            &measure.chords[0],
+            &segment_positions,
+            &[],
+            true,
+            false,
+            measure.time_signature,
+        );
+        let b_over_c_sharp_idx = calculate_segment_index(
+            &measure,
+            1,
+            &measure.chords[1],
+            &segment_positions,
+            &[],
+            false,
+            false,
+            measure.time_signature,
+        );
+
+        assert_eq!(c_sharp_minor_idx, 0, "C#m at 7.1 should align to beat 1");
+        assert_eq!(
+            b_over_c_sharp_idx, 1,
+            "B/C# at 7.4 should align to the second dotted-half segment"
+        );
+    }
+
+    #[test]
+    fn lotf_measure_7_chord_x_uses_beat_4_even_without_melody_segment() {
+        let style = HarmonyStyle::default();
+        let segment_positions = vec![0.0];
+        let ctx = ChordRenderContext {
+            measure_x: 200.0,
+            measure_width: 180.0,
+            chord_y: 40.0,
+            page_number: None,
+            global_system_index: 0,
+            measure_idx: 7,
+            local_measure_idx: 0,
+            section_name: "Verse",
+            segment_positions: &segment_positions,
+            internal_push_positions: &[],
+            harmony_style: &style,
+            time_signature: (6, 8),
+            hide_repeated_chords: false,
+            min_chord_symbol_gap: 0.0,
+            push_alters_rhythm: false,
+            spatium: 5.0,
+            measure_measurements: None,
+            spillback_positions: &[],
+            note_line_stacks: &[],
+        };
+
+        let c_sharp_minor_x =
+            chord_x_from_musical_position(&ctx, &chord_at_chart_beat("C#m", 1, 0));
+        let b_over_c_sharp_x =
+            chord_x_from_musical_position(&ctx, &chord_at_chart_beat("B/C#", 4, 0));
+
+        assert_eq!(c_sharp_minor_x, 200.0);
+        assert_eq!(b_over_c_sharp_x, 290.0);
+        assert!(
+            b_over_c_sharp_x > c_sharp_minor_x + ctx.measure_width * 0.45,
+            "B/C# at beat 4 should not collapse onto the C#m beat-1 anchor"
+        );
     }
 
     // ==========================================================================

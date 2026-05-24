@@ -3,7 +3,11 @@
 //! Provides utilities for converting MIDI events to chords and working with MIDI note data.
 
 use crate::chord::quality::SuspendedType;
-use crate::chord::{Chord, ChordDegree, ChordQuality, from_semitones};
+use crate::chord::{
+    Chord, ChordDegree, ChordFamily, ChordQuality, ExtensionQuality, from_semitones,
+    from_semitones_no_inversion,
+};
+use crate::key::{KeySpelling, SpellingMode};
 use crate::primitives::note::Note;
 use crate::primitives::{MusicalNote, RootNotation};
 use helgoboss_midi::KeyNumber;
@@ -150,6 +154,20 @@ pub fn detect_chords_from_midi_notes(
     notes: &[MidiNote],
     min_chord_duration_ppq: i64,
 ) -> Vec<DetectedChord> {
+    detect_chords_from_midi_notes_with_spelling(notes, min_chord_duration_ppq, None)
+}
+
+/// Detect chords from MIDI notes using an optional key spelling context.
+///
+/// Without a spelling context, ambiguous pitch classes use the historical sharp
+/// spelling (`A#`, `D#`, etc.). With a `KeySpelling`, roots and slash basses are
+/// respelled for the local key center (`Bb`, `Eb`, etc.), while recognition still
+/// operates on pitch classes.
+pub fn detect_chords_from_midi_notes_with_spelling(
+    notes: &[MidiNote],
+    min_chord_duration_ppq: i64,
+    spelling: Option<&KeySpelling>,
+) -> Vec<DetectedChord> {
     if notes.is_empty() {
         return Vec::new();
     }
@@ -214,6 +232,7 @@ pub fn detect_chords_from_midi_notes(
                             chord_min_eppq.unwrap_or(0),
                             note.start_ppq,
                             min_chord_duration_ppq,
+                            spelling,
                         ) {
                             chords.push(chord);
                         }
@@ -237,6 +256,7 @@ pub fn detect_chords_from_midi_notes(
                     chord_min_eppq.unwrap_or(0),
                     note.start_ppq,
                     min_chord_duration_ppq,
+                    spelling,
                 )
             {
                 chords.push(chord);
@@ -272,6 +292,7 @@ pub fn detect_chords_from_midi_notes(
                     chord_min_eppq.unwrap_or(0),
                     note.start_ppq,
                     min_chord_duration_ppq,
+                    spelling,
                 ) {
                     chords.push(chord);
                 }
@@ -289,6 +310,7 @@ pub fn detect_chords_from_midi_notes(
             chord_min_eppq.unwrap_or(0),
             i64::MAX,
             min_chord_duration_ppq,
+            spelling,
         )
     {
         chords.push(chord);
@@ -315,6 +337,10 @@ pub fn detect_chords_from_midi_notes(
         merged_chords.push(chord);
     }
 
+    prefer_major6_over_isolated_minor7_first_inversion(&mut merged_chords);
+    prefer_established_add9_slash_over_minor7_sharp5(&mut merged_chords);
+    prefer_minor6_over_isolated_inverted_half_diminished(&mut merged_chords, spelling);
+
     merged_chords
 }
 
@@ -327,25 +353,28 @@ fn build_chord_from_notes(
     chord_start_ppq: i64,
     chord_end_limit: i64,
     min_chord_duration_ppq: i64,
+    spelling: Option<&KeySpelling>,
 ) -> Option<DetectedChord> {
     if active_notes.len() < 2 {
         return None;
     }
 
+    let notes = remove_short_ornaments(active_notes);
+
     // Get pitches and sort them
-    let mut pitches: Vec<u8> = active_notes.iter().map(|n| n.pitch).collect();
+    let mut pitches: Vec<u8> = notes.iter().map(|n| n.pitch).collect();
     pitches.sort();
 
     // Calculate max velocity from all notes in this chord
-    let max_velocity = active_notes.iter().map(|n| n.velocity).max().unwrap_or(0);
+    let max_velocity = notes.iter().map(|n| n.velocity).max().unwrap_or(0);
 
     // Find the earliest start and earliest end of active notes (clamped to limit)
-    let chord_start = active_notes
+    let chord_start = notes
         .iter()
         .map(|n| n.start_ppq)
         .min()
         .unwrap_or(chord_start_ppq);
-    let chord_end = active_notes
+    let chord_end = notes
         .iter()
         .map(|n| n.end_ppq)
         .min()
@@ -358,56 +387,749 @@ fn build_chord_from_notes(
         return None;
     }
 
-    let note_names = [
-        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
-    ];
+    recognize_midi_chord_candidate(&pitches, spelling).map(|candidate| DetectedChord {
+        chord: candidate.chord,
+        start_ppq: chord_start,
+        end_ppq: chord_end,
+        root_pitch: candidate.root_pitch,
+        velocity: max_velocity,
+    })
+}
 
-    let lowest_pitch = pitches[0];
+#[derive(Debug, Clone)]
+struct ChordRecognitionCandidate {
+    chord: Chord,
+    root_pitch: u8,
+    pitch_classes: Vec<u8>,
+    score: i32,
+}
+
+fn remove_short_ornaments(active_notes: &[ActiveNote]) -> Vec<ActiveNote> {
+    if active_notes.len() < 4 {
+        return active_notes.to_vec();
+    }
+
+    let max_duration = active_notes
+        .iter()
+        .map(|note| note.end_ppq - note.start_ppq)
+        .max()
+        .unwrap_or(0);
+    if max_duration <= 0 {
+        return active_notes.to_vec();
+    }
+
+    let earliest_start = active_notes
+        .iter()
+        .map(|note| note.start_ppq)
+        .min()
+        .unwrap_or(0);
+    let lowest_pitch = active_notes
+        .iter()
+        .map(|note| note.pitch)
+        .min()
+        .unwrap_or(0);
+    let retained: Vec<ActiveNote> = active_notes
+        .iter()
+        .filter(|note| {
+            let duration = note.end_ppq - note.start_ppq;
+            (note.start_ppq == earliest_start && note.pitch == lowest_pitch)
+                || duration * 4 >= max_duration
+        })
+        .cloned()
+        .collect();
+
+    if retained.len() >= 3 {
+        retained
+    } else {
+        active_notes.to_vec()
+    }
+}
+
+fn recognize_midi_chord_candidate(
+    pitches: &[u8],
+    spelling: Option<&KeySpelling>,
+) -> Option<ChordRecognitionCandidate> {
+    let lowest_pitch = *pitches.first()?;
     let lowest_pitch_class = lowest_pitch % 12;
 
-    // Convert pitches to semitone sequence relative to lowest pitch
-    let semitones = midi_pitches_to_semitone_sequence(&pitches, lowest_pitch);
+    let mut root_classes: Vec<u8> = pitches.iter().map(|pitch| pitch % 12).collect();
+    root_classes.sort_unstable();
+    root_classes.dedup();
 
-    // Get root note name from lowest pitch
-    let root_name = note_names[lowest_pitch_class as usize];
-
-    if let Some(root_note) = MusicalNote::from_string(root_name) {
+    let mut candidates = Vec::new();
+    for root_class in root_classes {
+        let root_pitch = pitches
+            .iter()
+            .copied()
+            .find(|pitch| pitch % 12 == root_class)?;
+        let root_note = note_for_pitch_class(root_class, spelling);
         let root = RootNotation::from_note_name(root_note);
+        let semitones = midi_pitches_to_semitone_sequence(pitches, root_pitch);
+        let pitch_classes = normalized_pitch_classes(&semitones);
 
-        // Use from_semitones which handles inversion detection
-        if let Ok(mut chord) = from_semitones(&semitones, root) {
-            // Determine actual root pitch after potential inversion detection
-            let actual_root_pitch = if chord.bass.is_some() {
-                // Inversion was detected - find the MIDI pitch for the actual root
-                if let Some(actual_root) = chord.root.resolved_note() {
-                    let actual_root_class = actual_root.semitone();
-                    // Find a MIDI pitch in our list that matches this pitch class
-                    pitches
-                        .iter()
-                        .find(|&&p| p % 12 == actual_root_class)
-                        .copied()
-                        .unwrap_or(lowest_pitch)
-                } else {
-                    lowest_pitch
-                }
-            } else {
-                lowest_pitch
-            };
+        let Ok(mut chord) = from_semitones_no_inversion(&semitones, root) else {
+            continue;
+        };
 
-            // Apply MIDI-specific adjustments for octave context
-            apply_midi_octave_adjustments(&mut chord, &pitches, lowest_pitch, &semitones);
+        apply_midi_octave_adjustments(&mut chord, pitches, root_pitch, &semitones);
+        if root_class != lowest_pitch_class {
+            let bass_note = note_for_pitch_class(lowest_pitch_class, spelling);
+            chord.bass = Some(RootNotation::from_note_name(bass_note));
+        }
+        promote_dominant_sus_slash_to_eleventh(&mut chord);
+        promote_slash_add_second_to_ninth(&mut chord);
+        remove_bass_only_color_tones(&mut chord, pitches);
+        chord.normalize();
 
-            return Some(DetectedChord {
-                chord,
-                start_ppq: chord_start,
-                end_ppq: chord_end,
-                root_pitch: actual_root_pitch,
-                velocity: max_velocity,
-            });
+        candidates.push(ChordRecognitionCandidate {
+            score: score_chord_recognition_candidate(
+                &chord,
+                root_pitch,
+                lowest_pitch,
+                &pitch_classes,
+                spelling,
+            ),
+            chord,
+            root_pitch,
+            pitch_classes,
+        });
+    }
+
+    if let Some(legacy_candidate) = recognize_with_legacy_inversion(pitches, spelling) {
+        candidates.push(legacy_candidate);
+    }
+
+    candidates
+        .into_iter()
+        .min_by_key(|candidate| (candidate.score, candidate.root_pitch))
+}
+
+fn recognize_with_legacy_inversion(
+    pitches: &[u8],
+    spelling: Option<&KeySpelling>,
+) -> Option<ChordRecognitionCandidate> {
+    let lowest_pitch = *pitches.first()?;
+    let lowest_pitch_class = lowest_pitch % 12;
+    let semitones = midi_pitches_to_semitone_sequence(pitches, lowest_pitch);
+    let pitch_classes = normalized_pitch_classes(&semitones);
+    let root_note = note_for_pitch_class(lowest_pitch_class, spelling);
+    let root = RootNotation::from_note_name(root_note);
+    let Ok(mut chord) = from_semitones(&semitones, root) else {
+        return None;
+    };
+
+    let root_pitch = if chord.bass.is_some() {
+        chord
+            .root
+            .resolved_note()
+            .and_then(|actual_root| {
+                let actual_root_class = actual_root.semitone();
+                pitches
+                    .iter()
+                    .find(|pitch| **pitch % 12 == actual_root_class)
+                    .copied()
+            })
+            .unwrap_or(lowest_pitch)
+    } else {
+        lowest_pitch
+    };
+
+    apply_midi_octave_adjustments(&mut chord, pitches, lowest_pitch, &semitones);
+    if let Some(spelling) = spelling {
+        chord.respell_root(spelling, SpellingMode::Relaxed);
+    }
+    Some(ChordRecognitionCandidate {
+        score: score_chord_recognition_candidate(
+            &chord,
+            root_pitch,
+            lowest_pitch,
+            &pitch_classes,
+            spelling,
+        ),
+        chord,
+        root_pitch,
+        pitch_classes,
+    })
+}
+
+fn normalized_pitch_classes(semitones: &[u8]) -> Vec<u8> {
+    let mut pitch_classes: Vec<u8> = semitones.iter().map(|semitone| semitone % 12).collect();
+    pitch_classes.sort_unstable();
+    pitch_classes.dedup();
+    pitch_classes
+}
+
+fn note_for_pitch_class(pitch_class: u8, spelling: Option<&KeySpelling>) -> MusicalNote {
+    if let Some(spelling) = spelling {
+        spelling.spell(pitch_class, SpellingMode::Relaxed).to_note()
+    } else {
+        MusicalNote::from_semitone(pitch_class, true)
+    }
+}
+
+fn promote_dominant_sus_slash_to_eleventh(chord: &mut Chord) {
+    if chord.quality != ChordQuality::Suspended(SuspendedType::Fourth)
+        || chord.family != Some(ChordFamily::Dominant7)
+    {
+        return;
+    }
+
+    let Some(root) = chord.root.resolved_note() else {
+        return;
+    };
+    let Some(bass) = chord.bass.as_ref().and_then(|bass| bass.resolved_note()) else {
+        return;
+    };
+
+    let bass_interval = (bass.semitone() + 12 - root.semitone()) % 12;
+    if bass_interval == 10 {
+        chord.quality = ChordQuality::Major;
+        chord.extensions.eleventh = Some(ExtensionQuality::Natural);
+        chord.compute_intervals();
+    }
+}
+
+fn promote_slash_add_second_to_ninth(chord: &mut Chord) {
+    if chord.bass.is_none()
+        || !chord.additions.contains(&ChordDegree::Second)
+        || chord.quality.is_suspended()
+    {
+        return;
+    }
+
+    chord
+        .additions
+        .retain(|degree| *degree != ChordDegree::Second);
+    if !chord.additions.contains(&ChordDegree::Ninth) {
+        chord.additions.push(ChordDegree::Ninth);
+    }
+    chord.compute_intervals();
+}
+
+fn remove_bass_only_color_tones(chord: &mut Chord, pitches: &[u8]) {
+    let Some(root) = chord.root.resolved_note() else {
+        return;
+    };
+    let Some(bass) = chord.bass.as_ref().and_then(|bass| bass.resolved_note()) else {
+        return;
+    };
+
+    let root_pc = root.semitone();
+    let bass_pc = bass.semitone();
+
+    if let Some(family) = chord.family {
+        let seventh_pc = match family {
+            ChordFamily::Major7 | ChordFamily::MinorMajor7 => (root_pc + 11) % 12,
+            ChordFamily::Dominant7 | ChordFamily::Minor7 | ChordFamily::HalfDiminished => {
+                (root_pc + 10) % 12
+            }
+            ChordFamily::FullyDiminished => (root_pc + 9) % 12,
+        };
+
+        if bass_pc == seventh_pc && pitch_class_is_only_bass(pitches, bass_pc) {
+            chord.family = None;
         }
     }
 
-    None
+    chord.extensions.ninth = retain_extension(
+        chord.extensions.ninth,
+        root_pc,
+        bass_pc,
+        pitches,
+        |quality| match quality {
+            ExtensionQuality::Natural => 14,
+            ExtensionQuality::Flat => 13,
+            ExtensionQuality::Sharp => 15,
+        },
+    );
+    chord.extensions.eleventh = retain_extension(
+        chord.extensions.eleventh,
+        root_pc,
+        bass_pc,
+        pitches,
+        |quality| match quality {
+            ExtensionQuality::Natural | ExtensionQuality::Flat => 17,
+            ExtensionQuality::Sharp => 18,
+        },
+    );
+    chord.extensions.thirteenth = retain_extension(
+        chord.extensions.thirteenth,
+        root_pc,
+        bass_pc,
+        pitches,
+        |quality| match quality {
+            ExtensionQuality::Natural | ExtensionQuality::Sharp => 21,
+            ExtensionQuality::Flat => 20,
+        },
+    );
+
+    chord.additions.retain(|degree| {
+        let interval = degree.to_expected_interval(chord.quality).semitones();
+        !interval_is_bass_only(root_pc, bass_pc, pitches, interval)
+    });
+    chord.alterations.retain(|alteration| {
+        !interval_is_bass_only(root_pc, bass_pc, pitches, alteration.interval.semitones())
+    });
+
+    chord.compute_intervals();
+}
+
+fn prefer_major6_over_isolated_minor7_first_inversion(chords: &mut [DetectedChord]) {
+    let convert_indices: Vec<usize> = chords
+        .iter()
+        .enumerate()
+        .filter_map(|(index, chord)| {
+            let minor_root = plain_minor7_first_inversion_root(&chord.chord)?;
+            let has_neighbor_same_minor = index
+                .checked_sub(1)
+                .and_then(|prev| chords.get(prev))
+                .is_some_and(|neighbor| is_minor7_root(&neighbor.chord, minor_root))
+                || chords
+                    .get(index + 1)
+                    .is_some_and(|neighbor| is_minor7_root(&neighbor.chord, minor_root));
+
+            (!has_neighbor_same_minor).then_some(index)
+        })
+        .collect();
+
+    for index in convert_indices {
+        promote_plain_minor7_first_inversion_to_major6(&mut chords[index]);
+    }
+}
+
+fn plain_minor7_first_inversion_root(chord: &Chord) -> Option<u8> {
+    if chord.quality != ChordQuality::Minor
+        || chord.family != Some(ChordFamily::Minor7)
+        || !chord.additions.is_empty()
+        || !chord.alterations.is_empty()
+        || chord.extensions.ninth.is_some()
+        || chord.extensions.eleventh.is_some()
+        || chord.extensions.thirteenth.is_some()
+    {
+        return None;
+    }
+
+    let root = chord.root.resolved_note()?;
+    let bass = chord.bass.as_ref().and_then(|bass| bass.resolved_note())?;
+
+    let bass_interval = (bass.semitone() + 12 - root.semitone()) % 12;
+    (bass_interval == 3).then_some(root.semitone())
+}
+
+fn is_minor7_root(chord: &Chord, root_pc: u8) -> bool {
+    chord.quality == ChordQuality::Minor
+        && chord.family == Some(ChordFamily::Minor7)
+        && chord
+            .root
+            .resolved_note()
+            .is_some_and(|root| root.semitone() == root_pc)
+}
+
+fn promote_plain_minor7_first_inversion_to_major6(chord: &mut DetectedChord) {
+    if plain_minor7_first_inversion_root(&chord.chord).is_none() {
+        return;
+    }
+
+    let Some(bass) = chord
+        .chord
+        .bass
+        .as_ref()
+        .and_then(|bass| bass.resolved_note())
+        .cloned()
+    else {
+        return;
+    };
+
+    chord.root_pitch = (chord.root_pitch / 12) * 12 + bass.semitone();
+    chord.chord.root = RootNotation::from_note_name(bass);
+    chord.chord.quality = ChordQuality::Major;
+    chord.chord.family = None;
+    chord.chord.bass = None;
+    chord.chord.additions.push(ChordDegree::Sixth);
+    chord.chord.compute_intervals();
+    chord.chord.normalize();
+}
+
+fn prefer_established_add9_slash_over_minor7_sharp5(chords: &mut [DetectedChord]) {
+    let convert_indices: Vec<usize> = chords
+        .iter()
+        .enumerate()
+        .filter_map(|(index, chord)| {
+            let slash_root = add9_slash_root_for_minor7_sharp5(&chord.chord)?;
+            let has_neighbor_same_add9 = index
+                .checked_sub(1)
+                .and_then(|prev| chords.get(prev))
+                .is_some_and(|neighbor| is_major_add9_root(&neighbor.chord, slash_root))
+                || chords
+                    .get(index + 1)
+                    .is_some_and(|neighbor| is_major_add9_root(&neighbor.chord, slash_root));
+
+            has_neighbor_same_add9.then_some(index)
+        })
+        .collect();
+
+    for index in convert_indices {
+        promote_minor7_sharp5_to_established_add9_slash(&mut chords[index]);
+    }
+}
+
+fn add9_slash_root_for_minor7_sharp5(chord: &Chord) -> Option<u8> {
+    if chord.quality != ChordQuality::Minor
+        || chord.family != Some(ChordFamily::Minor7)
+        || chord.alterations.len() != 1
+        || chord.alterations[0].degree != ChordDegree::Fifth
+        || !chord.additions.is_empty()
+        || chord.extensions.ninth.is_some()
+        || chord.extensions.eleventh.is_some()
+        || chord.extensions.thirteenth.is_some()
+        || chord.bass.is_some()
+    {
+        return None;
+    }
+
+    let root = chord.root.resolved_note()?;
+    Some((root.semitone() + 8) % 12)
+}
+
+fn is_major_add9_root(chord: &Chord, root_pc: u8) -> bool {
+    chord.quality == ChordQuality::Major
+        && chord.family.is_none()
+        && chord.additions.contains(&ChordDegree::Ninth)
+        && chord
+            .root
+            .resolved_note()
+            .is_some_and(|root| root.semitone() == root_pc)
+}
+
+fn promote_minor7_sharp5_to_established_add9_slash(chord: &mut DetectedChord) {
+    let Some(old_root) = chord.chord.root.resolved_note().cloned() else {
+        return;
+    };
+    let Some(add9_root_pc) = add9_slash_root_for_minor7_sharp5(&chord.chord) else {
+        return;
+    };
+    let add9_root = MusicalNote::from_semitone(add9_root_pc, true);
+
+    chord.root_pitch = (chord.root_pitch / 12) * 12 + add9_root_pc;
+    chord.chord.root = RootNotation::from_note_name(add9_root);
+    chord.chord.quality = ChordQuality::Major;
+    chord.chord.family = None;
+    chord.chord.bass = Some(RootNotation::from_note_name(old_root));
+    chord.chord.additions.clear();
+    chord.chord.additions.push(ChordDegree::Ninth);
+    chord.chord.alterations.clear();
+    chord.chord.extensions = Default::default();
+    chord.chord.compute_intervals();
+    chord.chord.normalize();
+}
+
+fn prefer_minor6_over_isolated_inverted_half_diminished(
+    chords: &mut [DetectedChord],
+    spelling: Option<&KeySpelling>,
+) {
+    let convert_indices: Vec<usize> = chords
+        .iter()
+        .enumerate()
+        .filter_map(|(index, chord)| {
+            let half_dim_root = inverted_half_diminished_root(&chord.chord)?;
+            let has_neighbor_same_half_dim = index
+                .checked_sub(1)
+                .and_then(|prev| chords.get(prev))
+                .is_some_and(|neighbor| is_half_diminished_root(&neighbor.chord, half_dim_root))
+                || chords.get(index + 1).is_some_and(|neighbor| {
+                    is_half_diminished_root(&neighbor.chord, half_dim_root)
+                });
+
+            (!has_neighbor_same_half_dim).then_some(index)
+        })
+        .collect();
+
+    for index in convert_indices {
+        promote_inverted_half_diminished_to_minor6(&mut chords[index], spelling);
+    }
+}
+
+fn inverted_half_diminished_root(chord: &Chord) -> Option<u8> {
+    if !is_plain_half_diminished(chord)
+        || !chord.additions.is_empty()
+        || chord.extensions.ninth.is_some()
+        || chord.extensions.eleventh.is_some()
+        || chord.extensions.thirteenth.is_some()
+        || chord.bass.is_none()
+    {
+        return None;
+    }
+
+    chord.root.resolved_note().map(|root| root.semitone())
+}
+
+fn is_half_diminished_root(chord: &Chord, root_pc: u8) -> bool {
+    is_plain_half_diminished(chord)
+        && chord
+            .root
+            .resolved_note()
+            .is_some_and(|root| root.semitone() == root_pc)
+}
+
+fn is_plain_half_diminished(chord: &Chord) -> bool {
+    chord.family == Some(ChordFamily::HalfDiminished)
+        || (chord.quality == ChordQuality::Minor
+            && chord.family == Some(ChordFamily::Minor7)
+            && chord.alterations.len() == 1
+            && chord.alterations[0].degree == ChordDegree::Fifth)
+}
+
+fn promote_inverted_half_diminished_to_minor6(
+    chord: &mut DetectedChord,
+    spelling: Option<&KeySpelling>,
+) {
+    let Some(half_dim_root) = inverted_half_diminished_root(&chord.chord) else {
+        return;
+    };
+    let Some(old_bass) = chord
+        .chord
+        .bass
+        .as_ref()
+        .and_then(|bass| bass.resolved_note())
+        .cloned()
+    else {
+        return;
+    };
+
+    let minor6_root_pc = (half_dim_root + 3) % 12;
+    let minor6_root = note_for_pitch_class(minor6_root_pc, spelling);
+    let bass = if old_bass.semitone() == (minor6_root.semitone() + 3) % 12 {
+        MusicalNote::enharmonic_from_root(&minor6_root, 3, ChordDegree::Third.semantic_interval())
+    } else if let Some(spelling) = spelling {
+        spelling.respell(&old_bass, SpellingMode::Relaxed)
+    } else {
+        old_bass
+    };
+
+    chord.root_pitch = (chord.root_pitch / 12) * 12 + minor6_root_pc;
+    chord.chord.root = RootNotation::from_note_name(minor6_root.clone());
+    chord.chord.quality = ChordQuality::Minor;
+    chord.chord.family = None;
+    chord.chord.bass =
+        (bass.semitone() != minor6_root.semitone()).then(|| RootNotation::from_note_name(bass));
+    chord.chord.additions.clear();
+    chord.chord.additions.push(ChordDegree::Sixth);
+    chord.chord.alterations.clear();
+    chord.chord.extensions = Default::default();
+    chord.chord.compute_intervals();
+    chord.chord.normalize();
+}
+
+fn retain_extension(
+    extension: Option<ExtensionQuality>,
+    root_pc: u8,
+    bass_pc: u8,
+    pitches: &[u8],
+    interval_for_quality: impl FnOnce(ExtensionQuality) -> u8,
+) -> Option<ExtensionQuality> {
+    let quality = extension?;
+    let interval = interval_for_quality(quality);
+    (!interval_is_bass_only(root_pc, bass_pc, pitches, interval)).then_some(quality)
+}
+
+fn interval_is_bass_only(root_pc: u8, bass_pc: u8, pitches: &[u8], interval: u8) -> bool {
+    let interval_pc = (root_pc + interval) % 12;
+    bass_pc == interval_pc && pitch_class_is_only_bass(pitches, bass_pc)
+}
+
+fn pitch_class_is_only_bass(pitches: &[u8], pitch_class: u8) -> bool {
+    let Some(bass_pitch) = pitches
+        .iter()
+        .copied()
+        .filter(|pitch| pitch % 12 == pitch_class)
+        .min()
+    else {
+        return false;
+    };
+
+    !pitches
+        .iter()
+        .any(|pitch| pitch % 12 == pitch_class && *pitch != bass_pitch)
+}
+
+fn score_chord_recognition_candidate(
+    chord: &Chord,
+    root_pitch: u8,
+    lowest_pitch: u8,
+    pitch_classes: &[u8],
+    spelling: Option<&KeySpelling>,
+) -> i32 {
+    let mut score = 0;
+    let name = chord.to_string();
+
+    let has_minor_third = pitch_classes.contains(&3);
+    let has_major_third = pitch_classes.contains(&4);
+    let has_third = has_minor_third || has_major_third;
+    let has_fifth = pitch_classes.contains(&7);
+    let has_flat_fifth = pitch_classes.contains(&6);
+    let has_sharp_fifth = pitch_classes.contains(&8);
+    let augmented_dominant =
+        name.contains("#5") && has_major_third && has_sharp_fifth && chord.family.is_some();
+    let root_position_minor_seventh_sharp_five = root_pitch == lowest_pitch
+        && chord.quality == ChordQuality::Minor
+        && chord.family == Some(ChordFamily::Minor7)
+        && has_minor_third
+        && has_sharp_fifth
+        && pitch_classes.contains(&10);
+    let complete_root_position_altered_dominant = root_pitch == lowest_pitch
+        && chord.family == Some(ChordFamily::Dominant7)
+        && has_major_third
+        && has_fifth
+        && pitch_classes.contains(&10)
+        && (pitch_classes.contains(&1) || pitch_classes.contains(&3));
+    let complete_triad = match chord.quality {
+        ChordQuality::Major => has_major_third && has_fifth,
+        ChordQuality::Minor => has_minor_third && has_fifth,
+        ChordQuality::Diminished => has_minor_third && has_flat_fifth,
+        ChordQuality::Augmented => has_major_third && has_sharp_fifth,
+        _ => has_third && has_fifth,
+    };
+    let complete_suspended_triad = match chord.quality {
+        ChordQuality::Suspended(SuspendedType::Second) => pitch_classes.contains(&2) && has_fifth,
+        ChordQuality::Suspended(SuspendedType::Fourth) => pitch_classes.contains(&5) && has_fifth,
+        _ => false,
+    };
+
+    if root_pitch != lowest_pitch {
+        score += 8;
+    } else {
+        score -= 8;
+    }
+    if complete_triad {
+        score -= 30;
+    }
+    if augmented_dominant {
+        score -= 38;
+    }
+    if root_position_minor_seventh_sharp_five {
+        score -= 42;
+    }
+    if complete_root_position_altered_dominant {
+        score -= 45;
+    }
+    if complete_suspended_triad {
+        score -= 28;
+    }
+    if chord.quality.is_suspended() && chord.bass.is_some() && chord.family.is_some() {
+        score += 12;
+    }
+    if chord.quality.is_suspended() && !has_fifth {
+        score += 20;
+    }
+    if chord.family.is_some() {
+        score -= 8;
+    }
+    if chord.additions.contains(&ChordDegree::Ninth) {
+        score -= 8;
+    }
+    if chord.additions.contains(&ChordDegree::Second) {
+        score -= 8;
+    }
+    if chord.extensions.eleventh.is_some() {
+        score -= 6;
+        if !has_third {
+            score += 34;
+        }
+        if !has_fifth {
+            score += 18;
+        }
+    }
+    if chord.extensions.thirteenth.is_some() {
+        score += 18;
+    }
+    if !has_third && !chord.quality.is_suspended() {
+        score += 14;
+    }
+
+    score += chord.alterations.len() as i32 * 24;
+    if (name.contains("#5")
+        && chord.quality != ChordQuality::Augmented
+        && !augmented_dominant
+        && !root_position_minor_seventh_sharp_five)
+        || (name.contains("b5") && chord.quality != ChordQuality::Diminished)
+    {
+        score += 30;
+    }
+    if (name.contains("#9") || name.contains("b9")) && !complete_root_position_altered_dominant {
+        score += 18;
+    }
+    if name.contains("6/9") {
+        score += 12;
+    }
+    if name.contains("mMaj") || name.contains("mmaj") {
+        score += 20;
+    }
+
+    if let (Some(root), Some(bass)) = (
+        chord.root.resolved_note(),
+        chord.bass.as_ref().and_then(|bass| bass.resolved_note()),
+    ) {
+        let bass_interval = (bass.semitone() + 12 - root.semitone()) % 12;
+        match bass_interval {
+            10 => {
+                score -= 30;
+                if chord.extensions.eleventh.is_some() {
+                    score -= 12;
+                }
+            }
+            3 | 4 => {
+                score += 4;
+                if chord.family.is_some()
+                    && (chord.additions.contains(&ChordDegree::Ninth)
+                        || chord.extensions.ninth.is_some())
+                {
+                    score -= 18;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if let Some(spelling) = spelling {
+        score += key_context_score(chord, spelling);
+    }
+
+    score
+}
+
+fn key_context_score(chord: &Chord, spelling: &KeySpelling) -> i32 {
+    let scale_pcs: std::collections::HashSet<u8> = spelling
+        .scale_notes(SpellingMode::Relaxed)
+        .into_iter()
+        .map(|note| note.semitone())
+        .collect();
+
+    let mut score = 0;
+    if let Some(root) = chord.root.resolved_note() {
+        if scale_pcs.contains(&root.semitone()) {
+            score -= 8;
+        } else {
+            score += 12;
+        }
+
+        let respelled = spelling.respell(root, SpellingMode::Relaxed);
+        if respelled.name() != root.name() {
+            score += 18;
+        }
+    }
+
+    if let Some(bass) = chord.bass.as_ref().and_then(|bass| bass.resolved_note()) {
+        if scale_pcs.contains(&bass.semitone()) {
+            score -= 3;
+        }
+
+        let respelled = spelling.respell(bass, SpellingMode::Relaxed);
+        if respelled.name() != bass.name() {
+            score += 12;
+        }
+    }
+
+    score
 }
 
 /// Apply MIDI-specific adjustments based on octave context
@@ -666,10 +1388,29 @@ pub fn midi_pitches_to_semitone_sequence(pitches: &[u8], root_pitch: u8) -> Vec<
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::chord::{ChordDegree, ChordQuality};
+    use crate::chord::{Chord, ChordDegree, ChordQuality};
+    use crate::parsing::Lexer;
 
     fn create_midi_note(pitch: u8, start_ppq: i64, end_ppq: i64) -> MidiNote {
         MidiNote::new(pitch, start_ppq, end_ppq, 0, 100)
+    }
+
+    fn parse_chord(symbol: &str) -> Chord {
+        let mut lexer = Lexer::new(symbol.to_string());
+        let tokens = lexer.tokenize();
+        Chord::parse(&tokens).unwrap()
+    }
+
+    fn eb_major_spelling() -> KeySpelling {
+        crate::key::KeySpelling::major(&crate::primitives::MusicalNote::from_string("Eb").unwrap())
+    }
+
+    fn db_major_spelling() -> KeySpelling {
+        crate::key::KeySpelling::major(&crate::primitives::MusicalNote::from_string("Db").unwrap())
+    }
+
+    fn f_major_spelling() -> KeySpelling {
+        crate::key::KeySpelling::major(&crate::primitives::MusicalNote::from_string("F").unwrap())
     }
 
     #[test]
@@ -1729,6 +2470,272 @@ mod tests {
             chords[0].root_pitch
         );
         assert_eq!(chords[0].root_pitch, 60); // C should be root
+    }
+
+    #[test]
+    fn test_key_spelling_context_prefers_flat_roots() {
+        // Bb major triad: Bb2, D3, F3.
+        let notes = vec![
+            create_midi_note(46, 0, 960),
+            create_midi_note(50, 0, 960),
+            create_midi_note(53, 0, 960),
+        ];
+
+        let without_context = detect_chords_from_midi_notes(&notes, 180);
+        assert_eq!(without_context[0].chord.to_string(), "A#");
+
+        let f_major = f_major_spelling();
+        let with_context = detect_chords_from_midi_notes_with_spelling(&notes, 180, Some(&f_major));
+        assert_eq!(with_context[0].chord.to_string(), "Bb");
+    }
+
+    #[test]
+    fn test_slash_bass_only_major_seventh_does_not_create_maj7() {
+        // D2, Eb3, G3, Bb3 is Eb over D bass. The D is only the slash bass,
+        // not an upper major seventh chord tone.
+        let notes = vec![
+            create_midi_note(38, 0, 960),
+            create_midi_note(51, 0, 960),
+            create_midi_note(55, 0, 960),
+            create_midi_note(58, 0, 960),
+        ];
+        let spelling = eb_major_spelling();
+
+        let chords = detect_chords_from_midi_notes_with_spelling(&notes, 180, Some(&spelling));
+
+        assert_eq!(chords[0].chord.to_string(), "Eb/D");
+        assert_eq!(chords[0].chord.semitone_sequence(), vec![0, 4, 7]);
+    }
+
+    #[test]
+    fn test_upper_major_seventh_keeps_maj7_with_slash_bass() {
+        // Add D4 above the Eb triad. Now D is both slash bass and upper seventh.
+        let notes = vec![
+            create_midi_note(38, 0, 960),
+            create_midi_note(51, 0, 960),
+            create_midi_note(55, 0, 960),
+            create_midi_note(58, 0, 960),
+            create_midi_note(62, 0, 960),
+        ];
+        let spelling = eb_major_spelling();
+
+        let chords = detect_chords_from_midi_notes_with_spelling(&notes, 180, Some(&spelling));
+
+        assert_eq!(chords[0].chord.to_string(), "Ebmaj7/D");
+        assert_eq!(chords[0].chord.semitone_sequence(), vec![0, 4, 7, 11]);
+    }
+
+    #[test]
+    fn test_slash_bass_only_add9_does_not_create_add9() {
+        // Eb2, Db3, F3, Ab3 is Db over Eb bass. The Eb is only the slash bass,
+        // not an added ninth above Db.
+        let notes = vec![
+            create_midi_note(39, 0, 960),
+            create_midi_note(49, 0, 960),
+            create_midi_note(53, 0, 960),
+            create_midi_note(56, 0, 960),
+        ];
+        let spelling = db_major_spelling();
+
+        let chords = detect_chords_from_midi_notes_with_spelling(&notes, 180, Some(&spelling));
+
+        assert_eq!(chords[0].chord.to_string(), "Db/Eb");
+        assert_eq!(chords[0].chord.semitone_sequence(), vec![0, 4, 7]);
+    }
+
+    #[test]
+    fn test_upper_add9_keeps_add9_with_slash_bass() {
+        // Add Eb4 above the Db triad. Now Eb is both slash bass and added ninth.
+        let notes = vec![
+            create_midi_note(39, 0, 960),
+            create_midi_note(49, 0, 960),
+            create_midi_note(53, 0, 960),
+            create_midi_note(56, 0, 960),
+            create_midi_note(63, 0, 960),
+        ];
+        let spelling = db_major_spelling();
+
+        let chords = detect_chords_from_midi_notes_with_spelling(&notes, 180, Some(&spelling));
+
+        assert_eq!(chords[0].chord.to_string(), "Dbadd9/Eb");
+        assert_eq!(chords[0].chord.semitone_sequence(), vec![0, 4, 7, 14]);
+    }
+
+    #[test]
+    fn test_altered_dominant_with_bass_root_beats_slash_upper_structure() {
+        // MuseScore exports E7b9 harmony as E bass plus D, E, F, G#, B.
+        // The same pitch classes can be misread as a D-root slash chord, but
+        // the complete dominant on the bass root is the chart spelling.
+        let notes = vec![
+            create_midi_note(40, 0, 960),
+            create_midi_note(62, 0, 960),
+            create_midi_note(64, 0, 960),
+            create_midi_note(65, 0, 960),
+            create_midi_note(68, 0, 960),
+            create_midi_note(71, 0, 960),
+        ];
+
+        let chords = detect_chords_from_midi_notes(&notes, 180);
+
+        assert_eq!(chords[0].chord.to_string(), "E7b9");
+        assert_eq!(chords[0].root_pitch, 40);
+    }
+
+    #[test]
+    fn test_key_context_prefers_minor_ninth_inversion_over_major_thirteenth() {
+        // Same pitch-class collection as Bbmaj13 without the ninth/eleventh:
+        // Bb, G, D, F, A. In an F-major context, this is usually better read
+        // as Gm9/Bb than as a large IVmaj13 sonority.
+        let notes = vec![
+            create_midi_note(46, 0, 960),
+            create_midi_note(55, 0, 960),
+            create_midi_note(62, 0, 960),
+            create_midi_note(65, 0, 960),
+            create_midi_note(69, 0, 960),
+        ];
+        let spelling = f_major_spelling();
+
+        let chords = detect_chords_from_midi_notes_with_spelling(&notes, 180, Some(&spelling));
+
+        assert_eq!(chords[0].chord.to_string(), "Gm9/Bb");
+    }
+
+    #[test]
+    fn test_root_position_minor7_sharp5_beats_add9_slash() {
+        // E, G, C, D can be Cadd9/E, but with E in the bass and no neighboring
+        // Cadd9 continuity it reads more clearly as Em7#5.
+        let notes = vec![
+            create_midi_note(40, 0, 960),
+            create_midi_note(60, 0, 960),
+            create_midi_note(62, 0, 960),
+            create_midi_note(64, 0, 960),
+            create_midi_note(67, 0, 960),
+        ];
+
+        let chords = detect_chords_from_midi_notes(&notes, 180);
+
+        assert_eq!(chords[0].chord.to_string(), "Em7#5");
+        assert_eq!(chords[0].root_pitch, 40);
+    }
+
+    #[test]
+    fn test_add9_slash_kept_when_neighbor_establishes_same_add9_root() {
+        let mut chords = vec![
+            DetectedChord {
+                chord: parse_chord("Cadd9"),
+                start_ppq: 0,
+                end_ppq: 960,
+                root_pitch: 48,
+                velocity: 100,
+            },
+            DetectedChord {
+                chord: parse_chord("Em7#5"),
+                start_ppq: 960,
+                end_ppq: 1920,
+                root_pitch: 52,
+                velocity: 100,
+            },
+        ];
+
+        prefer_established_add9_slash_over_minor7_sharp5(&mut chords);
+
+        assert_eq!(chords[0].chord.to_string(), "Cadd9");
+        assert_eq!(chords[1].chord.to_string(), "Cadd9/E");
+    }
+
+    #[test]
+    fn test_plain_minor7_first_inversion_prefers_major6() {
+        // Db, F, Ab, Bb can be named Bbm7/Db, but for a plain first-inversion
+        // relative-minor seventh voicing the compact chord-symbol spelling is Db6.
+        let notes = vec![
+            create_midi_note(49, 0, 960),
+            create_midi_note(53, 0, 960),
+            create_midi_note(56, 0, 960),
+            create_midi_note(58, 0, 960),
+        ];
+        let spelling = db_major_spelling();
+
+        let chords = detect_chords_from_midi_notes_with_spelling(&notes, 180, Some(&spelling));
+
+        assert_eq!(chords[0].chord.to_string(), "Db6");
+    }
+
+    #[test]
+    fn test_minor7_first_inversion_kept_when_neighbor_is_same_minor7() {
+        let mut chords = vec![
+            DetectedChord {
+                chord: parse_chord("Bbm7"),
+                start_ppq: 0,
+                end_ppq: 960,
+                root_pitch: 46,
+                velocity: 100,
+            },
+            DetectedChord {
+                chord: parse_chord("Bbm7/Db"),
+                start_ppq: 960,
+                end_ppq: 1920,
+                root_pitch: 58,
+                velocity: 100,
+            },
+        ];
+
+        prefer_major6_over_isolated_minor7_first_inversion(&mut chords);
+
+        assert_eq!(chords[0].chord.to_string(), "Bbm7");
+        assert_eq!(chords[1].chord.to_string(), "Bbm7/Db");
+    }
+
+    #[test]
+    fn test_inverted_half_diminished_prefers_minor6() {
+        let mut chords = vec![DetectedChord {
+            chord: parse_chord("Em7b5/Bb"),
+            start_ppq: 0,
+            end_ppq: 960,
+            root_pitch: 52,
+            velocity: 100,
+        }];
+        let spelling = f_major_spelling();
+
+        prefer_minor6_over_isolated_inverted_half_diminished(&mut chords, Some(&spelling));
+
+        assert_eq!(chords[0].chord.to_string(), "Gm6/Bb");
+    }
+
+    #[test]
+    fn test_inverted_half_diminished_kept_when_neighbor_is_same_half_diminished() {
+        let mut chords = vec![
+            DetectedChord {
+                chord: parse_chord("Em7b5"),
+                start_ppq: 0,
+                end_ppq: 960,
+                root_pitch: 52,
+                velocity: 100,
+            },
+            DetectedChord {
+                chord: parse_chord("Em7b5/Bb"),
+                start_ppq: 960,
+                end_ppq: 1920,
+                root_pitch: 52,
+                velocity: 100,
+            },
+        ];
+        let spelling = f_major_spelling();
+
+        prefer_minor6_over_isolated_inverted_half_diminished(&mut chords, Some(&spelling));
+
+        assert_eq!(chords[0].chord.to_string(), "Em7b5");
+        assert_eq!(chords[1].chord.to_string(), "Em7b5/Bb");
+    }
+
+    #[test]
+    fn test_slash_bass_symbols_do_not_imply_upper_color_tones() {
+        let plain_slash = parse_chord("Eb/D");
+        assert_eq!(plain_slash.to_string(), "Eb/D");
+        assert_eq!(plain_slash.semitone_sequence(), vec![0, 4, 7]);
+
+        let explicit_maj7_slash = parse_chord("Ebmaj7/D");
+        assert_eq!(explicit_maj7_slash.to_string(), "Ebmaj7/D");
+        assert_eq!(explicit_maj7_slash.semitone_sequence(), vec![0, 4, 7, 11]);
     }
 
     #[test]

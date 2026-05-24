@@ -1,0 +1,2661 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
+<score-partwise version="4.0">
+  <movement-title>"WHO'S THERE, GOD'S THERE"</movement-title>
+  <identification>
+    <creator type="composer">TONY KENOLY</creator>
+    <encoding>
+      <software>Finale v27.4 for Mac</software>
+      <encoding-date>2026-05-23</encoding-date>
+      <supports attribute="new-system" element="print" type="yes" value="yes"/>
+      <supports attribute="new-page" element="print" type="yes" value="yes"/>
+      <supports element="accidental" type="yes"/>
+      <supports element="beam" type="yes"/>
+      <supports element="stem" type="yes"/>
+    </encoding>
+  </identification>
+  <defaults>
+    <scaling>
+      <millimeters>8.4667</millimeters>
+      <tenths>40</tenths>
+    </scaling>
+    <concert-score/>
+    <page-layout>
+      <page-height>1320</page-height>
+      <page-width>1020</page-width>
+      <page-margins type="both">
+        <left-margin>99</left-margin>
+        <right-margin>60</right-margin>
+        <top-margin>63</top-margin>
+        <bottom-margin>55</bottom-margin>
+      </page-margins>
+    </page-layout>
+    <system-layout>
+      <system-margins>
+        <left-margin>60</left-margin>
+        <right-margin>0</right-margin>
+      </system-margins>
+      <system-distance>153</system-distance>
+      <top-system-distance>153</top-system-distance>
+    </system-layout>
+    <appearance>
+      <line-width type="stem">0.7227</line-width>
+      <line-width type="beam">5.0391</line-width>
+      <line-width type="staff">0.7227</line-width>
+      <line-width type="light barline">0.7227</line-width>
+      <line-width type="heavy barline">5.0391</line-width>
+      <line-width type="leger">0.7227</line-width>
+      <line-width type="ending">0.7227</line-width>
+      <line-width type="wedge">0.7227</line-width>
+      <line-width type="enclosure">0.7682</line-width>
+      <line-width type="tuplet bracket">0.7682</line-width>
+      <note-size type="grace">50</note-size>
+      <note-size type="cue">50</note-size>
+      <distance type="hyphen">60</distance>
+      <distance type="beam">7.5</distance>
+    </appearance>
+    <music-font font-family="Petrucci,engraved" font-size="24"/>
+    <word-font font-family="Chicago" font-size="24"/>
+    <lyric-font font-family="Chicago" font-size="10" name="verse"/>
+    <lyric-font font-family="Chicago" font-size="10" name="chorus"/>
+    <lyric-font font-family="Chicago" font-size="10" name="section"/>
+  </defaults>
+  <credit page="1">
+    <credit-words default-x="541" default-y="1209" font-family="Arial" font-size="14" justify="center" valign="top" xml:space="preserve">Arranged by Tom Brooks
+TomBrooksMusic.com</credit-words>
+  </credit>
+  <credit page="1">
+    <credit-words default-x="542" default-y="1277" font-family="Arial" font-size="36" font-weight="bold" justify="center" valign="top">"Presence"</credit-words>
+  </credit>
+  <credit page="1">
+    <credit-words default-x="98" default-y="1237" font-family="Arial" font-weight="bold" valign="top" xml:space="preserve">Master
+Rhythm
+</credit-words>
+    <credit-words font-family="Arial" font-size="18" font-weight="normal">BPM = 63</credit-words>
+  </credit>
+  <credit page="1">
+    <credit-words default-x="875" default-y="1208" font-family="Arial" font-size="12" halign="left" justify="right" valign="top">Writers??</credit-words>
+  </credit>
+  <credit page="2">
+    <credit-type>page number</credit-type>
+    <credit-words default-x="96" default-y="1273" enclosure="rectangle" font-family="Arial" font-size="18" valign="top">"Presence", page 2.</credit-words>
+  </credit>
+  <part-list>
+    <score-part id="P1">
+      <part-name print-object="no">MusicXML Part</part-name>
+      <group>score</group>
+      <score-instrument id="P1-I1">
+        <instrument-name>ARIA Player</instrument-name>
+        <virtual-instrument/>
+      </score-instrument>
+      <midi-device>ARIA Player</midi-device>
+      <midi-instrument id="P1-I1">
+        <midi-channel>2</midi-channel>
+        <midi-program>44</midi-program>
+        <volume>80</volume>
+        <pan>0</pan>
+      </midi-instrument>
+    </score-part>
+  </part-list>
+  <!--=========================================================-->
+  <part id="P1">
+    <measure number="1" width="288">
+      <print page-number="1">
+        <page-layout>
+          <page-height>1320</page-height>
+          <page-width>1020</page-width>
+          <page-margins>
+            <left-margin>87</left-margin>
+            <right-margin>60</right-margin>
+            <top-margin>60</top-margin>
+            <bottom-margin>60</bottom-margin>
+          </page-margins>
+        </page-layout>
+        <system-layout>
+          <system-margins>
+            <left-margin>60</left-margin>
+            <right-margin>360</right-margin>
+          </system-margins>
+          <top-system-distance>213</top-system-distance>
+        </system-layout>
+        <measure-numbering multiple-rest-always="no" multiple-rest-range="no" system="only-top">system</measure-numbering>
+      </print>
+      <attributes>
+        <divisions>8</divisions>
+        <key>
+          <fifths>4</fifths>
+          <mode>major</mode>
+        </key>
+        <time>
+          <beats>4</beats>
+          <beat-type>4</beat-type>
+        </time>
+        <clef>
+          <sign>G</sign>
+          <line>2</line>
+        </clef>
+      </attributes>
+      <sound tempo="96">
+        <swing>
+          <straight/>
+        </swing>
+      </sound>
+      <direction placement="above">
+        <direction-type>
+          <rehearsal default-y="208" font-family="Arial" font-weight="bold" relative-x="-203">04</rehearsal>
+        </direction-type>
+      </direction>
+      <note default-x="203">
+        <rest/>
+        <duration>32</duration>
+        <voice>1</voice>
+        <type>whole</type>
+      </note>
+      <direction placement="above">
+        <direction-type>
+          <words default-y="30" enclosure="rectangle" font-family="Arial" font-size="10" font-weight="bold" relative-x="-47" xml:space="preserve">***2 Bars***
+</words>
+          <words font-weight="normal">Click-Count</words>
+        </direction-type>
+      </direction>
+    </measure>
+    <!--=======================================================-->
+    <measure number="2" width="165">
+      <note default-x="15">
+        <rest/>
+        <duration>16</duration>
+        <voice>1</voice>
+        <type>half</type>
+      </note>
+      <note default-x="69">
+        <rest/>
+        <duration>8</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+      </note>
+      <note default-x="106">
+        <rest/>
+        <duration>4</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+      </note>
+      <note default-x="131">
+        <pitch>
+          <step>E</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>4</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+        <stem default-y="-5">up</stem>
+      </note>
+      <barline location="right">
+        <bar-style>light-light</bar-style>
+      </barline>
+    </measure>
+    <!--=======================================================-->
+    <measure number="3" width="329">
+      <print new-system="yes">
+        <system-layout>
+          <system-margins>
+            <left-margin>12</left-margin>
+            <right-margin>120</right-margin>
+          </system-margins>
+          <system-distance>115</system-distance>
+        </system-layout>
+      </print>
+      <harmony default-y="19" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>E</root-step>
+        </root>
+        <kind halign="left" text="">minor</kind>
+      </harmony>
+      <direction placement="above">
+        <direction-type>
+          <words default-y="7" enclosure="rectangle" font-family="Arial" font-size="14" font-weight="bold" relative-x="-197">INTRO</words>
+        </direction-type>
+      </direction>
+      <direction placement="below">
+        <direction-type>
+          <dynamics default-y="-24" halign="left" relative-x="-152">
+            <mp/>
+          </dynamics>
+        </direction-type>
+        <sound dynamics="69"/>
+      </direction>
+      <direction placement="above">
+        <direction-type>
+          <words default-y="39" enclosure="bracket" font-family="JazzText" font-size="10" font-weight="bold" relative-x="-77">AC GTR ONLY</words>
+        </direction-type>
+      </direction>
+      <note default-x="120">
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>6</duration>
+        <voice>1</voice>
+        <type size="cue">eighth</type>
+        <dot/>
+        <stem default-y="-3">up</stem>
+        <beam number="1">begin</beam>
+      </note>
+      <harmony default-y="19" font-family="JazzText" font-size="18">
+        <root>
+          <root-step text="">E</root-step>
+          <root-alter print-object="no">-1</root-alter>
+        </root>
+        <kind halign="left" text="">major</kind>
+        <bass arrangement="horizontal">
+          <bass-step>G</bass-step>
+          <bass-alter>1</bass-alter>
+        </bass>
+      </harmony>
+      <note default-x="164">
+        <pitch>
+          <step>B</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>2</duration>
+        <tie type="start"/>
+        <voice>1</voice>
+        <type size="cue">16th</type>
+        <stem default-y="4">up</stem>
+        <beam number="1">end</beam>
+        <beam number="2">backward hook</beam>
+        <notations>
+          <tied type="start"/>
+        </notations>
+      </note>
+      <note default-x="196">
+        <pitch>
+          <step>B</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>4</duration>
+        <tie type="stop"/>
+        <voice>1</voice>
+        <type size="cue">eighth</type>
+        <stem default-y="-44">down</stem>
+        <beam number="1">begin</beam>
+        <notations>
+          <tied type="stop"/>
+        </notations>
+      </note>
+      <harmony default-y="19" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>A</root-step>
+        </root>
+        <kind halign="left" text="">minor</kind>
+      </harmony>
+      <note default-x="228">
+        <pitch>
+          <step>C</step>
+          <alter>1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>4</duration>
+        <tie type="start"/>
+        <voice>1</voice>
+        <type size="cue">eighth</type>
+        <stem default-y="-39">down</stem>
+        <beam number="1">end</beam>
+        <notations>
+          <tied type="start"/>
+        </notations>
+      </note>
+      <note default-x="264">
+        <pitch>
+          <step>C</step>
+          <alter>1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>16</duration>
+        <tie type="stop"/>
+        <voice>1</voice>
+        <type size="cue">half</type>
+        <stem default-y="-39">down</stem>
+        <notations>
+          <tied type="stop"/>
+        </notations>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="4" width="228">
+      <harmony default-y="19" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>A</root-step>
+        </root>
+        <kind halign="left" text="">minor</kind>
+      </harmony>
+      <note default-x="18">
+        <pitch>
+          <step>C</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>6</duration>
+        <voice>1</voice>
+        <type size="cue">eighth</type>
+        <dot/>
+        <stem default-y="-25">up</stem>
+        <beam number="1">begin</beam>
+      </note>
+      <harmony default-y="19" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>B</root-step>
+        </root>
+        <kind halign="left" text="">minor</kind>
+      </harmony>
+      <note default-x="63">
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>2</duration>
+        <tie type="start"/>
+        <voice>1</voice>
+        <type size="cue">16th</type>
+        <stem default-y="-20">up</stem>
+        <beam number="1">end</beam>
+        <beam number="2">backward hook</beam>
+        <notations>
+          <tied type="start"/>
+        </notations>
+      </note>
+      <note default-x="94">
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>4</duration>
+        <tie type="stop"/>
+        <voice>1</voice>
+        <type size="cue">eighth</type>
+        <stem default-y="-21">up</stem>
+        <beam number="1">begin</beam>
+        <notations>
+          <tied type="stop"/>
+        </notations>
+      </note>
+      <harmony default-y="19" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>C</root-step>
+          <root-alter>1</root-alter>
+        </root>
+        <kind halign="left" text="min">minor</kind>
+      </harmony>
+      <note default-x="126">
+        <pitch>
+          <step>E</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>4</duration>
+        <tie type="start"/>
+        <voice>1</voice>
+        <type size="cue">eighth</type>
+        <stem default-y="-16">up</stem>
+        <beam number="1">end</beam>
+        <notations>
+          <tied type="start"/>
+        </notations>
+      </note>
+      <note default-x="163">
+        <pitch>
+          <step>E</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>16</duration>
+        <tie type="stop"/>
+        <voice>1</voice>
+        <type size="cue">half</type>
+        <stem default-y="-16">up</stem>
+        <notations>
+          <tied type="stop"/>
+        </notations>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="5" width="184">
+      <harmony default-y="19" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>B</root-step>
+        </root>
+        <kind halign="left" text="sus4">suspended-fourth</kind>
+      </harmony>
+      <note default-x="15">
+        <pitch>
+          <step>F</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>32</duration>
+        <voice>1</voice>
+        <type size="cue">whole</type>
+      </note>
+      <direction>
+        <direction-type>
+          <?DoletFinale Unrecognized chord suffix "3" exported as text in part P1, measure 5?>
+          <words default-y="19" font-family="JazzText" font-size="18">B3</words>
+        </direction-type>
+        <offset>-16</offset>
+      </direction>
+      <barline location="right">
+        <bar-style>light-light</bar-style>
+      </barline>
+    </measure>
+    <!--=======================================================-->
+    <measure number="6" width="295">
+      <print new-system="yes">
+        <system-layout>
+          <system-margins>
+            <left-margin>12</left-margin>
+            <right-margin>0</right-margin>
+          </system-margins>
+          <system-distance>115</system-distance>
+        </system-layout>
+      </print>
+      <attributes>
+        <clef>
+          <sign>F</sign>
+          <line>4</line>
+        </clef>
+      </attributes>
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>E</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+      </harmony>
+      <direction placement="above">
+        <direction-type>
+          <words default-y="10" enclosure="rectangle" font-family="Arial" font-size="14" font-weight="bold" relative-x="-189">VS 1a</words>
+        </direction-type>
+      </direction>
+      <direction placement="below">
+        <direction-type>
+          <dynamics default-y="-24" halign="left" relative-x="-160">
+            <mp/>
+          </dynamics>
+        </direction-type>
+        <sound dynamics="69"/>
+      </direction>
+      <note default-x="121">
+        <pitch>
+          <step>E</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>6</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+        <dot/>
+        <stem default-y="-15">up</stem>
+        <beam number="1">begin</beam>
+      </note>
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step text="">E</root-step>
+          <root-alter print-object="no">-1</root-alter>
+        </root>
+        <kind halign="left" text="">major</kind>
+        <bass arrangement="horizontal">
+          <bass-step>G</bass-step>
+          <bass-alter>1</bass-alter>
+        </bass>
+      </harmony>
+      <note default-x="153">
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>2</duration>
+        <tie type="start"/>
+        <voice>1</voice>
+        <type>16th</type>
+        <stem default-y="-5">up</stem>
+        <beam number="1">end</beam>
+        <beam number="2">backward hook</beam>
+        <notations>
+          <tied type="start"/>
+        </notations>
+      </note>
+      <note default-x="178">
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>4</duration>
+        <tie type="stop"/>
+        <voice>1</voice>
+        <type>eighth</type>
+        <stem default-y="-5">up</stem>
+        <beam number="1">begin</beam>
+        <notations>
+          <tied type="stop"/>
+        </notations>
+      </note>
+      <note default-x="201">
+        <pitch>
+          <step>A</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>4</duration>
+        <tie type="start"/>
+        <voice>1</voice>
+        <type>eighth</type>
+        <stem default-y="0">up</stem>
+        <beam number="1">end</beam>
+        <notations>
+          <tied type="start"/>
+        </notations>
+      </note>
+      <harmony default-y="10" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>A</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+      </harmony>
+      <note default-x="233">
+        <pitch>
+          <step>A</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>16</duration>
+        <tie type="stop"/>
+        <voice>1</voice>
+        <type>half</type>
+        <stem default-y="0">up</stem>
+        <notations>
+          <tied type="stop"/>
+        </notations>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="7" width="189">
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>B</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+      </harmony>
+      <note default-x="15">
+        <pitch>
+          <step>B</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>12</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <dot/>
+        <stem default-y="5">up</stem>
+      </note>
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>C</root-step>
+          <root-alter>1</root-alter>
+        </root>
+        <kind halign="left" text="min">minor</kind>
+      </harmony>
+      <note default-x="80">
+        <pitch>
+          <step>C</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>4</duration>
+        <tie type="start"/>
+        <voice>1</voice>
+        <type>eighth</type>
+        <stem default-y="10">up</stem>
+        <notations>
+          <tied type="start"/>
+        </notations>
+      </note>
+      <note default-x="116">
+        <pitch>
+          <step>C</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>16</duration>
+        <tie type="stop"/>
+        <voice>1</voice>
+        <type>half</type>
+        <stem default-y="10">up</stem>
+        <notations>
+          <tied type="stop"/>
+        </notations>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="8" width="189">
+      <attributes>
+        <measure-style>
+          <slash type="start" use-dots="yes" use-stems="no"/>
+        </measure-style>
+      </attributes>
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>A</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+      </harmony>
+      <note default-x="15">
+        <pitch>
+          <step>A</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>8</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <stem>up</stem>
+      </note>
+      <note default-x="58">
+        <pitch>
+          <step>A</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>8</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <stem>up</stem>
+      </note>
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>E</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+        <bass arrangement="diagonal">
+          <bass-step>G</bass-step>
+          <bass-alter>1</bass-alter>
+        </bass>
+      </harmony>
+      <note default-x="101">
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>8</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <stem>up</stem>
+      </note>
+      <note default-x="145">
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>8</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <stem>up</stem>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="9" width="189">
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>B</root-step>
+        </root>
+        <kind halign="left" text="sus4">suspended-fourth</kind>
+      </harmony>
+      <note default-x="15">
+        <pitch>
+          <step>B</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>8</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <stem>up</stem>
+      </note>
+      <note default-x="58">
+        <pitch>
+          <step>B</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>8</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <stem>up</stem>
+      </note>
+      <direction>
+        <direction-type>
+          <?DoletFinale Unrecognized chord suffix "3" exported as text in part P1, measure 9?>
+          <words default-y="12" font-family="JazzText" font-size="18">B3</words>
+        </direction-type>
+      </direction>
+      <note default-x="101">
+        <pitch>
+          <step>B</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>8</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <stem>up</stem>
+      </note>
+      <harmony default-y="25" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>E</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+        <bass arrangement="vertical">
+          <bass-step>G</bass-step>
+          <bass-alter>1</bass-alter>
+        </bass>
+      </harmony>
+      <note default-x="145">
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>8</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <stem>up</stem>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="10" width="294">
+      <print new-system="yes">
+        <system-layout>
+          <system-margins>
+            <left-margin>12</left-margin>
+            <right-margin>0</right-margin>
+          </system-margins>
+          <system-distance>105</system-distance>
+        </system-layout>
+      </print>
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>A</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+      </harmony>
+      <harmony default-y="12" font-family="JazzText" font-size="18" relative-x="-11">
+        <root>
+          <root-step>E</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+        <bass arrangement="diagonal">
+          <bass-step>G</bass-step>
+          <bass-alter>1</bass-alter>
+        </bass>
+        <offset>16</offset>
+      </harmony>
+      <note print-object="no">
+        <rest measure="yes"/>
+        <duration>32</duration>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="11" width="188">
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>B</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+      </harmony>
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>C</root-step>
+          <root-alter>1</root-alter>
+        </root>
+        <kind halign="left" text="min">minor</kind>
+        <offset>16</offset>
+      </harmony>
+      <note print-object="no">
+        <rest measure="yes"/>
+        <duration>32</duration>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="12" width="188">
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>F</root-step>
+          <root-alter>1</root-alter>
+        </root>
+        <kind halign="left" text="min7">minor-seventh</kind>
+      </harmony>
+      <direction>
+        <direction-type>
+          <?DoletFinale Unrecognized chord suffix "4-3" exported as text in part P1, measure 12?>
+          <words default-y="12" font-family="JazzText" font-size="18">B4-3</words>
+        </direction-type>
+        <offset>16</offset>
+      </direction>
+      <note print-object="no">
+        <rest measure="yes"/>
+        <duration>32</duration>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="13" width="193">
+      <attributes>
+        <measure-style>
+          <slash type="stop"/>
+        </measure-style>
+        <measure-style>
+          <slash type="start" use-stems="yes"/>
+        </measure-style>
+      </attributes>
+      <harmony default-y="21" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>A</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+        <bass arrangement="vertical">
+          <bass-step>E</bass-step>
+        </bass>
+      </harmony>
+      <note default-x="15">
+        <pitch>
+          <step>E</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>12</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <dot/>
+        <stem default-y="-65">down</stem>
+      </note>
+      <harmony default-y="12" font-family="JazzText" font-size="18" relative-x="-13">
+        <root>
+          <root-step>E</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+      </harmony>
+      <note default-x="69">
+        <pitch>
+          <step>E</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>4</duration>
+        <tie type="start"/>
+        <voice>1</voice>
+        <type>eighth</type>
+        <stem default-y="-65">down</stem>
+        <notations>
+          <tied type="start"/>
+        </notations>
+      </note>
+      <direction placement="below">
+        <direction-type>
+          <words default-y="-60" enclosure="inverted-bracket" font-family="JazzText" font-size="12" font-weight="bold" relative-x="21">BAND IN</words>
+        </direction-type>
+      </direction>
+      <note default-x="101">
+        <pitch>
+          <step>E</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>8</duration>
+        <tie type="stop"/>
+        <voice>1</voice>
+        <type>quarter</type>
+        <stem default-y="-65">down</stem>
+        <notations>
+          <tied type="stop"/>
+        </notations>
+      </note>
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>B</root-step>
+        </root>
+        <kind halign="left" text="11">dominant-11th</kind>
+      </harmony>
+      <note default-x="144">
+        <pitch>
+          <step>B</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>8</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <stem default-y="-65">down</stem>
+      </note>
+      <barline location="right">
+        <bar-style>light-light</bar-style>
+      </barline>
+    </measure>
+    <!--=======================================================-->
+    <measure number="14" width="319">
+      <print new-system="yes">
+        <system-layout>
+          <system-margins>
+            <left-margin>12</left-margin>
+            <right-margin>0</right-margin>
+          </system-margins>
+          <system-distance>105</system-distance>
+        </system-layout>
+      </print>
+      <barline location="left">
+        <bar-style>heavy-light</bar-style>
+        <repeat direction="forward" winged="double-straight"/>
+      </barline>
+      <attributes>
+        <measure-style>
+          <slash type="stop"/>
+        </measure-style>
+      </attributes>
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>E</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+      </harmony>
+      <direction placement="above">
+        <direction-type>
+          <words default-y="19" enclosure="rectangle" font-family="Arial" font-size="14" font-weight="bold" relative-x="-223" xml:space="preserve">VS 1b
+ VS 2</words>
+        </direction-type>
+      </direction>
+      <direction placement="below">
+        <direction-type>
+          <dynamics default-y="-33" halign="left" relative-x="-197">
+            <mf/>
+          </dynamics>
+        </direction-type>
+        <sound dynamics="83"/>
+      </direction>
+      <direction placement="below">
+        <direction-type>
+          <words default-y="-75" font-family="JazzText" font-size="12" font-style="italic" font-weight="bold" relative-x="-158">BAND IN GENTLY</words>
+        </direction-type>
+      </direction>
+      <note default-x="154">
+        <pitch>
+          <step>E</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>6</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+        <dot/>
+        <stem default-y="-15">up</stem>
+        <beam number="1">begin</beam>
+      </note>
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step text="">E</root-step>
+          <root-alter print-object="no">-1</root-alter>
+        </root>
+        <kind halign="left" text="">major</kind>
+        <bass arrangement="horizontal">
+          <bass-step>G</bass-step>
+          <bass-alter>1</bass-alter>
+        </bass>
+      </harmony>
+      <note default-x="185">
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>2</duration>
+        <tie type="start"/>
+        <voice>1</voice>
+        <type>16th</type>
+        <stem default-y="-5">up</stem>
+        <beam number="1">end</beam>
+        <beam number="2">backward hook</beam>
+        <notations>
+          <tied type="start"/>
+        </notations>
+      </note>
+      <note default-x="208">
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>4</duration>
+        <tie type="stop"/>
+        <voice>1</voice>
+        <type>eighth</type>
+        <stem default-y="-5">up</stem>
+        <beam number="1">begin</beam>
+        <notations>
+          <tied type="stop"/>
+        </notations>
+      </note>
+      <note default-x="230">
+        <pitch>
+          <step>A</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>4</duration>
+        <tie type="start"/>
+        <voice>1</voice>
+        <type>eighth</type>
+        <stem default-y="0">up</stem>
+        <beam number="1">end</beam>
+        <notations>
+          <tied type="start"/>
+        </notations>
+      </note>
+      <harmony default-y="10" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>A</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+      </harmony>
+      <note default-x="261">
+        <pitch>
+          <step>A</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>16</duration>
+        <tie type="stop"/>
+        <voice>1</voice>
+        <type>half</type>
+        <stem default-y="0">up</stem>
+        <notations>
+          <tied type="stop"/>
+        </notations>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="15" width="180">
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>B</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+      </harmony>
+      <note default-x="15">
+        <pitch>
+          <step>B</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>12</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <dot/>
+        <stem default-y="5">up</stem>
+      </note>
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>C</root-step>
+          <root-alter>1</root-alter>
+        </root>
+        <kind halign="left" text="min">minor</kind>
+      </harmony>
+      <note default-x="77">
+        <pitch>
+          <step>C</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>4</duration>
+        <tie type="start"/>
+        <voice>1</voice>
+        <type>eighth</type>
+        <stem default-y="10">up</stem>
+        <notations>
+          <tied type="start"/>
+        </notations>
+      </note>
+      <note default-x="112">
+        <pitch>
+          <step>C</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>16</duration>
+        <tie type="stop"/>
+        <voice>1</voice>
+        <type>half</type>
+        <stem default-y="10">up</stem>
+        <notations>
+          <tied type="stop"/>
+        </notations>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="16" width="180">
+      <attributes>
+        <measure-style>
+          <slash type="start" use-dots="yes" use-stems="no"/>
+        </measure-style>
+      </attributes>
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>A</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+      </harmony>
+      <harmony default-y="12" font-family="JazzText" font-size="18" relative-x="-12">
+        <root>
+          <root-step>E</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+        <bass arrangement="diagonal">
+          <bass-step>G</bass-step>
+          <bass-alter>1</bass-alter>
+        </bass>
+        <offset>16</offset>
+      </harmony>
+      <note print-object="no">
+        <rest measure="yes"/>
+        <duration>32</duration>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="17" width="181">
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>B</root-step>
+        </root>
+        <kind halign="left" text="sus4">suspended-fourth</kind>
+      </harmony>
+      <direction>
+        <direction-type>
+          <?DoletFinale Unrecognized chord suffix "3" exported as text in part P1, measure 17?>
+          <words default-y="12" font-family="JazzText" font-size="18">B3</words>
+        </direction-type>
+        <offset>16</offset>
+      </direction>
+      <note print-object="no">
+        <rest measure="yes"/>
+        <duration>32</duration>
+        <voice>1</voice>
+      </note>
+      <harmony default-y="24" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>E</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+        <bass arrangement="vertical">
+          <bass-step>G</bass-step>
+          <bass-alter>1</bass-alter>
+        </bass>
+        <offset>-8</offset>
+      </harmony>
+    </measure>
+    <!--=======================================================-->
+    <measure number="18" width="294">
+      <print new-system="yes">
+        <system-layout>
+          <system-margins>
+            <left-margin>12</left-margin>
+            <right-margin>0</right-margin>
+          </system-margins>
+          <system-distance>105</system-distance>
+        </system-layout>
+      </print>
+      <harmony default-y="15" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>A</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+      </harmony>
+      <harmony default-y="15" font-family="JazzText" font-size="18" relative-x="-14">
+        <root>
+          <root-step>E</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+        <bass arrangement="diagonal">
+          <bass-step>G</bass-step>
+          <bass-alter>1</bass-alter>
+        </bass>
+        <offset>16</offset>
+      </harmony>
+      <note print-object="no">
+        <rest measure="yes"/>
+        <duration>32</duration>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="19" width="188">
+      <harmony default-y="15" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>B</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+      </harmony>
+      <harmony default-y="15" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>C</root-step>
+          <root-alter>1</root-alter>
+        </root>
+        <kind halign="left" text="min">minor</kind>
+        <offset>16</offset>
+      </harmony>
+      <note print-object="no">
+        <rest measure="yes"/>
+        <duration>32</duration>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="20" width="188">
+      <harmony default-y="15" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>F</root-step>
+          <root-alter>1</root-alter>
+        </root>
+        <kind halign="left" text="min7">minor-seventh</kind>
+      </harmony>
+      <direction>
+        <direction-type>
+          <?DoletFinale Unrecognized chord suffix "4-3" exported as text in part P1, measure 20?>
+          <words default-y="15" font-family="JazzText" font-size="18">B4-3</words>
+        </direction-type>
+        <offset>16</offset>
+      </direction>
+      <note print-object="no">
+        <rest measure="yes"/>
+        <duration>32</duration>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="21" width="193">
+      <harmony default-y="15" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>E</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+      </harmony>
+      <direction placement="below">
+        <direction-type>
+          <words default-y="-66" enclosure="oval" font-size="10" font-style="italic" relative-x="-25">Cresc. &lt;...&lt;...&lt;</words>
+        </direction-type>
+        <offset>8</offset>
+      </direction>
+      <note print-object="no">
+        <rest measure="yes"/>
+        <duration>32</duration>
+        <voice>1</voice>
+      </note>
+      <barline location="right">
+        <bar-style>light-light</bar-style>
+      </barline>
+    </measure>
+    <!--=======================================================-->
+    <measure number="22" width="295">
+      <print new-system="yes">
+        <system-layout>
+          <system-margins>
+            <left-margin>12</left-margin>
+            <right-margin>0</right-margin>
+          </system-margins>
+          <system-distance>105</system-distance>
+        </system-layout>
+      </print>
+      <harmony default-y="13" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>B</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+      </harmony>
+      <direction placement="above">
+        <direction-type>
+          <words default-y="19" enclosure="rectangle" font-family="Arial" font-size="14" font-weight="bold" relative-x="-185" xml:space="preserve">CH 1
+CH 2</words>
+        </direction-type>
+      </direction>
+      <direction placement="below">
+        <direction-type>
+          <dynamics default-y="-34" halign="left" relative-x="-155">
+            <f/>
+          </dynamics>
+        </direction-type>
+        <sound dynamics="141"/>
+      </direction>
+      <direction placement="below">
+        <direction-type>
+          <words default-y="-66" font-family="JazzText" font-size="12" font-style="italic" font-weight="bold" relative-x="-48">Big, Broad, Wide Open Groove &gt;</words>
+        </direction-type>
+      </direction>
+      <note print-object="no">
+        <rest measure="yes"/>
+        <duration>32</duration>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="23" width="189">
+      <harmony default-y="13" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>C</root-step>
+          <root-alter>1</root-alter>
+        </root>
+        <kind halign="left" text="min">minor</kind>
+      </harmony>
+      <direction placement="below">
+        <direction-type>
+          <words default-y="-101" font-family="Arial Italic" font-size="8" font-style="italic" relative-x="-10">This arrangement © Tom Brooks Music 2026</words>
+        </direction-type>
+        <offset>8</offset>
+      </direction>
+      <note print-object="no">
+        <rest measure="yes"/>
+        <duration>32</duration>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="24" width="189">
+      <harmony default-y="13" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>A</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+      </harmony>
+      <note print-object="no">
+        <rest measure="yes"/>
+        <duration>32</duration>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="25" width="189">
+      <harmony default-y="13" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>C</root-step>
+          <root-alter>1</root-alter>
+        </root>
+        <kind halign="left" text="min">minor</kind>
+      </harmony>
+      <note print-object="no">
+        <rest measure="yes"/>
+        <duration>32</duration>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="26" width="292">
+      <print new-page="yes" page-number="2">
+        <system-layout>
+          <system-margins>
+            <left-margin>12</left-margin>
+            <right-margin>0</right-margin>
+          </system-margins>
+          <top-system-distance>99</top-system-distance>
+        </system-layout>
+      </print>
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>B</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+      </harmony>
+      <note print-object="no">
+        <rest measure="yes"/>
+        <duration>32</duration>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="27" width="186">
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>C</root-step>
+          <root-alter>1</root-alter>
+        </root>
+        <kind halign="left" text="min">minor</kind>
+      </harmony>
+      <note print-object="no">
+        <rest measure="yes"/>
+        <duration>32</duration>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="28" width="186">
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>A</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+      </harmony>
+      <direction placement="below">
+        <direction-type>
+          <wedge default-y="-167" relative-x="15" spread="58" type="diminuendo"/>
+        </direction-type>
+        <offset>8</offset>
+      </direction>
+      <note print-object="no">
+        <rest measure="yes"/>
+        <duration>32</duration>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="29" width="186">
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>C</root-step>
+          <root-alter>1</root-alter>
+        </root>
+        <kind halign="left" text="min">minor</kind>
+      </harmony>
+      <direction placement="below">
+        <direction-type>
+          <words default-y="-65" enclosure="oval" font-size="10" font-style="italic" relative-x="-15">Dim &gt;...&gt;...&gt;</words>
+        </direction-type>
+        <offset>8</offset>
+      </direction>
+      <direction>
+        <direction-type>
+          <wedge relative-x="8" type="stop"/>
+        </direction-type>
+        <offset>16</offset>
+      </direction>
+      <note print-object="no">
+        <rest measure="yes"/>
+        <duration>32</duration>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="30" width="327">
+      <print new-system="yes">
+        <system-layout>
+          <system-margins>
+            <left-margin>12</left-margin>
+            <right-margin>300</right-margin>
+          </system-margins>
+          <system-distance>105</system-distance>
+        </system-layout>
+      </print>
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>F</root-step>
+          <root-alter>1</root-alter>
+        </root>
+        <kind halign="left" text="min7">minor-seventh</kind>
+      </harmony>
+      <direction placement="below">
+        <direction-type>
+          <dynamics default-y="-30" halign="left" relative-x="-161">
+            <mf/>
+          </dynamics>
+        </direction-type>
+        <sound dynamics="83"/>
+      </direction>
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>E</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+        <bass arrangement="diagonal">
+          <bass-step>G</bass-step>
+          <bass-alter>1</bass-alter>
+        </bass>
+        <offset>16</offset>
+      </harmony>
+      <note print-object="no">
+        <rest measure="yes"/>
+        <duration>32</duration>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="31" width="222">
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>A</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+      </harmony>
+      <direction>
+        <direction-type>
+          <?DoletFinale Unrecognized chord suffix "74-3" exported as text in part P1, measure 31?>
+          <words default-y="12" font-family="JazzText" font-size="18">B74-3</words>
+        </direction-type>
+        <offset>16</offset>
+      </direction>
+      <note print-object="no">
+        <rest measure="yes"/>
+        <duration>32</duration>
+        <voice>1</voice>
+      </note>
+      <direction placement="below">
+        <direction-type>
+          <words default-y="-27" enclosure="oval" font-size="10" font-style="italic" relative-x="5">Dim &gt;...&gt;...&gt;</words>
+        </direction-type>
+      </direction>
+    </measure>
+    <!--=======================================================-->
+    <measure number="32" width="320">
+      <print new-system="yes">
+        <system-layout>
+          <system-margins>
+            <left-margin>12</left-margin>
+            <right-margin>60</right-margin>
+          </system-margins>
+          <system-distance>105</system-distance>
+        </system-layout>
+      </print>
+      <attributes>
+        <clef>
+          <sign>G</sign>
+          <line>2</line>
+        </clef>
+        <measure-style>
+          <slash type="stop"/>
+        </measure-style>
+      </attributes>
+      <harmony default-y="20" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>E</root-step>
+        </root>
+        <kind halign="left" text="">minor</kind>
+      </harmony>
+      <direction placement="above">
+        <direction-type>
+          <words default-y="55" enclosure="rectangle" font-family="Arial" font-size="14" font-weight="bold" relative-x="-102">1st Ending</words>
+        </direction-type>
+      </direction>
+      <direction placement="above">
+        <direction-type>
+          <words default-y="18" enclosure="rectangle" font-family="Arial" font-size="14" font-weight="bold" relative-x="-191" xml:space="preserve">  RE
+INTRO</words>
+        </direction-type>
+      </direction>
+      <direction placement="below">
+        <direction-type>
+          <dynamics default-y="-34" halign="left" relative-x="-162">
+            <mp/>
+          </dynamics>
+        </direction-type>
+        <sound dynamics="69"/>
+      </direction>
+      <direction placement="above">
+        <direction-type>
+          <words default-y="31" enclosure="bracket" font-family="JazzText" font-size="10" font-weight="bold" relative-x="-88">AC GTR ONLY</words>
+        </direction-type>
+      </direction>
+      <note default-x="120">
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>6</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+        <dot/>
+        <stem default-y="2">up</stem>
+        <beam number="1">begin</beam>
+      </note>
+      <harmony default-y="20" font-family="JazzText" font-size="18">
+        <root>
+          <root-step text="">E</root-step>
+          <root-alter print-object="no">-1</root-alter>
+        </root>
+        <kind halign="left" text="">major</kind>
+        <bass arrangement="horizontal">
+          <bass-step>G</bass-step>
+          <bass-alter>1</bass-alter>
+        </bass>
+      </harmony>
+      <note default-x="162">
+        <pitch>
+          <step>B</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>2</duration>
+        <tie type="start"/>
+        <voice>1</voice>
+        <type>16th</type>
+        <stem default-y="11">up</stem>
+        <beam number="1">end</beam>
+        <beam number="2">backward hook</beam>
+        <notations>
+          <tied type="start"/>
+        </notations>
+      </note>
+      <note default-x="194">
+        <pitch>
+          <step>B</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>4</duration>
+        <tie type="stop"/>
+        <voice>1</voice>
+        <type>eighth</type>
+        <stem default-y="-51">down</stem>
+        <beam number="1">begin</beam>
+        <notations>
+          <tied type="stop"/>
+        </notations>
+      </note>
+      <harmony default-y="20" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>A</root-step>
+        </root>
+        <kind halign="left" text="">minor</kind>
+      </harmony>
+      <note default-x="224">
+        <pitch>
+          <step>C</step>
+          <alter>1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>4</duration>
+        <tie type="start"/>
+        <voice>1</voice>
+        <type>eighth</type>
+        <stem default-y="-46">down</stem>
+        <beam number="1">end</beam>
+        <notations>
+          <tied type="start"/>
+        </notations>
+      </note>
+      <note default-x="259">
+        <pitch>
+          <step>C</step>
+          <alter>1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>16</duration>
+        <tie type="stop"/>
+        <voice>1</voice>
+        <type>half</type>
+        <stem default-y="-46">down</stem>
+        <notations>
+          <tied type="stop"/>
+        </notations>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="33" width="248">
+      <harmony default-y="20" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>A</root-step>
+        </root>
+        <kind halign="left" text="">minor</kind>
+      </harmony>
+      <note default-x="18">
+        <pitch>
+          <step>C</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>6</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+        <dot/>
+        <stem default-y="-19">up</stem>
+        <beam number="1">begin</beam>
+      </note>
+      <harmony default-y="20" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>B</root-step>
+        </root>
+        <kind halign="left" text="">minor</kind>
+      </harmony>
+      <note default-x="59">
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>2</duration>
+        <tie type="start"/>
+        <voice>1</voice>
+        <type>16th</type>
+        <stem default-y="-14">up</stem>
+        <beam number="1">end</beam>
+        <beam number="2">backward hook</beam>
+        <notations>
+          <tied type="start"/>
+        </notations>
+      </note>
+      <note default-x="91">
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>4</duration>
+        <tie type="stop"/>
+        <voice>1</voice>
+        <type>eighth</type>
+        <stem default-y="-14">up</stem>
+        <beam number="1">begin</beam>
+        <notations>
+          <tied type="stop"/>
+        </notations>
+      </note>
+      <harmony default-y="20" font-family="JazzText" font-size="18" relative-x="-16">
+        <root>
+          <root-step>C</root-step>
+          <root-alter>1</root-alter>
+        </root>
+        <kind halign="left" text="min">minor</kind>
+      </harmony>
+      <direction placement="below">
+        <direction-type>
+          <dynamics default-y="-74" halign="left" relative-x="17">
+            <mf/>
+          </dynamics>
+        </direction-type>
+        <sound dynamics="83"/>
+      </direction>
+      <note default-x="121">
+        <pitch>
+          <step>E</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>4</duration>
+        <tie type="start"/>
+        <voice>1</voice>
+        <type>eighth</type>
+        <stem default-y="-9">up</stem>
+        <beam number="1">end</beam>
+        <notations>
+          <tied type="start"/>
+        </notations>
+      </note>
+      <direction placement="below">
+        <direction-type>
+          <words default-y="-75" enclosure="inverted-bracket" font-family="JazzText" font-size="12" font-weight="bold" relative-x="13">BAND IN</words>
+        </direction-type>
+      </direction>
+      <note default-x="156">
+        <pitch>
+          <step>E</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>8</duration>
+        <tie type="stop"/>
+        <voice>1</voice>
+        <type>quarter</type>
+        <stem default-y="-9">up</stem>
+        <notations>
+          <tied type="stop"/>
+        </notations>
+      </note>
+      <note default-x="186">
+        <pitch>
+          <step>C</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>8</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <stem default-y="-15">up</stem>
+      </note>
+      <harmony default-y="18" font-family="JazzText" font-size="18" relative-x="-12">
+        <root>
+          <root-step>B</root-step>
+        </root>
+        <kind halign="left" text="11">dominant-11th</kind>
+        <offset>-8</offset>
+      </harmony>
+      <barline location="right">
+        <bar-style>light-heavy</bar-style>
+        <ending number="" print-object="yes" system="only-top" type="stop"/>
+        <repeat direction="backward" winged="double-straight"/>
+      </barline>
+    </measure>
+    <!--=======================================================-->
+    <measure number="34" width="221">
+      <attributes>
+        <clef>
+          <sign>F</sign>
+          <line>4</line>
+        </clef>
+      </attributes>
+      <attributes>
+        <measure-style>
+          <slash type="start" use-dots="yes" use-stems="no"/>
+        </measure-style>
+      </attributes>
+      <harmony default-y="20" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>E</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+      </harmony>
+      <direction placement="above">
+        <direction-type>
+          <words default-y="56" enclosure="rectangle" font-family="Arial" font-size="14" font-weight="bold" relative-x="-5">2nd Ending &gt; &gt; &gt;</words>
+        </direction-type>
+      </direction>
+      <note default-x="14">
+        <pitch>
+          <step>E</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>8</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <stem>up</stem>
+      </note>
+      <direction placement="below">
+        <direction-type>
+          <wedge default-y="-22" relative-x="24" type="crescendo"/>
+        </direction-type>
+      </direction>
+      <direction placement="below">
+        <direction-type>
+          <words default-y="-65" enclosure="oval" font-size="10" font-style="italic" relative-x="-26">Cresc. &lt;...&lt;...&lt;</words>
+        </direction-type>
+      </direction>
+      <note default-x="64">
+        <pitch>
+          <step>E</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>8</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+        <stem>up</stem>
+      </note>
+      <note default-x="114">
+        <pitch>
+          <step>E</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>4</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+        <stem>up</stem>
+      </note>
+      <note default-x="139">
+        <rest/>
+        <duration>4</duration>
+        <voice>1</voice>
+        <type>eighth</type>
+      </note>
+      <note default-x="164">
+        <rest/>
+        <duration>8</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+      </note>
+      <direction placement="above">
+        <direction-type>
+          <words default-y="124" enclosure="inverted-bracket" font-family="JazzText" font-size="12" font-weight="bold">BAND OUT</words>
+        </direction-type>
+      </direction>
+      <direction>
+        <direction-type>
+          <wedge relative-x="115" spread="74" type="stop"/>
+        </direction-type>
+      </direction>
+      <barline location="right">
+        <bar-style>light-light</bar-style>
+      </barline>
+    </measure>
+    <!--=======================================================-->
+    <measure number="35" width="292">
+      <print new-system="yes">
+        <system-layout>
+          <system-margins>
+            <left-margin>12</left-margin>
+            <right-margin>0</right-margin>
+          </system-margins>
+          <system-distance>105</system-distance>
+        </system-layout>
+      </print>
+      <attributes>
+        <measure-style>
+          <slash type="stop"/>
+        </measure-style>
+      </attributes>
+      <harmony default-y="11" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>B</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+      </harmony>
+      <direction placement="above">
+        <direction-type>
+          <words default-y="8" enclosure="rectangle" font-family="Arial" font-size="14" font-weight="bold" relative-x="-182">CH 3</words>
+        </direction-type>
+      </direction>
+      <direction placement="below">
+        <direction-type>
+          <dynamics default-y="-33" halign="left" relative-x="-162">
+            <ff/>
+          </dynamics>
+        </direction-type>
+        <sound dynamics="98"/>
+      </direction>
+      <direction placement="below">
+        <direction-type>
+          <words default-y="-63" enclosure="hexagon" font-family="JazzText" font-size="10" font-weight="bold" relative-x="-133" xml:space="preserve">==STOP==
+=GROOVE=</words>
+        </direction-type>
+      </direction>
+      <note default-x="121">
+        <pitch>
+          <step>B</step>
+          <octave>1</octave>
+        </pitch>
+        <duration>32</duration>
+        <voice>1</voice>
+        <type>whole</type>
+        <notations>
+          <articulations>
+            <accent default-x="0" default-y="-81" placement="below"/>
+          </articulations>
+        </notations>
+      </note>
+      <note default-x="121">
+        <chord/>
+        <pitch>
+          <step>B</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>32</duration>
+        <voice>1</voice>
+        <type>whole</type>
+      </note>
+      <direction placement="above">
+        <direction-type>
+          <symbol default-y="16" font-family="JazzPerc" font-size="48">noteheadCircleX</symbol>
+        </direction-type>
+        <offset>-8</offset>
+      </direction>
+    </measure>
+    <!--=======================================================-->
+    <measure number="36" width="186">
+      <harmony default-y="11" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>C</root-step>
+          <root-alter>1</root-alter>
+        </root>
+        <kind halign="left" text="min">minor</kind>
+      </harmony>
+      <note default-x="15">
+        <pitch>
+          <step>C</step>
+          <alter>1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>32</duration>
+        <voice>1</voice>
+        <type>whole</type>
+        <notations>
+          <articulations>
+            <accent default-x="0" default-y="-76" placement="below"/>
+          </articulations>
+        </notations>
+      </note>
+      <note default-x="15">
+        <chord/>
+        <pitch>
+          <step>C</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>32</duration>
+        <voice>1</voice>
+        <type>whole</type>
+      </note>
+      <direction placement="below">
+        <direction-type>
+          <words default-y="-61" font-family="Arial Italic" font-size="12" font-style="italic" relative-x="-6">*Back to Groove &gt; &gt; &gt;</words>
+        </direction-type>
+      </direction>
+      <direction placement="above">
+        <direction-type>
+          <symbol default-y="18" font-family="JazzPerc" font-size="48" relative-x="10">noteheadCircleX</symbol>
+        </direction-type>
+        <offset>-8</offset>
+      </direction>
+    </measure>
+    <!--=======================================================-->
+    <measure number="37" width="186">
+      <attributes>
+        <measure-style>
+          <slash type="start" use-dots="yes" use-stems="no"/>
+        </measure-style>
+      </attributes>
+      <harmony default-y="11" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>A</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+      </harmony>
+      <note print-object="no">
+        <rest measure="yes"/>
+        <duration>32</duration>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="38" width="186">
+      <harmony default-y="11" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>C</root-step>
+          <root-alter>1</root-alter>
+        </root>
+        <kind halign="left" text="min">minor</kind>
+      </harmony>
+      <note print-object="no">
+        <rest measure="yes"/>
+        <duration>32</duration>
+        <voice>1</voice>
+      </note>
+      <harmony default-y="11" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>F</root-step>
+          <root-alter>1</root-alter>
+        </root>
+        <kind halign="left" text="min7">minor-seventh</kind>
+        <offset>-8</offset>
+      </harmony>
+    </measure>
+    <!--=======================================================-->
+    <measure number="39" width="292">
+      <print new-system="yes">
+        <system-layout>
+          <system-margins>
+            <left-margin>12</left-margin>
+            <right-margin>0</right-margin>
+          </system-margins>
+          <system-distance>105</system-distance>
+        </system-layout>
+      </print>
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>B</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+      </harmony>
+      <note print-object="no">
+        <rest measure="yes"/>
+        <duration>32</duration>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="40" width="186">
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>C</root-step>
+          <root-alter>1</root-alter>
+        </root>
+        <kind halign="left" text="min">minor</kind>
+      </harmony>
+      <note print-object="no">
+        <rest measure="yes"/>
+        <duration>32</duration>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="41" width="186">
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>A</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+      </harmony>
+      <note print-object="no">
+        <rest measure="yes"/>
+        <duration>32</duration>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="42" width="186">
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>C</root-step>
+          <root-alter>1</root-alter>
+        </root>
+        <kind halign="left" text="min">minor</kind>
+      </harmony>
+      <direction placement="below">
+        <direction-type>
+          <words default-y="-64" enclosure="oval" font-size="10" font-style="italic" relative-x="-25">Dim &gt;...&gt;...&gt;</words>
+        </direction-type>
+        <offset>16</offset>
+      </direction>
+      <note print-object="no">
+        <rest measure="yes"/>
+        <duration>32</duration>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="43" width="314">
+      <print new-system="yes">
+        <system-layout>
+          <system-margins>
+            <left-margin>12</left-margin>
+            <right-margin>120</right-margin>
+          </system-margins>
+          <system-distance>105</system-distance>
+        </system-layout>
+      </print>
+      <harmony default-y="14" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>F</root-step>
+          <root-alter>1</root-alter>
+        </root>
+        <kind halign="left" text="min7">minor-seventh</kind>
+      </harmony>
+      <direction placement="below">
+        <direction-type>
+          <words default-y="-59" font-family="JazzText" font-size="12" font-style="italic" relative-x="-20">wind it down...</words>
+        </direction-type>
+        <offset>8</offset>
+      </direction>
+      <harmony default-y="14" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>E</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+        <bass arrangement="diagonal">
+          <bass-step>G</bass-step>
+          <bass-alter>1</bass-alter>
+        </bass>
+        <offset>16</offset>
+      </harmony>
+      <note print-object="no">
+        <rest measure="yes"/>
+        <duration>32</duration>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="44" width="208">
+      <harmony default-y="14" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>A</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+      </harmony>
+      <direction>
+        <direction-type>
+          <?DoletFinale Unrecognized chord suffix "74-3" exported as text in part P1, measure 44?>
+          <words default-y="14" font-family="JazzText" font-size="18">B74-3</words>
+        </direction-type>
+        <offset>16</offset>
+      </direction>
+      <note print-object="no">
+        <rest measure="yes"/>
+        <duration>32</duration>
+        <voice>1</voice>
+      </note>
+      <direction placement="below">
+        <direction-type>
+          <dynamics default-y="-62" halign="left" relative-x="-18">
+            <mf/>
+          </dynamics>
+        </direction-type>
+        <sound dynamics="83"/>
+      </direction>
+    </measure>
+    <!--=======================================================-->
+    <measure number="45" width="208">
+      <attributes>
+        <measure-style>
+          <slash type="stop"/>
+        </measure-style>
+      </attributes>
+      <harmony default-y="14" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>C</root-step>
+          <root-alter>1</root-alter>
+        </root>
+        <kind halign="left" text="min">minor</kind>
+      </harmony>
+      <direction placement="below">
+        <direction-type>
+          <words default-y="-18" enclosure="hexagon" font-family="JazzText" font-size="10" font-weight="bold" xml:space="preserve">==STOP==
+=GROOVE=</words>
+        </direction-type>
+        <offset>8</offset>
+      </direction>
+      <note default-x="15">
+        <pitch>
+          <step>C</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>32</duration>
+        <voice>1</voice>
+        <type>whole</type>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="46" width="358">
+      <print new-system="yes">
+        <system-layout>
+          <system-margins>
+            <left-margin>12</left-margin>
+            <right-margin>240</right-margin>
+          </system-margins>
+          <system-distance>105</system-distance>
+        </system-layout>
+      </print>
+      <harmony default-y="15" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>F</root-step>
+          <root-alter>1</root-alter>
+        </root>
+        <kind halign="left" text="min7">minor-seventh</kind>
+      </harmony>
+      <direction placement="above">
+        <direction-type>
+          <rehearsal default-y="6" font-family="Arial" font-size="14" font-weight="bold" relative-x="-176">TAG</rehearsal>
+        </direction-type>
+      </direction>
+      <direction placement="below">
+        <direction-type>
+          <dynamics default-y="-27" halign="left" relative-x="-159">
+            <mp/>
+          </dynamics>
+        </direction-type>
+        <sound dynamics="69"/>
+      </direction>
+      <note default-x="121">
+        <pitch>
+          <step>F</step>
+          <alter>1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>16</duration>
+        <voice>1</voice>
+        <type>half</type>
+        <stem default-y="-10">up</stem>
+      </note>
+      <harmony default-y="15" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>E</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+        <bass arrangement="diagonal">
+          <bass-step>G</bass-step>
+          <bass-alter>1</bass-alter>
+        </bass>
+      </harmony>
+      <direction placement="below">
+        <direction-type>
+          <words default-y="-66" enclosure="oval" font-size="10" font-style="italic" relative-x="18">Dim &gt;...&gt;...&gt;</words>
+        </direction-type>
+      </direction>
+      <note default-x="239">
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>16</duration>
+        <voice>1</voice>
+        <type>half</type>
+        <stem default-y="-5">up</stem>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="47" width="251">
+      <harmony default-y="15" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>A</root-step>
+        </root>
+        <kind halign="left" text="">major</kind>
+      </harmony>
+      <note default-x="15">
+        <pitch>
+          <step>A</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>16</duration>
+        <voice>1</voice>
+        <type>half</type>
+        <stem default-y="0">up</stem>
+      </note>
+      <direction>
+        <direction-type>
+          <?DoletFinale Unrecognized chord suffix "74-3" exported as text in part P1, measure 47?>
+          <words default-y="15" font-family="JazzText" font-size="18">B74-3</words>
+        </direction-type>
+      </direction>
+      <note default-x="133">
+        <pitch>
+          <step>B</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>16</duration>
+        <voice>1</voice>
+        <type>half</type>
+        <stem default-y="5">up</stem>
+      </note>
+      <direction placement="below">
+        <direction-type>
+          <words default-y="-32" enclosure="inverted-bracket" font-family="JazzText" font-size="12" font-weight="bold" relative-x="7">BAND OUT</words>
+        </direction-type>
+      </direction>
+    </measure>
+    <!--=======================================================-->
+    <measure number="48" width="288">
+      <print new-system="yes">
+        <system-layout>
+          <system-margins>
+            <left-margin>12</left-margin>
+            <right-margin>0</right-margin>
+          </system-margins>
+          <system-distance>105</system-distance>
+        </system-layout>
+      </print>
+      <attributes>
+        <clef>
+          <sign>G</sign>
+          <line>2</line>
+        </clef>
+      </attributes>
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>E</root-step>
+        </root>
+        <kind halign="left" text="">minor</kind>
+      </harmony>
+      <direction placement="above">
+        <direction-type>
+          <words default-y="4" enclosure="rectangle" font-family="Arial" font-size="14" font-weight="bold" relative-x="-185">OUTRO</words>
+        </direction-type>
+      </direction>
+      <direction placement="above">
+        <direction-type>
+          <words default-y="34" enclosure="bracket" font-family="JazzText" font-size="10" font-weight="bold" relative-x="-73">AC GTR ONLY</words>
+        </direction-type>
+      </direction>
+      <note default-x="120">
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>6</duration>
+        <voice>1</voice>
+        <type size="cue">eighth</type>
+        <dot/>
+        <stem default-y="-3">up</stem>
+        <beam number="1">begin</beam>
+      </note>
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step text="">E</root-step>
+          <root-alter print-object="no">-1</root-alter>
+        </root>
+        <kind halign="left" text="">major</kind>
+        <bass arrangement="horizontal">
+          <bass-step>G</bass-step>
+          <bass-alter>1</bass-alter>
+        </bass>
+      </harmony>
+      <note default-x="154">
+        <pitch>
+          <step>B</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>2</duration>
+        <tie type="start"/>
+        <voice>1</voice>
+        <type size="cue">16th</type>
+        <stem default-y="4">up</stem>
+        <beam number="1">end</beam>
+        <beam number="2">backward hook</beam>
+        <notations>
+          <tied type="start"/>
+        </notations>
+      </note>
+      <note default-x="185">
+        <pitch>
+          <step>B</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>4</duration>
+        <tie type="stop"/>
+        <voice>1</voice>
+        <type size="cue">eighth</type>
+        <stem default-y="-44">down</stem>
+        <beam number="1">begin</beam>
+        <notations>
+          <tied type="stop"/>
+        </notations>
+      </note>
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>A</root-step>
+        </root>
+        <kind halign="left" text="">minor</kind>
+      </harmony>
+      <note default-x="210">
+        <pitch>
+          <step>C</step>
+          <alter>1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>4</duration>
+        <tie type="start"/>
+        <voice>1</voice>
+        <type size="cue">eighth</type>
+        <stem default-y="-39">down</stem>
+        <beam number="1">end</beam>
+        <notations>
+          <tied type="start"/>
+        </notations>
+      </note>
+      <note default-x="241">
+        <pitch>
+          <step>C</step>
+          <alter>1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>16</duration>
+        <tie type="stop"/>
+        <voice>1</voice>
+        <type size="cue">half</type>
+        <stem default-y="-39">down</stem>
+        <notations>
+          <tied type="stop"/>
+        </notations>
+      </note>
+      <direction placement="below">
+        <direction-type>
+          <words default-y="-75" font-family="Arial" font-size="14" font-style="italic" relative-x="-11">Rall...</words>
+        </direction-type>
+        <offset>-8</offset>
+      </direction>
+    </measure>
+    <!--=======================================================-->
+    <measure number="49" width="184">
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>A</root-step>
+        </root>
+        <kind halign="left" text="">minor</kind>
+      </harmony>
+      <note default-x="18">
+        <pitch>
+          <step>C</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>6</duration>
+        <voice>1</voice>
+        <type size="cue">eighth</type>
+        <dot/>
+        <stem default-y="-25">up</stem>
+        <beam number="1">begin</beam>
+      </note>
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>B</root-step>
+        </root>
+        <kind halign="left" text="">minor</kind>
+      </harmony>
+      <note default-x="51">
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>2</duration>
+        <tie type="start"/>
+        <voice>1</voice>
+        <type size="cue">16th</type>
+        <stem default-y="-20">up</stem>
+        <beam number="1">end</beam>
+        <beam number="2">backward hook</beam>
+        <notations>
+          <tied type="start"/>
+        </notations>
+      </note>
+      <note default-x="83">
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>4</duration>
+        <tie type="stop"/>
+        <voice>1</voice>
+        <type size="cue">eighth</type>
+        <stem default-y="-21">up</stem>
+        <beam number="1">begin</beam>
+        <notations>
+          <tied type="stop"/>
+        </notations>
+      </note>
+      <harmony default-y="9" font-family="JazzText" font-size="18" relative-x="-12">
+        <root>
+          <root-step>C</root-step>
+          <root-alter>1</root-alter>
+        </root>
+        <kind halign="left" text="min">minor</kind>
+      </harmony>
+      <note default-x="106">
+        <pitch>
+          <step>E</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>4</duration>
+        <tie type="start"/>
+        <voice>1</voice>
+        <type size="cue">eighth</type>
+        <stem default-y="-16">up</stem>
+        <beam number="1">end</beam>
+        <notations>
+          <tied type="start"/>
+        </notations>
+      </note>
+      <direction placement="below">
+        <direction-type>
+          <words default-y="-59" enclosure="inverted-bracket" font-family="JazzText" font-size="12" font-weight="bold" relative-x="9">BAND IN</words>
+        </direction-type>
+      </direction>
+      <note default-x="138">
+        <pitch>
+          <step>E</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>16</duration>
+        <tie type="stop"/>
+        <voice>1</voice>
+        <type size="cue">half</type>
+        <stem default-y="-16">up</stem>
+        <notations>
+          <tied type="stop"/>
+        </notations>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="50" width="184">
+      <attributes>
+        <clef>
+          <sign>F</sign>
+          <line>4</line>
+        </clef>
+      </attributes>
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>F</root-step>
+          <root-alter>1</root-alter>
+        </root>
+        <kind halign="left" text="min7">minor-seventh</kind>
+      </harmony>
+      <direction placement="below">
+        <direction-type>
+          <words default-y="-85" font-family="Arial" font-size="14" font-style="italic" xml:space="preserve">B i g  R a l l . . . </words>
+        </direction-type>
+      </direction>
+      <note default-x="15">
+        <pitch>
+          <step>F</step>
+          <alter>1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>16</duration>
+        <voice>1</voice>
+        <type>half</type>
+        <stem default-y="-10">up</stem>
+      </note>
+      <direction>
+        <direction-type>
+          <?DoletFinale Unrecognized chord suffix "74-3" exported as text in part P1, measure 50?>
+          <words default-y="12" font-family="JazzText" font-size="18">B74-3</words>
+        </direction-type>
+      </direction>
+      <note default-x="99">
+        <pitch>
+          <step>B</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>16</duration>
+        <voice>1</voice>
+        <type>half</type>
+        <stem default-y="5">up</stem>
+      </note>
+    </measure>
+    <!--=======================================================-->
+    <measure number="51" width="193">
+      <harmony default-y="12" font-family="JazzText" font-size="18">
+        <root>
+          <root-step>E</root-step>
+        </root>
+        <kind halign="left" text="2">major</kind>
+        <degree print-object="no">
+          <degree-value>2</degree-value>
+          <degree-alter>0</degree-alter>
+          <degree-type>add</degree-type>
+        </degree>
+      </harmony>
+      <note default-x="15">
+        <pitch>
+          <step>E</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>32</duration>
+        <voice>1</voice>
+        <type>whole</type>
+        <notations>
+          <fermata default-x="-5" default-y="-65" type="inverted"/>
+        </notations>
+      </note>
+      <barline location="right">
+        <bar-style>light-heavy</bar-style>
+      </barline>
+    </measure>
+  </part>
+  <!--=========================================================-->
+</score-partwise>

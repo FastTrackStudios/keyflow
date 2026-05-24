@@ -103,10 +103,14 @@ impl TupletSpec {
 /// Builder for creating a single measure of music with automatic spacing.
 #[derive(Debug, Clone)]
 pub struct MeasureBuilder {
-    /// Clef type (None = no clef displayed)
+    /// Clef type (None = no clef metadata at all)
     clef: Option<ClefType>,
-    /// Time signature (None = no time sig displayed)
+    /// Whether to render the clef glyph (metadata still used for layout)
+    show_clef: bool,
+    /// Time signature (None = unknown; defaults to 4/4 for beam grouping)
     time_signature: Option<TimeSignature>,
+    /// Whether to render the time-signature glyph
+    show_time_signature: bool,
     /// Notation mode (Standard, Rhythmic, etc.)
     mode: NotationMode,
     /// Rhythm pattern (list of durations)
@@ -139,6 +143,10 @@ pub struct MeasureBuilder {
     /// When set, overrides the default note_line with per-note staff positions and accidentals.
     /// Parallel to rhythm entries — Some((line, accidental)) for pitched notes, None for default.
     note_pitches: Vec<Option<(i32, Accidental)>>,
+    /// Extra pitches stacked on each rhythm entry's stem — same length as
+    /// `note_pitches` when set, each entry holding the secondary heads
+    /// (octave doublings, double-stops). All share the primary's stem.
+    note_pitch_stacks: Vec<Vec<(i32, Accidental)>>,
 }
 
 impl Default for MeasureBuilder {
@@ -153,7 +161,9 @@ impl MeasureBuilder {
     pub fn new() -> Self {
         Self {
             clef: None,
+            show_clef: true,
             time_signature: None,
+            show_time_signature: true,
             mode: NotationMode::Standard,
             rhythm: Vec::new(),
             rest_positions: Vec::new(),
@@ -168,6 +178,7 @@ impl MeasureBuilder {
             compact: false,
             segment_min_widths: Vec::new(),
             note_pitches: Vec::new(),
+            note_pitch_stacks: Vec::new(),
         }
     }
 
@@ -199,6 +210,14 @@ impl MeasureBuilder {
         self
     }
 
+    /// Per-rhythm-entry stack of extra noteheads (octave doublings, etc.)
+    /// that share the primary head's stem. Same length as `note_pitches`.
+    #[must_use]
+    pub fn note_pitch_stacks(mut self, stacks: Vec<Vec<(i32, Accidental)>>) -> Self {
+        self.note_pitch_stacks = stacks;
+        self
+    }
+
     /// Set the clef.
     #[must_use]
     pub fn clef(mut self, clef: ClefType) -> Self {
@@ -210,6 +229,22 @@ impl MeasureBuilder {
     #[must_use]
     pub fn time_signature(mut self, numerator: u8, denominator: u8) -> Self {
         self.time_signature = Some(TimeSignature::new(numerator, denominator));
+        self
+    }
+
+    /// Set time-signature metadata without rendering the glyph (still used for beam grouping).
+    #[must_use]
+    pub fn time_signature_meta(mut self, ts: TimeSignature) -> Self {
+        self.time_signature = Some(ts);
+        self.show_time_signature = false;
+        self
+    }
+
+    /// Set clef metadata without rendering the glyph.
+    #[must_use]
+    pub fn clef_meta(mut self, clef: ClefType) -> Self {
+        self.clef = Some(clef);
+        self.show_clef = false;
         self
     }
 
@@ -332,10 +367,13 @@ impl MeasureBuilder {
             }
 
             let is_long_duration = matches!(dur.kind, DurationKind::Whole | DurationKind::Half);
-            let is_plain_quarter = matches!(dur.kind, DurationKind::Quarter) && dur.dots == 0;
+            // Quarter slashes — plain or dotted — are filler rhythm marks
+            // (e.g. compound-meter `/. /.`); they get no stems unless the
+            // user supplied an explicit chord rhythm.
+            let is_quarter_slash = matches!(dur.kind, DurationKind::Quarter) && dur.dots <= 1;
 
-            // Long durations or plain quarters (outside tuplets) are stemless
-            result[i] = is_long_duration || is_plain_quarter;
+            // Long durations or quarter-family slashes (outside tuplets) are stemless
+            result[i] = is_long_duration || is_quarter_slash;
         }
 
         result
@@ -520,6 +558,17 @@ impl MeasureBuilder {
                 .unwrap_or((note_line, Accidental::None))
         };
 
+        // Helper to get the polyphony stack (extras) for a rhythm entry.
+        // Returns an empty slice when nothing's stacked. Mirrors MuseScore's
+        // `Chord::notes()` minus the primary head: every entry shares the
+        // same stem and x position, with each notehead at its own line.
+        let get_pitch_stack = |idx: usize| -> &[(i32, Accidental)] {
+            self.note_pitch_stacks
+                .get(idx)
+                .map(|v| v.as_slice())
+                .unwrap_or(&[])
+        };
+
         // Helper to get head type for a specific note index
         // Auto-stemless notes use slash noteheads, others use override or default
         let get_head_type = |idx: usize| -> NoteHeadType {
@@ -535,7 +584,7 @@ impl MeasureBuilder {
         };
 
         // 1. Add clef segment
-        if let Some(clef_type) = self.clef {
+        if let Some(clef_type) = self.clef.filter(|_| self.show_clef) {
             let mut seg = Segment::clef(current_tick);
             seg.min_width = spatium * 4.0; // Approximate clef width (use min_width so spacing respects it)
             segment_vec.push(seg);
@@ -556,7 +605,7 @@ impl MeasureBuilder {
         }
 
         // 2. Add time signature segment
-        if let Some(ts) = self.time_signature {
+        if let Some(ts) = self.time_signature.filter(|_| self.show_time_signature) {
             let mut seg = Segment::time_sig(current_tick);
             seg.min_width = spatium * 3.0; // Approximate time sig width (use min_width so spacing respects it)
             segment_vec.push(seg);
@@ -647,16 +696,29 @@ impl MeasureBuilder {
 
                     let note_head_type = get_head_type(rhythm_index);
                     let (actual_line, actual_acc) = get_note_pitch(rhythm_index);
+                    // Build the chord-note list: primary + any polyphony
+                    // stack. `layout_chord` already renders multiple
+                    // noteheads sharing a stem (MuseScore parity).
+                    let mut chord_notes =
+                        Vec::with_capacity(1 + get_pitch_stack(rhythm_index).len());
+                    chord_notes.push(ChordNote {
+                        line: actual_line,
+                        accidental: actual_acc,
+                        tie: false,
+                    });
+                    for (extra_line, extra_acc) in get_pitch_stack(rhythm_index) {
+                        chord_notes.push(ChordNote {
+                            line: *extra_line,
+                            accidental: *extra_acc,
+                            tie: false,
+                        });
+                    }
                     let (_, chord_node) = layout_chord(
                         &ChordParams {
                             id,
                             duration: dur.to_note_duration(),
                             head_type: note_head_type,
-                            notes: vec![ChordNote {
-                                line: actual_line,
-                                accidental: actual_acc,
-                                tie: false,
-                            }],
+                            notes: chord_notes,
                             stem_direction: stem_dir,
                             dots: dur.dots(),
                             beamed: false,
@@ -703,6 +765,7 @@ impl MeasureBuilder {
                         duration: *dur,
                         line: beam_line,
                         accidental: beam_acc,
+                        extras: get_pitch_stack(rhythm_index).to_vec(),
                     });
 
                     current_tick += dur.ticks();
@@ -710,11 +773,37 @@ impl MeasureBuilder {
                     id += 1;
                 }
 
+                // Per-beam-group auto stem direction (mirrors MuseScore
+                // computeAutoStemDirection): sum every notehead's line
+                // position relative to the staff middle line. In our
+                // convention positive = above the middle, so a positive
+                // sum (chord weight above the staff) gets a *down* stem
+                // and a negative sum gets *up*. Tie → down.
+                let line_sum: i32 = beam_notes
+                    .iter()
+                    .map(|n| n.line + n.extras.iter().map(|(l, _)| *l).sum::<i32>())
+                    .sum();
+                let auto_stem_dir = if line_sum > 0 {
+                    StemDirection::Down
+                } else {
+                    StemDirection::Up
+                };
+                let group_stem_dir = match stem_dir {
+                    StemDirection::Auto => auto_stem_dir,
+                    explicit => explicit,
+                };
+                // Apply chosen direction to every beam note so beam
+                // layout positions stems on the correct side.
+                for bn in beam_notes.iter_mut() {
+                    // nothing per-note today, but reserved for future
+                    // explicit per-note overrides from MusicXML <stem>.
+                    let _ = bn;
+                }
                 scene_elements.push(SceneElement::BeamGroup {
                     start_tick: group_start_tick,
                     notes: beam_notes,
                     head_type: beam_head_type,
-                    stem_dir,
+                    stem_dir: group_stem_dir,
                 });
             } else {
                 // Multiple non-flagged notes - individual chords
@@ -736,16 +825,29 @@ impl MeasureBuilder {
 
                     let note_head_type = get_head_type(rhythm_index);
                     let (actual_line, actual_acc) = get_note_pitch(rhythm_index);
+                    // Build the chord-note list: primary + any polyphony
+                    // stack. `layout_chord` already renders multiple
+                    // noteheads sharing a stem (MuseScore parity).
+                    let mut chord_notes =
+                        Vec::with_capacity(1 + get_pitch_stack(rhythm_index).len());
+                    chord_notes.push(ChordNote {
+                        line: actual_line,
+                        accidental: actual_acc,
+                        tie: false,
+                    });
+                    for (extra_line, extra_acc) in get_pitch_stack(rhythm_index) {
+                        chord_notes.push(ChordNote {
+                            line: *extra_line,
+                            accidental: *extra_acc,
+                            tie: false,
+                        });
+                    }
                     let (_, chord_node) = layout_chord(
                         &ChordParams {
                             id,
                             duration: dur.to_note_duration(),
                             head_type: note_head_type,
-                            notes: vec![ChordNote {
-                                line: actual_line,
-                                accidental: actual_acc,
-                                tie: false,
-                            }],
+                            notes: chord_notes,
                             stem_direction: stem_dir,
                             dots: dur.dots(),
                             beamed: false,
@@ -829,11 +931,30 @@ impl MeasureBuilder {
 
         // 9. Build final scene with computed positions
         let scene = self.build_scene(ctx, &segments, &scene_elements);
+        let note_line_stacks = self
+            .note_pitches
+            .iter()
+            .enumerate()
+            .map(|(idx, pitch)| {
+                pitch.map(|(line, _)| {
+                    let mut min_line = line;
+                    let mut max_line = line;
+                    if let Some(extras) = self.note_pitch_stacks.get(idx) {
+                        for (extra_line, _) in extras {
+                            min_line = min_line.min(*extra_line);
+                            max_line = max_line.max(*extra_line);
+                        }
+                    }
+                    (min_line, max_line)
+                })
+            })
+            .collect();
 
         MeasureScene {
             scene,
             width: spacing_result.total_width,
             segments,
+            note_line_stacks,
             internal_push_positions: Vec::new(), // Set by chart layout when needed
             spillback_positions: Vec::new(),     // Set by chart layout when needed
         }
@@ -846,14 +967,44 @@ impl MeasureBuilder {
     /// 2. Flagged notes (8ths, 16ths, 32nds) are grouped within beats
     /// 3. Beam groups never cross beat boundaries
     /// 4. Within a beat, all consecutive flagged notes are beamed together
-    /// 5. Rests break beam groups (rests are never beamed)
+    /// 5. Rests break beam groups (rests are never beamed).
+    ///
+    /// Pulse boundaries come from `TimeSignature::beam_groups()` so
+    /// compound meters get the canonical 3-eighth (dotted-quarter)
+    /// grouping. In 6/8 that means a pair of dotted-eighth notes — total
+    /// 720 ticks — beams as one group instead of breaking on the eighth
+    /// "beat" boundary. Matches MuseScore's `Beam::layout` partitioning.
     fn compute_beam_groups(&self) -> Vec<BeamGroup> {
         if self.rhythm.is_empty() {
             return Vec::new();
         }
 
         let ts = self.time_signature.unwrap_or(TimeSignature::COMMON);
-        let beat_ticks = ts.beat_ticks();
+        // Beam-group boundary ticks: cumulative sum of pulse durations.
+        // For 6/8 → [720, 1440]; a note ending at 720 closes the first
+        // group; the next starts there.
+        let beam_pulses = ts.beam_groups();
+        let group_boundaries: Vec<i32> = beam_pulses
+            .iter()
+            .scan(0i32, |acc, &g| {
+                *acc += g;
+                Some(*acc)
+            })
+            .collect();
+        let is_group_boundary = |tick: i32| -> bool {
+            tick > 0
+                && group_boundaries.iter().any(|&b| {
+                    tick % group_boundaries.last().copied().unwrap_or(b) == 0 || tick == b
+                })
+        };
+        let group_idx_at = |tick: i32| -> usize {
+            for (i, &b) in group_boundaries.iter().enumerate() {
+                if tick < b {
+                    return i;
+                }
+            }
+            group_boundaries.len().saturating_sub(1)
+        };
 
         let mut groups: Vec<BeamGroup> = Vec::new();
         let mut current_group: Vec<Duration> = Vec::new();
@@ -864,63 +1015,50 @@ impl MeasureBuilder {
             let needs_flag = dur.needs_flag();
             let is_rest = self.rest_positions.get(idx).copied().unwrap_or(false);
 
-            // Calculate which beat we're starting in
-            let start_beat = current_tick / beat_ticks;
+            let start_pulse = group_idx_at(current_tick);
             let end_tick = current_tick + dur_ticks;
-            let end_beat = (end_tick - 1) / beat_ticks; // -1 because note ending exactly on beat boundary belongs to previous beat
+            let end_pulse = group_idx_at(end_tick.saturating_sub(1));
 
-            // Rests break beam groups - rests are never beamed
             if is_rest {
-                // Finish any pending beam group
                 if !current_group.is_empty() {
                     groups.push(BeamGroup {
                         notes: std::mem::take(&mut current_group),
                     });
                 }
-                // Add rest as its own group
                 groups.push(BeamGroup { notes: vec![dur] });
                 current_tick = end_tick;
                 continue;
             }
 
-            // Non-flagged notes (quarters, halves, etc.) break any current beam group
             if !needs_flag {
-                // Finish any pending beam group
                 if !current_group.is_empty() {
                     groups.push(BeamGroup {
                         notes: std::mem::take(&mut current_group),
                     });
                 }
-                // Add this note as its own group (not beamable)
                 groups.push(BeamGroup { notes: vec![dur] });
                 current_tick = end_tick;
                 continue;
             }
 
-            // For flagged notes: check if we're crossing into a new beat
-            let crosses_beat = start_beat != end_beat;
+            let crosses_pulse = start_pulse != end_pulse;
 
-            // If we're at a beat boundary and have a pending group, finish it
-            if current_tick > 0 && current_tick % beat_ticks == 0 && !current_group.is_empty() {
+            if is_group_boundary(current_tick) && !current_group.is_empty() {
                 groups.push(BeamGroup {
                     notes: std::mem::take(&mut current_group),
                 });
             }
 
-            // Add this flagged note to current group
             current_group.push(dur);
             current_tick = end_tick;
 
-            // If this note crosses a beat boundary, finish the group
-            // (The note itself completes this beat's group)
-            if crosses_beat || current_tick % beat_ticks == 0 {
+            if crosses_pulse || is_group_boundary(current_tick) {
                 groups.push(BeamGroup {
                     notes: std::mem::take(&mut current_group),
                 });
             }
         }
 
-        // Add any remaining notes
         if !current_group.is_empty() {
             groups.push(BeamGroup {
                 notes: current_group,
@@ -1042,21 +1180,26 @@ impl MeasureBuilder {
                     head_type,
                     stem_dir,
                 } => {
-                    // Build beam notes with computed X positions (per-note lines)
-                    // Offset X by accidental width so beam stems align with noteheads
+                    // Build beam notes with computed X positions. Noteheads
+                    // are anchored directly on the rhythmic segment; accidentals
+                    // extend left and must not move the stem/beam x.
                     let beam_notes: Vec<BeamNote> = notes
                         .iter()
                         .map(|info| {
                             let x = find_chord_x(info.tick);
-                            // Account for accidental width pushing notehead right
-                            let acc_offset = if info.accidental != Accidental::None {
-                                info.accidental.width() * spatium + spatium * 0.15
-                            } else {
-                                0.0
-                            };
+                            // Compute the full chord range from primary +
+                            // extras so the beam stem reaches every notehead.
+                            let mut top_line = info.line;
+                            let mut bottom_line = info.line;
+                            for (extra_line, _) in &info.extras {
+                                top_line = top_line.max(*extra_line);
+                                bottom_line = bottom_line.min(*extra_line);
+                            }
                             BeamNote {
-                                x: x + acc_offset,
+                                x,
                                 line: info.line,
+                                top_line,
+                                bottom_line,
                                 duration: info.duration.to_note_duration(),
                                 stem_direction: *stem_dir,
                                 head_type: *head_type,
@@ -1064,7 +1207,11 @@ impl MeasureBuilder {
                         })
                         .collect();
 
-                    // Layout noteheads (each with its own line and accidental)
+                    // Layout noteheads (each with its own line and accidental).
+                    // Polyphony stack: for each beam note, also emit one
+                    // extra notehead per entry in `extras` at the same x.
+                    // The shared stem is drawn by the beam pass itself;
+                    // extras render as additional heads + ledger lines.
                     for info in notes {
                         let x = find_chord_x(info.tick);
                         let has_pitch =
@@ -1087,6 +1234,33 @@ impl MeasureBuilder {
                         container.transform = Affine::translate((x, 0.0));
                         container.add_child(note_node);
                         root.add_child(container);
+
+                        for (extra_idx, (extra_line, extra_acc)) in info.extras.iter().enumerate() {
+                            let (_, extra_node) = layout_note(
+                                &NoteParams {
+                                    id: info.id ^ ((extra_idx as u64 + 1) << 32),
+                                    duration: info.duration.to_note_duration(),
+                                    head_type: *head_type,
+                                    line: *extra_line,
+                                    accidental: *extra_acc,
+                                    dots: info.duration.dots(),
+                                    ledger_lines: true,
+                                    // layout_note draws only the notehead +
+                                    // accidental + ledger lines (no stem),
+                                    // so the beam's primary stem isn't
+                                    // duplicated by extra heads.
+                                    ..Default::default()
+                                },
+                                ctx,
+                            );
+                            let mut extra_container = SceneNode::group(SemanticId::new(
+                                ElementType::Note,
+                                info.id ^ ((extra_idx as u64 + 1) << 32),
+                            ));
+                            extra_container.transform = Affine::translate((x, 0.0));
+                            extra_container.add_child(extra_node);
+                            root.add_child(extra_container);
+                        }
                     }
 
                     // Layout beam
@@ -1241,6 +1415,11 @@ struct BeamNoteInfo {
     line: i32,
     /// Per-note accidental (for melody pitch rendering)
     accidental: Accidental,
+    /// Polyphony stack — extra noteheads on this beat's stem (octave
+    /// doublings / double-stops). Each entry is (staff_line, accidental).
+    /// The beam itself draws once for the primary head; extras render as
+    /// stand-alone noteheads at the same x with their own ledger lines.
+    extras: Vec<(i32, Accidental)>,
 }
 
 /// A group of notes that should be beamed together.
@@ -1314,6 +1493,10 @@ pub struct MeasureScene {
     pub width: f64,
     /// The segment list (for debugging/inspection)
     pub segments: SegmentList,
+    /// Per-rhythm-entry notehead stack bounds as `(min_line, max_line)`.
+    /// Used by chart layout to keep chord symbols clear of noteheads and
+    /// ledger lines while preserving beat alignment.
+    pub note_line_stacks: Vec<Option<(i32, i32)>>,
     /// Internal push positions: maps chord_idx to segment_idx for pushed chords
     /// (for chords that push back within the same measure, not spillbacks)
     pub internal_push_positions: Vec<(usize, usize)>,
@@ -1450,6 +1633,19 @@ mod tests {
     }
 
     #[test]
+    fn test_auto_stemless_dotted_quarters_in_6_8() {
+        // Compound-meter filler slashes (`/. /.` in 6/8) — dotted quarters
+        // are rhythm-slash filler, not specific rhythm, so they're stemless.
+        let builder = MeasureBuilder::new()
+            .time_signature(6, 8)
+            .rhythmic()
+            .rhythm(vec![Duration::DottedQuarter, Duration::DottedQuarter]);
+
+        let flags = builder.compute_auto_stemless();
+        assert_eq!(flags, vec![true, true]);
+    }
+
+    #[test]
     fn test_auto_stemless_two_quarters() {
         // 2 consecutive quarters should be stemless (minimum threshold)
         let builder = MeasureBuilder::new()
@@ -1526,9 +1722,10 @@ mod tests {
     }
 
     #[test]
-    fn test_auto_stemless_dotted_quarter_not_plain_quarter() {
-        // Dotted quarters are NOT plain quarters, so they keep stems
-        // Plain quarter is stemless regardless of context
+    fn test_auto_stemless_dotted_quarter_is_filler_slash() {
+        // Dotted quarters are filler rhythm slashes (e.g. `/. /.` in compound
+        // meters) — like plain quarters, they get no stem unless the chord
+        // carries an explicit rhythm.
         let builder = MeasureBuilder::new()
             .time_signature(4, 4)
             .rhythmic()
@@ -1539,8 +1736,7 @@ mod tests {
             ]);
 
         let flags = builder.compute_auto_stemless();
-        // Dotted quarters are NOT plain quarters = stemmed, plain quarter = stemless
-        assert_eq!(flags, vec![false, false, true]);
+        assert_eq!(flags, vec![true, true, true]);
     }
 
     #[test]
@@ -1644,9 +1840,9 @@ mod tests {
             ]);
 
         let flags = builder.compute_auto_stemless();
-        // Eighth = stemmed, DottedQuarter = stemmed (not plain quarter),
+        // Eighth = stemmed, DottedQuarter = filler-slash stemless,
         // Eighth = stemmed, Half = stemless (long duration)
-        assert_eq!(flags, vec![false, false, false, true]);
+        assert_eq!(flags, vec![false, true, false, true]);
     }
 
     #[test]

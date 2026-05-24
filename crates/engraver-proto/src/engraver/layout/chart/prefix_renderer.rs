@@ -90,6 +90,8 @@ pub struct PrefixRenderContext {
     pub spatium: f64,
     /// Whether to render the clef.
     pub include_clef: bool,
+    /// Which clef to render. Defaults to Treble.
+    pub clef_type: ClefType,
     /// Whether to render the key signature.
     pub include_key_sig: bool,
     /// Whether to render the time signature.
@@ -136,7 +138,7 @@ pub fn render_system_prefix(
     if ctx.include_clef {
         let clef_params = ClefParams {
             id: id_counter,
-            clef_type: ClefType::Treble,
+            clef_type: ctx.clef_type,
             ..Default::default()
         };
         id_counter += 1;

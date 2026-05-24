@@ -563,6 +563,7 @@ pub fn measure_measure_with_config(
 
     let rhythm_result = rhythm_builder::build_rhythm(source, &config);
     let num_segments = rhythm_result.len();
+    let mut segment_mins_for_log = Vec::new();
 
     // Calculate minimum width from actual measurements using segment-based layout.
     // This accounts for the fact that chords are placed at specific segments,
@@ -596,34 +597,24 @@ pub fn measure_measure_with_config(
             // For explicit rhythm, chord indices map directly to rhythm entry indices
             (0..measure.chords.len()).collect()
         } else {
-            // For slash notation, we need to account for triplet expansion
-            // Each beat is 1 segment (normal) or 2 segments (triplet)
-            let mut mapping = Vec::new();
-            let mut segment_idx = 0;
-            let num_beats = measure.time_signature.0 as usize;
-
-            for beat_idx in 0..num_beats {
-                // Count entries for this beat (1 for normal, 2 for triplet)
-                let is_triplet = rhythm_result
-                    .tuplet_specs
-                    .iter()
-                    .any(|spec| segment_idx >= spec.start_idx && segment_idx < spec.end_idx);
-
-                // Chord at this beat maps to current segment
-                if beat_idx < measure.chords.len() {
-                    mapping.push(segment_idx);
-                }
-
-                // Advance segment index (2 for triplet, 1 for normal)
-                segment_idx += if is_triplet { 2 } else { 1 };
-            }
-
-            // Ensure we have a mapping for all chords
-            while mapping.len() < measure.chords.len() {
-                mapping.push(mapping.last().copied().unwrap_or(0));
-            }
-
-            mapping
+            measure
+                .chords
+                .iter()
+                .map(|chord| {
+                    let beat = chord.position.beats() as f64
+                        + chord.position.subdivisions() as f64 / 1000.0;
+                    let beats_per_segment =
+                        f64::from(measure.time_signature.0) / num_segments as f64;
+                    if beats_per_segment > 0.0 {
+                        (beat / beats_per_segment)
+                            .round()
+                            .clamp(0.0, (num_segments.saturating_sub(1)) as f64)
+                            as usize
+                    } else {
+                        0
+                    }
+                })
+                .collect()
         };
 
         // Update chord_layouts with correct segment indices
@@ -708,9 +699,48 @@ pub fn measure_measure_with_config(
 
         // Only sum segments that have actual chord collision requirements
         let segment_total: f64 = segment_mins.iter().filter(|&&m| m > 0.0).sum();
+        segment_mins_for_log = segment_mins;
 
         segment_total + trailing_padding
     };
+
+    if tracing::enabled!(
+        target: "engraver_proto::engraver::layout::chart::spacing",
+        tracing::Level::DEBUG
+    ) {
+        let chord_width_summary = chord_layouts
+            .iter()
+            .map(|layout| {
+                format!(
+                    "#{}@seg{}:{:.1}pt",
+                    layout.chord_index, layout.segment_index, layout.text_width
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        let symbol_summary = measure
+            .chords
+            .iter()
+            .filter(|c| !is_placeholder(&c.full_symbol))
+            .map(|c| c.full_symbol.as_str())
+            .collect::<Vec<_>>()
+            .join(" ");
+        tracing::debug!(
+            target: "engraver_proto::engraver::layout::chart::spacing",
+            source_measure = ?measure.source_measure_number,
+            time_signature = ?measure.time_signature,
+            use_stems,
+            has_explicit_rhythm = has_explicit,
+            is_section_boundary,
+            segment_count = num_segments,
+            visible_chord_count,
+            symbols = %symbol_summary,
+            chord_widths = %chord_width_summary,
+            segment_mins = ?segment_mins_for_log,
+            min_width,
+            "[spacing-measure-pass] measured measure minimum"
+        );
+    }
 
     MeasureMeasurements {
         chord_widths,
@@ -875,6 +905,97 @@ mod tests {
         // 6/8 measure with 6 segments
         let weight_6_segments = compute_measure_weight(&measurements_triplet, 6, 0);
         assert!((weight_6_segments - 1.5).abs() < 0.01); // 6/4 = 1.5 weight
+    }
+
+    #[test]
+    fn dense_chord_measure_sums_segment_minimums() {
+        use crate::chord::{Chord, ChordQuality, ChordRhythm};
+        use crate::primitives::RootNotation;
+        use crate::time::{AbsolutePosition, MusicalDuration};
+
+        fn chord(symbol: &str) -> crate::chart::types::ChordInstance {
+            let root = RootNotation::from_string("C").expect("test root should parse");
+            crate::chart::types::ChordInstance::new(
+                root.clone(),
+                symbol.to_string(),
+                Chord::new(root, ChordQuality::Major),
+                ChordRhythm::Default,
+                symbol.to_string(),
+                MusicalDuration::new(0, 1, 0),
+                AbsolutePosition::at_beginning(),
+            )
+        }
+
+        let style = make_test_style();
+        let mut cache = MeasurementCache::new();
+
+        let mut dense = Measure::new();
+        dense.time_signature = (4, 4);
+        dense.chords = vec![
+            chord("Cmaj13#11"),
+            chord("F#m7b5"),
+            chord("B13b9"),
+            chord("Emaj9/G#"),
+        ];
+
+        let mut filler = Measure::new();
+        filler.time_signature = (4, 4);
+        filler.chords = vec![chord(""), chord("")];
+
+        let dense_measure = measure_measure(&dense, &style, &mut cache);
+        let filler_measure = measure_measure(&filler, &style, &mut cache);
+
+        assert_eq!(dense_measure.visible_chord_count, 4);
+        assert_eq!(filler_measure.visible_chord_count, 0);
+        assert!(
+            dense_measure.min_width > filler_measure.min_width * 3.0,
+            "dense chord clusters should reserve a summed per-segment floor: dense={} filler={}",
+            dense_measure.min_width,
+            filler_measure.min_width
+        );
+    }
+
+    #[test]
+    fn lord_of_the_fight_dense_measures_measure_wider_than_written_rests() {
+        let mut fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        fixture.push("../..");
+        fixture.push("examples/png-project-charts/02 LORD OF THE FIGHT Master RS.musicxml");
+        let chart = keyflow_musicxml::import_file(fixture).expect("LotF should import");
+        let measures: Vec<&Measure> = chart
+            .sections
+            .iter()
+            .flat_map(|section| section.tracks.iter())
+            .flat_map(|track| track.measures.iter())
+            .collect();
+        let by_source_number = |n: u32| -> &Measure {
+            measures
+                .iter()
+                .copied()
+                .find(|m| m.source_measure_number == Some(n))
+                .unwrap_or_else(|| panic!("missing source measure {n}"))
+        };
+
+        let style = make_test_style();
+        let mut cache = MeasurementCache::new();
+        let m3 = measure_measure(by_source_number(3), &style, &mut cache);
+        let m4 = measure_measure(by_source_number(4), &style, &mut cache);
+        let m5 = measure_measure(by_source_number(5), &style, &mut cache);
+        let m6 = measure_measure(by_source_number(6), &style, &mut cache);
+
+        assert_eq!(m3.visible_chord_count, 0);
+        assert_eq!(m4.visible_chord_count, 0);
+        assert!(
+            m5.min_width > m3.min_width,
+            "m5 has an F#m7 symbol and should reserve more width than written-rest m3: m5={} m3={}",
+            m5.min_width,
+            m3.min_width
+        );
+        assert!(
+            m6.min_width > m5.min_width * 2.0,
+            "m6 has four chord positions and should reserve much more width than m5: m6={} m5={}",
+            m6.min_width,
+            m5.min_width
+        );
     }
 
     #[test]

@@ -51,7 +51,7 @@ pub fn colors_for_section_type(section_type: &SectionType) -> SectionColors {
         SectionType::Vamp => VAMP,
 
         // Utility sections - neutral colors
-        SectionType::CountIn | SectionType::End => SLATE,
+        SectionType::CountIn | SectionType::Opening | SectionType::End => SLATE,
         SectionType::Hits | SectionType::Breakdown => SLATE,
 
         // Custom sections - slate

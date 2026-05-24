@@ -4,7 +4,7 @@
 //! Ported from the web app's renderer.rs, adapted for native rendering
 //! (no WASM canvas methods — produces `vello::Scene` for the app to render).
 
-use crate::signals::{PageMeta, SystemMeta};
+use crate::signals::{PageMeta, PreviewMode, SystemMeta};
 use anyrender::{recording::RenderCommand, Paint};
 use anyrender::{ImageRenderer, PaintScene, Scene as RecordedScene};
 #[cfg(feature = "anyrender_vello")]
@@ -24,7 +24,7 @@ use keyflow::engraver::export::{PdfSerializer, SvgExportConfig, SvgSerializer};
 use keyflow::engraver::fonts::ChartFontBundle;
 use keyflow::engraver::layout::chart::cursor::{ChartCursor, CursorState, HighlightCommand, Rgba};
 use keyflow::engraver::layout::chart::{
-    BeatPosition, ChartLayoutConfig, ChartLayoutEngine, ChartLayoutResult, LayoutMode,
+    BeatPosition, Breakpoint, ChartLayoutConfig, ChartLayoutEngine, ChartLayoutResult, LayoutMode,
 };
 use keyflow::engraver::renderer::cursor_renderer::render_cursor_commands;
 use keyflow::engraver::renderer::scene_renderer::SceneRenderBuilder;
@@ -44,6 +44,12 @@ const POINTS_PER_INCH: f64 = 72.0;
 /// DPI scaling factor: converts points to screen pixels.
 pub const DPI_SCALE: f64 = SCREEN_DPI / POINTS_PER_INCH;
 
+/// US Letter page dimensions in points (8.5" x 11").
+///
+/// Kept as constants for ergonomic call sites; values mirror
+/// [`engraver::model::PaperSize::Letter`] / `PaperSize::A4` to one decimal.
+pub const LETTER_WIDTH: f64 = 612.0;
+pub const LETTER_HEIGHT: f64 = 792.0;
 /// A4 page dimensions in points.
 pub const A4_WIDTH: f64 = 595.0;
 pub const A4_HEIGHT: f64 = 842.0;
@@ -60,6 +66,47 @@ fn ticks_per_beat_for_denom(denominator: u8) -> i64 {
         4 => 480,
         8 => 240,
         _ => 480,
+    }
+}
+
+/// Classify a viewport width and pick the breakpoint, accounting for zoom.
+///
+/// Zoom > 1 makes content larger, so the *effective* viewport shrinks —
+/// a zoomed-in tablet should layout like a phone.
+fn responsive_breakpoint(viewport_points: f64, zoom: f64) -> Breakpoint {
+    let effective = viewport_points / zoom.max(0.25);
+    Breakpoint::from_viewport_pt(effective)
+}
+
+pub fn layout_mode_for_preview(
+    preview_mode: PreviewMode,
+    viewport_width: f64,
+    zoom: f64,
+) -> (LayoutMode, ChartLayoutConfig) {
+    let raw_points = viewport_width / DPI_SCALE;
+    let viewport_points = LayoutMode::sanitize_dim(raw_points, LETTER_WIDTH).max(240.0);
+    match preview_mode {
+        PreviewMode::Snippet => (
+            LayoutMode::snippet(viewport_points),
+            ChartLayoutConfig::snippet().with_page_offsets(true),
+        ),
+        PreviewMode::Page => (
+            LayoutMode::paginated_letter(),
+            ChartLayoutConfig::master_rhythm().with_page_offsets(true),
+        ),
+        PreviewMode::Responsive => {
+            // Vertical-only scroll: page width snaps to viewport so nothing
+            // overflows horizontally. ContinuousScroll has no page boundary,
+            // so content reflows as one infinite column — the right shape
+            // for a phone/tablet preview that grows downward only.
+            let breakpoint = responsive_breakpoint(viewport_points, zoom);
+            (
+                LayoutMode::ContinuousScroll {
+                    width: viewport_points,
+                },
+                ChartLayoutConfig::responsive_for(breakpoint),
+            )
+        }
     }
 }
 
@@ -358,10 +405,12 @@ fn replay_recorded_scene(
                 RenderCommand::Stroke(cmd) => target.stroke(
                     &cmd.style,
                     cmd.transform,
-                    match &cmd.brush {
-                        peniko::Brush::Solid(color) => Paint::Solid(*color),
-                        peniko::Brush::Gradient(gradient) => Paint::Gradient(gradient),
-                        peniko::Brush::Image(image) => Paint::Image(image.as_ref()),
+                    match cmd.brush {
+                        Paint::Solid(alpha_color) => Paint::Solid(alpha_color),
+                        Paint::Gradient(ref gradient) => Paint::Gradient(gradient),
+                        Paint::Image(ref image) => Paint::Image(image.as_ref()),
+                        Paint::Resource(id) => Paint::Resource(id),
+                        Paint::Custom(ref custom) => Paint::Custom(custom.as_ref()),
                     },
                     cmd.brush_transform,
                     &cmd.shape,
@@ -369,10 +418,12 @@ fn replay_recorded_scene(
                 RenderCommand::Fill(cmd) => target.fill(
                     cmd.fill,
                     cmd.transform,
-                    match &cmd.brush {
-                        peniko::Brush::Solid(color) => Paint::Solid(*color),
-                        peniko::Brush::Gradient(gradient) => Paint::Gradient(gradient),
-                        peniko::Brush::Image(image) => Paint::Image(image.as_ref()),
+                    match cmd.brush {
+                        Paint::Solid(alpha_color) => Paint::Solid(alpha_color),
+                        Paint::Gradient(ref gradient) => Paint::Gradient(gradient),
+                        Paint::Image(ref image) => Paint::Image(image.as_ref()),
+                        Paint::Resource(id) => Paint::Resource(id),
+                        Paint::Custom(ref custom) => Paint::Custom(custom.as_ref()),
                     },
                     cmd.brush_transform,
                     &cmd.shape,
@@ -382,11 +433,14 @@ fn replay_recorded_scene(
                     cmd.font_size,
                     cmd.hint,
                     &cmd.normalized_coords,
+                    cmd.embolden,
                     &cmd.style,
-                    match &cmd.brush {
-                        peniko::Brush::Solid(color) => Paint::Solid(*color),
-                        peniko::Brush::Gradient(gradient) => Paint::Gradient(gradient),
-                        peniko::Brush::Image(image) => Paint::Image(image.as_ref()),
+                    match cmd.brush {
+                        Paint::Solid(alpha_color) => Paint::Solid(alpha_color),
+                        Paint::Gradient(ref gradient) => Paint::Gradient(gradient),
+                        Paint::Image(ref image) => Paint::Image(image.as_ref()),
+                        Paint::Resource(id) => Paint::Resource(id),
+                        Paint::Custom(ref custom) => Paint::Custom(custom.as_ref()),
                     },
                     cmd.brush_alpha,
                     cmd.transform,
@@ -420,10 +474,12 @@ fn replay_recorded_scene(
             RenderCommand::Stroke(cmd) => target.stroke(
                 &cmd.style,
                 scene_transform * cmd.transform,
-                match &cmd.brush {
-                    peniko::Brush::Solid(color) => Paint::Solid(*color),
-                    peniko::Brush::Gradient(gradient) => Paint::Gradient(gradient),
-                    peniko::Brush::Image(image) => Paint::Image(image.as_ref()),
+                match cmd.brush {
+                    Paint::Solid(alpha_color) => Paint::Solid(alpha_color),
+                    Paint::Gradient(ref gradient) => Paint::Gradient(gradient),
+                    Paint::Image(ref image) => Paint::Image(image.as_ref()),
+                    Paint::Resource(id) => Paint::Resource(id),
+                    Paint::Custom(ref custom) => Paint::Custom(custom.as_ref()),
                 },
                 cmd.brush_transform,
                 &cmd.shape,
@@ -431,10 +487,12 @@ fn replay_recorded_scene(
             RenderCommand::Fill(cmd) => target.fill(
                 cmd.fill,
                 scene_transform * cmd.transform,
-                match &cmd.brush {
-                    peniko::Brush::Solid(color) => Paint::Solid(*color),
-                    peniko::Brush::Gradient(gradient) => Paint::Gradient(gradient),
-                    peniko::Brush::Image(image) => Paint::Image(image.as_ref()),
+                match cmd.brush {
+                    Paint::Solid(alpha_color) => Paint::Solid(alpha_color),
+                    Paint::Gradient(ref gradient) => Paint::Gradient(gradient),
+                    Paint::Image(ref image) => Paint::Image(image.as_ref()),
+                    Paint::Resource(id) => Paint::Resource(id),
+                    Paint::Custom(ref custom) => Paint::Custom(custom.as_ref()),
                 },
                 cmd.brush_transform,
                 &cmd.shape,
@@ -444,11 +502,14 @@ fn replay_recorded_scene(
                 cmd.font_size,
                 cmd.hint,
                 &cmd.normalized_coords,
+                cmd.embolden,
                 &cmd.style,
-                match &cmd.brush {
-                    peniko::Brush::Solid(color) => Paint::Solid(*color),
-                    peniko::Brush::Gradient(gradient) => Paint::Gradient(gradient),
-                    peniko::Brush::Image(image) => Paint::Image(image.as_ref()),
+                match cmd.brush {
+                    Paint::Solid(alpha_color) => Paint::Solid(alpha_color),
+                    Paint::Gradient(ref gradient) => Paint::Gradient(gradient),
+                    Paint::Image(ref image) => Paint::Image(image.as_ref()),
+                    Paint::Resource(id) => Paint::Resource(id),
+                    Paint::Custom(ref custom) => Paint::Custom(custom.as_ref()),
                 },
                 cmd.brush_alpha,
                 scene_transform * cmd.transform,
@@ -476,7 +537,7 @@ fn replay_recorded_scene(
 /// Two cache levels to avoid redundant work:
 /// 1. **Parse cache** (`cached_chart`): Keyed by source text hash. Avoids re-parsing
 ///    (~10-20ms) when only the layout mode or viewport changes.
-/// 2. **Layout cache** (`layout_result`): Keyed by (source, snippet_mode) hash. Avoids
+/// 2. **Layout cache** (`layout_result`): Keyed by (source, preview_mode) hash. Avoids
 ///    re-layout (~440-500ms) when the same chart is re-rendered.
 ///
 /// Rendering uses the `PaintScene` trait abstraction (via anyrender) so the
@@ -488,14 +549,14 @@ pub struct ChartLayoutManager {
     layout_engine: ChartLayoutEngine,
     /// Cached layout result.
     layout_result: Option<ChartLayoutResult>,
-    /// Last layout hash — covers (source, snippet_mode) for layout invalidation.
+    /// Last layout hash — covers (source, preview_mode) for layout invalidation.
     last_chart_hash: u64,
     /// Cached parsed chart — rebuilt only when source text changes.
     cached_chart: Option<Chart>,
     /// Hash of just the source text (for parse cache invalidation).
     last_source_hash: u64,
-    /// Whether the last layout was in snippet mode (affects fit-to-width calculation).
-    last_snippet_mode: bool,
+    /// Last preview mode (affects fit-to-width calculation).
+    last_preview_mode: PreviewMode,
     /// Renderer-agnostic cursor for computing highlight commands.
     cursor: ChartCursor,
     /// Last computed cursor state (cached to avoid recomputing every frame when tick hasn't changed).
@@ -827,7 +888,7 @@ impl ChartLayoutManager {
             last_chart_hash: 0,
             cached_chart: None,
             last_source_hash: 0,
-            last_snippet_mode: false,
+            last_preview_mode: PreviewMode::Page,
             cursor: ChartCursor::default(),
             cached_cursor_state: None,
             cached_cursor_tick: i64::MIN,
@@ -878,8 +939,24 @@ impl ChartLayoutManager {
         viewport_width: f64,
         snippet_mode: bool,
     ) -> Result<bool, String> {
+        let preview_mode = if snippet_mode {
+            PreviewMode::Snippet
+        } else {
+            PreviewMode::Page
+        };
+        self.parse_and_layout_with_preview_mode(source, viewport_width, preview_mode, 1.0)
+    }
+
+    /// Parse source and layout the chart using an explicit preview mode.
+    pub fn parse_and_layout_with_preview_mode(
+        &mut self,
+        source: &str,
+        viewport_width: f64,
+        preview_mode: PreviewMode,
+        zoom: f64,
+    ) -> Result<bool, String> {
         // Check layout hash — skip everything if nothing changed
-        let chart_hash = self.compute_chart_hash(source, snippet_mode);
+        let chart_hash = self.compute_chart_hash(source, preview_mode, viewport_width, zoom);
         if self.layout_result.is_some() && chart_hash == self.last_chart_hash {
             return Ok(false);
         }
@@ -900,20 +977,7 @@ impl ChartLayoutManager {
 
         // Layout using the cached chart
         let chart = self.cached_chart.as_ref().unwrap();
-        let (mode, config) = if snippet_mode {
-            let config = ChartLayoutConfig::snippet().with_page_offsets(true);
-            let mode = LayoutMode::Snippet {
-                page_width: viewport_width / DPI_SCALE,
-            };
-            (mode, config)
-        } else {
-            let config = ChartLayoutConfig::master_rhythm().with_page_offsets(true);
-            let mode = LayoutMode::Paginated {
-                page_width: A4_WIDTH,
-                page_height: A4_HEIGHT,
-            };
-            (mode, config)
-        };
+        let (mode, config) = layout_mode_for_preview(preview_mode, viewport_width, zoom);
 
         let result = self
             .layout_engine
@@ -921,7 +985,7 @@ impl ChartLayoutManager {
 
         self.layout_result = Some(result);
         self.last_chart_hash = chart_hash;
-        self.last_snippet_mode = snippet_mode;
+        self.last_preview_mode = preview_mode;
         self.cached_cursor_state = None; // Invalidate cursor cache
         self.cached_cursor_tick = i64::MIN;
         self.cached_page_fragments.clear();
@@ -961,27 +1025,31 @@ impl ChartLayoutManager {
         viewport_width: f64,
         snippet_mode: bool,
     ) {
-        let chart_hash = self.compute_chart_hash(source, snippet_mode);
+        let preview_mode = if snippet_mode {
+            PreviewMode::Snippet
+        } else {
+            PreviewMode::Page
+        };
+        self.layout_chart_with_preview_mode(chart, source, viewport_width, preview_mode, 1.0);
+    }
+
+    /// Layout a chart with an explicit preview mode.
+    pub fn layout_chart_with_preview_mode(
+        &mut self,
+        chart: &Chart,
+        source: &str,
+        viewport_width: f64,
+        preview_mode: PreviewMode,
+        zoom: f64,
+    ) {
+        let chart_hash = self.compute_chart_hash(source, preview_mode, viewport_width, zoom);
 
         // Skip if already laid out with same content
         if self.layout_result.is_some() && chart_hash == self.last_chart_hash {
             return;
         }
 
-        let (mode, config) = if snippet_mode {
-            let config = ChartLayoutConfig::snippet().with_page_offsets(true);
-            let mode = LayoutMode::Snippet {
-                page_width: viewport_width / DPI_SCALE,
-            };
-            (mode, config)
-        } else {
-            let config = ChartLayoutConfig::master_rhythm().with_page_offsets(true);
-            let mode = LayoutMode::Paginated {
-                page_width: A4_WIDTH,
-                page_height: A4_HEIGHT,
-            };
-            (mode, config)
-        };
+        let (mode, config) = layout_mode_for_preview(preview_mode, viewport_width, zoom);
 
         let result = self
             .layout_engine
@@ -989,6 +1057,7 @@ impl ChartLayoutManager {
 
         self.layout_result = Some(result);
         self.last_chart_hash = chart_hash;
+        self.last_preview_mode = preview_mode;
         self.cached_cursor_state = None; // Invalidate cursor cache
         self.cached_cursor_tick = i64::MIN;
         self.cached_page_fragments.clear();
@@ -1462,17 +1531,17 @@ impl ChartLayoutManager {
 
         // In paginated mode, fit to the single page width (not the full multi-page scene).
         // In snippet mode, fit to the actual content width.
-        let content_width = if self.last_snippet_mode {
-            // Snippet: use actual scene bounds
+        let content_width = if self.last_preview_mode == PreviewMode::Snippet {
+            // Snippet: use actual scene bounds.
             self.get_content_dimensions()
                 .map(|(w, _)| w)
-                .unwrap_or(A4_WIDTH)
+                .unwrap_or(LETTER_WIDTH)
         } else {
-            // Paginated: use the first page width, or A4 default
+            // Paginated/responsive: use the first page width.
             self.layout_result
                 .as_ref()
                 .and_then(|layout| layout.pages.first().map(|p| p.width))
-                .unwrap_or(A4_WIDTH)
+                .unwrap_or(LETTER_WIDTH)
         };
 
         let scale = available / content_width;
@@ -2162,11 +2231,28 @@ impl ChartLayoutManager {
     // ========================================================================
 
     /// Compute a hash of the chart source and layout mode for cache invalidation.
-    fn compute_chart_hash(&self, source: &str, snippet_mode: bool) -> u64 {
+    fn compute_chart_hash(
+        &self,
+        source: &str,
+        preview_mode: PreviewMode,
+        viewport_width: f64,
+        zoom: f64,
+    ) -> u64 {
         use std::hash::{Hash, Hasher};
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         source.hash(&mut hasher);
-        snippet_mode.hash(&mut hasher);
+        preview_mode.hash(&mut hasher);
+        match preview_mode {
+            PreviewMode::Snippet => {
+                ((viewport_width / 16.0).round() as i64).hash(&mut hasher);
+            }
+            PreviewMode::Responsive => {
+                ((viewport_width / 16.0).round() as i64).hash(&mut hasher);
+                let viewport_points = (viewport_width / DPI_SCALE).max(240.0);
+                responsive_breakpoint(viewport_points, zoom).hash(&mut hasher);
+            }
+            PreviewMode::Page => {}
+        }
         hasher.finish()
     }
 
@@ -2176,7 +2262,23 @@ impl ChartLayoutManager {
     /// last successful layout. Used by the async layout path to avoid
     /// spawning background work when nothing has changed.
     pub fn needs_layout(&self, source: &str, snippet_mode: bool) -> bool {
-        let chart_hash = self.compute_chart_hash(source, snippet_mode);
+        let preview_mode = if snippet_mode {
+            PreviewMode::Snippet
+        } else {
+            PreviewMode::Page
+        };
+        self.needs_layout_for_preview_mode(source, preview_mode, 0.0, 1.0)
+    }
+
+    /// Check whether a layout is needed for the given source and preview mode.
+    pub fn needs_layout_for_preview_mode(
+        &self,
+        source: &str,
+        preview_mode: PreviewMode,
+        viewport_width: f64,
+        zoom: f64,
+    ) -> bool {
+        let chart_hash = self.compute_chart_hash(source, preview_mode, viewport_width, zoom);
         self.layout_result.is_none() || chart_hash != self.last_chart_hash
     }
 
@@ -2199,6 +2301,31 @@ impl ChartLayoutManager {
         source: &str,
         snippet_mode: bool,
     ) {
+        let preview_mode = if snippet_mode {
+            PreviewMode::Snippet
+        } else {
+            PreviewMode::Page
+        };
+        self.apply_precomputed_layout_with_preview_mode(
+            chart,
+            result,
+            source,
+            preview_mode,
+            0.0,
+            1.0,
+        );
+    }
+
+    /// Apply a pre-computed layout result from a background thread.
+    pub fn apply_precomputed_layout_with_preview_mode(
+        &mut self,
+        chart: Chart,
+        result: ChartLayoutResult,
+        source: &str,
+        preview_mode: PreviewMode,
+        viewport_width: f64,
+        zoom: f64,
+    ) {
         use std::hash::{Hash, Hasher};
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         source.hash(&mut hasher);
@@ -2207,8 +2334,8 @@ impl ChartLayoutManager {
         self.cached_chart = Some(chart);
         self.last_source_hash = source_hash;
         self.layout_result = Some(result);
-        self.last_chart_hash = self.compute_chart_hash(source, snippet_mode);
-        self.last_snippet_mode = snippet_mode;
+        self.last_chart_hash = self.compute_chart_hash(source, preview_mode, viewport_width, zoom);
+        self.last_preview_mode = preview_mode;
         self.cached_cursor_state = None;
         self.cached_cursor_tick = i64::MIN;
         self.cached_page_fragments.clear();

@@ -105,13 +105,7 @@ fn test_layout_segment_ticks() {
     let chart = keyflow::parse(SPACING_TEST_CHART).expect("Failed to parse chart");
     let engine = create_test_engine();
 
-    let result = engine.layout_chart(
-        &chart,
-        &LayoutMode::Paginated {
-            page_width: 595.0,
-            page_height: 842.0,
-        },
-    );
+    let result = engine.layout_chart(&chart, &LayoutMode::paginated_a4());
 
     eprintln!("\n=== Layout Results ===");
     eprintln!("Beat positions count: {}", result.beat_positions.len());
@@ -287,7 +281,7 @@ fn test_snippet_mode_layout() {
     eprintln!("Page width (points): {:.2}", page_width);
 
     // Use snippet mode like the web app
-    let result = engine.layout_chart(&chart, &LayoutMode::Snippet { page_width });
+    let result = engine.layout_chart(&chart, &LayoutMode::snippet(page_width));
 
     eprintln!("Total width: {:.2}", result.total_width);
     eprintln!("Total height: {:.2}", result.total_height);

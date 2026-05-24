@@ -5,11 +5,12 @@ edition.workspace = true
 description = "Music theory and chord parsing - re-exports from keyflow-proto"
 
 [features]
-default = ["text"]
+default = ["text", "engraver"]
 text = ["dep:keyflow-text"]
 midi = ["dep:keyflow-midi"]
+live = ["dep:keyflow-live"]
 engraver = ["dep:engraver"]
-highlighting = ["keyflow-proto/highlighting", "keyflow-text?/highlighting"]
+highlighting = ["keyflow-text?/highlighting"]
 midi-import = ["engraver", "engraver/midi-import"]
 
 [dependencies]
@@ -20,7 +21,9 @@ colored = "3.0"
 regex = "1.11.3"
 derive_more = { version = "1.0", features = ["debug", "display", "from", "error"] }
 
-# DAW and facet (WASM compatible)
+# DAW types-only deps (WASM compatible). Internal crates rather than
+# the `daw` facade — keyflow is consumed by daw-reaper for chord
+# detection, so going through the facade would create a cycle.
 daw-module = { workspace = true }
 daw-proto = { workspace = true }
 facet = { workspace = true }
@@ -30,6 +33,7 @@ helgoboss-midi = "0.4.0"
 keyflow-proto = { path = "../keyflow-proto" }
 keyflow-text = { path = "../keyflow-text", optional = true }
 keyflow-midi = { path = "../keyflow-midi", optional = true }
+keyflow-live = { path = "../keyflow-live", optional = true }
 engraver = { path = "../engraver", optional = true, default-features = false, features = ["engraver"] }
 
 # WASM-specific dependencies

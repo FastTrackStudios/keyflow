@@ -64,6 +64,11 @@ pub struct Chord {
     /// Bass note for slash chords (if different from root)
     pub bass: Option<RootNotation>,
 
+    /// When `bass` is set, render the bass note vertically beneath the main
+    /// symbol (root over horizontal rule over bass) instead of inline (`B/C#`).
+    /// Maps to MusicXML `<bass arrangement="vertical">`.
+    pub bass_vertical: bool,
+
     /// Optional rhythm/duration (None = no duration specified)
     pub duration: Option<ChordRhythm>,
 
@@ -97,6 +102,7 @@ impl Chord {
             additions: Vec::new(),
             omissions: Vec::new(),
             bass: None,
+            bass_vertical: false,
             duration: None,
             intervals: HashMap::new(),
             semantic_degrees: Vec::new(),
@@ -128,6 +134,7 @@ impl Chord {
             additions: Vec::new(),
             omissions: Vec::new(),
             bass: None,
+            bass_vertical: false,
             duration: None,
             intervals: HashMap::new(),
             semantic_degrees: Vec::new(),
@@ -431,6 +438,7 @@ impl Chord {
             additions: additions.0,
             omissions: omissions.0,
             bass: bass.0,
+            bass_vertical: false,
             duration,
             intervals: HashMap::new(),
             semantic_degrees: Vec::new(),

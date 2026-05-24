@@ -12,7 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 keyflow-text = { path = "../keyflow-text", features = ["highlighting"] }
-keyflow-proto = { path = "../keyflow-proto", features = ["highlighting"] }
+keyflow-syntax = { path = "../keyflow-syntax", features = ["highlighting"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std"] }
 tower-lsp = "0.20"
 serde = { version = "1", features = ["derive"] }

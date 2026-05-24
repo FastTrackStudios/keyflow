@@ -11,7 +11,6 @@ use dioxus_core::Task;
 use kurbo::Affine;
 
 use crate::chart_graphics::ChartGraphics;
-use crate::chart_renderer::{A4_HEIGHT, A4_WIDTH, DPI_SCALE};
 use crate::signals::{ChartEditorBounds, PreviewMode};
 use crate::{
     ChartEditorLayout, ChartLayoutManager, SemanticZoomLevel, CHART_BASE_SCALE,
@@ -19,7 +18,7 @@ use crate::{
     CHART_EDITOR_BOUNDS, CHART_HOVER_SCENE_POINT, CHART_PAGE_INFO, CHART_PREVIEW_MODE,
     CHART_RENDER_STATS, CHART_SOURCE, CHART_VIEWPORT,
 };
-use keyflow::engraver::layout::chart::{ChartLayoutConfig, ChartLayoutEngine, LayoutMode};
+use keyflow::engraver::layout::chart::ChartLayoutEngine;
 use keyflow::engraver::style::MStyle;
 
 use dock_dioxus::DOCK_WORKSPACE;
@@ -242,17 +241,26 @@ pub fn ChartView() -> Element {
             let source = CHART_SOURCE.read().clone();
             let preview_mode = *CHART_PREVIEW_MODE.read();
             let bounds = *CHART_EDITOR_BOUNDS.read();
+            let viewport = *CHART_VIEWPORT.read();
+            let layout_zoom = if preview_mode == PreviewMode::Responsive {
+                viewport.zoom
+            } else {
+                1.0
+            };
 
             if !bounds.is_valid() {
                 return;
             }
 
-            let snippet_mode = preview_mode == PreviewMode::Snippet;
-
             // Quick hash check on main thread — avoid spawning if nothing changed
             let (text_font, symbol_font) = if let Some(ref manager_rc) = *layout_manager.read() {
                 let manager = manager_rc.borrow();
-                if !manager.needs_layout(&source, snippet_mode) {
+                if !manager.needs_layout_for_preview_mode(
+                    &source,
+                    preview_mode,
+                    bounds.width,
+                    layout_zoom,
+                ) {
                     return;
                 }
                 manager.font_data()
@@ -280,20 +288,11 @@ pub fn ChartView() -> Element {
 
                     let chart = keyflow::parse(&source_clone).map_err(|e| format!("{}", e))?;
 
-                    let (mode, config) = if snippet_mode {
-                        let config = ChartLayoutConfig::snippet().with_page_offsets(true);
-                        let mode = LayoutMode::Snippet {
-                            page_width: viewport_width / DPI_SCALE,
-                        };
-                        (mode, config)
-                    } else {
-                        let config = ChartLayoutConfig::master_rhythm().with_page_offsets(true);
-                        let mode = LayoutMode::Paginated {
-                            page_width: A4_WIDTH,
-                            page_height: A4_HEIGHT,
-                        };
-                        (mode, config)
-                    };
+                    let (mode, config) = crate::chart_renderer::layout_mode_for_preview(
+                        preview_mode,
+                        viewport_width,
+                        layout_zoom,
+                    );
 
                     let layout_result = engine.layout_chart_with_config(&chart, &mode, &config);
                     Ok::<_, String>((chart, layout_result))
@@ -305,11 +304,13 @@ pub fn ChartView() -> Element {
                     Ok(Ok((chart, layout_result))) => {
                         if let Some(ref manager_rc) = *layout_manager.read() {
                             let mut manager = manager_rc.borrow_mut();
-                            manager.apply_precomputed_layout(
+                            manager.apply_precomputed_layout_with_preview_mode(
                                 chart,
                                 layout_result,
                                 &source,
-                                snippet_mode,
+                                preview_mode,
+                                bounds.width,
+                                layout_zoom,
                             );
 
                             layout_generation.set(layout_generation() + 1);
@@ -332,7 +333,7 @@ pub fn ChartView() -> Element {
                             }
 
                             // Apply FullPage zoom on initial layout
-                            if !snippet_mode {
+                            if preview_mode == PreviewMode::Page {
                                 let vp = *CHART_VIEWPORT.peek();
                                 if vp.zoom_level == SemanticZoomLevel::FullPage
                                     && (vp.zoom - 1.0).abs() < 0.01
@@ -675,9 +676,13 @@ pub fn ChartView() -> Element {
                                             || (current.height - height).abs() > 1.0
                                         {
                                             tracing::info!(
-                                                    "Chart editor bounds updated: ({:.0}, {:.0}, {:.0}x{:.0}), dpr={:.2}",
-                                                    x, y, width, height, dpr
-                                                );
+                                                "Chart editor bounds updated: ({:.0}, {:.0}, {:.0}x{:.0}), dpr={:.2}",
+                                                x,
+                                                y,
+                                                width,
+                                                height,
+                                                dpr
+                                            );
                                             *CHART_EDITOR_BOUNDS.write() =
                                                 ChartEditorBounds::new(x, y, width, height, dpr);
                                         }

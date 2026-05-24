@@ -13,7 +13,6 @@ use fts_ui::prelude::{Button, ButtonSize, ButtonVariant};
 use kurbo::Affine;
 
 use crate::chart_graphics::ChartGraphics;
-use crate::chart_renderer::{A4_HEIGHT, A4_WIDTH};
 use crate::{
     ChartLayoutManager, CHART_CURSOR_TICK, CHART_CURSOR_VISIBLE, CHART_SOURCE, SESSION_CHART_SOURCE,
 };
@@ -194,10 +193,7 @@ pub fn ChartPreviewPanel() -> Element {
                     let chart = keyflow::parse(&source_clone).map_err(|e| format!("{}", e))?;
 
                     let config = ChartLayoutConfig::master_rhythm().with_page_offsets(true);
-                    let mode = LayoutMode::Paginated {
-                        page_width: A4_WIDTH,
-                        page_height: A4_HEIGHT,
-                    };
+                    let mode = LayoutMode::paginated_a4();
                     let layout_result = engine.layout_chart_with_config(&chart, &mode, &config);
                     Ok::<_, String>((chart, layout_result))
                 })
@@ -467,7 +463,12 @@ pub fn ChartPreviewPanel() -> Element {
                 {
                     info!(
                         "ChartPreview renderer (5s): frames={}, avg={:.2}ms, p95={:.2}ms, overlay={:.2}ms, static_rebuilds={}, static={:.2}ms",
-                        frames, avg_frame_ms, p95_ms, avg_overlay_ms, static_rebuilds, avg_static_ms,
+                        frames,
+                        avg_frame_ms,
+                        p95_ms,
+                        avg_overlay_ms,
+                        static_rebuilds,
+                        avg_static_ms,
                     );
                 }
             }

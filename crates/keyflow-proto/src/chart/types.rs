@@ -7,6 +7,7 @@ use super::commands::Command;
 use super::cues::TextCue;
 use super::dynamics::DynamicMarking;
 use super::melody::Melody;
+use super::notations::{BarlineStyle, Dynamic, FiguredBass, Hairpin, RepeatMark, StaffText, Volta};
 use super::track::{Track, TrackType};
 use crate::chord::{Chord, ChordRhythm, PushPullAmount};
 use crate::parsing::TextSpan;
@@ -356,12 +357,47 @@ pub struct Measure {
     /// Dynamic/intensity markings ([Build], [Down], [Go Crazy], etc.)
     pub dynamics: Vec<DynamicMarking>,
 
+    /// Classical dynamic markings (mp/mf/f/ff/fff with SMuFL glyphs).
+    pub classical_dynamics: Vec<Dynamic>,
+
+    /// Crescendo / decrescendo hairpins anchored to this measure.
+    pub hairpins: Vec<Hairpin>,
+
+    /// Stacked-numeral figured-bass annotations anchored to a beat.
+    pub figured_bass: Vec<FiguredBass>,
+
+    /// Free-form text directions attached to a beat (`StaffText`).
+    pub staff_text: Vec<StaffText>,
+
+    /// Volta (1st/2nd ending) starting at this measure, if any.
+    pub volta_start: Option<Volta>,
+
+    /// Style of the barline that closes this measure.
+    pub end_barline: BarlineStyle,
+
+    /// Repeat decoration on the barline that opens this measure.
+    pub start_repeat: RepeatMark,
+
+    /// Repeat decoration on the barline that closes this measure.
+    pub end_repeat: RepeatMark,
+
     /// Melodies in this measure (inline m{} blocks)
     pub melodies: Vec<Melody>,
 
     /// Source text span for this measure
     /// Links this measure back to the original input text that generated it.
     pub source_span: Option<TextSpan>,
+
+    /// Source measure number when imported from MusicXML — the value of
+    /// `<measure number="...">`. `None` for keyflow-text-authored charts.
+    /// Useful for asserting that count-in measures keep their original
+    /// numbering (musical measure 1 == xml measure 3 in Lord of the Fight).
+    pub source_measure_number: Option<u32>,
+
+    /// Source measure width from MusicXML's `<measure width="...">`, in
+    /// tenths. This is a layout hint from the exporting notation program;
+    /// the engraver may use it to preserve source-relative spacing.
+    pub source_measure_width: Option<f64>,
 }
 
 impl Measure {
@@ -374,8 +410,18 @@ impl Measure {
             repeat_count: 1,        // Default to no repeat
             text_cues: Vec::new(),
             dynamics: Vec::new(),
+            classical_dynamics: Vec::new(),
+            hairpins: Vec::new(),
+            figured_bass: Vec::new(),
+            staff_text: Vec::new(),
+            volta_start: None,
+            end_barline: BarlineStyle::default(),
+            start_repeat: RepeatMark::default(),
+            end_repeat: RepeatMark::default(),
             melodies: Vec::new(),
             source_span: None,
+            source_measure_number: None,
+            source_measure_width: None,
         }
     }
 

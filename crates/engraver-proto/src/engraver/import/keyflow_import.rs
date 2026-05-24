@@ -8,26 +8,26 @@
 //! - Key signatures from the chart's key context
 //! - Proper handling of rests and spaces from rhythm_elements
 
-use crate::chart::types::{RestInstance, RhythmElement, SpaceInstance};
-use crate::core::ChordSymbol as ChordSymbolTrait;
 use crate::engraver::model::{
     ChordSymbol, Duration, DurationKind, KeySignature, LayoutBreak, Measure as EngraverMeasure,
     MusicElement, Note, NoteHead, Octave, Part, PartId, Pitch, PitchClass, RehearsalMark,
     RehearsalMarkStyle, Rest, Score, ScoreMetadata, Stem, TimeSignature as EngraverTimeSig, Voice,
 };
 use crate::engraver::quantize::{QuantizeConfig, quantize_duration};
-use crate::{DurationTrait, Note as KeyflowNote};
+use keyflow_proto::Note as KeyflowNote;
+use keyflow_proto::chart::types::{RestInstance, RhythmElement, SpaceInstance};
+use keyflow_proto::core::ChordSymbol as ChordSymbolTrait;
 
 // region:    --- From<Chart> for Score
 
-impl From<crate::Chart> for Score {
-    fn from(chart: crate::Chart) -> Self {
+impl From<keyflow_proto::Chart> for Score {
+    fn from(chart: keyflow_proto::Chart) -> Self {
         import_chart(&chart)
     }
 }
 
-impl From<&crate::Chart> for Score {
-    fn from(chart: &crate::Chart) -> Self {
+impl From<&keyflow_proto::Chart> for Score {
+    fn from(chart: &keyflow_proto::Chart) -> Self {
         import_chart(chart)
     }
 }
@@ -45,7 +45,7 @@ impl From<&crate::Chart> for Score {
 /// - Section labels as rehearsal marks
 /// - Key signatures
 #[must_use]
-pub fn import_chart(chart: &crate::Chart) -> Score {
+pub fn import_chart(chart: &keyflow_proto::Chart) -> Score {
     let metadata = ScoreMetadata {
         title: chart.metadata.title.clone(),
         composer: chart.metadata.artist.clone(),
@@ -378,10 +378,10 @@ fn space_instance_to_slash(space: &SpaceInstance) -> Note {
 /// Uses 480 PPQ standard. The keyflow MusicalDuration is in
 /// measures.beats.subdivisions format where subdivisions are
 /// in 1/1000 of a beat.
-fn duration_to_ticks(duration: &crate::MusicalDuration, ppq: i32) -> i32 {
+fn duration_to_ticks(duration: &keyflow_proto::MusicalDuration, ppq: i32) -> i32 {
     // Convert to total beats
     // subdivisions are 1/1000 of a beat (so 500 = half beat)
-    let total_beats = duration.beats() as f64 + (duration.subdivisions() as f64 / 1000.0);
+    let total_beats = duration.beat as f64 + (duration.subdivision as f64 / 1000.0);
 
     // Convert beats to ticks
     (total_beats * ppq as f64).round() as i32
@@ -391,7 +391,7 @@ fn duration_to_ticks(duration: &crate::MusicalDuration, ppq: i32) -> i32 {
 ///
 /// Uses the quantization system to properly detect triplets and
 /// other tuplet durations from MIDI tick values.
-fn chord_duration_to_engraver(duration: &crate::MusicalDuration) -> Duration {
+fn chord_duration_to_engraver(duration: &keyflow_proto::MusicalDuration) -> Duration {
     let config = QuantizeConfig::default();
     let ticks = duration_to_ticks(duration, config.target_ppq);
 
@@ -448,29 +448,29 @@ mod tests {
     #[test]
     fn test_chord_duration_to_engraver() {
         // Whole note (4 beats)
-        let dur = crate::MusicalDuration::new(0, 4, 0);
+        let dur = keyflow_proto::MusicalDuration::new(0, 4, 0);
         let result = chord_duration_to_engraver(&dur);
         assert_eq!(result.kind, DurationKind::Whole);
 
         // Half note (2 beats)
-        let dur = crate::MusicalDuration::new(0, 2, 0);
+        let dur = keyflow_proto::MusicalDuration::new(0, 2, 0);
         let result = chord_duration_to_engraver(&dur);
         assert_eq!(result.kind, DurationKind::Half);
 
         // Quarter note (1 beat)
-        let dur = crate::MusicalDuration::new(0, 1, 0);
+        let dur = keyflow_proto::MusicalDuration::new(0, 1, 0);
         let result = chord_duration_to_engraver(&dur);
         assert_eq!(result.kind, DurationKind::Quarter);
     }
 
     #[test]
     fn test_rest_instance_to_engraver() {
-        use crate::chord::ChordRhythm;
-        use crate::time::AbsolutePosition;
+        use keyflow_proto::chord::ChordRhythm;
+        use keyflow_proto::time::AbsolutePosition;
 
         let rest = RestInstance::new(
             ChordRhythm::Default,
-            crate::MusicalDuration::new(0, 1, 0), // quarter note
+            keyflow_proto::MusicalDuration::new(0, 1, 0), // quarter note
             AbsolutePosition::at_beginning(),
             "r4".to_string(),
         );
@@ -481,12 +481,12 @@ mod tests {
 
     #[test]
     fn test_space_instance_to_slash() {
-        use crate::chord::ChordRhythm;
-        use crate::time::AbsolutePosition;
+        use keyflow_proto::chord::ChordRhythm;
+        use keyflow_proto::time::AbsolutePosition;
 
         let space = SpaceInstance::new(
             ChordRhythm::Default,
-            crate::MusicalDuration::new(0, 2, 0), // half note
+            keyflow_proto::MusicalDuration::new(0, 2, 0), // half note
             AbsolutePosition::at_beginning(),
             "s2".to_string(),
         );

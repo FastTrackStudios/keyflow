@@ -63,6 +63,7 @@ pub mod prelude {
     pub use fts_ui::prelude::*;
 }
 
+pub mod catalog;
 pub mod chart_renderer;
 pub mod components;
 pub mod examples;

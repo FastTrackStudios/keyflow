@@ -16,7 +16,7 @@ pub mod metadata {
     pub use keyflow_proto::metadata::*;
 }
 pub mod parsing {
-    pub use keyflow_proto::parsing::*;
+    pub use keyflow_syntax::parsing::*;
 }
 pub mod primitives {
     pub use keyflow_proto::primitives::*;
@@ -30,7 +30,7 @@ pub mod time {
 
 #[cfg(feature = "highlighting")]
 pub mod highlighting {
-    pub use keyflow_proto::highlighting::*;
+    pub use keyflow_syntax::highlighting::*;
 }
 
 pub mod api;
