@@ -103,7 +103,7 @@ pub fn default_value(sid: Sid) -> StyleValue {
         Sid::HarmonyPosBelow => StyleValue::Spatium(3.5),
         Sid::MinHarmonyDistance => StyleValue::Spatium(0.5),
         Sid::MaxHarmonyBarDistance => StyleValue::Spatium(0.8),
-        Sid::ChordSymbolAFontFace => StyleValue::String("Leland Text".to_string()),
+        Sid::ChordSymbolAFontFace => StyleValue::String("MuseJazz".to_string()),
         Sid::ChordSymbolAFontSize => StyleValue::Real(12.0),
         Sid::ChordSymbolAFontStyle => StyleValue::FontStyle(FontStyle::NORMAL),
         Sid::ChordSymbolAColor => StyleValue::Color(Color::BLACK),
@@ -119,7 +119,7 @@ pub fn default_value(sid: Sid) -> StyleValue {
         // ====================================================================
         Sid::RehearsalMarkPlacement => StyleValue::Placement(Placement::Above),
         Sid::RehearsalMarkPosAbove => StyleValue::Spatium(-3.0),
-        Sid::RehearsalMarkFontFace => StyleValue::String("Edwin".to_string()),
+        Sid::RehearsalMarkFontFace => StyleValue::String("Leland Text".to_string()),
         Sid::RehearsalMarkFontSize => StyleValue::Real(14.0),
         Sid::RehearsalMarkFontStyle => StyleValue::FontStyle(FontStyle::BOLD),
         Sid::RehearsalMarkFrameType => StyleValue::FrameType(FrameType::Square),
@@ -145,16 +145,16 @@ pub fn default_value(sid: Sid) -> StyleValue {
         // ====================================================================
         // Title/Composer Text - MuseScore default sizes
         // ====================================================================
-        Sid::TitleFontFace => StyleValue::String("Edwin".to_string()),
+        Sid::TitleFontFace => StyleValue::String("Chicago".to_string()),
         Sid::TitleFontSize => StyleValue::Real(24.0),
         Sid::TitleFontStyle => StyleValue::FontStyle(FontStyle::NORMAL),
         Sid::TitleAlign => StyleValue::Align(HAlign::Center),
-        Sid::SubtitleFontFace => StyleValue::String("Edwin".to_string()),
+        Sid::SubtitleFontFace => StyleValue::String("Chicago".to_string()),
         Sid::SubtitleFontSize => StyleValue::Real(14.0),
-        Sid::ComposerFontFace => StyleValue::String("Edwin".to_string()),
+        Sid::ComposerFontFace => StyleValue::String("Chicago".to_string()),
         Sid::ComposerFontSize => StyleValue::Real(12.0),
         Sid::ComposerAlign => StyleValue::Align(HAlign::Right),
-        Sid::LyricistFontFace => StyleValue::String("Edwin".to_string()),
+        Sid::LyricistFontFace => StyleValue::String("Chicago".to_string()),
         Sid::LyricistFontSize => StyleValue::Real(12.0),
         Sid::LyricistAlign => StyleValue::Align(HAlign::Left),
 

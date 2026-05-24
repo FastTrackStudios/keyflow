@@ -11,10 +11,22 @@
 
 use super::page_rendering::draw_staff_lines_with_thickness;
 use super::types::slash_glyph_for_ticks;
+use crate::engraver::layout::context::LayoutContextOwned;
+use crate::engraver::layout::tlayout::{TimeSigParams, TimeSigType, layout_timesig};
+use crate::engraver::notation::{Duration, MeasureBuilder, RhythmEntry};
 use crate::engraver::scene::node::SceneNode;
 use crate::engraver::scene::paint::{FontStyle, FontWeight, PaintCommand, TextAnchor};
-use kurbo::Point;
+use crate::engraver::style::{MStyle, Sid, StyleValue};
+use kurbo::{Affine, Point};
 use vello::peniko::Color;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct CountInPulse {
+    beat_index: usize,
+    duration_ticks: i32,
+    dotted: bool,
+    label: Option<&'static str>,
+}
 
 /// Configuration for count-in snippet rendering.
 #[derive(Debug, Clone)]
@@ -30,6 +42,9 @@ pub struct CountInSnippetConfig {
     /// Scale factor for the snippet (e.g., 0.6 for 60% size).
     /// Applied uniformly to all dimensions to maintain proportions.
     pub scale: f64,
+    /// Per-measure labels to render above each measure (e.g. `["1","2"]`).
+    /// Empty means no labels are drawn (preserves old behavior).
+    pub measure_numbers: Vec<String>,
 }
 
 impl Default for CountInSnippetConfig {
@@ -40,6 +55,7 @@ impl Default for CountInSnippetConfig {
             num_measures: 1,
             spatium: 5.0,
             scale: 0.6, // 60% of normal size
+            measure_numbers: Vec::new(),
         }
     }
 }
@@ -115,12 +131,13 @@ pub fn render_count_in_snippet(
     // Layout constants - same proportions as main chart, using scaled spatium
     let beat_spacing = spatium * 4.0; // Space between beat centers
     let staff_height = spatium * 4.0; // 5 lines, 4 spaces
-    let beat_number_offset = spatium * 2.0; // Below staff
+    let beat_number_offset = spatium * 4.4; // Below staff, clear of beamed count notes
 
     // Measure layout: beats positioned with padding at measure boundaries
     // Slash glyphs are wide diagonal shapes that extend significantly to the right,
     // so we need substantial end padding to prevent touching the barline
-    let start_padding = beat_spacing * 0.5; // Padding before first beat
+    let notation_start_inset = spatium * 3.2; // Time signature column + air before beat 1.
+    let start_padding = beat_spacing * 1.2; // Padding before first beat and time signature
     let end_padding = beat_spacing * 1.0; // Padding after last beat
     let beats_content_width = beat_spacing * (config.beats_per_measure - 1) as f64;
     let measure_width = start_padding + beats_content_width + end_padding;
@@ -143,20 +160,9 @@ pub fn render_count_in_snippet(
     let label_y = position.y + label_font_size;
     let staff_top_y = label_y + label_padding;
     let staff_center_y = staff_top_y + staff_height / 2.0; // Center line of staff
-    let beat_number_y = staff_top_y + staff_height + beat_number_font_size;
+    let close_beat_number_y = staff_top_y + staff_height + beat_number_font_size;
+    let low_beat_number_y = staff_top_y + staff_height + beat_number_font_size + spatium * 2.4;
     let staff_start_x = position.x;
-
-    // Render "Count-In" label above the staff, aligned to the left
-    commands.push(PaintCommand::Text {
-        text: "Count-In".to_string(),
-        font_family: "FreeSans".to_string(),
-        font_size: label_font_size,
-        position: Point::new(staff_start_x, label_y),
-        color: Color::BLACK,
-        anchor: TextAnchor::Start,
-        weight: FontWeight::Normal,
-        style: FontStyle::Normal,
-    });
 
     // Draw 5 staff lines
     commands.extend(draw_staff_lines_with_thickness(
@@ -166,9 +172,6 @@ pub fn render_count_in_snippet(
         spatium,
         staff_line_thickness,
     ));
-
-    // Quarter note = 480 ticks (standard resolution)
-    let slash_codepoint = slash_glyph_for_ticks(480);
 
     // Draw barlines at measure boundaries: start, between measures, and end
     // Uses the same rendering approach as draw_barline() in page_rendering.rs,
@@ -186,28 +189,89 @@ pub fn render_count_in_snippet(
 
     // Collect beat geometry for cursor highlighting
     let mut beat_geometries = Vec::new();
+    let mut notation_style = MStyle::default();
+    notation_style.set(Sid::Spatium, StyleValue::Real(spatium as f32));
+    let notation_context = LayoutContextOwned::new_minimal(notation_style);
+    let notation_ctx = notation_context.as_context();
+    let mut notation_children = Vec::new();
 
-    // Render slashes and beat numbers for each measure
+    // Mini time signature at the start of the count-in staff. Use the same
+    // SMuFL path as regular system prefixes so it matches main notation.
+    let time_sig_params = TimeSigParams {
+        id: 9_900,
+        sig_type: TimeSigType::Numeric {
+            numerator: config.beats_per_measure,
+            denominator: config.beat_unit,
+        },
+        ..Default::default()
+    };
+    let (_, mut time_sig_node) = layout_timesig(&time_sig_params, &notation_ctx);
+    time_sig_node.transform = Affine::translate((
+        staff_start_x + spatium * 0.85,
+        staff_top_y + staff_height / 2.0,
+    ));
+    notation_children.push(time_sig_node);
+
+    // Per-measure labels above the staff. Align to the top-left of each
+    // measure; the first label carries the Count-In text after the number.
+    for i in 0..config.num_measures {
+        let measure_label = config
+            .measure_numbers
+            .get(i)
+            .filter(|label| !label.is_empty())
+            .cloned()
+            .unwrap_or_else(|| (i + 1).to_string());
+        let text = if i == 0 {
+            format!("{measure_label} Count-In")
+        } else {
+            measure_label
+        };
+        let label_x = staff_start_x + measure_width * i as f64 + spatium * 0.35;
+        commands.push(PaintCommand::Text {
+            text,
+            font_family: "FreeSans".to_string(),
+            font_size: label_font_size,
+            position: Point::new(label_x, label_y),
+            color: Color::BLACK,
+            anchor: TextAnchor::Start,
+            weight: FontWeight::Normal,
+            style: FontStyle::Normal,
+        });
+    }
+
+    // Render count-in notation using the same measure/rhythm path as normal
+    // measures. The header still owns staff-line/barline thickness and labels.
     for measure_idx in 0..config.num_measures {
         let measure_start_x = staff_start_x + measure_width * measure_idx as f64;
+        let notation_x = measure_start_x + notation_start_inset;
+        let notation_width = (measure_width - notation_start_inset - spatium).max(spatium * 6.0);
+        let measure_scene =
+            count_in_measure_scene(config, measure_idx, notation_width, &notation_ctx);
+        let chord_positions = measure_scene
+            .segments
+            .iter()
+            .filter(|segment| segment.seg_type.is_chord_rest())
+            .map(|segment| notation_x + segment.x)
+            .collect::<Vec<_>>();
 
-        // Determine beat text style based on measure position
-        // For 2-measure count-in: first measure shows half-time (1, _, 2, _)
-        // For last/only measure: full count (1, 2, 3, 4)
-        let is_half_time = config.num_measures == 2 && measure_idx == 0;
+        let mut notation_node = measure_scene.scene;
+        notation_node.transform = Affine::translate((notation_x, staff_center_y));
+        notation_children.push(notation_node);
 
-        // Render beats within this measure
-        for beat_idx in 0..config.beats_per_measure as usize {
-            // Position beat with start padding, then evenly spaced
-            let beat_x = measure_start_x + start_padding + beat_spacing * beat_idx as f64;
-
-            // Slash glyph - using scaled spatium for size (maintains proportion)
-            commands.push(PaintCommand::Glyph {
-                codepoint: slash_codepoint,
-                position: Point::new(beat_x, staff_center_y),
-                size: spatium,
-                color: Color::BLACK,
-            });
+        for (pulse_idx, pulse) in count_in_pulses_for_measure(config, measure_idx)
+            .into_iter()
+            .enumerate()
+        {
+            let beat_number_y = if count_in_measure_needs_low_labels(config, measure_idx) {
+                low_beat_number_y
+            } else {
+                close_beat_number_y
+            };
+            let beat_x = chord_positions
+                .get(pulse_idx)
+                .copied()
+                .unwrap_or(notation_x + start_padding + beat_spacing * pulse.beat_index as f64);
+            let slash_codepoint = slash_glyph_for_ticks(pulse.duration_ticks);
 
             // Record beat geometry for cursor positioning
             beat_geometries.push(CountInBeatGeometry {
@@ -216,28 +280,15 @@ pub fn render_count_in_snippet(
                 staff_y: staff_top_y,
                 staff_height,
                 measure_index: measure_idx,
-                beat_index: beat_idx,
+                beat_index: pulse.beat_index,
                 glyph_codepoint: slash_codepoint,
                 glyph_size: spatium,
                 glyph_y: staff_center_y,
             });
 
-            // Beat number below slash
-            let beat_text = if is_half_time {
-                // Half-time: only show on beats 1 and 3
-                match beat_idx {
-                    0 => Some("1".to_string()),
-                    2 => Some("2".to_string()),
-                    _ => None,
-                }
-            } else {
-                // Full count: show all beats
-                Some((beat_idx + 1).to_string())
-            };
-
-            if let Some(text) = beat_text {
+            if let Some(text) = pulse.label {
                 commands.push(PaintCommand::Text {
-                    text,
+                    text: text.to_string(),
                     font_family: "FreeSans".to_string(),
                     font_size: beat_number_font_size,
                     position: Point::new(beat_x, beat_number_y),
@@ -250,7 +301,10 @@ pub fn render_count_in_snippet(
         }
     }
 
-    let node = SceneNode::anonymous_leaf(commands);
+    let mut node = SceneNode::anonymous_leaf(commands);
+    for child in notation_children {
+        node.add_child(child);
+    }
 
     CountInSnippetResult {
         node,
@@ -260,9 +314,122 @@ pub fn render_count_in_snippet(
     }
 }
 
+fn count_in_pulses_for_measure(
+    config: &CountInSnippetConfig,
+    measure_idx: usize,
+) -> Vec<CountInPulse> {
+    if config.beat_unit == 8 && config.beats_per_measure == 6 {
+        if config.num_measures == 2 && measure_idx == 0 {
+            return vec![
+                CountInPulse {
+                    beat_index: 0,
+                    duration_ticks: 720,
+                    dotted: true,
+                    label: Some("1"),
+                },
+                CountInPulse {
+                    beat_index: 3,
+                    duration_ticks: 720,
+                    dotted: true,
+                    label: Some("2"),
+                },
+            ];
+        }
+
+        return (0..6)
+            .map(|beat_index| CountInPulse {
+                beat_index,
+                duration_ticks: 240,
+                dotted: false,
+                label: Some(match beat_index {
+                    0 => "1",
+                    1 => "2",
+                    2 => "3",
+                    3 => "4",
+                    4 => "5",
+                    _ => "6",
+                }),
+            })
+            .collect();
+    }
+
+    let is_half_time = config.num_measures == 2 && measure_idx == 0;
+    (0..config.beats_per_measure as usize)
+        .filter_map(|beat_index| {
+            let label = if is_half_time {
+                match beat_index {
+                    0 => Some("1"),
+                    2 => Some("2"),
+                    _ => None,
+                }
+            } else {
+                None
+            };
+
+            if is_half_time && label.is_none() {
+                return None;
+            }
+
+            Some(CountInPulse {
+                beat_index,
+                duration_ticks: 480,
+                dotted: false,
+                label: label.or(match beat_index {
+                    0 => Some("1"),
+                    1 => Some("2"),
+                    2 => Some("3"),
+                    3 => Some("4"),
+                    4 => Some("5"),
+                    5 => Some("6"),
+                    _ => None,
+                }),
+            })
+        })
+        .collect()
+}
+
+fn count_in_measure_scene(
+    config: &CountInSnippetConfig,
+    measure_idx: usize,
+    measure_width: f64,
+    ctx: &crate::engraver::layout::context::LayoutContext<'_>,
+) -> crate::engraver::notation::MeasureScene {
+    let entries = count_in_pulses_for_measure(config, measure_idx)
+        .into_iter()
+        .map(|pulse| {
+            let duration = match (pulse.duration_ticks, pulse.dotted) {
+                (720, true) => Duration::DottedQuarter,
+                (240, false) => Duration::Eighth,
+                (480, false) => Duration::Quarter,
+                _ => Duration::Quarter,
+            };
+            RhythmEntry::Note(duration)
+        })
+        .collect::<Vec<_>>();
+
+    MeasureBuilder::new()
+        .id_base(10_000 + measure_idx as u64 * 100)
+        .justify_to(measure_width / ctx.spatium())
+        .no_barlines()
+        .entries(entries)
+        .rhythmic()
+        .time_signature_meta(crate::engraver::notation::TimeSignature::new(
+            config.beats_per_measure,
+            config.beat_unit,
+        ))
+        .build(ctx)
+}
+
+fn count_in_measure_needs_low_labels(config: &CountInSnippetConfig, measure_idx: usize) -> bool {
+    count_in_pulses_for_measure(config, measure_idx)
+        .iter()
+        .any(|pulse| pulse.duration_ticks <= 240)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engraver::scene::traverse::SceneNodeExt;
 
     #[test]
     fn test_default_config() {
@@ -282,6 +449,7 @@ mod tests {
             num_measures: 1,
             spatium: 5.0,
             scale: 0.6,
+            measure_numbers: Vec::new(),
         };
         let result = render_count_in_snippet(&config, Point::new(0.0, 0.0));
         assert!(result.width > 0.0);
@@ -296,6 +464,7 @@ mod tests {
             num_measures: 2,
             spatium: 5.0,
             scale: 0.6,
+            measure_numbers: Vec::new(),
         };
         let result = render_count_in_snippet(&config, Point::new(0.0, 0.0));
         // Two measures should be wider than one
@@ -308,6 +477,230 @@ mod tests {
     }
 
     #[test]
+    fn measure_labels_are_top_left_with_count_in_after_first_number() {
+        let config = CountInSnippetConfig {
+            beats_per_measure: 4,
+            beat_unit: 4,
+            num_measures: 2,
+            spatium: 5.0,
+            scale: 1.0,
+            measure_numbers: vec!["1".to_string(), "2".to_string()],
+        };
+
+        let result = render_count_in_snippet(&config, Point::new(10.0, 20.0));
+        let labels = result
+            .node
+            .commands
+            .iter()
+            .filter_map(|cmd| {
+                if let PaintCommand::Text {
+                    text,
+                    position,
+                    anchor,
+                    ..
+                } = cmd
+                {
+                    Some((text.as_str(), *position, *anchor))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let first = labels
+            .iter()
+            .find(|(text, _, _)| *text == "1 Count-In")
+            .expect("first count-in measure label should include Count-In text");
+        let second = labels
+            .iter()
+            .find(|(text, _, _)| *text == "2")
+            .expect("second count-in measure label should render its measure number");
+
+        assert_eq!(first.2, TextAnchor::Start);
+        assert_eq!(second.2, TextAnchor::Start);
+        assert!(
+            first.1.x < second.1.x,
+            "measure labels should advance left-to-right by measure"
+        );
+        assert!(
+            (first.1.y - second.1.y).abs() < f64::EPSILON,
+            "measure labels should share the same header row"
+        );
+    }
+
+    #[test]
+    fn renders_mini_time_signature() {
+        let config = CountInSnippetConfig {
+            beats_per_measure: 6,
+            beat_unit: 8,
+            num_measures: 1,
+            spatium: 5.0,
+            scale: 1.0,
+            measure_numbers: Vec::new(),
+        };
+
+        let result = render_count_in_snippet(&config, Point::new(0.0, 0.0));
+        let time_sig_glyphs = result
+            .node
+            .iter_with_transforms()
+            .flat_map(|(node, transform)| {
+                node.commands.iter().filter_map(move |cmd| {
+                    if let PaintCommand::Glyph {
+                        codepoint,
+                        position,
+                        ..
+                    } = cmd
+                    {
+                        Some((*codepoint, transform * *position))
+                    } else {
+                        None
+                    }
+                })
+            })
+            .filter(|(codepoint, _)| {
+                *codepoint == crate::engraver::layout::tlayout::timesig::glyphs::TIMESIG_6
+                    || *codepoint == crate::engraver::layout::tlayout::timesig::glyphs::TIMESIG_8
+            })
+            .collect::<Vec<_>>();
+
+        assert!(time_sig_glyphs.iter().any(|(codepoint, _)| *codepoint
+            == crate::engraver::layout::tlayout::timesig::glyphs::TIMESIG_6));
+        assert!(time_sig_glyphs.iter().any(|(codepoint, _)| *codepoint
+            == crate::engraver::layout::tlayout::timesig::glyphs::TIMESIG_8));
+    }
+
+    #[test]
+    fn six_eight_count_in_keeps_slashes_clear_of_time_signature() {
+        let config = CountInSnippetConfig {
+            beats_per_measure: 6,
+            beat_unit: 8,
+            num_measures: 2,
+            spatium: 5.0,
+            scale: 1.0,
+            measure_numbers: Vec::new(),
+        };
+
+        let result = render_count_in_snippet(&config, Point::new(0.0, 0.0));
+        let first_beat_x = result
+            .beat_geometries
+            .iter()
+            .find(|beat| beat.measure_index == 0 && beat.beat_index == 0)
+            .expect("first count-in beat should have geometry")
+            .x;
+        let time_sig_right = 5.0 * 0.85 + 5.0 * 1.0;
+
+        assert!(
+            first_beat_x > time_sig_right + 5.0,
+            "beat 1 slash should start after the mini time signature: beat_x={first_beat_x:.1}, time_sig_right={time_sig_right:.1}"
+        );
+    }
+
+    #[test]
+    fn six_eight_count_in_labels_sit_under_beamed_notes() {
+        let config = CountInSnippetConfig {
+            beats_per_measure: 6,
+            beat_unit: 8,
+            num_measures: 2,
+            spatium: 5.0,
+            scale: 1.0,
+            measure_numbers: Vec::new(),
+        };
+
+        let result = render_count_in_snippet(&config, Point::new(0.0, 0.0));
+        let labels = result
+            .node
+            .commands
+            .iter()
+            .filter_map(|cmd| {
+                if let PaintCommand::Text { text, position, .. } = cmd {
+                    text.parse::<usize>()
+                        .ok()
+                        .map(|_| (text.as_str(), *position))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        for beat in result
+            .beat_geometries
+            .iter()
+            .filter(|beat| beat.measure_index == 1)
+        {
+            let label = labels
+                .iter()
+                .find(|(text, position)| {
+                    *text == (beat.beat_index + 1).to_string()
+                        && (position.x - beat.x).abs() <= 0.01
+                })
+                .expect("each second-bar eighth beat should have a count label");
+            assert!(
+                label.1.y >= beat.staff_y + beat.staff_height + 21.5,
+                "count label should sit below the staff/beamed notes with clearance: label={:?}, staff_bottom={:.1}",
+                label,
+                beat.staff_y + beat.staff_height
+            );
+        }
+    }
+
+    #[test]
+    fn six_eight_count_in_labels_only_drop_for_beamed_measure() {
+        let config = CountInSnippetConfig {
+            beats_per_measure: 6,
+            beat_unit: 8,
+            num_measures: 2,
+            spatium: 5.0,
+            scale: 1.0,
+            measure_numbers: Vec::new(),
+        };
+
+        let result = render_count_in_snippet(&config, Point::new(0.0, 0.0));
+        let labels = result
+            .node
+            .commands
+            .iter()
+            .filter_map(|cmd| {
+                if let PaintCommand::Text { text, position, .. } = cmd {
+                    text.parse::<usize>()
+                        .ok()
+                        .map(|_| (text.as_str(), *position))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let first_bar_one = result
+            .beat_geometries
+            .iter()
+            .find(|beat| beat.measure_index == 0 && beat.beat_index == 0)
+            .expect("first count-in bar should have beat 1");
+        let second_bar_one = result
+            .beat_geometries
+            .iter()
+            .find(|beat| beat.measure_index == 1 && beat.beat_index == 0)
+            .expect("second count-in bar should have beat 1");
+
+        let first_label_y = labels
+            .iter()
+            .find(|(text, position)| *text == "1" && (position.x - first_bar_one.x).abs() <= 0.01)
+            .expect("first bar beat 1 label should exist")
+            .1
+            .y;
+        let second_label_y = labels
+            .iter()
+            .find(|(text, position)| *text == "1" && (position.x - second_bar_one.x).abs() <= 0.01)
+            .expect("second bar beat 1 label should exist")
+            .1
+            .y;
+
+        assert!(
+            second_label_y > first_label_y + 10.0,
+            "beamed second bar labels should drop, but stemless first bar labels should stay close: first={first_label_y:.1}, second={second_label_y:.1}"
+        );
+    }
+
+    #[test]
     fn test_scale_affects_dimensions() {
         let base_config = CountInSnippetConfig {
             beats_per_measure: 4,
@@ -315,6 +708,7 @@ mod tests {
             num_measures: 1,
             spatium: 5.0,
             scale: 1.0, // Full size
+            measure_numbers: Vec::new(),
         };
         let scaled_config = CountInSnippetConfig {
             scale: 0.5, // Half size
@@ -339,6 +733,108 @@ mod tests {
     }
 
     #[test]
+    fn six_eight_two_bar_count_in_uses_compound_then_full_count() {
+        let config = CountInSnippetConfig {
+            beats_per_measure: 6,
+            beat_unit: 8,
+            num_measures: 2,
+            spatium: 5.0,
+            scale: 1.0,
+            measure_numbers: Vec::new(),
+        };
+
+        assert_eq!(
+            count_in_pulses_for_measure(&config, 0),
+            vec![
+                CountInPulse {
+                    beat_index: 0,
+                    duration_ticks: 720,
+                    dotted: true,
+                    label: Some("1")
+                },
+                CountInPulse {
+                    beat_index: 3,
+                    duration_ticks: 720,
+                    dotted: true,
+                    label: Some("2")
+                }
+            ],
+            "first 6/8 count-in bar should render /. /. with 2 on beat 4"
+        );
+        assert_eq!(
+            count_in_pulses_for_measure(&config, 1)
+                .iter()
+                .map(|pulse| (
+                    pulse.beat_index,
+                    pulse.duration_ticks,
+                    pulse.dotted,
+                    pulse.label
+                ))
+                .collect::<Vec<_>>(),
+            vec![
+                (0, 240, false, Some("1")),
+                (1, 240, false, Some("2")),
+                (2, 240, false, Some("3")),
+                (3, 240, false, Some("4")),
+                (4, 240, false, Some("5")),
+                (5, 240, false, Some("6")),
+            ],
+            "second 6/8 count-in bar should render /// /// with labels 1-6"
+        );
+
+        let result = render_count_in_snippet(&config, Point::new(0.0, 0.0));
+        let glyphs = result
+            .node
+            .iter_with_transforms()
+            .flat_map(|(_node, transform)| {
+                _node.commands.iter().filter_map(move |cmd| {
+                    if let PaintCommand::Glyph {
+                        codepoint,
+                        position,
+                        ..
+                    } = cmd
+                    {
+                        Some((*codepoint, transform * *position))
+                    } else {
+                        None
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+        let slash_positions = glyphs
+            .iter()
+            .filter_map(|(codepoint, position)| {
+                (*codepoint
+                    == crate::engraver::layout::tlayout::note::glyphs::NOTEHEAD_SLASH_HORIZONTAL)
+                    .then_some(*position)
+            })
+            .collect::<Vec<_>>();
+        let dot_positions = glyphs
+            .iter()
+            .filter_map(|(codepoint, position)| {
+                (*codepoint == crate::engraver::layout::tlayout::note::glyphs::AUGMENTATION_DOT)
+                    .then_some(*position)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            slash_positions.len(),
+            8,
+            "want 2 compound slashes + 6 eighth slashes"
+        );
+        assert_eq!(dot_positions.len(), 2);
+        for (slash, dot) in slash_positions.iter().take(2).zip(dot_positions.iter()) {
+            assert!(
+                dot.x > slash.x,
+                "dotted-slash dot should sit clearly to the right of the slash: slash={slash:?}, dot={dot:?}"
+            );
+            assert!(
+                dot.y < slash.y,
+                "dotted-slash dot should sit in the upper-right dot position: slash={slash:?}, dot={dot:?}"
+            );
+        }
+    }
+
+    #[test]
     fn test_barlines_rendered() {
         let config = CountInSnippetConfig {
             beats_per_measure: 4,
@@ -346,6 +842,7 @@ mod tests {
             num_measures: 2,
             spatium: 5.0,
             scale: 1.0,
+            measure_numbers: Vec::new(),
         };
         let result = render_count_in_snippet(&config, Point::new(0.0, 0.0));
 

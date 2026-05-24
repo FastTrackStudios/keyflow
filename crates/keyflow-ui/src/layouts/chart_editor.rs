@@ -4,6 +4,7 @@
 //! WGPU chart preview on the right. The preview area is transparent so
 //! the WGPU surface (rendered by the app's ChartGraphics) shows through.
 
+use crate::catalog;
 use crate::components::HighlightedEditor;
 use crate::examples::{self, EXAMPLES};
 use crate::prelude::*;
@@ -31,7 +32,12 @@ fn navigate_to_page(page_number: u32) {
     let scroll_x = x_offset * base_scale * viewport.zoom / bounds.dpr;
     tracing::info!(
         "navigate_to_page({}): x_offset={:.1} base_scale={:.4} zoom={:.3} dpr={:.2} → scroll_x={:.1}",
-        page_number, x_offset, base_scale, viewport.zoom, bounds.dpr, scroll_x
+        page_number,
+        x_offset,
+        base_scale,
+        viewport.zoom,
+        bounds.dpr,
+        scroll_x
     );
     let mut vp = CHART_VIEWPORT.write();
     vp.scroll_x = scroll_x;
@@ -61,7 +67,14 @@ fn apply_semantic_zoom(level: SemanticZoomLevel) {
     let scroll_x = page_meta.x_offset * base_scale * zoom / bounds.dpr;
     tracing::info!(
         "apply_semantic_zoom({:?}): page={} base_scale={:.4} viewport_h={:.0} dpr={:.2} → zoom={:.3} scroll_x={:.1} scroll_y={:.1}",
-        level, current_page, base_scale, bounds.height, bounds.dpr, zoom, scroll_x, scroll_y
+        level,
+        current_page,
+        base_scale,
+        bounds.height,
+        bounds.dpr,
+        zoom,
+        scroll_x,
+        scroll_y
     );
     let mut vp = CHART_VIEWPORT.write();
     vp.zoom = zoom.clamp(0.1, 8.0);
@@ -143,9 +156,11 @@ fn ChartEditorLayoutInner() -> Element {
 
     // Dropdown open state
     let mut examples_open = use_signal(|| false);
+    let mut catalog_open = use_signal(|| false);
 
     // Currently selected example index
     let mut selected_example = use_signal(|| 1usize); // Default: Thriller
+    let catalog_entries = use_memo(catalog::local_musicxml_catalog);
 
     // Parse error state
     let parse_error = use_memo(move || {
@@ -162,6 +177,9 @@ fn ChartEditorLayoutInner() -> Element {
             onclick: move |_| {
                 if *examples_open.read() {
                     examples_open.set(false);
+                }
+                if *catalog_open.read() {
+                    catalog_open.set(false);
                 }
             },
 
@@ -213,6 +231,65 @@ fn ChartEditorLayoutInner() -> Element {
                                             examples_open.set(false);
                                         }),
                                         "{example.name}"
+                                    }
+                                }
+                            }
+                        }
+
+                        Dropdown {
+                            open: *catalog_open.read(),
+                            on_open_change: Callback::new(move |open: bool| {
+                                catalog_open.set(open);
+                            }),
+                            DropdownTrigger {
+                                Button {
+                                    variant: ButtonVariant::Secondary,
+                                    size: ButtonSize::Small,
+                                    span { "Catalog" }
+                                    fts_ui::lucide_dioxus::ChevronDown { size: 12 }
+                                }
+                            }
+                            DropdownContent {
+                                width: "w-72".to_string(),
+                                if catalog_entries.read().is_empty() {
+                                    DropdownItem {
+                                        value: "empty".to_string(),
+                                        index: 0usize,
+                                        on_select: Callback::new(move |_: String| {
+                                            catalog_open.set(false);
+                                        }),
+                                        "No local MusicXML catalog"
+                                    }
+                                } else {
+                                    for (i, entry) in catalog_entries.read().iter().take(80).enumerate() {
+                                        DropdownItem {
+                                            key: "{entry.path}",
+                                            value: entry.path.clone(),
+                                            index: i,
+                                            on_select: Callback::new({
+                                                let path = entry.path.clone();
+                                                move |_: String| {
+                                                    match catalog::load_musicxml_catalog_chart(&path) {
+                                                        Ok(source) => {
+                                                            *CHART_SOURCE.write() = source;
+                                                            *CHART_PREVIEW_MODE.write() = PreviewMode::Responsive;
+                                                        }
+                                                        Err(err) => {
+                                                            *CHART_SOURCE.write() = format!(
+                                                                "Catalog Import Error\n120bpm 4/4 #C\n\nERR\n// {}\n",
+                                                                err.replace('\n', " ")
+                                                            );
+                                                        }
+                                                    }
+                                                    catalog_open.set(false);
+                                                }
+                                            }),
+                                            if let Some(composer) = &entry.composer {
+                                                "{entry.title} - {composer}"
+                                            } else {
+                                                "{entry.title}"
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -408,14 +485,17 @@ fn ChartEditorLayoutInner() -> Element {
                             value: match preview_mode {
                                 PreviewMode::Snippet => "snippet".to_string(),
                                 PreviewMode::Page => "page".to_string(),
+                                PreviewMode::Responsive => "responsive".to_string(),
                             },
                             options: vec![
                                 ("snippet".into(), "Snippet".into()),
-                                ("page".into(), "Page (A4)".into()),
+                                ("page".into(), "Letter".into()),
+                                ("responsive".into(), "iReal".into()),
                             ],
                             on_change: Callback::new(move |v: String| {
                                 *CHART_PREVIEW_MODE.write() = match v.as_str() {
                                     "page" => PreviewMode::Page,
+                                    "responsive" => PreviewMode::Responsive,
                                     _ => PreviewMode::Snippet,
                                 };
                             }),

@@ -61,7 +61,7 @@ pub const CHORD_SPACE_ABOVE_STAFF: f64 = 30.0;
 
 /// Y offset for chord symbols above the staff (in points).
 /// Negative means above the staff line.
-pub const CHORD_Y_OFFSET: f64 = -8.0;
+pub const CHORD_Y_OFFSET: f64 = -6.0;
 
 /// Middle of staff position (in spatiums from top line).
 pub const STAFF_MIDDLE_Y_SPATIUMS: f64 = 2.0;

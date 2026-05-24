@@ -304,6 +304,7 @@ impl Chord {
             } else {
                 None
             },
+            bass_vertical: self.bass_vertical,
             duration: self.duration.clone(),
             intervals: HashMap::new(),
             semantic_degrees: Vec::new(),

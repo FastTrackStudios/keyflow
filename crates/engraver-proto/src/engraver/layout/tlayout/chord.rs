@@ -4,6 +4,7 @@
 //! and proper notehead stacking for seconds.
 
 use kurbo::{Point, Rect};
+use tracing::debug;
 use vello::peniko::Color;
 
 use crate::engraver::layout::context::LayoutContext;
@@ -171,13 +172,6 @@ pub fn layout_chord(params: &ChordParams, ctx: &LayoutContext) -> (LayoutData, S
         .fold(0.0f64, f64::max);
     let has_any_accidental = max_acc_width_sp > 0.0;
     let column_width_param = has_any_accidental.then_some(max_acc_width_sp);
-    // Stem / notehead X offset (in pixels): column width + gap.
-    let accidental_x_offset = if has_any_accidental {
-        max_acc_width_sp * spatium + spatium * 0.15
-    } else {
-        0.0
-    };
-
     // Layout each note
     for (i, note) in sorted_notes.iter().enumerate() {
         let note_params = NoteParams {
@@ -221,7 +215,6 @@ pub fn layout_chord(params: &ChordParams, ctx: &LayoutContext) -> (LayoutData, S
             params.head_type,
             params.duration,
             spatium,
-            accidental_x_offset,
         );
 
         let stem_node = SceneNode::anonymous_leaf(stem_commands);
@@ -236,7 +229,6 @@ pub fn layout_chord(params: &ChordParams, ctx: &LayoutContext) -> (LayoutData, S
                 params.duration,
                 params.head_type,
                 spatium,
-                accidental_x_offset,
             );
 
             if !flag_commands.is_empty() {
@@ -358,16 +350,56 @@ const DIAMOND_STEM_DOWN_NW_Y: f64 = 0.0;
 /// Standard stem width in staff spaces (from MuseScore default).
 const STEM_WIDTH: f64 = 0.12;
 
+#[derive(Debug, Clone, Copy)]
+struct StemAttachmentMetrics {
+    stem_left: f64,
+    stem_right: f64,
+    notehead_left: f64,
+    notehead_right: f64,
+    attached: bool,
+}
+
+fn stem_side_notehead_offset(stem_dir: StemDirection, offsets: &[f64]) -> f64 {
+    match stem_dir {
+        StemDirection::Up | StemDirection::Auto => offsets.first().copied(),
+        StemDirection::Down => offsets.last().copied(),
+    }
+    .unwrap_or(0.0)
+}
+
+fn stem_attachment_metrics(
+    stem_x: f64,
+    stem_width: f64,
+    notehead_x: f64,
+    head_type: NoteHeadType,
+    spatium: f64,
+) -> StemAttachmentMetrics {
+    let stem_left = stem_x - stem_width / 2.0;
+    let stem_right = stem_x + stem_width / 2.0;
+    let notehead_left = notehead_x;
+    let notehead_right = notehead_x + head_type.width() * spatium;
+    let tolerance = spatium * 0.02;
+    let attached =
+        stem_right >= notehead_left - tolerance && stem_left <= notehead_right + tolerance;
+
+    StemAttachmentMetrics {
+        stem_left,
+        stem_right,
+        notehead_left,
+        notehead_right,
+        attached,
+    }
+}
+
 /// Draw the stem for a chord.
 /// Uses SMuFL anchor points for normal noteheads, proportional positioning for slash noteheads.
 fn draw_stem(
     notes: &[ChordNote],
     stem_dir: StemDirection,
-    _offsets: &[f64],
+    offsets: &[f64],
     head_type: NoteHeadType,
     duration: NoteDuration,
     spatium: f64,
-    notehead_x_offset: f64,
 ) -> Vec<PaintCommand> {
     // Early return if no notes (shouldn't happen but guard against panic)
     let (Some(top_note), Some(bottom_note)) = (notes.last(), notes.first()) else {
@@ -379,6 +411,7 @@ fn draw_stem(
 
     let top_y = -top_note.line as f64 * spatium / 2.0;
     let bottom_y = -bottom_note.line as f64 * spatium / 2.0;
+    let stem_notehead_x_offset = stem_side_notehead_offset(stem_dir, offsets);
 
     // Determine if we're using diamond notehead (for half/whole in slash mode)
     let uses_diamond = head_type == NoteHeadType::Slash
@@ -397,8 +430,7 @@ fn draw_stem(
             } else {
                 (STEM_UP_SE_X, STEM_UP_SE_Y)
             };
-            // Shift stem right by accidental offset so it aligns with the notehead
-            let x = notehead_x_offset + anchor_x * spatium - stem_width / 2.0;
+            let x = stem_notehead_x_offset + anchor_x * spatium - stem_width / 2.0;
             let y_offset = -anchor_y * spatium;
             let start = bottom_y + y_offset;
             let end = top_y - stem_length;
@@ -413,14 +445,37 @@ fn draw_stem(
             } else {
                 (STEM_DOWN_NW_X, STEM_DOWN_NW_Y)
             };
-            // Shift stem right by accidental offset so it aligns with the notehead
-            let x = notehead_x_offset + anchor_x * spatium + stem_width / 2.0;
+            let x = stem_notehead_x_offset + anchor_x * spatium + stem_width / 2.0;
             let y_offset = -anchor_y * spatium;
             let start = top_y + y_offset;
             let end = bottom_y + stem_length;
             (x, start, end)
         }
     };
+
+    let metrics = stem_attachment_metrics(
+        stem_x,
+        stem_width,
+        stem_notehead_x_offset,
+        head_type,
+        spatium,
+    );
+    debug!(
+        target: "engraver_proto::engraver::layout::tlayout::stem",
+        stem_x,
+        stem_left = metrics.stem_left,
+        stem_right = metrics.stem_right,
+        notehead_left = metrics.notehead_left,
+        notehead_right = metrics.notehead_right,
+        attached = metrics.attached,
+        ?stem_dir,
+        ?head_type,
+        ?duration,
+        top_line = top_note.line,
+        bottom_line = bottom_note.line,
+        notehead_offset = stem_notehead_x_offset,
+        "[chord-stem] notehead/stem alignment"
+    );
 
     vec![PaintCommand::line(
         Point::new(stem_x, stem_start_y),
@@ -435,11 +490,10 @@ fn draw_stem(
 fn draw_flags(
     notes: &[ChordNote],
     stem_dir: StemDirection,
-    _offsets: &[f64],
+    offsets: &[f64],
     duration: NoteDuration,
     head_type: NoteHeadType,
     spatium: f64,
-    notehead_x_offset: f64,
 ) -> Vec<PaintCommand> {
     let flag_count = duration.flag_count();
     if flag_count == 0 {
@@ -453,6 +507,7 @@ fn draw_flags(
 
     let stem_length = spatium * 3.5;
     let stem_width = STEM_WIDTH * spatium;
+    let stem_notehead_x_offset = stem_side_notehead_offset(stem_dir, offsets);
 
     // Use same anchor calculations as draw_stem for consistent flag positioning
     let (flag_x, flag_y, glyph) = match stem_dir {
@@ -463,7 +518,7 @@ fn draw_flags(
             } else {
                 STEM_UP_SE_X
             };
-            let x = notehead_x_offset + anchor_x * spatium - stem_width / 2.0;
+            let x = stem_notehead_x_offset + anchor_x * spatium - stem_width / 2.0;
             let top_y = -top_note.line as f64 * spatium / 2.0;
             let y = top_y - stem_length;
             let g = match flag_count {
@@ -481,7 +536,7 @@ fn draw_flags(
             } else {
                 STEM_DOWN_NW_X
             };
-            let x = notehead_x_offset + anchor_x * spatium + stem_width / 2.0;
+            let x = stem_notehead_x_offset + anchor_x * spatium + stem_width / 2.0;
             let bottom_y = -bottom_note.line as f64 * spatium / 2.0;
             let y = bottom_y + stem_length;
             let g = match flag_count {
@@ -767,6 +822,77 @@ mod tests {
         assert!(
             offsets[0] != 0.0 || offsets[1] != 0.0,
             "Unison notes should have at least one offset"
+        );
+    }
+
+    #[test]
+    fn test_stem_attachment_ignores_accidental_column() {
+        let spatium = 10.0;
+        let notes = vec![ChordNote {
+            line: 0,
+            accidental: Accidental::Sharp,
+            tie: false,
+        }];
+        let offsets = calculate_notehead_offsets(&notes, StemDirection::Up);
+        let commands = draw_stem(
+            &notes,
+            StemDirection::Up,
+            &offsets,
+            NoteHeadType::Normal,
+            NoteDuration::Quarter,
+            spatium,
+        );
+
+        let PaintCommand::Line { start, width, .. } = commands[0] else {
+            panic!("expected stem line");
+        };
+        let metrics =
+            stem_attachment_metrics(start.x, width, offsets[0], NoteHeadType::Normal, spatium);
+        assert!(
+            metrics.attached,
+            "accidental column must not detach stem from anchored notehead: {metrics:?}"
+        );
+    }
+
+    #[test]
+    fn test_stem_attachment_uses_stem_side_offset_for_seconds() {
+        let spatium = 10.0;
+        let notes = vec![
+            ChordNote {
+                line: 0,
+                accidental: Accidental::None,
+                tie: false,
+            },
+            ChordNote {
+                line: 1,
+                accidental: Accidental::None,
+                tie: false,
+            },
+        ];
+        let offsets = calculate_notehead_offsets(&notes, StemDirection::Down);
+        let commands = draw_stem(
+            &notes,
+            StemDirection::Down,
+            &offsets,
+            NoteHeadType::Normal,
+            NoteDuration::Quarter,
+            spatium,
+        );
+
+        let PaintCommand::Line { start, width, .. } = commands[0] else {
+            panic!("expected stem line");
+        };
+        let stem_side_offset = stem_side_notehead_offset(StemDirection::Down, &offsets);
+        let metrics = stem_attachment_metrics(
+            start.x,
+            width,
+            stem_side_offset,
+            NoteHeadType::Normal,
+            spatium,
+        );
+        assert!(
+            metrics.attached,
+            "stem must attach to the notehead on the stem side for seconds: {metrics:?}"
         );
     }
 }

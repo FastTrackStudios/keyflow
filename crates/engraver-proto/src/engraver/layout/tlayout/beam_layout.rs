@@ -7,6 +7,7 @@
 //! - Stem length adjustment
 
 use kurbo::{BezPath, Point, Rect};
+use tracing::debug;
 use vello::peniko::Color;
 
 use crate::engraver::scene::paint::PaintCommand;
@@ -32,9 +33,9 @@ pub struct BeamLayoutConfig {
 impl Default for BeamLayoutConfig {
     fn default() -> Self {
         Self {
-            beam_thickness: 0.5,
+            beam_thickness: 0.4,
             beam_spacing: 0.25,
-            min_stem_length: 3.5, // Match chord.rs stem length
+            min_stem_length: 2.75, // Eighth beam minimum; denser beams grow via MIN_STEM_LENGTHS.
             max_slope: 0.5,
             beamlet_length: 1.2,
         }
@@ -67,8 +68,17 @@ const MIN_STEM_LENGTHS: [i32; 8] = [11, 13, 15, 18, 21, 24, 27, 30];
 pub struct BeamNote {
     /// X position relative to beam group start
     pub x: f64,
-    /// Staff line position
+    /// Primary staff line position (where the main notehead sits — drives
+    /// stem attachment when there's only one head).
     pub line: i32,
+    /// Top-most line in this chord's notehead stack (max line value across
+    /// the primary head + any polyphony extras). Defaults to `line` when no
+    /// extras are present. For down-stems, the stem attaches at the TOP of
+    /// this line so it visually spans the full chord.
+    pub top_line: i32,
+    /// Bottom-most line — for up-stems, the stem attaches at the BOTTOM
+    /// of this line and extends past the top to the beam.
+    pub bottom_line: i32,
     /// Note duration (determines number of beams)
     pub duration: NoteDuration,
     /// Stem direction (should be consistent within beam)
@@ -128,13 +138,14 @@ fn get_slope_constraint(notes: &[BeamNote], stem_up: bool) -> SlopeConstraint {
     }
 
     // Check middle notes for constraint violations
-    // The "higher" end depends on stem direction:
-    // - Stem up: higher = smaller line number (higher on staff)
-    // - Stem down: higher = larger line number (lower on staff)
+    // Positive staff-line numbers are higher on the staff in this codebase.
+    // The extreme endpoint depends on stem direction:
+    // - Stem up: protect the highest note (largest line)
+    // - Stem down: protect the lowest note (smallest line)
     let (higher_end, _lower_end) = if stem_up {
-        (start_line.min(end_line), start_line.max(end_line))
-    } else {
         (start_line.max(end_line), start_line.min(end_line))
+    } else {
+        (start_line.min(end_line), start_line.max(end_line))
     };
 
     // Get sorted line positions of middle notes
@@ -143,9 +154,9 @@ fn get_slope_constraint(notes: &[BeamNote], stem_up: bool) -> SlopeConstraint {
     for &middle_line in &middle_lines {
         // Check if middle note is more extreme than higher end
         let is_more_extreme = if stem_up {
-            middle_line < higher_end // Higher on staff
+            middle_line > higher_end // Higher on staff
         } else {
-            middle_line > higher_end // Lower on staff
+            middle_line < higher_end // Lower on staff
         };
 
         if is_more_extreme {
@@ -237,8 +248,9 @@ fn compute_desired_slant(notes: &[BeamNote], stem_up: bool, spatium: f64) -> i32
     // Use the smaller of the two limits
     let slope_limit = max_slope.min(interval_max);
 
-    // Direction: positive slope for descending notes (higher line = lower on staff)
-    let direction = if end_line > start_line { 1 } else { -1 };
+    // Positive staff lines render higher on the staff (smaller screen Y), so
+    // rising notes need a negative screen-space beam slant.
+    let direction = if end_line > start_line { -1 } else { 1 };
 
     // Apply stem direction adjustment (MuseScore multiplies by up ? 1 : -1)
     // But we're working in screen coords where Y-down, so invert for stem-up
@@ -304,6 +316,24 @@ pub fn layout_beam(notes: &[BeamNote], spatium: f64, config: &BeamLayoutConfig) 
 
         // Calculate the actual stem X position (Middle anchor - center of stem)
         let stem_x = stem_x_for_note(note, stem_dir, spatium);
+        let metrics = stem_attachment_metrics(note, stem_x, stem_width, spatium);
+        debug!(
+            target: "engraver_proto::engraver::layout::tlayout::stem",
+            note_x = note.x,
+            stem_x,
+            stem_left = metrics.stem_left,
+            stem_right = metrics.stem_right,
+            notehead_left = metrics.notehead_left,
+            notehead_right = metrics.notehead_right,
+            attached = metrics.attached,
+            line = note.line,
+            top_line = note.top_line,
+            bottom_line = note.bottom_line,
+            ?stem_dir,
+            head_type = ?note.head_type,
+            duration = ?note.duration,
+            "[beam-stem] notehead/stem alignment"
+        );
 
         // Calculate beam edge Y at the STEM position by interpolating along the beam line
         // start_anchor_y/end_anchor_y represent the beam EDGE (not center):
@@ -332,8 +362,18 @@ pub fn layout_beam(notes: &[BeamNote], spatium: f64, config: &BeamLayoutConfig) 
             }
         };
 
-        // Use SMuFL anchor points for stem attachment on notehead
-        let stem_attach_y = note_y + stem_y_offset(stem_dir, note.head_type, spatium);
+        // Stem attaches at the farthest notehead from the beam so it
+        // spans every head in a polyphony stack:
+        //   - up-stem (beam above): attach at the BOTTOM-most line
+        //   - down-stem (beam below): attach at the TOP-most line
+        // For single-pitch beats, top_line == bottom_line == line, so
+        // this collapses to the original behaviour.
+        let attach_line = match stem_dir {
+            StemDirection::Up | StemDirection::Auto => note.bottom_line,
+            StemDirection::Down => note.top_line,
+        };
+        let attach_y = -(attach_line as f64) * spatium / 2.0;
+        let stem_attach_y = attach_y + stem_y_offset(stem_dir, note.head_type, spatium);
 
         // Stem from notehead anchor to beam edge
         let stem_cmd = PaintCommand::line(
@@ -721,6 +761,38 @@ fn stem_x_for_note(note: &BeamNote, stem_dir: StemDirection, spatium: f64) -> f6
     chord_beam_anchor_x(note, stem_dir, ChordBeamAnchorType::Middle, spatium)
 }
 
+#[derive(Debug, Clone, Copy)]
+struct StemAttachmentMetrics {
+    stem_left: f64,
+    stem_right: f64,
+    notehead_left: f64,
+    notehead_right: f64,
+    attached: bool,
+}
+
+fn stem_attachment_metrics(
+    note: &BeamNote,
+    stem_x: f64,
+    stem_width: f64,
+    spatium: f64,
+) -> StemAttachmentMetrics {
+    let stem_left = stem_x - stem_width / 2.0;
+    let stem_right = stem_x + stem_width / 2.0;
+    let notehead_left = note.x;
+    let notehead_right = note.x + note.head_type.width() * spatium;
+    let tolerance = spatium * 0.02;
+    let attached =
+        stem_right >= notehead_left - tolerance && stem_left <= notehead_right + tolerance;
+
+    StemAttachmentMetrics {
+        stem_left,
+        stem_right,
+        notehead_left,
+        notehead_right,
+        attached,
+    }
+}
+
 /// Calculate the Y offset for stem attachment relative to notehead center.
 /// Uses SMuFL anchor Y coordinates with Y-flip compensation.
 ///
@@ -1000,12 +1072,74 @@ fn find_beamlets(notes: &[BeamNote], level: usize) -> Vec<(usize, bool)> {
 mod tests {
     use super::*;
 
+    fn assert_all_beam_stems_attached(notes: &[BeamNote], stem_dir: StemDirection, spatium: f64) {
+        let stem_width = STEM_WIDTH * spatium;
+        for note in notes {
+            let stem_x = stem_x_for_note(note, stem_dir, spatium);
+            let metrics = stem_attachment_metrics(note, stem_x, stem_width, spatium);
+            assert!(
+                metrics.attached,
+                "beam stem detached from notehead: note={note:?}, stem_dir={stem_dir:?}, metrics={metrics:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_beam_stems_intersect_notehead_bounds() {
+        let spatium = 10.0;
+        let up_notes = vec![
+            BeamNote {
+                x: 0.0,
+                line: -5,
+                top_line: 6,
+                bottom_line: -5,
+                duration: NoteDuration::Eighth,
+                stem_direction: StemDirection::Up,
+                head_type: NoteHeadType::Normal,
+            },
+            BeamNote {
+                x: 18.0,
+                line: 6,
+                top_line: 6,
+                bottom_line: 6,
+                duration: NoteDuration::Eighth,
+                stem_direction: StemDirection::Up,
+                head_type: NoteHeadType::Normal,
+            },
+        ];
+        assert_all_beam_stems_attached(&up_notes, StemDirection::Up, spatium);
+
+        let down_notes = vec![
+            BeamNote {
+                x: 0.0,
+                line: 6,
+                top_line: 6,
+                bottom_line: -5,
+                duration: NoteDuration::Eighth,
+                stem_direction: StemDirection::Down,
+                head_type: NoteHeadType::Normal,
+            },
+            BeamNote {
+                x: 18.0,
+                line: -5,
+                top_line: -5,
+                bottom_line: -5,
+                duration: NoteDuration::Eighth,
+                stem_direction: StemDirection::Down,
+                head_type: NoteHeadType::Normal,
+            },
+        ];
+        assert_all_beam_stems_attached(&down_notes, StemDirection::Down, spatium);
+    }
+
     #[test]
     fn test_beam_direction_auto() {
         let notes = vec![
             BeamNote {
                 x: 0.0,
                 line: -2,
+                top_line: -2,
+                bottom_line: -2,
                 duration: NoteDuration::Eighth,
                 stem_direction: StemDirection::Auto,
                 head_type: NoteHeadType::Normal,
@@ -1013,6 +1147,8 @@ mod tests {
             BeamNote {
                 x: 20.0,
                 line: -4,
+                top_line: -4,
+                bottom_line: -4,
                 duration: NoteDuration::Eighth,
                 stem_direction: StemDirection::Auto,
                 head_type: NoteHeadType::Normal,
@@ -1029,6 +1165,8 @@ mod tests {
             BeamNote {
                 x: 0.0,
                 line: 0,
+                top_line: 0,
+                bottom_line: 0,
                 duration: NoteDuration::Eighth,
                 stem_direction: StemDirection::Up,
                 head_type: NoteHeadType::Normal,
@@ -1036,6 +1174,8 @@ mod tests {
             BeamNote {
                 x: 25.0,
                 line: -2,
+                top_line: -2,
+                bottom_line: -2,
                 duration: NoteDuration::Eighth,
                 stem_direction: StemDirection::Up,
                 head_type: NoteHeadType::Normal,
@@ -1055,6 +1195,8 @@ mod tests {
             BeamNote {
                 x: 0.0,
                 line: 0,
+                top_line: 0,
+                bottom_line: 0,
                 duration: NoteDuration::Sixteenth,
                 stem_direction: StemDirection::Up,
                 head_type: NoteHeadType::Normal,
@@ -1062,6 +1204,8 @@ mod tests {
             BeamNote {
                 x: 15.0,
                 line: -1,
+                top_line: -1,
+                bottom_line: -1,
                 duration: NoteDuration::Sixteenth,
                 stem_direction: StemDirection::Up,
                 head_type: NoteHeadType::Normal,
@@ -1069,6 +1213,8 @@ mod tests {
             BeamNote {
                 x: 30.0,
                 line: -2,
+                top_line: -2,
+                bottom_line: -2,
                 duration: NoteDuration::Eighth,
                 stem_direction: StemDirection::Up,
                 head_type: NoteHeadType::Normal,
@@ -1089,6 +1235,8 @@ mod tests {
             BeamNote {
                 x: 0.0,
                 line: 0,
+                top_line: 0,
+                bottom_line: 0,
                 duration: NoteDuration::Eighth,
                 stem_direction: StemDirection::Up,
                 head_type: NoteHeadType::Normal,
@@ -1096,6 +1244,8 @@ mod tests {
             BeamNote {
                 x: 25.0,
                 line: 0,
+                top_line: 0,
+                bottom_line: 0,
                 duration: NoteDuration::Eighth,
                 stem_direction: StemDirection::Up,
                 head_type: NoteHeadType::Normal,
@@ -1113,20 +1263,26 @@ mod tests {
             BeamNote {
                 x: 0.0,
                 line: 0,
+                top_line: 0,
+                bottom_line: 0,
                 duration: NoteDuration::Eighth,
                 stem_direction: StemDirection::Up,
                 head_type: NoteHeadType::Normal,
             },
             BeamNote {
                 x: 15.0,
-                line: -4, // Higher on staff (more extreme for stem-up)
+                line: 4,
+                top_line: 4,
+                bottom_line: 4, // Higher on staff (more extreme for stem-up)
                 duration: NoteDuration::Eighth,
                 stem_direction: StemDirection::Up,
                 head_type: NoteHeadType::Normal,
             },
             BeamNote {
                 x: 30.0,
-                line: -2,
+                line: 2,
+                top_line: 2,
+                bottom_line: 2,
                 duration: NoteDuration::Eighth,
                 stem_direction: StemDirection::Up,
                 head_type: NoteHeadType::Normal,
@@ -1144,6 +1300,8 @@ mod tests {
             BeamNote {
                 x: 0.0,
                 line: 0,
+                top_line: 0,
+                bottom_line: 0,
                 duration: NoteDuration::Eighth,
                 stem_direction: StemDirection::Up,
                 head_type: NoteHeadType::Normal,
@@ -1151,6 +1309,8 @@ mod tests {
             BeamNote {
                 x: 25.0,
                 line: -2,
+                top_line: -2,
+                bottom_line: -2,
                 duration: NoteDuration::Eighth,
                 stem_direction: StemDirection::Up,
                 head_type: NoteHeadType::Normal,
@@ -1168,6 +1328,8 @@ mod tests {
             BeamNote {
                 x: 0.0,
                 line: 0,
+                top_line: 0,
+                bottom_line: 0,
                 duration: NoteDuration::Eighth,
                 stem_direction: StemDirection::Up,
                 head_type: NoteHeadType::Normal,
@@ -1175,6 +1337,8 @@ mod tests {
             BeamNote {
                 x: 25.0,
                 line: 0,
+                top_line: 0,
+                bottom_line: 0,
                 duration: NoteDuration::Eighth,
                 stem_direction: StemDirection::Up,
                 head_type: NoteHeadType::Normal,
@@ -1192,13 +1356,17 @@ mod tests {
             BeamNote {
                 x: 0.0,
                 line: 0,
+                top_line: 0,
+                bottom_line: 0,
                 duration: NoteDuration::Eighth,
                 stem_direction: StemDirection::Up,
                 head_type: NoteHeadType::Normal,
             },
             BeamNote {
                 x: 25.0,
-                line: -2, // Interval of 2
+                line: 2,
+                top_line: 2,
+                bottom_line: 2, // Interval of 2
                 duration: NoteDuration::Eighth,
                 stem_direction: StemDirection::Up,
                 head_type: NoteHeadType::Normal,
@@ -1208,6 +1376,92 @@ mod tests {
         let slant = compute_desired_slant(&notes, true, 5.0);
         // Should be negative (beam goes up as notes go up on staff)
         assert!(slant < 0);
+    }
+
+    #[test]
+    fn rising_beam_group_uses_diagonal_beam() {
+        let notes = vec![
+            BeamNote {
+                x: 0.0,
+                line: 0,
+                top_line: 0,
+                bottom_line: 0,
+                duration: NoteDuration::Eighth,
+                stem_direction: StemDirection::Up,
+                head_type: NoteHeadType::Normal,
+            },
+            BeamNote {
+                x: 15.0,
+                line: 1,
+                top_line: 1,
+                bottom_line: 1,
+                duration: NoteDuration::Eighth,
+                stem_direction: StemDirection::Up,
+                head_type: NoteHeadType::Normal,
+            },
+            BeamNote {
+                x: 30.0,
+                line: 2,
+                top_line: 2,
+                bottom_line: 2,
+                duration: NoteDuration::Eighth,
+                stem_direction: StemDirection::Up,
+                head_type: NoteHeadType::Normal,
+            },
+        ];
+
+        let (start_y, end_y) =
+            calculate_beam_position(&notes, StemDirection::Up, 5.0, &BeamLayoutConfig::default());
+
+        assert!(
+            end_y < start_y,
+            "rising up-stem notes should produce an upward diagonal beam, got start_y={start_y}, end_y={end_y}"
+        );
+    }
+
+    #[test]
+    fn rising_down_stem_beam_group_uses_upward_diagonal_beam() {
+        let notes = vec![
+            BeamNote {
+                x: 0.0,
+                line: 6,
+                top_line: 6,
+                bottom_line: 6,
+                duration: NoteDuration::Eighth,
+                stem_direction: StemDirection::Down,
+                head_type: NoteHeadType::Normal,
+            },
+            BeamNote {
+                x: 15.0,
+                line: 7,
+                top_line: 7,
+                bottom_line: 7,
+                duration: NoteDuration::Eighth,
+                stem_direction: StemDirection::Down,
+                head_type: NoteHeadType::Normal,
+            },
+            BeamNote {
+                x: 30.0,
+                line: 8,
+                top_line: 8,
+                bottom_line: 8,
+                duration: NoteDuration::Eighth,
+                stem_direction: StemDirection::Down,
+                head_type: NoteHeadType::Normal,
+            },
+        ];
+
+        let (start_y, end_y) = calculate_beam_position(
+            &notes,
+            StemDirection::Down,
+            5.0,
+            &BeamLayoutConfig::default(),
+        );
+
+        assert!(
+            end_y < start_y,
+            "rising down-stem notes should still produce an upward diagonal beam, got start_y={start_y}, end_y={end_y}"
+        );
     }
 
     #[test]
@@ -1225,5 +1479,16 @@ mod tests {
         assert_eq!(get_min_stem_length_qs(2), 13);
         assert_eq!(get_min_stem_length_qs(3), 15);
         assert_eq!(get_min_stem_length_qs(4), 18);
+    }
+
+    #[test]
+    fn default_beam_config_uses_eighth_note_stem_minimum() {
+        let config = BeamLayoutConfig::default();
+
+        assert_eq!(config.min_stem_length, 2.75);
+        assert_eq!(
+            config.min_stem_length,
+            f64::from(get_min_stem_length_qs(1)) / 4.0
+        );
     }
 }

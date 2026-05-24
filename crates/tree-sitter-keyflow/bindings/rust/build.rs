@@ -9,7 +9,9 @@ fn main() {
         // this stub. Downstream code that calls `LANGUAGE.into()` will
         // get a NULL `Language`, which `tree-sitter` rejects with a
         // descriptive error rather than crashing.
-        println!("cargo:warning=tree-sitter-keyflow: src/parser.c missing — run `tree-sitter generate` to build the C parser. Compiling a NULL stub.");
+        println!(
+            "cargo:warning=tree-sitter-keyflow: src/parser.c missing — run `tree-sitter generate` to build the C parser. Compiling a NULL stub."
+        );
         let stub_dir = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap());
         let stub = stub_dir.join("parser_stub.c");
         std::fs::write(

@@ -664,13 +664,14 @@ impl<'a> VelloSceneRenderer<'a> {
             scene.draw_glyphs(
                 font_data,
                 screen_font_size as f32,
-                false,          // hint
-                &[],            // normalized_coords
-                Fill::NonZero,  // style
-                color,          // brush
-                1.0,            // brush_alpha
-                text_transform, // transform
-                None,           // glyph_transform
+                false,             // hint
+                &[],               // normalized_coords
+                kurbo::Vec2::ZERO, // embolden
+                Fill::NonZero,     // style
+                color,             // brush
+                1.0,               // brush_alpha
+                text_transform,    // transform
+                None,              // glyph_transform
                 glyphs.into_iter(),
             );
 

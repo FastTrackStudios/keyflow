@@ -57,13 +57,17 @@ pub enum OctaveModifier {
     Up,
     /// `,` - force one octave down from closest
     Down,
+    /// Multiple `'` marks.
+    UpBy(u8),
+    /// Multiple `,` marks.
+    DownBy(u8),
 }
 
 /// A single note in a melody
 #[derive(Debug, Clone, PartialEq, Facet)]
 pub struct MelodyNote {
     /// The pitch name (C, D, E, F, G, A, B) with optional accidental
-    /// "r" for rest
+    /// "r" for rest, "s" for invisible space
     pub pitch: String,
 
     /// Explicit octave number (None = use relative mode)
@@ -86,6 +90,25 @@ pub struct MelodyNote {
 
     /// Position in the song (set during position calculation)
     pub position: Option<AbsolutePosition>,
+
+    /// Additional pitches that share this note's stem — e.g. octave
+    /// doublings or chord-notes from a `<note><chord>` MusicXML
+    /// continuation. Each entry is `(pitch_name, octave)`; rendered as
+    /// extra noteheads stacked on the same stem.
+    #[facet(default)]
+    pub extra_pitches: Vec<(String, Option<u8>)>,
+
+    /// Relative octave modifiers for `extra_pitches`. Kept parallel to
+    /// `extra_pitches`; missing entries default to `OctaveModifier::None`.
+    #[facet(default)]
+    pub extra_pitch_modifiers: Vec<OctaveModifier>,
+
+    /// True when this note is tied INTO the next note (`<tie type="start"/>`).
+    #[facet(default)]
+    pub tie_start: bool,
+    /// True when this note is tied FROM the previous note (`<tie type="stop"/>`).
+    #[facet(default)]
+    pub tie_stop: bool,
 }
 
 impl MelodyNote {
@@ -100,6 +123,10 @@ impl MelodyNote {
             triplet: false,
             scale_degree: None,
             position: None,
+            extra_pitches: Vec::new(),
+            extra_pitch_modifiers: Vec::new(),
+            tie_start: false,
+            tie_stop: false,
         }
     }
 
@@ -114,6 +141,10 @@ impl MelodyNote {
             triplet: false,
             scale_degree: None,
             position: None,
+            extra_pitches: Vec::new(),
+            extra_pitch_modifiers: Vec::new(),
+            tie_start: false,
+            tie_stop: false,
         }
     }
 
@@ -134,6 +165,11 @@ impl MelodyNote {
         self.pitch == "r"
     }
 
+    /// Check if this is an invisible space placeholder
+    pub fn is_space(&self) -> bool {
+        self.pitch == "s"
+    }
+
     /// Set the octave modifier
     pub fn with_octave_modifier(mut self, modifier: OctaveModifier) -> Self {
         self.octave_modifier = modifier;
@@ -143,7 +179,7 @@ impl MelodyNote {
     /// Get the pitch class (0-11) for this note, ignoring octave
     /// Returns None for rests
     pub fn pitch_class(&self) -> Option<i8> {
-        if self.is_rest() {
+        if self.is_rest() || self.is_space() {
             return None;
         }
 
@@ -186,23 +222,34 @@ impl MelodyNote {
             return ref_octave; // Rest, keep same octave context
         };
 
-        // Calculate interval (how many semitones up from ref to this note in same octave)
-        let interval = (this_class - ref_pitch_class).rem_euclid(12);
-
-        // Choose closest octave:
-        // If interval <= 6, stay in same octave
-        // If interval > 6, go down an octave (closer to come from below)
-        let base_octave = if interval <= 6 {
-            ref_octave
-        } else {
-            ref_octave.saturating_sub(1)
-        };
+        let ref_abs = absolute_pitch_value(ref_pitch_class, ref_octave);
+        let base_octave = ref_octave
+            .saturating_sub(1)
+            .saturating_add(0)
+            .saturating_sub(0);
+        let candidates = [
+            ref_octave.saturating_sub(1),
+            ref_octave,
+            ref_octave.saturating_add(1),
+        ];
+        let base_octave = candidates
+            .into_iter()
+            .min_by_key(|octave| {
+                let abs = absolute_pitch_value(this_class, *octave);
+                (
+                    (abs - ref_abs).abs(),
+                    (i16::from(*octave) - i16::from(ref_octave)).abs(),
+                )
+            })
+            .unwrap_or(base_octave);
 
         // Apply octave modifier
         match self.octave_modifier {
             OctaveModifier::None => base_octave,
             OctaveModifier::Up => base_octave.saturating_add(1),
             OctaveModifier::Down => base_octave.saturating_sub(1),
+            OctaveModifier::UpBy(count) => base_octave.saturating_add(count),
+            OctaveModifier::DownBy(count) => base_octave.saturating_sub(count),
         }
     }
 
@@ -228,19 +275,50 @@ impl MelodyNote {
     /// - `3_8` - Scale degree 3 eighth note
     /// - `r_4` - quarter rest
     pub fn parse(s: &str) -> Result<Self, String> {
-        let s = s.trim();
+        let mut s = s.trim();
 
         if s.is_empty() {
             return Err("Empty note string".to_string());
         }
 
+        let tie_stop = s.starts_with('~');
+        if tie_stop {
+            s = s[1..].trim_start();
+        }
+        let tie_start = s.ends_with('~');
+        if tie_start {
+            s = s[..s.len() - 1].trim_end();
+        }
+
         let (pitch_part, duration, dotted, triplet, underscore_form) =
             Self::split_pitch_and_duration(s)?;
 
-        // Check for rest
-        if pitch_part == "r" || pitch_part == "R" {
+        if let Some((group_modifier, inner)) = split_chord_note_group_pitch_part(pitch_part) {
+            let mut pitches = split_melody_tokens(inner);
+            let first = pitches
+                .next()
+                .ok_or_else(|| format!("Empty chord-note group: {}", s))?;
+            let mut primary = Self::parse(&format!("{first}{duration}"))?;
+            primary.octave_modifier =
+                combine_octave_modifiers(primary.octave_modifier, group_modifier);
+            primary.dotted = dotted;
+            primary.triplet = triplet;
+            for pitch in pitches {
+                let mut extra = Self::parse(&format!("{pitch}{duration}"))?;
+                extra.octave_modifier =
+                    combine_octave_modifiers(extra.octave_modifier, group_modifier);
+                primary.extra_pitches.push((extra.pitch, extra.octave));
+                primary.extra_pitch_modifiers.push(extra.octave_modifier);
+            }
+            primary.tie_start = tie_start;
+            primary.tie_stop = tie_stop;
+            return Ok(primary);
+        }
+
+        // Check for rest or invisible space
+        if matches!(pitch_part, "r" | "R" | "s" | "S") {
             return Ok(MelodyNote {
-                pitch: "r".to_string(),
+                pitch: pitch_part.to_ascii_lowercase(),
                 octave: None,
                 octave_modifier: OctaveModifier::None,
                 duration,
@@ -248,10 +326,15 @@ impl MelodyNote {
                 triplet,
                 scale_degree: None,
                 position: None,
+                extra_pitches: Vec::new(),
+                extra_pitch_modifiers: Vec::new(),
+                tie_start,
+                tie_stop,
             });
         }
 
         let mut chars = pitch_part.chars().peekable();
+        let leading_octave_modifier = Self::parse_octave_modifier(&mut chars);
         let first_char = *chars.peek().ok_or("Missing pitch")?;
 
         // Check if it's a scale degree (starts with 1-7)
@@ -278,20 +361,29 @@ impl MelodyNote {
             }
 
             // Check for octave modifier
-            let octave_modifier = Self::parse_octave_modifier(&mut chars);
+            let parsed_modifier = Self::parse_octave_modifier(&mut chars);
+            let octave_modifier = if matches!(leading_octave_modifier, OctaveModifier::None) {
+                parsed_modifier
+            } else {
+                leading_octave_modifier
+            };
 
             // Check for explicit octave
             let octave = Self::parse_explicit_octave(&mut chars)?;
 
             return Ok(MelodyNote {
                 pitch: final_pitch,
-                octave: if underscore_form { octave } else { None },
+                octave,
                 octave_modifier,
                 duration,
                 dotted,
                 triplet,
                 scale_degree: Some(degree),
                 position: None,
+                extra_pitches: Vec::new(),
+                extra_pitch_modifiers: Vec::new(),
+                tie_start,
+                tie_stop,
             });
         }
 
@@ -318,20 +410,29 @@ impl MelodyNote {
         }
 
         // Check for octave modifier
-        let octave_modifier = Self::parse_octave_modifier(&mut chars);
+        let parsed_modifier = Self::parse_octave_modifier(&mut chars);
+        let octave_modifier = if matches!(leading_octave_modifier, OctaveModifier::None) {
+            parsed_modifier
+        } else {
+            leading_octave_modifier
+        };
 
         // Check for explicit octave
         let octave = Self::parse_explicit_octave(&mut chars)?;
 
         Ok(MelodyNote {
             pitch,
-            octave: if underscore_form { octave } else { None },
+            octave,
             octave_modifier,
             duration,
             dotted,
             triplet,
             scale_degree: None,
             position: None,
+            extra_pitches: Vec::new(),
+            extra_pitch_modifiers: Vec::new(),
+            tie_start,
+            tie_stop,
         })
     }
 
@@ -394,15 +495,28 @@ impl MelodyNote {
     fn parse_octave_modifier(
         chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
     ) -> OctaveModifier {
-        match chars.peek() {
-            Some('\'') => {
-                chars.next();
-                OctaveModifier::Up
+        let mut up = 0u8;
+        let mut down = 0u8;
+        while let Some(next) = chars.peek() {
+            match next {
+                '\'' => {
+                    up = up.saturating_add(1);
+                    chars.next();
+                }
+                ',' => {
+                    down = down.saturating_add(1);
+                    chars.next();
+                }
+                _ => break,
             }
-            Some(',') => {
-                chars.next();
-                OctaveModifier::Down
-            }
+        }
+
+        match (up, down) {
+            (0, 0) => OctaveModifier::None,
+            (1, 0) => OctaveModifier::Up,
+            (0, 1) => OctaveModifier::Down,
+            (count, 0) => OctaveModifier::UpBy(count),
+            (0, count) => OctaveModifier::DownBy(count),
             _ => OctaveModifier::None,
         }
     }
@@ -413,6 +527,10 @@ impl MelodyNote {
     ) -> Result<Option<u8>, String> {
         if chars.peek().is_some() {
             let octave_str: String = chars.collect();
+            let octave_str = octave_str
+                .strip_prefix('(')
+                .and_then(|inner| inner.strip_suffix(')'))
+                .unwrap_or(&octave_str);
             Ok(Some(
                 octave_str
                     .parse::<u8>()
@@ -435,6 +553,12 @@ impl MelodyNote {
 
 impl fmt::Display for MelodyNote {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if !self.extra_pitches.is_empty() {
+            return write_chord_note(self, f);
+        }
+        if self.tie_stop {
+            write!(f, "~")?;
+        }
         // Use scale degree if available, otherwise pitch letter
         if let Some(degree) = self.scale_degree {
             write!(f, "{}", degree)?;
@@ -450,15 +574,17 @@ impl fmt::Display for MelodyNote {
         match self.octave_modifier {
             OctaveModifier::Up => write!(f, "'")?,
             OctaveModifier::Down => write!(f, ",")?,
+            OctaveModifier::UpBy(count) => write!(f, "{}", "'".repeat(count as usize))?,
+            OctaveModifier::DownBy(count) => write!(f, "{}", ",".repeat(count as usize))?,
             OctaveModifier::None => {}
         }
 
         // Add explicit octave if set
         if let Some(oct) = self.octave {
-            write!(f, "{}", oct)?;
+            write!(f, "({})", oct)?;
         }
 
-        let prefer_bare_duration = self.octave.is_none() && self.scale_degree.is_none();
+        let prefer_bare_duration = self.scale_degree.is_none();
         if prefer_bare_duration {
             write!(f, "{}", self.duration)?;
         } else {
@@ -470,7 +596,238 @@ impl fmt::Display for MelodyNote {
         if self.triplet {
             write!(f, "t")?;
         }
+        if self.tie_start {
+            write!(f, "~")?;
+        }
         Ok(())
+    }
+}
+
+fn write_pitch_without_duration(note: &MelodyNote, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    if let Some(degree) = note.scale_degree {
+        write!(f, "{}", degree)?;
+        if note.pitch.len() > 1 {
+            write!(f, "{}", &note.pitch[1..])?;
+        }
+    } else {
+        write!(f, "{}", note.pitch)?;
+    }
+    match note.octave_modifier {
+        OctaveModifier::Up => write!(f, "'")?,
+        OctaveModifier::Down => write!(f, ",")?,
+        OctaveModifier::UpBy(count) => write!(f, "{}", "'".repeat(count as usize))?,
+        OctaveModifier::DownBy(count) => write!(f, "{}", ",".repeat(count as usize))?,
+        OctaveModifier::None => {}
+    }
+    if let Some(oct) = note.octave {
+        write!(f, "({})", oct)?;
+    }
+    Ok(())
+}
+
+fn write_chord_note(note: &MelodyNote, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    if note.tie_stop {
+        write!(f, "~")?;
+    }
+    write!(f, "<")?;
+    write_pitch_without_duration(note, f)?;
+    for (idx, (pitch, octave)) in note.extra_pitches.iter().enumerate() {
+        write!(f, " ")?;
+        let modifier = note
+            .extra_pitch_modifiers
+            .get(idx)
+            .copied()
+            .unwrap_or_default();
+        match modifier {
+            OctaveModifier::Up => write!(f, "'")?,
+            OctaveModifier::Down => write!(f, ",")?,
+            OctaveModifier::UpBy(count) => write!(f, "{}", "'".repeat(count as usize))?,
+            OctaveModifier::DownBy(count) => write!(f, "{}", ",".repeat(count as usize))?,
+            OctaveModifier::None => {}
+        }
+        write!(f, "{pitch}")?;
+        if let Some(oct) = octave {
+            write!(f, "({oct})")?;
+        }
+    }
+    write!(f, ">")?;
+    let prefer_bare_duration = note.scale_degree.is_none();
+    if prefer_bare_duration {
+        write!(f, "{}", note.duration)?;
+    } else {
+        write!(f, "_{}", note.duration)?;
+    }
+    if note.dotted {
+        write!(f, ".")?;
+    }
+    if note.triplet {
+        write!(f, "t")?;
+    }
+    if note.tie_start {
+        write!(f, "~")?;
+    }
+    Ok(())
+}
+
+fn split_melody_tokens(content: &str) -> MelodyTokenIter<'_> {
+    MelodyTokenIter { content, cursor: 0 }
+}
+
+fn split_chord_note_group_pitch_part(pitch_part: &str) -> Option<(OctaveModifier, &str)> {
+    let group_start = pitch_part.find('<')?;
+    let group_end = pitch_part.rfind('>')?;
+    if group_end + 1 != pitch_part.len() || group_start > group_end {
+        return None;
+    }
+    let modifier_prefix = &pitch_part[..group_start];
+    if !modifier_prefix.chars().all(|ch| ch == '\'' || ch == ',') {
+        return None;
+    }
+    let mut chars = modifier_prefix.chars().peekable();
+    let modifier = MelodyNote::parse_octave_modifier(&mut chars);
+    Some((modifier, &pitch_part[group_start + 1..group_end]))
+}
+
+fn combine_octave_modifiers(note: OctaveModifier, group: OctaveModifier) -> OctaveModifier {
+    modifier_from_delta(octave_modifier_delta(note) + octave_modifier_delta(group))
+}
+
+fn octave_modifier_delta(modifier: OctaveModifier) -> i16 {
+    match modifier {
+        OctaveModifier::None => 0,
+        OctaveModifier::Up => 1,
+        OctaveModifier::Down => -1,
+        OctaveModifier::UpBy(count) => i16::from(count),
+        OctaveModifier::DownBy(count) => -i16::from(count),
+    }
+}
+
+fn apply_octave_modifier(octave: u8, modifier: OctaveModifier) -> u8 {
+    match modifier {
+        OctaveModifier::None => octave,
+        OctaveModifier::Up => octave.saturating_add(1),
+        OctaveModifier::Down => octave.saturating_sub(1),
+        OctaveModifier::UpBy(count) => octave.saturating_add(count),
+        OctaveModifier::DownBy(count) => octave.saturating_sub(count),
+    }
+}
+
+fn modifier_from_delta(delta: i16) -> OctaveModifier {
+    match delta {
+        0 => OctaveModifier::None,
+        1 => OctaveModifier::Up,
+        -1 => OctaveModifier::Down,
+        n if n > 1 => OctaveModifier::UpBy(n as u8),
+        n => OctaveModifier::DownBy((-n) as u8),
+    }
+}
+
+fn melody_token_has_duration(token: &str) -> bool {
+    melody_token_duration_start(token).is_some()
+}
+
+fn melody_token_duration_suffix(token: &str) -> Result<String, String> {
+    let clean_token = token
+        .trim()
+        .trim_start_matches('~')
+        .trim_end_matches('~')
+        .trim_start_matches('!');
+    let Some(start) = melody_token_duration_start(clean_token) else {
+        return Err(format!("Melody token '{}' has no duration", token));
+    };
+    Ok(clean_token[start..].to_string())
+}
+
+fn melody_token_duration_start(token: &str) -> Option<usize> {
+    let token = token
+        .trim()
+        .trim_start_matches('~')
+        .trim_end_matches('~')
+        .trim_start_matches('!');
+    if token.is_empty() {
+        return None;
+    }
+    if let Some(close) = token.rfind('>') {
+        let suffix = &token[close + 1..];
+        if is_melody_duration_suffix(suffix) {
+            return Some(token.len() - suffix.len());
+        }
+        return None;
+    }
+    if let Some(close) = token.rfind(')') {
+        if token[..close].contains('(') {
+            let suffix = &token[close + 1..];
+            if suffix.is_empty() {
+                return None;
+            }
+            return is_melody_duration_suffix(suffix).then_some(close + 1);
+        }
+    }
+    if let Some((idx, suffix)) = token
+        .char_indices()
+        .find(|(_, c)| *c == '_')
+        .map(|(idx, _)| (idx, &token[idx + 1..]))
+    {
+        return is_melody_duration_suffix(suffix).then_some(idx);
+    }
+    let start = token
+        .char_indices()
+        .rfind(|(_, c)| !c.is_ascii_digit() && *c != '.' && *c != 't')
+        .map(|(idx, c)| idx + c.len_utf8())?;
+    (start < token.len() && is_melody_duration_suffix(&token[start..])).then_some(start)
+}
+
+fn is_melody_duration_suffix(suffix: &str) -> bool {
+    let suffix = suffix.trim_end_matches('~');
+    if suffix.is_empty() {
+        return false;
+    }
+    MelodyNote::parse_duration_part(suffix).is_ok()
+}
+
+struct MelodyTokenIter<'a> {
+    content: &'a str,
+    cursor: usize,
+}
+
+impl<'a> Iterator for MelodyTokenIter<'a> {
+    type Item = &'a str;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let bytes = self.content.as_bytes();
+        while self.cursor < bytes.len() && bytes[self.cursor].is_ascii_whitespace() {
+            self.cursor += 1;
+        }
+        if self.cursor >= bytes.len() {
+            return None;
+        }
+        let start = self.cursor;
+        let has_tie_stop = bytes[self.cursor] == b'~';
+        if has_tie_stop {
+            self.cursor += 1;
+        }
+        while self.cursor < bytes.len() && matches!(bytes[self.cursor], b'\'' | b',') {
+            self.cursor += 1;
+        }
+        if self.cursor < bytes.len() && bytes[self.cursor] == b'<' {
+            while self.cursor < bytes.len() && bytes[self.cursor] != b'>' {
+                self.cursor += 1;
+            }
+            if self.cursor < bytes.len() {
+                self.cursor += 1;
+            }
+            while self.cursor < bytes.len()
+                && (bytes[self.cursor].is_ascii_digit()
+                    || matches!(bytes[self.cursor], b'.' | b't' | b'~'))
+            {
+                self.cursor += 1;
+            }
+        } else {
+            while self.cursor < bytes.len() && !bytes[self.cursor].is_ascii_whitespace() {
+                self.cursor += 1;
+            }
+        }
+        Some(&self.content[start..self.cursor])
     }
 }
 
@@ -514,24 +871,165 @@ impl Melody {
         self.notes.iter().map(|n| n.duration_beats()).sum()
     }
 
+    /// Resolve all relative notes to concrete octaves.
+    pub fn resolve_absolute_octaves(&mut self) {
+        self.resolve_absolute_octaves_from(0, 4);
+    }
+
+    /// Resolve all relative notes to concrete octaves from a starting reference.
+    pub fn resolve_absolute_octaves_from(&mut self, mut ref_pitch_class: i8, mut ref_octave: u8) {
+        for note in &mut self.notes {
+            if note.is_rest() || note.is_space() {
+                continue;
+            }
+
+            let primary_octave = note.resolve_octave(ref_pitch_class, ref_octave);
+            note.octave = Some(primary_octave);
+            note.octave_modifier = OctaveModifier::None;
+
+            let note_pitch_class = note.pitch_class();
+            let primary_abs = note_pitch_class.map(|pc| absolute_pitch_value(pc, primary_octave));
+            let mut lowest_abs = primary_abs;
+
+            let mut group_ref_pitch_class = note_pitch_class.unwrap_or(ref_pitch_class);
+            let mut group_ref_octave = primary_octave;
+
+            for idx in 0..note.extra_pitches.len() {
+                let (pitch, octave) = &mut note.extra_pitches[idx];
+                let modifier = note
+                    .extra_pitch_modifiers
+                    .get(idx)
+                    .copied()
+                    .unwrap_or_default();
+                let Some(pc) = pitch_class_for_name(pitch) else {
+                    continue;
+                };
+                let prev_abs = absolute_pitch_value(group_ref_pitch_class, group_ref_octave);
+                let resolved = if let Some(octave) = *octave {
+                    octave
+                } else {
+                    let mut octave = group_ref_octave.saturating_sub(1);
+                    while absolute_pitch_value(pc, octave) <= prev_abs {
+                        octave = octave.saturating_add(1);
+                    }
+                    apply_octave_modifier(octave, modifier)
+                };
+                *octave = Some(resolved);
+                let abs = absolute_pitch_value(pc, resolved);
+                lowest_abs = Some(lowest_abs.map_or(abs, |current| current.min(abs)));
+                group_ref_pitch_class = pc;
+                group_ref_octave = resolved;
+                if let Some(modifier) = note.extra_pitch_modifiers.get_mut(idx) {
+                    *modifier = OctaveModifier::None;
+                }
+            }
+
+            if let Some(abs) = lowest_abs {
+                ref_pitch_class = (abs % 12) as i8;
+                ref_octave = (abs / 12) as u8;
+            } else if let Some(pc) = note.pitch_class() {
+                ref_pitch_class = pc;
+                ref_octave = primary_octave;
+            }
+        }
+    }
+
     /// Parse a melody from a string (the content inside m{ })
     ///
     /// Example: "C_8 D_8 E_4 F_4"
     pub fn parse(content: &str) -> Result<Self, String> {
-        let mut notes = Vec::new();
+        Self::parse_with_defaults(content, None, None)
+    }
 
-        for token in content.split_whitespace() {
-            let note = MelodyNote::parse(token)?;
+    /// Parse a melody using an optional sticky duration before the first note.
+    pub fn parse_with_default_duration(
+        content: &str,
+        default_duration: Option<&str>,
+    ) -> Result<Self, String> {
+        Self::parse_with_defaults(content, default_duration, None)
+    }
+
+    /// Parse a melody with optional inherited duration and starting octave.
+    pub fn parse_with_defaults(
+        content: &str,
+        default_duration: Option<&str>,
+        default_octave: Option<u8>,
+    ) -> Result<Self, String> {
+        let mut notes: Vec<MelodyNote> = Vec::new();
+        let mut inherited_duration: Option<String> = default_duration.map(str::to_string);
+
+        for token in split_melody_tokens(content) {
+            let (no_memory, token) = token
+                .strip_prefix('!')
+                .map_or((false, token), |token| (true, token));
+            if let Some(duration_override) = token.strip_prefix('.') {
+                let mut note = notes
+                    .last()
+                    .cloned()
+                    .ok_or_else(|| "Melody dot repeat needs a previous note".to_string())?;
+                if !duration_override.is_empty() {
+                    let (duration, dotted, triplet) =
+                        MelodyNote::parse_duration_part(duration_override)?;
+                    note.duration = duration;
+                    note.dotted = dotted;
+                    note.triplet = triplet;
+                    if !no_memory {
+                        inherited_duration = Some(duration_override.to_string());
+                    }
+                } else if !no_memory {
+                    inherited_duration = Some(melody_token_duration_suffix(&note.to_string())?);
+                }
+                note.tie_start = false;
+                note.tie_stop = false;
+                notes.push(note);
+                continue;
+            }
+
+            let token_to_parse = if melody_token_has_duration(token) {
+                token.to_string()
+            } else if let Some(duration) = &inherited_duration {
+                format!("{token}{duration}")
+            } else {
+                return Err(format!(
+                    "Melody token '{}' needs a duration before it can inherit one",
+                    token
+                ));
+            };
+            let note = MelodyNote::parse(&token_to_parse)?;
+            if !no_memory {
+                inherited_duration = Some(melody_token_duration_suffix(&token_to_parse)?);
+            }
             notes.push(note);
         }
 
-        Ok(Melody { notes, name: None })
+        let mut melody = Melody { notes, name: None };
+        if let Some(octave) = default_octave {
+            melody.resolve_absolute_octaves_from(0, octave);
+        }
+        Ok(melody)
     }
 
     /// Parse a melody block from a string including the m{ } wrapper
     ///
     /// Format: `m{ <notes> }` or `<name> = m{ <notes> }`
     pub fn parse_block(s: &str) -> Result<(Option<String>, Self), String> {
+        Self::parse_block_with_default_duration(s, None)
+    }
+
+    /// Parse a melody block with an optional inherited starting duration.
+    pub fn parse_block_with_default_duration(
+        s: &str,
+        default_duration: Option<&str>,
+    ) -> Result<(Option<String>, Self), String> {
+        Self::parse_block_with_defaults(s, default_duration, None)
+    }
+
+    /// Parse a melody block with optional inherited duration and starting octave.
+    pub fn parse_block_with_defaults(
+        s: &str,
+        default_duration: Option<&str>,
+        default_octave: Option<u8>,
+    ) -> Result<(Option<String>, Self), String> {
         let s = s.trim();
 
         // Check for variable assignment
@@ -544,6 +1042,13 @@ impl Melody {
         };
 
         // Parse the m{ } block
+        let normalized;
+        let melody_part = if let Some(rest) = melody_part.strip_prefix("m {") {
+            normalized = format!("m{{{rest}");
+            normalized.as_str()
+        } else {
+            melody_part
+        };
         if !melody_part.starts_with("m{") {
             return Err("Melody block must start with m{".to_string());
         }
@@ -553,11 +1058,31 @@ impl Melody {
             .ok_or("Missing closing brace in melody block")?;
 
         let content = &melody_part[2..close_brace];
-        let mut melody = Self::parse(content)?;
+        let mut melody = Self::parse_with_defaults(content, default_duration, default_octave)?;
         melody.name = name.clone();
 
         Ok((name, melody))
     }
+}
+
+fn absolute_pitch_value(pitch_class: i8, octave: u8) -> i16 {
+    i16::from(octave) * 12 + i16::from(pitch_class)
+}
+
+fn pitch_class_for_name(name: &str) -> Option<i8> {
+    let base_pitch = name.chars().next()?;
+    let base_class = PITCH_CLASS
+        .iter()
+        .find(|(p, _)| p.starts_with(base_pitch))
+        .map(|(_, c)| *c)?;
+    let accidental_offset = if name.contains('#') {
+        1
+    } else if name.contains('b') {
+        -1
+    } else {
+        0
+    };
+    Some((base_class + accidental_offset).rem_euclid(12))
 }
 
 impl Default for Melody {
@@ -910,6 +1435,164 @@ mod tests {
         assert!(melody.notes[1].triplet);
         assert_eq!(format!("{}", melody), "m{ G2 r4t F#4t F4t }");
         assert!((melody.total_beats() - 4.0).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_melody_chord_note_group() {
+        let melody = Melody::parse("<F# 'C#>4.").unwrap();
+        assert_eq!(melody.notes.len(), 1);
+        let note = &melody.notes[0];
+        assert_eq!(note.pitch, "F#");
+        assert_eq!(note.duration, 4);
+        assert!(note.dotted);
+        assert_eq!(note.extra_pitches, vec![("C#".to_string(), None)]);
+        assert_eq!(note.extra_pitch_modifiers, vec![OctaveModifier::Up]);
+        assert_eq!(format!("{}", melody), "m{ <F# 'C#>4. }");
+    }
+
+    #[test]
+    fn test_melody_tie_markers() {
+        let melody = Melody::parse("<D 'D>2.~ ~<D 'D>2.~ ~<D 'D>4.").unwrap();
+        assert!(melody.notes[0].tie_start);
+        assert!(!melody.notes[0].tie_stop);
+        assert!(melody.notes[1].tie_start);
+        assert!(melody.notes[1].tie_stop);
+        assert!(!melody.notes[2].tie_start);
+        assert!(melody.notes[2].tie_stop);
+        assert_eq!(format!("{}", melody), "m{ <D 'D>2.~ ~<D 'D>2.~ ~<D 'D>4. }");
+    }
+
+    #[test]
+    fn test_melody_duration_memory_with_one_time_override() {
+        let melody = Melody::parse("F#8. C# !Eb4 Bb").unwrap();
+
+        assert_eq!(melody.notes[0].duration, 8);
+        assert!(melody.notes[0].dotted);
+        assert_eq!(melody.notes[1].duration, 8);
+        assert!(melody.notes[1].dotted);
+        assert_eq!(melody.notes[2].duration, 4);
+        assert!(!melody.notes[2].dotted);
+        assert_eq!(melody.notes[3].duration, 8);
+        assert!(melody.notes[3].dotted);
+    }
+
+    #[test]
+    fn test_melody_duration_memory_keeps_underscore_form() {
+        let melody = Melody::parse("C#(3)2.~ ~C#(3) ~C#(3) ~C#(3)4. G#(3)").unwrap();
+
+        assert_eq!(melody.notes[0].octave, Some(3));
+        assert_eq!(melody.notes[0].duration, 2);
+        assert!(melody.notes[0].dotted);
+        assert_eq!(melody.notes[1].octave, Some(3));
+        assert_eq!(melody.notes[1].duration, 2);
+        assert!(melody.notes[1].dotted);
+        assert_eq!(melody.notes[2].octave, Some(3));
+        assert_eq!(melody.notes[2].duration, 2);
+        assert!(melody.notes[2].dotted);
+        assert_eq!(melody.notes[3].octave, Some(3));
+        assert_eq!(melody.notes[3].duration, 4);
+        assert!(melody.notes[3].dotted);
+        assert_eq!(melody.notes[4].octave, Some(3));
+        assert_eq!(melody.notes[4].duration, 4);
+        assert!(melody.notes[4].dotted);
+    }
+
+    #[test]
+    fn test_melody_parenthesized_absolute_octave_round_trips() {
+        let melody = Melody::parse("C#(3)8. D#(4)").unwrap();
+
+        assert_eq!(melody.notes[0].octave, Some(3));
+        assert_eq!(melody.notes[1].octave, Some(4));
+        assert_eq!(melody.notes[1].duration, 8);
+        assert!(melody.notes[1].dotted);
+        assert_eq!(format!("{}", melody), "m{ C#(3)8. D#(4)8. }");
+    }
+
+    #[test]
+    fn test_melody_resolves_absolute_octaves_and_chord_notes() {
+        let melody = Melody::parse_with_defaults("<F# C#>8. <G# D#>", None, Some(2)).unwrap();
+
+        assert_eq!(melody.notes[0].octave, Some(2));
+        assert_eq!(
+            melody.notes[0].extra_pitches[0],
+            ("C#".to_string(), Some(3))
+        );
+        assert_eq!(melody.notes[1].octave, Some(2));
+        assert_eq!(
+            melody.notes[1].extra_pitches[0],
+            ("D#".to_string(), Some(3))
+        );
+    }
+
+    #[test]
+    fn test_melody_chord_note_group_resolves_low_to_high() {
+        let melody = Melody::parse_with_defaults("<F# C# E A>8.", None, Some(2)).unwrap();
+
+        assert_eq!(melody.notes[0].octave, Some(2));
+        assert_eq!(
+            melody.notes[0].extra_pitches[0],
+            ("C#".to_string(), Some(3))
+        );
+        assert_eq!(melody.notes[0].extra_pitches[1], ("E".to_string(), Some(3)));
+        assert_eq!(melody.notes[0].extra_pitches[2], ("A".to_string(), Some(3)));
+    }
+
+    #[test]
+    fn test_melody_chord_note_group_accepts_block_octave_modifier() {
+        let melody = Melody::parse(",<F# ''C#>8.").unwrap();
+
+        assert_eq!(melody.notes[0].octave_modifier, OctaveModifier::Down);
+        assert_eq!(melody.notes[0].extra_pitch_modifiers[0], OctaveModifier::Up);
+        assert_eq!(format!("{}", melody), "m{ <F#, 'C#>8. }");
+    }
+
+    #[test]
+    fn test_melody_chord_note_group_repeated_pitch_resolves_above() {
+        let melody = Melody::parse_with_defaults("<F# F#>8.", None, Some(2)).unwrap();
+
+        assert_eq!(melody.notes[0].octave, Some(2));
+        assert_eq!(
+            melody.notes[0].extra_pitches[0],
+            ("F#".to_string(), Some(3))
+        );
+    }
+
+    #[test]
+    fn test_melody_dot_repeat_can_override_duration() {
+        let melody = Melody::parse("<Dn 'Dn>4. .8 . .").unwrap();
+
+        assert_eq!(melody.notes.len(), 4);
+        assert_eq!(melody.notes[0].duration, 4);
+        assert!(melody.notes[0].dotted);
+        for note in &melody.notes[1..] {
+            assert_eq!(note.pitch, "Dn");
+            assert_eq!(note.duration, 8);
+            assert!(!note.dotted);
+            assert_eq!(note.extra_pitches, vec![("Dn".to_string(), None)]);
+            assert_eq!(note.extra_pitch_modifiers, vec![OctaveModifier::Up]);
+        }
+    }
+
+    #[test]
+    fn test_melody_chord_note_group_applies_inner_marker_after_ascending_resolution() {
+        let melody = Melody::parse_with_defaults("<F# 'C#>8.", None, Some(2)).unwrap();
+
+        assert_eq!(melody.notes[0].octave, Some(2));
+        assert_eq!(
+            melody.notes[0].extra_pitches[0],
+            ("C#".to_string(), Some(4))
+        );
+    }
+
+    #[test]
+    fn test_melody_chord_note_group_comma_can_go_down_after_ascending_resolution() {
+        let melody = Melody::parse_with_defaults("<F# ,C#>8.", None, Some(2)).unwrap();
+
+        assert_eq!(melody.notes[0].octave, Some(2));
+        assert_eq!(
+            melody.notes[0].extra_pitches[0],
+            ("C#".to_string(), Some(2))
+        );
     }
 
     #[test]

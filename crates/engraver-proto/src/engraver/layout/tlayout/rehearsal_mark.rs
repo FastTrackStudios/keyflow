@@ -223,6 +223,9 @@ pub struct MarginLabelParams {
     pub letter: Option<char>,
     /// Optional comment/annotation to display below the capsule (e.g., "Down", "Build", "Horns", "Half-time")
     pub comment: Option<String>,
+    /// Optional already-formatted label text. Used when the source chart has
+    /// stacked pass labels such as `VS 1b\nVS 2`.
+    pub label_override: Option<String>,
     /// Left edge of the page
     pub page_x: f64,
     /// Available margin width (distance from page edge to content)
@@ -247,6 +250,7 @@ impl Default for MarginLabelParams {
             number: None,
             letter: None,
             comment: None,
+            label_override: None,
             page_x: 0.0,
             margin_width: 50.0,
             staff_y: 0.0,
@@ -277,12 +281,14 @@ pub fn layout_margin_label(
     params: &MarginLabelParams,
     _ctx: &LayoutContext<'_>,
 ) -> (RehearsalMarkLayoutData, SceneNode) {
-    let raw_text = format_rehearsal_label_with_letter(
-        &params.section_type,
-        &params.abbreviation,
-        params.number,
-        params.letter,
-    );
+    let raw_text = params.label_override.clone().unwrap_or_else(|| {
+        format_rehearsal_label_with_letter(
+            &params.section_type,
+            &params.abbreviation,
+            params.number,
+            params.letter,
+        )
+    });
     let style = &params.style;
 
     // Calculate available space in the margin
@@ -413,6 +419,15 @@ pub fn layout_margin_label(
 /// - Words are broken at spaces
 /// - Long words that don't fit are kept together (will be scaled down)
 fn split_into_lines(text: &str, available_width: f64, char_width_ratio: f64) -> Vec<String> {
+    if text.contains('\n') {
+        return text
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(str::to_string)
+            .collect();
+    }
+
     let mut lines = Vec::new();
 
     // Check for section letter at end (e.g., "CH 1 B" -> ["CH 1", "B"])
@@ -807,6 +822,31 @@ mod tests {
         let (layout, _node) = layout_section_label("Intro", "IN", None, 0.0, 0.0, None, &ctx);
         // Intro should produce "INTRO" which is wider than "VS 1"
         assert!(layout.width > 0.0);
+    }
+
+    #[test]
+    fn margin_label_preserves_stacked_repeat_pass_labels() {
+        let ctx = make_ctx();
+        let (_layout, node) = layout_margin_label(
+            &MarginLabelParams {
+                section_type: "Verse".to_string(),
+                abbreviation: "VS".to_string(),
+                number: Some(1),
+                label_override: Some("VS 1b\nVS 2".to_string()),
+                ..Default::default()
+            },
+            &ctx,
+        );
+
+        let rendered_text = node
+            .commands
+            .iter()
+            .filter_map(|cmd| match cmd {
+                PaintCommand::Text { text, .. } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(rendered_text, vec!["VS 1b", "VS 2"]);
     }
 
     #[test]
