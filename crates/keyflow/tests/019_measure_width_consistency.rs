@@ -243,13 +243,7 @@ fn test_identical_measures_have_same_width() {
     let engine = create_test_engine();
 
     // Layout in paginated mode
-    let result = engine.layout_chart(
-        &chart,
-        &LayoutMode::Paginated {
-            page_width: 595.0,  // A4 width in points
-            page_height: 842.0, // A4 height in points
-        },
-    );
+    let result = engine.layout_chart(&chart, &LayoutMode::paginated_a4());
 
     let barline_positions = find_barline_positions(&result.scene);
     let measure_widths = calculate_measure_widths(&barline_positions);
@@ -273,13 +267,7 @@ fn test_vs1_first_measure_not_elongated() {
     let chart = parse_test_chart();
     let engine = create_test_engine();
 
-    let result = engine.layout_chart(
-        &chart,
-        &LayoutMode::Paginated {
-            page_width: 595.0,
-            page_height: 842.0,
-        },
-    );
+    let result = engine.layout_chart(&chart, &LayoutMode::paginated_a4());
 
     let barline_positions = find_barline_positions(&result.scene);
     let measure_widths = calculate_measure_widths(&barline_positions);

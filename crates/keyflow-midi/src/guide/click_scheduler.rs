@@ -3,12 +3,12 @@
 //! Ported from the legacy FTS Guide plugin's `audio/trigger_scheduler.rs`,
 //! stripped of sample-space calculations. Works entirely in quarter-note positions.
 
+use keyflow_proto::TimeSignature;
 use keyflow_proto::guide::{
     config::ClickConfig,
     event::{ClickEvent, ClickType},
     midi_map,
 };
-use keyflow_proto::TimeSignature;
 
 /// Schedules click events within a time range.
 pub struct ClickScheduler;

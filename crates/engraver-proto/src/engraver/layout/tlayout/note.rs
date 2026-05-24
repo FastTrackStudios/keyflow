@@ -291,27 +291,26 @@ pub fn layout_note(params: &NoteParams, ctx: &LayoutContext) -> (LayoutData, Sce
     let y = -params.line as f64 * staff_line_distance / 2.0;
 
     // Reserved chord-wide accidental column width (in pixels), if any.
-    // When set, the notehead lands at `column_px + gap` regardless of this note's
-    // accidental width — keeping all noteheads in a chord in the same column.
+    // The notehead is the rhythmic anchor and remains at x = 0; accidentals
+    // are placed to the left so noteheads, ledger lines, stems, and chord
+    // symbols can share the same beat x.
     let column_px = params
         .accidental_column_width
         .map(|w| w * spatium)
         .unwrap_or(0.0);
 
-    let mut x = 0.0;
     let mut commands = Vec::new();
-    let mut total_width = 0.0;
+    let mut left_extent: f64 = 0.0;
+    let notehead_width = spatium * params.head_type.width();
+    let mut right_extent = notehead_width;
 
     // Draw accidental if present
     if let Some(acc_glyph) = params.accidental.glyph() {
         let acc_width = params.accidental.width() * spatium;
-        // Right-align the accidental inside the column so the gap-to-notehead
-        // is consistent across the chord.
-        let acc_x = if column_px > 0.0 {
-            column_px - acc_width
-        } else {
-            0.0
-        };
+        let gap = spatium * 0.15;
+        let column_width = column_px.max(acc_width);
+        let acc_x = -gap - column_width;
+        left_extent = left_extent.max(-acc_x);
 
         commands.push(PaintCommand::glyph(
             acc_glyph,
@@ -321,22 +320,9 @@ pub fn layout_note(params: &NoteParams, ctx: &LayoutContext) -> (LayoutData, Sce
         ));
     }
 
-    // Notehead start X: column width + gap (column-aware) or this-note's
-    // accidental width + gap (single-note behavior).
-    let acc_advance = if column_px > 0.0 {
-        column_px + spatium * 0.15
-    } else if params.accidental.glyph().is_some() {
-        params.accidental.width() * spatium + spatium * 0.15
-    } else {
-        0.0
-    };
-    x += acc_advance;
-    total_width += acc_advance;
-
     // Draw notehead
-    let notehead_x = x + params.offset_x;
+    let notehead_x = params.offset_x;
     let notehead_glyph = params.head_type.glyph(params.duration);
-    let notehead_width = spatium * params.head_type.width();
 
     commands.push(PaintCommand::glyph(
         notehead_glyph,
@@ -344,8 +330,6 @@ pub fn layout_note(params: &NoteParams, ctx: &LayoutContext) -> (LayoutData, Sce
         spatium,
         Color::BLACK,
     ));
-
-    total_width += notehead_width;
 
     // Draw ledger lines if needed
     if params.ledger_lines {
@@ -386,15 +370,15 @@ pub fn layout_note(params: &NoteParams, ctx: &LayoutContext) -> (LayoutData, Sce
         } else {
             0.0
         };
-        total_width += spatium * (DOT_NOTE_DISTANCE + dots_spacing + DOT_GLYPH_WIDTH);
+        right_extent += spatium * (DOT_NOTE_DISTANCE + dots_spacing + DOT_GLYPH_WIDTH);
     }
 
     // Calculate bounding box (relative to note position)
     let half_height = spatium * 0.5;
-    let bbox = Rect::new(0.0, -half_height, total_width, half_height);
+    let bbox = Rect::new(-left_extent, -half_height, right_extent, half_height);
 
     // Create shape for collision detection (in world coordinates)
-    let world_bbox = Rect::new(0.0, y - half_height, total_width, y + half_height);
+    let world_bbox = Rect::new(-left_extent, y - half_height, right_extent, y + half_height);
     let shape = Shape::from_rect(world_bbox);
 
     // Create layout data with proper position
@@ -601,9 +585,56 @@ mod tests {
 
         let x_with = notehead_x(&with_acc.1);
         let x_without = notehead_x(&without_acc.1);
+        assert!((x_with - 0.0).abs() < 1e-6);
         assert!(
             (x_with - x_without).abs() < 1e-6,
             "notehead Xs should match across accidental column: with={x_with}, without={x_without}"
+        );
+    }
+
+    #[test]
+    fn test_ledger_lines_center_on_notehead_anchor_with_accidental() {
+        let ctx = test_ctx();
+        let (_, node) = layout_note(
+            &NoteParams {
+                id: 102,
+                duration: NoteDuration::Quarter,
+                line: 6,
+                accidental: Accidental::Sharp,
+                ledger_lines: true,
+                ..Default::default()
+            },
+            &ctx,
+        );
+
+        let mut notehead_x = None;
+        let mut ledger_bounds = None;
+        for cmd in &node.commands {
+            match cmd {
+                PaintCommand::Glyph {
+                    position,
+                    codepoint,
+                    ..
+                } if matches!(
+                    *codepoint,
+                    glyphs::NOTEHEAD_BLACK | glyphs::NOTEHEAD_HALF | glyphs::NOTEHEAD_WHOLE
+                ) =>
+                {
+                    notehead_x = Some(position.x);
+                }
+                PaintCommand::Line { start, end, .. } => {
+                    ledger_bounds = Some((start.x, end.x));
+                }
+                _ => {}
+            }
+        }
+
+        let notehead_x = notehead_x.expect("notehead glyph");
+        let (ledger_start, ledger_end) = ledger_bounds.expect("ledger line");
+        assert!((notehead_x - 0.0).abs() < 1e-6);
+        assert!(
+            ledger_start < notehead_x && ledger_end > notehead_x,
+            "ledger line must straddle the beat-aligned notehead x: notehead={notehead_x}, ledger=({ledger_start}, {ledger_end})"
         );
     }
 

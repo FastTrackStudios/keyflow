@@ -10,10 +10,17 @@ path = "src/main.rs"
 
 [dependencies]
 keyflow = { workspace = true, features = ["text", "midi", "engraver"] }
+keyflow-musicxml = { workspace = true }
 
 clap = { version = "4", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+# PNG rendering via resvg (SVG → bitmap)
+resvg = "0.45"
+usvg = "0.45"
+tiny-skia = "0.11"
+png = "0.17"
 
 [lints]
 workspace = true

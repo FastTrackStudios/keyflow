@@ -100,6 +100,13 @@ fn looks_like_chord_content(line: &str) -> bool {
 }
 
 impl<'a> ChartParser<'a> {
+    fn empty_measure_with_active_time_signature(&self) -> Measure {
+        let time_sig = self.time_signature.unwrap_or(TimeSignature::common_time());
+        let mut measure = Measure::new();
+        measure.time_signature = (time_sig.numerator as u8, time_sig.denominator as u8);
+        measure
+    }
+
     /// Phase 2: Parse sections and content
     pub(super) fn parse_sections(
         &mut self,
@@ -113,6 +120,12 @@ impl<'a> ChartParser<'a> {
 
             // Skip empty lines
             if line.is_empty() {
+                idx += 1;
+                continue;
+            }
+
+            if let Some((name, value)) = Self::parse_alias_declaration(line) {
+                self.aliases.insert(name, value);
                 idx += 1;
                 continue;
             }
@@ -182,7 +195,7 @@ impl<'a> ChartParser<'a> {
                     let measures = if content.is_empty() {
                         // Empty inline content
                         if let Some(count) = measure_count {
-                            vec![Measure::new(); count]
+                            vec![self.empty_measure_with_active_time_signature(); count]
                         } else {
                             self.templates
                                 .recall_transposed(&section_type, self.current_key.as_ref())
@@ -199,7 +212,8 @@ impl<'a> ChartParser<'a> {
                         // This ensures "Count 2: | |" creates 2 empty measures
                         if let Some(count) = measure_count {
                             while parsed_measures.len() < count {
-                                parsed_measures.push(Measure::new());
+                                parsed_measures
+                                    .push(self.empty_measure_with_active_time_signature());
                             }
                         }
 
@@ -438,15 +452,20 @@ impl<'a> ChartParser<'a> {
             // - Starts with '/' and contains '=' (e.g., "/PUSH=8t")
             // - Starts with '/push ' (space-separated syntax, e.g., "/push 4")
             let is_setting_line = trimmed.starts_with('/')
-                && (trimmed.contains('=') || trimmed.to_lowercase().starts_with("/push "));
+                && (trimmed.contains('=')
+                    || trimmed.to_lowercase().starts_with("/push ")
+                    || trimmed.to_lowercase().starts_with("/chordlength "));
 
             if is_setting_line {
-                // This is a settings line - apply it temporarily
-                if let Err(e) = self.settings.parse_setting_line(line) {
-                    tracing::warn!("Failed to parse section setting '{}': {}", line, e);
-                } else {
-                    has_section_settings = true;
+                if !trimmed.to_lowercase().starts_with("/chordlength ") {
+                    // This is a settings line - apply it temporarily
+                    if let Err(e) = self.settings.parse_setting_line(line) {
+                        tracing::warn!("Failed to parse section setting '{}': {}", line, e);
+                    } else {
+                        has_section_settings = true;
+                    }
                 }
+                actual_content_lines.push(*line);
             } else {
                 actual_content_lines.push(*line);
             }
@@ -475,7 +494,7 @@ impl<'a> ChartParser<'a> {
                 template
             } else if let Some(count) = measure_count {
                 // No template, but have measure count - create empty measures
-                vec![Measure::new(); count]
+                vec![self.empty_measure_with_active_time_signature(); count]
             } else {
                 Vec::new()
             };
@@ -542,10 +561,11 @@ impl<'a> ChartParser<'a> {
                                         parsed_measures.push(space_measure);
                                     }
                                 } else if actual_measures > count {
-                                    tracing::warn!(
-                                        "Section {:?} has {} measures but specified {} - using actual content",
+                                    return Err(format!(
+                                        "Section {:?} has {} parsed measures but header specifies {}. \
+                                         Add explicit durations or split the content so the parsed measure count matches the section header.",
                                         section_type, actual_measures, count
-                                    );
+                                    ));
                                 }
                             }
 

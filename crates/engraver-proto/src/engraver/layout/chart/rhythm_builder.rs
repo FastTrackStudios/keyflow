@@ -108,8 +108,15 @@ pub struct RhythmBuildResult {
     /// Maps pushed chords to their rhythm entry positions within this measure.
     pub internal_push_positions: Vec<(usize, usize)>,
     /// Per-note pitch information for melody rendering.
-    /// Parallel to `entries` — Some((staff_line, accidental)) for pitched notes, None for rests/slashes.
+    /// Parallel to `entries` — Some((staff_line, accidental)) for the primary
+    /// pitched notehead, None for rests/slashes. Use [`note_pitch_stacks`]
+    /// for polyphony / octave-doubling cases.
     pub note_pitches: Vec<Option<(i32, Accidental)>>,
+    /// Extra pitches stacked on the same stem as the primary `note_pitches`
+    /// entry at the same index — empty when no chord-notes / double-stops.
+    /// Parallel to `note_pitches`; the engraver loops over both to emit one
+    /// notehead per pitch sharing a single stem.
+    pub note_pitch_stacks: Vec<Vec<(i32, Accidental)>>,
 }
 
 impl RhythmBuildResult {
@@ -534,7 +541,7 @@ fn extract_from_explicit(
 /// Melody segments come from `expand_melodies_across_measures()` and represent
 /// notes that may have been split at barlines.
 fn extract_from_melody(data: &MeasureMelodyData) -> RhythmBuildResult {
-    use super::types::melody_pitch_to_line;
+    use super::types::melody_pitch_to_line_for_clef_and_key;
 
     let mut result = RhythmBuildResult::default();
     let num_melody_notes = data.segments.len();
@@ -544,18 +551,54 @@ fn extract_from_melody(data: &MeasureMelodyData) -> RhythmBuildResult {
         if segment.is_rest {
             result.entries.push(RhythmEntry::Rest(duration));
             result.note_pitches.push(None);
+            result.note_pitch_stacks.push(Vec::new());
         } else {
             result.entries.push(RhythmEntry::Note(duration));
 
-            // Resolve pitch to staff line if we have octave info
+            // Primary pitch + any polyphony stack (octave doublings /
+            // double-stops). All resolved through the active clef.
             if let Some(octave) = segment.octave {
-                let (line, acc) = melody_pitch_to_line(&segment.pitch, octave);
+                let (line, acc) = melody_pitch_to_line_for_clef_and_key(
+                    &segment.pitch,
+                    octave,
+                    data.clef,
+                    data.key_signature,
+                );
                 result.note_pitches.push(Some((line, acc)));
+                let mut stack: Vec<(i32, Accidental)> =
+                    Vec::with_capacity(segment.extra_pitches.len());
+                for (idx, (extra_pitch, extra_octave)) in segment.extra_pitches.iter().enumerate() {
+                    let oct = extra_octave.unwrap_or_else(|| {
+                        if let Some((class, _, _)) = super::types::parse_melody_pitch(extra_pitch) {
+                            super::types::resolve_relative_octave(
+                                class,
+                                super::types::parse_melody_pitch(&segment.pitch)
+                                    .map_or(class, |(primary_class, _, _)| primary_class),
+                                octave,
+                                segment
+                                    .extra_pitch_modifiers
+                                    .get(idx)
+                                    .copied()
+                                    .unwrap_or_default(),
+                            )
+                        } else {
+                            octave
+                        }
+                    });
+                    let (eline, eacc) = melody_pitch_to_line_for_clef_and_key(
+                        extra_pitch,
+                        oct,
+                        data.clef,
+                        data.key_signature,
+                    );
+                    stack.push((eline, eacc));
+                }
+                result.note_pitch_stacks.push(stack);
             } else {
                 result.note_pitches.push(None);
+                result.note_pitch_stacks.push(Vec::new());
             }
         }
-        // Head type override will be None for melody notes (use default head)
         result.head_type_overrides.push(None);
     }
 
@@ -614,7 +657,26 @@ fn extract_from_slash(
         .iter()
         .filter(|c| c.push_pull.as_ref().is_none_or(|(is_push, _)| !is_push))
         .count();
-    let num_beats = non_pushed_count.max(config.time_signature.0 as usize);
+    // If every chord declares a dotted-slash rhythm (e.g. 6/8's "/. /.")
+    // the beat unit IS the dotted quarter — the bar is already covered by
+    // `sum(count)` dotted slashes, so we must NOT pad up to the meter
+    // numerator (which would emit 6 plain quarter slashes for 6/8).
+    let all_dotted_slashes = !chords.is_empty()
+        && chords
+            .iter()
+            .all(|c| matches!(c.rhythm, ChordRhythm::Slashes { dotted: true, .. }));
+    let num_beats = if all_dotted_slashes {
+        chords
+            .iter()
+            .map(|c| match &c.rhythm {
+                ChordRhythm::Slashes { count, .. } => *count as usize,
+                _ => 1,
+            })
+            .sum::<usize>()
+            .max(1)
+    } else {
+        non_pushed_count.max(config.time_signature.0 as usize)
+    };
 
     // Build a list of beats, tracking which ones have pushes
     let mut beats_with_pushes: Vec<Option<BeatPushInfo>> = vec![None; num_beats];
@@ -771,12 +833,35 @@ fn extract_from_slash(
                     .push((rhythm_index, spillback.chord_symbol.clone()));
             }
 
-            result.entries.push(RhythmEntry::Note(Duration::Quarter));
+            let dur = if all_dotted_slashes {
+                Duration::DottedQuarter
+            } else {
+                Duration::Quarter
+            };
+            result.entries.push(RhythmEntry::Note(dur));
             rhythm_index += 1;
         }
     }
 
     result.total_ticks = result.entries.iter().map(|e| e.duration().ticks()).sum();
+    let measure_ticks = calculate_measure_ticks(config.time_signature);
+    let tick_delta = result.total_ticks - measure_ticks;
+    tracing::debug!(
+        target: "engraver_proto::engraver::layout::chart::rhythm",
+        time_signature = ?config.time_signature,
+        chord_count = chords.len(),
+        non_pushed_count,
+        all_dotted_slashes,
+        num_beats,
+        entries = result.entries.len(),
+        durations_ticks = ?result.entries.iter().map(|entry| entry.duration().ticks()).collect::<Vec<_>>(),
+        total_ticks = result.total_ticks,
+        measure_ticks,
+        tick_delta,
+        overfull = tick_delta > 0,
+        chords = ?chords.iter().map(|chord| (&chord.full_symbol, &chord.rhythm, chord.position.beats(), chord.position.subdivisions())).collect::<Vec<_>>(),
+        "[rhythm-slash] built slash notation rhythm"
+    );
     result
 }
 

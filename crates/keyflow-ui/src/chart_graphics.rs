@@ -54,7 +54,7 @@ mod desktop {
                 ..Default::default()
             });
 
-            renderer.resume(window.clone(), width, height);
+            renderer.resume(window.clone(), width, height, || {});
 
             Self {
                 renderer,

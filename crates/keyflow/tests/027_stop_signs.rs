@@ -17,9 +17,6 @@ use engraver::layout::chart::{ChartLayoutConfig, ChartLayoutEngine, LayoutMode};
 use engraver::style::MStyle;
 use keyflow::chart::commands::Command;
 
-const A4_WIDTH: f64 = 595.0;
-const A4_HEIGHT: f64 = 842.0;
-
 fn output_dir() -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/output");
     fs::create_dir_all(&dir).expect("create output dir");
@@ -170,10 +167,7 @@ ou
     let engine = font_bundle.create_layout_engine(style);
 
     let layout_config = ChartLayoutConfig::master_rhythm().with_page_offsets(true);
-    let mode = LayoutMode::Paginated {
-        page_width: A4_WIDTH,
-        page_height: A4_HEIGHT,
-    };
+    let mode = LayoutMode::paginated_a4();
     let result = engine.layout_chart_with_config(&chart, &mode, &layout_config);
 
     // Export SVG pages

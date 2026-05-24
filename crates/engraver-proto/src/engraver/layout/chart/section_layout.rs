@@ -47,7 +47,9 @@ pub fn get_section_theme(section_type: &SectionType) -> RehearsalMarkStyle {
         }
 
         // Utility sections - neutral colors
-        SectionType::CountIn | SectionType::End => rehearsal_themes::outline(),
+        SectionType::CountIn | SectionType::Opening | SectionType::End => {
+            rehearsal_themes::outline()
+        }
         SectionType::Hits | SectionType::Breakdown => rehearsal_themes::breakdown(),
 
         // Custom sections (Solo, etc.) - slate with border

@@ -1,7 +1,7 @@
 //! Error types for the keyflow crate.
 
 use derive_more::{Display, From};
-use keyflow_proto::parsing::ParseError;
+use keyflow_proto::ParseError;
 
 // region:    --- Result Alias
 

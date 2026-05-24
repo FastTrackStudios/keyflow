@@ -26,6 +26,12 @@ impl<'a> ChartParser<'a> {
                 continue;
             }
 
+            if let Some((name, value)) = Self::parse_alias_declaration(lines[idx]) {
+                self.aliases.insert(name, value);
+                idx += 1;
+                continue;
+            }
+
             // Check for settings (lines starting with /)
             if lines[idx].starts_with('/') {
                 self.parse_setting(lines[idx])?;
@@ -73,6 +79,12 @@ impl<'a> ChartParser<'a> {
         // Skip empty lines and parse more settings
         while idx < lines.len() {
             if lines[idx].is_empty() {
+                idx += 1;
+                continue;
+            }
+
+            if let Some((name, value)) = Self::parse_alias_declaration(lines[idx]) {
+                self.aliases.insert(name, value);
                 idx += 1;
                 continue;
             }
@@ -129,6 +141,12 @@ impl<'a> ChartParser<'a> {
                 continue;
             }
 
+            if let Some((name, value)) = Self::parse_alias_declaration(lines[idx]) {
+                self.aliases.insert(name, value);
+                idx += 1;
+                continue;
+            }
+
             // Check for settings (lines starting with /)
             if lines[idx].starts_with('/') {
                 self.parse_setting(lines[idx])?;
@@ -156,6 +174,7 @@ impl<'a> ChartParser<'a> {
                 self.metadata.version = Some(version);
                 idx += 1;
             } else if !line.is_empty()
+                && !line.starts_with("<<")
                 && !Self::looks_like_section_marker(line)
                 && !Self::looks_like_chord_content(line)
             {
@@ -304,7 +323,11 @@ impl<'a> ChartParser<'a> {
             // Try time signature
             if part.contains('/') {
                 if let Some((num, den)) = Self::parse_time_signature(part) {
-                    self.time_signature = Some(TimeSignature::new(num as u32, den as u32));
+                    let time_signature = TimeSignature::new(num as u32, den as u32);
+                    self.time_signature = Some(time_signature);
+                    if self.initial_time_signature.is_none() {
+                        self.initial_time_signature = Some(time_signature);
+                    }
                     continue;
                 }
             }
@@ -334,7 +357,7 @@ impl<'a> ChartParser<'a> {
         }
     }
 
-    /// Parse tempo from a token (e.g., "120bpm" or "120")
+    /// Parse tempo from a token (e.g., "120bpm", "8th=168bpm", or "120")
     fn parse_tempo(token: &str) -> Option<Tempo> {
         let trimmed = token.trim();
         let value = if let Some(stripped) = trimmed.strip_suffix("bpm") {
@@ -342,12 +365,18 @@ impl<'a> ChartParser<'a> {
         } else {
             trimmed
         };
+        let value = value.rsplit_once('=').map_or(value, |(_, bpm)| bpm.trim());
         let bpm = value.parse::<f64>().ok()?;
         Tempo::try_from_bpm(bpm).ok()
     }
 
     /// Parse a setting line (e.g., "/SMART_REPEATS=true")
     pub(super) fn parse_setting(&mut self, line: &str) -> Result<(), String> {
+        if let Some((name, value)) = Self::parse_alias_declaration(line) {
+            self.aliases.insert(name, value);
+            return Ok(());
+        }
+
         self.settings.parse_setting_line(line)
     }
 

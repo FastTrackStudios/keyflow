@@ -1,14 +1,22 @@
 //! Chart module with text parsing support.
 
+use std::collections::HashMap;
+
 pub use keyflow_proto::chart::*;
 
 pub struct ChartParser<'a> {
     chart: &'a mut Chart,
+    aliases: HashMap<String, String>,
+    melody_octave_memory: Option<u8>,
 }
 
 impl<'a> ChartParser<'a> {
     pub fn new(chart: &'a mut Chart) -> Self {
-        Self { chart }
+        Self {
+            chart,
+            aliases: HashMap::new(),
+            melody_octave_memory: None,
+        }
     }
 }
 
@@ -83,4 +91,5 @@ pub fn parse_document(input: &str) -> Result<(Chart, keyflow_proto::document::Kf
     Ok((chart, doc))
 }
 
+pub mod exporter;
 pub mod parser;

@@ -1,0 +1,18 @@
+[package]
+name = "keyflow-musicxml"
+version.workspace = true
+edition.workspace = true
+description = "MusicXML import — translate score files to keyflow Chart"
+
+[dependencies]
+keyflow-proto = { path = "../keyflow-proto" }
+keyflow-syntax = { path = "../keyflow-syntax" }
+musicxml = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+keyflow-text = { path = "../keyflow-text" }
+
+[lints]
+workspace = true

@@ -20,7 +20,7 @@
 //! own chord markers; this harness verifies *output stability* of the
 //! whole chart-text pipeline.
 
-use keyflow_midi::import::{generate_chart_text, MidiChartConfig, MidiFile};
+use keyflow_midi::import::{MidiChartConfig, MidiFile, generate_chart_text};
 use std::path::{Path, PathBuf};
 
 fn corpus_dir() -> PathBuf {

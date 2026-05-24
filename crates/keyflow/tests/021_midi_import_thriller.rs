@@ -3136,7 +3136,9 @@ fn test_interlude_outro_hits_sections() {
     }
 
     println!("\n=== EXPECTED OUTPUT (reference) ===\n");
-    println!("CH (last line): >Cm/Eb / 'Eb /// 'Eb / 'F/C / 'Cm // 'F/A r8t >Ab9_8t r8t r8t >'F9_8t r8t r4.");
+    println!(
+        "CH (last line): >Cm/Eb / 'Eb /// 'Eb / 'F/C / 'Cm // 'F/A r8t >Ab9_8t r8t r8t >'F9_8t r8t r4."
+    );
     println!("Interlude A: '_4Cm . . . . . . . (Cm carries over from CH)");
     println!("Interlude B: /push 4 / 'Cm . 'Cm7b5 . 'Cm Cm/maj7 'B/C .");
     println!("Interlude C: C C+ // C // Cm7b5 Cmaj7 / 'Cmaj7 . Fm/C Cdim7");

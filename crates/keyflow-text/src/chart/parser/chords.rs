@@ -7,7 +7,7 @@ use super::helpers::{PushPullModifier, RepeatCount};
 use super::ChartParser;
 use crate::chart::cues::TextCue;
 use crate::chart::dynamics::DynamicMarking;
-use crate::chart::melody::Melody;
+use crate::chart::melody::{Melody, MelodyNote};
 use crate::chart::types::{
     ChordInstance, KeyChange, Measure, RestInstance, RhythmElement, SpaceInstance,
 };
@@ -21,10 +21,407 @@ use crate::time::{
     TimeSignatureExt,
 };
 use keyflow_proto::chart::commands::Command;
+use keyflow_proto::chart::{
+    Dynamic, DynamicLevel, FiguredBass, FiguredBassRow, Hairpin, HairpinKind, Placement,
+    RepeatMark, StaffText, Volta,
+};
 
 // region:    --- Token Helpers
 
 impl<'a> ChartParser<'a> {
+    fn parse_quoted_text_token(token: &str) -> Option<(String, Placement)> {
+        let (token, placement) = if let Some(rest) = token.strip_prefix("^\"") {
+            (format!("\"{rest}"), Placement::Above)
+        } else if let Some(rest) = token.strip_prefix("_\"") {
+            (format!("\"{rest}"), Placement::Below)
+        } else {
+            (token.to_string(), Placement::Below)
+        };
+        let inner = token.strip_prefix('"')?.strip_suffix('"')?;
+        Some((unescape_quoted(inner), placement))
+    }
+
+    pub(super) fn parse_alias_declaration(line: &str) -> Option<(String, String)> {
+        let (name, value) = if let Some(rest) = line.strip_prefix("/alias ") {
+            let mut parts = rest.splitn(2, char::is_whitespace);
+            (parts.next()?.trim(), parts.next()?.trim())
+        } else if let Some(rest) = line.strip_prefix("let ") {
+            let (name, value) = rest.split_once('=')?;
+            (name.trim(), value.trim())
+        } else {
+            return None;
+        };
+        if name.is_empty() || value.is_empty() {
+            return None;
+        }
+        let value = value
+            .strip_prefix('{')
+            .and_then(|inner| inner.strip_suffix('}'))
+            .map(str::trim)
+            .unwrap_or(value);
+        Some((name.to_string(), value.to_string()))
+    }
+
+    pub(super) fn expand_aliases_in_line(&self, line: &str) -> String {
+        let spans = tokenize_with_spans(line);
+        if spans.is_empty() {
+            return line.to_string();
+        }
+
+        let mut out = String::new();
+        let mut cursor = 0usize;
+        let mut changed = false;
+        for span in spans {
+            out.push_str(&line[cursor..span.start]);
+            let token = &line[span.as_range()];
+            if let Some(expanded) = self.expand_alias_token(token) {
+                out.push_str(&expanded);
+                changed = true;
+            } else {
+                out.push_str(token);
+            }
+            cursor = span.start + span.len;
+        }
+        out.push_str(&line[cursor..]);
+
+        if changed {
+            out
+        } else {
+            line.to_string()
+        }
+    }
+
+    fn expand_alias_token(&self, token: &str) -> Option<String> {
+        if let Some(name) = token.strip_prefix("^<").and_then(|t| t.strip_suffix('>')) {
+            return self.aliases.get(name).map(|value| {
+                apply_alias_placement(value, Some(Placement::Above))
+                    .unwrap_or_else(|| value.to_string())
+            });
+        }
+        if let Some(name) = token.strip_prefix("_<").and_then(|t| t.strip_suffix('>')) {
+            return self.aliases.get(name).map(|value| {
+                apply_alias_placement(value, Some(Placement::Below))
+                    .unwrap_or_else(|| value.to_string())
+            });
+        }
+        if let Some(name) = token.strip_prefix('<').and_then(|t| t.strip_suffix('>')) {
+            return self.aliases.get(name).map(|value| {
+                apply_alias_placement(value, None).unwrap_or_else(|| value.to_string())
+            });
+        }
+        if let Some((chord, name)) = split_chord_attached_alias(token) {
+            return self
+                .aliases
+                .get(name)
+                .and_then(|value| alias_quoted_payload(value))
+                .map(|payload| format!("{chord}\"{payload}\""));
+        }
+        None
+    }
+
+    fn parse_standalone_staff_text_line(&self, line: &str) -> Option<Vec<StaffText>> {
+        if line.starts_with("<<") {
+            return None;
+        }
+        let expanded = self.expand_aliases_in_line(line);
+        let spans = tokenize_with_spans(&expanded);
+        if spans.is_empty() {
+            return None;
+        }
+
+        let mut items = Vec::new();
+        for span in spans {
+            let token = &expanded[span.as_range()];
+            let (text, placement) = Self::parse_quoted_text_token(token)?;
+            items.push(StaffText {
+                text,
+                beat: 1,
+                placement,
+                source_default_x: None,
+                boxed: false,
+                bold: false,
+                italic: false,
+            });
+        }
+
+        Some(items)
+    }
+
+    fn parse_classical_dynamic_line(line: &str) -> Option<Dynamic> {
+        let value = line
+            .strip_prefix("/dyn ")
+            .or_else(|| line.strip_prefix("/dynamic "))
+            .or_else(|| line.strip_prefix("dyn "))
+            .or_else(|| line.strip_prefix("dynamic "))?
+            .trim();
+        let mut parts = value.split_whitespace();
+        let token = parts.next()?;
+        let (level_token, beat) = token
+            .split_once('@')
+            .map(|(level, beat)| (level, beat.parse::<u8>().ok().unwrap_or(1)))
+            .unwrap_or((token, 1));
+        let level = Self::parse_dynamic_level(level_token)?;
+        let placement = parts
+            .next()
+            .and_then(Self::parse_placement)
+            .unwrap_or(Placement::Below);
+        Some(Dynamic {
+            level,
+            beat,
+            placement,
+        })
+    }
+
+    fn parse_hairpin_line(line: &str) -> Option<Hairpin> {
+        let value = line
+            .strip_prefix("/hairpin ")
+            .or_else(|| line.strip_prefix("hairpin "))?
+            .trim();
+        let mut parts = value.split_whitespace();
+        let kind = match parts.next()? {
+            "<" | "crescendo" | "cresc" => HairpinKind::Crescendo,
+            ">" | "decrescendo" | "decresc" | "dim" | "diminuendo" => HairpinKind::Decrescendo,
+            _ => return None,
+        };
+        let span = parts.next().unwrap_or("1..1");
+        let (start, end) = span
+            .split_once("..")
+            .or_else(|| span.split_once('-'))
+            .unwrap_or(("1", "1"));
+        let start_beat = start.trim_start_matches('@').parse::<u8>().ok().unwrap_or(1);
+        let end_beat = end.trim_start_matches('@').parse::<u8>().ok().unwrap_or(start_beat);
+        let placement = parts
+            .next()
+            .and_then(Self::parse_placement)
+            .unwrap_or(Placement::Below);
+        Some(Hairpin {
+            kind,
+            start_beat,
+            end_measure_offset: 0,
+            end_beat,
+            placement,
+        })
+    }
+
+    fn parse_dynamic_level(value: &str) -> Option<DynamicLevel> {
+        match value {
+            "ppp" => Some(DynamicLevel::Ppp),
+            "pp" => Some(DynamicLevel::Pp),
+            "p" => Some(DynamicLevel::P),
+            "mp" => Some(DynamicLevel::Mp),
+            "mf" => Some(DynamicLevel::Mf),
+            "f" => Some(DynamicLevel::F),
+            "ff" => Some(DynamicLevel::Ff),
+            "fff" => Some(DynamicLevel::Fff),
+            "sf" => Some(DynamicLevel::Sf),
+            "sfz" => Some(DynamicLevel::Sfz),
+            "fp" => Some(DynamicLevel::Fp),
+            _ => None,
+        }
+    }
+
+    fn parse_placement(value: &str) -> Option<Placement> {
+        match value.to_ascii_lowercase().as_str() {
+            "above" | "^" => Some(Placement::Above),
+            "below" | "_" => Some(Placement::Below),
+            _ => None,
+        }
+    }
+
+    fn extract_figured_bass_suffix(token: &str) -> (String, Option<Vec<FiguredBassRow>>) {
+        if let Some((chord_token, quoted)) = split_chord_attached_quote(token) {
+            let text = unescape_quoted(quoted);
+            if let Some(rows) = Self::parse_figured_bass_text(&text) {
+                return (chord_token.to_string(), Some(rows));
+            }
+        }
+
+        (token.to_string(), None)
+    }
+
+    fn parse_figured_bass_rows(input: &str) -> Vec<FiguredBassRow> {
+        let row_texts = if input.contains('/') || input.contains(',') {
+            input
+                .split(['/', ','])
+                .map(str::trim)
+                .filter(|row| !row.is_empty())
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        } else {
+            split_figured_bass_words(input)
+        };
+
+        row_texts
+            .iter()
+            .map(String::as_str)
+            .map(str::trim)
+            .filter(|row| !row.is_empty())
+            .map(|row| {
+                let (accidental, text) = Self::split_figured_bass_accidental(row);
+                FiguredBassRow { accidental, text }
+            })
+            .collect()
+    }
+
+    fn parse_figured_bass_text(input: &str) -> Option<Vec<FiguredBassRow>> {
+        let rows = Self::parse_figured_bass_rows(input);
+        (!rows.is_empty()
+            && rows
+                .iter()
+                .all(|row| looks_like_figured_bass_text(&row.text)))
+        .then_some(rows)
+    }
+
+    fn split_figured_bass_accidental(row: &str) -> (String, String) {
+        for accidental in ["bb", "##", "#", "b", "n", "\u{266e}"] {
+            if let Some(text) = row.strip_prefix(accidental) {
+                return (accidental.to_string(), text.to_string());
+            }
+        }
+        (String::new(), row.to_string())
+    }
+
+    fn push_figured_bass_at_current_beat(
+        measure: &mut Measure,
+        rows: &[FiguredBassRow],
+        placement: Placement,
+        current_measure_beats: f64,
+    ) {
+        let beat = current_measure_beats.floor().max(0.0) as u8 + 1;
+        measure.figured_bass.push(FiguredBass {
+            rows: rows.to_vec(),
+            beat,
+            placement,
+            source_default_x: None,
+            source_relative_x: None,
+        });
+    }
+
+    fn parse_chord_length_value(
+        token: &str,
+        time_sig: TimeSignature,
+    ) -> Option<(ChordRhythm, MusicalDuration)> {
+        if let Some((beats, dotted)) = parse_lily_duration_beats(token, time_sig) {
+            return Some((
+                ChordRhythm::Slashes {
+                    count: beats.round().max(1.0) as u8,
+                    dotted,
+                    tied: false,
+                },
+                MusicalDuration::from_beats(beats, time_sig),
+            ));
+        }
+
+        let dotted = token.ends_with('.');
+        let slashes = token.trim_end_matches('.');
+        if !slashes.is_empty() && slashes.chars().all(|c| c == '/') {
+            let count = slashes.len() as u8;
+            let beats = if dotted {
+                f64::from(count) * dotted_slash_beats(time_sig)
+            } else {
+                f64::from(count)
+            };
+            return Some((
+                ChordRhythm::Slashes {
+                    count,
+                    dotted,
+                    tied: false,
+                },
+                MusicalDuration::from_beats(beats, time_sig),
+            ));
+        }
+
+        None
+    }
+
+    fn token_has_explicit_chord_length(token: &str) -> bool {
+        token.contains('_') || token.contains("//") || token.ends_with("/.") || token.ends_with('/')
+    }
+
+    fn parse_volta_token(token: &str) -> Option<Volta> {
+        let token = token.split_once('_').map_or(token, |(base, _)| base);
+        let inner = token.strip_prefix('[')?.strip_suffix(']')?;
+        let numbers = inner
+            .split(',')
+            .filter_map(|part| part.trim().parse::<u8>().ok())
+            .collect::<Vec<_>>();
+        if numbers.is_empty() {
+            return None;
+        }
+
+        Some(Volta {
+            label: format!(
+                "{}.",
+                numbers
+                    .iter()
+                    .map(u8::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            numbers,
+            length_measures: 1,
+        })
+    }
+
+    fn finalize_measure_for_separator(
+        measures: &mut Vec<Measure>,
+        current_measure: &Measure,
+        measure_was_created_by_separator: bool,
+    ) {
+        if !current_measure.chords.is_empty()
+            || !current_measure.rhythm_elements.is_empty()
+            || !current_measure.figured_bass.is_empty()
+            || !current_measure.staff_text.is_empty()
+            || !current_measure.text_cues.is_empty()
+            || !current_measure.melodies.is_empty()
+            || current_measure.volta_start.is_some()
+            || !matches!(current_measure.start_repeat, RepeatMark::None)
+            || !matches!(current_measure.end_repeat, RepeatMark::None)
+            || measure_was_created_by_separator
+        {
+            measures.push(current_measure.clone());
+        }
+    }
+
+    fn fresh_measure(time_sig: TimeSignature) -> Measure {
+        let mut measure = Measure::new();
+        measure.time_signature = (time_sig.numerator as u8, time_sig.denominator as u8);
+        measure
+    }
+
+    pub(super) fn join_multiline_parallel_containers(lines: &[&str]) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut current = String::new();
+        let mut parallel_depth = 0usize;
+        let mut let_block_depth = 0usize;
+
+        for line in lines {
+            let trimmed = line.trim();
+            if parallel_depth == 0 && let_block_depth == 0 {
+                current.clear();
+            } else if !current.is_empty() {
+                if let_block_depth > 0 {
+                    current.push('\n');
+                } else {
+                    current.push(' ');
+                }
+            }
+            current.push_str(trimmed);
+            parallel_depth = parallel_depth_for_line(parallel_depth, trimmed);
+            let_block_depth = let_block_depth_for_line(let_block_depth, trimmed);
+
+            if parallel_depth == 0 && let_block_depth == 0 {
+                out.push(std::mem::take(&mut current));
+            }
+        }
+
+        if !current.trim().is_empty() {
+            out.push(current);
+        }
+
+        out
+    }
+
     /// Normalize chord case - capitalize first letter for note names
     /// This allows "cmaj7", "dm7", "g7", "bbmaj7" to be parsed as "Cmaj7", "Dm7", "G7", "Bbmaj7"
     pub(super) fn normalize_chord_case(token: &str) -> String {
@@ -413,7 +810,11 @@ impl<'a> ChartParser<'a> {
 
             // Count chords in this segment (exclude commands, cues, dot repeats, etc.)
             // Count ALL chords, even those with explicit durations, to calculate segment duration
-            let tokens: Vec<&str> = segment.split_whitespace().collect();
+            let token_spans = tokenize_with_spans(segment);
+            let tokens: Vec<&str> = token_spans
+                .iter()
+                .map(|span| &segment[span.as_range()])
+                .collect();
 
             // Build a mask of which tokens are inside m{...} melody blocks
             // so we can skip them for chord counting and duration assignment
@@ -440,6 +841,9 @@ impl<'a> ChartParser<'a> {
             let has_standalone_slashes = tokens
                 .iter()
                 .any(|t| t.chars().all(|c| c == '/') && !t.is_empty());
+            let has_chord_length_directive = tokens
+                .iter()
+                .any(|t| *t == "/ChordLength" || *t == "/duration" || *t == "/Duration");
 
             let chord_count = tokens
                 .iter()
@@ -457,6 +861,7 @@ impl<'a> ChartParser<'a> {
                         && !t.starts_with('@')
                         && !t.starts_with('"')
                         && !t.starts_with('$')
+                        && **t != "%"
                         && Command::parse_stop_token(t).is_none()
                 })
                 .count();
@@ -467,27 +872,29 @@ impl<'a> ChartParser<'a> {
 
             // Count chords WITHOUT explicit durations (these need auto-duration)
             // If segment has standalone slashes or melody blocks, skip auto-duration entirely
-            let chords_needing_duration = if has_standalone_slashes || has_melody_block {
-                0 // Don't apply auto-duration when slashes or melodies are present
-            } else {
-                tokens
-                    .iter()
-                    .enumerate()
-                    .filter(|(i, t)| {
-                        // Skip tokens inside melody blocks
-                        if melody_mask[*i] {
-                            return false;
-                        }
-                        !t.starts_with('/')
+            let chords_needing_duration =
+                if has_standalone_slashes || has_melody_block || has_chord_length_directive {
+                    0 // Don't apply auto-duration when slashes or melodies are present
+                } else {
+                    tokens
+                        .iter()
+                        .enumerate()
+                        .filter(|(i, t)| {
+                            // Skip tokens inside melody blocks
+                            if melody_mask[*i] {
+                                return false;
+                            }
+                            !t.starts_with('/')
                             && !t.starts_with('@')
                             && !t.starts_with('"')
                             && !t.starts_with('$')
+                            && **t != "%"
                             && !t.contains('_')
                             && **t != "." // Dot repeats handle their own duration
                             && Command::parse_stop_token(t).is_none()
-                    })
-                    .count()
-            };
+                        })
+                        .count()
+                };
 
             // Calculate duration per chord
             // If all chords have explicit durations, use whole note as default
@@ -540,12 +947,14 @@ impl<'a> ChartParser<'a> {
                 // Check if this is a chord (not a command, cue, dot repeat, stop token,
                 // or `$name` melody-variable recall — those must round-trip unchanged).
                 let is_dot_repeat = *token == ".";
+                let is_measure_repeat = *token == "%";
                 let is_stop_token = Command::parse_stop_token(token).is_some();
                 if !token.starts_with('/')
                     && !token.starts_with('@')
                     && !token.starts_with('"')
                     && !token.starts_with('$')
                     && !is_dot_repeat
+                    && !is_measure_repeat
                     && !is_stop_token
                 {
                     // Check if token already has a duration
@@ -704,22 +1113,181 @@ impl<'a> ChartParser<'a> {
         let mut measures: Vec<Measure> = Vec::new();
         let mut pending_cues: Vec<TextCue> = Vec::new();
         let mut pending_dynamics: Vec<DynamicMarking> = Vec::new();
+        let mut pending_classical_dynamics: Vec<Dynamic> = Vec::new();
+        let mut pending_hairpins: Vec<Hairpin> = Vec::new();
+        let mut pending_staff_text: Vec<StaffText> = Vec::new();
 
-        for line in lines {
+        let mut section_chord_length: Option<(ChordRhythm, MusicalDuration)> = None;
+        let mut section_melody_duration: Option<String> = None;
+        let mut section_melody_octave: Option<u8> = self.melody_octave_memory;
+        let logical_lines = Self::join_multiline_parallel_containers(lines);
+
+        for line in &logical_lines {
+            let line = line.as_str();
             let trimmed = line.trim();
 
+            if let Some((name, value)) = Self::parse_alias_declaration(trimmed) {
+                self.aliases.insert(name, value);
+                continue;
+            }
+
+            if let Some(value) = trimmed
+                .strip_prefix("/duration ")
+                .or_else(|| trimmed.strip_prefix("/Duration "))
+            {
+                let value = value.trim();
+                section_chord_length = Self::parse_chord_length_value(
+                    value,
+                    self.time_signature.unwrap_or(TimeSignature::common_time()),
+                );
+                section_melody_duration = Some(value.to_string());
+                continue;
+            }
+
+            if let Some(value) = trimmed
+                .strip_prefix("/octave ")
+                .or_else(|| trimmed.strip_prefix("/Octave "))
+            {
+                let value = value.trim();
+                if let Some((octave, melody_block)) = value.split_once(char::is_whitespace) {
+                    if melody_block.trim_start().starts_with("m{")
+                        || melody_block.trim_start().starts_with("m {")
+                    {
+                        let inline_octave = octave.parse::<u8>().ok().or(section_melody_octave);
+                        match Melody::parse_block_with_defaults(
+                            melody_block.trim(),
+                            section_melody_duration.as_deref(),
+                            inline_octave,
+                        ) {
+                            Ok((name, melody)) => {
+                                if let Some(var_name) = name {
+                                    self.melody_variables.set(var_name, melody);
+                                } else {
+                                    if let Some(octave) = Self::last_melody_context_octave(&melody)
+                                    {
+                                        section_melody_octave = Some(octave);
+                                    }
+                                    let time_sig =
+                                        self.time_signature.unwrap_or(TimeSignature::common_time());
+                                    let mut measure = Self::fresh_measure(time_sig);
+                                    measure.melodies.push(melody);
+                                    let mut melody_measures =
+                                        self.split_long_melody_branch_measures(vec![measure]);
+
+                                    if !pending_cues.is_empty() && !melody_measures.is_empty() {
+                                        melody_measures[0].text_cues.append(&mut pending_cues);
+                                    }
+                                    if !pending_dynamics.is_empty() && !melody_measures.is_empty() {
+                                        melody_measures[0].dynamics.append(&mut pending_dynamics);
+                                    }
+                                    if !pending_staff_text.is_empty() && !melody_measures.is_empty()
+                                    {
+                                        melody_measures[0]
+                                            .staff_text
+                                            .append(&mut pending_staff_text);
+                                    }
+                                    if !pending_classical_dynamics.is_empty()
+                                        && !melody_measures.is_empty()
+                                    {
+                                        melody_measures[0]
+                                            .classical_dynamics
+                                            .append(&mut pending_classical_dynamics);
+                                    }
+                                    if !pending_hairpins.is_empty() && !melody_measures.is_empty() {
+                                        melody_measures[0].hairpins.append(&mut pending_hairpins);
+                                    }
+
+                                    measures.extend(melody_measures);
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    "Failed to parse melody block '{}': {}",
+                                    melody_block.trim(),
+                                    e
+                                );
+                            }
+                        }
+                        continue;
+                    }
+                }
+                section_melody_octave = value.parse::<u8>().ok();
+                continue;
+            }
+
+            if let Some(value) = trimmed.strip_prefix("/ChordLength ") {
+                section_chord_length = Self::parse_chord_length_value(
+                    value.trim(),
+                    self.time_signature.unwrap_or(TimeSignature::common_time()),
+                );
+                continue;
+            }
+
+            if let Some(staff_text) = self.parse_standalone_staff_text_line(trimmed) {
+                pending_staff_text.extend(staff_text);
+                continue;
+            }
+
+            if let Some(dynamic) = Self::parse_classical_dynamic_line(trimmed) {
+                pending_classical_dynamics.push(dynamic);
+                continue;
+            }
+
+            if let Some(hairpin) = Self::parse_hairpin_line(trimmed) {
+                pending_hairpins.push(hairpin);
+                continue;
+            }
+
             // Check for melody variable definition (e.g., "mainRiff = m{ C_8 D_8 E_4 }")
-            if trimmed.contains("= m{") || trimmed.starts_with("m{") {
-                match Melody::parse_block(trimmed) {
+            if trimmed.contains("= m{")
+                || trimmed.contains("= m {")
+                || trimmed.starts_with("m{")
+                || trimmed.starts_with("m {")
+            {
+                match Melody::parse_block_with_defaults(
+                    trimmed,
+                    section_melody_duration.as_deref(),
+                    section_melody_octave,
+                ) {
                     Ok((name, melody)) => {
                         if let Some(var_name) = name {
                             // Store as a variable
                             self.melody_variables.set(var_name, melody);
+                        } else {
+                            if let Some(octave) = Self::last_melody_context_octave(&melody) {
+                                section_melody_octave = Some(octave);
+                            }
+                            let time_sig =
+                                self.time_signature.unwrap_or(TimeSignature::common_time());
+                            let mut measure = Self::fresh_measure(time_sig);
+                            measure.melodies.push(melody);
+                            let mut melody_measures =
+                                self.split_long_melody_branch_measures(vec![measure]);
+
+                            if !pending_cues.is_empty() && !melody_measures.is_empty() {
+                                melody_measures[0].text_cues.append(&mut pending_cues);
+                            }
+                            if !pending_dynamics.is_empty() && !melody_measures.is_empty() {
+                                melody_measures[0].dynamics.append(&mut pending_dynamics);
+                            }
+                            if !pending_staff_text.is_empty() && !melody_measures.is_empty() {
+                                melody_measures[0]
+                                    .staff_text
+                                    .append(&mut pending_staff_text);
+                            }
+                            if !pending_classical_dynamics.is_empty()
+                                && !melody_measures.is_empty()
+                            {
+                                melody_measures[0]
+                                    .classical_dynamics
+                                    .append(&mut pending_classical_dynamics);
+                            }
+                            if !pending_hairpins.is_empty() && !melody_measures.is_empty() {
+                                melody_measures[0].hairpins.append(&mut pending_hairpins);
+                            }
+
+                            measures.extend(melody_measures);
                         }
-                        // Note: Inline melodies without variable names on their own line
-                        // are currently not attached to any measure - they're just stored
-                        // as a definition. Use inline syntax within chord lines to attach
-                        // melodies to specific measures.
                     }
                     Err(e) => {
                         tracing::warn!("Failed to parse melody block '{}': {}", trimmed, e);
@@ -739,7 +1307,23 @@ impl<'a> ChartParser<'a> {
                         tracing::warn!("Failed to parse text cue '{}': {}", line, e);
                     }
                 }
-            } else if trimmed.starts_with('<') && trimmed.contains('>') {
+            } else if trimmed.starts_with('<')
+                && !trimmed.starts_with("<<")
+                && trimmed.contains('>')
+                && !tokenize_with_spans(trimmed)
+                    .first()
+                    .and_then(|span| {
+                        trimmed[span.as_range()]
+                            .strip_prefix('<')
+                            .and_then(|token| token.strip_suffix('>'))
+                    })
+                    .map(|name| self.aliases.contains_key(name))
+                    .unwrap_or(false)
+                && !self
+                    .expand_aliases_in_line(trimmed)
+                    .trim_start()
+                    .starts_with("<<")
+            {
                 // Check if this is a standalone dynamic marking line
                 // Could be just "<Build>" or "<Build>:3" on its own line
                 match DynamicMarking::parse(trimmed) {
@@ -753,8 +1337,14 @@ impl<'a> ChartParser<'a> {
             } else {
                 // Parse chords from line
                 // Pass section measure_count for x^ calculation
-                let mut line_measures =
-                    self.parse_chord_line(line, section_type, section_measure_count)?;
+                let mut line_measures = self.parse_chord_line_with_default_chord_length(
+                    line,
+                    section_type,
+                    section_measure_count,
+                    section_chord_length.clone(),
+                    section_melody_duration.clone(),
+                    section_melody_octave,
+                )?;
 
                 // If we have pending cues, attach them to the first new measure
                 if !pending_cues.is_empty() && !line_measures.is_empty() {
@@ -765,12 +1355,43 @@ impl<'a> ChartParser<'a> {
                 if !pending_dynamics.is_empty() && !line_measures.is_empty() {
                     line_measures[0].dynamics.append(&mut pending_dynamics);
                 }
+                if !pending_staff_text.is_empty() && !line_measures.is_empty() {
+                    line_measures[0].staff_text.append(&mut pending_staff_text);
+                }
+                if !pending_classical_dynamics.is_empty() && !line_measures.is_empty() {
+                    line_measures[0]
+                        .classical_dynamics
+                        .append(&mut pending_classical_dynamics);
+                }
+                if !pending_hairpins.is_empty() && !line_measures.is_empty() {
+                    line_measures[0].hairpins.append(&mut pending_hairpins);
+                }
 
                 measures.extend(line_measures);
             }
         }
 
+        self.melody_octave_memory = section_melody_octave;
         Ok(measures)
+    }
+
+    fn last_melody_context_octave(melody: &Melody) -> Option<u8> {
+        melody
+            .notes
+            .iter()
+            .rev()
+            .find(|note| !note.is_rest() && !note.is_space())
+            .and_then(Self::lowest_octave_in_note)
+    }
+
+    fn lowest_octave_in_note(note: &MelodyNote) -> Option<u8> {
+        let mut lowest = note.octave;
+        for (_, octave) in &note.extra_pitches {
+            if let Some(octave) = octave {
+                lowest = Some(lowest.map_or(*octave, |current| current.min(*octave)));
+            }
+        }
+        lowest
     }
 
     /// Parse a line of chords into measures.
@@ -789,6 +1410,26 @@ impl<'a> ChartParser<'a> {
         self.parse_chord_line_with_offset(line, section_type, section_measure_count, 0)
     }
 
+    pub(super) fn parse_chord_line_with_default_chord_length(
+        &mut self,
+        line: &str,
+        section_type: &SectionType,
+        section_measure_count: Option<usize>,
+        default_chord_length: Option<(ChordRhythm, MusicalDuration)>,
+        mut default_melody_duration: Option<String>,
+        default_melody_octave: Option<u8>,
+    ) -> Result<Vec<Measure>, String> {
+        self.parse_chord_line_inner(
+            line,
+            section_type,
+            section_measure_count,
+            0,
+            default_chord_length,
+            default_melody_duration,
+            default_melody_octave,
+        )
+    }
+
     /// Same as [`Self::parse_chord_line`] but shifts every emitted token span
     /// by `line_byte_offset` so spans line up with the surrounding source.
     #[allow(clippy::too_many_lines)]
@@ -798,6 +1439,27 @@ impl<'a> ChartParser<'a> {
         section_type: &SectionType,
         section_measure_count: Option<usize>,
         line_byte_offset: usize,
+    ) -> Result<Vec<Measure>, String> {
+        self.parse_chord_line_inner(
+            line,
+            section_type,
+            section_measure_count,
+            line_byte_offset,
+            None,
+            None,
+            None,
+        )
+    }
+
+    fn parse_chord_line_inner(
+        &mut self,
+        line: &str,
+        section_type: &SectionType,
+        section_measure_count: Option<usize>,
+        line_byte_offset: usize,
+        default_chord_length: Option<(ChordRhythm, MusicalDuration)>,
+        mut default_melody_duration: Option<String>,
+        default_melody_octave: Option<u8>,
     ) -> Result<Vec<Measure>, String> {
         use crate::chart::types::TempoChange;
         use keyflow_proto::chart::commands::Command;
@@ -815,17 +1477,44 @@ impl<'a> ChartParser<'a> {
         let trim_offset = (line_to_parse.as_ptr() as usize).saturating_sub(line.as_ptr() as usize);
         let outer_offset = line_byte_offset + trim_offset;
 
-        if line_to_parse.contains("<<") {
+        let line_to_parse = self.expand_aliases_in_line(line_to_parse);
+
+        let trimmed_parallel = line_to_parse.trim();
+        if (trimmed_parallel.starts_with("<<") && trimmed_parallel.ends_with(">>"))
+            || (line_to_parse.contains("<<")
+                && line_to_parse.contains(">>")
+                && !line_to_parse.contains("|:")
+                && !line_to_parse.contains(":|"))
+        {
             return self.parse_parallel_chord_line(
-                line_to_parse,
+                &line_to_parse,
                 repeat_count,
                 section_type,
                 section_measure_count,
                 outer_offset,
+                default_chord_length,
+                default_melody_duration,
+                default_melody_octave,
             );
         }
 
-        let line_to_parse = Self::normalize_parallel_container_syntax(line_to_parse);
+        if default_chord_length.is_some() && line_to_parse.contains('|') {
+            return self.parse_barred_line_with_default_chord_length(
+                &line_to_parse,
+                section_type,
+                section_measure_count,
+                outer_offset,
+                default_chord_length,
+                default_melody_duration,
+                default_melody_octave,
+            );
+        }
+
+        let line_to_parse = Self::normalize_parallel_container_syntax(&line_to_parse);
+        let line_to_parse = line_to_parse
+            .replace("|:", "| @repeat-start ")
+            .replace(":|", " @repeat-end |")
+            .replace("m {", "m{");
 
         // Preprocess: Calculate automatic durations for chords between measure separators
         // If chords are between | separators, split the measure evenly
@@ -833,7 +1522,11 @@ impl<'a> ChartParser<'a> {
         let line_with_auto_durations =
             Self::apply_auto_durations_between_separators(&line_to_parse, beats_per_measure);
 
-        let tokens_str: Vec<&str> = line_with_auto_durations.split_whitespace().collect();
+        let line_with_auto_token_spans = tokenize_with_spans(&line_with_auto_durations);
+        let tokens_str: Vec<&str> = line_with_auto_token_spans
+            .iter()
+            .map(|span| &line_with_auto_durations[span.as_range()])
+            .collect();
 
         // Byte spans of each whitespace-separated token in the *pre-auto-duration* line.
         // `apply_auto_durations_between_separators` only appends `_N` suffixes to existing
@@ -846,8 +1539,8 @@ impl<'a> ChartParser<'a> {
             .map(|s| TextSpan::new(s.start + outer_offset, s.len))
             .collect();
         let mut measures: Vec<Measure> = Vec::new();
-        let mut current_measure = Measure::new();
-        let mut current_measure_beats = 0.0;
+        let mut current_measure = Self::fresh_measure(time_sig);
+        let mut current_measure_beats: f64 = 0.0;
         let mut pending_cue: Option<TextCue> = None;
         let mut pending_dynamic: Option<DynamicMarking> = None;
         let mut pending_stop: Option<Command> = None;
@@ -855,14 +1548,113 @@ impl<'a> ChartParser<'a> {
         let mut measure_was_created_by_separator = false; // Track if current measure was created by |
         let mut in_melody_block = false; // Track if we're inside a m{...} block
         let mut melody_search_offset = 0usize; // Cursor for finding successive m{ blocks in line_to_parse
+        let mut line_melody_octave = default_melody_octave;
         let mut last_chord: Option<ChordInstance> = None; // Track last chord for dot repeat
         let mut measure_has_slash_rhythm = false; // Track if current measure has chords with slash rhythm
         let mut last_token_was_slash = false; // Track for slash accumulation (consecutive slashes accumulate)
+        let mut pending_start_repeat = false;
+        let mut chord_length_override: Option<(ChordRhythm, MusicalDuration)> =
+            default_chord_length;
+        let mut skip_next_token = false;
 
         for (token_idx, token_str) in tokens_str.iter().enumerate() {
+            if skip_next_token {
+                skip_next_token = false;
+                continue;
+            }
+
+            if *token_str == "/octave" {
+                if let Some(next) = tokens_str.get(token_idx + 1) {
+                    line_melody_octave = next.parse::<u8>().ok().or(line_melody_octave);
+                    skip_next_token = true;
+                }
+                continue;
+            }
+
+            if *token_str == "/ChordLength"
+                || *token_str == "/duration"
+                || *token_str == "/Duration"
+            {
+                if let Some(next) = tokens_str.get(token_idx + 1) {
+                    chord_length_override = Self::parse_chord_length_value(next, time_sig);
+                    if *token_str == "/duration" || *token_str == "/Duration" {
+                        default_melody_duration = Some(next.to_string());
+                    }
+                    skip_next_token = true;
+                }
+                continue;
+            }
+
+            if *token_str == "%" {
+                if !current_measure.chords.is_empty()
+                    || !current_measure.rhythm_elements.is_empty()
+                    || !current_measure.figured_bass.is_empty()
+                    || !current_measure.staff_text.is_empty()
+                    || !current_measure.text_cues.is_empty()
+                {
+                    measures.push(current_measure.clone());
+                    current_measure = Self::fresh_measure(time_sig);
+                    current_measure_beats = 0.0;
+                    measure_has_slash_rhythm = false;
+                }
+
+                if let Some(previous_measure) = measures.last().cloned() {
+                    measures.push(previous_measure);
+                }
+
+                just_processed_separator = false;
+                measure_was_created_by_separator = false;
+                continue;
+            }
+
+            if let Some((text, placement)) = Self::parse_quoted_text_token(token_str) {
+                let beat = current_measure_beats.floor().max(0.0) as u8 + 1;
+                let target_measure = if current_measure.chords.is_empty()
+                    && current_measure.rhythm_elements.is_empty()
+                    && current_measure.figured_bass.is_empty()
+                    && current_measure.staff_text.is_empty()
+                {
+                    measures.last_mut().unwrap_or(&mut current_measure)
+                } else {
+                    &mut current_measure
+                };
+                target_measure.staff_text.push(StaffText {
+                    text,
+                    beat,
+                    placement,
+                    source_default_x: None,
+                    boxed: false,
+                    bold: false,
+                    italic: false,
+                });
+                continue;
+            }
+
+            let token_for_barline = token_str
+                .split_once('_')
+                .map_or(*token_str, |(base, _)| base);
+            if token_for_barline.starts_with("|{") && token_for_barline.ends_with('}') {
+                Self::finalize_measure_for_separator(
+                    &mut measures,
+                    &current_measure,
+                    measure_was_created_by_separator,
+                );
+                current_measure = Self::fresh_measure(time_sig);
+                current_measure_beats = 0.0;
+                just_processed_separator = true;
+                measure_was_created_by_separator = true;
+                measure_has_slash_rhythm = false;
+                continue;
+            }
+
             // Check for command (e.g., "/fermata", "/accent")
             // Commands are applied to the PREVIOUS chord
             if token_str.starts_with('/') {
+                if *token_str == "/octave" {
+                    skip_next_token = true;
+                    continue;
+                }
+
                 if let Some(cmd) = Command::parse_slash(token_str) {
                     // Apply command to the last chord in rhythm_elements (source of truth)
                     // and also to chords for backward compatibility during parsing
@@ -924,7 +1716,7 @@ impl<'a> ChartParser<'a> {
                         // So /. = 1 * 1.5 = 1.5 beats
                         // //. = 2 * 1.5 = 3.0 beats? Or is it 2 + 0.5 = 2.5?
                         // Let's use: /. = dotted quarter (1.5), //. = dotted half (3.0)
-                        let dotted_duration = slash_count as f64 * 1.5;
+                        let dotted_duration = slash_count as f64 * dotted_slash_beats(time_sig);
 
                         // Convert to Lily rhythm for proper representation
                         let _lily_duration = match slash_count {
@@ -940,6 +1732,42 @@ impl<'a> ChartParser<'a> {
                             dotted: true,
                             tied: false,
                         };
+
+                        if last_token_was_slash && !current_measure.chords.is_empty() {
+                            let space_duration =
+                                MusicalDuration::from_beats(dotted_duration, time_sig);
+                            let space = SpaceInstance::new(
+                                dotted_slash_rhythm.clone(),
+                                space_duration,
+                                AbsolutePosition::new(
+                                    MusicalPosition::try_new(
+                                        measures.len() as i32,
+                                        current_measure_beats as i32,
+                                        0,
+                                    )
+                                    .unwrap_or_else(|_| MusicalPosition::start()),
+                                    self.sections.len(),
+                                ),
+                                token_str.to_string(),
+                            );
+                            current_measure
+                                .rhythm_elements
+                                .push(RhythmElement::Space(space));
+                            current_measure_beats += dotted_duration;
+                            measure_has_slash_rhythm = true;
+
+                            if !just_processed_separator
+                                && (current_measure_beats - beats_per_measure).abs() < 0.001
+                            {
+                                measures.push(current_measure.clone());
+                                current_measure = Self::fresh_measure(time_sig);
+                                current_measure_beats = 0.0;
+                                measure_has_slash_rhythm = false;
+                            }
+
+                            last_token_was_slash = true;
+                            continue;
+                        }
 
                         let applied = if let Some(last_chord) = current_measure.chords.last_mut() {
                             last_chord.rhythm = dotted_slash_rhythm.clone();
@@ -988,7 +1816,30 @@ impl<'a> ChartParser<'a> {
                         };
 
                         if applied {
-                            measure_has_slash_rhythm = true;
+                            if !current_measure.chords.is_empty()
+                                || !current_measure.rhythm_elements.is_empty()
+                            {
+                                current_measure_beats = current_measure
+                                    .chords
+                                    .iter()
+                                    .map(|c| c.duration.to_beats(time_sig))
+                                    .sum();
+                                measure_has_slash_rhythm = true;
+                            } else if !measures.is_empty() {
+                                let prev_measure_beats: f64 = measures
+                                    .last()
+                                    .unwrap()
+                                    .chords
+                                    .iter()
+                                    .map(|c| c.duration.to_beats(time_sig))
+                                    .sum();
+
+                                if prev_measure_beats < beats_per_measure - 0.001 {
+                                    current_measure = measures.pop().unwrap();
+                                    current_measure_beats = prev_measure_beats;
+                                    measure_has_slash_rhythm = true;
+                                }
+                            }
                             last_token_was_slash = true;
                             continue;
                         }
@@ -1352,7 +2203,11 @@ impl<'a> ChartParser<'a> {
                         let melody_str = &melody_start[..close_pos + 1];
                         // Advance cursor past this melody block for next search
                         melody_search_offset = abs_pos + close_pos + 1;
-                        match Melody::parse_block(melody_str) {
+                        match Melody::parse_block_with_defaults(
+                            melody_str,
+                            default_melody_duration.as_deref(),
+                            line_melody_octave,
+                        ) {
                             Ok((name, melody)) => {
                                 if let Some(var_name) = name {
                                     // Store as a variable
@@ -1391,6 +2246,43 @@ impl<'a> ChartParser<'a> {
                 if token_str.contains('}') {
                     in_melody_block = false;
                 }
+                continue;
+            }
+
+            if *token_str == "@repeat-start" {
+                Self::finalize_measure_for_separator(&mut measures, &current_measure, false);
+                current_measure = Self::fresh_measure(time_sig);
+                current_measure.start_repeat = RepeatMark::Forward;
+                pending_start_repeat = true;
+                current_measure_beats = 0.0;
+                just_processed_separator = true;
+                measure_was_created_by_separator = true;
+                measure_has_slash_rhythm = false;
+                continue;
+            }
+
+            if *token_str == "@repeat-end" {
+                if current_measure.chords.is_empty()
+                    && current_measure.rhythm_elements.is_empty()
+                    && current_measure.figured_bass.is_empty()
+                    && current_measure.volta_start.is_none()
+                {
+                    if let Some(measure) = measures.last_mut() {
+                        measure.end_repeat = RepeatMark::Backward;
+                    }
+                } else {
+                    current_measure.end_repeat = RepeatMark::Backward;
+                    Self::finalize_measure_for_separator(
+                        &mut measures,
+                        &current_measure,
+                        measure_was_created_by_separator,
+                    );
+                }
+                current_measure = Self::fresh_measure(time_sig);
+                current_measure_beats = 0.0;
+                just_processed_separator = true;
+                measure_was_created_by_separator = false;
+                measure_has_slash_rhythm = false;
                 continue;
             }
 
@@ -1488,19 +2380,24 @@ impl<'a> ChartParser<'a> {
                 continue;
             }
 
+            if let Some(volta) = Self::parse_volta_token(token_str) {
+                current_measure.volta_start = Some(volta);
+                continue;
+            }
+
             // Check for measure separator (|)
             // This forces a measure boundary regardless of beat count
             if *token_str == "|" {
                 // Finalize current measure if it has chords, or if it was created by a previous separator
                 // (This allows multiple | in a row to create empty measures)
                 // But don't push auto-created empty measures (created when a measure fills up)
-                if !current_measure.chords.is_empty() || measure_was_created_by_separator {
-                    measures.push(current_measure.clone());
-                }
+                Self::finalize_measure_for_separator(
+                    &mut measures,
+                    &current_measure,
+                    measure_was_created_by_separator,
+                );
                 // Always start a new measure after |
-                current_measure = Measure::new();
-                current_measure.time_signature =
-                    (time_sig.numerator as u8, time_sig.denominator as u8);
+                current_measure = Self::fresh_measure(time_sig);
                 current_measure_beats = 0.0;
                 just_processed_separator = true; // Mark that we just processed a separator
                 measure_was_created_by_separator = true; // Mark that this measure was created by |
@@ -1518,7 +2415,7 @@ impl<'a> ChartParser<'a> {
                     // If we have a current measure, finalize it before the time sig change
                     if !current_measure.chords.is_empty() {
                         measures.push(current_measure.clone());
-                        current_measure = Measure::new();
+                        current_measure = Self::fresh_measure(time_sig);
                         current_measure_beats = 0.0;
                     }
 
@@ -1743,8 +2640,23 @@ impl<'a> ChartParser<'a> {
             // Parse chord. Pass through the token's byte span in the original line
             // (line-relative) so diagnostics can point at real source positions.
             let token_span = original_token_spans.get(token_idx).copied();
-            match self.parse_chord_token(token_str, section_type, time_sig, token_span) {
+            let (chord_token, figured_bass_rows) = Self::extract_figured_bass_suffix(token_str);
+            match self.parse_chord_token(&chord_token, section_type, time_sig, token_span) {
                 Ok(mut chord) => {
+                    let token_has_explicit_length =
+                        Self::token_has_explicit_chord_length(&chord_token);
+                    if let Some((rhythm, duration)) = &chord_length_override {
+                        if chord.rhythm == ChordRhythm::Default && !token_has_explicit_length {
+                            chord.rhythm = rhythm.clone();
+                            chord.duration = *duration;
+                        }
+                    }
+                    if token_has_explicit_length
+                        && !chord_token.starts_with('!')
+                        && chord.rhythm != ChordRhythm::Default
+                    {
+                        chord_length_override = Some((chord.rhythm.clone(), chord.duration));
+                    }
                     let mut chord_beats = chord.duration.to_beats(time_sig);
 
                     // If we just processed a separator, we're already in a new measure
@@ -1805,6 +2717,11 @@ impl<'a> ChartParser<'a> {
                         chord.commands.push(stop_cmd);
                     }
 
+                    if pending_start_repeat && current_measure.chords.is_empty() {
+                        current_measure.start_repeat = RepeatMark::Forward;
+                        pending_start_repeat = false;
+                    }
+
                     // Store as last chord for dot repeat
                     last_chord = Some(chord.clone());
 
@@ -1813,6 +2730,16 @@ impl<'a> ChartParser<'a> {
                         .rhythm_elements
                         .push(RhythmElement::Chord(chord.clone()));
                     current_measure.chords.push(chord);
+
+                    if let Some(rows) = figured_bass_rows {
+                        Self::push_figured_bass_at_current_beat(
+                            &mut current_measure,
+                            &rows,
+                            Placement::Above,
+                            current_measure_beats,
+                        );
+                    }
+
                     current_measure_beats += chord_beats;
 
                     // Attach pending cue to this measure if present
@@ -1851,7 +2778,13 @@ impl<'a> ChartParser<'a> {
 
         // Add last measure if it has content
         // (If we just processed a separator, the empty measure was already pushed)
-        if !current_measure.chords.is_empty() || !current_measure.rhythm_elements.is_empty() {
+        if !current_measure.chords.is_empty()
+            || !current_measure.rhythm_elements.is_empty()
+            || !current_measure.figured_bass.is_empty()
+            || !current_measure.staff_text.is_empty()
+            || !current_measure.text_cues.is_empty()
+            || !current_measure.melodies.is_empty()
+        {
             measures.push(current_measure);
         }
 
@@ -1967,6 +2900,50 @@ impl<'a> ChartParser<'a> {
         Ok(measures)
     }
 
+    fn parse_barred_line_with_default_chord_length(
+        &mut self,
+        line: &str,
+        section_type: &SectionType,
+        section_measure_count: Option<usize>,
+        line_byte_offset: usize,
+        default_chord_length: Option<(ChordRhythm, MusicalDuration)>,
+        default_melody_duration: Option<String>,
+        default_melody_octave: Option<u8>,
+    ) -> Result<Vec<Measure>, String> {
+        let mut measures = Vec::new();
+        for (part_offset, part) in Self::split_top_level_measures_spanned(line) {
+            let trim_left = part.len() - part.trim_start().len();
+            let trimmed = part.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let mut parsed = self.parse_chord_line_inner(
+                trimmed,
+                section_type,
+                Some(1),
+                line_byte_offset + part_offset + trim_left,
+                default_chord_length.clone(),
+                default_melody_duration.clone(),
+                default_melody_octave,
+            )?;
+            measures.append(&mut parsed);
+        }
+
+        if measures.is_empty() {
+            self.parse_chord_line_inner(
+                line,
+                section_type,
+                section_measure_count,
+                line_byte_offset,
+                default_chord_length,
+                default_melody_duration,
+                default_melody_octave,
+            )
+        } else {
+            Ok(measures)
+        }
+    }
+
     fn normalize_parallel_container_syntax(input: &str) -> String {
         let mut out = String::with_capacity(input.len());
         let mut chars = input.chars().peekable();
@@ -2002,7 +2979,31 @@ impl<'a> ChartParser<'a> {
         section_type: &SectionType,
         _section_measure_count: Option<usize>,
         line_byte_offset: usize,
+        default_chord_length: Option<(ChordRhythm, MusicalDuration)>,
+        default_melody_duration: Option<String>,
+        default_melody_octave: Option<u8>,
     ) -> Result<Vec<Measure>, String> {
+        let trimmed_line = line.trim();
+        if trimmed_line.starts_with("<<") && trimmed_line.ends_with(">>") {
+            let trim_left = line.len() - line.trim_start().len();
+            let mut measures = self.parse_parallel_sequence(
+                trimmed_line,
+                section_type,
+                line_byte_offset + trim_left,
+                default_chord_length,
+                default_melody_duration.clone(),
+                default_melody_octave,
+            )?;
+            if let RepeatCount::Fixed(count) = repeat_count {
+                if count > 1 {
+                    if let Some(last) = measures.last_mut() {
+                        last.repeat_count = count;
+                    }
+                }
+            }
+            return Ok(measures);
+        }
+
         let measure_parts = Self::split_top_level_measures_spanned(line);
         let mut measures = Vec::new();
 
@@ -2020,13 +3021,19 @@ impl<'a> ChartParser<'a> {
                     trimmed,
                     section_type,
                     measure_offset,
+                    default_chord_length.clone(),
+                    default_melody_duration.clone(),
+                    default_melody_octave,
                 )?);
             } else {
-                let mut parsed = self.parse_chord_line_with_offset(
+                let mut parsed = self.parse_chord_line_inner(
                     trimmed,
                     section_type,
                     Some(1),
                     measure_offset,
+                    default_chord_length.clone(),
+                    default_melody_duration.clone(),
+                    default_melody_octave,
                 )?;
                 if let Some(measure) = parsed.into_iter().next() {
                     measures.push(measure);
@@ -2045,11 +3052,63 @@ impl<'a> ChartParser<'a> {
         Ok(measures)
     }
 
+    fn parse_parallel_sequence(
+        &mut self,
+        container_text: &str,
+        section_type: &SectionType,
+        container_byte_offset: usize,
+        default_chord_length: Option<(ChordRhythm, MusicalDuration)>,
+        default_melody_duration: Option<String>,
+        default_melody_octave: Option<u8>,
+    ) -> Result<Vec<Measure>, String> {
+        let inner_with_caps = container_text
+            .strip_prefix("<<")
+            .and_then(|s| s.strip_suffix(">>"))
+            .ok_or_else(|| format!("Invalid parallel container: {}", container_text))?;
+        let inner = inner_with_caps.trim();
+        let inner_lead = inner_with_caps.len() - inner_with_caps.trim_start().len();
+        let inner_offset = container_byte_offset + 2 + inner_lead;
+
+        let branches = Self::split_top_level_parallel_branches_spanned(inner);
+        let mut merged: Vec<Measure> = Vec::new();
+
+        for (branch_offset, branch) in branches {
+            let trim_left = branch.len() - branch.trim_start().len();
+            let trimmed = branch.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let parsed = self.parse_chord_line_inner(
+                trimmed,
+                section_type,
+                None,
+                inner_offset + branch_offset + trim_left,
+                default_chord_length.clone(),
+                default_melody_duration.clone(),
+                default_melody_octave,
+            )?;
+            let parsed = self.split_long_melody_branch_measures(parsed);
+
+            if merged.len() < parsed.len() {
+                let time_sig = self.time_signature.unwrap_or(TimeSignature::common_time());
+                merged.resize_with(parsed.len(), || Self::fresh_measure(time_sig));
+            }
+            for (idx, branch_measure) in parsed.into_iter().enumerate() {
+                Self::merge_parallel_branch_measure(&mut merged[idx], branch_measure);
+            }
+        }
+
+        Ok(merged)
+    }
+
     fn parse_parallel_measure(
         &mut self,
         measure_text: &str,
         section_type: &SectionType,
         measure_byte_offset: usize,
+        default_chord_length: Option<(ChordRhythm, MusicalDuration)>,
+        default_melody_duration: Option<String>,
+        default_melody_octave: Option<u8>,
     ) -> Result<Measure, String> {
         let trimmed_outer = measure_text.trim();
         // Offset of `trimmed_outer` within `measure_text`.
@@ -2065,7 +3124,8 @@ impl<'a> ChartParser<'a> {
         let inner_offset = measure_byte_offset + outer_lead + 2 /* "<<" */ + inner_lead;
 
         let branches = Self::split_top_level_parallel_branches_spanned(inner);
-        let mut merged = Measure::new();
+        let time_sig = self.time_signature.unwrap_or(TimeSignature::common_time());
+        let mut merged = Self::fresh_measure(time_sig);
 
         for (branch_offset, branch) in branches {
             let trim_left = branch.len() - branch.trim_start().len();
@@ -2074,32 +3134,103 @@ impl<'a> ChartParser<'a> {
                 continue;
             }
 
-            let mut parsed = self.parse_chord_line_with_offset(
+            let mut parsed = self.parse_chord_line_inner(
                 trimmed,
                 section_type,
                 Some(1),
                 inner_offset + branch_offset + trim_left,
+                default_chord_length.clone(),
+                default_melody_duration.clone(),
+                default_melody_octave,
             )?;
             let Some(branch_measure) = parsed.into_iter().next() else {
                 continue;
             };
 
-            merged.chords.extend(branch_measure.chords);
-            merged
-                .rhythm_elements
-                .extend(branch_measure.rhythm_elements);
-            merged.rhythm_slashes.extend(branch_measure.rhythm_slashes);
-            merged.text_cues.extend(branch_measure.text_cues);
-            merged.dynamics.extend(branch_measure.dynamics);
-            merged.melodies.extend(branch_measure.melodies);
-            merged.repeat_count = merged.repeat_count.max(branch_measure.repeat_count);
-            merged.time_signature = branch_measure.time_signature;
-            if merged.source_span.is_none() {
-                merged.source_span = branch_measure.source_span;
-            }
+            Self::merge_parallel_branch_measure(&mut merged, branch_measure);
         }
 
         Ok(merged)
+    }
+
+    fn merge_parallel_branch_measure(merged: &mut Measure, branch_measure: Measure) {
+        merged.chords.extend(branch_measure.chords);
+        merged
+            .rhythm_elements
+            .extend(branch_measure.rhythm_elements);
+        merged.rhythm_slashes.extend(branch_measure.rhythm_slashes);
+        merged.text_cues.extend(branch_measure.text_cues);
+        merged.staff_text.extend(branch_measure.staff_text);
+        merged.figured_bass.extend(branch_measure.figured_bass);
+        merged.dynamics.extend(branch_measure.dynamics);
+        merged.melodies.extend(branch_measure.melodies);
+        merged.repeat_count = merged.repeat_count.max(branch_measure.repeat_count);
+        merged.time_signature = branch_measure.time_signature;
+        if merged.source_span.is_none() {
+            merged.source_span = branch_measure.source_span;
+        }
+    }
+
+    fn split_long_melody_branch_measures(&self, measures: Vec<Measure>) -> Vec<Measure> {
+        if measures.len() != 1 {
+            return measures;
+        }
+
+        let mut iter = measures.into_iter();
+        let measure = iter.next().expect("one measure");
+        if !measure.chords.is_empty()
+            || !measure.rhythm_elements.is_empty()
+            || !measure.figured_bass.is_empty()
+            || !measure.staff_text.is_empty()
+            || !measure.text_cues.is_empty()
+            || measure.melodies.len() != 1
+        {
+            return vec![measure];
+        }
+
+        let time_sig = TimeSignature::new(
+            measure.time_signature.0.into(),
+            measure.time_signature.1.into(),
+        );
+        let beats_per_measure =
+            f64::from(time_sig.numerator) * 4.0 / f64::from(time_sig.denominator);
+        if beats_per_measure <= 0.0 {
+            return vec![measure];
+        }
+
+        let melody = measure.melodies.into_iter().next().expect("one melody");
+        let mut split = Vec::new();
+        let mut current = Self::fresh_measure(time_sig);
+        let mut current_notes = Vec::new();
+        let mut current_beats = 0.0;
+
+        for note in melody.notes {
+            let note_beats = note.duration_beats();
+            if !current_notes.is_empty() && current_beats + note_beats > beats_per_measure + 0.001 {
+                current.melodies.push(Melody::with_notes(current_notes));
+                split.push(current);
+                current = Self::fresh_measure(time_sig);
+                current_notes = Vec::new();
+                current_beats = 0.0;
+            }
+            current_beats += note_beats;
+            current_notes.push(note);
+
+            if (current_beats - beats_per_measure).abs() < 0.001 {
+                current.melodies.push(Melody::with_notes(current_notes));
+                split.push(current);
+                current = Self::fresh_measure(time_sig);
+                current_notes = Vec::new();
+                current_beats = 0.0;
+            }
+        }
+
+        if !current_notes.is_empty() {
+            current.melodies.push(Melody::with_notes(current_notes));
+            split.push(current);
+        }
+
+        split
     }
 
     fn split_top_level_measures(input: &str) -> Vec<String> {
@@ -2251,7 +3382,7 @@ impl<'a> ChartParser<'a> {
 
     /// Like `split_top_level_parallel_branches`, but with byte offsets.
     /// Splits on `;` at brace-depth 0.
-    fn split_top_level_parallel_branches_spanned(input: &str) -> Vec<(usize, String)> {
+    pub(super) fn split_top_level_parallel_branches_spanned(input: &str) -> Vec<(usize, String)> {
         let mut parts: Vec<(usize, String)> = Vec::new();
         let mut current = String::new();
         let mut current_start: usize = 0;
@@ -2413,11 +3544,14 @@ impl<'a> ChartParser<'a> {
         // For scale degrees with quality (e.g., "2maj"), we need to extract just the number part
         // But we pass the full chord_part to process_chord so it can detect explicit quality
         let root_from_token = Self::extract_root_from_token(&chord_part);
+        let chord_part_without_duration = chord_part
+            .split_once('_')
+            .map_or(chord_part.as_str(), |(base, _)| base);
 
         // For slash chords with just a root (no explicit quality), don't recall from memory.
         // Writing "F/C" means "F major over C bass", not "whatever F I used before with C bass".
         let is_slash_chord_with_just_root =
-            chord.bass.is_some() && chord_part.len() <= root_from_token.len() + 1; // +1 for possible accidental
+            chord.bass.is_some() && chord_part_without_duration.len() <= root_from_token.len() + 1; // +1 for possible accidental
 
         // Use ChordMemory to process this chord and get the appropriate full symbol
         // Pass chord_part (which includes quality like "2maj") so it can detect explicit quality
@@ -2512,6 +3646,10 @@ impl<'a> ChartParser<'a> {
 
 // endregion: --- Chord Token Parsing
 
+fn dotted_slash_beats(time_sig: TimeSignature) -> f64 {
+    1.5 * (time_sig.denominator as f64 / 4.0)
+}
+
 // region:    --- Tests
 
 #[cfg(test)]
@@ -2539,6 +3677,426 @@ mod tests {
             }
         }
         out
+    }
+
+    #[test]
+    fn chord_token_can_attach_figured_bass_rows() {
+        let measures = parse_line("| A\"#4-3/2-1\" /// |");
+
+        assert_eq!(measures.len(), 1);
+        assert_eq!(measures[0].chords[0].full_symbol, "A");
+        assert_eq!(measures[0].figured_bass.len(), 1);
+
+        let figured_bass = &measures[0].figured_bass[0];
+        assert_eq!(figured_bass.beat, 1);
+        assert_eq!(figured_bass.placement, Placement::Above);
+        assert_eq!(figured_bass.rows.len(), 2);
+        assert_eq!(figured_bass.rows[0].accidental, "#");
+        assert_eq!(figured_bass.rows[0].text, "4-3");
+        assert_eq!(figured_bass.rows[1].accidental, "");
+        assert_eq!(figured_bass.rows[1].text, "2-1");
+    }
+
+    #[test]
+    fn chord_attached_quote_can_be_figured_bass() {
+        let measures = parse_line("| A\"#4-3 2-1\" /// |");
+
+        assert_eq!(measures.len(), 1);
+        assert_eq!(measures[0].chords[0].full_symbol, "A");
+        assert_eq!(measures[0].figured_bass.len(), 1);
+
+        let figured_bass = &measures[0].figured_bass[0];
+        assert_eq!(figured_bass.rows[0].accidental, "#");
+        assert_eq!(figured_bass.rows[0].text, "4-3");
+        assert_eq!(figured_bass.rows[1].accidental, "");
+        assert_eq!(figured_bass.rows[1].text, "2-1");
+    }
+
+    #[test]
+    fn percent_repeats_previous_measure() {
+        let measures = parse_line("C#\"Major Triad\" %");
+
+        assert_eq!(measures.len(), 2);
+        assert_eq!(measures[0].chords.len(), 1);
+        assert_eq!(measures[1].chords.len(), 1);
+        assert_eq!(measures[0].chords[0].full_symbol, "C#");
+        assert_eq!(measures[1].chords[0].full_symbol, "C#");
+    }
+
+    #[test]
+    fn parallel_container_can_merge_chords_with_long_melody_branch() {
+        let input = r#"
+Parallel Melody Test
+120bpm 6/8 #E
+
+opening 2
+<< /ChordLength 8. F#m7 G#m7 Amaj7 B | C#m ;
+   m { <F# 'C#>4. <G# 'D#>4. <A 'E>4. <B 'F#>4. } >>
+"#;
+        let chart = parse_chart(input).expect("Should parse");
+        let measures = chart.sections[0].measures();
+
+        assert_eq!(measures.len(), 2);
+        assert_eq!(measures[0].chords.len(), 4);
+        assert_eq!(measures[1].chords.len(), 1);
+        assert_eq!(measures[0].melodies.len(), 1);
+        assert_eq!(measures[0].melodies[0].notes.len(), 2);
+        assert_eq!(measures[0].melodies[0].notes[0].extra_pitches[0].0, "C#");
+        assert_eq!(measures[1].melodies.len(), 1);
+        assert_eq!(measures[1].melodies[0].notes.len(), 2);
+    }
+
+    #[test]
+    fn aliases_expand_for_chord_attached_and_standalone_text() {
+        let input = r##"
+Alias Test
+120bpm 4/4 #C
+/alias fb ^"4-3 2-1"
+/alias #fb ^"#4-3 2-1"
+
+Verse 2
+A<#fb>
+C#m <fb> /. _<fb> /.
+"##;
+        let chart = parse_chart(input).expect("Should parse");
+        let measures = chart.sections[0].measures();
+
+        assert_eq!(measures.len(), 2);
+        assert_eq!(measures[0].chords[0].full_symbol, "A");
+        assert_eq!(measures[0].figured_bass.len(), 1);
+        assert_eq!(measures[0].figured_bass[0].rows[0].accidental, "#");
+        assert_eq!(measures[0].figured_bass[0].rows[0].text, "4-3");
+
+        assert_eq!(measures[1].figured_bass.len(), 0);
+        assert_eq!(measures[1].staff_text.len(), 2);
+        assert_eq!(measures[1].staff_text[0].text, "4-3 2-1");
+        assert_eq!(measures[1].staff_text[0].placement, Placement::Above);
+        assert_eq!(measures[1].staff_text[1].text, "4-3 2-1");
+        assert_eq!(measures[1].staff_text[1].placement, Placement::Below);
+    }
+
+    #[test]
+    fn standalone_quoted_numeric_text_stays_staff_text() {
+        let measures = parse_line("| A / _\"#4-3 2-1\" // |");
+
+        assert_eq!(measures.len(), 1);
+        assert_eq!(measures[0].figured_bass.len(), 0);
+        assert_eq!(measures[0].staff_text.len(), 1);
+        assert_eq!(measures[0].staff_text[0].beat, 2);
+        assert_eq!(measures[0].staff_text[0].placement, Placement::Below);
+        assert_eq!(measures[0].staff_text[0].text, "#4-3 2-1");
+    }
+
+    #[test]
+    fn quoted_staff_text_attaches_to_current_measure() {
+        let measures = parse_line("| \"Ac. Gtr. groove\" A /// |");
+
+        assert_eq!(measures.len(), 1);
+        assert_eq!(measures[0].staff_text.len(), 1);
+        assert_eq!(measures[0].staff_text[0].text, "Ac. Gtr. groove");
+        assert_eq!(measures[0].staff_text[0].beat, 1);
+        assert_eq!(measures[0].staff_text[0].placement, Placement::Below);
+    }
+
+    #[test]
+    fn quoted_staff_text_can_choose_placement() {
+        let measures = parse_line("| _\"below staff\" ^\"above staff\" A /// |");
+
+        assert_eq!(measures.len(), 1);
+        assert_eq!(measures[0].staff_text.len(), 2);
+        assert_eq!(measures[0].staff_text[0].text, "below staff");
+        assert_eq!(measures[0].staff_text[0].placement, Placement::Below);
+        assert_eq!(measures[0].staff_text[1].text, "above staff");
+        assert_eq!(measures[0].staff_text[1].placement, Placement::Above);
+    }
+
+    #[test]
+    fn parses_repeat_barlines_and_alternate_endings() {
+        let measures = parse_line("|: A | [1] D :| | [2] E |");
+        let measures = measures
+            .iter()
+            .filter(|measure| !measure.chords.is_empty())
+            .collect::<Vec<_>>();
+
+        assert_eq!(measures.len(), 3);
+        assert!(matches!(measures[0].start_repeat, RepeatMark::Forward));
+        assert!(matches!(measures[1].end_repeat, RepeatMark::Backward));
+
+        let first_ending = measures[1].volta_start.as_ref().expect("first ending");
+        assert_eq!(first_ending.numbers, vec![1]);
+        assert_eq!(first_ending.label, "1.");
+
+        let second_ending = measures[2].volta_start.as_ref().expect("second ending");
+        assert_eq!(second_ending.numbers, vec![2]);
+        assert_eq!(second_ending.label, "2.");
+    }
+
+    #[test]
+    fn numbered_measure_check_behaves_like_barline() {
+        let measures = parse_line("|{1} A |{2} D |");
+
+        assert_eq!(measures.len(), 2);
+        assert_eq!(measures[0].chords[0].full_symbol, "A");
+        assert_eq!(measures[1].chords[0].full_symbol, "D");
+    }
+
+    #[test]
+    fn chord_length_directive_applies_to_following_chords() {
+        let measures = parse_line("| /ChordLength /. C#m B/C# |");
+        let time_sig = TimeSignature::new(4, 4);
+
+        assert_eq!(measures.len(), 1);
+        assert_eq!(measures[0].chords.len(), 2);
+        for chord in &measures[0].chords {
+            assert!(matches!(
+                chord.rhythm,
+                ChordRhythm::Slashes {
+                    count: 1,
+                    dotted: true,
+                    tied: false
+                }
+            ));
+            assert!((chord.duration.to_beats(time_sig) - 1.5).abs() < 0.001);
+        }
+    }
+
+    #[test]
+    fn section_chord_length_directive_applies_to_content_lines() {
+        let input = r#"
+Chord Length Section
+120bpm 4/4 #C
+
+Intro 1
+/ChordLength 4.
+| C#m B/C# |
+"#;
+        let chart = parse_chart(input).expect("Should parse");
+        let measures = chart.sections[0].measures();
+        let time_sig = TimeSignature::new(4, 4);
+
+        assert_eq!(measures.len(), 1);
+        assert_eq!(measures[0].chords.len(), 2);
+        for chord in &measures[0].chords {
+            assert!((chord.duration.to_beats(time_sig) - 1.5).abs() < 0.001);
+        }
+    }
+
+    #[test]
+    fn duration_directive_applies_to_chords_and_melody() {
+        let input = r#"
+Duration Section
+120bpm 6/8 #C
+
+Intro 1
+/Duration 8.
+<< C#m B/C# A/C# G#m7/C# ;
+   m { C# D# E F# } >>
+"#;
+        let chart = parse_chart(input).expect("Should parse");
+        let measures = chart.sections[0].measures();
+        let time_sig = TimeSignature::new(6, 8);
+
+        assert_eq!(measures.len(), 1);
+        assert_eq!(measures[0].chords.len(), 4);
+        for chord in &measures[0].chords {
+            assert!((chord.duration.to_beats(time_sig) - 1.5).abs() < 0.001);
+        }
+        assert_eq!(measures[0].melodies.len(), 1);
+        assert_eq!(measures[0].melodies[0].notes.len(), 4);
+        for note in &measures[0].melodies[0].notes {
+            assert_eq!(note.duration, 8);
+            assert!(note.dotted);
+        }
+    }
+
+    #[test]
+    fn explicit_chord_duration_sticks_to_following_chords() {
+        let input = r#"
+Sticky Duration Section
+120bpm 6/8 #C
+
+Intro 1
+F#m7_8. G#m7 Amaj7 B
+"#;
+        let chart = parse_chart(input).expect("Should parse");
+        let measures = chart.sections[0].measures();
+        let time_sig = TimeSignature::new(6, 8);
+
+        assert_eq!(measures.len(), 1);
+        assert_eq!(measures[0].chords.len(), 4);
+        for chord in &measures[0].chords {
+            assert!((chord.duration.to_beats(time_sig) - 1.5).abs() < 0.001);
+        }
+    }
+
+    #[test]
+    fn let_aliases_expand_for_chord_attached_and_standalone_text() {
+        let input = r##"
+Let Alias Section
+120bpm 4/4 #C
+
+let fb = ^"4-3 2-1"
+let #fb = ^"#4-3 2-1"
+
+Intro 2
+A<#fb>
+<fb> /.
+"##;
+        let chart = parse_chart(input).expect("Should parse");
+        let measures = chart.sections[0].measures();
+
+        assert_eq!(measures[0].chords[0].full_symbol, "A");
+        assert_eq!(measures[0].figured_bass.len(), 1);
+        assert_eq!(measures[0].figured_bass[0].rows.len(), 2);
+        assert_eq!(measures[0].figured_bass[0].rows[0].accidental, "#");
+
+        assert_eq!(measures[1].figured_bass.len(), 0);
+        assert_eq!(measures[1].staff_text.len(), 1);
+        assert_eq!(measures[1].staff_text[0].text, "4-3 2-1");
+        assert_eq!(measures[1].staff_text[0].placement, Placement::Above);
+        assert_eq!(measures[1].staff_text[0].beat, 1);
+    }
+
+    #[test]
+    fn let_block_alias_can_invoke_parallel_container() {
+        let input = r#"
+Let Block Section
+120bpm 6/8 #E
+
+let openingHits = {
+  <<
+    /ChordLength 8. F#m7 G#m7 Amaj7 B ;
+    m { <F# 'C#>8. <G# 'D#>8. <A 'E>8. <B 'F#>8. }
+  >>
+}
+
+Opening 1
+<openingHits>
+"#;
+        let chart = parse_chart(input).expect("Should parse");
+        let measures = chart.sections[0].measures();
+
+        assert_eq!(measures.len(), 1);
+        assert_eq!(measures[0].chords.len(), 4);
+        assert_eq!(measures[0].chords[0].full_symbol, "F#m7");
+        assert_eq!(measures[0].chords[2].full_symbol, "Amaj7");
+        assert_eq!(measures[0].melodies.len(), 1);
+        assert_eq!(measures[0].melodies[0].notes.len(), 4);
+    }
+
+    #[test]
+    fn sectioned_lane_aliases_can_merge_as_whole_chart_parallel() {
+        let input = r#"
+Lane Chart
+120bpm 6/8 #E
+
+let chords = {
+  intro 2
+  C#m
+  F#m7_8. G#m7 Amaj7 B
+}
+
+let melody = {
+  intro 2
+  /octave 3 m { C#2. }
+  /octave 2 m { <F# 'C#>8. <G# 'D#> <A 'E> <B 'F#> }
+}
+
+<< <chords> ; <melody> >>
+"#;
+
+        let chart = parse_chart(input).expect("Should parse sectioned lanes");
+        assert_eq!(chart.sections.len(), 1);
+        let measures = chart.sections[0].measures();
+        assert_eq!(measures.len(), 2);
+        assert_eq!(measures[0].chords[0].full_symbol, "C#m");
+        assert_eq!(measures[0].melodies.len(), 1);
+        assert_eq!(measures[1].chords.len(), 4);
+        assert_eq!(measures[1].chords[2].full_symbol, "Amaj7");
+        assert_eq!(measures[1].melodies[0].notes.len(), 4);
+    }
+
+    #[test]
+    fn melody_octave_memory_carries_across_sections() {
+        let input = r#"
+Octave Carry
+120bpm 6/8 #E
+
+intro 1
+/octave 4
+m { C#8. D# E F# }
+
+vs 1
+m { <,,F# 'C#>8. <G# 'D#> <A 'E> <B 'F#> }
+"#;
+
+        let chart = parse_chart(input).expect("Should parse");
+        let intro = chart.sections[0].measures();
+        assert_eq!(intro[0].melodies[0].notes[3].pitch, "F#");
+        assert_eq!(intro[0].melodies[0].notes[3].octave, Some(4));
+
+        let verse = chart.sections[1].measures();
+        let first_hit = &verse[0].melodies[0].notes[0];
+        assert_eq!(first_hit.pitch, "F#");
+        assert_eq!(first_hit.octave, Some(2));
+        assert_eq!(first_hit.extra_pitches[0], ("C#".to_string(), Some(4)));
+    }
+
+    #[test]
+    fn reserved_melody_lane_accepts_bare_melody_lines() {
+        let input = r#"
+Melody Lane
+120bpm 6/8 #E
+
+intro 2
+
+let chords = {
+  intro
+  C#m
+  F#m7_8. G#m7 Amaj7 B
+}
+
+let melody = {
+  intro
+  /octave 4
+  C#2.
+  <,,F# 'C#>8. <G# 'D#> <A 'E> <B 'F#>
+}
+
+<< <chords> ; <melody> >>
+"#;
+
+        let chart = parse_chart(input).expect("Should parse reserved melody lane");
+        let measures = chart.sections[0].measures();
+        assert_eq!(measures[0].chords[0].full_symbol, "C#m");
+        assert_eq!(measures[0].melodies[0].notes[0].pitch, "C#");
+        assert_eq!(measures[0].melodies[0].notes[0].octave, Some(4));
+        assert_eq!(measures[1].chords.len(), 4);
+        assert_eq!(measures[1].melodies[0].notes[0].pitch, "F#");
+        assert_eq!(measures[1].melodies[0].notes[0].octave, Some(2));
+    }
+
+    #[test]
+    fn parses_classical_dynamics_and_hairpins() {
+        let input = r#"
+Dynamics
+120bpm 6/8 #E
+
+intro 1
+hairpin < 2..4
+dyn fff@4
+C#m
+"#;
+
+        let chart = parse_chart(input).expect("Should parse dynamics and hairpins");
+        let measure = &chart.sections[0].measures()[0];
+        assert_eq!(measure.classical_dynamics.len(), 1);
+        assert_eq!(measure.classical_dynamics[0].level, DynamicLevel::Fff);
+        assert_eq!(measure.classical_dynamics[0].beat, 4);
+        assert_eq!(measure.hairpins.len(), 1);
+        assert_eq!(measure.hairpins[0].kind, HairpinKind::Crescendo);
+        assert_eq!(measure.hairpins[0].start_beat, 2);
+        assert_eq!(measure.hairpins[0].end_beat, 4);
     }
 
     #[test]
@@ -3081,12 +4639,221 @@ fn tokenize_with_spans(line: &str) -> Vec<TextSpan> {
             break;
         }
         let start = i;
-        while i < bytes.len() && !(bytes[i] as char).is_whitespace() {
+        let mut in_quote = false;
+        let mut escaped = false;
+        while i < bytes.len() {
+            let ch = bytes[i] as char;
+            if escaped {
+                escaped = false;
+                i += 1;
+                continue;
+            }
+            if ch == '\\' && in_quote {
+                escaped = true;
+                i += 1;
+                continue;
+            }
+            if ch == '"' {
+                in_quote = !in_quote;
+                i += 1;
+                continue;
+            }
+            if !in_quote && ch.is_whitespace() {
+                break;
+            }
             i += 1;
         }
         spans.push(TextSpan::new(start, i - start));
     }
     spans
+}
+
+fn unescape_quoted(s: &str) -> String {
+    let mut out = String::new();
+    let mut escaped = false;
+    for ch in s.chars() {
+        if escaped {
+            out.push(ch);
+            escaped = false;
+        } else if ch == '\\' {
+            escaped = true;
+        } else {
+            out.push(ch);
+        }
+    }
+    if escaped {
+        out.push('\\');
+    }
+    out
+}
+
+fn split_chord_attached_quote(token: &str) -> Option<(&str, &str)> {
+    let quote_start = token.find('"')?;
+    if quote_start == 0 || !token.ends_with('"') {
+        return None;
+    }
+    Some((
+        &token[..quote_start],
+        &token[quote_start + 1..token.len() - 1],
+    ))
+}
+
+fn split_chord_attached_alias(token: &str) -> Option<(&str, &str)> {
+    let alias_start = token.find('<')?;
+    if alias_start == 0 || !token.ends_with('>') {
+        return None;
+    }
+    Some((
+        &token[..alias_start],
+        &token[alias_start + 1..token.len() - 1],
+    ))
+}
+
+fn alias_quoted_payload(value: &str) -> Option<&str> {
+    let value = value.trim();
+    let value = value
+        .strip_prefix("^\"")
+        .or_else(|| value.strip_prefix("_\""))
+        .or_else(|| value.strip_prefix('"'))?;
+    value.strip_suffix('"')
+}
+
+fn apply_alias_placement(value: &str, placement: Option<Placement>) -> Option<String> {
+    let value = value.trim();
+    let payload = alias_quoted_payload(value)?;
+    let prefix = match placement {
+        Some(Placement::Below) => "_",
+        Some(Placement::Above) => "^",
+        None if value.starts_with("^\"") => "^",
+        None if value.starts_with("_\"") => "_",
+        None => "",
+    };
+    Some(format!("{prefix}\"{payload}\""))
+}
+
+fn parallel_depth_for_line(mut depth: usize, line: &str) -> usize {
+    let bytes = line.as_bytes();
+    let mut brace_depth = 0usize;
+    let mut i = 0usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'{' => {
+                brace_depth += 1;
+                i += 1;
+            }
+            b'}' => {
+                brace_depth = brace_depth.saturating_sub(1);
+                i += 1;
+            }
+            b'<' if brace_depth == 0 && bytes.get(i + 1) == Some(&b'<') => {
+                depth += 1;
+                i += 2;
+            }
+            b'>' if brace_depth == 0 && bytes.get(i + 1) == Some(&b'>') => {
+                depth = depth.saturating_sub(1);
+                i += 2;
+            }
+            _ => i += 1,
+        }
+    }
+    depth
+}
+
+fn let_block_depth_for_line(mut depth: usize, line: &str) -> usize {
+    if depth == 0 {
+        let Some(rest) = line.trim_start().strip_prefix("let ") else {
+            return 0;
+        };
+        let Some((_, value)) = rest.split_once('=') else {
+            return 0;
+        };
+        if !value.trim_start().starts_with('{') {
+            return 0;
+        }
+    }
+
+    let mut in_quote = false;
+    let mut escaped = false;
+    for c in line.chars() {
+        if in_quote {
+            escaped = c == '\\' && !escaped;
+            if c == '"' && !escaped {
+                in_quote = false;
+            }
+            if c != '\\' {
+                escaped = false;
+            }
+            continue;
+        }
+
+        match c {
+            '"' => in_quote = true,
+            '{' => depth += 1,
+            '}' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+    }
+    depth
+}
+
+fn split_figured_bass_words(input: &str) -> Vec<String> {
+    let parts = input.split_whitespace().collect::<Vec<_>>();
+    if parts.len() > 1 {
+        parts.into_iter().map(str::to_string).collect()
+    } else if let Some(only) = parts.first() {
+        split_compacted_figured_bass(only)
+            .into_iter()
+            .map(str::to_string)
+            .collect()
+    } else {
+        Vec::new()
+    }
+}
+
+fn split_compacted_figured_bass(row: &str) -> Vec<&str> {
+    let stripped = row
+        .strip_prefix("bb")
+        .or_else(|| row.strip_prefix("##"))
+        .or_else(|| row.strip_prefix('#'))
+        .or_else(|| row.strip_prefix('b'))
+        .or_else(|| row.strip_prefix('n'))
+        .unwrap_or(row);
+    let accidental_len = row.len() - stripped.len();
+    let chars = stripped.chars().collect::<Vec<_>>();
+    if chars.len() == 6
+        && chars[0].is_ascii_digit()
+        && chars[1] == '-'
+        && chars[2].is_ascii_digit()
+        && chars[3].is_ascii_digit()
+        && chars[4] == '-'
+        && chars[5].is_ascii_digit()
+    {
+        vec![&row[..accidental_len + 3], &row[accidental_len + 3..]]
+    } else {
+        vec![row]
+    }
+}
+
+fn looks_like_figured_bass_text(text: &str) -> bool {
+    text.chars()
+        .all(|ch| ch.is_ascii_digit() || matches!(ch, '-' | '#' | 'b' | 'n'))
+        && text.chars().any(|ch| ch.is_ascii_digit())
+}
+
+fn parse_lily_duration_beats(token: &str, time_sig: TimeSignature) -> Option<(f64, bool)> {
+    let dotted = token.ends_with('.');
+    let base = token.trim_end_matches('.');
+    let note_denominator = match base {
+        "1" => 1.0,
+        "2" => 2.0,
+        "4" => 4.0,
+        "8" => 8.0,
+        "16" => 16.0,
+        "32" => 32.0,
+        _ => return None,
+    };
+    let beats = f64::from(time_sig.denominator) / note_denominator;
+    Some((if dotted { beats * 1.5 } else { beats }, dotted))
 }
 
 #[cfg(test)]
@@ -3109,5 +4876,13 @@ mod span_helper_tests {
     fn tokenize_with_spans_handles_empty_and_whitespace_only() {
         assert!(tokenize_with_spans("").is_empty());
         assert!(tokenize_with_spans("   \t  ").is_empty());
+    }
+
+    #[test]
+    fn tokenize_with_spans_keeps_quoted_text_together() {
+        let line = r#"| "Ac. Gtr. groove" A |"#;
+        let spans = tokenize_with_spans(line);
+        let toks: Vec<&str> = spans.iter().map(|span| &line[span.as_range()]).collect();
+        assert_eq!(toks, vec!["|", r#""Ac. Gtr. groove""#, "A", "|"]);
     }
 }

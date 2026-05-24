@@ -186,8 +186,8 @@ pub use fermata::{
     layout_fermatas,
 };
 pub use harmony::{
-    ChordNotation, HarmonyLayoutData, HarmonyParams, HarmonyStyle, SymbolSet, layout_harmony,
-    musejazz, parse_chord, smufl,
+    BassArrangement, ChordNotation, HarmonyLayoutData, HarmonyParams, HarmonyStyle, SymbolSet,
+    layout_harmony, musejazz, parse_chord, smufl,
 };
 pub use keysig::{ClefContext, KeySigParams, KeySigType, layout_keysig};
 pub use lyrics::{

@@ -33,6 +33,8 @@ impl<'a> ChartParser<'a> {
         // Set ending key
         self.ending_key = self.current_key.clone();
 
+        self.resolve_melody_octaves();
+
         // Calculate absolute positions for all elements BEFORE applying duration adjustments.
         // This ensures positions are based on original rhythm slots, not adjusted durations.
         // The position calculation handles push/pull by adjusting the sounding position
@@ -58,6 +60,16 @@ impl<'a> ChartParser<'a> {
         //   - Melody-variable recall: `$name` tokens are expanded inline by
         //     `parser/chords.rs` via `self.melody_variables.get(name)`.
         // No post-processing pass is required.
+    }
+
+    fn resolve_melody_octaves(&mut self) {
+        for section in &mut self.sections {
+            for measure in section.measures_mut() {
+                for melody in &mut measure.melodies {
+                    melody.resolve_absolute_octaves();
+                }
+            }
+        }
     }
 
     /// Compute chord-syllable alignments for sections that have both chord and lyrics tracks

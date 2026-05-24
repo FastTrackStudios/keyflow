@@ -23,6 +23,8 @@ use crate::engraver::scene::id::{ElementType, SemanticId};
 use crate::engraver::scene::node::SceneNode;
 use crate::engraver::scene::paint::PaintCommand;
 
+const MAJOR_TRIANGLE_SCALE: f64 = 0.75;
+
 /// Chord notation style.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ChordNotation {
@@ -31,6 +33,18 @@ pub enum ChordNotation {
     Standard,
     /// Jazz notation: C△7, C°, C+, Cø7
     Jazz,
+}
+
+/// How a slash chord's bass note is positioned relative to the main symbol.
+///
+/// Maps to MusicXML `<bass arrangement="...">` attribute.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BassArrangement {
+    /// Inline after a forward slash: `B/C#`. Default.
+    #[default]
+    Inline,
+    /// Stacked vertically as a fraction: root over horizontal rule over bass.
+    Vertical,
 }
 
 /// Style configuration for chord symbols.
@@ -169,7 +183,9 @@ impl HarmonyStyle {
     #[must_use]
     pub fn musejazz() -> Self {
         Self {
-            // Font internal name is "MuseJazz Text" (with space)
+            // Chord-symbol letters live in MuseJazz Text (jazz-style text
+            // companion). MuseJazz proper is the music-symbol font and has
+            // *no* ASCII glyphs, so it can't render chord text by itself.
             font_family: "MuseJazz Text".to_string(),
             // Same font for symbols - MuseJazz Text has PUA symbols
             symbol_font_family: None,
@@ -185,7 +201,9 @@ impl HarmonyStyle {
     pub fn musejazz_jazz() -> Self {
         Self {
             notation: ChordNotation::Jazz,
-            // Font internal name is "MuseJazz Text" (with space)
+            // Chord-symbol letters live in MuseJazz Text (jazz-style text
+            // companion). MuseJazz proper is the music-symbol font and has
+            // *no* ASCII glyphs, so it can't render chord text by itself.
             font_family: "MuseJazz Text".to_string(),
             // Same font for symbols
             symbol_font_family: None,
@@ -193,6 +211,33 @@ impl HarmonyStyle {
             symbol_set: SymbolSet::MuseJazz,
             ..Default::default()
         }
+    }
+
+    /// Create a large, compact chord-symbol style for iReal Pro-like
+    /// screen charts.
+    ///
+    /// This keeps the handwritten MuseJazz look but increases the root size
+    /// and tightens suffix/bass scaling so chord-only grids remain readable
+    /// on phones and tablets.
+    #[must_use]
+    pub fn ireal_pro_screen() -> Self {
+        Self {
+            root_size: 24.0,
+            superscript_scale: 0.68,
+            bass_scale: 0.82,
+            superscript_offset: -0.42,
+            ..Self::musejazz_jazz()
+        }
+    }
+
+    /// Override the root note font size (points).
+    ///
+    /// All other sizes (superscript, bass) derive from this via their scale
+    /// factors, so this is the single knob for "make chord symbols bigger".
+    #[must_use]
+    pub fn with_root_size(mut self, size_pt: f64) -> Self {
+        self.root_size = size_pt;
+        self
     }
 
     /// Enable SMuFL symbols with specified music font.
@@ -265,6 +310,8 @@ pub struct HarmonyParams {
     pub bass: Option<String>,
     /// Bass note accidental
     pub bass_accidental: String,
+    /// How the bass note is laid out relative to the main symbol.
+    pub bass_arrangement: BassArrangement,
     /// Position (baseline left of root)
     pub position: Point,
     /// Style configuration
@@ -282,6 +329,7 @@ impl Default for HarmonyParams {
             alterations: Vec::new(),
             bass: None,
             bass_accidental: String::new(),
+            bass_arrangement: BassArrangement::default(),
             position: Point::ZERO,
             style: HarmonyStyle::default(),
         }
@@ -541,15 +589,40 @@ pub fn layout_harmony(
         } else {
             &style.font_family
         };
-        let ext_width = measure_text_width(&ext_text, ext_size, has_symbols);
-        commands.push(PaintCommand::text(
-            ext_text.clone(),
-            ext_font,
-            ext_size,
-            Point::new(cursor_x, ext_y),
-            style.color,
-        ));
-        cursor_x += ext_width;
+
+        if let Some((triangle, suffix)) = split_major_triangle_extension(&ext_text) {
+            let triangle_text = triangle.to_string();
+            let triangle_size = ext_size * MAJOR_TRIANGLE_SCALE;
+            let triangle_width = measure_text_width(&triangle_text, triangle_size, true);
+            commands.push(PaintCommand::text(
+                triangle_text,
+                ext_font,
+                triangle_size,
+                Point::new(cursor_x, ext_y),
+                style.color,
+            ));
+            cursor_x += triangle_width;
+
+            let suffix_width = measure_text_width(suffix, ext_size, false);
+            commands.push(PaintCommand::text(
+                suffix.to_string(),
+                &style.font_family,
+                ext_size,
+                Point::new(cursor_x, ext_y),
+                style.color,
+            ));
+            cursor_x += suffix_width;
+        } else {
+            let ext_width = measure_text_width(&ext_text, ext_size, has_symbols);
+            commands.push(PaintCommand::text(
+                ext_text.clone(),
+                ext_font,
+                ext_size,
+                Point::new(cursor_x, ext_y),
+                style.color,
+            ));
+            cursor_x += ext_width;
+        }
         prev_char = ext_text.chars().last();
     }
 
@@ -578,54 +651,117 @@ pub fn layout_harmony(
         }
     }
 
-    // 5. Bass note (slash chord)
+    // 5. Bass note (slash chord) — two arrangements:
+    //    Inline  : "B/C#"  — slash + bass appended to the right of the main symbol.
+    //    Vertical: stacked top-to-bottom as a fraction (root / line / bass).
     if let Some(bass) = &params.bass {
         let bass_size = style.root_size * style.bass_scale;
 
-        // Move slightly left before slash (m:-0.014:0 in MuseScore - unscaled)
-        cursor_x += space_before_slash;
+        match params.bass_arrangement {
+            BassArrangement::Inline => {
+                // Move slightly left before slash (m:-0.014:0 in MuseScore - unscaled)
+                cursor_x += space_before_slash;
 
-        // Slash - use text font
-        let slash_width = measure_text_width("/", bass_size, false);
-        commands.push(PaintCommand::text(
-            "/",
-            &style.font_family,
-            bass_size,
-            Point::new(cursor_x, baseline_y),
-            style.color,
-        ));
-        cursor_x += slash_width;
+                let slash_width = measure_text_width("/", bass_size, false);
+                commands.push(PaintCommand::text(
+                    "/",
+                    &style.font_family,
+                    bass_size,
+                    Point::new(cursor_x, baseline_y),
+                    style.color,
+                ));
+                cursor_x += slash_width;
+                cursor_x += space_after_slash;
 
-        // Small space after slash (m:0.014:0 in MuseScore - unscaled)
-        cursor_x += space_after_slash;
+                let bass_width = measure_text_width(bass, bass_size, false);
+                commands.push(PaintCommand::text(
+                    bass.clone(),
+                    &style.font_family,
+                    bass_size,
+                    Point::new(cursor_x, baseline_y),
+                    style.color,
+                ));
+                cursor_x += bass_width;
 
-        // Bass note letter
-        let bass_width = measure_text_width(bass, bass_size, false);
-        commands.push(PaintCommand::text(
-            bass.clone(),
-            &style.font_family,
-            bass_size,
-            Point::new(cursor_x, baseline_y),
-            style.color,
-        ));
-        cursor_x += bass_width;
+                if !params.bass_accidental.is_empty() {
+                    let bass_acc_text =
+                        format_accidental(&params.bass_accidental, style.symbol_set);
+                    cursor_x += accidental_padding * style.bass_scale;
+                    let bass_acc_width = measure_text_width(&bass_acc_text, bass_size, true);
+                    commands.push(PaintCommand::text(
+                        bass_acc_text,
+                        symbol_font,
+                        bass_size,
+                        Point::new(cursor_x, baseline_y),
+                        style.color,
+                    ));
+                    cursor_x += bass_acc_width;
+                }
+            }
+            BassArrangement::Vertical => {
+                // Measure bass row width (bass letter + optional accidental).
+                let bass_letter_width = measure_text_width(bass, bass_size, false);
+                let bass_acc_text = if params.bass_accidental.is_empty() {
+                    None
+                } else {
+                    Some(format_accidental(&params.bass_accidental, style.symbol_set))
+                };
+                let bass_acc_width = bass_acc_text
+                    .as_ref()
+                    .map(|t| {
+                        accidental_padding * style.bass_scale
+                            + measure_text_width(t, bass_size, true)
+                    })
+                    .unwrap_or(0.0);
+                let bass_row_width = bass_letter_width + bass_acc_width;
 
-        // Bass accidental (if any)
-        if !params.bass_accidental.is_empty() {
-            let bass_acc_text = format_accidental(&params.bass_accidental, style.symbol_set);
+                let main_width = cursor_x;
+                let stack_width = main_width.max(bass_row_width);
 
-            // Padding before bass accidental (scaled for bass size)
-            cursor_x += accidental_padding * style.bass_scale;
+                // Shift the already-emitted main commands so they centre over the stack.
+                let main_shift = (stack_width - main_width) / 2.0;
+                if main_shift > 0.0 {
+                    for cmd in commands.iter_mut() {
+                        shift_command_x(cmd, main_shift);
+                    }
+                }
 
-            let bass_acc_width = measure_text_width(&bass_acc_text, bass_size, true);
-            commands.push(PaintCommand::text(
-                bass_acc_text,
-                symbol_font,
-                bass_size,
-                Point::new(cursor_x, baseline_y),
-                style.color,
-            ));
-            cursor_x += bass_acc_width;
+                // Horizontal rule between root and bass.
+                // y_line sits a fraction of cap-height below the baseline so the
+                // rule clears the root descender on capital letters.
+                let line_y = baseline_y + cap_height * 0.18;
+                let line_thickness = style.root_size * 0.06;
+                commands.push(PaintCommand::line(
+                    Point::new(0.0, line_y),
+                    Point::new(stack_width, line_y),
+                    style.color,
+                    line_thickness,
+                ));
+
+                // Bass row sits below the rule.
+                let bass_y = line_y + bass_size * 0.95;
+                let bass_x = (stack_width - bass_row_width) / 2.0;
+
+                commands.push(PaintCommand::text(
+                    bass.clone(),
+                    &style.font_family,
+                    bass_size,
+                    Point::new(bass_x, bass_y),
+                    style.color,
+                ));
+                if let Some(acc) = bass_acc_text {
+                    let acc_x = bass_x + bass_letter_width + accidental_padding * style.bass_scale;
+                    commands.push(PaintCommand::text(
+                        acc,
+                        symbol_font,
+                        bass_size,
+                        Point::new(acc_x, bass_y),
+                        style.color,
+                    ));
+                }
+
+                cursor_x = stack_width;
+            }
         }
     }
 
@@ -812,20 +948,20 @@ fn format_quality(quality: &str, notation: ChordNotation, symbol_set: SymbolSet)
 /// Format extension for display based on notation style and symbol set.
 fn format_extension(ext: &str, notation: ChordNotation, symbol_set: SymbolSet) -> String {
     match (ext, notation, symbol_set) {
-        // Jazz uses triangle for major 7/9/13
-        ("Maj7", ChordNotation::Jazz, SymbolSet::Smufl) => format!("{}7", smufl::MAJOR_SEVENTH),
-        ("Maj9", ChordNotation::Jazz, SymbolSet::Smufl) => format!("{}9", smufl::MAJOR_SEVENTH),
-        ("Maj13", ChordNotation::Jazz, SymbolSet::Smufl) => format!("{}13", smufl::MAJOR_SEVENTH),
-        ("Maj7", ChordNotation::Jazz, SymbolSet::MuseJazz) => format!("{}7", musejazz::TRIANGLE),
-        ("Maj9", ChordNotation::Jazz, SymbolSet::MuseJazz) => format!("{}9", musejazz::TRIANGLE),
-        ("Maj13", ChordNotation::Jazz, SymbolSet::MuseJazz) => format!("{}13", musejazz::TRIANGLE),
-        ("Maj7", ChordNotation::Jazz, SymbolSet::Unicode) => {
+        // Major seventh family uses the triangle form in chart chord symbols.
+        ("Maj7", _, SymbolSet::Smufl) => format!("{}7", smufl::MAJOR_SEVENTH),
+        ("Maj9", _, SymbolSet::Smufl) => format!("{}9", smufl::MAJOR_SEVENTH),
+        ("Maj13", _, SymbolSet::Smufl) => format!("{}13", smufl::MAJOR_SEVENTH),
+        ("Maj7", _, SymbolSet::MuseJazz) => format!("{}7", musejazz::TRIANGLE),
+        ("Maj9", _, SymbolSet::MuseJazz) => format!("{}9", musejazz::TRIANGLE),
+        ("Maj13", _, SymbolSet::MuseJazz) => format!("{}13", musejazz::TRIANGLE),
+        ("Maj7", _, SymbolSet::Unicode) => {
             format!("{}7", unicode_fallback::TRIANGLE)
         }
-        ("Maj9", ChordNotation::Jazz, SymbolSet::Unicode) => {
+        ("Maj9", _, SymbolSet::Unicode) => {
             format!("{}9", unicode_fallback::TRIANGLE)
         }
-        ("Maj13", ChordNotation::Jazz, SymbolSet::Unicode) => {
+        ("Maj13", _, SymbolSet::Unicode) => {
             format!("{}13", unicode_fallback::TRIANGLE)
         }
         // Half-diminished (m7b5) in jazz uses oslash
@@ -837,6 +973,19 @@ fn format_extension(ext: &str, notation: ChordNotation, symbol_set: SymbolSet) -
         // Standard notation - no symbol replacement
         _ => ext.to_string(),
     }
+}
+
+fn split_major_triangle_extension(ext_text: &str) -> Option<(char, &str)> {
+    let triangle = ext_text.chars().next()?;
+    let is_triangle = triangle == smufl::MAJOR_SEVENTH
+        || triangle == musejazz::TRIANGLE
+        || triangle == unicode_fallback::TRIANGLE;
+    if !is_triangle {
+        return None;
+    }
+
+    let suffix = &ext_text[triangle.len_utf8()..];
+    (!suffix.is_empty()).then_some((triangle, suffix))
 }
 
 /// Format alteration for display using proper accidental symbols.
@@ -1037,6 +1186,32 @@ fn parse_quality_and_extensions(s: &str, params: &mut HarmonyParams) {
     params.extension = s.to_string();
 }
 
+/// Shift the horizontal position of a paint command by `dx`.
+///
+/// Used by the vertical-bass layout to recentre an already-built main symbol
+/// over a wider bass row (or vice versa) without re-rendering.
+fn shift_command_x(cmd: &mut PaintCommand, dx: f64) {
+    match cmd {
+        PaintCommand::Text { position, .. } | PaintCommand::Glyph { position, .. } => {
+            position.x += dx;
+        }
+        PaintCommand::Line { start, end, .. } => {
+            start.x += dx;
+            end.x += dx;
+        }
+        PaintCommand::Rect { rect, .. } => {
+            rect.x0 += dx;
+            rect.x1 += dx;
+        }
+        PaintCommand::Circle { center, .. } | PaintCommand::Ellipse { center, .. } => {
+            center.x += dx;
+        }
+        PaintCommand::Fill { path, .. } | PaintCommand::Stroke { path, .. } => {
+            *path = kurbo::Affine::translate((dx, 0.0)) * path.clone();
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1143,6 +1318,42 @@ mod tests {
     }
 
     #[test]
+    fn major_seventh_triangle_renders_at_seventy_five_percent() {
+        let ctx = make_ctx();
+        let style = make_test_style();
+        let ext_size = style.root_size * style.superscript_scale;
+        let params = parse_chord("Amaj7").with_style(style);
+
+        let (_, node) = layout_harmony(&params, &ctx);
+        let text_commands = node
+            .commands
+            .iter()
+            .filter_map(|cmd| {
+                if let PaintCommand::Text {
+                    text, font_size, ..
+                } = cmd
+                {
+                    Some((text.as_str(), *font_size))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let triangle = text_commands
+            .iter()
+            .find(|(text, _)| *text == "\u{25B3}")
+            .expect("Amaj7 should render a standalone triangle");
+        let seven = text_commands
+            .iter()
+            .find(|(text, _)| *text == "7")
+            .expect("Amaj7 should render a standalone 7 after the triangle");
+
+        assert_eq!(triangle.1, ext_size * MAJOR_TRIANGLE_SCALE);
+        assert_eq!(seven.1, ext_size);
+    }
+
+    #[test]
     fn test_format_quality_jazz_unicode() {
         // Test Unicode fallback
         assert_eq!(
@@ -1205,6 +1416,22 @@ mod tests {
         assert_eq!(
             format_extension("Maj7", ChordNotation::Jazz, SymbolSet::MuseJazz),
             "\u{E18A}7"
+        );
+    }
+
+    #[test]
+    fn test_format_extension_standard_musejazz_major_seventh_uses_triangle() {
+        assert_eq!(
+            format_extension("Maj7", ChordNotation::Standard, SymbolSet::MuseJazz),
+            "\u{E18A}7"
+        );
+    }
+
+    #[test]
+    fn test_format_extension_standard_unicode_major_seventh_uses_triangle() {
+        assert_eq!(
+            format_extension("Maj7", ChordNotation::Standard, SymbolSet::Unicode),
+            "\u{25B3}7"
         );
     }
 

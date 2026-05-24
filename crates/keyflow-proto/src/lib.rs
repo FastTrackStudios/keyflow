@@ -13,22 +13,26 @@ pub mod core;
 pub mod guide;
 pub mod key;
 pub mod metadata;
-pub mod parsing;
 pub mod primitives;
 pub mod sections;
 pub mod services;
 pub mod time;
 
+pub(crate) mod ast {
+    pub(crate) use keyflow_syntax::ast::*;
+}
+
+pub(crate) mod parsing {
+    pub(crate) use keyflow_syntax::parsing::*;
+
+    pub(crate) mod token {
+        pub(crate) use keyflow_syntax::parsing::token::*;
+    }
+}
+
 // Multi-block document support
 #[cfg(feature = "serde")]
 pub mod document;
-
-// AST module (for syntax tree types)
-pub mod ast;
-
-// Syntax highlighting module - parser-integrated highlighting
-#[cfg(feature = "highlighting")]
-pub mod highlighting;
 
 // Re-export common types for convenience
 pub use api::prelude as api_prelude;
@@ -53,7 +57,7 @@ pub use key::{Key, ScaleMode, ScaleType};
 
 pub use metadata::SongMetadata;
 
-pub use parsing::{ParseError, TextSpan, Token, TokenType};
+pub use keyflow_syntax::parsing::{ParseError, TextSpan, Token, TokenType};
 
 pub use primitives::{
     Interval, MusicalNote, MusicalNoteToken, Note, RomanCase, RomanNumeralToken, RootFormat,
@@ -72,16 +76,13 @@ pub use time::{
     Position, Tempo, TimeDuration, TimePosition, TimeSignature,
 };
 
-pub use ast::{
-    AccidentalAst, AlterationAst, AstNode, BassToneAst, ChordAst, ChordModifierAst, DurationAst,
-    ExtensionAst, ExtensionQualityAst, QualityAst, RhythmAst, RhythmKind, RootAst, SlashCountAst,
-    Spanned,
-};
-
-// Service types
+// RPC contracts + request/response payloads at the crate root for
+// `use keyflow_proto::{Charts, GuideRequest, ...}`-style imports.
+// Per-contract module aliases (`services::<svc>::Dispatcher`,
+// `<svc>::descriptor`, `<svc>::serve`, `<svc>::layer`) live under
+// `services::*` — touch those at the mounting site only.
 pub use services::{
-    ChartParseService, ChartParseServiceClient, ChartParseServiceDispatcher, ChartService,
-    ChartServiceClient, ChartServiceDispatcher, GuideRequest, GuideService, GuideServiceClient,
-    GuideServiceDispatcher, ParseRequest, ParseResponse, ParserService, ParserServiceClient,
-    ParserServiceDispatcher,
+    ChartParsers, Charts, GuideRequest, Guides, ParseRequest, ParseResponse, Parsers,
 };
+#[cfg(feature = "vox")]
+pub use services::{ChartParsersClient, ChartsClient, GuidesClient, ParsersClient};
