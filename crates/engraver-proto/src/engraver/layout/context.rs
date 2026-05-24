@@ -11,6 +11,8 @@
 //!
 //! This design eliminates RefCell runtime overhead and Box::leak memory leaks.
 
+use std::sync::Arc;
+
 use crate::engraver::fonts::SMuFLFont;
 use crate::engraver::model::Score;
 use crate::engraver::style::MStyle;
@@ -289,7 +291,7 @@ impl<'a> LayoutContext<'a> {
 pub struct LayoutContextOwned {
     config: LayoutConfiguration,
     score: Score,
-    style: MStyle,
+    style: Arc<MStyle>,
     font: SMuFLFontOwned,
 }
 
@@ -333,7 +335,7 @@ impl LayoutContextOwned {
         Self {
             config,
             score,
-            style,
+            style: Arc::new(style),
             font: SMuFLFontOwned { data: None, font },
         }
     }
@@ -344,6 +346,15 @@ impl LayoutContextOwned {
     /// without requiring a full Score or font.
     #[must_use]
     pub fn new_minimal(style: MStyle) -> Self {
+        Self::new_minimal_arc(Arc::new(style))
+    }
+
+    /// Create a minimal owned context from a shared style.
+    ///
+    /// Preferred when the caller already holds an `Arc<MStyle>` — avoids
+    /// cloning the style's underlying property vector.
+    #[must_use]
+    pub fn new_minimal_arc(style: Arc<MStyle>) -> Self {
         Self {
             config: LayoutConfiguration::default(),
             score: Score::default(),
@@ -358,7 +369,7 @@ impl LayoutContextOwned {
         Self {
             config,
             score: Score::default(),
-            style,
+            style: Arc::new(style),
             font: SMuFLFontOwned::empty(),
         }
     }
@@ -372,11 +383,15 @@ impl LayoutContextOwned {
             style: &self.style,
             font: self.font.as_ref(),
         }
+        // NOTE: `&self.style` autoderefs Arc<MStyle> -> &MStyle
     }
 
     /// Get mutable access to the style.
+    ///
+    /// Uses `Arc::make_mut` for copy-on-write: cheap when the `Arc` is unique,
+    /// clones the inner `MStyle` when shared.
     pub fn style_mut(&mut self) -> &mut MStyle {
-        &mut self.style
+        Arc::make_mut(&mut self.style)
     }
 
     /// Get mutable access to the score.

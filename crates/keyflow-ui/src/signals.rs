@@ -15,7 +15,7 @@ pub static CHART_SOURCE: GlobalSignal<String> = GlobalSignal::new(|| DEFAULT_CHA
 /// manual chart editor text.
 pub static SESSION_CHART_SOURCE: GlobalSignal<Option<String>> = GlobalSignal::new(|| None);
 
-/// The current preview mode (Snippet vs Page).
+/// The current preview mode.
 pub static CHART_PREVIEW_MODE: GlobalSignal<PreviewMode> = GlobalSignal::new(|| PreviewMode::Page);
 
 /// The physical pixel bounds of the chart preview area.
@@ -24,12 +24,14 @@ pub static CHART_EDITOR_BOUNDS: GlobalSignal<ChartEditorBounds> =
     GlobalSignal::new(ChartEditorBounds::zero);
 
 /// Preview mode for the chart renderer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PreviewMode {
     /// Content-sized layout with no fixed page dimensions.
     Snippet,
-    /// A4 paginated layout (595x842 points).
+    /// Printable paginated layout.
     Page,
+    /// iReal Pro-inspired responsive screen layout for phones/tablets.
+    Responsive,
 }
 
 /// Physical pixel bounds of the chart preview area in the window.

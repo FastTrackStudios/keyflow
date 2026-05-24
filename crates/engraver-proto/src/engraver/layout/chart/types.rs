@@ -17,6 +17,10 @@ use crate::engraver::scene::node::SceneNode;
 // ============================================================================
 
 /// Layout mode for chart rendering.
+///
+/// All dimensions are in PostScript points (72pt = 1 inch). Use
+/// [`PaperSize`] presets via [`LayoutMode::paginated`] / [`LayoutMode::snippet_of`]
+/// to avoid hard-coding sizes.
 #[derive(Debug, Clone)]
 pub enum LayoutMode {
     /// Paginated layout with discrete pages and page breaks.
@@ -29,20 +33,107 @@ pub enum LayoutMode {
 }
 
 impl LayoutMode {
-    /// Create a snippet layout mode for the given width.
-    /// Height will be calculated to fit the content.
+    /// Create a paginated layout for a standard paper size.
+    ///
+    /// Dimensions are in points (72pt = 1 inch).
+    #[must_use]
+    pub fn paginated(paper: crate::engraver::model::PaperSize) -> Self {
+        let (w, h) = paper.dimensions_pt();
+        Self::Paginated {
+            page_width: f64::from(w),
+            page_height: f64::from(h),
+        }
+    }
+
+    /// Paginated US Letter (8.5" × 11").
+    #[must_use]
+    pub fn paginated_letter() -> Self {
+        Self::paginated(crate::engraver::model::PaperSize::Letter)
+    }
+
+    /// Paginated A4 (210mm × 297mm).
+    #[must_use]
+    pub fn paginated_a4() -> Self {
+        Self::paginated(crate::engraver::model::PaperSize::A4)
+    }
+
+    /// Paginated US Legal (8.5" × 14").
+    #[must_use]
+    pub fn paginated_legal() -> Self {
+        Self::paginated(crate::engraver::model::PaperSize::Legal)
+    }
+
+    /// Paginated Tabloid / Ledger (11" × 17").
+    #[must_use]
+    pub fn paginated_tabloid() -> Self {
+        Self::paginated(crate::engraver::model::PaperSize::Tabloid)
+    }
+
+    /// Snippet mode at the width of a standard paper size.
+    #[must_use]
+    pub fn snippet_of(paper: crate::engraver::model::PaperSize) -> Self {
+        let (w, _) = paper.dimensions_pt();
+        Self::Snippet {
+            page_width: f64::from(w),
+        }
+    }
+
+    /// Snippet mode with an explicit width (points).
+    /// Height is calculated to fit the content.
     #[must_use]
     pub fn snippet(width: f64) -> Self {
         Self::Snippet { page_width: width }
     }
 
-    /// Create a snippet layout mode for Letter-size width (8.5").
+    /// Snippet mode at US Letter width.
     #[must_use]
     pub fn snippet_letter() -> Self {
-        Self::Snippet { page_width: 612.0 }
+        Self::snippet_of(crate::engraver::model::PaperSize::Letter)
     }
 
-    /// Get the page width for this layout mode.
+    /// Minimum page dimension (points). Anything smaller than this is
+    /// almost certainly a bug — a single staff line is ~5pt, a chord
+    /// symbol ~14pt, so a page narrower than 36pt (half an inch) can't
+    /// fit a single measure.
+    pub const MIN_DIMENSION_PT: f64 = 36.0;
+
+    /// Custom paginated layout with validation.
+    ///
+    /// Returns `None` if either dimension is non-finite, non-positive, or
+    /// smaller than [`Self::MIN_DIMENSION_PT`] (½").
+    #[must_use]
+    pub fn paginated_custom(width_pt: f64, height_pt: f64) -> Option<Self> {
+        if !Self::is_valid_dim(width_pt) || !Self::is_valid_dim(height_pt) {
+            return None;
+        }
+        Some(Self::Paginated {
+            page_width: width_pt,
+            page_height: height_pt,
+        })
+    }
+
+    /// Sanitize an arbitrary dimension to a layout-safe value.
+    ///
+    /// Replaces NaN/Inf/non-positive values with `fallback`, then clamps
+    /// to at least [`Self::MIN_DIMENSION_PT`]. Use this at API boundaries
+    /// where callers may pass viewport pixels that briefly hit 0 during
+    /// resize.
+    #[must_use]
+    pub fn sanitize_dim(value: f64, fallback: f64) -> f64 {
+        if Self::is_valid_dim(value) {
+            value
+        } else {
+            fallback.max(Self::MIN_DIMENSION_PT)
+        }
+    }
+
+    #[inline]
+    #[must_use]
+    fn is_valid_dim(d: f64) -> bool {
+        d.is_finite() && d >= Self::MIN_DIMENSION_PT
+    }
+
+    /// Get the page width (points) for this layout mode.
     #[must_use]
     pub fn page_width(&self) -> f64 {
         match self {
@@ -51,15 +142,23 @@ impl LayoutMode {
             LayoutMode::Snippet { page_width } => *page_width,
         }
     }
+
+    /// Get the page height (points), if bounded.
+    ///
+    /// Returns `None` for [`LayoutMode::ContinuousScroll`] (unbounded) and
+    /// [`LayoutMode::Snippet`] (auto-fits content).
+    #[must_use]
+    pub fn page_height(&self) -> Option<f64> {
+        match self {
+            LayoutMode::Paginated { page_height, .. } => Some(*page_height),
+            LayoutMode::ContinuousScroll { .. } | LayoutMode::Snippet { .. } => None,
+        }
+    }
 }
 
 impl Default for LayoutMode {
     fn default() -> Self {
-        // Default to Letter size pages
-        Self::Paginated {
-            page_width: 612.0,  // 8.5" in points
-            page_height: 792.0, // 11" in points
-        }
+        Self::paginated_letter()
     }
 }
 
@@ -502,6 +601,14 @@ pub struct MelodyNoteSegment {
     pub octave: Option<u8>,
     /// Resolved accidental for rendering
     pub accidental: Accidental,
+    /// Additional pitches stacked on this note's stem — comes from
+    /// MelodyNote.extra_pitches (octave doublings, double-stops). Each
+    /// entry is (pitch name, optional explicit octave) and is resolved
+    /// to a staff line at render time using the active clef.
+    pub extra_pitches: Vec<(String, Option<u8>)>,
+    /// Relative octave modifiers for `extra_pitches`; parallel to
+    /// `extra_pitches`, defaulting to none when omitted.
+    pub extra_pitch_modifiers: Vec<crate::chart::melody::OctaveModifier>,
 }
 
 impl MelodyNoteSegment {
@@ -550,6 +657,13 @@ pub struct MeasureMelodyData {
     pub segments: Vec<MelodyNoteSegment>,
     /// Total beats consumed by melody segments
     pub total_beats: f64,
+    /// Active clef for this measure — drives pitch→staff-line mapping.
+    /// Defaults to Treble so legacy code paths that don't yet set it
+    /// keep their previous behaviour.
+    pub clef: crate::chart::ChartClef,
+    /// Active key signature as fifths: positive sharps, negative flats.
+    /// Used only to decide which accidentals must be visibly printed.
+    pub key_signature: i8,
 }
 
 impl MeasureMelodyData {
@@ -567,7 +681,7 @@ impl MeasureMelodyData {
 ///
 /// Handles pitch names like "C", "F#", "Bb", "D##", "Ebb".
 /// Returns None for rests ("r").
-fn parse_melody_pitch(pitch: &str) -> Option<(PitchClass, i8, Accidental)> {
+pub(super) fn parse_melody_pitch(pitch: &str) -> Option<(PitchClass, i8, Accidental)> {
     if pitch == "r" || pitch.is_empty() {
         return None;
     }
@@ -598,12 +712,70 @@ fn parse_melody_pitch(pitch: &str) -> Option<(PitchClass, i8, Accidental)> {
     Some((class, alteration, accidental))
 }
 
+fn key_signature_alteration(class: PitchClass, key_signature: i8) -> i8 {
+    let letter = match class {
+        PitchClass::C => 'C',
+        PitchClass::D => 'D',
+        PitchClass::E => 'E',
+        PitchClass::F => 'F',
+        PitchClass::G => 'G',
+        PitchClass::A => 'A',
+        PitchClass::B => 'B',
+    };
+
+    if key_signature > 0 {
+        const SHARP_ORDER: [char; 7] = ['F', 'C', 'G', 'D', 'A', 'E', 'B'];
+        if SHARP_ORDER[..key_signature.min(7) as usize].contains(&letter) {
+            return 1;
+        }
+    } else if key_signature < 0 {
+        const FLAT_ORDER: [char; 7] = ['B', 'E', 'A', 'D', 'G', 'C', 'F'];
+        if FLAT_ORDER[..key_signature.unsigned_abs().min(7) as usize].contains(&letter) {
+            return -1;
+        }
+    }
+
+    0
+}
+
+fn accidental_from_alteration(alteration: i8) -> Accidental {
+    match alteration {
+        2 => Accidental::DoubleSharp,
+        1 => Accidental::Sharp,
+        -1 => Accidental::Flat,
+        -2 => Accidental::DoubleFlat,
+        _ => Accidental::Natural,
+    }
+}
+
+fn accidental_for_key_signature(
+    class: PitchClass,
+    alteration: i8,
+    explicit_accidental: Accidental,
+    key_signature: i8,
+) -> Accidental {
+    let implied = key_signature_alteration(class, key_signature);
+
+    if alteration == implied {
+        return Accidental::None;
+    }
+
+    // An explicit natural should stay visible when it cancels a key-signature
+    // accidental. For unmarked natural pitches that differ from the active key,
+    // also print a natural so the rendered note matches the pitch spelling.
+    if alteration == 0 || explicit_accidental == Accidental::Natural {
+        Accidental::Natural
+    } else {
+        accidental_from_alteration(alteration)
+    }
+}
+
 /// Resolve the octave for a melody note using relative-pitch logic.
 ///
 /// Given the previous note's pitch class and octave, find the octave for the
 /// new note that places it closest (within a 4th) to the previous note.
 /// Then apply octave modifier (Up = +1, Down = -1).
-fn resolve_relative_octave(
+pub(super) fn resolve_relative_octave(
     new_class: PitchClass,
     prev_class: PitchClass,
     prev_octave: u8,
@@ -636,27 +808,99 @@ fn resolve_relative_octave(
     match octave_modifier {
         crate::chart::melody::OctaveModifier::Up => best_octave.saturating_add(1),
         crate::chart::melody::OctaveModifier::Down => best_octave.saturating_sub(1),
+        crate::chart::melody::OctaveModifier::UpBy(count) => best_octave.saturating_add(count),
+        crate::chart::melody::OctaveModifier::DownBy(count) => best_octave.saturating_sub(count),
         crate::chart::melody::OctaveModifier::None => best_octave,
     }
 }
 
 /// Convert a melody pitch string + resolved octave to a staff line position
-/// and accidental for treble clef rendering.
+/// and accidental, accounting for the active clef.
 ///
-/// Staff line 0 = middle line (B4 in treble clef).
-/// Positive = up, negative = down.
-pub fn melody_pitch_to_line(pitch: &str, octave: u8) -> (i32, Accidental) {
+/// Staff line 0 = middle line. Each clef shifts the middle-line pitch:
+/// - Treble (G clef): B4 (staff_position 6) = line 0
+/// - Bass (F clef): D3 (staff_position -6) = line 0
+/// - Alto (C clef on line 3): C4 (staff_position 0) = line 0
+/// - Tenor (C clef on line 4): A3 (staff_position -2) = line 0
+///
+/// Positive = up, negative = down. For backwards-compat callers that
+/// don't yet know which clef they're rendering, use
+/// [`melody_pitch_to_line_treble`].
+pub fn melody_pitch_to_line_for_clef(
+    pitch: &str,
+    octave: u8,
+    clef: crate::chart::ChartClef,
+) -> (i32, Accidental) {
+    melody_pitch_to_line_for_clef_and_key(pitch, octave, clef, 0)
+}
+
+pub fn melody_pitch_to_line_for_clef_and_key(
+    pitch: &str,
+    octave: u8,
+    clef: crate::chart::ChartClef,
+    key_signature: i8,
+) -> (i32, Accidental) {
     let Some((class, alteration, accidental)) = parse_melody_pitch(pitch) else {
-        return (0, Accidental::None); // fallback for unparseable
+        return (0, Accidental::None);
     };
-
     let p = Pitch::with_alteration(class, Octave::new(octave as i8), alteration);
-    // staff_position() returns position relative to middle C (C4 = 0)
-    // In treble clef, B4 (staff_position = 6) is the middle line (line 0)
     let staff_pos = p.staff_position();
-    let line = staff_pos - 6; // B4 (pos 6) → line 0
+    let middle_line_pos = clef_middle_line_pos(clef);
+    let line = staff_pos - middle_line_pos;
+    let display_accidental =
+        accidental_for_key_signature(class, alteration, accidental, key_signature);
+    (line, display_accidental)
+}
 
-    (line, accidental)
+/// Treble-clef pitch-to-line (back-compat shim for callers that haven't
+/// been threaded with clef yet).
+pub fn melody_pitch_to_line(pitch: &str, octave: u8) -> (i32, Accidental) {
+    melody_pitch_to_line_for_clef(pitch, octave, crate::chart::ChartClef::Treble)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StaffPlacement {
+    StaffLine(i32),
+    StaffSpace(i32),
+    LedgerLineAbove(i32),
+    LedgerSpaceAbove(i32),
+    LedgerLineBelow(i32),
+    LedgerSpaceBelow(i32),
+}
+
+pub fn staff_placement_for_line(line: i32) -> StaffPlacement {
+    match line {
+        -4 | -2 | 0 | 2 | 4 => StaffPlacement::StaffLine((line + 4) / 2 + 1),
+        -3 | -1 | 1 | 3 => StaffPlacement::StaffSpace((line + 3) / 2 + 1),
+        l if l > 4 && l % 2 == 0 => StaffPlacement::LedgerLineAbove((l - 4) / 2),
+        l if l > 4 => StaffPlacement::LedgerSpaceAbove((l - 5) / 2 + 1),
+        l if l < -4 && l % 2 == 0 => StaffPlacement::LedgerLineBelow((-4 - l) / 2),
+        l if l < -4 => StaffPlacement::LedgerSpaceBelow((-5 - l) / 2 + 1),
+        _ => unreachable!(),
+    }
+}
+
+pub fn melody_staff_placement_for_clef(
+    pitch: &str,
+    octave: u8,
+    clef: crate::chart::ChartClef,
+) -> (i32, StaffPlacement, Accidental) {
+    let (line, accidental) = melody_pitch_to_line_for_clef(pitch, octave, clef);
+    (line, staff_placement_for_line(line), accidental)
+}
+
+/// Staff `staff_position` (relative to middle C = 0) of the middle line
+/// for each clef. Treble: B4 = 6. Bass: D3 = -6. Alto: C4 = 0.
+/// Tenor: A3 = -2. Percussion has no pitched middle — fall back to
+/// treble so derived layouts stay sensible.
+fn clef_middle_line_pos(clef: crate::chart::ChartClef) -> i32 {
+    match clef {
+        crate::chart::ChartClef::Treble => 6,
+        crate::chart::ChartClef::Bass => -6,
+        crate::chart::ChartClef::Alto => 0,
+        crate::chart::ChartClef::Tenor => -2,
+        crate::chart::ChartClef::Percussion => 6,
+    }
 }
 
 /// Compute extra vertical space needed above and below the staff
@@ -665,7 +909,11 @@ pub fn melody_pitch_to_line(pitch: &str, octave: u8) -> (i32, Accidental) {
 /// Returns `(extra_above, extra_below)` in points.
 /// The staff spans lines -4 (bottom, E4) to +4 (top, F5).
 /// Notes outside this range need ledger lines and extra vertical space.
-pub fn melody_note_extent(melody_data: &MeasureMelodyData, spatium: f64) -> (f64, f64) {
+pub fn melody_note_extent(
+    melody_data: &MeasureMelodyData,
+    spatium: f64,
+    clef: crate::chart::ChartClef,
+) -> (f64, f64) {
     let mut max_line: i32 = 0;
     let mut min_line: i32 = 0;
 
@@ -674,7 +922,7 @@ pub fn melody_note_extent(melody_data: &MeasureMelodyData, spatium: f64) -> (f64
             continue;
         }
         if let Some(oct) = seg.octave {
-            let (line, _) = melody_pitch_to_line(&seg.pitch, oct);
+            let (line, _) = melody_pitch_to_line_for_clef(&seg.pitch, oct, clef);
             max_line = max_line.max(line);
             min_line = min_line.min(line);
         }
@@ -710,6 +958,7 @@ pub fn melody_note_extent(melody_data: &MeasureMelodyData, spatium: f64) -> (f64
 pub fn expand_melodies_across_measures(
     section_measures: &[crate::chart::types::Measure],
     beats_per_measure: f64,
+    key_signature: i8,
 ) -> HashMap<usize, MeasureMelodyData> {
     let mut result: HashMap<usize, MeasureMelodyData> = HashMap::new();
 
@@ -774,6 +1023,7 @@ pub fn expand_melodies_across_measures(
                 while beats_to_place > 0.001 {
                     // Get or create melody data for current measure
                     let measure_data = result.entry(current_measure).or_default();
+                    measure_data.key_signature = key_signature;
 
                     // Check remaining capacity in this measure
                     let capacity = beats_per_measure - measure_data.total_beats;
@@ -793,12 +1043,25 @@ pub fn expand_melodies_across_measures(
                     let segment = MelodyNoteSegment {
                         pitch: note.pitch.clone(),
                         beats: segment_beats,
-                        dotted: note.dotted && is_last_segment, // Only dot the final segment
+                        dotted: note.dotted && is_last_segment,
                         tie_from_previous: !is_first_segment,
                         tie_to_next: !is_last_segment && !note.is_rest(),
                         is_rest: note.is_rest(),
                         octave: resolved_octave,
                         accidental: resolved_accidental,
+                        // Polyphony stack — only attach to the first segment
+                        // when a note spills across barlines; otherwise the
+                        // tied continuation segments would duplicate heads.
+                        extra_pitches: if is_first_segment {
+                            note.extra_pitches.clone()
+                        } else {
+                            Vec::new()
+                        },
+                        extra_pitch_modifiers: if is_first_segment {
+                            note.extra_pitch_modifiers.clone()
+                        } else {
+                            Vec::new()
+                        },
                     };
 
                     measure_data.segments.push(segment);
@@ -930,3 +1193,104 @@ pub fn expand_melodies_across_measures(
 // (engraver::layout::chart) for backward compatibility.
 //
 // See: crate::chart::rhythm::{Spillback, detect_push_spillbacks, detect_section_start_spillback}
+
+#[cfg(test)]
+mod layout_mode_tests {
+    use super::{
+        Accidental, LayoutMode, StaffPlacement, melody_pitch_to_line_for_clef,
+        melody_pitch_to_line_for_clef_and_key, melody_staff_placement_for_clef,
+    };
+    use crate::chart::ChartClef;
+    use crate::engraver::model::PaperSize;
+
+    #[test]
+    fn paper_presets_match_paper_size_dimensions() {
+        let letter = LayoutMode::paginated_letter();
+        let (w, h) = PaperSize::Letter.dimensions_pt();
+        assert_eq!(letter.page_width(), f64::from(w));
+        assert_eq!(letter.page_height(), Some(f64::from(h)));
+    }
+
+    #[test]
+    fn paginated_custom_rejects_garbage() {
+        assert!(LayoutMode::paginated_custom(f64::NAN, 800.0).is_none());
+        assert!(LayoutMode::paginated_custom(800.0, f64::INFINITY).is_none());
+        assert!(LayoutMode::paginated_custom(-1.0, 800.0).is_none());
+        assert!(LayoutMode::paginated_custom(0.0, 800.0).is_none());
+        // Below MIN_DIMENSION_PT
+        assert!(LayoutMode::paginated_custom(20.0, 800.0).is_none());
+        // Valid
+        assert!(LayoutMode::paginated_custom(400.0, 600.0).is_some());
+    }
+
+    #[test]
+    fn sanitize_dim_falls_back_on_garbage() {
+        let fallback = 612.0;
+        assert_eq!(LayoutMode::sanitize_dim(f64::NAN, fallback), fallback);
+        assert_eq!(LayoutMode::sanitize_dim(0.0, fallback), fallback);
+        assert_eq!(LayoutMode::sanitize_dim(-50.0, fallback), fallback);
+        assert_eq!(LayoutMode::sanitize_dim(500.0, fallback), 500.0);
+    }
+
+    #[test]
+    fn page_height_is_none_for_unbounded_modes() {
+        assert!(LayoutMode::snippet(400.0).page_height().is_none());
+        assert!(
+            LayoutMode::ContinuousScroll { width: 400.0 }
+                .page_height()
+                .is_none()
+        );
+        assert!(LayoutMode::paginated_letter().page_height().is_some());
+    }
+
+    #[test]
+    fn bass_clef_note_staff_positions_match_lotf_measure_6() {
+        let (f_line, f_place, _) = melody_staff_placement_for_clef("F#", 2, ChartClef::Bass);
+        assert_eq!(f_line, -5);
+        assert_eq!(f_place, StaffPlacement::LedgerSpaceBelow(1));
+
+        let (c_line, c_place, _) = melody_staff_placement_for_clef("C#", 4, ChartClef::Bass);
+        assert_eq!(c_line, 6);
+        assert_eq!(c_place, StaffPlacement::LedgerLineAbove(1));
+    }
+
+    #[test]
+    fn middle_c_ledger_lines_are_clef_dependent() {
+        let (treble_line, treble_place, _) =
+            melody_staff_placement_for_clef("C", 4, ChartClef::Treble);
+        assert_eq!(treble_line, -6);
+        assert_eq!(treble_place, StaffPlacement::LedgerLineBelow(1));
+
+        let (bass_line, bass_place, _) = melody_staff_placement_for_clef("C", 4, ChartClef::Bass);
+        assert_eq!(bass_line, 6);
+        assert_eq!(bass_place, StaffPlacement::LedgerLineAbove(1));
+    }
+
+    #[test]
+    fn bass_middle_line_is_d3() {
+        let (line, _) = melody_pitch_to_line_for_clef("D", 3, ChartClef::Bass);
+        assert_eq!(line, 0);
+    }
+
+    #[test]
+    fn key_signature_suppresses_implied_melody_accidentals() {
+        // E major has F#, C#, G#, D#. The C# pitch still maps to the same
+        // ledger-line staff position, but it should not print a redundant #.
+        let (line, accidental) = melody_pitch_to_line_for_clef_and_key("C#", 4, ChartClef::Bass, 4);
+        assert_eq!(line, 6);
+        assert_eq!(accidental, Accidental::None);
+
+        let (_, accidental) = melody_pitch_to_line_for_clef_and_key("C", 4, ChartClef::Bass, 4);
+        assert_eq!(accidental, Accidental::Natural);
+    }
+
+    #[test]
+    fn key_signature_suppresses_implied_flat_melody_accidentals() {
+        // Bb major has Bb and Eb.
+        let (_, accidental) = melody_pitch_to_line_for_clef_and_key("Bb", 3, ChartClef::Bass, -2);
+        assert_eq!(accidental, Accidental::None);
+
+        let (_, accidental) = melody_pitch_to_line_for_clef_and_key("B", 3, ChartClef::Bass, -2);
+        assert_eq!(accidental, Accidental::Natural);
+    }
+}

@@ -16,6 +16,20 @@ use crate::time::{AbsolutePosition, MusicalPosition, Tempo, TimeSignature};
 use facet::Facet;
 use std::collections::HashMap;
 
+/// Top-level clef choice for a chart. The engraver maps each variant to its
+/// own ClefType — proto-side this is kept small (no glyph data) so the
+/// keyflow workspace can stay engraver-agnostic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Facet, Default)]
+#[repr(u8)]
+pub enum ChartClef {
+    #[default]
+    Treble,
+    Bass,
+    Alto,
+    Tenor,
+    Percussion,
+}
+
 /// The complete parsed chart structure
 #[derive(Clone, PartialEq, Facet)]
 pub struct Chart {
@@ -45,6 +59,10 @@ pub struct Chart {
 
     /// Initial time signature at the start
     pub initial_time_signature: Option<TimeSignature>,
+
+    /// Initial clef. `None` means the renderer picks its default (typically
+    /// treble for lead-sheet charts).
+    pub initial_clef: Option<ChartClef>,
 
     /// All time signature changes throughout the song
     pub time_signature_changes: Vec<TimeSignatureChange>,
@@ -87,6 +105,7 @@ impl Chart {
             tempo: None,
             time_signature: None,
             initial_time_signature: None,
+            initial_clef: None,
             time_signature_changes: Vec::new(),
             tempo_changes: Vec::new(),
             chord_memory: ChordMemory::new(),

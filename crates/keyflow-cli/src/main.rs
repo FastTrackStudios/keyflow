@@ -1,19 +1,55 @@
 use std::io::Read;
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use keyflow::engraver::export::pdf::PdfSerializer;
 use keyflow::engraver::export::svg::{SvgExportConfig, SvgSerializer};
 use keyflow::engraver::fonts::ChartFontBundle;
 use keyflow::engraver::layout::chart::{
-    ChartLayoutConfig, ChartLayoutEngine, ChartLayoutResult, LayoutMode,
+    Breakpoint, ChartLayoutConfig, ChartLayoutEngine, ChartLayoutResult, LayoutMode,
 };
 use keyflow::engraver::style::MStyle;
 use keyflow::Chart;
 
-/// A4 page dimensions in points.
-const A4_WIDTH: f64 = 595.0;
-const A4_HEIGHT: f64 = 842.0;
+/// Layout preset choice for the `png` / `svg` subcommands.
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum PresetMode {
+    /// A4 paginated, Master Rhythm preset.
+    Page,
+    /// Content-sized, minimal margins.
+    Snippet,
+    /// iReal Pro-style breakpoint-driven layout.
+    Responsive,
+}
+
+/// Breakpoint choice for `--mode responsive`.
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum BreakpointArg {
+    Phone,
+    Tablet,
+    Desktop,
+}
+
+impl BreakpointArg {
+    fn to_engraver(self) -> Breakpoint {
+        match self {
+            Self::Phone => Breakpoint::Phone,
+            Self::Tablet => Breakpoint::Tablet,
+            Self::Desktop => Breakpoint::Desktop,
+        }
+    }
+
+    /// Default viewport width (points) for this breakpoint.
+    /// Picked roughly in the middle of each breakpoint's range so the
+    /// rendered output looks representative without the caller passing --width.
+    fn default_width_pt(self) -> f64 {
+        match self {
+            Self::Phone => 375.0, // typical phone CSS width / DPI_SCALE
+            Self::Tablet => 720.0,
+            Self::Desktop => 1280.0,
+        }
+    }
+}
 
 #[derive(Parser)]
 #[command(
@@ -69,6 +105,94 @@ enum Commands {
         #[arg(default_value = "-")]
         input: String,
     },
+    /// Render a directory of charts into a gallery (PNG per mode + index.md).
+    Gallery {
+        /// Directory containing .kf source files (recursively scanned, top level only).
+        #[arg(short, long, default_value = "examples")]
+        input_dir: PathBuf,
+        /// Output directory for the rendered gallery.
+        #[arg(short, long, default_value = "examples/gallery")]
+        output_dir: PathBuf,
+        /// Bitmap density factor (1.0 = 1 px per pt).
+        #[arg(long, default_value_t = 1.5)]
+        scale: f32,
+    },
+    /// Import a MusicXML (.musicxml / .mxl) file and render the converted chart.
+    Musicxml {
+        /// Path to a .musicxml or .mxl file.
+        input: PathBuf,
+        /// Output directory for the rendered chart (one PNG per variant).
+        #[arg(short, long, default_value = "musicxml-out")]
+        output_dir: PathBuf,
+        /// Bitmap density factor (1.0 = 1 px per pt).
+        #[arg(long, default_value_t = 2.0)]
+        scale: f32,
+    },
+    /// Import a MusicXML (.musicxml / .mxl) file and write Keyflow text.
+    MusicxmlKf {
+        /// Path to a .musicxml or .mxl file.
+        input: PathBuf,
+        /// Output .kf path. Defaults to the input path with a .kf extension.
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+    /// Compare a MusicXML import against a .kf parse after both become Chart objects.
+    MusicxmlCompare {
+        /// Path to the source .musicxml or .mxl file.
+        musicxml: PathBuf,
+        /// Path to the hand-authored or exported .kf file.
+        keyflow: PathBuf,
+        /// Maximum number of differences to print.
+        #[arg(long, default_value_t = 50)]
+        max_diffs: usize,
+        /// Also compare source MusicXML measure numbers and widths.
+        #[arg(long)]
+        include_source: bool,
+    },
+    /// Import every `*.musicxml` in a directory and render each into its own
+    /// subfolder under `output-dir`. Mirrors `gallery` but for MusicXML input.
+    MusicxmlGallery {
+        /// Directory containing `*.musicxml` files (top level only).
+        #[arg(short, long, default_value = "examples/png-project-charts")]
+        input_dir: PathBuf,
+        /// Output directory.
+        #[arg(short, long, default_value = "examples/png-project-charts/rendered")]
+        output_dir: PathBuf,
+        /// Bitmap density factor (1.0 = 1 px per pt).
+        #[arg(long, default_value_t = 1.5)]
+        scale: f32,
+    },
+    /// Compare MusicXML measure width hints against generated measure spacing.
+    MusicxmlSpacingCompare {
+        /// Path to a .musicxml or .mxl file.
+        input: PathBuf,
+        /// Only print rows whose normalized relative error is at or above this fraction.
+        #[arg(long, default_value_t = 0.25)]
+        tolerance: f64,
+    },
+    /// Render chart to PNG (offline; uses resvg). Useful for visual review.
+    Png {
+        /// Path to a .kf file, or "-" for stdin
+        #[arg(default_value = "-")]
+        input: String,
+        /// Output PNG path (page suffix added for multi-page).
+        #[arg(short, long, default_value = "chart.png")]
+        output: PathBuf,
+        /// Layout preset.
+        #[arg(short, long, value_enum, default_value_t = PresetMode::Page)]
+        mode: PresetMode,
+        /// Responsive breakpoint (only used when --mode responsive).
+        #[arg(short, long, value_enum, default_value_t = BreakpointArg::Desktop)]
+        breakpoint: BreakpointArg,
+        /// Viewport width (points). Overrides the breakpoint's default.
+        /// Only meaningful for --mode snippet / responsive.
+        #[arg(short, long)]
+        width: Option<f64>,
+        /// Scale factor for the output bitmap (1.0 = 1px per pt at 72 DPI).
+        /// 2.0 gives a Retina-resolution PNG.
+        #[arg(long, default_value_t = 2.0)]
+        scale: f32,
+    },
 }
 
 fn read_source(input: &str) -> Result<String, String> {
@@ -109,6 +233,298 @@ fn generate_midi_chart_text(input: &str) -> Result<String, String> {
     keyflow::midi::generate_chart_text_from_midi_bytes(&bytes)
 }
 
+struct ChartCompareReport {
+    total_diffs: usize,
+    diffs: Vec<String>,
+    truncated: bool,
+}
+
+fn compare_charts(
+    left: &Chart,
+    right: &Chart,
+    include_source: bool,
+    max_diffs: usize,
+) -> ChartCompareReport {
+    let mut report = ChartCompareReport {
+        total_diffs: 0,
+        diffs: Vec::new(),
+        truncated: false,
+    };
+
+    push_diff_if(
+        &mut report,
+        max_diffs,
+        left.metadata.title != right.metadata.title,
+        format!(
+            "metadata.title: musicxml={:?}, keyflow={:?}",
+            left.metadata.title, right.metadata.title
+        ),
+    );
+    push_diff_if(
+        &mut report,
+        max_diffs,
+        left.tempo != right.tempo,
+        format!(
+            "tempo: musicxml={:?}, keyflow={:?}",
+            left.tempo, right.tempo
+        ),
+    );
+    push_diff_if(
+        &mut report,
+        max_diffs,
+        left.initial_key != right.initial_key,
+        format!(
+            "initial_key: musicxml={:?}, keyflow={:?}",
+            left.initial_key, right.initial_key
+        ),
+    );
+    push_diff_if(
+        &mut report,
+        max_diffs,
+        left.initial_time_signature != right.initial_time_signature,
+        format!(
+            "initial_time_signature: musicxml={:?}, keyflow={:?}",
+            left.initial_time_signature, right.initial_time_signature
+        ),
+    );
+    let left_measures = flatten_measures_expanding_repeats(left);
+    let right_measures = flatten_measures(right);
+    push_diff_if(
+        &mut report,
+        max_diffs,
+        left_measures.len() != right_measures.len(),
+        format!(
+            "global measure count: musicxml={}, keyflow={}",
+            left_measures.len(),
+            right_measures.len()
+        ),
+    );
+
+    for (left_idx, left_measure) in left_measures.iter().enumerate() {
+        let measure_number = left_measure
+            .source_measure_number
+            .map(|n| n as usize)
+            .unwrap_or(left_idx + 1);
+        let Some(right_measure) = right_measures.get(left_idx) else {
+            push_diff_if(
+                &mut report,
+                max_diffs,
+                true,
+                format!(
+                    "expanded measure {} source measure {measure_number}: missing keyflow measure",
+                    left_idx + 1
+                ),
+            );
+            continue;
+        };
+
+        let left_sig = measure_signature(left_measure, include_source);
+        let right_sig = measure_signature(right_measure, include_source);
+        push_diff_if(
+            &mut report,
+            max_diffs,
+            left_sig != right_sig,
+            format!(
+                "expanded measure {} source measure {measure_number}: musicxml={left_sig}, keyflow={right_sig}",
+                left_idx + 1
+            ),
+        );
+    }
+
+    if report.total_diffs > report.diffs.len() {
+        report.truncated = true;
+    }
+    report
+}
+
+fn flatten_measures(chart: &Chart) -> Vec<&keyflow::chart::types::Measure> {
+    chart
+        .sections
+        .iter()
+        .flat_map(|section| section.measures())
+        .collect()
+}
+
+fn flatten_measures_expanding_repeats(chart: &Chart) -> Vec<&keyflow::chart::types::Measure> {
+    let measures = flatten_measures(chart);
+    let mut expanded = Vec::new();
+    let mut repeat_start = 0usize;
+
+    for (idx, measure) in measures.iter().enumerate() {
+        if matches!(
+            measure.start_repeat,
+            keyflow::chart::notations::RepeatMark::Forward
+        ) {
+            repeat_start = idx;
+        }
+
+        expanded.push(*measure);
+
+        if matches!(
+            measure.end_repeat,
+            keyflow::chart::notations::RepeatMark::Backward
+        ) {
+            let repeat_end = first_ending_start(&measures, repeat_start, idx).unwrap_or(idx + 1);
+            for repeated in &measures[repeat_start..repeat_end] {
+                expanded.push(*repeated);
+            }
+            repeat_start = idx + 1;
+        }
+    }
+
+    expanded
+}
+
+fn first_ending_start(
+    measures: &[&keyflow::chart::types::Measure],
+    repeat_start: usize,
+    repeat_end: usize,
+) -> Option<usize> {
+    measures[repeat_start..=repeat_end]
+        .iter()
+        .position(|measure| {
+            measure
+                .volta_start
+                .as_ref()
+                .map(|volta| volta.numbers.contains(&1))
+                .unwrap_or(false)
+        })
+        .map(|offset| repeat_start + offset)
+}
+
+fn push_diff_if(report: &mut ChartCompareReport, max_diffs: usize, condition: bool, diff: String) {
+    if !condition {
+        return;
+    }
+    report.total_diffs += 1;
+    if report.diffs.len() < max_diffs {
+        report.diffs.push(diff);
+    }
+}
+
+fn measure_signature(measure: &keyflow::chart::types::Measure, include_source: bool) -> String {
+    let whole_measure_silence = is_whole_measure_silence(measure);
+    let chords = measure
+        .chords
+        .iter()
+        .filter(|chord| chord.full_symbol != "s")
+        .map(|chord| {
+            format!(
+                "{}:{:?}:{:?}:{:?}",
+                chord.full_symbol, chord.rhythm, chord.duration, chord.commands
+            )
+        })
+        .collect::<Vec<_>>();
+    let rhythm = if whole_measure_silence {
+        vec!["whole-measure-silence".to_string()]
+    } else {
+        measure
+            .rhythm_elements
+            .iter()
+            .map(|element| match element {
+                keyflow::chart::types::RhythmElement::Chord(chord) => {
+                    format!(
+                        "chord({}:{:?}:{:?})",
+                        chord.full_symbol, chord.rhythm, chord.duration
+                    )
+                }
+                keyflow::chart::types::RhythmElement::Rest(rest) => {
+                    format!("rest({:?}:{:?})", rest.rhythm, rest.duration)
+                }
+                keyflow::chart::types::RhythmElement::Space(space) => {
+                    format!("space({:?}:{:?})", space.rhythm, space.duration)
+                }
+            })
+            .collect::<Vec<_>>()
+    };
+    let staff_text = measure
+        .staff_text
+        .iter()
+        .map(|text| {
+            format!(
+                "{}@{}:{:?}:box={}:bold={}:italic={}",
+                text.text, text.beat, text.placement, text.boxed, text.bold, text.italic
+            )
+        })
+        .collect::<Vec<_>>();
+    let figured = measure
+        .figured_bass
+        .iter()
+        .map(|fb| {
+            let rows = fb
+                .rows
+                .iter()
+                .map(|row| format!("{}{}", row.accidental, row.text))
+                .collect::<Vec<_>>()
+                .join("/");
+            format!("{rows}@{}:{:?}", fb.beat, fb.placement)
+        })
+        .collect::<Vec<_>>();
+    let melodies = if whole_measure_silence {
+        Vec::new()
+    } else {
+        measure
+            .melodies
+            .iter()
+            .map(|melody| format!("{melody:?}"))
+            .collect::<Vec<_>>()
+    };
+    let source = if include_source {
+        format!(
+            ", source={:?}, width={:?}",
+            measure.source_measure_number, measure.source_measure_width
+        )
+    } else {
+        String::new()
+    };
+
+    format!(
+        "ts={:?}, repeat_count={}, start={:?}, end={:?}, volta={:?}, chords={:?}, rhythm={:?}, text={:?}, figured={:?}, dynamics={:?}, classical={:?}, hairpins={:?}, melodies={:?}{}",
+        measure.time_signature,
+        measure.repeat_count,
+        measure.start_repeat,
+        measure.end_repeat,
+        measure.volta_start,
+        chords,
+        rhythm,
+        staff_text,
+        figured,
+        measure.dynamics,
+        measure.classical_dynamics,
+        measure.hairpins,
+        melodies,
+        source
+    )
+}
+
+fn is_whole_measure_silence(measure: &keyflow::chart::types::Measure) -> bool {
+    let has_only_space_chord = measure.chords.iter().all(|chord| chord.full_symbol == "s");
+    let has_rest_or_space_rhythm = !measure.rhythm_elements.is_empty()
+        && measure.rhythm_elements.iter().all(|element| {
+            element.is_rest()
+                || element.is_space()
+                || element
+                    .as_chord()
+                    .map(|chord| chord.full_symbol == "s")
+                    .unwrap_or(false)
+        });
+    let has_rest_melody = !measure.melodies.is_empty()
+        && measure.melodies.iter().all(|melody| {
+            melody.notes.len() == 1
+                && melody.notes[0].is_rest()
+                && melody.notes[0].duration == 2
+                && melody.notes[0].dotted
+        });
+
+    has_only_space_chord
+        && measure.staff_text.is_empty()
+        && measure.figured_bass.is_empty()
+        && measure.dynamics.is_empty()
+        && measure.classical_dynamics.is_empty()
+        && measure.hairpins.is_empty()
+        && (has_rest_or_space_rhythm || has_rest_melody)
+}
+
 struct LayoutPipeline {
     font_bundle: ChartFontBundle,
     engine: ChartLayoutEngine,
@@ -127,30 +543,95 @@ impl LayoutPipeline {
 
     fn layout(&self, chart: &Chart) -> ChartLayoutResult {
         let config = ChartLayoutConfig::master_rhythm().with_page_offsets(true);
-        let mode = LayoutMode::Paginated {
-            page_width: A4_WIDTH,
-            page_height: A4_HEIGHT,
+        let mode = LayoutMode::paginated_a4();
+        self.engine.layout_chart_with_config(chart, &mode, &config)
+    }
+
+    /// Layout with explicit preset + viewport for visual review.
+    ///
+    /// `width_pt` is ignored in Page mode (uses A4); meaningful for Snippet
+    /// and Responsive where it sets the viewport width.
+    fn layout_preset(
+        &self,
+        chart: &Chart,
+        preset: PresetMode,
+        breakpoint: BreakpointArg,
+        width_pt: f64,
+    ) -> ChartLayoutResult {
+        let (mode, config) = match preset {
+            PresetMode::Page => (
+                LayoutMode::paginated_a4(),
+                ChartLayoutConfig::master_rhythm().with_page_offsets(false),
+            ),
+            PresetMode::Snippet => (
+                LayoutMode::snippet(width_pt),
+                ChartLayoutConfig::snippet().with_page_offsets(false),
+            ),
+            PresetMode::Responsive => (
+                LayoutMode::ContinuousScroll { width: width_pt },
+                ChartLayoutConfig::responsive_for(breakpoint.to_engraver()),
+            ),
         };
         self.engine.layout_chart_with_config(chart, &mode, &config)
+    }
+
+    /// Embed every named font the chart pipeline ever references into the SVG
+    /// export config. Names must match the values used by HarmonyStyle /
+    /// ChartFontBundle::configure_renderer so resvg can resolve them.
+    fn with_embedded_fonts(&self, mut config: SvgExportConfig) -> SvgExportConfig {
+        let leland = self.font_bundle.symbol_font_data().as_ref().clone();
+        let leland_text = self.font_bundle.leland_text_font_data().as_ref().clone();
+        let musejazz_text = self.font_bundle.text_font_data().as_ref().clone();
+        let musejazz = self.font_bundle.musejazz_font_data().as_ref().clone();
+        let chicago = self.font_bundle.chicago_font_data().as_ref().clone();
+        let bravura = self.font_bundle.bravura_font_data().as_ref().clone();
+        let freesans = self.font_bundle.freesans_font_data().as_ref().clone();
+
+        config = config
+            // SMuFL music font (Leland) — primary + legacy "Bravura" alias.
+            .with_embedded_font("Leland", leland.clone())
+            .with_embedded_font("Bravura", bravura)
+            // Leland Text companion (alternate text/symbol font).
+            .with_embedded_font("Leland Text", leland_text.clone())
+            .with_embedded_font("LelandText", leland_text.clone())
+            .with_embedded_font("Edwin", leland_text)
+            // MuseJazz (music font) + MuseJazz Text (chord-symbol text font).
+            .with_embedded_font("MuseJazz", musejazz)
+            .with_embedded_font("MuseJazz Text", musejazz_text.clone())
+            .with_embedded_font("MuseJazzText", musejazz_text)
+            // Chicago — default document/title text.
+            .with_embedded_font("Chicago", chicago.clone())
+            .with_embedded_font("ChicagoFLF", chicago.clone())
+            .with_embedded_font("FreeSans", freesans)
+            .with_embedded_font("sans-serif", chicago);
+        config
+    }
+
+    /// SVG for ContinuousScroll layouts (single image, scene-sized).
+    /// Returns `None` if the result has explicit pages — use [`export_svg_pages`] in that case.
+    fn export_svg_continuous(&self, result: &ChartLayoutResult) -> Option<String> {
+        if !result.pages.is_empty() {
+            return None;
+        }
+        let config = self.with_embedded_fonts(SvgExportConfig::for_page(
+            0.0,
+            0.0,
+            result.total_width,
+            result.total_height,
+        ));
+        let mut serializer = SvgSerializer::new(config);
+        Some(serializer.serialize(&result.scene))
     }
 
     fn export_svg_pages(&self, result: &ChartLayoutResult) -> Vec<String> {
         let mut pages = Vec::with_capacity(result.pages.len());
         for page in &result.pages {
-            let config =
-                SvgExportConfig::for_page(page.x_offset, page.y_offset, page.width, page.height)
-                    .with_embedded_font(
-                        "Bravura",
-                        self.font_bundle.symbol_font_data().as_ref().clone(),
-                    )
-                    .with_embedded_font(
-                        "MuseJazzText",
-                        self.font_bundle.text_font_data().as_ref().clone(),
-                    )
-                    .with_embedded_font(
-                        "FreeSans",
-                        self.font_bundle.aux_font_data().as_ref().clone(),
-                    );
+            let config = self.with_embedded_fonts(SvgExportConfig::for_page(
+                page.x_offset,
+                page.y_offset,
+                page.width,
+                page.height,
+            ));
             let mut serializer = SvgSerializer::new(config);
             pages.push(serializer.serialize(&result.scene));
         }
@@ -159,20 +640,163 @@ impl LayoutPipeline {
 
     fn export_pdf(&self, result: &ChartLayoutResult) -> Result<Vec<u8>, String> {
         let svg_pages = self.export_svg_pages(result);
-        let symbol_font = self.font_bundle.symbol_font_data();
-        let text_font = self.font_bundle.text_font_data();
-        let aux_font = self.font_bundle.aux_font_data();
+        let leland = self.font_bundle.symbol_font_data();
+        let leland_text = self.font_bundle.aux_font_data();
+        let musejazz = self.font_bundle.text_font_data();
 
         PdfSerializer::serialize_from_svg(
             &svg_pages,
             &[
-                ("Bravura", symbol_font.as_slice()),
-                ("MuseJazzText", text_font.as_slice()),
-                ("FreeSans", aux_font.as_slice()),
+                ("Leland", leland.as_slice()),
+                ("Leland Text", leland_text.as_slice()),
+                ("LelandText", leland_text.as_slice()),
+                ("MuseJazz", musejazz.as_slice()),
+                ("MuseJazz Text", musejazz.as_slice()),
+                ("MuseJazzText", musejazz.as_slice()),
+                ("Edwin", leland_text.as_slice()),
             ],
         )
         .map_err(|e| format!("Failed to export PDF: {e}"))
     }
+}
+
+/// HTML preamble for the gallery index page. Stylesheet inline so the
+/// generated file works as a single drop-in artifact (no external assets).
+const GALLERY_HTML_HEAD: &str = r#"<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Keyflow chart gallery</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 14px/1.5 -apple-system, system-ui, "Segoe UI", sans-serif;
+         margin: 0; padding: 24px; max-width: 1400px; margin: 0 auto;
+         background: #fafafa; color: #222; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #1a1a1a; color: #ddd; }
+    figure { background: #2a2a2a; }
+    .src { color: #888; }
+  }
+  h1 { margin: 0 0 4px; font-size: 28px; }
+  h2 { margin: 32px 0 4px; font-size: 20px; }
+  .hint { color: #777; margin: 0 0 32px; }
+  .src { color: #888; font-size: 12px; margin: 0 0 12px; }
+  .chart { margin-bottom: 48px; padding-bottom: 24px; border-bottom: 1px solid #ddd; }
+  @media (prefers-color-scheme: dark) { .chart { border-bottom-color: #333; } }
+  .variants { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+              gap: 16px; }
+  figure { margin: 0; background: white; border-radius: 8px; padding: 12px;
+           box-shadow: 0 1px 3px rgba(0,0,0,.1); display: flex; flex-direction: column;
+           align-items: center; }
+  figcaption { font-size: 12px; font-weight: 600; text-transform: uppercase;
+               letter-spacing: 0.05em; color: #666; margin-bottom: 8px; }
+  figure img { max-width: 100%; height: auto; border: 1px solid #eee; }
+  @media (prefers-color-scheme: dark) {
+    figure { background: #2a2a2a; }
+    figure img { border-color: #444; }
+    figcaption { color: #aaa; }
+  }
+  .failed .err { color: #c33; font-size: 12px; padding: 24px; text-align: center; }
+  code { background: rgba(127,127,127,.15); padding: 2px 6px; border-radius: 3px; font-size: 12px; }
+</style>
+</head><body>
+"#;
+
+/// Render variants exposed by `kf gallery`. One row per chart in the index.
+const GALLERY_VARIANTS: &[(&str, PresetMode, BreakpointArg, Option<f64>)] = &[
+    ("page", PresetMode::Page, BreakpointArg::Desktop, None),
+    ("phone", PresetMode::Responsive, BreakpointArg::Phone, None),
+    (
+        "tablet",
+        PresetMode::Responsive,
+        BreakpointArg::Tablet,
+        None,
+    ),
+    (
+        "desktop",
+        PresetMode::Responsive,
+        BreakpointArg::Desktop,
+        None,
+    ),
+];
+
+/// Render one chart to one variant; returns paths written.
+fn render_variant_pngs(
+    pipeline: &LayoutPipeline,
+    chart: &Chart,
+    preset: PresetMode,
+    breakpoint: BreakpointArg,
+    width_pt: f64,
+    scale: f32,
+    output_base: &std::path::Path,
+) -> Result<Vec<PathBuf>, String> {
+    let layout = pipeline.layout_preset(chart, preset, breakpoint, width_pt);
+    let svgs: Vec<String> = if layout.pages.is_empty() {
+        vec![pipeline
+            .export_svg_continuous(&layout)
+            .ok_or_else(|| "continuous layout produced no SVG".to_string())?]
+    } else {
+        pipeline.export_svg_pages(&layout)
+    };
+
+    let mut written = Vec::with_capacity(svgs.len());
+    if svgs.len() == 1 {
+        let path = output_base.with_extension("png");
+        let png = svg_to_png(&svgs[0], scale, &pipeline.font_bundle)?;
+        std::fs::write(&path, &png)
+            .map_err(|e| format!("Failed to write {}: {e}", path.display()))?;
+        written.push(path);
+    } else {
+        for (i, svg) in svgs.iter().enumerate() {
+            let path = output_base.with_extension(format!("p{}.png", i + 1));
+            let png = svg_to_png(svg, scale, &pipeline.font_bundle)?;
+            std::fs::write(&path, &png)
+                .map_err(|e| format!("Failed to write {}: {e}", path.display()))?;
+            written.push(path);
+        }
+    }
+    Ok(written)
+}
+
+/// Rasterize one SVG string to PNG bytes via resvg.
+///
+/// `scale` is the bitmap density factor (1.0 = 1 px per pt, 2.0 = Retina).
+/// `font_bundle` registers the music fonts so chord/notation glyphs render —
+/// usvg won't pick up @font-face base64 data on its own.
+fn svg_to_png(svg: &str, scale: f32, font_bundle: &ChartFontBundle) -> Result<Vec<u8>, String> {
+    let mut fontdb = usvg::fontdb::Database::new();
+    // Every embedded font in the SVG must also live in the fontdb so usvg
+    // can resolve `font-family` references. Without these, resvg silently
+    // falls back to a system serif/sans.
+    fontdb.load_font_data(font_bundle.symbol_font_data().as_ref().clone()); // Leland
+    fontdb.load_font_data(font_bundle.text_font_data().as_ref().clone()); // MuseJazz Text
+    fontdb.load_font_data(font_bundle.musejazz_font_data().as_ref().clone()); // MuseJazz
+    fontdb.load_font_data(font_bundle.leland_text_font_data().as_ref().clone()); // Leland Text
+    fontdb.load_font_data(font_bundle.chicago_font_data().as_ref().clone()); // ChicagoFLF
+    fontdb.load_font_data(font_bundle.bravura_font_data().as_ref().clone());
+    fontdb.load_font_data(font_bundle.freesans_font_data().as_ref().clone());
+    fontdb.load_system_fonts();
+
+    let opts = usvg::Options {
+        fontdb: std::sync::Arc::new(fontdb),
+        ..Default::default()
+    };
+    let tree = usvg::Tree::from_str(svg, &opts).map_err(|e| format!("usvg parse failed: {e}"))?;
+    let size = tree.size();
+    let pixmap_width = (size.width() * scale).ceil() as u32;
+    let pixmap_height = (size.height() * scale).ceil() as u32;
+    if pixmap_width == 0 || pixmap_height == 0 {
+        return Err("rendered pixmap has zero size".to_string());
+    }
+    let mut pixmap = tiny_skia::Pixmap::new(pixmap_width, pixmap_height)
+        .ok_or_else(|| format!("failed to allocate {pixmap_width}x{pixmap_height} pixmap"))?;
+    // White background — engraver SVGs often have transparent areas outside the page.
+    pixmap.fill(tiny_skia::Color::WHITE);
+    let transform = tiny_skia::Transform::from_scale(scale, scale);
+    resvg::render(&tree, transform, &mut pixmap.as_mut());
+    pixmap
+        .encode_png()
+        .map_err(|e| format!("PNG encode failed: {e}"))
 }
 
 fn main() {
@@ -339,6 +963,463 @@ fn run(cli: Cli) -> Result<(), String> {
                     std::fs::write(&page_path, svg)
                         .map_err(|e| format!("Failed to write {}: {e}", page_path.display()))?;
                     println!("Wrote {}", page_path.display());
+                }
+            }
+            Ok(())
+        }
+
+        Commands::Gallery {
+            input_dir,
+            output_dir,
+            scale,
+        } => {
+            let mut entries: Vec<PathBuf> = std::fs::read_dir(&input_dir)
+                .map_err(|e| format!("Failed to read {}: {e}", input_dir.display()))?
+                .filter_map(|r| r.ok())
+                .map(|d| d.path())
+                .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("kf"))
+                .collect();
+            entries.sort();
+            if entries.is_empty() {
+                return Err(format!("No .kf files found in {}", input_dir.display()));
+            }
+            std::fs::create_dir_all(&output_dir)
+                .map_err(|e| format!("Failed to create {}: {e}", output_dir.display()))?;
+
+            let pipeline = LayoutPipeline::new()?;
+
+            // Build index.md and index.html together.
+            let mut md = String::from("# Keyflow chart gallery\n\n");
+            md.push_str("Regenerate with `cargo run -p keyflow-cli -- gallery`.\n\n");
+
+            let mut html = String::new();
+            html.push_str(GALLERY_HTML_HEAD);
+            html.push_str("<h1>Keyflow chart gallery</h1>\n");
+            html.push_str("<p class=\"hint\">Regenerate with <code>cargo run -p keyflow-cli -- gallery</code>.</p>\n");
+
+            for path in &entries {
+                let stem = path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .ok_or_else(|| format!("Bad filename: {}", path.display()))?;
+                println!("→ {}", stem);
+
+                let source = std::fs::read_to_string(path)
+                    .map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
+                let chart = match parse_chart(&source) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        eprintln!("  ⚠ skipped ({stem}): parse error: {e}");
+                        continue;
+                    }
+                };
+
+                let chart_dir = output_dir.join(stem);
+                std::fs::create_dir_all(&chart_dir)
+                    .map_err(|e| format!("Failed to create {}: {e}", chart_dir.display()))?;
+
+                let title = chart
+                    .metadata
+                    .title
+                    .clone()
+                    .unwrap_or_else(|| stem.to_string());
+
+                md.push_str(&format!("## {title}\n\n"));
+                md.push_str(&format!(
+                    "Source: [`{}`](../{})\n\n",
+                    path.display(),
+                    path.display()
+                ));
+                md.push_str("| Variant | Preview |\n|---|---|\n");
+
+                html.push_str(&format!("<section class=\"chart\">\n  <h2>{title}</h2>\n"));
+                html.push_str(&format!(
+                    "  <p class=\"src\">Source: <code>{}</code></p>\n",
+                    path.display()
+                ));
+                html.push_str("  <div class=\"variants\">\n");
+
+                for (variant_name, preset, breakpoint, width_override) in GALLERY_VARIANTS {
+                    let width_pt = width_override.unwrap_or_else(|| breakpoint.default_width_pt());
+                    let base = chart_dir.join(variant_name);
+                    match render_variant_pngs(
+                        &pipeline,
+                        &chart,
+                        *preset,
+                        *breakpoint,
+                        width_pt,
+                        scale,
+                        &base,
+                    ) {
+                        Ok(written) => {
+                            for p in written {
+                                let rel = p
+                                    .strip_prefix(&output_dir)
+                                    .unwrap_or(&p)
+                                    .display()
+                                    .to_string();
+                                md.push_str(&format!(
+                                    "| `{variant_name}` | <img src=\"{rel}\" width=\"320\" /> |\n"
+                                ));
+                                html.push_str(&format!(
+                                    "    <figure class=\"variant variant-{variant_name}\"><figcaption>{variant_name}</figcaption><img src=\"{rel}\" alt=\"{title} {variant_name}\" loading=\"lazy\" /></figure>\n"
+                                ));
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("  ⚠ {variant_name}: {e}");
+                            md.push_str(&format!("| `{variant_name}` | ⚠ render failed |\n"));
+                            html.push_str(&format!(
+                                "    <figure class=\"variant variant-{variant_name} failed\"><figcaption>{variant_name}</figcaption><div class=\"err\">⚠ {e}</div></figure>\n"
+                            ));
+                        }
+                    }
+                }
+                md.push('\n');
+                html.push_str("  </div>\n</section>\n");
+            }
+
+            html.push_str("</body></html>\n");
+
+            let md_path = output_dir.join("README.md");
+            std::fs::write(&md_path, &md)
+                .map_err(|e| format!("Failed to write {}: {e}", md_path.display()))?;
+            println!("Wrote {}", md_path.display());
+
+            let html_path = output_dir.join("index.html");
+            std::fs::write(&html_path, &html)
+                .map_err(|e| format!("Failed to write {}: {e}", html_path.display()))?;
+            println!("Wrote {}", html_path.display());
+            Ok(())
+        }
+
+        Commands::Musicxml {
+            input,
+            output_dir,
+            scale,
+        } => {
+            let chart = keyflow_musicxml::import_file(&input)
+                .map_err(|e| format!("musicxml import: {e}"))?;
+            std::fs::create_dir_all(&output_dir)
+                .map_err(|e| format!("Failed to create {}: {e}", output_dir.display()))?;
+            let pipeline = LayoutPipeline::new()?;
+            let stem = input
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("chart");
+            // A4 page-mode only — matches the source PDF.
+            let base = output_dir.join(stem);
+            match render_variant_pngs(
+                &pipeline,
+                &chart,
+                PresetMode::Page,
+                BreakpointArg::Desktop,
+                BreakpointArg::Desktop.default_width_pt(),
+                scale,
+                &base,
+            ) {
+                Ok(written) => {
+                    for p in written {
+                        println!("Wrote {}", p.display());
+                    }
+                }
+                Err(e) => eprintln!("  ⚠ {e}"),
+            }
+            Ok(())
+        }
+
+        Commands::MusicxmlKf { input, output } => {
+            let chart = keyflow_musicxml::import_file(&input)
+                .map_err(|e| format!("musicxml import: {e}"))?;
+            let keyflow_text = keyflow::text::chart::exporter::chart_to_keyflow(&chart);
+            let output = output.unwrap_or_else(|| input.with_extension("kf"));
+            if let Some(parent) = output.parent() {
+                if !parent.as_os_str().is_empty() {
+                    std::fs::create_dir_all(parent)
+                        .map_err(|e| format!("Failed to create {}: {e}", parent.display()))?;
+                }
+            }
+            std::fs::write(&output, keyflow_text)
+                .map_err(|e| format!("Failed to write {}: {e}", output.display()))?;
+            println!("Wrote {}", output.display());
+            Ok(())
+        }
+
+        Commands::MusicxmlCompare {
+            musicxml,
+            keyflow,
+            max_diffs,
+            include_source,
+        } => {
+            let musicxml_chart = keyflow_musicxml::import_file(&musicxml)
+                .map_err(|e| format!("musicxml import: {e}"))?;
+            let keyflow_source = std::fs::read_to_string(&keyflow)
+                .map_err(|e| format!("Failed to read {}: {e}", keyflow.display()))?;
+            let keyflow_chart = parse_chart(&keyflow_source)?;
+            let report = compare_charts(&musicxml_chart, &keyflow_chart, include_source, max_diffs);
+
+            println!("Compared MusicXML Chart to Keyflow Chart");
+            println!("  MusicXML: {}", musicxml.display());
+            println!("  Keyflow:  {}", keyflow.display());
+            println!("  Differences: {}", report.total_diffs);
+            for diff in &report.diffs {
+                println!("- {diff}");
+            }
+            if report.truncated {
+                println!("- ... more differences omitted; rerun with a higher --max-diffs");
+            }
+
+            if report.total_diffs == 0 {
+                Ok(())
+            } else {
+                Err(format!(
+                    "charts differ ({} differences found)",
+                    report.total_diffs
+                ))
+            }
+        }
+
+        Commands::MusicxmlGallery {
+            input_dir,
+            output_dir,
+            scale,
+        } => {
+            let mut entries: Vec<PathBuf> = std::fs::read_dir(&input_dir)
+                .map_err(|e| format!("Failed to read {}: {e}", input_dir.display()))?
+                .filter_map(|r| r.ok())
+                .map(|d| d.path())
+                .filter(|p| {
+                    p.extension().and_then(|s| s.to_str()) == Some("musicxml")
+                        || p.extension().and_then(|s| s.to_str()) == Some("mxl")
+                })
+                .collect();
+            entries.sort();
+            if entries.is_empty() {
+                return Err(format!(
+                    "No .musicxml / .mxl files found in {}",
+                    input_dir.display()
+                ));
+            }
+            std::fs::create_dir_all(&output_dir)
+                .map_err(|e| format!("Failed to create {}: {e}", output_dir.display()))?;
+            let pipeline = LayoutPipeline::new()?;
+
+            let mut md = String::from("# MusicXML import gallery\n\n");
+            md.push_str("Regenerate with `cargo run -p keyflow-cli -- musicxml-gallery`.\n\n");
+            let mut html = String::new();
+            html.push_str(GALLERY_HTML_HEAD);
+            html.push_str("<h1>MusicXML import gallery</h1>\n");
+            html.push_str("<p class=\"hint\">Regenerate with <code>cargo run -p keyflow-cli -- musicxml-gallery</code>.</p>\n");
+
+            for path in &entries {
+                let stem = path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .ok_or_else(|| format!("Bad filename: {}", path.display()))?;
+                println!("→ {}", stem);
+
+                let chart = match keyflow_musicxml::import_file(path) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        eprintln!("  ⚠ {stem}: import error: {e}");
+                        continue;
+                    }
+                };
+
+                let chart_dir = output_dir.join(stem);
+                std::fs::create_dir_all(&chart_dir)
+                    .map_err(|e| format!("Failed to create {}: {e}", chart_dir.display()))?;
+
+                let title = chart
+                    .metadata
+                    .title
+                    .clone()
+                    .unwrap_or_else(|| stem.to_string());
+
+                md.push_str(&format!("## {title}\n\nSource: `{}`\n\n", path.display()));
+
+                html.push_str(&format!("<section class=\"chart\">\n  <h2>{title}</h2>\n"));
+                html.push_str(&format!(
+                    "  <p class=\"src\">Source: <code>{}</code></p>\n",
+                    path.display()
+                ));
+                html.push_str("  <div class=\"variants\">\n");
+
+                // A4 page only — phone/tablet/desktop deferred until import is solid.
+                {
+                    let variant_name = "page";
+                    let base = chart_dir.join(variant_name);
+                    match render_variant_pngs(
+                        &pipeline,
+                        &chart,
+                        PresetMode::Page,
+                        BreakpointArg::Desktop,
+                        BreakpointArg::Desktop.default_width_pt(),
+                        scale,
+                        &base,
+                    ) {
+                        Ok(written) => {
+                            for p in written {
+                                let rel = p
+                                    .strip_prefix(&output_dir)
+                                    .unwrap_or(&p)
+                                    .display()
+                                    .to_string();
+                                md.push_str(&format!("![{rel}]({rel})\n\n"));
+                                html.push_str(&format!(
+                                    "    <figure class=\"variant variant-{variant_name}\"><figcaption>{variant_name}</figcaption><img src=\"{rel}\" alt=\"{title} {variant_name}\" loading=\"lazy\" /></figure>\n"
+                                ));
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("  ⚠ {variant_name}: {e}");
+                            md.push_str(&format!("| `{variant_name}` | ⚠ render failed |\n"));
+                            html.push_str(&format!(
+                                "    <figure class=\"variant variant-{variant_name} failed\"><figcaption>{variant_name}</figcaption><div class=\"err\">⚠ {e}</div></figure>\n"
+                            ));
+                        }
+                    }
+                }
+                md.push('\n');
+                html.push_str("  </div>\n</section>\n");
+            }
+            html.push_str("</body></html>\n");
+
+            let md_path = output_dir.join("README.md");
+            std::fs::write(&md_path, &md)
+                .map_err(|e| format!("Failed to write {}: {e}", md_path.display()))?;
+            println!("Wrote {}", md_path.display());
+
+            let html_path = output_dir.join("index.html");
+            std::fs::write(&html_path, &html)
+                .map_err(|e| format!("Failed to write {}: {e}", html_path.display()))?;
+            println!("Wrote {}", html_path.display());
+            Ok(())
+        }
+
+        Commands::MusicxmlSpacingCompare { input, tolerance } => {
+            let chart = keyflow_musicxml::import_file(&input)
+                .map_err(|e| format!("musicxml import: {e}"))?;
+            let pipeline = LayoutPipeline::new()?;
+            let mode = LayoutMode::paginated_a4();
+            let config = ChartLayoutConfig::master_rhythm().with_page_offsets(false);
+            let report = pipeline
+                .engine
+                .compare_musicxml_widths(&chart, &mode, &config);
+
+            println!("MusicXML spacing comparison: {}", input.display());
+            println!("Compared measures: {}", report.compared);
+            if let Some(err) = report.median_abs_error {
+                println!("Median abs error: {:.1}%", err * 100.0);
+            }
+            if let Some(err) = report.p90_abs_error {
+                println!("P90 abs error: {:.1}%", err * 100.0);
+            }
+            if let Some(err) = report.max_abs_error {
+                println!("Max abs error: {:.1}%", err * 100.0);
+            }
+            println!();
+            println!(
+                "{:>4} {:>3} {:>3} {:>7} {:>8} {:>8} {:>8} {:>8} {:>7} {:>7} {:>7}",
+                "meas",
+                "sec",
+                "sys",
+                "xml",
+                "xmlBody",
+                "assigned",
+                "xmlShare",
+                "ourShare",
+                "err%",
+                "weight",
+                "prefix"
+            );
+
+            let mut printed = 0usize;
+            for row in &report.rows {
+                let Some(err) = row.relative_error else {
+                    continue;
+                };
+                if err.abs() < tolerance {
+                    continue;
+                }
+                printed += 1;
+                println!(
+                    "{:>4} {:>3} {:>3} {:>7.1} {:>8.1} {:>8.1} {:>7.1}% {:>7.1}% {:>+6.1}% {:>7.2} {:>7.1}",
+                    row.source_measure
+                        .map(|n| n.to_string())
+                        .unwrap_or_else(|| "-".to_string()),
+                    row.section_idx,
+                    row.system_idx,
+                    row.source_measure_width.unwrap_or_default(),
+                    row.adjusted_source_body_width.unwrap_or_default(),
+                    row.assigned_width,
+                    row.source_body_share.unwrap_or_default() * 100.0,
+                    row.assigned_share * 100.0,
+                    err * 100.0,
+                    row.weight,
+                    row.prefix_xml_units_removed,
+                );
+            }
+            println!();
+            println!(
+                "Printed {printed} row(s) at tolerance >= {:.1}%. First-system XML widths are prefix-adjusted before comparison.",
+                tolerance * 100.0
+            );
+            Ok(())
+        }
+
+        Commands::Png {
+            input,
+            output,
+            mode,
+            breakpoint,
+            width,
+            scale,
+        } => {
+            let source = read_source(&input)?;
+            let chart = parse_chart(&source)?;
+            let pipeline = LayoutPipeline::new()?;
+
+            let viewport_pt = width.unwrap_or_else(|| breakpoint.default_width_pt());
+            let layout = pipeline.layout_preset(&chart, mode, breakpoint, viewport_pt);
+
+            // ContinuousScroll has no `pages`; render the whole scene as one image.
+            let svgs: Vec<String> = if layout.pages.is_empty() {
+                vec![pipeline
+                    .export_svg_continuous(&layout)
+                    .ok_or_else(|| "continuous layout produced no SVG".to_string())?]
+            } else {
+                pipeline.export_svg_pages(&layout)
+            };
+
+            println!(
+                "Layout: mode={:?}, breakpoint={:?}, viewport={:.0}pt, pages={}, total={:.0}x{:.0}pt",
+                mode,
+                breakpoint,
+                viewport_pt,
+                svgs.len().max(1),
+                layout.total_width,
+                layout.total_height,
+            );
+
+            if svgs.len() == 1 {
+                let png = svg_to_png(&svgs[0], scale, &pipeline.font_bundle)?;
+                std::fs::write(&output, &png)
+                    .map_err(|e| format!("Failed to write {}: {e}", output.display()))?;
+                println!("Wrote {} ({} bytes)", output.display(), png.len());
+            } else {
+                let stem = output
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("chart");
+                let ext = output.extension().and_then(|s| s.to_str()).unwrap_or("png");
+                let dir = output.parent().unwrap_or(std::path::Path::new("."));
+                for (i, svg) in svgs.iter().enumerate() {
+                    let path = dir.join(format!("{}-p{}.{}", stem, i + 1, ext));
+                    let png = svg_to_png(svg, scale, &pipeline.font_bundle)?;
+                    std::fs::write(&path, &png)
+                        .map_err(|e| format!("Failed to write {}: {e}", path.display()))?;
+                    println!("Wrote {} ({} bytes)", path.display(), png.len());
                 }
             }
             Ok(())

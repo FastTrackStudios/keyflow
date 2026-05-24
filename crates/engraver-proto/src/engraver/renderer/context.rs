@@ -13,6 +13,8 @@ use wgpu::{
 };
 use winit::window::Window;
 
+use crate::engraver::error::{Error, Result};
+
 // region:    --- VelloRenderContext
 
 /// GPU infrastructure for Vello rendering.
@@ -49,26 +51,26 @@ impl VelloRenderContext {
     ///
     /// This performs all GPU initialization synchronously using pollster.
     ///
-    /// # Panics
-    /// Panics if GPU initialization fails.
-    #[must_use]
-    pub fn new(window: Arc<Window>) -> Self {
+    /// # Errors
+    /// Returns `Error::GpuDevice` if surface creation, adapter request,
+    /// device request, or Vello renderer construction fails.
+    pub fn new(window: Arc<Window>) -> Result<Self> {
         let instance = Instance::new(&InstanceDescriptor::default());
         let surface = instance
             .create_surface(window.clone())
-            .expect("Failed to create surface");
+            .map_err(|e| Error::GpuDevice(format!("create surface: {e}")))?;
 
         let adapter = pollster::block_on(instance.request_adapter(&RequestAdapterOptions {
             compatible_surface: Some(&surface),
             ..Default::default()
         }))
-        .expect("Failed to find adapter");
+        .map_err(|e| Error::GpuDevice(format!("request adapter: {e}")))?;
 
         let (device, queue) = pollster::block_on(adapter.request_device(&DeviceDescriptor {
             required_features: Features::empty(),
             ..Default::default()
         }))
-        .expect("Failed to create device");
+        .map_err(|e| Error::GpuDevice(format!("request device: {e}")))?;
 
         let size = window.inner_size();
 
@@ -95,7 +97,7 @@ impl VelloRenderContext {
 
         // Create Vello renderer
         let vello_renderer = vello::Renderer::new(&device, vello::RendererOptions::default())
-            .expect("Failed to create Vello renderer");
+            .map_err(|e| Error::GpuDevice(format!("create vello renderer: {e}")))?;
 
         // Create intermediate render texture (Rgba8Unorm for Vello's compute shaders)
         let render_texture = Self::create_render_texture(&device, config.width, config.height);
@@ -103,7 +105,7 @@ impl VelloRenderContext {
         // Create blitter for copying from intermediate texture to surface
         let blitter = wgpu::util::TextureBlitter::new(&device, surface_format);
 
-        Self {
+        Ok(Self {
             window,
             surface,
             device,
@@ -112,7 +114,7 @@ impl VelloRenderContext {
             vello_renderer,
             render_texture,
             blitter,
-        }
+        })
     }
 
     /// Resize the render context for a new window size.
@@ -127,13 +129,14 @@ impl VelloRenderContext {
 
     /// Render a Vello scene to the surface.
     ///
-    /// # Panics
-    /// Panics if rendering fails.
-    pub fn render(&mut self, scene: &Scene) {
+    /// # Errors
+    /// Returns `Error::GpuDevice` if acquiring the surface texture or
+    /// running the Vello render pass fails.
+    pub fn render(&mut self, scene: &Scene) -> Result<()> {
         let output = self
             .surface
             .get_current_texture()
-            .expect("Failed to get surface texture");
+            .map_err(|e| Error::GpuDevice(format!("get surface texture: {e}")))?;
 
         let render_view = self
             .render_texture
@@ -155,7 +158,7 @@ impl VelloRenderContext {
                     antialiasing_method: vello::AaConfig::Msaa16,
                 },
             )
-            .expect("Vello render failed");
+            .map_err(|e| Error::GpuDevice(format!("vello render: {e}")))?;
 
         let mut encoder = self
             .device
@@ -167,6 +170,7 @@ impl VelloRenderContext {
         self.queue.submit(std::iter::once(encoder.finish()));
 
         output.present();
+        Ok(())
     }
 
     /// Get the current viewport dimensions.

@@ -8,14 +8,13 @@ use std::fmt;
 
 /// Commonly used types for chart engraving.
 pub mod prelude {
-    pub use crate::Chart;
-    pub use crate::ParseError;
     pub use crate::api::style::{
         leak_default_style, leak_jazz_lead_sheet_style, leak_lead_sheet_style,
     };
     pub use crate::engraver::fonts::ChartFontBundle;
     pub use crate::engraver::layout::chart::{ChartLayoutEngine, ChartLayoutResult, LayoutMode};
     pub use crate::engraver::style::MStyle;
+    pub use keyflow_proto::{Chart, ParseError};
 }
 
 /// Convenience helpers for obtaining a `'static` style.
@@ -68,10 +67,10 @@ impl Error for ChartLayoutError {}
 /// Chart engraving helpers (keyflow chart → layout).
 pub mod chart {
     use super::{ChartLayoutError, style};
-    use crate::Chart;
     use crate::engraver::fonts::ChartFontBundle;
     use crate::engraver::layout::chart::{ChartLayoutEngine, ChartLayoutResult, LayoutMode};
     use crate::engraver::style::MStyle;
+    use keyflow_proto::Chart;
 
     /// Create a chart layout engine from a style and font bundle.
     #[must_use]

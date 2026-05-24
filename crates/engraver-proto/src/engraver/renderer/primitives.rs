@@ -470,7 +470,7 @@ pub fn create_main_pipeline(
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("Music Pipeline Layout"),
-        bind_group_layouts: &[camera_bind_group_layout],
+        bind_group_layouts: &[Some(camera_bind_group_layout)],
         immediate_size: 0,
     });
 
@@ -647,7 +647,10 @@ pub fn create_blit_pipeline(
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("Blit Pipeline Layout"),
-        bind_group_layouts: &[camera_bind_group_layout, texture_bind_group_layout],
+        bind_group_layouts: &[
+            Some(camera_bind_group_layout),
+            Some(texture_bind_group_layout),
+        ],
         immediate_size: 0,
     });
 
@@ -691,7 +694,7 @@ pub fn create_sdf_pipeline(
 
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("SDF Pipeline Layout"),
-        bind_group_layouts: &[camera_bind_group_layout],
+        bind_group_layouts: &[Some(camera_bind_group_layout)],
         immediate_size: 0,
     });
 

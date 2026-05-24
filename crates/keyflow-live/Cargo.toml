@@ -1,0 +1,13 @@
+[package]
+name = "keyflow-live"
+version.workspace = true
+edition.workspace = true
+description = "Live in-process implementation of keyflow-proto services"
+
+[dependencies]
+keyflow-proto = { path = "../keyflow-proto" }
+keyflow-text = { path = "../keyflow-text" }
+keyflow-midi = { path = "../keyflow-midi" }
+
+[lints]
+workspace = true

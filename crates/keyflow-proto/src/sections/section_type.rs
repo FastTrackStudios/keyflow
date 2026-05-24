@@ -17,14 +17,15 @@ pub enum SectionType {
     Instrumental,
     Solo,                   // Solo section (instrument specified via comment, e.g. Solo "Keys")
     CountIn,                // Count-in measures (rendered small, with whole rests)
-    End,                    // End section (from SONGEND to =END, for ring-out/fade)
-    Hits,                   // Hits section (rhythmic accents)
-    Interlude,              // Interlude section
-    Breakdown,              // Breakdown section
-    Vamp,                   // Vamp section (repeated section for improvisation/transitions)
-    Pre(Box<SectionType>),  // Pre-Chorus, Pre-Verse, etc.
+    Opening, // Pre-Intro setup: groove-builds, fade-ins, etc. Falls before the song's INTRO marker.
+    End,     // End section (from SONGEND to =END, for ring-out/fade)
+    Hits,    // Hits section (rhythmic accents)
+    Interlude, // Interlude section
+    Breakdown, // Breakdown section
+    Vamp,    // Vamp section (repeated section for improvisation/transitions)
+    Pre(Box<SectionType>), // Pre-Chorus, Pre-Verse, etc.
     Post(Box<SectionType>), // Post-Chorus, Post-Verse, etc.
-    Custom(String),         // Custom section types
+    Custom(String), // Custom section types
 }
 
 /// Result of parsing a section marker line.
@@ -111,6 +112,7 @@ impl SectionType {
             SectionType::Instrumental => "instrumental".to_string(),
             SectionType::Solo => "solo".to_string(),
             SectionType::CountIn => "count_in".to_string(),
+            SectionType::Opening => "opening".to_string(),
             SectionType::End => "end".to_string(),
             SectionType::Hits => "hits".to_string(),
             SectionType::Interlude => "interlude".to_string(),
@@ -144,6 +146,7 @@ impl SectionType {
             SectionType::Instrumental => "Instrumental".to_string(),
             SectionType::Solo => "Solo".to_string(),
             SectionType::CountIn => "Count-In".to_string(),
+            SectionType::Opening => "Opening".to_string(),
             SectionType::End => "End".to_string(),
             SectionType::Hits => "Hits".to_string(),
             SectionType::Interlude => "Interlude".to_string(),
@@ -166,6 +169,7 @@ impl SectionType {
             SectionType::Instrumental => "INST".to_string(),
             SectionType::Solo => "SOLO".to_string(),
             SectionType::CountIn => "COUNT".to_string(),
+            SectionType::Opening => "OPEN".to_string(),
             SectionType::End => "END".to_string(),
             SectionType::Hits => "HITS".to_string(),
             SectionType::Interlude => "INT".to_string(),
@@ -223,10 +227,12 @@ impl SectionType {
             "chorus" | "ch" | "c" => return Ok(SectionType::Chorus),
             "bridge" | "br" | "b" => return Ok(SectionType::Bridge),
             "intro" | "in" | "i" => return Ok(SectionType::Intro),
+            "opening" | "open" => return Ok(SectionType::Opening),
             "outro" | "out" | "o" => return Ok(SectionType::Outro),
             "instrumental" | "inst" | "instrument" => return Ok(SectionType::Instrumental),
             "solo" => return Ok(SectionType::Solo),
             "count" | "countin" | "count-in" => return Ok(SectionType::CountIn),
+            "tag" | "tags" => return Ok(SectionType::Custom("Tags".to_string())),
             "hits" | "hit" => return Ok(SectionType::Hits),
             "interlude" | "inter" | "int" => return Ok(SectionType::Interlude),
             "breakdown" | "bd" => return Ok(SectionType::Breakdown),
@@ -463,7 +469,7 @@ impl SectionType {
 
         if parts.len() == 3 {
             // Three tokens: first must be section type, second is sub-label, third is measure expr
-            if !is_sub_label(parts[1]) {
+            if !is_sub_label(parts[1]) && parts[1].parse::<u32>().is_err() {
                 return None; // Second token is not a valid sub-label
             }
             // Third token must be a valid measure expression
@@ -491,12 +497,14 @@ impl SectionType {
 
         let section_type = match section_str {
             "intro" | "in" => Some(SectionType::Intro),
+            "opening" | "open" => Some(SectionType::Opening),
             "verse" | "vs" | "v" => Some(SectionType::Verse),
             "chorus" | "ch" | "c" => Some(SectionType::Chorus),
             "bridge" | "br" | "b" => Some(SectionType::Bridge),
             "outro" | "out" | "o" => Some(SectionType::Outro),
             "instrumental" | "inst" | "i" => Some(SectionType::Instrumental),
             "count" | "countin" | "count-in" => Some(SectionType::CountIn),
+            "tag" | "tags" => Some(SectionType::Custom("Tags".to_string())),
             "hits" | "hit" => Some(SectionType::Hits),
             "interlude" | "inter" | "int" => Some(SectionType::Interlude),
             "breakdown" | "bd" => Some(SectionType::Breakdown),

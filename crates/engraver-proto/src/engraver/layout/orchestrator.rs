@@ -258,22 +258,34 @@ fn model_stem_to_layout(stem: crate::engraver::model::Stem) -> StemDirection {
 /// Orchestrates the complete layout pipeline from Score to SceneNode.
 pub struct LayoutEngine<'a> {
     config: LayoutEngineConfig,
-    style: &'a MStyle,
+    style: std::sync::Arc<MStyle>,
     font: Option<&'a SMuFLFont<'a>>,
 }
 
 impl<'a> LayoutEngine<'a> {
     /// Create a new layout engine with default configuration.
-    pub fn new(style: &'a MStyle) -> Self {
+    pub fn new(style: &MStyle) -> Self {
         Self {
             config: LayoutEngineConfig::default(),
-            style,
+            style: std::sync::Arc::new(style.clone()),
             font: None,
         }
     }
 
     /// Create a layout engine with custom configuration.
-    pub fn with_config(config: LayoutEngineConfig, style: &'a MStyle) -> Self {
+    pub fn with_config(config: LayoutEngineConfig, style: &MStyle) -> Self {
+        Self {
+            config,
+            style: std::sync::Arc::new(style.clone()),
+            font: None,
+        }
+    }
+
+    /// Create a layout engine from a shared style.
+    ///
+    /// Avoids cloning the style's internal property vector when callers
+    /// already hold a shared style handle.
+    pub fn from_arc(config: LayoutEngineConfig, style: std::sync::Arc<MStyle>) -> Self {
         Self {
             config,
             style,
@@ -305,7 +317,7 @@ impl<'a> LayoutEngine<'a> {
     /// Honors explicit page breaks and line breaks.
     fn layout_page_mode(&self, score: &'a Score) -> LayoutResult {
         // Create layout context (owned, no memory leak)
-        let ctx_owned = LayoutContextOwned::new_minimal(self.style.clone());
+        let ctx_owned = LayoutContextOwned::new_minimal_arc(self.style.clone());
         let ctx = ctx_owned.as_context();
 
         // Calculate number of measures
@@ -441,7 +453,7 @@ impl<'a> LayoutEngine<'a> {
     /// Ignores all line breaks and page breaks.
     fn layout_horizontal_mode(&self, score: &'a Score) -> LayoutResult {
         // Create layout context (owned, no memory leak)
-        let ctx_owned = LayoutContextOwned::new_minimal(self.style.clone());
+        let ctx_owned = LayoutContextOwned::new_minimal_arc(self.style.clone());
         let ctx = ctx_owned.as_context();
 
         let measure_count = self.count_measures(score);
@@ -518,7 +530,7 @@ impl<'a> LayoutEngine<'a> {
     /// Page breaks are converted to line breaks; content flows continuously.
     fn layout_vertical_mode(&self, score: &'a Score) -> LayoutResult {
         // Create layout context (owned, no memory leak)
-        let ctx_owned = LayoutContextOwned::new_minimal(self.style.clone());
+        let ctx_owned = LayoutContextOwned::new_minimal_arc(self.style.clone());
         let ctx = ctx_owned.as_context();
 
         let measure_count = self.count_measures(score);

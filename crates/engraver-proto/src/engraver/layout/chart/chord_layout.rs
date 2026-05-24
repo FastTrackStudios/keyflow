@@ -4,7 +4,7 @@
 //! collision detection, and conversion to harmony parameters.
 
 use crate::engraver::layout::segment::SegmentType;
-use crate::engraver::layout::tlayout::{HarmonyParams, HarmonyStyle, parse_chord};
+use crate::engraver::layout::tlayout::{BassArrangement, HarmonyParams, HarmonyStyle, parse_chord};
 use crate::engraver::notation::MeasureScene;
 
 /// Extract ChordRest segment x-positions from a MeasureScene (in spatiums).
@@ -32,6 +32,9 @@ pub fn chord_to_harmony_params(
 ) -> HarmonyParams {
     let mut params = parse_chord(&chord.full_symbol);
     params.style = harmony_style.clone();
+    if chord.parsed.bass_vertical {
+        params.bass_arrangement = BassArrangement::Vertical;
+    }
     params
 }
 

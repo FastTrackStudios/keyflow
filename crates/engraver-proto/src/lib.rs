@@ -1,104 +1,44 @@
-//! Engraver protocol - shared types for Keyflow engraving.
+//! Engraver protocol - implementation crate for Keyflow engraving.
+//!
+//! Public consumers should use `keyflow` with its default `engraver` feature
+//! and access the engine through `keyflow::engraver`.
 
-// region:    --- Keyflow Re-exports (compat)
+// region:    --- Keyflow Implementation Aliases
 
-pub mod ast {
-    pub use keyflow_proto::ast::*;
+pub(crate) mod ast {
+    pub(crate) use keyflow_syntax::ast::*;
 }
-pub mod chart {
-    pub use keyflow_proto::chart::*;
+pub(crate) mod chart {
+    pub(crate) use keyflow_proto::chart::*;
 }
-pub mod chord {
-    pub use keyflow_proto::chord::*;
+pub(crate) mod chord {
+    pub(crate) use keyflow_proto::chord::*;
 }
-pub mod core {
-    pub use keyflow_proto::core::*;
+pub(crate) mod core {
+    pub(crate) use keyflow_proto::core::*;
 }
-pub mod key {
-    pub use keyflow_proto::key::*;
+pub(crate) mod key {
+    pub(crate) use keyflow_proto::key::*;
 }
-pub mod metadata {
-    pub use keyflow_proto::metadata::*;
+pub(crate) mod metadata {
+    pub(crate) use keyflow_proto::metadata::*;
 }
-pub mod parsing {
-    pub use keyflow_proto::parsing::*;
+pub(crate) mod parsing {
+    pub(crate) use keyflow_syntax::parsing::*;
 }
-pub mod primitives {
-    pub use keyflow_proto::primitives::*;
+pub(crate) mod primitives {
+    pub(crate) use keyflow_proto::primitives::*;
 }
-pub mod sections {
-    pub use keyflow_proto::sections::*;
+pub(crate) mod sections {
+    pub(crate) use keyflow_proto::sections::*;
 }
-pub mod time {
-    pub use keyflow_proto::time::*;
-}
-
-pub use keyflow_proto::*;
-
-// endregion: --- Keyflow Re-exports (compat)
-
-// region:    --- Legacy DurationTrait (compat)
-
-use std::fmt;
-
-/// Trait for musical durations (legacy - use MusicalDuration directly)
-pub trait DurationTrait: fmt::Debug + fmt::Display {
-    fn measures(&self) -> u32;
-    fn beats(&self) -> u32;
-    fn subdivisions(&self) -> u32;
-    fn to_beats(&self, time_sig: time::TimeSignature) -> f64;
-    fn add(
-        &self,
-        other: &dyn DurationTrait,
-        time_sig: time::TimeSignature,
-    ) -> Box<dyn DurationTrait>;
-    fn clone_box(&self) -> Box<dyn DurationTrait>;
+pub(crate) mod time {
+    pub(crate) use keyflow_proto::time::*;
 }
 
-impl DurationTrait for time::MusicalDuration {
-    fn measures(&self) -> u32 {
-        self.measure.max(0) as u32
-    }
+pub(crate) use keyflow_proto::*;
 
-    fn beats(&self) -> u32 {
-        self.beat.max(0) as u32
-    }
-
-    fn subdivisions(&self) -> u32 {
-        self.subdivision.clamp(0, 999) as u32
-    }
-
-    fn to_beats(&self, time_sig: time::TimeSignature) -> f64 {
-        let beats_per_measure = time_sig.numerator() as f64;
-        self.measure.max(0) as f64 * beats_per_measure
-            + self.beat.max(0) as f64
-            + self.subdivision.clamp(0, 999) as f64 / 1000.0
-    }
-
-    fn add(
-        &self,
-        other: &dyn DurationTrait,
-        time_sig: time::TimeSignature,
-    ) -> Box<dyn DurationTrait> {
-        let total_beats = self.to_beats(time_sig) + other.to_beats(time_sig);
-        let beats_per_measure = time_sig.numerator() as f64;
-        let measures = (total_beats / beats_per_measure).floor() as i32;
-        let remaining_beats = total_beats - (measures as f64 * beats_per_measure);
-        let beats = remaining_beats.floor() as i32;
-        let subdivisions = ((remaining_beats - beats as f64) * 1000.0).round() as i32;
-        Box::new(time::MusicalDuration::new(
-            measures,
-            beats,
-            subdivisions.clamp(0, 999),
-        ))
-    }
-
-    fn clone_box(&self) -> Box<dyn DurationTrait> {
-        Box::new(*self)
-    }
-}
-
-// endregion: --- Legacy DurationTrait (compat)
+// endregion: --- Keyflow Implementation Aliases
 
 // region:    --- Modules
 

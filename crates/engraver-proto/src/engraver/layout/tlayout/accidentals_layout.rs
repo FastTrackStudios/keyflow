@@ -1094,24 +1094,6 @@ fn is_exception_of_naturals_sixth_stacked(acc1: &AccidentalInfo, acc2: &StackedA
         && (acc1.line - acc2.line).abs() == 5
 }
 
-/// Calculate kerning for fourth exception.
-#[allow(dead_code)]
-fn kerning_of_fourth(
-    _acc1: &AccidentalInfo,
-    acc2: &AccidentalInfo,
-    shape1: &AccidentalShape,
-    shape2: &AccidentalShape,
-    config: &AccidentalLayoutConfig,
-) -> f64 {
-    let kern = if acc2.accidental_type == AccidentalType::Natural {
-        config.natural_kerning_of_fourth
-    } else {
-        config.flat_kerning_of_fourth
-    };
-
-    shape1.right - shape2.left + kern
-}
-
 /// Calculate kerning for fourth exception (version for stacked).
 fn kerning_of_fourth_stacked(
     _acc1: &AccidentalInfo,
@@ -1127,31 +1109,6 @@ fn kerning_of_fourth_stacked(
     };
 
     shape1.right - shape2.left + kern
-}
-
-/// Additional padding when natural is near vertical elements.
-#[allow(dead_code)]
-fn additional_padding_for_verticals(
-    acc1: &AccidentalInfo,
-    acc2: &AccidentalInfo,
-    config: &AccidentalLayoutConfig,
-) -> f64 {
-    if acc1.accidental_type != AccidentalType::Natural {
-        return 0.0;
-    }
-
-    // Natural near another natural or flat
-    let acc2_type = acc2.accidental_type;
-    if acc2_type != AccidentalType::Natural && !acc2_type.is_flat() {
-        return 0.0;
-    }
-
-    let line_diff = acc2.line - acc1.line;
-    if !(-2..=5).contains(&line_diff) {
-        return 0.0;
-    }
-
-    config.additional_padding_for_verticals
 }
 
 /// Additional padding when natural is near vertical elements (version for stacked).

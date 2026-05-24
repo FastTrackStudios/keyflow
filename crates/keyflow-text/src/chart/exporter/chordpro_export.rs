@@ -1,10 +1,10 @@
 //! ChordPro export - convert Chart to ChordPro format text
 
-use keyflow_proto::{
-    Chart, ChartSection, ChordProChunk, ChordProDirective, ChordProDocument, ChordProLine,
-    ChordProSection,
-};
 use keyflow_proto::chart::{Track, TrackType};
+use keyflow_proto::chord::{
+    ChordProChunk, ChordProDirective, ChordProDocument, ChordProLine, ChordProSection,
+};
+use keyflow_proto::{Chart, ChartSection};
 
 /// Export a Chart to ChordPro format
 ///
@@ -40,8 +40,14 @@ fn convert_chart_to_chordpro_doc(chart: &Chart) -> Result<ChordProDocument, Stri
         }
 
         // Collect chords and lyrics from tracks
-        let chords_track = chart_section.tracks.iter().find(|t| t.track_type == TrackType::Chords);
-        let lyrics_track = chart_section.tracks.iter().find(|t| t.track_type == TrackType::Lyrics);
+        let chords_track = chart_section
+            .tracks
+            .iter()
+            .find(|t| t.track_type == TrackType::Chords);
+        let lyrics_track = chart_section
+            .tracks
+            .iter()
+            .find(|t| t.track_type == TrackType::Lyrics);
 
         // Build lines by interleaving chords and lyrics
         if let (Some(chords), Some(lyrics)) = (chords_track, lyrics_track) {
@@ -180,26 +186,22 @@ fn chordpro_document_to_text(doc: &ChordProDocument) -> String {
 /// Convert a single ChordProLine to text
 fn line_to_text(line: &ChordProLine) -> String {
     match line {
-        ChordProLine::Lyric(chunks) => {
-            chunks
-                .iter()
-                .map(|chunk| {
-                    if let Some(chord) = &chunk.chord {
-                        format!("[{}]{}", chord, chunk.text)
-                    } else {
-                        chunk.text.clone()
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join("")
-        }
-        ChordProLine::ChordOnly(chunks) => {
-            chunks
-                .iter()
-                .filter_map(|chunk| chunk.chord.as_ref().map(|c| c.as_str()))
-                .collect::<Vec<_>>()
-                .join(" ")
-        }
+        ChordProLine::Lyric(chunks) => chunks
+            .iter()
+            .map(|chunk| {
+                if let Some(chord) = &chunk.chord {
+                    format!("[{}]{}", chord, chunk.text)
+                } else {
+                    chunk.text.clone()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(""),
+        ChordProLine::ChordOnly(chunks) => chunks
+            .iter()
+            .filter_map(|chunk| chunk.chord.as_ref().map(|c| c.as_str()))
+            .collect::<Vec<_>>()
+            .join(" "),
         ChordProLine::Comment(text) => format!("# {}", text),
         ChordProLine::Empty => String::new(),
     }

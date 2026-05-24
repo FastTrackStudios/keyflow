@@ -323,9 +323,11 @@ mod tests {
         assert_eq!(click_count, 4);
 
         // No section cue
-        assert!(events
-            .iter()
-            .all(|e| !matches!(e, GuideEvent::SectionCue(_))));
+        assert!(
+            events
+                .iter()
+                .all(|e| !matches!(e, GuideEvent::SectionCue(_)))
+        );
     }
 
     #[test]

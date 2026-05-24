@@ -25,7 +25,7 @@ dioxus = { version = "0.7.2", optional = true }
 dioxus-native = { workspace = true, optional = true }
 
 # Vello scene types (for building scenes to hand off to ChartGraphics)
-vello = "0.7"
+vello = "0.9"
 vello_hybrid = { workspace = true, optional = true }
 kurbo = { workspace = true }
 
@@ -47,6 +47,9 @@ dock-proto = { workspace = true, optional = true }
 
 # JSON parsing (for bounds eval results)
 serde_json = { workspace = true, optional = true }
+
+# MusicXML catalog extraction for local ignored reference corpora.
+roxmltree = "0.20"
 
 # Icons
 lucide-dioxus = { version = "2", features = ["all-icons"] }

@@ -1,7 +1,7 @@
 //! Section cue scheduling — generates section announcement events at count-in start.
 
-use keyflow_proto::guide::{config::GuideConfig, event::SectionCueEvent, midi_map};
 use keyflow_proto::SectionType;
+use keyflow_proto::guide::{config::GuideConfig, event::SectionCueEvent, midi_map};
 
 /// Schedules section cue events during count-in regions.
 pub struct SectionCueScheduler;

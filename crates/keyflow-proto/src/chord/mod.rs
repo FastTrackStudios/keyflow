@@ -45,7 +45,8 @@ pub use error::{ChordParseError, ChordParseErrors};
 pub use extensions::{ExtensionQuality, Extensions};
 pub use family::ChordFamily;
 pub use midi::{
-    DetectedChord, MidiNote, MidiNoteName, detect_chords_from_midi_notes, midi_pitch_to_note_name,
+    DetectedChord, MidiNote, MidiNoteName, detect_chords_from_midi_notes,
+    detect_chords_from_midi_notes_with_spelling, midi_pitch_to_note_name,
 };
 pub use quality::{ChordQuality, SuspendedType};
 pub use root::{RootParseResult, parse_root};

@@ -28,12 +28,18 @@ pub use helpers::{LineOffsetMap, PushPullModifier, RepeatCount};
 // region:    --- Parser Entry Point
 
 use super::ChartParser;
-use crate::sections::MeasureExpression;
+use crate::chart::types::Measure;
+use crate::chart::{Chart, ChartSection};
+use crate::sections::{MeasureExpression, SectionType};
 use crate::time::TimeSignatureExt;
 
 impl<'a> ChartParser<'a> {
     /// Strip comments from a line (everything after ;)
     fn strip_comment(line: &str) -> &str {
+        let trimmed = line.trim();
+        if trimmed.ends_with(';') || trimmed.contains(" ; ") {
+            return line;
+        }
         if let Some(pos) = line.find(';') {
             line[..pos].trim()
         } else {
@@ -71,10 +77,12 @@ impl<'a> ChartParser<'a> {
         use crate::primitives::MusicalNote;
         use crate::time::TimeSignature;
 
-        let lines: Vec<&str> = input
+        let raw_lines: Vec<&str> = input
             .lines()
             .map(|l| Self::strip_comment(l.trim()))
             .collect();
+        let logical_lines = Self::join_multiline_parallel_containers(&raw_lines);
+        let lines: Vec<&str> = logical_lines.iter().map(String::as_str).collect();
 
         if lines.is_empty() {
             return Err("Empty input".to_string());
@@ -97,7 +105,9 @@ impl<'a> ChartParser<'a> {
         }
 
         // Phase 2: Parse sections and content
-        line_idx = self.parse_sections(&lines, line_idx)?;
+        if !self.try_parse_sectioned_lane_parallel(&lines[line_idx..])? {
+            line_idx = self.parse_sections(&lines, line_idx)?;
+        }
 
         // Phase 3: Post-processing
         self.post_process();
@@ -105,6 +115,255 @@ impl<'a> ChartParser<'a> {
         let _ = line_idx; // Suppress unused warning
 
         Ok(())
+    }
+
+    fn try_parse_sectioned_lane_parallel(&mut self, lines: &[&str]) -> Result<bool, String> {
+        let content_lines = lines
+            .iter()
+            .map(|line| line.trim())
+            .filter(|line| !line.is_empty())
+            .collect::<Vec<_>>();
+        let Some(parallel_idx) = content_lines
+            .iter()
+            .position(|line| line.starts_with("<<") && line.ends_with(">>"))
+        else {
+            return Ok(false);
+        };
+        if parallel_idx + 1 != content_lines.len() {
+            return Ok(false);
+        }
+        let mut toc_lines = Vec::new();
+        for line in &content_lines[..parallel_idx] {
+            if let Some((name, value)) = Self::parse_alias_declaration(line) {
+                self.aliases.insert(name, value);
+            } else {
+                toc_lines.push(*line);
+            }
+        }
+        let section_plan = Self::section_plan_from_toc(&toc_lines)?;
+
+        let trimmed = content_lines[parallel_idx];
+        if !trimmed.starts_with("<<") || !trimmed.ends_with(">>") {
+            return Ok(false);
+        }
+
+        let inner = trimmed
+            .strip_prefix("<<")
+            .and_then(|s| s.strip_suffix(">>"))
+            .unwrap_or("")
+            .trim();
+        let branches = Self::split_top_level_parallel_branches_spanned(inner);
+        if branches.len() < 2 {
+            return Ok(false);
+        }
+
+        let mut merged_sections: Option<Vec<ChartSection>> = None;
+        for (_, branch) in branches {
+            let branch = branch.trim();
+            let Some(alias_name) = branch
+                .strip_prefix('<')
+                .and_then(|token| token.strip_suffix('>'))
+            else {
+                return Ok(false);
+            };
+            let Some(content) = self.aliases.get(alias_name).cloned() else {
+                return Ok(false);
+            };
+            let lane_sections =
+                self.parse_sectioned_lane_alias(alias_name, &content, &section_plan)?;
+            if let Some(existing) = merged_sections.as_mut() {
+                Self::merge_section_lanes(existing, lane_sections, alias_name, false)?;
+            } else {
+                merged_sections = Some(lane_sections);
+            }
+        }
+
+        self.sections = merged_sections.unwrap_or_default();
+        Ok(true)
+    }
+
+    fn parse_sectioned_lane_alias(
+        &self,
+        alias_name: &str,
+        content: &str,
+        section_plan: &[String],
+    ) -> Result<Vec<ChartSection>, String> {
+        let content = Self::apply_section_plan_to_lane(content, section_plan)?;
+        let content = if alias_name == "melody" {
+            Self::melody_mode_content(&content)
+        } else {
+            content
+        };
+        let mut lane_chart = Chart::new();
+        lane_chart.metadata = self.metadata.clone();
+        lane_chart.tempo = self.tempo.clone();
+        lane_chart.time_signature = self.time_signature;
+        lane_chart.initial_time_signature = self.initial_time_signature;
+        lane_chart.current_key = self.current_key.clone();
+        lane_chart.initial_key = self.initial_key.clone();
+        lane_chart.settings = self.settings.clone();
+
+        let raw_lines = content.lines().map(str::trim).collect::<Vec<_>>();
+        let logical_lines = Self::join_multiline_parallel_containers(&raw_lines);
+        let lines = logical_lines.iter().map(String::as_str).collect::<Vec<_>>();
+
+        let mut parser = ChartParser::new(&mut lane_chart);
+        parser.aliases = self.aliases.clone();
+        parser.melody_octave_memory = self.melody_octave_memory;
+        parser.parse_sections(&lines, 0)?;
+        parser.post_process();
+
+        if parser.sections.is_empty() {
+            return Err(format!("sectioned lane alias <{alias_name}> has no sections"));
+        }
+
+        Ok(lane_chart.sections)
+    }
+
+    fn section_plan_from_toc(lines: &[&str]) -> Result<Vec<String>, String> {
+        let mut plan = Vec::new();
+        for line in lines {
+            let Some(parsed) = SectionType::parse_with_measure_count(line) else {
+                return Err(format!(
+                    "Expected section table-of-contents entry before lane parallel, got '{line}'"
+                ));
+            };
+            if parsed.measure_expr.is_none() {
+                return Err(format!(
+                    "Section table-of-contents entry '{line}' must include a measure count"
+                ));
+            }
+            plan.push((*line).to_string());
+        }
+        Ok(plan)
+    }
+
+    fn apply_section_plan_to_lane(content: &str, section_plan: &[String]) -> Result<String, String> {
+        let mut section_idx = 0usize;
+        let mut output = Vec::new();
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                output.push(String::new());
+                continue;
+            }
+            if SectionType::parse_with_measure_count(trimmed).is_some() {
+                let Some(planned) = section_plan.get(section_idx) else {
+                    return Err(format!("Lane has extra section '{trimmed}' beyond table of contents"));
+                };
+                let planned_type = SectionType::parse_with_measure_count(planned)
+                    .map(|parsed| parsed.section_type);
+                let lane_type = SectionType::parse_with_measure_count(trimmed)
+                    .map(|parsed| parsed.section_type);
+                if planned_type != lane_type {
+                    return Err(format!(
+                        "Lane section '{trimmed}' does not match table-of-contents section '{}'",
+                        planned
+                    ));
+                }
+                output.push(planned.clone());
+                section_idx += 1;
+            } else {
+                output.push(trimmed.to_string());
+            }
+        }
+        if section_idx != section_plan.len() {
+            return Err(format!(
+                "Lane has {} sections, expected {} from table of contents",
+                section_idx,
+                section_plan.len()
+            ));
+        }
+        Ok(output.join("\n"))
+    }
+
+    fn melody_mode_content(content: &str) -> String {
+        content
+            .lines()
+            .map(|line| {
+                let trimmed = line.trim();
+                if trimmed.is_empty()
+                    || trimmed.starts_with('/')
+                    || trimmed.starts_with("dyn ")
+                    || trimmed.starts_with("dynamic ")
+                    || trimmed.starts_with("hairpin ")
+                    || trimmed.starts_with('@')
+                    || trimmed.starts_with('"')
+                    || trimmed.starts_with("^\"")
+                    || trimmed.starts_with("_\"")
+                    || trimmed.starts_with("m{")
+                    || trimmed.starts_with("m {")
+                    || trimmed.chars().all(|ch| ch == '|' || ch.is_whitespace())
+                    || crate::sections::SectionType::parse_with_measure_count(trimmed).is_some()
+                {
+                    trimmed.to_string()
+                } else {
+                    format!("m {{ {trimmed} }}")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    fn merge_section_lanes(
+        base: &mut [ChartSection],
+        lane: Vec<ChartSection>,
+        alias_name: &str,
+        merge_chords_and_rhythm: bool,
+    ) -> Result<(), String> {
+        if base.len() != lane.len() {
+            return Err(format!(
+                "sectioned lane <{alias_name}> has {} sections, expected {}",
+                lane.len(),
+                base.len()
+            ));
+        }
+
+        for (idx, (base_section, lane_section)) in base.iter_mut().zip(lane).enumerate() {
+            if base_section.section.section_type != lane_section.section.section_type
+                || base_section.section.measure_count != lane_section.section.measure_count
+            {
+                return Err(format!(
+                    "sectioned lane <{alias_name}> section {} does not match: {:?} {:?} vs {:?} {:?}",
+                    idx + 1,
+                    lane_section.section.section_type,
+                    lane_section.section.measure_count,
+                    base_section.section.section_type,
+                    base_section.section.measure_count
+                ));
+            }
+
+            let base_measures = base_section.measures_mut();
+            let lane_measures = lane_section.measures();
+            if base_measures.len() != lane_measures.len() {
+                return Err(format!(
+                    "sectioned lane <{alias_name}> section {} has {} measures, expected {}",
+                    idx + 1,
+                    lane_measures.len(),
+                    base_measures.len()
+                ));
+            }
+            for (base_measure, lane_measure) in base_measures.iter_mut().zip(lane_measures) {
+                Self::merge_lane_measure(base_measure, lane_measure, merge_chords_and_rhythm);
+            }
+        }
+
+        Ok(())
+    }
+
+    fn merge_lane_measure(base: &mut Measure, lane: &Measure, merge_chords_and_rhythm: bool) {
+        if merge_chords_and_rhythm {
+            base.chords.extend(lane.chords.clone());
+            base.rhythm_elements.extend(lane.rhythm_elements.clone());
+            base.rhythm_slashes.extend(lane.rhythm_slashes.clone());
+        }
+        base.text_cues.extend(lane.text_cues.clone());
+        base.staff_text.extend(lane.staff_text.clone());
+        base.figured_bass.extend(lane.figured_bass.clone());
+        base.dynamics.extend(lane.dynamics.clone());
+        base.classical_dynamics.extend(lane.classical_dynamics.clone());
+        base.hairpins.extend(lane.hairpins.clone());
+        base.melodies.extend(lane.melodies.clone());
     }
 }
 

@@ -8,11 +8,20 @@ default = ["serde"]
 serde = ["dep:serde"]
 highlighting = []
 syllable-splitting = []
+# `vox` here is the consumer-crate flag the architect-rpc-derive macro
+# checks via `#[cfg_attr(feature = "vox", ::architect::vox::service)]`.
+# Enabling it activates the macro's `<T>Client` type alias and the
+# vox::service decoration on the hidden mirror trait.
+vox = ["dep:vox", "architect/vox"]
 
 [dependencies]
+keyflow-syntax = { path = "../keyflow-syntax" }
 facet.workspace = true
 thiserror.workspace = true
-vox.workspace = true
+vox = { workspace = true, optional = true }
+# architect — provides `#[architect::rpc]`. Enabling the `vox` feature
+# wires the macro's emission through to the workspace's vox stack.
+architect = { workspace = true }
 tracing.workspace = true
 serde = { workspace = true, optional = true }
 daw-proto = { workspace = true }

@@ -16,7 +16,7 @@
 use std::collections::HashMap;
 
 use dashmap::DashMap;
-use keyflow_proto::highlighting::HighlightKind;
+use keyflow_syntax::highlighting::HighlightKind;
 use keyflow_text::ide::{
     self, CompletionKind, Diagnostic as IdeDiagnostic, Severity as IdeSeverity,
 };
@@ -209,7 +209,7 @@ fn ide_diag_to_lsp(text: &str, d: &IdeDiagnostic) -> Diagnostic {
     }
 }
 
-fn span_to_range(text: &str, span: keyflow_proto::parsing::TextSpan) -> Range {
+fn span_to_range(text: &str, span: keyflow_syntax::parsing::TextSpan) -> Range {
     let (sl, sc) = ide::offset_to_line_col(text, span.start);
     let (el, ec) = ide::offset_to_line_col(text, span.end());
     Range {
@@ -277,10 +277,10 @@ fn token_type_for(kind: HighlightKind) -> u32 {
 /// Encode line-relative semantic-tokens deltas as the LSP wants them.
 fn encode_semantic_tokens(
     text: &str,
-    highlights: &[keyflow_proto::highlighting::HighlightSpan],
+    highlights: &[keyflow_syntax::highlighting::HighlightSpan],
 ) -> Vec<SemanticToken> {
     // Sort by start offset.
-    let mut spans: Vec<&keyflow_proto::highlighting::HighlightSpan> = highlights.iter().collect();
+    let mut spans: Vec<&keyflow_syntax::highlighting::HighlightSpan> = highlights.iter().collect();
     spans.sort_by_key(|s| s.span.start);
 
     // Cache a mapping from byte offset to (line, col) by precomputing line starts.

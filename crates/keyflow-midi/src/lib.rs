@@ -6,19 +6,16 @@
 pub use keyflow_proto as proto;
 
 pub mod guide;
-
-pub mod import {
-    pub use engraver::import::*;
-}
+pub mod import;
 
 use std::path::Path;
 
 use keyflow_proto::Chart;
 
 pub fn generate_chart_text_from_midi_bytes(bytes: &[u8]) -> Result<String, String> {
-    let midi = engraver::import::MidiFile::parse(bytes).map_err(|e| e.to_string())?;
-    let config = engraver::import::MidiChartConfig::default();
-    Ok(engraver::import::generate_chart_text(&midi, &config))
+    let midi = import::MidiFile::parse(bytes).map_err(|e| e.to_string())?;
+    let config = import::MidiChartConfig::default();
+    Ok(import::generate_chart_text(&midi, &config))
 }
 
 pub fn generate_chart_text_from_midi_path(path: &Path) -> Result<String, String> {

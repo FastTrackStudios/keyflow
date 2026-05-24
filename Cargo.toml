@@ -32,8 +32,16 @@ facet-pretty = { version = "0.46" }
 facet-value = { version = "0.46" }
 facet-yaml = { version = "0.46" }
 
-# VOX service framework (pinned to FastTrackStudios fork)
-vox = { git = "https://github.com/Codys-Wright/vox.git", rev = "5ce8cdd9" }
+# VOX service framework. Aligned with daw + architect on the bearcove
+# upstream rev so the FTS workspace ships a single vox copy.
+vox = { git = "https://github.com/bearcove/vox", rev = "27eef573efd388bddaad0befdd59143a7e98b830" }
+vox-types = { git = "https://github.com/bearcove/vox", rev = "27eef573efd388bddaad0befdd59143a7e98b830" }
+vox-stream = { git = "https://github.com/bearcove/vox", rev = "27eef573efd388bddaad0befdd59143a7e98b830" }
+
+# architect framework — defines #[architect::rpc] for sync-trait → vox
+# RPC bridging. Path dep onto local checkout, matching daw's setup.
+architect = { path = "../../architect/macros/architect" }
+architect-rpc-derive = { path = "../../architect/macros/architect-rpc-derive" }
 
 # Rendering
 anyrender = { git = "https://github.com/DioxusLabs/anyrender.git", branch = "main" }
@@ -48,11 +56,18 @@ kurbo = "0.13"
 dioxus-native = "0.7.1"
 
 # Sibling repos
-daw = { git = "https://github.com/FastTrackStudios/daw.git", branch = "main" }
-daw-control = { git = "https://github.com/FastTrackStudios/daw.git", branch = "main" }
+# `daw-module`/`daw-proto`/`dawfile-reaper` are internal type-only crates.
+# Pre-keyflow-daw-analysis, daw-reaper depended on keyflow for chord
+# detection, which closed a cycle if keyflow used the `daw` facade. That
+# dep was lifted (daw 11c6062 + keyflow-daw-analysis here), so keyflow
+# could now use `daw` — but for purely type/trait imports the internal
+# crates are still the lighter choice.
 daw-module = { git = "https://github.com/FastTrackStudios/daw.git", branch = "main" }
 daw-proto = { git = "https://github.com/FastTrackStudios/daw.git", branch = "main" }
 dawfile-reaper = { git = "https://github.com/FastTrackStudios/daw.git", branch = "main" }
+# Full daw facade — needed by `keyflow-daw-analysis` only.
+daw = { git = "https://github.com/FastTrackStudios/daw.git", branch = "main" }
+keyflow-daw-analysis = { path = "crates/keyflow-daw-analysis" }
 color-palette = { git = "https://github.com/FastTrackStudios/dynamic-template.git", branch = "main" }
 music-catalog = { git = "https://github.com/FastTrackStudios/dynamic-template.git", branch = "main" }
 session = { git = "https://github.com/FastTrackStudios/session.git", branch = "main" }
@@ -66,12 +81,16 @@ serde_json = "1.0"
 thiserror = "2.0"
 tracing = { version = "0.1", features = ["std"] }
 
+# MusicXML parsing — full MusicXML 4.0 spec, supports .musicxml and .mxl.
+musicxml = "1.1"
+
+keyflow-musicxml = { path = "crates/keyflow-musicxml" }
+
 # ── Local development overrides ──────────────────────────────────────
 # Uncomment to use local checkouts instead of GitHub.
 #
 [patch."https://github.com/FastTrackStudios/daw.git"]
 daw = { path = "../daw/crates/daw" }
-daw-control = { path = "../daw/crates/daw-control" }
 daw-module = { path = "../daw/crates/daw-module" }
 daw-proto = { path = "../daw/crates/daw-proto" }
 dawfile-reaper = { path = "../daw/crates/dawfile-reaper" }
@@ -83,6 +102,20 @@ dawfile-reaper = { path = "../daw/crates/dawfile-reaper" }
 [patch."https://github.com/FastTrackStudios/session.git"]
 session = { path = "../session/crates/session" }
 session-ui = { path = "../session/crates/session-ui" }
+session-proto = { path = "../session/crates/session-proto" }
+
+# Session's own workspace toml references `keyflow-daw-analysis` (a
+# new crate) by git url, but that branch tip predates the crate. Loop
+# back to our local sibling so resolution succeeds.
+[patch."https://github.com/FastTrackStudios/keyflow.git"]
+keyflow = { path = "crates/keyflow" }
+keyflow-proto = { path = "crates/keyflow-proto" }
+keyflow-text = { path = "crates/keyflow-text" }
+keyflow-daw-analysis = { path = "crates/keyflow-daw-analysis" }
+keyflow-syntax = { path = "crates/keyflow-syntax" }
+keyflow-live = { path = "crates/keyflow-live" }
+engraver = { path = "crates/engraver" }
+engraver-proto = { path = "crates/engraver-proto" }
 #
 # [patch."https://github.com/FastTrackStudios/input_actions.git"]
 # actions-proto = { path = "../input_actions/crates/actions-proto" }
@@ -98,14 +131,6 @@ session-ui = { path = "../session/crates/session-ui" }
 [patch."https://github.com/FastTrackStudios/fts-ui.git"]
 fts-ui = { path = "../fts-ui/crates/fts-ui" }
 
-# Redirect bearcove/vox.git transitive deps to the FTS fork so the workspace
-# resolves a single vox/facet stack.
-[patch."https://github.com/bearcove/vox.git"]
-vox = { git = "https://github.com/Codys-Wright/vox.git", rev = "5ce8cdd9" }
-vox-core = { git = "https://github.com/Codys-Wright/vox.git", rev = "5ce8cdd9" }
-vox-types = { git = "https://github.com/Codys-Wright/vox.git", rev = "5ce8cdd9" }
-vox-postcard = { git = "https://github.com/Codys-Wright/vox.git", rev = "5ce8cdd9" }
-vox-schema = { git = "https://github.com/Codys-Wright/vox.git", rev = "5ce8cdd9" }
-vox-service-macros = { git = "https://github.com/Codys-Wright/vox.git", rev = "5ce8cdd9" }
-vox-macros-core = { git = "https://github.com/Codys-Wright/vox.git", rev = "5ce8cdd9" }
-vox-macros-parse = { git = "https://github.com/Codys-Wright/vox.git", rev = "5ce8cdd9" }
+# Vox pins live in `[workspace.dependencies]` above — direct + transitive
+# refs already resolve to the same bearcove rev now that keyflow + daw +
+# architect + session are aligned.
