@@ -40,8 +40,8 @@ vox-stream = { git = "https://github.com/bearcove/vox", rev = "27eef573efd388bdd
 
 # architect framework — defines #[architect::rpc] for sync-trait → vox
 # RPC bridging. Path dep onto local checkout, matching daw's setup.
-architect = { path = "../../architect/macros/architect" }
-architect-rpc-derive = { path = "../../architect/macros/architect-rpc-derive" }
+architect = { git = "https://git.starcommand.live/FastTrackStudios/architect.git", branch = "main" }
+architect-rpc-derive = { git = "https://git.starcommand.live/FastTrackStudios/architect.git", branch = "main" }
 
 # Rendering
 anyrender = { git = "https://github.com/DioxusLabs/anyrender.git", branch = "main" }
