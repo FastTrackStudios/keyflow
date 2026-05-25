@@ -62,11 +62,11 @@ dioxus-native = "0.7.1"
 # dep was lifted (daw 11c6062 + keyflow-daw-analysis here), so keyflow
 # could now use `daw` — but for purely type/trait imports the internal
 # crates are still the lighter choice.
-daw-module = { git = "https://github.com/FastTrackStudios/daw.git", branch = "main" }
-daw-proto = { git = "https://github.com/FastTrackStudios/daw.git", branch = "main" }
-dawfile-reaper = { git = "https://github.com/FastTrackStudios/daw.git", branch = "main" }
+daw-module = { git = "https://git.starcommand.live/FastTrackStudios/daw.git", branch = "main" }
+daw-proto = { git = "https://git.starcommand.live/FastTrackStudios/daw.git", branch = "main" }
+dawfile-reaper = { git = "https://git.starcommand.live/FastTrackStudios/daw.git", branch = "main" }
 # Full daw facade — needed by `keyflow-daw-analysis` only.
-daw = { git = "https://github.com/FastTrackStudios/daw.git", branch = "main" }
+daw = { git = "https://git.starcommand.live/FastTrackStudios/daw.git", branch = "main" }
 keyflow-daw-analysis = { path = "crates/keyflow-daw-analysis" }
 color-palette = { git = "https://github.com/FastTrackStudios/dynamic-template.git", branch = "main" }
 music-catalog = { git = "https://github.com/FastTrackStudios/dynamic-template.git", branch = "main" }
@@ -89,7 +89,7 @@ keyflow-musicxml = { path = "crates/keyflow-musicxml" }
 # ── Local development overrides ──────────────────────────────────────
 # Uncomment to use local checkouts instead of GitHub.
 #
-[patch."https://github.com/FastTrackStudios/daw.git"]
+[patch."https://git.starcommand.live/FastTrackStudios/daw.git"]
 daw = { path = "../daw/crates/daw" }
 daw-module = { path = "../daw/crates/daw-module" }
 daw-proto = { path = "../daw/crates/daw-proto" }
