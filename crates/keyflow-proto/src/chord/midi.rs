@@ -226,16 +226,16 @@ pub fn detect_chords_from_midi_notes_with_spelling(
                 }
                 if cleaned.len() < active_notes.len() {
                     // Some notes were cleaned up — finalize the previous chord
-                    if active_notes.len() >= 2 {
-                        if let Some(chord) = build_chord_from_notes(
+                    if active_notes.len() >= 2
+                        && let Some(chord) = build_chord_from_notes(
                             &active_notes,
                             chord_min_eppq.unwrap_or(0),
                             note.start_ppq,
                             min_chord_duration_ppq,
                             spelling,
-                        ) {
-                            chords.push(chord);
-                        }
+                        )
+                    {
+                        chords.push(chord);
                     }
                     active_notes = cleaned;
                     chord_min_eppq = new_min;

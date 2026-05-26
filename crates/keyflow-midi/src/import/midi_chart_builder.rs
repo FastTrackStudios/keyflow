@@ -521,7 +521,7 @@ fn extract_melody_for_section(
             // will distribute it across all measures
             output.push_str(&format!(". {}", melody_block));
         } else {
-            output.push_str(".");
+            output.push('.');
         }
         output.push_str(" | ");
     }
@@ -545,10 +545,10 @@ fn format_pitch_name(pitch: &Pitch, key_spelling: Option<&KeySpelling>) -> Strin
     let acc = match pitch.alteration {
         1 => {
             // Check if we should spell as flat instead
-            if let Some(ks) = key_spelling {
-                if ks.prefers_flat() {
-                    return format_as_flat(pitch);
-                }
+            if let Some(ks) = key_spelling
+                && ks.prefers_flat()
+            {
+                return format_as_flat(pitch);
             }
             "#"
         }
@@ -1262,12 +1262,12 @@ fn extract_sub_label(marker_name: &str) -> Option<String> {
 /// `"Guitar Solo"` → `Some("Guitar")`, `"SOLO Keys"` → `Some("Keys")`.
 fn extract_solo_instrument(marker_name: &str) -> Option<String> {
     // Try parenthesized instrument: "SOLO A (Trumpet)" or "Solo B (Trumpet)"
-    if let Some(open) = marker_name.find('(') {
-        if let Some(close) = marker_name[open..].find(')') {
-            let instrument = marker_name[open + 1..open + close].trim();
-            if !instrument.is_empty() {
-                return Some(instrument.to_string());
-            }
+    if let Some(open) = marker_name.find('(')
+        && let Some(close) = marker_name[open..].find(')')
+    {
+        let instrument = marker_name[open + 1..open + close].trim();
+        if !instrument.is_empty() {
+            return Some(instrument.to_string());
         }
     }
 
@@ -1625,10 +1625,8 @@ fn build_rhythm_elements(
         // Threshold: chord duration <= half a beat (eighth note or less in 4/4).
         let is_staccato = if is_staccato_pushed {
             true
-        } else if !is_pushed && !is_continuing && actual_duration <= ticks_per_beat / 2 {
-            true
         } else {
-            false
+            !is_pushed && !is_continuing && actual_duration <= ticks_per_beat / 2
         };
 
         // For very short chords (< triplet eighth), quantize the end to grid

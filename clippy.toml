@@ -1,0 +1,2 @@
+# MSRV floor for clippy's version-gated lints.
+msrv = "1.90"

@@ -672,13 +672,12 @@ pub fn calculate_segment_index(
     }
 
     // Check precomputed segment positions (used by internal pushes AND staccato measures)
-    if !internal_push_positions.is_empty() {
-        if let Some((_, seg_idx)) = internal_push_positions
+    if !internal_push_positions.is_empty()
+        && let Some((_, seg_idx)) = internal_push_positions
             .iter()
             .find(|(c_idx, _)| *c_idx == chord_idx)
-        {
-            return *seg_idx;
-        }
+    {
+        return *seg_idx;
     }
 
     // Check for explicit rhythm elements

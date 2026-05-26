@@ -199,7 +199,7 @@ fn line_to_text(line: &ChordProLine) -> String {
             .join(""),
         ChordProLine::ChordOnly(chunks) => chunks
             .iter()
-            .filter_map(|chunk| chunk.chord.as_ref().map(|c| c.as_str()))
+            .filter_map(|chunk| chunk.chord.as_deref())
             .collect::<Vec<_>>()
             .join(" "),
         ChordProLine::Comment(text) => format!("# {}", text),

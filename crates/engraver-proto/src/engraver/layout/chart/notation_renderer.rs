@@ -78,18 +78,18 @@ impl<'a> MeasureFrame<'a> {
     /// X position of a 1-based beat. Uses real chord-segment positions when
     /// available, otherwise falls back to an even grid.
     fn beat_x(&self, beat: u8) -> f64 {
-        if beat <= 1 {
-            if let Some(x) = self.system_start_dynamic_x {
-                return x;
-            }
+        if beat <= 1
+            && let Some(x) = self.system_start_dynamic_x
+        {
+            return x;
         }
 
         let beat_idx = beat.saturating_sub(1) as usize;
-        if let Some(segments) = self.segment_positions {
-            if !segments.is_empty() {
-                let idx = beat_idx.min(segments.len() - 1);
-                return self.measure_x + segments[idx] * self.spatium;
-            }
+        if let Some(segments) = self.segment_positions
+            && !segments.is_empty()
+        {
+            let idx = beat_idx.min(segments.len() - 1);
+            return self.measure_x + segments[idx] * self.spatium;
         }
         let beats = self.beats_per_measure.max(1) as f64;
         let beat_clamped = (beat.max(1) as f64 - 1.0).min(beats - 1.0);

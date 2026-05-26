@@ -66,7 +66,7 @@ impl IntoChart for &String {
 }
 
 #[cfg(feature = "midi")]
-impl<'a> IntoChart for &'a [u8] {
+impl IntoChart for &[u8] {
     fn into_chart(self) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError> {
         keyflow_midi::parse_midi_bytes(self).map_err(KeyflowSourceError::Midi)
     }
@@ -80,7 +80,7 @@ impl IntoChart for Vec<u8> {
 }
 
 #[cfg(feature = "midi")]
-impl<'a> IntoChart for &'a std::path::Path {
+impl IntoChart for &std::path::Path {
     fn into_chart(self) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError> {
         keyflow_midi::parse_midi_path(self).map_err(KeyflowSourceError::Midi)
     }

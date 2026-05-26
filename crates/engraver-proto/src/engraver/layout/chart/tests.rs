@@ -617,7 +617,7 @@ fn trace_source_measure_system_gap(
         );
     }
 
-    let dead_spaces = find_dead_vertical_space_between_systems(&result, 8.0);
+    let dead_spaces = find_dead_vertical_space_between_systems(result, 8.0);
     let mut max_target_dead_space: f64 = 0.0;
     for space in dead_spaces.iter().filter(|space| {
         space.page == upper_beat.page

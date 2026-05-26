@@ -188,8 +188,16 @@ impl<'a> ChartParser<'a> {
             .split_once("..")
             .or_else(|| span.split_once('-'))
             .unwrap_or(("1", "1"));
-        let start_beat = start.trim_start_matches('@').parse::<u8>().ok().unwrap_or(1);
-        let end_beat = end.trim_start_matches('@').parse::<u8>().ok().unwrap_or(start_beat);
+        let start_beat = start
+            .trim_start_matches('@')
+            .parse::<u8>()
+            .ok()
+            .unwrap_or(1);
+        let end_beat = end
+            .trim_start_matches('@')
+            .parse::<u8>()
+            .ok()
+            .unwrap_or(start_beat);
         let placement = parts
             .next()
             .and_then(Self::parse_placement)
@@ -1275,8 +1283,7 @@ impl<'a> ChartParser<'a> {
                                     .staff_text
                                     .append(&mut pending_staff_text);
                             }
-                            if !pending_classical_dynamics.is_empty()
-                                && !melody_measures.is_empty()
+                            if !pending_classical_dynamics.is_empty() && !melody_measures.is_empty()
                             {
                                 melody_measures[0]
                                     .classical_dynamics
@@ -3284,7 +3291,7 @@ impl<'a> ChartParser<'a> {
         let mut brace_depth = 0usize;
         let mut chars = input.chars().peekable();
 
-        while let Some(ch) = chars.next() {
+        for ch in chars {
             match ch {
                 '{' => brace_depth += 1,
                 '}' => brace_depth = brace_depth.saturating_sub(1),

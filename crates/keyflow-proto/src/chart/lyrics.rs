@@ -317,10 +317,10 @@ impl LyricLine {
                 start = Some(idx);
             }
 
-            if !syl.hyphen_after {
-                if let Some(s) = start.take() {
-                    push_word_segment(&mut out, &self.syllables, s, idx + 1);
-                }
+            if !syl.hyphen_after
+                && let Some(s) = start.take()
+            {
+                push_word_segment(&mut out, &self.syllables, s, idx + 1);
             }
         }
 

@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/*"]
+members = ["crates/*", "xtask"]
 resolver = "2"
 
 [workspace.package]
@@ -12,6 +12,22 @@ license = "MIT OR Apache-2.0"
 unused = "allow"
 
 [workspace.lints.clippy]
+# Permissive stylistic lints — WIP workspace, don't block CI on these.
+field_reassign_with_default = "allow"
+redundant_closure = "allow"
+nonminimal_bool = "allow"
+clone_on_copy = "allow"
+useless_vec = "allow"
+large_enum_variant = "allow"
+if_same_then_else = "allow"
+explicit_counter_loop = "allow"
+manual_strip = "allow"
+too_many_arguments = "allow"
+double_must_use = "allow"
+manual_clamp = "allow"
+vec_init_then_push = "allow"
+collapsible_match = "allow"
+filter_next = "allow"
 
 [workspace.dependencies]
 # Public crates (facade + UI)
@@ -20,7 +36,7 @@ keyflow-ui = { path = "crates/keyflow-ui" }
 engraver = { path = "crates/engraver" }
 
 # FastTrack Studio shared design system. Lives in the sibling fts-ui repo.
-fts-ui = { path = "../fts-ui/crates/fts-ui" }
+fts-ui = { git = "https://git.starcommand.live/FastTrackStudios/fts-ui.git", branch = "main", package = "fts-ui" }
 
 # Facet reflection — align the stack to the current 0.46 line.
 facet = { version = "0.46" }
@@ -86,51 +102,30 @@ musicxml = "1.1"
 
 keyflow-musicxml = { path = "crates/keyflow-musicxml" }
 
-# ── Local development overrides ──────────────────────────────────────
-# Uncomment to use local checkouts instead of GitHub.
-#
-[patch."https://git.starcommand.live/FastTrackStudios/daw.git"]
-daw = { path = "../daw/crates/daw" }
-daw-module = { path = "../daw/crates/daw-module" }
-daw-proto = { path = "../daw/crates/daw-proto" }
-dawfile-reaper = { path = "../daw/crates/dawfile-reaper" }
-#
-# [patch."https://git.starcommand.live/FastTrackStudios/dynamic-template.git"]
-# color-palette = { path = "../dynamic-template/crates/color-palette" }
-# music-catalog = { path = "../dynamic-template/crates/music-catalog" }
-#
-[patch."https://git.starcommand.live/FastTrackStudios/session.git"]
-session = { path = "../session/crates/session" }
-session-ui = { path = "../session/crates/session-ui" }
-session-proto = { path = "../session/crates/session-proto" }
-
-# Session's own workspace toml references `keyflow-daw-analysis` (a
-# new crate) by git url, but that branch tip predates the crate. Loop
-# back to our local sibling so resolution succeeds.
-[patch."https://git.starcommand.live/FastTrackStudios/keyflow.git"]
-keyflow = { path = "crates/keyflow" }
-keyflow-proto = { path = "crates/keyflow-proto" }
-keyflow-text = { path = "crates/keyflow-text" }
-keyflow-daw-analysis = { path = "crates/keyflow-daw-analysis" }
-keyflow-syntax = { path = "crates/keyflow-syntax" }
-keyflow-live = { path = "crates/keyflow-live" }
-engraver = { path = "crates/engraver" }
-engraver-proto = { path = "crates/engraver-proto" }
-#
-# [patch."https://git.starcommand.live/FastTrackStudios/input_actions.git"]
-# actions-proto = { path = "../input_actions/crates/actions-proto" }
-#
-# [patch."https://git.starcommand.live/FastTrackStudios/dock-dioxus.git"]
-# dock-dioxus = { path = "../dock-dioxus/crates/dock-dioxus" }
-# dock-proto = { path = "../dock-dioxus/crates/dock-proto" }
-
-# Force every transitive `fts-ui` (currently pulled in via session-ui's git
-# dep) to resolve to the local sibling checkout, so the workspace ships a
-# single fts-ui version and components composed in keyflow-ui interop with
-# components composed in session-ui.
-[patch."https://git.starcommand.live/FastTrackStudios/fts-ui.git"]
-fts-ui = { path = "../fts-ui/crates/fts-ui" }
-
-# Vox pins live in `[workspace.dependencies]` above — direct + transitive
-# refs already resolve to the same bearcove rev now that keyflow + daw +
-# architect + session are aligned.
+# ── Patched dioxus ───────────────────────────────────────────────────
+# keyflow pulls daw (with reaper features → daw-reaper-dioxus → patched
+# dioxus) and fts-ui, so the whole workspace must share daw's dioxus fork.
+# These lines are copied verbatim from daw's [patch.crates-io].
+[patch.crates-io]
+dioxus = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus" }
+dioxus-asset-resolver = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-asset-resolver" }
+dioxus-cli-config = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-cli-config" }
+dioxus-config-macros = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-config-macros" }
+dioxus-core = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-core" }
+dioxus-core-macro = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-core-macro" }
+dioxus-core-types = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-core-types" }
+dioxus-devtools = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-devtools" }
+dioxus-devtools-types = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-devtools-types" }
+dioxus-document = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-document" }
+dioxus-history = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-history" }
+dioxus-hooks = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-hooks" }
+dioxus-html = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-html" }
+dioxus-html-internal-macro = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-html-internal-macro" }
+dioxus-rsx = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-rsx" }
+dioxus-signals = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-signals" }
+dioxus-stores = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-stores" }
+dioxus-stores-macro = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-stores-macro" }
+generational-box = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "generational-box" }
+manganis = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "manganis" }
+manganis-core = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "manganis-core" }
+manganis-macro = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "manganis-macro" }

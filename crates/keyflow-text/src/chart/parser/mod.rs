@@ -214,7 +214,9 @@ impl<'a> ChartParser<'a> {
         parser.post_process();
 
         if parser.sections.is_empty() {
-            return Err(format!("sectioned lane alias <{alias_name}> has no sections"));
+            return Err(format!(
+                "sectioned lane alias <{alias_name}> has no sections"
+            ));
         }
 
         Ok(lane_chart.sections)
@@ -238,7 +240,10 @@ impl<'a> ChartParser<'a> {
         Ok(plan)
     }
 
-    fn apply_section_plan_to_lane(content: &str, section_plan: &[String]) -> Result<String, String> {
+    fn apply_section_plan_to_lane(
+        content: &str,
+        section_plan: &[String],
+    ) -> Result<String, String> {
         let mut section_idx = 0usize;
         let mut output = Vec::new();
         for line in content.lines() {
@@ -249,7 +254,9 @@ impl<'a> ChartParser<'a> {
             }
             if SectionType::parse_with_measure_count(trimmed).is_some() {
                 let Some(planned) = section_plan.get(section_idx) else {
-                    return Err(format!("Lane has extra section '{trimmed}' beyond table of contents"));
+                    return Err(format!(
+                        "Lane has extra section '{trimmed}' beyond table of contents"
+                    ));
                 };
                 let planned_type = SectionType::parse_with_measure_count(planned)
                     .map(|parsed| parsed.section_type);
@@ -361,7 +368,8 @@ impl<'a> ChartParser<'a> {
         base.staff_text.extend(lane.staff_text.clone());
         base.figured_bass.extend(lane.figured_bass.clone());
         base.dynamics.extend(lane.dynamics.clone());
-        base.classical_dynamics.extend(lane.classical_dynamics.clone());
+        base.classical_dynamics
+            .extend(lane.classical_dynamics.clone());
         base.hairpins.extend(lane.hairpins.clone());
         base.melodies.extend(lane.melodies.clone());
     }

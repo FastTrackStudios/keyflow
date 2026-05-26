@@ -392,6 +392,7 @@ fn test_vienna_rpp_to_chart_text() {
         key_root: Some("Bb".to_string()),
         title: Some("Vienna - Just Friends\nTranscribed By: Cody Wright".to_string()),
         swing: midi.swing(),
+        ..Default::default()
     };
     let chart_text = generate_chart_text(&midi, &config);
 
@@ -413,6 +414,7 @@ fn test_vienna_rpp_to_pdf() {
         key_root: Some("Bb".to_string()),
         title: Some("Vienna - Just Friends\nTranscribed By: Cody Wright".to_string()),
         swing: midi.swing(),
+        ..Default::default()
     };
     let chart_text = generate_chart_text(&midi, &config);
 

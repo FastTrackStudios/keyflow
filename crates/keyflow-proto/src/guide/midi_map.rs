@@ -45,7 +45,7 @@ pub const COUNT_NOTES: [u8; 8] = [
 ///
 /// Returns `None` if the count number is out of range.
 pub fn count_midi_note(count_number: u8) -> Option<u8> {
-    if count_number >= 1 && count_number <= 8 {
+    if (1..=8).contains(&count_number) {
         Some(COUNT_NOTES[(count_number - 1) as usize])
     } else {
         None

@@ -1,0 +1,5 @@
+# Pins the toolchain for rustup users + CI.
+[toolchain]
+channel = "1.94.1"
+components = ["rustfmt", "clippy", "rust-src"]
+profile = "minimal"

@@ -754,14 +754,14 @@ fn melody_token_duration_start(token: &str) -> Option<usize> {
         }
         return None;
     }
-    if let Some(close) = token.rfind(')') {
-        if token[..close].contains('(') {
-            let suffix = &token[close + 1..];
-            if suffix.is_empty() {
-                return None;
-            }
-            return is_melody_duration_suffix(suffix).then_some(close + 1);
+    if let Some(close) = token.rfind(')')
+        && token[..close].contains('(')
+    {
+        let suffix = &token[close + 1..];
+        if suffix.is_empty() {
+            return None;
         }
+        return is_melody_duration_suffix(suffix).then_some(close + 1);
     }
     if let Some((idx, suffix)) = token
         .char_indices()

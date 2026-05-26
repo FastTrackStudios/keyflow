@@ -104,7 +104,7 @@ fn find_barline_positions(scene: &SceneNode) -> Vec<f64> {
             if id.element_type != ElementType::Barline {
                 return None;
             }
-            let world_origin = transform * kurbo::Point::ORIGIN;
+            let world_origin = keyflow::engraver::scene::transform::get_translation(&transform);
             Some(world_origin.x)
         })
         .collect();
@@ -170,7 +170,7 @@ fn test_vs_sections_have_correct_measure_count() {
         .filter(|s| {
             matches!(
                 s.section.section_type,
-                keyflow::sections::SectionType::Verse { .. }
+                keyflow::sections::SectionType::Verse
             )
         })
         .collect();
@@ -201,7 +201,7 @@ fn test_vs_measures_have_identical_content_structure() {
         .find(|s| {
             matches!(
                 s.section.section_type,
-                keyflow::sections::SectionType::Verse { .. }
+                keyflow::sections::SectionType::Verse
             )
         })
         .expect("VS section not found");
@@ -350,7 +350,7 @@ fn test_content_weight_calculation() {
         .find(|s| {
             matches!(
                 s.section.section_type,
-                keyflow::sections::SectionType::Verse { .. }
+                keyflow::sections::SectionType::Verse
             )
         })
         .expect("VS section not found");
@@ -414,7 +414,7 @@ fn test_push_pull_detection_in_vs1() {
         .find(|s| {
             matches!(
                 s.section.section_type,
-                keyflow::sections::SectionType::Verse { .. }
+                keyflow::sections::SectionType::Verse
             )
         })
         .expect("VS section not found");
@@ -463,7 +463,7 @@ fn test_spillback_from_in_to_count() {
         .find(|s| {
             matches!(
                 s.section.section_type,
-                keyflow::sections::SectionType::Intro { .. }
+                keyflow::sections::SectionType::Intro
             )
         })
         .expect("IN section not found");
@@ -503,7 +503,7 @@ fn test_spillback_from_vs1_to_in() {
         .find(|s| {
             matches!(
                 s.section.section_type,
-                keyflow::sections::SectionType::Verse { .. }
+                keyflow::sections::SectionType::Verse
             )
         })
         .expect("VS section not found");

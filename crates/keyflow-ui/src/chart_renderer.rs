@@ -1329,8 +1329,10 @@ impl ChartLayoutManager {
     }
 
     fn insert_transformed_fragment(&mut self, key: TransformedPageKey, value: RecordedScene) {
-        if self.cached_transformed_fragments.contains_key(&key) {
-            self.cached_transformed_fragments.insert(key, value);
+        if let std::collections::hash_map::Entry::Occupied(mut e) =
+            self.cached_transformed_fragments.entry(key)
+        {
+            e.insert(value);
             return;
         }
 

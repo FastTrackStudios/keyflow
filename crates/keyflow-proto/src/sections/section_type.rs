@@ -610,14 +610,14 @@ fn is_sub_label(s: &str) -> bool {
 /// - `CH (Build) 8` → (`CH  8`, Some("Build"))
 /// - `In (Band) x2` → (`In  x2`, Some("Band"))
 fn extract_paren_comment(input: &str) -> (String, Option<String>) {
-    if let Some(open) = input.find('(') {
-        if let Some(close) = input[open..].find(')') {
-            let close = open + close;
-            let comment = input[open + 1..close].trim().to_string();
-            let remaining = format!("{}{}", &input[..open], &input[close + 1..]);
-            if !comment.is_empty() {
-                return (remaining, Some(comment));
-            }
+    if let Some(open) = input.find('(')
+        && let Some(close) = input[open..].find(')')
+    {
+        let close = open + close;
+        let comment = input[open + 1..close].trim().to_string();
+        let remaining = format!("{}{}", &input[..open], &input[close + 1..]);
+        if !comment.is_empty() {
+            return (remaining, Some(comment));
         }
     }
     (input.to_string(), None)

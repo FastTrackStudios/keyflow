@@ -22,15 +22,11 @@ use facet::Facet;
 /// Where a staff-attached element renders relative to the staff.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Facet)]
 #[repr(u8)]
+#[derive(Default)]
 pub enum Placement {
+    #[default]
     Above,
     Below,
-}
-
-impl Default for Placement {
-    fn default() -> Self {
-        Self::Above
-    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

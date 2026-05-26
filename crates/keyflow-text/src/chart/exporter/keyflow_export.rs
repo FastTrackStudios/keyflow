@@ -565,7 +565,10 @@ fn hairpin_to_syntax(hairpin: &Hairpin) -> String {
         HairpinKind::Crescendo => "<",
         HairpinKind::Decrescendo => ">",
     };
-    let mut text = format!("hairpin {kind} {}..{}", hairpin.start_beat, hairpin.end_beat);
+    let mut text = format!(
+        "hairpin {kind} {}..{}",
+        hairpin.start_beat, hairpin.end_beat
+    );
     if hairpin.placement == Placement::Above {
         text.push_str(" above");
     }

@@ -329,19 +329,19 @@ fn record_system_ink_bottom(
     if !should_count_for_system_height(node) {
         return;
     }
-    if let Some(bounds) = notation_renderer::scene_ink_bounds(node, Affine::IDENTITY) {
-        if bounds.y1 > *system_ink_bottom {
-            *system_ink_bottom = bounds.y1;
-            contributors.push(format!(
-                "{} y1={:.1} bounds=({:.1},{:.1},{:.1},{:.1})",
-                node_spacing_reason(node, reason),
-                bounds.y1,
-                bounds.x0,
-                bounds.y0,
-                bounds.x1,
-                bounds.y1
-            ));
-        }
+    if let Some(bounds) = notation_renderer::scene_ink_bounds(node, Affine::IDENTITY)
+        && bounds.y1 > *system_ink_bottom
+    {
+        *system_ink_bottom = bounds.y1;
+        contributors.push(format!(
+            "{} y1={:.1} bounds=({:.1},{:.1},{:.1},{:.1})",
+            node_spacing_reason(node, reason),
+            bounds.y1,
+            bounds.x0,
+            bounds.y0,
+            bounds.x1,
+            bounds.y1
+        ));
     }
 }
 
@@ -1207,7 +1207,7 @@ impl ChartLayoutEngine {
                 self.log_system_width_decisions(
                     section_idx,
                     sys_idx,
-                    &measure_indices,
+                    measure_indices,
                     all_measures,
                     &measure_weights,
                     &measure_min_widths,
@@ -2265,7 +2265,7 @@ impl ChartLayoutEngine {
                 self.log_system_width_decisions(
                     section_idx,
                     sys_idx,
-                    &measure_indices,
+                    measure_indices,
                     all_measures,
                     &measure_weights,
                     &measure_min_widths,

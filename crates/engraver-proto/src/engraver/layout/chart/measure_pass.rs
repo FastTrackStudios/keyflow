@@ -678,11 +678,11 @@ pub fn measure_measure_with_config(
         }
 
         // Handle the last visible chord: reserve space for its width + trailing
-        if let Some(&(last_idx, last_width)) = visible_chord_info.last() {
-            if last_idx < segment_mins.len() {
-                let trailing_for_last = last_width * 0.5; // Half-width trailing
-                segment_mins[last_idx] = segment_mins[last_idx].max(trailing_for_last);
-            }
+        if let Some(&(last_idx, last_width)) = visible_chord_info.last()
+            && last_idx < segment_mins.len()
+        {
+            let trailing_for_last = last_width * 0.5; // Half-width trailing
+            segment_mins[last_idx] = segment_mins[last_idx].max(trailing_for_last);
         }
 
         // Sum segment minimums to get total min_width.
