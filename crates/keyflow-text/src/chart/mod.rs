@@ -8,6 +8,10 @@ pub struct ChartParser<'a> {
     chart: &'a mut Chart,
     aliases: HashMap<String, String>,
     melody_octave_memory: Option<u8>,
+    /// Chart-wide default duration set by a top-level `/Duration` directive
+    /// (before any section). Each section starts from this default unless it
+    /// overrides with its own `/Duration`. `None` means no global default.
+    default_duration: Option<String>,
 }
 
 impl<'a> ChartParser<'a> {
@@ -16,6 +20,7 @@ impl<'a> ChartParser<'a> {
             chart,
             aliases: HashMap::new(),
             melody_octave_memory: None,
+            default_duration: None,
         }
     }
 }

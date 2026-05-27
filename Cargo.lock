@@ -3496,7 +3496,7 @@ checksum = "66b7e2430c6dff6a955451e2cfc438f09cea1965a9d6f87f7e3b90decc014099"
 name = "engraver"
 version = "0.1.0"
 dependencies = [
- "engraver-proto 0.1.0",
+ "engraver-proto 0.0.1",
 ]
 
 [[package]]
@@ -3504,12 +3504,12 @@ name = "engraver"
 version = "0.1.0"
 source = "git+https://git.starcommand.live/FastTrackStudios/keyflow.git?branch=main#aa9fe94987e6ee892701cbcfc98261febe71cdd3"
 dependencies = [
- "engraver-proto 0.1.0 (git+https://git.starcommand.live/FastTrackStudios/keyflow.git?branch=main)",
+ "engraver-proto 0.1.0",
 ]
 
 [[package]]
 name = "engraver-proto"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyrender 0.10.0",
  "bitflags 2.11.1",
@@ -3521,12 +3521,12 @@ dependencies = [
  "facet 0.46.4",
  "getrandom 0.2.17",
  "helgoboss-midi",
- "keyflow 0.1.0",
- "keyflow-midi 0.1.0",
+ "keyflow 0.0.1",
+ "keyflow-midi 0.0.1",
  "keyflow-musicxml",
  "keyflow-proto 0.1.0",
- "keyflow-syntax 0.1.0",
- "keyflow-text 0.1.0",
+ "keyflow-syntax 0.0.1",
+ "keyflow-text 0.0.1",
  "kurbo 0.13.1",
  "log",
  "lopdf 0.36.0",
@@ -3566,10 +3566,10 @@ dependencies = [
  "facet 0.46.4",
  "getrandom 0.2.17",
  "helgoboss-midi",
- "keyflow-midi 0.1.0 (git+https://git.starcommand.live/FastTrackStudios/keyflow.git?branch=main)",
+ "keyflow-midi 0.1.0",
  "keyflow-proto 0.1.0 (git+https://git.starcommand.live/FastTrackStudios/keyflow.git?branch=main)",
- "keyflow-syntax 0.1.0 (git+https://git.starcommand.live/FastTrackStudios/keyflow.git?branch=main)",
- "keyflow-text 0.1.0 (git+https://git.starcommand.live/FastTrackStudios/keyflow.git?branch=main)",
+ "keyflow-syntax 0.1.0",
+ "keyflow-text 0.1.0",
  "kurbo 0.13.1",
  "lopdf 0.36.0",
  "lyon",
@@ -5972,7 +5972,7 @@ dependencies = [
 
 [[package]]
 name = "keyflow"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "color-eyre",
  "colored",
@@ -5985,9 +5985,9 @@ dependencies = [
  "getrandom 0.2.17",
  "helgoboss-midi",
  "keyflow-live",
- "keyflow-midi 0.1.0",
+ "keyflow-midi 0.0.1",
  "keyflow-proto 0.1.0",
- "keyflow-text 0.1.0",
+ "keyflow-text 0.0.1",
  "regex",
  "tracing",
  "tracing-subscriber",
@@ -6009,7 +6009,7 @@ dependencies = [
  "getrandom 0.2.17",
  "helgoboss-midi",
  "keyflow-proto 0.1.0 (git+https://git.starcommand.live/FastTrackStudios/keyflow.git?branch=main)",
- "keyflow-text 0.1.0 (git+https://git.starcommand.live/FastTrackStudios/keyflow.git?branch=main)",
+ "keyflow-text 0.1.0",
  "regex",
  "tracing",
  "uuid",
@@ -6017,7 +6017,7 @@ dependencies = [
 
 [[package]]
 name = "keyflow-chordpro"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -6030,10 +6030,10 @@ source = "git+https://git.starcommand.live/FastTrackStudios/keyflow.git?branch=m
 
 [[package]]
 name = "keyflow-cli"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "clap",
- "keyflow 0.1.0",
+ "keyflow 0.0.1",
  "keyflow-musicxml",
  "png 0.17.16",
  "resvg",
@@ -6045,13 +6045,13 @@ dependencies = [
 
 [[package]]
 name = "keyflow-daw-analysis"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "architect",
  "daw",
  "eyre",
  "facet 0.46.4",
- "keyflow 0.1.0",
+ "keyflow 0.0.1",
  "tracing",
  "vox 0.5.0",
 ]
@@ -6065,27 +6065,27 @@ dependencies = [
  "daw",
  "eyre",
  "facet 0.46.4",
- "keyflow 0.1.0 (git+https://git.starcommand.live/FastTrackStudios/keyflow.git?branch=main)",
+ "keyflow 0.1.0",
  "tracing",
  "vox 0.5.0",
 ]
 
 [[package]]
 name = "keyflow-live"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
- "keyflow-midi 0.1.0",
+ "keyflow-midi 0.0.1",
  "keyflow-proto 0.1.0",
- "keyflow-text 0.1.0",
+ "keyflow-text 0.0.1",
 ]
 
 [[package]]
 name = "keyflow-lsp"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "dashmap 6.2.1",
- "keyflow-syntax 0.1.0",
- "keyflow-text 0.1.0",
+ "keyflow-syntax 0.0.1",
+ "keyflow-text 0.0.1",
  "serde",
  "serde_json",
  "tokio",
@@ -6096,10 +6096,10 @@ dependencies = [
 
 [[package]]
 name = "keyflow-midi"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "keyflow-proto 0.1.0",
- "keyflow-text 0.1.0",
+ "keyflow-text 0.0.1",
  "midly",
  "roxmltree 0.20.0",
 ]
@@ -6110,17 +6110,17 @@ version = "0.1.0"
 source = "git+https://git.starcommand.live/FastTrackStudios/keyflow.git?branch=main#aa9fe94987e6ee892701cbcfc98261febe71cdd3"
 dependencies = [
  "keyflow-proto 0.1.0 (git+https://git.starcommand.live/FastTrackStudios/keyflow.git?branch=main)",
- "keyflow-text 0.1.0 (git+https://git.starcommand.live/FastTrackStudios/keyflow.git?branch=main)",
+ "keyflow-text 0.1.0",
  "midly",
 ]
 
 [[package]]
 name = "keyflow-musicxml"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "keyflow-proto 0.1.0",
- "keyflow-syntax 0.1.0",
- "keyflow-text 0.1.0",
+ "keyflow-syntax 0.0.1",
+ "keyflow-text 0.0.1",
  "musicxml",
  "thiserror 2.0.18",
  "tracing",
@@ -6135,8 +6135,8 @@ dependencies = [
  "daw-proto",
  "facet 0.46.4",
  "helgoboss-midi",
- "keyflow-syntax 0.1.0",
- "keyflow-text 0.1.0",
+ "keyflow-syntax 0.0.1",
+ "keyflow-text 0.0.1",
  "music-catalog",
  "serde",
  "thiserror 2.0.18",
@@ -6155,7 +6155,7 @@ dependencies = [
  "daw-proto",
  "facet 0.46.4",
  "helgoboss-midi",
- "keyflow-syntax 0.1.0 (git+https://git.starcommand.live/FastTrackStudios/keyflow.git?branch=main)",
+ "keyflow-syntax 0.1.0",
  "music-catalog",
  "serde",
  "thiserror 2.0.18",
@@ -6165,7 +6165,7 @@ dependencies = [
 
 [[package]]
 name = "keyflow-syntax"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "facet 0.46.4",
  "serde",
@@ -6184,11 +6184,11 @@ dependencies = [
 
 [[package]]
 name = "keyflow-text"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
- "keyflow-chordpro 0.1.0",
+ "keyflow-chordpro 0.0.1",
  "keyflow-proto 0.1.0",
- "keyflow-syntax 0.1.0",
+ "keyflow-syntax 0.0.1",
  "tracing",
 ]
 
@@ -6197,9 +6197,9 @@ name = "keyflow-text"
 version = "0.1.0"
 source = "git+https://git.starcommand.live/FastTrackStudios/keyflow.git?branch=main#aa9fe94987e6ee892701cbcfc98261febe71cdd3"
 dependencies = [
- "keyflow-chordpro 0.1.0 (git+https://git.starcommand.live/FastTrackStudios/keyflow.git?branch=main)",
+ "keyflow-chordpro 0.1.0",
  "keyflow-proto 0.1.0 (git+https://git.starcommand.live/FastTrackStudios/keyflow.git?branch=main)",
- "keyflow-syntax 0.1.0 (git+https://git.starcommand.live/FastTrackStudios/keyflow.git?branch=main)",
+ "keyflow-syntax 0.1.0",
  "tracing",
 ]
 
@@ -6216,7 +6216,7 @@ dependencies = [
  "dock-dioxus",
  "dock-proto",
  "fts-ui",
- "keyflow 0.1.0",
+ "keyflow 0.0.1",
  "kurbo 0.13.1",
  "lucide-dioxus 2.577.0",
  "peniko 0.6.1",
@@ -10062,8 +10062,8 @@ dependencies = [
  "daw-synchronization",
  "dynamic-template",
  "eyre",
- "keyflow 0.1.0 (git+https://git.starcommand.live/FastTrackStudios/keyflow.git?branch=main)",
- "keyflow-daw-analysis 0.1.0 (git+https://git.starcommand.live/FastTrackStudios/keyflow.git?branch=main)",
+ "keyflow 0.1.0",
+ "keyflow-daw-analysis 0.1.0",
  "moire 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "reaper-high",
  "reaper-low",
@@ -10090,7 +10090,7 @@ dependencies = [
  "facet 0.46.4",
  "futures",
  "gloo-timers",
- "keyflow 0.1.0 (git+https://git.starcommand.live/FastTrackStudios/keyflow.git?branch=main)",
+ "keyflow 0.1.0",
  "serde",
  "thiserror 2.0.18",
  "tokio",
@@ -11583,7 +11583,7 @@ dependencies = [
 
 [[package]]
 name = "tree-sitter-keyflow"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "cc",
  "tree-sitter-language",

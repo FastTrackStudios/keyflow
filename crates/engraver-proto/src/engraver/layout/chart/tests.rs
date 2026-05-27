@@ -2522,3 +2522,129 @@ fn responsive_for_chord_symbols_scale_with_spatium() {
     // Sanity: desktop matches the iReal Pro baseline.
     assert_eq!(desktop.harmony_style.root_size, 24.0);
 }
+
+/// Build a single-section chart with one whole-bar chord per measure, each
+/// measure carrying the supplied `(num, den)` meter.
+fn chart_with_meters(meters: &[(u8, u8)]) -> Chart {
+    let mut chart = Chart::new();
+    chart.time_signature = Some(TimeSignature::new(meters[0].0 as u32, meters[0].1 as u32));
+
+    let measures: Vec<Measure> = meters
+        .iter()
+        .enumerate()
+        .map(|(i, &ts)| Measure {
+            chords: vec![ChordInstance::new(
+                root("C"),
+                "C".to_string(),
+                Chord::new(root("C"), ChordQuality::Major),
+                ChordRhythm::Default,
+                "C".to_string(),
+                MusicalDuration::new(0, 4, 0),
+                AbsolutePosition::new(MusicalPosition::try_new(i as i32, 0, 0).unwrap(), 0),
+            )],
+            time_signature: ts,
+            ..Default::default()
+        })
+        .collect();
+
+    let mut section_info = Section::new(SectionType::Verse);
+    section_info.number = Some(1);
+    section_info.measure_count = Some(measures.len());
+    chart
+        .sections
+        .push(ChartSection::new(section_info).with_measures(measures));
+    chart
+}
+
+/// Collect the colors of every glyph emitted by nodes of the given element type.
+fn glyph_colors_of(scene: &SceneNode, element_type: ElementType) -> Vec<Color> {
+    scene
+        .iter_with_transforms()
+        .filter(|(node, _)| {
+            node.id
+                .as_ref()
+                .is_some_and(|id| id.element_type == element_type)
+        })
+        .flat_map(|(node, _)| {
+            node.commands.iter().filter_map(|cmd| match cmd {
+                PaintCommand::Glyph { color, .. } => Some(*color),
+                _ => None,
+            })
+        })
+        .collect()
+}
+
+/// Collect the colors of every glyph emitted by a `TimeSignature` scene node.
+fn time_sig_glyph_colors(scene: &SceneNode) -> Vec<Color> {
+    glyph_colors_of(scene, ElementType::TimeSignature)
+}
+
+#[test]
+fn mid_chart_time_signature_change_renders_in_red() {
+    let style = test_style();
+    let engine = ChartLayoutEngine::new(style, Arc::new(Vec::new()), Arc::new(Vec::new()));
+    let red = Color::from_rgba8(0xCC, 0x00, 0x00, 0xFF);
+    let red_count = |chart: &Chart| {
+        let result = engine.layout_chart(chart, &LayoutMode::default());
+        time_sig_glyph_colors(&result.scene)
+            .iter()
+            .filter(|c| **c == red)
+            .count()
+    };
+
+    // Constant 4/4: the only time signatures drawn are the (black) system prefix.
+    assert_eq!(
+        red_count(&chart_with_meters(&[(4, 4), (4, 4), (4, 4)])),
+        0,
+        "a constant-meter chart should render no red time signatures"
+    );
+
+    // One-measure excursion (`!T2/4`): the 2/4 is highlighted red (2 digits),
+    // but the immediate revert to 4/4 is adjacent/obvious, so it draws in black.
+    assert_eq!(
+        red_count(&chart_with_meters(&[(4, 4), (2, 4), (4, 4)])),
+        2,
+        "only the one-measure 2/4 should be red; its immediate revert stays black"
+    );
+
+    // Persistent change then revert several bars later: BOTH the 2/4 and the
+    // eventual return to 4/4 are highlighted red (2 digits each).
+    assert_eq!(
+        red_count(&chart_with_meters(&[
+            (4, 4),
+            (2, 4),
+            (2, 4),
+            (2, 4),
+            (4, 4)
+        ])),
+        4,
+        "a persistent change and its later revert should both be red"
+    );
+}
+
+#[test]
+fn mid_chart_key_change_renders_in_red() {
+    use crate::key::Key;
+    use keyflow_proto::chart::types::KeyChange;
+
+    let style = test_style();
+    let engine = ChartLayoutEngine::new(style, Arc::new(Vec::new()), Arc::new(Vec::new()));
+    let red = Color::from_rgba8(0xCC, 0x00, 0x00, 0xFF);
+
+    // Two 4/4 measures with a key change to A major (3 sharps) on the downbeat
+    // of section-local measure 1.
+    let mut chart = chart_with_meters(&[(4, 4), (4, 4)]);
+    chart.key_changes.push(KeyChange::new(
+        AbsolutePosition::new(MusicalPosition::try_new(1, 0, 0).unwrap(), 0),
+        Some(Key::major(MusicalNote::from_string("E").unwrap())),
+        Key::major(MusicalNote::from_string("A").unwrap()),
+        0,
+    ));
+
+    let result = engine.layout_chart(&chart, &LayoutMode::default());
+    let colors = glyph_colors_of(&result.scene, ElementType::KeySignature);
+    assert!(
+        colors.iter().any(|c| *c == red),
+        "expected a red key-change accidental glyph, got {colors:?}"
+    );
+}

@@ -37,6 +37,7 @@ impl ChartLayoutEngine {
             include_clef,
             include_time_sig,
             time_signature,
+            time_sig_color,
             clef,
             ctx,
             id_base,
@@ -292,6 +293,9 @@ impl ChartLayoutEngine {
 
         if include_time_sig {
             builder = builder.time_signature(time_signature.0, time_signature.1);
+            if let Some(color) = time_sig_color {
+                builder = builder.time_signature_color(color);
+            }
         } else {
             builder = builder.time_signature_meta(crate::engraver::notation::TimeSignature::new(
                 time_signature.0,

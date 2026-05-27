@@ -101,6 +101,27 @@ fn key_signature_fifths(chart: &Chart) -> i8 {
         .unwrap_or(0)
 }
 
+/// Prevailing key-signature fifths in effect at a section-local measure,
+/// applying every key change at or before it (in playback order). Lets each
+/// system's prefix show the key actually sounding there rather than always the
+/// chart's opening key.
+fn prevailing_fifths_at(chart: &Chart, section_idx: usize, local_measure: usize) -> i8 {
+    let mut fifths = chart
+        .initial_key
+        .as_ref()
+        .map(prefix_renderer::key_to_fifths)
+        .unwrap_or(0);
+    for kc in &chart.key_changes {
+        let kc_measure = kc.position.total_duration.measure as usize;
+        let applies = kc.section_index < section_idx
+            || (kc.section_index == section_idx && kc_measure <= local_measure);
+        if applies {
+            fifths = prefix_renderer::key_to_fifths(&kc.to_key);
+        }
+    }
+    fifths
+}
+
 fn collect_page_ink_intervals(scene: &SceneNode, page: &PageLayout) -> Vec<(f64, f64)> {
     let x0 = page.x_offset + page.margins.left;
     let x1 = page.x_offset + page.width - page.margins.right;
@@ -499,12 +520,53 @@ struct MeasureLayoutParams<'a> {
     include_clef: bool,
     include_time_sig: bool,
     time_signature: (u8, u8),
+    /// When `include_time_sig` is set, the color of the rendered meter glyph.
+    /// `None` = default black; a mid-chart meter change passes red.
+    time_sig_color: Option<vello::peniko::Color>,
     /// Chart-level clef used to map melody pitches to staff lines so the
     /// rendered note sits at the correct height for the chosen clef.
     clef: crate::chart::ChartClef,
     ctx: &'a LayoutContext<'a>,
     id_base: u64,
     is_boundary: bool,
+}
+
+/// Red used to highlight mid-chart meter and key changes so they are obvious.
+fn change_highlight_color() -> vello::peniko::Color {
+    vello::peniko::Color::from_rgba8(0xCC, 0x00, 0x00, 0xFF)
+}
+
+/// Build a red, in-place key-change indicator (cancelling naturals + the new
+/// key's accidentals, MuseScore-style) sitting in the barline gap just before
+/// `measure_x`, on the staff. Returns the positioned scene node.
+fn key_change_indicator_node(
+    kc: &keyflow_proto::chart::types::KeyChange,
+    measure_x: f64,
+    staff_y: f64,
+    spatium: f64,
+    ctx: &LayoutContext,
+    id: u64,
+) -> SceneNode {
+    use crate::engraver::layout::tlayout::keysig::{
+        ClefContext, KeySigParams, KeySigType, layout_keysig,
+    };
+    use prefix_renderer::key_to_fifths;
+
+    let to_fifths = key_to_fifths(&kc.to_key);
+    let prev_fifths = kc.from_key.as_ref().map(key_to_fifths);
+    let params = KeySigParams {
+        id,
+        key: KeySigType::Standard(to_fifths),
+        clef: ClefContext::Treble,
+        show_naturals: prev_fifths.is_some(),
+        prev_key: prev_fifths.map(KeySigType::Standard),
+        color: Some(change_highlight_color()),
+    };
+    let (layout, mut node) = layout_keysig(&params, ctx);
+    let width = layout.bbox.width();
+    let x = (measure_x - width - spatium * 0.5).max(0.0);
+    node.transform = Affine::translate((x, staff_y + 2.0 * spatium));
+    node
 }
 
 /// Chart layout engine.
@@ -771,6 +833,17 @@ impl ChartLayoutEngine {
             .map(|ts| (ts.numerator as u8, ts.denominator as u8))
             .unwrap_or((4u8, 4u8));
 
+        // Prevailing meter, carried across sections/systems in playback order so a
+        // measure whose `time_signature` differs from its predecessor renders an
+        // inline meter change. Seeded with the chart's initial meter.
+        // `prev_prevailing_ts` + `ts_run_len` detect a one-measure excursion (e.g.
+        // the auto-revert after `!T2/4`): that revert is drawn but NOT highlighted,
+        // since the return-to-normal is adjacent and obvious. A revert that is
+        // several measures after the change is highlighted like any other change.
+        let mut prevailing_ts = time_signature;
+        let mut prev_prevailing_ts: Option<(u8, u8)> = None;
+        let mut ts_run_len: usize = 0;
+
         // Detect count-in from parsed chart sections if not configured explicitly.
         // If the chart has a CountIn section, use its measure count.
         let count_in_measures = if self.config.count_in_measures > 0 {
@@ -938,6 +1011,16 @@ impl ChartLayoutEngine {
                     .push(spillback);
             }
 
+            // Mid-chart key changes in this section, keyed by section-local
+            // measure index (the parser stores the change's measure ordinal in
+            // total_duration.measures).
+            let key_changes_in_section: std::collections::HashMap<usize, _> = chart
+                .key_changes
+                .iter()
+                .filter(|kc| kc.section_index == section_idx)
+                .map(|kc| (kc.position.total_duration.measure as usize, kc))
+                .collect();
+
             // Group measures into systems (count-based for consistent layout)
             let systems = self.group_measures_into_systems(chart_section.measures(), content_width);
 
@@ -1103,12 +1186,16 @@ impl ChartLayoutEngine {
                 let include_key_sig = true; // Key sig on every system (standard notation)
                 let include_time_sig = global_system_index == 0; // Time sig only on first system
 
-                // Get key signature from chart (number of sharps/flats)
-                let key_signature: i8 = chart
-                    .initial_key
-                    .as_ref()
-                    .map(prefix_renderer::key_to_fifths)
-                    .unwrap_or(0);
+                // Key signature prevailing at this system's downbeat (follows
+                // mid-chart key changes), and whether the change happens right
+                // here — if so the prefix is drawn red in place rather than
+                // stacking a separate red indicator over it.
+                let system_first_measure = measure_indices.first().copied().unwrap_or(0);
+                let key_signature: i8 =
+                    prevailing_fifths_at(chart, section_idx, system_first_measure);
+                let system_starts_with_key_change = measure_indices
+                    .first()
+                    .is_some_and(|m| key_changes_in_section.contains_key(m));
 
                 let (clef_width, key_sig_width, time_sig_width, prefix_width) =
                     prefix_renderer::calculate_prefix_width(
@@ -1290,6 +1377,7 @@ impl ChartLayoutEngine {
                     include_key_sig,
                     include_time_sig,
                     key_signature,
+                    key_sig_color: system_starts_with_key_change.then(change_highlight_color),
                     time_signature: ts,
                     clef_width,
                     clef_type: self.chart_clef_for(chart),
@@ -1367,20 +1455,59 @@ impl ChartLayoutEngine {
                         // is_boundary: first measure of section needs width for pushed chords
                         // that render both here AND spill back to previous section
                         let is_section_boundary = measure_idx == 0;
+                        // A measure whose meter differs from the prevailing one
+                        // renders the new time signature inline. It is highlighted
+                        // red unless it merely closes a one-measure excursion (the
+                        // auto-revert after `!T2/4`): that return-to-normal renders
+                        // in default black because it is adjacent and obvious.
+                        let measure_ts = measure.time_signature;
+                        let ts_changed = measure_ts != prevailing_ts;
+                        let is_oneshot_revert =
+                            ts_changed && ts_run_len == 1 && prev_prevailing_ts == Some(measure_ts);
+                        let highlight = ts_changed && !is_oneshot_revert;
                         let measure_result = self.layout_measure(MeasureLayoutParams {
                             measure,
                             melody_data,
                             spillbacks,
                             measure_width: this_measure_width,
                             include_clef: false,
-                            include_time_sig: false,
-                            time_signature,
+                            include_time_sig: ts_changed,
+                            time_signature: measure_ts,
+                            time_sig_color: highlight.then(change_highlight_color),
                             clef: self.chart_proto_clef_for(chart),
                             ctx: &ctx,
                             id_base: id_counter,
                             is_boundary: is_section_boundary,
                         });
                         id_counter += 10;
+                        if ts_changed {
+                            prev_prevailing_ts = Some(prevailing_ts);
+                            prevailing_ts = measure_ts;
+                            ts_run_len = 1;
+                        } else {
+                            ts_run_len += 1;
+                        }
+
+                        // Red key-change indicator when a key change lands on a
+                        // measure mid-system. A change on the system's first
+                        // measure is shown by the red prefix key signature
+                        // instead (see `system_starts_with_key_change`), so skip
+                        // it here to avoid stacking two key sigs.
+                        if let Some(kc) = key_changes_in_section
+                            .get(&measure_idx)
+                            .filter(|_| local_measure_idx != 0)
+                        {
+                            let mut kc_node = key_change_indicator_node(
+                                kc,
+                                measure_x,
+                                staff_y,
+                                self.config.spatium,
+                                &ctx,
+                                id_counter,
+                            );
+                            id_counter += 1;
+                            root.add_child(kc_node);
+                        }
 
                         // Get ChordRest segment x-positions (already in points after spacing)
                         let segment_positions: Vec<f64> =
@@ -2078,6 +2205,17 @@ impl ChartLayoutEngine {
             .map(|ts| (ts.numerator as u8, ts.denominator as u8))
             .unwrap_or((4u8, 4u8));
 
+        // Prevailing meter, carried across sections/systems in playback order so a
+        // measure whose `time_signature` differs from its predecessor renders an
+        // inline meter change. Seeded with the chart's initial meter.
+        // `prev_prevailing_ts` + `ts_run_len` detect a one-measure excursion (e.g.
+        // the auto-revert after `!T2/4`): that revert is drawn but NOT highlighted,
+        // since the return-to-normal is adjacent and obvious. A revert that is
+        // several measures after the change is highlighted like any other change.
+        let mut prevailing_ts = time_signature;
+        let mut prev_prevailing_ts: Option<(u8, u8)> = None;
+        let mut ts_run_len: usize = 0;
+
         // Detect count-in from parsed chart sections if not configured explicitly.
         let _count_in_measures = if self.config.count_in_measures > 0 {
             self.config.count_in_measures as usize
@@ -2167,6 +2305,16 @@ impl ChartLayoutEngine {
                     .push(spillback);
             }
 
+            // Mid-chart key changes in this section, keyed by section-local
+            // measure index (the parser stores the change's measure ordinal in
+            // total_duration.measures).
+            let key_changes_in_section: std::collections::HashMap<usize, _> = chart
+                .key_changes
+                .iter()
+                .filter(|kc| kc.section_index == section_idx)
+                .map(|kc| (kc.position.total_duration.measure as usize, kc))
+                .collect();
+
             // Group measures into systems (count-based for consistent layout)
             let systems = self.group_measures_into_systems(chart_section.measures(), content_width);
 
@@ -2208,12 +2356,16 @@ impl ChartLayoutEngine {
                 let include_key_sig = true; // Key sig on every system (standard notation)
                 let include_time_sig = global_system_index == 0;
 
-                // Get key signature from chart (number of sharps/flats)
-                let key_signature: i8 = chart
-                    .initial_key
-                    .as_ref()
-                    .map(prefix_renderer::key_to_fifths)
-                    .unwrap_or(0);
+                // Key signature prevailing at this system's downbeat (follows
+                // mid-chart key changes), and whether the change happens right
+                // here — if so the prefix is drawn red in place rather than
+                // stacking a separate red indicator over it.
+                let system_first_measure = measure_indices.first().copied().unwrap_or(0);
+                let key_signature: i8 =
+                    prevailing_fifths_at(chart, section_idx, system_first_measure);
+                let system_starts_with_key_change = measure_indices
+                    .first()
+                    .is_some_and(|m| key_changes_in_section.contains_key(m));
 
                 let (clef_width, key_sig_width, time_sig_width, prefix_width) =
                     prefix_renderer::calculate_prefix_width(
@@ -2364,6 +2516,7 @@ impl ChartLayoutEngine {
                     include_key_sig,
                     include_time_sig,
                     key_signature,
+                    key_sig_color: system_starts_with_key_change.then(change_highlight_color),
                     time_signature: ts,
                     clef_width,
                     clef_type: self.chart_clef_for(chart),
@@ -2421,20 +2574,59 @@ impl ChartLayoutEngine {
 
                         // is_boundary: first measure of section needs width for pushed chords
                         let is_section_boundary = measure_idx == 0;
+                        // A measure whose meter differs from the prevailing one
+                        // renders the new time signature inline. It is highlighted
+                        // red unless it merely closes a one-measure excursion (the
+                        // auto-revert after `!T2/4`): that return-to-normal renders
+                        // in default black because it is adjacent and obvious.
+                        let measure_ts = measure.time_signature;
+                        let ts_changed = measure_ts != prevailing_ts;
+                        let is_oneshot_revert =
+                            ts_changed && ts_run_len == 1 && prev_prevailing_ts == Some(measure_ts);
+                        let highlight = ts_changed && !is_oneshot_revert;
                         let measure_result = self.layout_measure(MeasureLayoutParams {
                             measure,
                             melody_data,
                             spillbacks,
                             measure_width: this_measure_width,
                             include_clef: false,
-                            include_time_sig: false,
-                            time_signature,
+                            include_time_sig: ts_changed,
+                            time_signature: measure_ts,
+                            time_sig_color: highlight.then(change_highlight_color),
                             clef: self.chart_proto_clef_for(chart),
                             ctx: &ctx,
                             id_base: id_counter,
                             is_boundary: is_section_boundary,
                         });
                         id_counter += 10;
+                        if ts_changed {
+                            prev_prevailing_ts = Some(prevailing_ts);
+                            prevailing_ts = measure_ts;
+                            ts_run_len = 1;
+                        } else {
+                            ts_run_len += 1;
+                        }
+
+                        // Red key-change indicator when a key change lands on a
+                        // measure mid-system. A change on the system's first
+                        // measure is shown by the red prefix key signature
+                        // instead (see `system_starts_with_key_change`), so skip
+                        // it here to avoid stacking two key sigs.
+                        if let Some(kc) = key_changes_in_section
+                            .get(&measure_idx)
+                            .filter(|_| local_measure_idx != 0)
+                        {
+                            let mut kc_node = key_change_indicator_node(
+                                kc,
+                                measure_x,
+                                staff_y,
+                                self.config.spatium,
+                                &ctx,
+                                id_counter,
+                            );
+                            id_counter += 1;
+                            root.add_child(kc_node);
+                        }
 
                         let segment_positions: Vec<f64> =
                             self.get_chord_rest_positions(&measure_result);

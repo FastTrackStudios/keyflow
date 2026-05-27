@@ -78,6 +78,9 @@ pub struct TimeSigParams {
     pub sig_type: TimeSigType,
     /// Large time signature (spans entire staff height)
     pub large: bool,
+    /// Optional glyph color override. `None` renders the default black; mid-chart
+    /// meter changes pass a red so they stand out from the prevailing prefix.
+    pub color: Option<Color>,
 }
 
 /// Get the SMuFL glyph for a digit.
@@ -111,6 +114,7 @@ fn number_width(n: u8) -> f64 {
 pub fn layout_timesig(params: &TimeSigParams, ctx: &LayoutContext) -> (LayoutData, SceneNode) {
     let spatium = ctx.spatium();
     let scale = 1.0;
+    let color = params.color.unwrap_or(Color::BLACK);
 
     let mut commands = Vec::new();
 
@@ -120,7 +124,7 @@ pub fn layout_timesig(params: &TimeSigParams, ctx: &LayoutContext) -> (LayoutDat
                 glyphs::TIMESIG_COMMON,
                 Point::new(0.0, 0.0),
                 spatium * scale,
-                Color::BLACK,
+                color,
             ));
 
             let width = spatium * 1.8;
@@ -140,7 +144,7 @@ pub fn layout_timesig(params: &TimeSigParams, ctx: &LayoutContext) -> (LayoutDat
                 glyphs::TIMESIG_CUT,
                 Point::new(0.0, 0.0),
                 spatium * scale,
-                Color::BLACK,
+                color,
             ));
 
             let width = spatium * 1.8;
@@ -160,9 +164,9 @@ pub fn layout_timesig(params: &TimeSigParams, ctx: &LayoutContext) -> (LayoutDat
             denominator,
         } => {
             let (num_commands, num_width) =
-                layout_number(*numerator, 0.0, -spatium, spatium * scale);
+                layout_number(*numerator, 0.0, -spatium, spatium * scale, color);
             let (denom_commands, denom_width) =
-                layout_number(*denominator, 0.0, spatium, spatium * scale);
+                layout_number(*denominator, 0.0, spatium, spatium * scale, color);
 
             commands.extend(num_commands);
             commands.extend(denom_commands);
@@ -181,7 +185,7 @@ pub fn layout_timesig(params: &TimeSigParams, ctx: &LayoutContext) -> (LayoutDat
         }
 
         TimeSigType::SingleNumber(n) => {
-            let (num_commands, num_width) = layout_number(*n, 0.0, 0.0, spatium * scale);
+            let (num_commands, num_width) = layout_number(*n, 0.0, 0.0, spatium * scale, color);
             commands.extend(num_commands);
 
             let height = spatium * 2.0;
@@ -212,7 +216,7 @@ pub fn layout_timesig(params: &TimeSigParams, ctx: &LayoutContext) -> (LayoutDat
                         glyphs::TIMESIG_PLUS,
                         Point::new(x, y_num),
                         spatium * scale,
-                        Color::BLACK,
+                        color,
                     ));
                     x += spatium * 0.8;
                 }
@@ -221,7 +225,7 @@ pub fn layout_timesig(params: &TimeSigParams, ctx: &LayoutContext) -> (LayoutDat
                     digit_glyph(*group),
                     Point::new(x, y_num),
                     spatium * scale,
-                    Color::BLACK,
+                    color,
                 ));
                 x += digit_width;
             }
@@ -230,7 +234,7 @@ pub fn layout_timesig(params: &TimeSigParams, ctx: &LayoutContext) -> (LayoutDat
 
             // Layout denominator centered below
             let (denom_commands, denom_width) =
-                layout_number(*denominator, 0.0, spatium, spatium * scale);
+                layout_number(*denominator, 0.0, spatium, spatium * scale, color);
 
             // Center the denominator under the numerator
             let x_offset = (num_width - denom_width) / 2.0;
@@ -270,7 +274,7 @@ pub fn layout_timesig(params: &TimeSigParams, ctx: &LayoutContext) -> (LayoutDat
 }
 
 /// Layout a number as time signature digits.
-fn layout_number(n: u8, x: f64, y: f64, size: f64) -> (Vec<PaintCommand>, f64) {
+fn layout_number(n: u8, x: f64, y: f64, size: f64, color: Color) -> (Vec<PaintCommand>, f64) {
     let mut commands = Vec::new();
     let digit_width = size;
 
@@ -279,7 +283,7 @@ fn layout_number(n: u8, x: f64, y: f64, size: f64) -> (Vec<PaintCommand>, f64) {
             digit_glyph(n),
             Point::new(x, y),
             size,
-            Color::BLACK,
+            color,
         ));
         (commands, digit_width)
     } else {
@@ -291,13 +295,13 @@ fn layout_number(n: u8, x: f64, y: f64, size: f64) -> (Vec<PaintCommand>, f64) {
             digit_glyph(tens),
             Point::new(x, y),
             size,
-            Color::BLACK,
+            color,
         ));
         commands.push(PaintCommand::glyph(
             digit_glyph(ones),
             Point::new(x + digit_width, y),
             size,
-            Color::BLACK,
+            color,
         ));
 
         (commands, digit_width * 2.0)

@@ -312,6 +312,20 @@ impl<'a> ChartParser<'a> {
         let parts: Vec<&str> = line.split_whitespace().collect();
 
         for part in parts {
+            // Clef keyword (e.g. `64 BPM #E 4/4 bass`). Checked first so `bass`
+            // isn't mistaken for a B-flat key token.
+            if let Some(clef) = match part.to_ascii_lowercase().as_str() {
+                "treble" | "g-clef" => Some(crate::chart::ChartClef::Treble),
+                "bass" | "f-clef" => Some(crate::chart::ChartClef::Bass),
+                "alto" => Some(crate::chart::ChartClef::Alto),
+                "tenor" => Some(crate::chart::ChartClef::Tenor),
+                "perc" | "percussion" => Some(crate::chart::ChartClef::Percussion),
+                _ => None,
+            } {
+                self.initial_clef = Some(clef);
+                continue;
+            }
+
             // Try tempo
             if part.ends_with("bpm") || part.parse::<u32>().is_ok() {
                 if let Some(tempo) = Self::parse_tempo(part) {
@@ -374,6 +388,17 @@ impl<'a> ChartParser<'a> {
     pub(super) fn parse_setting(&mut self, line: &str) -> Result<(), String> {
         if let Some((name, value)) = Self::parse_alias_declaration(line) {
             self.aliases.insert(name, value);
+            return Ok(());
+        }
+
+        // A top-level `/Duration` (before any section) sets a chart-wide default
+        // duration applied to every section unless that section overrides it.
+        let trimmed = line.trim();
+        if let Some(value) = trimmed
+            .strip_prefix("/duration ")
+            .or_else(|| trimmed.strip_prefix("/Duration "))
+        {
+            self.default_duration = Some(value.trim().to_string());
             return Ok(());
         }
 

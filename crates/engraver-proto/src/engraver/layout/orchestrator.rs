@@ -667,6 +667,7 @@ impl<'a> LayoutEngine<'a> {
                         denominator: score.time_signature.denominator,
                     },
                     large: false,
+                    color: None,
                 };
                 let (_, ts_node) = layout_timesig(&ts_params, ctx);
                 let mut positioned = ts_node;
@@ -921,6 +922,7 @@ impl<'a> LayoutEngine<'a> {
                         denominator: score.time_signature.denominator,
                     },
                     large: false,
+                    color: None,
                 };
                 let (_, ts_node) = layout_timesig(&ts_params, ctx);
                 let mut positioned = ts_node;
@@ -1089,6 +1091,7 @@ impl<'a> LayoutEngine<'a> {
                             denominator: time_sig.denominator,
                         },
                         large: false,
+                        color: None,
                     };
                     let (_, mut node) = layout_timesig(&params, ctx);
                     node.transform = Affine::translate((x_pos, 0.0));

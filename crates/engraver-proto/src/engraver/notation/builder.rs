@@ -111,6 +111,9 @@ pub struct MeasureBuilder {
     time_signature: Option<TimeSignature>,
     /// Whether to render the time-signature glyph
     show_time_signature: bool,
+    /// Optional time-signature glyph color. `None` = default black. A mid-chart
+    /// meter change passes red so it stands out from the prevailing meter.
+    time_signature_color: Option<Color>,
     /// Notation mode (Standard, Rhythmic, etc.)
     mode: NotationMode,
     /// Rhythm pattern (list of durations)
@@ -164,6 +167,7 @@ impl MeasureBuilder {
             show_clef: true,
             time_signature: None,
             show_time_signature: true,
+            time_signature_color: None,
             mode: NotationMode::Standard,
             rhythm: Vec::new(),
             rest_positions: Vec::new(),
@@ -229,6 +233,13 @@ impl MeasureBuilder {
     #[must_use]
     pub fn time_signature(mut self, numerator: u8, denominator: u8) -> Self {
         self.time_signature = Some(TimeSignature::new(numerator, denominator));
+        self
+    }
+
+    /// Set the time-signature glyph color (e.g. red for a mid-chart change).
+    #[must_use]
+    pub fn time_signature_color(mut self, color: Color) -> Self {
+        self.time_signature_color = Some(color);
         self
     }
 
@@ -617,6 +628,7 @@ impl MeasureBuilder {
                         numerator: ts.numerator,
                         denominator: ts.denominator,
                     },
+                    color: self.time_signature_color,
                     ..Default::default()
                 },
                 ctx,

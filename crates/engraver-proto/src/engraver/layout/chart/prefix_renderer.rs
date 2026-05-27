@@ -98,6 +98,10 @@ pub struct PrefixRenderContext {
     pub include_time_sig: bool,
     /// Key signature (number of sharps/flats: positive = sharps, negative = flats).
     pub key_signature: i8,
+    /// Color for the key signature. `None` = black; a system whose first
+    /// measure carries a key change passes red to highlight the change in
+    /// place (instead of drawing a separate red indicator on top).
+    pub key_sig_color: Option<vello::peniko::Color>,
     /// Time signature (numerator, denominator).
     pub time_signature: (u8, u8),
     /// Width of the clef element.
@@ -164,6 +168,7 @@ pub fn render_system_prefix(
         let key_params = KeySigParams {
             id: id_counter,
             key: KeySigType::Standard(ctx.key_signature),
+            color: ctx.key_sig_color,
             ..Default::default()
         };
         id_counter += 1;

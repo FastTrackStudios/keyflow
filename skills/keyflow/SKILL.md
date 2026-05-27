@@ -144,6 +144,39 @@ m { Dn8. C# B E }
 
 Use `/Duration` only when it affects more than four items. A `!` prefix makes the whole token one-time and prevents it from updating duration memory.
 
+A `/Duration` placed **before any section** (top-level) sets a chart-wide default that every section inherits. A section's own `/Duration` overrides the global default for that section only:
+
+```kf
+Song Title
+64 BPM #E 4/4
+
+/Duration 2
+
+intro 4
+/Duration 4   ; overrides the global default for this section
+C#m /// /B / A // E/G# D B4-3
+
+vs 8           ; inherits the global half-note default
+E B/D# A/C# E/B ...
+```
+
+## Inline Time Signature Changes
+
+Mid-chart meter changes use a `T` prefix on the meter (`T2/4`, `T6/8`), parallel to how key changes use `#` (`#E`, `#G`). The leading `T` is required so a meter change never collides with a number/Nashville slash chord like `4/6`. The change applies from that point until the next `T...`:
+
+```kf
+G D/F# Em G/D C D G D/C T2/4 Am7 T4/4 #A Esus ////
+```
+
+For a meter change that lasts exactly **one measure** and then reverts, prefix with `!` (the same "one-time" sigil used for durations): `!T2/4` means one measure of 2/4, then back to the prevailing meter — no closing `T4/4` needed:
+
+```kf
+G D/F# Em G/D C D G D/C !T2/4 Am7 #A Esus ////
+!T2/4 D Esus // E // E5 ////
+```
+
+A bare `N/D` fraction is only honored on the header metadata line (`64 BPM #E 4/4`); mid-chart it would be read as a chord, so always use the `T`/`!T` prefix there.
+
 ## Parallel Chords And Melody
 
 Use `<< ... ; ... >>` for parallel content. Keep the chord structure in one branch and melody in another branch when the melody spans across the same measures:

@@ -238,6 +238,7 @@ impl<'a> ChartParser<'a> {
         let mut parser = ChartParser::new(&mut lane_chart);
         parser.aliases = self.aliases.clone();
         parser.melody_octave_memory = self.melody_octave_memory;
+        parser.default_duration = self.default_duration.clone();
         parser.parse_sections(&lines, 0)?;
         parser.post_process();
 

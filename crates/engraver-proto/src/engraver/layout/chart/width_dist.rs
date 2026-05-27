@@ -691,14 +691,15 @@ impl ChartLayoutEngine {
         {
             melody_density_weight(measure, slope)
         } else {
-            rhythm_result
-                .entries
-                .iter()
-                .map(|e| {
-                    let ticks = e.duration().ticks().max(1) as f64;
-                    spacing::duration_stretch(ticks, constants::TICKS_PER_QUARTER, slope)
-                })
-                .sum()
+            // Chord-only (slash) bar: size it by the whole-measure duration, not
+            // by summing per-chord slash durations. Summing makes a 2+1+1 bar
+            // sprawl ~1.8x wider than a 2+2 bar purely because it has more
+            // slashes, even though the chord symbols fit comfortably. Chord
+            // symbols still reserve non-overlapping room via the min-width pass,
+            // so a bar only grows past base width when its chords actually need
+            // it — not from slash count.
+            let measure_ticks = measure_duration_ticks(measure.time_signature);
+            spacing::duration_stretch(measure_ticks, constants::TICKS_PER_QUARTER, slope)
         };
         let durations = rhythm_result
             .entries
