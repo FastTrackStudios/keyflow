@@ -384,11 +384,11 @@ pub fn render_suspensions(
                 Placement::Above => frame.chord_y,
                 Placement::Below => below_y,
             };
-            (chord_root_size * 0.90, gx, y)
+            (chord_root_size * 0.78, gx, y)
         } else {
             // Attached superscript hugging the chord whose left edge sits
             // closest to the figure's beat.
-            let size = chord_root_size * 0.72;
+            let size = chord_root_size * 0.66;
             let chord = chord_bounds.iter().min_by(|a, b| {
                 (a.x0 - beat_x)
                     .abs()
@@ -402,17 +402,25 @@ pub fn render_suspensions(
                 (None, Placement::Below) => (size, beat_x, below_y),
             }
         };
-        let paints = vec![PaintCommand::text_italic(
+        let paints = vec![PaintCommand::text(
             &item.figure,
             "FreeSans",
             font_size,
             Point::new(x, baseline),
             Color::BLACK,
         )];
+        // Oblique the figure by shearing geometrically rather than relying on
+        // `font-style: italic` — FreeSans has no italic face, so resvg (PNG)
+        // synthesizes a slant but svg2pdf (PDF) leaves it upright, making the
+        // two exports disagree. A baseline-anchored x-shear slants identically
+        // in both. shear ≈ tan(11°).
+        let shear = 0.2_f64;
+        let skew = Affine::new([1.0, 0.0, -shear, 1.0, shear * baseline, 0.0]);
         let mut node = SceneNode::leaf(
             SemanticId::new(ElementType::Articulation, *id_counter),
             paints,
-        );
+        )
+        .with_transform(skew);
         node.set_element_type("suspension");
         *id_counter += 1;
         nodes.push(node);
