@@ -1301,8 +1301,16 @@ impl<'a> ChartParser<'a> {
         let mut pending_hairpins: Vec<Hairpin> = Vec::new();
         let mut pending_staff_text: Vec<StaffText> = Vec::new();
 
-        let mut section_chord_length: Option<(ChordRhythm, MusicalDuration)> = None;
-        let mut section_melody_duration: Option<String> = None;
+        // Seed each section from the chart-wide `/Duration` default (if any).
+        // A `/Duration` inside the section overrides these below.
+        let mut section_chord_length: Option<(ChordRhythm, MusicalDuration)> =
+            self.default_duration.as_ref().and_then(|v| {
+                Self::parse_chord_length_value(
+                    v,
+                    self.time_signature.unwrap_or(TimeSignature::common_time()),
+                )
+            });
+        let mut section_melody_duration: Option<String> = self.default_duration.clone();
         let mut section_melody_octave: Option<u8> = self.melody_octave_memory;
         let logical_lines = Self::join_multiline_parallel_containers(lines);
 
@@ -1784,22 +1792,27 @@ impl<'a> ChartParser<'a> {
                 if let Some(prev) = measures.last().and_then(|m| m.chords.last()).cloned() {
                     // Case B — the prior bare chord already filled its bar
                     // (`F 4-3 ///`). The figure opens a NEW bar that restates the
-                    // same chord carrying the figure (a bar of F, then a bar of
-                    // F4-3). A trailing slash group sets the new bar's length;
-                    // otherwise it fills the whole bar.
+                    // same chord carrying the figure. The following slash group
+                    // sets how many beats the figure holds (`4-3 ///` = 3 beats),
+                    // and the rest of the bar is filled by what comes after (so
+                    // `... /D` lands on beat 4). With no slash, the figure fills
+                    // the whole bar on its own.
                     let mut bar_chord = prev;
                     bar_chord.commands.clear();
                     bar_chord.push_pull = None;
-                    if slash_follows {
-                        bar_chord.rhythm = ChordRhythm::slashes(1);
-                        bar_chord.duration = MusicalDuration::from_beats(1.0, time_sig);
-                        current_measure_beats = 1.0;
+                    let figure_beats = if slash_follows {
+                        let max = beats_per_measure as usize;
+                        tokens_str
+                            .get(token_idx + 1)
+                            .map(|t| t.chars().filter(|c| *c == '/').count())
+                            .unwrap_or(1)
+                            .clamp(1, max) as u8
                     } else {
-                        bar_chord.rhythm = ChordRhythm::Default;
-                        bar_chord.duration =
-                            MusicalDuration::from_beats(beats_per_measure, time_sig);
-                        current_measure_beats = beats_per_measure;
-                    }
+                        beats_per_measure as u8
+                    };
+                    bar_chord.rhythm = ChordRhythm::slashes(figure_beats);
+                    bar_chord.duration =
+                        MusicalDuration::from_beats(f64::from(figure_beats), time_sig);
                     current_measure
                         .rhythm_elements
                         .push(RhythmElement::Chord(bar_chord.clone()));
@@ -1810,14 +1823,19 @@ impl<'a> ChartParser<'a> {
                         Placement::Above,
                         0.0,
                     );
-                    last_token_was_slash = true;
-                    measure_has_slash_rhythm = slash_follows;
-                    if !slash_follows {
+                    current_measure_beats = f64::from(figure_beats);
+                    // The slash group's beats are now owned by the figure chord;
+                    // consume that token so it isn't re-applied.
+                    if slash_follows {
+                        skip_next_token = true;
+                    }
+                    measure_has_slash_rhythm = true;
+                    last_token_was_slash = false;
+                    if (current_measure_beats - beats_per_measure).abs() < 0.001 {
                         measures.push(current_measure.clone());
                         current_measure = Self::fresh_measure(time_sig);
                         current_measure_beats = 0.0;
                         measure_has_slash_rhythm = false;
-                        last_token_was_slash = false;
                     }
                     continue;
                 }
@@ -2280,6 +2298,22 @@ impl<'a> ChartParser<'a> {
                                             ChordRhythm::Slashes { .. } | ChordRhythm::Explicit(_)
                                         )
                                     });
+                                // Beats the previous bar already holds in chords *before* its
+                                // last one — captured here so the tie-across-barline branch can
+                                // tell whether extending the fill chord would overflow the bar
+                                // (computing it later conflicts with the `&mut last_chord` borrow).
+                                let prev_other_beats: f64 = measures
+                                    .last()
+                                    .map(|m| {
+                                        let idx = m.chords.len().saturating_sub(1);
+                                        m.chords[..idx]
+                                            .iter()
+                                            .map(|c| c.duration.to_beats(time_sig))
+                                            .sum()
+                                    })
+                                    .unwrap_or(0.0);
+                                let next_measure_index = measures.len();
+                                let sections_len = self.sections.len();
 
                                 if let Some(last_measure) = measures.last_mut() {
                                     if let Some(last_chord) = last_measure.chords.last_mut() {
@@ -2337,23 +2371,83 @@ impl<'a> ChartParser<'a> {
                                             } else {
                                                 slash_count
                                             };
-                                            last_chord.rhythm = ChordRhythm::slashes(new_count);
-                                            last_chord.duration = MusicalDuration::from_beats(
-                                                f64::from(new_count),
-                                                time_sig,
-                                            );
-
-                                            // Also update the chord in rhythm_elements
-                                            for elem in
-                                                last_measure.rhythm_elements.iter_mut().rev()
+                                            // Beats the previous bar holds in chords *other* than
+                                            // this one (the fill chord we're about to extend),
+                                            // captured before the `&mut last_chord` borrow above.
+                                            let other_beats = prev_other_beats;
+                                            if other_beats + f64::from(new_count)
+                                                > beats_per_measure + 0.001
                                             {
-                                                if let RhythmElement::Chord(c) = elem {
-                                                    c.rhythm = ChordRhythm::slashes(new_count);
-                                                    c.duration = MusicalDuration::from_beats(
-                                                        f64::from(new_count),
-                                                        time_sig,
+                                                // Setting the fill chord to `new_count` would
+                                                // overflow its already-full bar (e.g. the trailing
+                                                // `//` in `Eb/D / Eb // Eb/F //`). Tie the chord
+                                                // across the barline: it fills the rest of this bar,
+                                                // and the leftover beats become continuation slashes
+                                                // at the start of the next measure.
+                                                let in_bar =
+                                                    (beats_per_measure - other_beats).max(1.0);
+                                                let overflow =
+                                                    (f64::from(new_count) - in_bar).max(0.0);
+                                                let tied = ChordRhythm::Slashes {
+                                                    count: in_bar as u8,
+                                                    dotted: false,
+                                                    tied: true,
+                                                };
+                                                let in_bar_dur =
+                                                    MusicalDuration::from_beats(in_bar, time_sig);
+                                                last_chord.rhythm = tied.clone();
+                                                last_chord.duration = in_bar_dur;
+                                                for elem in
+                                                    last_measure.rhythm_elements.iter_mut().rev()
+                                                {
+                                                    if let RhythmElement::Chord(c) = elem {
+                                                        c.rhythm = tied.clone();
+                                                        c.duration = in_bar_dur;
+                                                        break;
+                                                    }
+                                                }
+                                                let overflow_beats = overflow.round() as u32;
+                                                for i in 0..overflow_beats {
+                                                    let space = SpaceInstance::new(
+                                                        ChordRhythm::slashes(1),
+                                                        MusicalDuration::from_beats(1.0, time_sig),
+                                                        AbsolutePosition::new(
+                                                            MusicalPosition::try_new(
+                                                                next_measure_index as i32,
+                                                                i as i32,
+                                                                0,
+                                                            )
+                                                            .unwrap_or_else(|_| {
+                                                                MusicalPosition::start()
+                                                            }),
+                                                            sections_len,
+                                                        ),
+                                                        format!("/{}", "/".repeat(i as usize)),
                                                     );
-                                                    break;
+                                                    current_measure
+                                                        .rhythm_elements
+                                                        .push(RhythmElement::Space(space));
+                                                }
+                                                current_measure_beats += f64::from(overflow_beats);
+                                            } else {
+                                                last_chord.rhythm = ChordRhythm::slashes(new_count);
+                                                last_chord.duration = MusicalDuration::from_beats(
+                                                    f64::from(new_count),
+                                                    time_sig,
+                                                );
+
+                                                // Also update the chord in rhythm_elements
+                                                for elem in
+                                                    last_measure.rhythm_elements.iter_mut().rev()
+                                                {
+                                                    if let RhythmElement::Chord(c) = elem {
+                                                        c.rhythm = ChordRhythm::slashes(new_count);
+                                                        c.duration = MusicalDuration::from_beats(
+                                                            f64::from(new_count),
+                                                            time_sig,
+                                                        );
+                                                        break;
+                                                    }
                                                 }
                                             }
                                             true
@@ -2777,24 +2871,29 @@ impl<'a> ChartParser<'a> {
                 continue;
             }
 
-            // Check for time signature change (e.g., "6/8", "3/4")
-            if token_str.contains('/') && !token_str.starts_with('/') {
-                if let Some((num, den)) = Self::parse_time_signature(token_str) {
-                    // Update the time signature for subsequent measures
-                    time_sig = TimeSignature::new(num as u32, den as u32);
-                    self.time_signature = Some(time_sig);
+            // Check for inline time signature change (e.g., "T6/8", "T3/4").
+            // The leading `T` (Time) is required so meter changes never collide
+            // with number/Nashville slash chords like `4/6`. Bare fractions are
+            // only honored on the header line (see parse_metadata_line).
+            if let Some(ts_body) = token_str.strip_prefix('T') {
+                if ts_body.contains('/') {
+                    if let Some((num, den)) = Self::parse_time_signature(ts_body) {
+                        // Update the time signature for subsequent measures
+                        time_sig = TimeSignature::new(num as u32, den as u32);
+                        self.time_signature = Some(time_sig);
 
-                    // If we have a current measure, finalize it before the time sig change
-                    if !current_measure.chords.is_empty() {
-                        measures.push(current_measure.clone());
-                        current_measure = Self::fresh_measure(time_sig);
-                        current_measure_beats = 0.0;
+                        // Finalize the current measure before the time sig change
+                        if !current_measure.chords.is_empty() {
+                            measures.push(current_measure.clone());
+                            current_measure = Self::fresh_measure(time_sig);
+                            current_measure_beats = 0.0;
+                        }
+
+                        // Update time signature for new measures
+                        current_measure.time_signature = (num, den);
+                        beats_per_measure = num as f64;
+                        continue;
                     }
-
-                    // Update time signature for new measures
-                    current_measure.time_signature = (num, den);
-                    beats_per_measure = num as f64;
-                    continue;
                 }
             }
 
@@ -4165,20 +4264,22 @@ mod tests {
     }
 
     #[test]
-    fn bare_chord_then_spaced_figure_is_two_bars() {
-        // `F 4-3 ///` is TWO bars: a bar of F, then a bar of F restated with
-        // the 4-3 figure (the space-separated figure opens a new bar once the
-        // bare chord has already filled its own). A following chord is bar 3.
+    fn bare_chord_then_spaced_figure_opens_a_new_bar() {
+        // `F 4-3 ///` opens a NEW bar restating F with the 4-3 figure. The `///`
+        // gives that figure 3 beats, so the following chord lands on beat 4 of
+        // the SAME bar (not a third bar): bar of F, then bar of [F4-3(3), Eb(1)].
         let measures = parse_line("F 4-3 /// Eb");
-        assert_eq!(measures.len(), 3);
+        assert_eq!(measures.len(), 2);
         let ts = TimeSignature::common_time();
         assert_eq!(measures[0].chords[0].full_symbol, "F");
         assert!(measures[0].suspensions.is_empty());
         assert_eq!(measures[0].chords[0].duration.to_beats(ts), 4.0);
+        // Bar 2: F restated (3 beats, with 4-3) + Eb filling beat 4.
         assert_eq!(measures[1].chords[0].full_symbol, "F");
-        assert_eq!(measures[1].chords[0].duration.to_beats(ts), 4.0);
+        assert_eq!(measures[1].chords[0].duration.to_beats(ts), 3.0);
         assert_eq!(measures[1].suspensions[0].figure, "4-3");
-        assert_eq!(measures[2].chords[0].full_symbol, "Eb");
+        assert_eq!(measures[1].chords[1].full_symbol, "Eb");
+        assert_eq!(measures[1].chords[1].duration.to_beats(ts), 1.0);
     }
 
     #[test]
