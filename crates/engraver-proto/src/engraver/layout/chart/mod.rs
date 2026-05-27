@@ -1699,6 +1699,7 @@ impl ChartLayoutEngine {
                                 .zip(notation_renderer::render_suspensions(
                                     &measure.suspensions,
                                     &notation_frame,
+                                    self.config.harmony_style.root_size,
                                     &mut id_counter,
                                 ))
                         {
@@ -1917,9 +1918,15 @@ impl ChartLayoutEngine {
         // Compaction should preserve ink clearance, not a second system-spacing
         // reserve. Larger north/south reserves are useful during initial system
         // construction, but after all notation is rendered we can safely pack
-        // systems by visible ink bounds. If text/chord ink is not actively
-        // colliding, leave only a small readable gap.
-        let target_gap = (self.config.spatium * 1.5).max(8.0);
+        // systems by visible ink bounds. We still hold a baseline gap equal to
+        // the configured `system_spacing` so compacted lines never sit tighter
+        // than the pre-compactor layout — only genuine dead space beyond that
+        // baseline is removed.
+        let target_gap = self
+            .config
+            .system_spacing
+            .max(self.config.spatium * 1.5)
+            .max(8.0);
 
         for _ in 0..1 {
             let mut page_shift_plans: Vec<(u32, Vec<(usize, f64)>)> = Vec::new();
@@ -2724,6 +2731,7 @@ impl ChartLayoutEngine {
                                 .zip(notation_renderer::render_suspensions(
                                     &measure.suspensions,
                                     &notation_frame,
+                                    self.config.harmony_style.root_size,
                                     &mut id_counter,
                                 ))
                         {

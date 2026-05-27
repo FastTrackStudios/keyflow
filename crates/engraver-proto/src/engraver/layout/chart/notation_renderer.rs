@@ -347,17 +347,20 @@ pub fn render_figured_bass(
     nodes
 }
 
-/// Render suspension figures (`4-3`, `2-3`, `3`) as a small superscript at the
-/// chord-symbol baseline, anchored to the figure's beat. One scene node per
-/// figure, matching the order of `items` so callers can zip them back.
+/// Render suspension figures (`4-3`, `2-3`, `3`) as a superscript near the
+/// chord-symbol baseline, anchored to the figure's beat. Sized at 80% of the
+/// chord-symbol root size (`chord_root_size`) so it reads as a chord-scale
+/// annotation, not a tiny figured-bass numeral. One scene node per figure,
+/// matching the order of `items` so callers can zip them back.
 pub fn render_suspensions(
     items: &[SuspensionFigure],
     frame: &MeasureFrame<'_>,
+    chord_root_size: f64,
     id_counter: &mut u64,
 ) -> Vec<SceneNode> {
     let mut nodes = Vec::with_capacity(items.len());
-    // Scaled down like a chord extension, lifted slightly above the baseline.
-    let font_size = frame.spatium * 1.45 * 0.75;
+    // 80% of an actual chord symbol, lifted into superscript position.
+    let font_size = chord_root_size * 0.80;
     let superscript_lift = font_size * 0.36;
 
     for item in items {
