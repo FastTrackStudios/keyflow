@@ -272,61 +272,56 @@ impl<'a> ChartParser<'a> {
     }
 
     /// Split a trailing suspension figure off an attached chord token, e.g.
-    /// `F4-3` → (`F`, `4-3`), `Eb2` → (`Eb`, `2`), `F3` → (`F`, `3`).
+    /// `F4-3` → (`F`, `4-3`), `Eb2` → (`Eb`, `2`), `F3` → (`F`, `3`),
+    /// `E3-4-3` → (`E`, `3-4-3`).
     ///
-    /// A lone trailing digit is only treated as a figure when the remaining
-    /// chord is a bare note root (letter + optional accidental), so chord
-    /// qualities like `Csus4`, `C6`, `Cm7`, `Gm7b5` are left intact.
+    /// Only fires when the chord part is a bare note root (letter + optional
+    /// accidental) and the suffix is a figure: a hyphenated digit run (`d-d`,
+    /// `d-d-d`, …, always a figure) or a lone `2`/`3`/`4` (the suspension
+    /// degrees — so `Csus4`, `C6`, `Cm7`, `Gm7b5` stay intact).
     fn extract_suspension_suffix(token: &str) -> (String, Option<String>) {
         // Slash chords and quoted suffixes are handled elsewhere.
         if token.contains('/') || token.contains('"') {
             return (token.to_string(), None);
         }
-        // Hyphenated figure: `<chord><a>-<b>` — always unambiguous.
-        if let Some(dash) = token.rfind('-') {
-            let (head, fig) = token.split_at(dash);
-            let fig = &fig[1..]; // drop the '-'
-            if let Some((a, _)) = head.rsplit_once(|c: char| !c.is_ascii_digit()) {
-                let lead = &head[a.len() + 1..];
-                if !lead.is_empty()
-                    && lead.chars().all(|c| c.is_ascii_digit())
-                    && fig.chars().all(|c| c.is_ascii_digit())
-                    && !fig.is_empty()
-                {
-                    return (
-                        head[..a.len() + 1].to_string(),
-                        Some(format!("{lead}-{fig}")),
-                    );
-                }
-            } else if head.chars().all(|c| c.is_ascii_digit()) {
-                // Whole head is digits — that's a floating figure, not attached.
-                return (token.to_string(), None);
-            }
+        // Length of the leading bare note root (letter + optional accidental).
+        let root_len = Self::bare_note_root_len(token);
+        if root_len == 0 {
+            return (token.to_string(), None);
         }
-        // Lone trailing 2/3/4 on a bare note root.
-        if let Some(last) = token.chars().last() {
-            if matches!(last, '2' | '3' | '4') {
-                let head = &token[..token.len() - 1];
-                if Self::is_bare_note_root(head) {
-                    return (head.to_string(), Some(last.to_string()));
-                }
-            }
+        let (root, suffix) = token.split_at(root_len);
+        let is_figure = if suffix.contains('-') {
+            // Hyphenated digit run: every dash-separated part is digits.
+            suffix
+                .split('-')
+                .all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_digit()))
+        } else {
+            // Lone suspension degree.
+            matches!(suffix, "2" | "3" | "4")
+        };
+        if is_figure {
+            (root.to_string(), Some(suffix.to_string()))
+        } else {
+            (token.to_string(), None)
         }
-        (token.to_string(), None)
     }
 
-    /// True for a bare note root: a letter `A`–`G` (either case) optionally
-    /// followed by a single accidental. No quality, extension, or slash.
-    fn is_bare_note_root(s: &str) -> bool {
-        let mut chars = s.chars();
+    /// Byte length of a leading bare note root: a letter `A`–`G` (either case)
+    /// plus an optional single accidental. Returns 0 if the token doesn't
+    /// start with a note name.
+    fn bare_note_root_len(s: &str) -> usize {
+        let mut chars = s.char_indices();
         match chars.next() {
-            Some('A'..='G' | 'a'..='g') => {}
-            _ => return false,
+            Some((_, 'A'..='G' | 'a'..='g')) => {}
+            _ => return 0,
         }
-        matches!(
-            chars.as_str(),
-            "" | "#" | "b" | "n" | "\u{266d}" | "\u{266f}" | "\u{266e}"
-        )
+        match chars.next() {
+            Some((i, c @ ('#' | 'b' | 'n' | '\u{266d}' | '\u{266f}' | '\u{266e}'))) => {
+                i + c.len_utf8() // root = note letter + this accidental
+            }
+            Some((i, _)) => i, // root is just the note letter
+            None => s.len(),   // single-char token, all root
+        }
     }
 
     /// Root portion of the most recent chord (current measure first, then the
@@ -4288,6 +4283,21 @@ mod tests {
         assert_eq!(measures[0].suspensions[0].figure, "2");
         assert_eq!(measures[1].chords[0].full_symbol, "F");
         assert_eq!(measures[1].suspensions[0].figure, "4-3");
+    }
+
+    #[test]
+    fn attached_multi_part_and_chord_quality_figures() {
+        // Multi-part hyphenated figure keeps every part (`E3-4-3`).
+        let m = parse_line("E3-4-3");
+        assert_eq!(m[0].chords[0].full_symbol, "E");
+        assert_eq!(m[0].suspensions[0].figure, "3-4-3");
+
+        // Real chord qualities are never mistaken for figures.
+        for sym in ["C6", "Csus4", "Cm7", "Gm7b5", "C9"] {
+            let m = parse_line(sym);
+            assert_eq!(m[0].chords[0].full_symbol, sym, "{sym} should stay a chord");
+            assert!(m[0].suspensions.is_empty(), "{sym} should have no figure");
+        }
     }
 
     #[test]
