@@ -347,13 +347,18 @@ pub fn render_figured_bass(
     nodes
 }
 
-/// Render suspension figures (`4-3`, `2-3`, `3`) as a superscript hugging the
-/// upper-right of their chord symbol, so `F` + `4-3` reads as `F⁴⁻³`. Sized at
-/// 80% of the chord-symbol root size (`chord_root_size`) and drawn in the plain
-/// text font (not the chord/jazz font). `chord_bounds` are the laid-out chord
-/// bounding boxes (sorted by x) used to find the chord at each figure's beat;
-/// the figure is placed just past that chord's right edge. One scene node per
-/// figure, matching the order of `items` so callers can zip them back.
+/// Render suspension figures (`4-3`, `2-3`, `3`) in the plain text font
+/// (`FreeSans` — the chord font Leland Text has no digit glyphs).
+///
+/// Two layouts depending on `SuspensionFigure::standalone`:
+/// - attached (`Eb2`, `F4-3`): a superscript at 80% of the chord root size,
+///   hugging the upper-right of its chord symbol (matched via `chord_bounds`),
+///   so it reads as `Eb²` / `F⁴⁻³`.
+/// - standalone (`Bb // 4-3`, `F 4-3 ///`): its own chord-row symbol at full
+///   chord size, placed at the figure's beat column — the held chord sounds
+///   underneath without printing its name.
+///
+/// One scene node per figure, matching the order of `items` so callers can zip.
 pub fn render_suspensions(
     items: &[SuspensionFigure],
     frame: &MeasureFrame<'_>,
@@ -362,32 +367,44 @@ pub fn render_suspensions(
     id_counter: &mut u64,
 ) -> Vec<SceneNode> {
     let mut nodes = Vec::with_capacity(items.len());
-    // 80% of an actual chord symbol, lifted into superscript position.
-    let font_size = chord_root_size * 0.80;
-    let superscript_lift = font_size * 0.36;
     let gap = frame.spatium * 0.25;
+    let below_y = frame.staff_bottom() + frame.spatium * 4.2;
 
     for item in items {
         let beat_x = frame.beat_x(item.beat);
-        // The chord this figure belongs to: the one whose left edge sits
-        // closest to the figure's beat. Hug just past its right edge so the
-        // figure reads as a superscript on the chord rather than floating at
-        // the beat column.
-        let chord = chord_bounds.iter().min_by(|a, b| {
-            (a.x0 - beat_x)
-                .abs()
-                .partial_cmp(&(b.x0 - beat_x).abs())
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        let (x, baseline) = match (chord, item.placement) {
-            (Some(b), Placement::Above) => (b.x1 + gap, b.y0 + font_size),
-            (Some(b), Placement::Below) => (b.x1 + gap, frame.staff_bottom() + frame.spatium * 4.2),
-            (None, Placement::Above) => (beat_x, frame.chord_y - superscript_lift),
-            (None, Placement::Below) => (beat_x, frame.staff_bottom() + frame.spatium * 4.2),
+        let (font_size, x, baseline) = if item.standalone {
+            // Own chord-row symbol at the beat column, full chord size. Use a
+            // measure-local grid fraction rather than beat_x(): in slash-filled
+            // measures the segment table can place a late beat far outside the
+            // bar, but a figure over "beat 3" just wants 3/N across the measure.
+            let beats = f64::from(frame.beats_per_measure.max(1));
+            let frac = ((f64::from(item.beat.max(1)) - 1.0) / beats).clamp(0.0, 1.0);
+            let gx = frame.measure_x + frame.spatium * 0.5 + frac * frame.measure_width;
+            let y = match item.placement {
+                Placement::Above => frame.chord_y,
+                Placement::Below => below_y,
+            };
+            (chord_root_size, gx, y)
+        } else {
+            // Attached superscript hugging the chord whose left edge sits
+            // closest to the figure's beat.
+            let size = chord_root_size * 0.80;
+            let chord = chord_bounds.iter().min_by(|a, b| {
+                (a.x0 - beat_x)
+                    .abs()
+                    .partial_cmp(&(b.x0 - beat_x).abs())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            match (chord, item.placement) {
+                (Some(b), Placement::Above) => (size, b.x1 + gap, b.y0 + size),
+                (Some(b), Placement::Below) => (size, b.x1 + gap, below_y),
+                (None, Placement::Above) => (size, beat_x, frame.chord_y - size * 0.36),
+                (None, Placement::Below) => (size, beat_x, below_y),
+            }
         };
         let paints = vec![PaintCommand::text(
             &item.figure,
-            "Leland Text",
+            "FreeSans",
             font_size,
             Point::new(x, baseline),
             Color::BLACK,

@@ -350,12 +350,14 @@ impl<'a> ChartParser<'a> {
         figure: &str,
         placement: Placement,
         current_measure_beats: f64,
+        standalone: bool,
     ) {
         let beat = current_measure_beats.floor().max(0.0) as u8 + 1;
         measure.suspensions.push(SuspensionFigure {
             figure: figure.to_string(),
             beat,
             placement,
+            standalone,
         });
     }
 
@@ -1805,6 +1807,7 @@ impl<'a> ChartParser<'a> {
                         &figure,
                         Placement::Above,
                         beat_anchor,
+                        true,
                     );
                     last_token_was_slash = true;
                     continue;
@@ -1821,6 +1824,10 @@ impl<'a> ChartParser<'a> {
                     let mut bar_chord = prev;
                     bar_chord.commands.clear();
                     bar_chord.push_pull = None;
+                    // The figure itself is the visible symbol for this bar (its
+                    // own `4-3`); hide the restated chord's name so the held
+                    // harmony stays for playback without printing `F` over it.
+                    bar_chord.display_override = Some(String::new());
                     let figure_beats = if slash_follows {
                         let max = beats_per_measure as usize;
                         tokens_str
@@ -1843,6 +1850,7 @@ impl<'a> ChartParser<'a> {
                         &figure,
                         Placement::Above,
                         0.0,
+                        true,
                     );
                     current_measure_beats = f64::from(figure_beats);
                     // The slash group's beats are now owned by the figure chord;
@@ -1868,6 +1876,7 @@ impl<'a> ChartParser<'a> {
                     &figure,
                     Placement::Above,
                     0.0,
+                    true,
                 );
                 continue;
             }
@@ -3250,13 +3259,14 @@ impl<'a> ChartParser<'a> {
                     }
 
                     // Attached suspension figure (`Eb2`, `F4-3`) anchors at the
-                    // chord's own beat.
+                    // chord's own beat and hugs it as a superscript.
                     if let Some(figure) = &suspension_figure {
                         Self::push_suspension_at_current_beat(
                             &mut current_measure,
                             figure,
                             Placement::Above,
                             current_measure_beats,
+                            false,
                         );
                     }
 
@@ -4560,6 +4570,34 @@ C T2/4 Am T4/4 G
         assert_eq!(measures[0].time_signature, (4, 4));
         assert_eq!(measures[1].time_signature, (2, 4));
         assert_eq!(measures[2].time_signature, (4, 4));
+    }
+
+    #[test]
+    fn oneshot_t_prefix_reverts_after_one_measure() {
+        // `!T2/4` applies 2/4 to exactly the next measure, then reverts to 4/4.
+        // Contrast with persistent `T2/4`, which would keep 2/4 for the rest.
+        let input = r#"
+One Shot
+120bpm 4/4 #C
+
+VS 4
+C !T2/4 Am C G
+"#;
+        let chart = parse_chart(input).expect("Should parse");
+        let m = chart.sections[0].measures();
+        assert_eq!(m.len(), 4);
+        assert_eq!(m[0].time_signature, (4, 4));
+        assert_eq!(m[1].time_signature, (2, 4)); // the one-shot measure
+        assert_eq!(m[2].time_signature, (4, 4)); // reverted
+        assert_eq!(m[3].time_signature, (4, 4));
+
+        // Persistent form keeps 2/4 from the change onward.
+        let persistent =
+            parse_chart("Persist\n120bpm 4/4 #C\n\nVS 4\nC T2/4 Am C G\n").expect("Should parse");
+        let p = persistent.sections[0].measures();
+        assert_eq!(p[1].time_signature, (2, 4));
+        assert_eq!(p[2].time_signature, (2, 4));
+        assert_eq!(p[3].time_signature, (2, 4));
     }
 
     #[test]

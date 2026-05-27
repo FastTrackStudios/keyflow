@@ -188,6 +188,11 @@ pub struct SuspensionFigure {
     pub beat: u8,
     /// Above (default) or below the staff.
     pub placement: Placement,
+    /// `false` for an attached figure (`Eb2`, `F4-3`) — renders as a small
+    /// superscript hugging the upper-right of its chord symbol. `true` for a
+    /// floating figure (`Bb // 4-3`, `F 4-3 ///`) — renders as its own symbol
+    /// in the chord row at `beat`, the held chord sounding underneath.
+    pub standalone: bool,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
