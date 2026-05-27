@@ -39,6 +39,10 @@ pub struct ParsedSection {
     pub measure_expr: Option<MeasureExpression>,
     /// Optional comment/annotation (e.g., "Down", "Build", "Horns", "Half-time")
     pub comment: Option<String>,
+    /// Optional key-change token on the header line (e.g. `#G` in `BR 8 #G`),
+    /// applied at the start of the section. Stored verbatim for the caller to
+    /// parse with `Key::parse`.
+    pub key_change: Option<String>,
 }
 
 impl ParsedSection {
@@ -48,6 +52,7 @@ impl ParsedSection {
             section_type,
             measure_expr: None,
             comment: None,
+            key_change: None,
         }
     }
 
@@ -60,6 +65,7 @@ impl ParsedSection {
             section_type,
             measure_expr,
             comment: None,
+            key_change: None,
         }
     }
 
@@ -73,7 +79,15 @@ impl ParsedSection {
             section_type,
             measure_expr,
             comment,
+            key_change: None,
         }
+    }
+
+    /// Attach a key-change token (builder).
+    #[must_use]
+    pub fn with_key_change(mut self, key_change: Option<String>) -> Self {
+        self.key_change = key_change;
+        self
     }
 }
 
@@ -380,6 +394,11 @@ impl SectionType {
     pub fn parse_with_measure_count(input: &str) -> Option<ParsedSection> {
         let input = input.trim();
 
+        // Peel a trailing key-change token (`BR 8 #G`) so the section header is
+        // still recognized; the caller applies it at the section start.
+        let (input, key_change) = extract_trailing_key_change(input);
+        let input = input.trim();
+
         // First, extract any quoted comment at the end: CH 4 "Down"
         let (input_without_quote, quoted_comment) = extract_quoted_comment(input);
         let input = input_without_quote.trim();
@@ -418,11 +437,14 @@ impl SectionType {
                     Some(MeasureExpression::parse(remaining)?)
                 };
 
-                return Some(ParsedSection::full(
-                    SectionType::Custom(name.to_string()),
-                    measure_expr,
-                    comment,
-                ));
+                return Some(
+                    ParsedSection::full(
+                        SectionType::Custom(name.to_string()),
+                        measure_expr,
+                        comment,
+                    )
+                    .with_key_change(key_change),
+                );
             }
         }
 
@@ -446,7 +468,7 @@ impl SectionType {
         //   "SOLO"           → Solo (no instrument, no measures)
         // Note: "SOLO \"Keys\"" is handled by the quoted comment extraction above.
         if let Some(solo_result) = parse_solo_section(&parts, comment.clone()) {
-            return Some(solo_result);
+            return Some(solo_result.with_key_change(key_change));
         }
 
         let section_str = parts[0];
@@ -512,8 +534,24 @@ impl SectionType {
             _ => None,
         };
 
-        section_type.map(|st| ParsedSection::full(st, measure_expr, comment))
+        section_type
+            .map(|st| ParsedSection::full(st, measure_expr, comment).with_key_change(key_change))
     }
+}
+
+/// Peel a trailing key-change token (`#G`, `bBb`) off a section-header line.
+/// Only accidental-prefixed tokens that parse as a key are stripped, so
+/// measure counts and sub-labels are never mistaken for a key.
+fn extract_trailing_key_change(input: &str) -> (&str, Option<String>) {
+    if let Some((head, last)) = input.rsplit_once(char::is_whitespace) {
+        if (last.starts_with('#') || last.starts_with('b'))
+            && last.len() >= 2
+            && crate::key::Key::parse(last).is_ok()
+        {
+            return (head.trim_end(), Some(last.to_string()));
+        }
+    }
+    (input, None)
 }
 
 /// Parse a Solo section from whitespace-split parts.

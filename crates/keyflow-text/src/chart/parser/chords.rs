@@ -3163,8 +3163,18 @@ impl<'a> ChartParser<'a> {
                     }
                     let token_has_explicit_length =
                         Self::token_has_explicit_chord_length(&chord_token);
+                    // A rhythm-slash token immediately after this chord (`E/B /`)
+                    // sets its duration explicitly, so the `/Duration` default
+                    // must NOT pre-fill it — otherwise the slash would only add a
+                    // continuation on top of the default instead of overriding it.
+                    let slash_token_follows = tokens_str.get(token_idx + 1).is_some_and(|t| {
+                        !t.is_empty() && t.trim_end_matches('.').chars().all(|c| c == '/')
+                    });
                     if let Some((rhythm, duration)) = &chord_length_override {
-                        if chord.rhythm == ChordRhythm::Default && !token_has_explicit_length {
+                        if chord.rhythm == ChordRhythm::Default
+                            && !token_has_explicit_length
+                            && !slash_token_follows
+                        {
                             chord.rhythm = rhythm.clone();
                             chord.duration = *duration;
                         }
@@ -4325,6 +4335,145 @@ mod tests {
         assert_eq!(measures[1].chords[1].full_symbol, "Eb");
         assert_eq!(measures[1].chords[1].duration.to_beats(ts), 1.0);
     }
+
+    #[test]
+    fn rhythm_slash_overrides_duration_default() {
+        // Under `/Duration 2` (half notes) a trailing rhythm slash sets that
+        // chord's length explicitly, ignoring the default. From "Life Giving
+        // Water": `E B/D# A/C# E/B / /G# / A B E B4` must tile into four 4/4
+        // bars, with `E/B` (one beat, via `/`) and the floating `/G#` → `E/G#`
+        // (one beat) both landing in measure 2.
+        let measures = parse_line("/Duration 2 E B/D# A/C# E/B / /G# / A B E B4");
+        assert_eq!(measures.len(), 4);
+        let ts = TimeSignature::common_time();
+
+        // m0: E, B/D# — the default half-note duration applies (2 beats each).
+        assert_eq!(measures[0].chords[0].full_symbol, "E");
+        assert_eq!(measures[0].chords[0].duration.to_beats(ts), 2.0);
+        assert_eq!(measures[0].chords[1].full_symbol, "B/D#");
+        assert_eq!(measures[0].chords[1].duration.to_beats(ts), 2.0);
+
+        // m1: A/C# (2) + E/B (1, slash overrides default) + E/G# (1, floating
+        // slash-bass + slash). E/G# is in measure 2, not spilled forward.
+        assert_eq!(measures[1].chords.len(), 3);
+        assert_eq!(measures[1].chords[0].full_symbol, "A/C#");
+        assert_eq!(measures[1].chords[0].duration.to_beats(ts), 2.0);
+        assert_eq!(measures[1].chords[1].full_symbol, "E/B");
+        assert_eq!(measures[1].chords[1].duration.to_beats(ts), 1.0);
+        assert_eq!(measures[1].chords[2].full_symbol, "E/G#");
+        assert_eq!(
+            measures[1].chords[2].display_override.as_deref(),
+            Some("/G#")
+        );
+        assert_eq!(measures[1].chords[2].duration.to_beats(ts), 1.0);
+
+        // m3 ends on E + B4 (B carrying an attached suspension figure "4").
+        assert_eq!(measures[3].chords[1].full_symbol, "B");
+        assert_eq!(measures[3].suspensions[0].figure, "4");
+    }
+
+    #[test]
+    fn section_header_trailing_key_change_is_recognized_and_applied() {
+        // `BR 8 #G` (key change on the header) must still register as a Bridge
+        // section — without stripping the `#G`, the header is unrecognized and
+        // its content merges into the previous section. The key change also
+        // applies entering the bridge.
+        let input = "Song\n120 BPM #E 4/4\n\nVS 1\nE\n\nBR 1 #G\nG\n";
+        let chart = parse_chart(input).expect("parse");
+        assert_eq!(chart.sections.len(), 2, "bridge must be its own section");
+        assert_eq!(chart.sections[1].section.section_type, SectionType::Bridge);
+        assert!(
+            chart
+                .key_changes
+                .iter()
+                .any(|kc| format!("{}", kc.to_key).contains('G')),
+            "expected a key change to G entering the bridge, got {:?}",
+            chart.key_changes
+        );
+    }
+
+    #[test]
+    fn life_giving_water_parses_into_its_twelve_sections() {
+        // Full-chart regression: exercises section-scoped `/Duration`, the
+        // rhythm-slash override of the duration default, floating slash-bass,
+        // attached + standalone suspension figures, a trailing key change on a
+        // section header (`BR 8 #G`), a quoted section comment (`CH "New?" 5`),
+        // and inline time changes (`!T2/4`). parse_chart only succeeds if every
+        // section's parsed measure count matches its header.
+        let chart = parse_chart(LIFE_GIVING_WATER).expect("Life Giving Water should parse");
+        let kinds: Vec<_> = chart
+            .sections
+            .iter()
+            .map(|s| s.section.section_type.clone())
+            .collect();
+        assert_eq!(chart.sections.len(), 12, "section kinds: {kinds:?}");
+        assert_eq!(chart.sections[0].section.section_type, SectionType::Intro);
+        assert_eq!(chart.sections[4].section.section_type, SectionType::Bridge);
+        assert_eq!(
+            chart.sections[6].section.section_type,
+            SectionType::Instrumental
+        );
+        // `BR 8 #G` applied a key change to G entering the bridge.
+        assert!(
+            chart
+                .key_changes
+                .iter()
+                .any(|kc| format!("{}", kc.to_key).contains('G')),
+            "expected key change to G, got {:?}",
+            chart.key_changes
+        );
+    }
+
+    const LIFE_GIVING_WATER: &str = r##"Life Giving Water
+64 BPM #E 4/4
+
+/Duration 2
+
+Intro 4
+/Duration 4
+C#m /// /B / A // E/G# D B4-3
+
+VS 8
+E B/D# A/C# E/B / /G# / A B E B4
+E B/D# A/C# E/B / /G# / A B E B/A
+
+VS 8
+E B/D# A/C# E / /G# / A B E B/A
+E //// A E A B E B/A
+
+CH 8
+E B/D# A/C# E/B / /G# / A C#m B4-3 ////
+E E/G# C#m E/B //// A B E3-4-3 ////
+
+BR 8 #G
+G D/F# C/E G/D C D G D/C
+G D/F# C/E G/B C D/C G D/C
+
+CH 8
+G D/F# C/E G C //// Em D
+G G/B Em G/D C D G D/C
+
+INST 3
+G D/F# C/E G/D / /B / C D
+
+CH "New?" 5
+G D/F# Em G/D C G/B G !T2/4 Am7 #A Esus ////
+
+CH 8
+A E/G# D/F# A/E / A/C# / D //// F#m E
+A E/G# D/F# A/E / A/C# / D // E // F#m E/G#
+
+CH 8
+A E/G# D/F# A/E / A/C# / D //// F#m E
+A A/C# F#m A/E / A/C# / D E F#m ////
+
+Tag 5
+D E F#m ////
+!T2/4 D Esus // E // E5 ////
+
+Out 4
+A E/G# D/F# A/E D // Esus // F#m ////
+"##;
 
     #[test]
     fn percent_repeats_previous_measure() {

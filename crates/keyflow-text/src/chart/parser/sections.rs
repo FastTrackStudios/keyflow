@@ -173,6 +173,26 @@ impl<'a> ChartParser<'a> {
                 let measure_expr = parsed.measure_expr;
                 let section_comment = parsed.comment;
 
+                // A key change written on the header line (`BR 8 #G`) takes
+                // effect at the start of this section, before its chords parse,
+                // so scale-degree chords resolve in the new key and the key
+                // signature updates here.
+                if let Some(key_token) = parsed.key_change.as_ref() {
+                    if let Ok(new_key) = crate::key::Key::parse(key_token) {
+                        let section_index = self.chart.sections.len();
+                        let position =
+                            AbsolutePosition::new(MusicalDuration::new(0, 0, 0), section_index);
+                        let key_change = crate::chart::types::KeyChange::new(
+                            position,
+                            self.current_key.clone(),
+                            new_key.clone(),
+                            section_index,
+                        );
+                        self.key_changes.push(key_change);
+                        self.current_key = Some(new_key);
+                    }
+                }
+
                 // Resolve the measure expression using section memory
                 let measure_count = if let Some(expr) = measure_expr.as_ref() {
                     self.resolve_measure_expression(&section_type, expr)
