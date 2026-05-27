@@ -910,10 +910,72 @@ fn chord_beat_position(chord: &ChordInstance) -> f64 {
     chord.position.beats() as f64 + chord.position.subdivisions() as f64 / 1000.0
 }
 
-fn chord_x_from_musical_position(ctx: &ChordRenderContext<'_>, chord: &ChordInstance) -> f64 {
+/// Onset beat of the chord at `chord_idx` within its OWN measure, from the
+/// cumulative duration of the chords before it. Drift-free, unlike
+/// `position.beats()` (the absolute-timeline beat), which a short earlier
+/// measure can shift across a barline.
+fn chord_local_onset_beat(measure: &Measure, chord_idx: usize, time_signature: (u8, u8)) -> f64 {
+    let ts = TimeSignature::new(time_signature.0.into(), time_signature.1.into());
+    measure
+        .chords
+        .iter()
+        .take(chord_idx)
+        .map(|c| c.duration.to_beats(ts))
+        .sum()
+}
+
+fn chord_x_from_local_beat(ctx: &ChordRenderContext<'_>, local_beat: f64) -> f64 {
     let measure_beats = f64::from(ctx.time_signature.0).max(1.0);
-    let beat = chord_beat_position(chord).clamp(0.0, measure_beats);
+    let beat = local_beat.clamp(0.0, measure_beats);
     ctx.measure_x + ctx.measure_width * (beat / measure_beats)
+}
+
+/// Anchor x for a chord symbol.
+///
+/// Chord symbols sit over the rhythm slash (or notehead) that carries their
+/// beat — not at the measure barline. We therefore anchor to the resolved
+/// segment's spring-laid-out x whenever that segment faithfully represents the
+/// chord's beat. Only when the chord's beat falls outside the available
+/// segments — e.g. a chord on beat 4 over a single measure-long melody note —
+/// do we fall back to the linear musical position so the symbol still lands at
+/// its beat instead of collapsing onto an earlier segment's slash.
+fn chord_render_x(
+    ctx: &ChordRenderContext<'_>,
+    segment_idx: usize,
+    segment_x: f64,
+    local_beat: f64,
+) -> f64 {
+    if segment_is_beat_faithful(ctx, segment_idx, local_beat) {
+        ctx.measure_x + segment_x
+    } else {
+        chord_x_from_local_beat(ctx, local_beat)
+    }
+}
+
+/// Whether the segment at `segment_idx` actually carries `chord`'s beat.
+///
+/// True when the segment's expected beat lands within half a segment of the
+/// chord's beat (the normal slash/notehead case where segments map 1:1 to
+/// beats). False when the chord's beat sits beyond the segments the measure
+/// rendered (long-note / sparse-melody measures), so the caller uses the
+/// linear musical position instead.
+fn segment_is_beat_faithful(
+    ctx: &ChordRenderContext<'_>,
+    segment_idx: usize,
+    local_beat: f64,
+) -> bool {
+    let seg_count = ctx.segment_positions.len();
+    if seg_count == 0 {
+        return false;
+    }
+    let measure_beats = f64::from(ctx.time_signature.0).max(1.0);
+    let beats_per_segment = measure_beats / seg_count as f64;
+    if beats_per_segment <= 0.0 {
+        return false;
+    }
+    let chord_beat = local_beat.clamp(0.0, measure_beats);
+    let segment_beat = segment_idx as f64 * beats_per_segment;
+    (segment_beat - chord_beat).abs() < beats_per_segment / 2.0
 }
 
 /// Render chord symbols for a measure with automatic collision detection.
@@ -1004,7 +1066,8 @@ pub fn render_chord_symbols(
             .copied()
             .unwrap_or_else(|| ctx.segment_positions.first().copied().unwrap_or(0.0));
 
-        let chord_x = chord_x_from_musical_position(ctx, chord);
+        let local_beat = chord_local_onset_beat(measure, chord_idx, ctx.time_signature);
+        let chord_x = chord_render_x(ctx, segment_idx, segment_x, local_beat);
 
         // Check if chord has regular accent (not AccentOnPush - that renders on spillback)
         let has_regular_accent = chord.commands.iter().any(|c| matches!(c, Command::Accent));
@@ -1735,10 +1798,9 @@ mod tests {
             note_line_stacks: &[],
         };
 
-        let c_sharp_minor_x =
-            chord_x_from_musical_position(&ctx, &chord_at_chart_beat("C#m", 1, 0));
-        let b_over_c_sharp_x =
-            chord_x_from_musical_position(&ctx, &chord_at_chart_beat("B/C#", 4, 0));
+        // Beat 1 → local onset 0; beat 4 in 6/8 → local onset 3 (half the bar).
+        let c_sharp_minor_x = chord_x_from_local_beat(&ctx, 0.0);
+        let b_over_c_sharp_x = chord_x_from_local_beat(&ctx, 3.0);
 
         assert_eq!(c_sharp_minor_x, 200.0);
         assert_eq!(b_over_c_sharp_x, 290.0);

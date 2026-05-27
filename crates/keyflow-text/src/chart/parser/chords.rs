@@ -4397,7 +4397,7 @@ mod tests {
         // Full-chart regression: exercises section-scoped `/Duration`, the
         // rhythm-slash override of the duration default, floating slash-bass,
         // attached + standalone suspension figures, a trailing key change on a
-        // section header (`BR 8 #G`), a quoted section comment (`CH "New?" 5`),
+        // section header (`BR 8 #G`), a quoted section comment (`CH 6 "New?"`),
         // and inline time changes (`!T2/4`). parse_chart only succeeds if every
         // section's parsed measure count matches its header.
         let chart = parse_chart(LIFE_GIVING_WATER).expect("Life Giving Water should parse");
@@ -4431,7 +4431,7 @@ mod tests {
 
 Intro 4
 /Duration 4
-C#m /// /B / A // E/G# D B4-3
+C#m /// /B / A // E/G# // D //// B4-3 ////
 
 VS 8
 E B/D# A/C# E/B / /G# / A B E B4
