@@ -47,22 +47,37 @@ impl IntoChart for keyflow_proto::Chart {
 #[cfg(feature = "text")]
 impl IntoChart for &str {
     fn into_chart(self) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError> {
-        keyflow_text::chart::parse_chart(self).map_err(KeyflowSourceError::Text)
+        parse_text_chart(self)
     }
 }
 
 #[cfg(feature = "text")]
 impl IntoChart for String {
     fn into_chart(self) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError> {
-        keyflow_text::chart::parse_chart(&self).map_err(KeyflowSourceError::Text)
+        parse_text_chart(&self)
     }
 }
 
 #[cfg(feature = "text")]
 impl IntoChart for &String {
     fn into_chart(self) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError> {
-        keyflow_text::chart::parse_chart(self.as_str()).map_err(KeyflowSourceError::Text)
+        parse_text_chart(self.as_str())
     }
+}
+
+/// Parse Keyflow source text into a `Chart`, honoring the document format.
+///
+/// Routes through `parse_document` so a file using `--- keyflow ---` /
+/// `--- chordpro ---` delimiters has its blocks split correctly: only the
+/// keyflow block becomes sections, and each ChordPro block is merged in as a
+/// lyric layer. A plain file with no delimiters is parsed as a single keyflow
+/// block. Calling the lower-level `parse_chart` here would feed ChordPro lyric
+/// lines (e.g. `Verse 1:`) to the section parser and fail.
+#[cfg(feature = "text")]
+fn parse_text_chart(source: &str) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError> {
+    keyflow_text::chart::parse_document(source)
+        .map(|(chart, _doc)| chart)
+        .map_err(KeyflowSourceError::Text)
 }
 
 #[cfg(feature = "midi")]
@@ -124,3 +139,35 @@ mod error;
 pub use error::{Error, Result};
 
 pub mod patterns;
+
+#[cfg(all(test, feature = "text"))]
+mod parse_routing_tests {
+    use super::parse;
+
+    /// `parse` must split `--- keyflow ---` / `--- chordpro ---` documents so
+    /// ChordPro lyric lines (e.g. `Verse 1:`) are not fed to the section
+    /// parser. Regression: it previously routed through the single-block
+    /// `parse_chart`, so a document's ChordPro block was parsed as keyflow and
+    /// failed with a section-length error.
+    #[test]
+    fn parse_routes_document_blocks() {
+        let input = "\
+--- keyflow ---
+Doc
+120bpm 4/4 #G
+
+VS 1
+| G C |
+
+--- chordpro ---
+Verse 1:
+[G]Worthy of every [C]song
+";
+        let chart = parse(input).expect("document with chordpro block should parse");
+        assert_eq!(
+            chart.sections.len(),
+            1,
+            "only the keyflow block makes sections"
+        );
+    }
+}

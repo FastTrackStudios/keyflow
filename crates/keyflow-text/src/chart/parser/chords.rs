@@ -3,8 +3,8 @@
 //! Handles parsing of chord lines, individual chord tokens, and related
 //! functionality including duration calculation, slash chords, and push/pull notation.
 
-use super::helpers::{PushPullModifier, RepeatCount};
 use super::ChartParser;
+use super::helpers::{PushPullModifier, RepeatCount};
 use crate::chart::cues::TextCue;
 use crate::chart::dynamics::DynamicMarking;
 use crate::chart::melody::{Melody, MelodyNote};
@@ -84,11 +84,7 @@ impl<'a> ChartParser<'a> {
         }
         out.push_str(&line[cursor..]);
 
-        if changed {
-            out
-        } else {
-            line.to_string()
-        }
+        if changed { out } else { line.to_string() }
     }
 
     fn expand_alias_token(&self, token: &str) -> Option<String> {
@@ -844,6 +840,59 @@ impl<'a> ChartParser<'a> {
                 })
                 .collect();
 
+            // Mask annotation tokens that carry no rhythmic duration:
+            // `dyn <level> [placement]` and `hairpin <dir> <span> [placement]`.
+            // Like melody blocks, these must not be counted as chords or receive
+            // auto-durations, or they steal beats from the real chords and
+            // inflate the measure count (e.g. `dyn mp C#m //.` -> two measures).
+            let annotation_mask: Vec<bool> = {
+                let mut mask = vec![false; tokens.len()];
+                let mut i = 0;
+                while i < tokens.len() {
+                    let consumed = match tokens[i] {
+                        "dyn" | "dynamic" => {
+                            // keyword + level + optional placement
+                            let mut n = 1;
+                            if i + n < tokens.len() {
+                                n += 1;
+                            }
+                            if i + n < tokens.len()
+                                && Self::parse_placement(tokens[i + n]).is_some()
+                            {
+                                n += 1;
+                            }
+                            n
+                        }
+                        "hairpin" => {
+                            // keyword + direction + span + optional placement
+                            let mut n = 1;
+                            if i + n < tokens.len() {
+                                n += 1;
+                            }
+                            if i + n < tokens.len() {
+                                n += 1;
+                            }
+                            if i + n < tokens.len()
+                                && Self::parse_placement(tokens[i + n]).is_some()
+                            {
+                                n += 1;
+                            }
+                            n
+                        }
+                        _ => 0,
+                    };
+                    if consumed > 0 {
+                        for slot in mask.iter_mut().skip(i).take(consumed) {
+                            *slot = true;
+                        }
+                        i += consumed;
+                    } else {
+                        i += 1;
+                    }
+                }
+                mask
+            };
+
             // Check if segment has standalone slashes (e.g., "/", "//", "///", "////")
             // If so, don't apply auto-duration - the slashes provide duration info
             let has_standalone_slashes = tokens
@@ -857,8 +906,8 @@ impl<'a> ChartParser<'a> {
                 .iter()
                 .enumerate()
                 .filter(|(i, t)| {
-                    // Skip tokens inside melody blocks
-                    if melody_mask[*i] {
+                    // Skip tokens inside melody blocks or annotation sequences
+                    if melody_mask[*i] || annotation_mask[*i] {
                         return false;
                     }
                     // Count as chord if it's not a command, cue, or other special token.
@@ -888,8 +937,8 @@ impl<'a> ChartParser<'a> {
                         .iter()
                         .enumerate()
                         .filter(|(i, t)| {
-                            // Skip tokens inside melody blocks
-                            if melody_mask[*i] {
+                            // Skip tokens inside melody blocks or annotation sequences
+                            if melody_mask[*i] || annotation_mask[*i] {
                                 return false;
                             }
                             !t.starts_with('/')
@@ -946,8 +995,8 @@ impl<'a> ChartParser<'a> {
                     segment_result.push(' ');
                 }
 
-                // Keep melody block tokens as-is (no duration mangling)
-                if melody_mask[tok_idx] {
+                // Keep melody-block and annotation tokens as-is (no duration mangling)
+                if melody_mask[tok_idx] || annotation_mask[tok_idx] {
                     segment_result.push_str(token);
                     continue;
                 }
@@ -1563,10 +1612,93 @@ impl<'a> ChartParser<'a> {
         let mut chord_length_override: Option<(ChordRhythm, MusicalDuration)> =
             default_chord_length;
         let mut skip_next_token = false;
+        // Number of upcoming tokens to skip — used by multi-token annotations
+        // like `dyn <level> [above]` and `hairpin <dir> <span> [above]` that
+        // are consumed in one place but span several tokens.
+        let mut skip_tokens: usize = 0;
 
         for (token_idx, token_str) in tokens_str.iter().enumerate() {
+            if skip_tokens > 0 {
+                skip_tokens -= 1;
+                continue;
+            }
             if skip_next_token {
                 skip_next_token = false;
+                continue;
+            }
+
+            // Inline classical dynamic / hairpin: zero-duration annotations that
+            // must NOT consume measure beats. Without this they fall through to
+            // chord parsing and inflate the measure count (e.g. `dyn mp C#m //.`
+            // would parse as two measures). Mirrors the standalone-line forms
+            // `parse_classical_dynamic_line` / `parse_hairpin_line`.
+            if *token_str == "dyn" || *token_str == "dynamic" {
+                if let Some(level_tok) = tokens_str.get(token_idx + 1) {
+                    let default_beat = current_measure_beats.floor().max(0.0) as u8 + 1;
+                    let (level_token, beat) = level_tok
+                        .split_once('@')
+                        .map(|(level, beat)| (level, beat.parse::<u8>().ok().unwrap_or(1)))
+                        .unwrap_or((*level_tok, default_beat));
+                    if let Some(level) = Self::parse_dynamic_level(level_token) {
+                        skip_tokens = 1;
+                        let placement = tokens_str
+                            .get(token_idx + 2)
+                            .and_then(|t| Self::parse_placement(t));
+                        if placement.is_some() {
+                            skip_tokens = 2;
+                        }
+                        current_measure.classical_dynamics.push(Dynamic {
+                            level,
+                            beat,
+                            placement: placement.unwrap_or(Placement::Below),
+                        });
+                    }
+                }
+                continue;
+            }
+
+            if *token_str == "hairpin" {
+                if let (Some(kind_tok), Some(span_tok)) =
+                    (tokens_str.get(token_idx + 1), tokens_str.get(token_idx + 2))
+                {
+                    let kind = match *kind_tok {
+                        "<" | "crescendo" | "cresc" => Some(HairpinKind::Crescendo),
+                        ">" | "decrescendo" | "decresc" | "dim" | "diminuendo" => {
+                            Some(HairpinKind::Decrescendo)
+                        }
+                        _ => None,
+                    };
+                    if let Some(kind) = kind {
+                        let (start, end) = span_tok
+                            .split_once("..")
+                            .or_else(|| span_tok.split_once('-'))
+                            .unwrap_or(("1", "1"));
+                        let start_beat = start
+                            .trim_start_matches('@')
+                            .parse::<u8>()
+                            .ok()
+                            .unwrap_or(1);
+                        let end_beat = end
+                            .trim_start_matches('@')
+                            .parse::<u8>()
+                            .ok()
+                            .unwrap_or(start_beat);
+                        skip_tokens = 2;
+                        let placement = tokens_str
+                            .get(token_idx + 3)
+                            .and_then(|t| Self::parse_placement(t));
+                        if placement.is_some() {
+                            skip_tokens = 3;
+                        }
+                        current_measure.hairpins.push(Hairpin {
+                            kind,
+                            start_beat,
+                            end_measure_offset: 0,
+                            end_beat,
+                            placement: placement.unwrap_or(Placement::Below),
+                        });
+                    }
+                }
                 continue;
             }
 
@@ -2599,7 +2731,7 @@ impl<'a> ChartParser<'a> {
                     let mut repeat_chord = prev_chord.clone();
                     repeat_chord.original_token = ".".to_string();
                     repeat_chord.position = AbsolutePosition::at_beginning(); // Will be recalculated
-                                                                              // Clear push/pull - the dot repeat doesn't inherit the timing modifier
+                    // Clear push/pull - the dot repeat doesn't inherit the timing modifier
                     repeat_chord.push_pull = None;
                     // Inherit the source chord's rhythm and duration
                     // "F/C ." = two measures (F/C for 4 beats, then F/C repeated for 4 beats)
@@ -2773,7 +2905,7 @@ impl<'a> ChartParser<'a> {
                             (time_sig.numerator as u8, time_sig.denominator as u8);
                         current_measure_beats = 0.0;
                         measure_has_slash_rhythm = false; // Reset for new measure
-                                                          // Auto-created measure, not by separator
+                        // Auto-created measure, not by separator
                     }
                 }
                 Err(_e) => {
@@ -4021,6 +4153,30 @@ let melody = {
         assert_eq!(measures[1].chords.len(), 4);
         assert_eq!(measures[1].chords[2].full_symbol, "Amaj7");
         assert_eq!(measures[1].melodies[0].notes.len(), 4);
+    }
+
+    #[test]
+    fn inline_dynamic_does_not_inflate_measure_count() {
+        // `dyn <level>` inside a bar is a zero-duration annotation; it must not
+        // be counted as a chord (which would steal beats and split the bar).
+        // Regression for the MusicXML round-trip exporter, which emits dynamics
+        // inline like `| dyn mp C#m //. |`.
+        let input = "T\n8th=168bpm 6/8 #E\n\nvs 1\n| dyn mp C#m //. |\n";
+        let chart = parse_chart(input).expect("inline dyn should parse");
+        let measures = chart.sections[0].measures();
+        assert_eq!(measures.len(), 1, "dyn must not add a measure");
+        assert_eq!(measures[0].chords[0].full_symbol, "C#m");
+        assert_eq!(measures[0].classical_dynamics.len(), 1);
+        assert_eq!(measures[0].classical_dynamics[0].level, DynamicLevel::Mp);
+    }
+
+    #[test]
+    fn inline_hairpin_does_not_inflate_measure_count() {
+        let input = "T\n8th=168bpm 6/8 #E\n\nvs 1\n| hairpin < 2..4 C#m //. |\n";
+        let chart = parse_chart(input).expect("inline hairpin should parse");
+        let measures = chart.sections[0].measures();
+        assert_eq!(measures.len(), 1, "hairpin must not add a measure");
+        assert_eq!(measures[0].hairpins.len(), 1);
     }
 
     #[test]

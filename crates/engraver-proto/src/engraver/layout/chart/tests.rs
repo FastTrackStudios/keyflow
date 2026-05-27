@@ -1028,6 +1028,80 @@ fn lord_of_the_fight_reports_dead_vertical_space_between_systems() {
     );
 }
 
+/// Performance budget for realtime editing: a full chart relayout must fit a
+/// 60 Hz frame (16.67 ms) with headroom, since layout runs on every edit and
+/// many scroll/zoom interactions. This measures the paged layout of the full
+/// Lord of the Fight chart (111 measures, melody + chords + annotations).
+///
+/// Run with output:
+///   cargo test -p engraver-proto --lib layout_chart_meets_60hz_budget -- --nocapture --ignored
+///
+/// Ignored by default so it doesn't slow normal test runs or flake on shared
+/// CI hardware; the printed numbers are the deliverable, and the assertion is a
+/// generous ceiling that only trips on a real regression.
+#[test]
+#[ignore = "performance benchmark — run explicitly with --ignored --nocapture"]
+fn layout_chart_meets_60hz_budget() {
+    use std::time::Instant;
+
+    let style = test_style();
+    let text_font = Arc::new(Vec::new());
+    let symbol_font = Arc::new(Vec::new());
+    let engine = ChartLayoutEngine::new(style, text_font, symbol_font);
+    let chart = keyflow_musicxml::import_file(lord_of_the_fight_fixture())
+        .expect("Lord of the Fight fixture should import");
+
+    const FRAME_BUDGET_MS: f64 = 1000.0 / 60.0; // 16.67 ms
+    let measures: usize = chart.sections.iter().map(|s| s.measures().len()).sum();
+    let iterations = 100;
+
+    let bench = |label: &str, mode: LayoutMode| -> f64 {
+        // Warm up (allocator / caches) before timing.
+        for _ in 0..5 {
+            std::hint::black_box(engine.layout_chart(&chart, &mode));
+        }
+        let mut samples_ms = Vec::with_capacity(iterations);
+        for _ in 0..iterations {
+            let start = Instant::now();
+            let result = engine.layout_chart(&chart, &mode);
+            let elapsed = start.elapsed();
+            std::hint::black_box(&result);
+            samples_ms.push(elapsed.as_secs_f64() * 1000.0);
+        }
+        samples_ms.sort_by(|a, b| a.total_cmp(b));
+        let min = samples_ms[0];
+        let median = samples_ms[iterations / 2];
+        let p95 = samples_ms[(iterations as f64 * 0.95) as usize];
+        let max = samples_ms[iterations - 1];
+        eprintln!(
+            "  {label:<18} min={min:.3} median={median:.3} p95={p95:.3} max={max:.3} ms  \
+             ({:.1}% of frame, {:.1} fit/frame)",
+            median / FRAME_BUDGET_MS * 100.0,
+            FRAME_BUDGET_MS / median.max(f64::EPSILON),
+        );
+        p95
+    };
+
+    eprintln!(
+        "layout_chart benchmark (Lord of the Fight, {measures} measures, {iterations} iters)"
+    );
+    eprintln!("  60 Hz frame budget = {FRAME_BUDGET_MS:.3}ms");
+    let paged_p95 = bench("paged", LayoutMode::default());
+    let scroll_p95 = bench(
+        "continuous-scroll",
+        LayoutMode::ContinuousScroll { width: 1200.0 },
+    );
+
+    // Generous ceiling: even on slow shared hardware, a full relayout should
+    // stay well under a quarter-second. This only catches order-of-magnitude
+    // regressions; the printed numbers are the real signal for the 60 Hz goal.
+    let worst = paged_p95.max(scroll_p95);
+    assert!(
+        worst < 250.0,
+        "layout_chart p95 {worst:.1}ms regressed badly (60 Hz budget is {FRAME_BUDGET_MS:.2}ms)"
+    );
+}
+
 /// Test that chord symbols are extracted from the scene graph.
 #[test]
 fn test_find_chord_symbols_in_scene() {

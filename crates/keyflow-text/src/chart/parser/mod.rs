@@ -140,7 +140,6 @@ impl<'a> ChartParser<'a> {
                 toc_lines.push(*line);
             }
         }
-        let section_plan = Self::section_plan_from_toc(&toc_lines)?;
 
         let trimmed = content_lines[parallel_idx];
         if !trimmed.starts_with("<<") || !trimmed.ends_with(">>") {
@@ -157,8 +156,16 @@ impl<'a> ChartParser<'a> {
             return Ok(false);
         }
 
-        let mut merged_sections: Option<Vec<ChartSection>> = None;
-        for (_, branch) in branches {
+        // Validate that every branch is an `<alias>` reference to a known alias
+        // BEFORE committing to the lane-parallel interpretation. An inline
+        // parallel block like `<< C#m B/C# ; m { ... } >>` has literal content
+        // branches, not alias refs — that is a normal measure, not a whole-chart
+        // lane join, so fall back to section parsing. Doing this before
+        // `section_plan_from_toc` avoids surfacing a confusing TOC error for a
+        // section that merely contains an inline parallel (e.g. after
+        // `/Duration`).
+        let mut resolved_branches = Vec::with_capacity(branches.len());
+        for (_, branch) in &branches {
             let branch = branch.trim();
             let Some(alias_name) = branch
                 .strip_prefix('<')
@@ -169,8 +176,24 @@ impl<'a> ChartParser<'a> {
             let Some(content) = self.aliases.get(alias_name).cloned() else {
                 return Ok(false);
             };
+            resolved_branches.push((alias_name.to_string(), content));
+        }
+
+        // The section plan (table of contents) owns the measure counts. It can
+        // be written explicitly above the lane join, or — when omitted — derived
+        // from the section headers of the first lane, which must then carry the
+        // counts itself.
+        let section_plan = if toc_lines.is_empty() {
+            Self::section_plan_from_lane(&resolved_branches[0].1)?
+        } else {
+            Self::section_plan_from_toc(&toc_lines)?
+        };
+
+        let mut merged_sections: Option<Vec<ChartSection>> = None;
+        for (alias_name, content) in &resolved_branches {
+            let alias_name = alias_name.as_str();
             let lane_sections =
-                self.parse_sectioned_lane_alias(alias_name, &content, &section_plan)?;
+                self.parse_sectioned_lane_alias(alias_name, content, &section_plan)?;
             if let Some(existing) = merged_sections.as_mut() {
                 Self::merge_section_lanes(existing, lane_sections, alias_name, false)?;
             } else {
@@ -220,6 +243,35 @@ impl<'a> ChartParser<'a> {
         }
 
         Ok(lane_chart.sections)
+    }
+
+    /// Derive a section plan from a lane's own content when no explicit
+    /// table of contents was written above the lane join. Each section header
+    /// found in the lane must include a measure count, since there is no TOC to
+    /// supply it.
+    fn section_plan_from_lane(content: &str) -> Result<Vec<String>, String> {
+        let mut plan = Vec::new();
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if let Some(parsed) = SectionType::parse_with_measure_count(trimmed) {
+                if parsed.measure_expr.is_none() {
+                    return Err(format!(
+                        "Lane section header '{trimmed}' must include a measure count \
+                         when there is no table of contents above the lane join"
+                    ));
+                }
+                plan.push(trimmed.to_string());
+            }
+        }
+        if plan.is_empty() {
+            return Err(
+                "Lane parallel has no section headers and no table of contents".to_string(),
+            );
+        }
+        Ok(plan)
     }
 
     fn section_plan_from_toc(lines: &[&str]) -> Result<Vec<String>, String> {

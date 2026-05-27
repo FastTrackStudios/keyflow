@@ -13,17 +13,17 @@ use kurbo::Affine;
 use crate::chart_graphics::ChartGraphics;
 use crate::signals::{ChartEditorBounds, PreviewMode};
 use crate::{
-    ChartEditorLayout, ChartLayoutManager, SemanticZoomLevel, CHART_BASE_SCALE,
-    CHART_CURSOR_POSITION, CHART_CURSOR_SCENE_CLICK, CHART_CURSOR_TICK, CHART_CURSOR_VISIBLE,
-    CHART_EDITOR_BOUNDS, CHART_HOVER_SCENE_POINT, CHART_PAGE_INFO, CHART_PREVIEW_MODE,
-    CHART_RENDER_STATS, CHART_SOURCE, CHART_VIEWPORT,
+    CHART_BASE_SCALE, CHART_CURSOR_POSITION, CHART_CURSOR_SCENE_CLICK, CHART_CURSOR_TICK,
+    CHART_CURSOR_VISIBLE, CHART_EDITOR_BOUNDS, CHART_HOVER_SCENE_POINT, CHART_PAGE_INFO,
+    CHART_PREVIEW_MODE, CHART_RENDER_STATS, CHART_SOURCE, CHART_VIEWPORT, ChartEditorLayout,
+    ChartLayoutManager, SemanticZoomLevel,
 };
 use keyflow::engraver::layout::chart::ChartLayoutEngine;
 use keyflow::engraver::style::MStyle;
 
 use dock_dioxus::DOCK_WORKSPACE;
 use dock_proto::PanelId;
-use session_ui::{Session, ACTIVE_INDICES, ACTIVE_PLAYBACK_IS_PLAYING, ACTIVE_PLAYBACK_MUSICAL};
+use session_ui::{ACTIVE_INDICES, ACTIVE_PLAYBACK_IS_PLAYING, ACTIVE_PLAYBACK_MUSICAL, Session};
 
 use super::render_stats::{FpsTracker, PerfCursorMotionState};
 

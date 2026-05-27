@@ -1,5 +1,5 @@
-use keyflow::chart::types::ChordInstance;
 use keyflow::chart::Chart;
+use keyflow::chart::types::ChordInstance;
 use keyflow::chord::ChordRhythm;
 use keyflow::sections::SectionType;
 

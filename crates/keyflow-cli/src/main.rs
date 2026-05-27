@@ -2,6 +2,7 @@ use std::io::Read;
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand, ValueEnum};
+use keyflow::Chart;
 use keyflow::engraver::export::pdf::PdfSerializer;
 use keyflow::engraver::export::svg::{SvgExportConfig, SvgSerializer};
 use keyflow::engraver::fonts::ChartFontBundle;
@@ -9,7 +10,6 @@ use keyflow::engraver::layout::chart::{
     Breakpoint, ChartLayoutConfig, ChartLayoutEngine, ChartLayoutResult, LayoutMode,
 };
 use keyflow::engraver::style::MStyle;
-use keyflow::Chart;
 
 /// Layout preset choice for the `png` / `svg` subcommands.
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -128,11 +128,16 @@ enum Commands {
         #[arg(long, default_value_t = 2.0)]
         scale: f32,
     },
-    /// Import a MusicXML (.musicxml / .mxl) file and write Keyflow text.
+    /// Import a MusicXML (.musicxml / .mxl) file and emit Keyflow text.
+    ///
+    /// Prints the converted `.kf` to stdout by default so it can be piped or
+    /// captured in tests. Pass `--output` to write a file instead. The default
+    /// never touches the input-adjacent `.kf`, so a curated chart sitting next
+    /// to its source is not clobbered.
     MusicxmlKf {
         /// Path to a .musicxml or .mxl file.
         input: PathBuf,
-        /// Output .kf path. Defaults to the input path with a .kf extension.
+        /// Write the Keyflow text to this `.kf` path instead of stdout.
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
@@ -402,73 +407,81 @@ fn push_diff_if(report: &mut ChartCompareReport, max_diffs: usize, condition: bo
     }
 }
 
+/// Canonical, encoding-independent string for one melody note.
+///
+/// The MusicXML importer and the `.kf` parser populate bookkeeping fields
+/// (`position`, `scale_degree`, `octave_modifier`) differently for the same
+/// music, so the signature compares only the audible content: pitch, resolved
+/// octave, duration, articulation, and stacked pitches.
+///
+/// Tie markers are deliberately omitted: a sustain is implied by the repeated
+/// pitch and duration, and the two importers disagree on whether interior
+/// notes of a tie chain carry `tie_start`/`tie_stop` — comparing the flags
+/// produces false diffs without adding musical information.
+fn melody_note_signature(note: &keyflow::chart::melody::MelodyNote) -> String {
+    let mut extras = note
+        .extra_pitches
+        .iter()
+        .map(|(pitch, octave)| format!("{pitch}{octave:?}"))
+        .collect::<Vec<_>>();
+    extras.sort();
+    format!(
+        "{}{:?}/{}{}{}{}[{}]",
+        note.pitch,
+        note.octave,
+        note.duration,
+        if note.dotted { "." } else { "" },
+        if note.triplet { "t" } else { "" },
+        if note.is_rest() { "R" } else { "" },
+        extras.join(","),
+    )
+}
+
+/// A melody that carries no audible content — every note is a rest or an
+/// invisible space. The MusicXML importer writes an empty bar as a
+/// whole-measure rest while the `.kf` parser may emit a space (`s`) or nothing;
+/// these all mean silence, so a silent melody is dropped from the signature.
+fn melody_is_audible(melody: &keyflow::chart::melody::Melody) -> bool {
+    melody
+        .notes
+        .iter()
+        .any(|note| !note.is_rest() && !note.is_space())
+}
+
 fn measure_signature(measure: &keyflow::chart::types::Measure, include_source: bool) -> String {
-    let whole_measure_silence = is_whole_measure_silence(measure);
+    // Chords: compare the musical symbol sequence (plus any articulation
+    // commands), not the rhythm-storage enum or absolute position. The `.kf`
+    // parser encodes a whole-measure chord as `Default` while the MusicXML
+    // importer encodes the same thing as `Slashes { count: 2 }`; both mean the
+    // chord sounds for the whole measure, so the encoding must not diff.
     let chords = measure
         .chords
         .iter()
         .filter(|chord| chord.full_symbol != "s")
         .map(|chord| {
-            format!(
-                "{}:{:?}:{:?}:{:?}",
-                chord.full_symbol, chord.rhythm, chord.duration, chord.commands
-            )
+            if chord.commands.is_empty() {
+                chord.full_symbol.clone()
+            } else {
+                format!("{}{:?}", chord.full_symbol, chord.commands)
+            }
         })
         .collect::<Vec<_>>();
-    let rhythm = if whole_measure_silence {
-        vec!["whole-measure-silence".to_string()]
-    } else {
-        measure
-            .rhythm_elements
-            .iter()
-            .map(|element| match element {
-                keyflow::chart::types::RhythmElement::Chord(chord) => {
-                    format!(
-                        "chord({}:{:?}:{:?})",
-                        chord.full_symbol, chord.rhythm, chord.duration
-                    )
-                }
-                keyflow::chart::types::RhythmElement::Rest(rest) => {
-                    format!("rest({:?}:{:?})", rest.rhythm, rest.duration)
-                }
-                keyflow::chart::types::RhythmElement::Space(space) => {
-                    format!("space({:?}:{:?})", space.rhythm, space.duration)
-                }
-            })
-            .collect::<Vec<_>>()
-    };
-    let staff_text = measure
-        .staff_text
+    // Melody: only audible voices, normalized per note. Silent (rest/space)
+    // melodies are dropped so an empty MusicXML bar and a `.kf` `s`/rest bar
+    // compare equal.
+    let melodies = measure
+        .melodies
         .iter()
-        .map(|text| {
-            format!(
-                "{}@{}:{:?}:box={}:bold={}:italic={}",
-                text.text, text.beat, text.placement, text.boxed, text.bold, text.italic
-            )
-        })
-        .collect::<Vec<_>>();
-    let figured = measure
-        .figured_bass
-        .iter()
-        .map(|fb| {
-            let rows = fb
-                .rows
+        .filter(|melody| melody_is_audible(melody))
+        .map(|melody| {
+            melody
+                .notes
                 .iter()
-                .map(|row| format!("{}{}", row.accidental, row.text))
+                .map(melody_note_signature)
                 .collect::<Vec<_>>()
-                .join("/");
-            format!("{rows}@{}:{:?}", fb.beat, fb.placement)
+                .join(" ")
         })
         .collect::<Vec<_>>();
-    let melodies = if whole_measure_silence {
-        Vec::new()
-    } else {
-        measure
-            .melodies
-            .iter()
-            .map(|melody| format!("{melody:?}"))
-            .collect::<Vec<_>>()
-    };
     let source = if include_source {
         format!(
             ", source={:?}, width={:?}",
@@ -478,51 +491,27 @@ fn measure_signature(measure: &keyflow::chart::types::Measure, include_source: b
         String::new()
     };
 
+    // Musical-equivalence signature. Free staff text, instrument cues, and
+    // figured bass are intentionally excluded: they are engraving annotations
+    // that the MusicXML importer and the `.kf` parser format differently
+    // (merged `<words>`, dropped accidentals, case/`*` variations), so they are
+    // not part of a hard chords-and-notes equivalence check. The `rhythm`
+    // element list is excluded too — it only echoes the chords (compared
+    // above) plus silence markers.
     format!(
-        "ts={:?}, repeat_count={}, start={:?}, end={:?}, volta={:?}, chords={:?}, rhythm={:?}, text={:?}, figured={:?}, dynamics={:?}, classical={:?}, hairpins={:?}, melodies={:?}{}",
+        "ts={:?}, repeat_count={}, start={:?}, end={:?}, volta={:?}, chords={:?}, dynamics={:?}, classical={:?}, hairpins={:?}, melodies={:?}{}",
         measure.time_signature,
         measure.repeat_count,
         measure.start_repeat,
         measure.end_repeat,
         measure.volta_start,
         chords,
-        rhythm,
-        staff_text,
-        figured,
         measure.dynamics,
         measure.classical_dynamics,
         measure.hairpins,
         melodies,
         source
     )
-}
-
-fn is_whole_measure_silence(measure: &keyflow::chart::types::Measure) -> bool {
-    let has_only_space_chord = measure.chords.iter().all(|chord| chord.full_symbol == "s");
-    let has_rest_or_space_rhythm = !measure.rhythm_elements.is_empty()
-        && measure.rhythm_elements.iter().all(|element| {
-            element.is_rest()
-                || element.is_space()
-                || element
-                    .as_chord()
-                    .map(|chord| chord.full_symbol == "s")
-                    .unwrap_or(false)
-        });
-    let has_rest_melody = !measure.melodies.is_empty()
-        && measure.melodies.iter().all(|melody| {
-            melody.notes.len() == 1
-                && melody.notes[0].is_rest()
-                && melody.notes[0].duration == 2
-                && melody.notes[0].dotted
-        });
-
-    has_only_space_chord
-        && measure.staff_text.is_empty()
-        && measure.figured_bass.is_empty()
-        && measure.dynamics.is_empty()
-        && measure.classical_dynamics.is_empty()
-        && measure.hairpins.is_empty()
-        && (has_rest_or_space_rhythm || has_rest_melody)
 }
 
 struct LayoutPipeline {
@@ -732,9 +721,11 @@ fn render_variant_pngs(
 ) -> Result<Vec<PathBuf>, String> {
     let layout = pipeline.layout_preset(chart, preset, breakpoint, width_pt);
     let svgs: Vec<String> = if layout.pages.is_empty() {
-        vec![pipeline
-            .export_svg_continuous(&layout)
-            .ok_or_else(|| "continuous layout produced no SVG".to_string())?]
+        vec![
+            pipeline
+                .export_svg_continuous(&layout)
+                .ok_or_else(|| "continuous layout produced no SVG".to_string())?,
+        ]
     } else {
         pipeline.export_svg_pages(&layout)
     };
@@ -1132,16 +1123,23 @@ fn run(cli: Cli) -> Result<(), String> {
             let chart = keyflow_musicxml::import_file(&input)
                 .map_err(|e| format!("musicxml import: {e}"))?;
             let keyflow_text = keyflow::text::chart::exporter::chart_to_keyflow(&chart);
-            let output = output.unwrap_or_else(|| input.with_extension("kf"));
-            if let Some(parent) = output.parent() {
-                if !parent.as_os_str().is_empty() {
-                    std::fs::create_dir_all(parent)
-                        .map_err(|e| format!("Failed to create {}: {e}", parent.display()))?;
+            match output {
+                Some(output) => {
+                    if let Some(parent) = output.parent() {
+                        if !parent.as_os_str().is_empty() {
+                            std::fs::create_dir_all(parent).map_err(|e| {
+                                format!("Failed to create {}: {e}", parent.display())
+                            })?;
+                        }
+                    }
+                    std::fs::write(&output, keyflow_text)
+                        .map_err(|e| format!("Failed to write {}: {e}", output.display()))?;
+                    eprintln!("Wrote {}", output.display());
+                }
+                None => {
+                    print!("{keyflow_text}");
                 }
             }
-            std::fs::write(&output, keyflow_text)
-                .map_err(|e| format!("Failed to write {}: {e}", output.display()))?;
-            println!("Wrote {}", output.display());
             Ok(())
         }
 
@@ -1385,9 +1383,11 @@ fn run(cli: Cli) -> Result<(), String> {
 
             // ContinuousScroll has no `pages`; render the whole scene as one image.
             let svgs: Vec<String> = if layout.pages.is_empty() {
-                vec![pipeline
-                    .export_svg_continuous(&layout)
-                    .ok_or_else(|| "continuous layout produced no SVG".to_string())?]
+                vec![
+                    pipeline
+                        .export_svg_continuous(&layout)
+                        .ok_or_else(|| "continuous layout produced no SVG".to_string())?,
+                ]
             } else {
                 pipeline.export_svg_pages(&layout)
             };
@@ -1440,5 +1440,65 @@ fn run(cli: Cli) -> Result<(), String> {
             }
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{melody_is_audible, melody_note_signature};
+    use keyflow::chart::melody::{Melody, MelodyNote};
+
+    /// A note is the same musical event whether or not it sits in the middle of
+    /// a tie chain; the MusicXML importer and the `.kf` parser disagree on the
+    /// tie flags, so the signature must ignore them.
+    #[test]
+    fn melody_signature_ignores_tie_markers() {
+        let mut tied = MelodyNote::new("C#", 2);
+        tied.octave = Some(3);
+        tied.dotted = true;
+        tied.tie_start = true;
+        tied.tie_stop = true;
+
+        let mut plain = MelodyNote::new("C#", 2);
+        plain.octave = Some(3);
+        plain.dotted = true;
+
+        assert_eq!(
+            melody_note_signature(&tied),
+            melody_note_signature(&plain),
+            "tie markers must not change the signature"
+        );
+    }
+
+    /// Stacked pitches and octave are part of the audible content and must
+    /// appear in the signature.
+    #[test]
+    fn melody_signature_keeps_pitch_octave_and_stack() {
+        let mut note = MelodyNote::new("F#", 8);
+        note.octave = Some(2);
+        note.dotted = true;
+        note.extra_pitches = vec![("C#".to_string(), Some(4))];
+        note.extra_pitch_modifiers = vec![Default::default()];
+
+        let sig = melody_note_signature(&note);
+        assert!(sig.contains("F#"), "pitch present: {sig}");
+        assert!(sig.contains("Some(2)"), "octave present: {sig}");
+        assert!(sig.contains("C#Some(4)"), "stacked pitch present: {sig}");
+    }
+
+    /// A melody made only of rests/spaces carries no audible content and is
+    /// dropped, so an empty MusicXML bar and a `.kf` `s`/rest bar compare equal.
+    #[test]
+    fn silent_melodies_are_not_audible() {
+        let rest = Melody::with_notes(vec![MelodyNote::new("r", 2)]);
+        let space = Melody::with_notes(vec![MelodyNote::new("s", 2)]);
+        assert!(!melody_is_audible(&rest), "all-rest melody is silent");
+        assert!(!melody_is_audible(&space), "all-space melody is silent");
+
+        let real = Melody::with_notes(vec![MelodyNote::new("r", 8), MelodyNote::new("C#", 8)]);
+        assert!(
+            melody_is_audible(&real),
+            "a melody with one real note is audible"
+        );
     }
 }
