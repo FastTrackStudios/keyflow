@@ -1751,6 +1751,13 @@ impl<'a> ChartParser<'a> {
         // like `dyn <level> [above]` and `hairpin <dir> <span> [above]` that
         // are consumed in one place but span several tokens.
         let mut skip_tokens: usize = 0;
+        // One-shot meter change (`!T2/4`): apply the new meter to exactly the
+        // next measure, then revert to the prevailing meter. `oneshot_revert`
+        // holds the (time_sig, beats_per_measure) to restore; the revert fires
+        // once `measures.len()` passes `oneshot_measure_idx` — i.e. the moment
+        // the one-shot measure has been pushed.
+        let mut oneshot_revert: Option<(TimeSignature, f64)> = None;
+        let mut oneshot_measure_idx: usize = 0;
 
         for (token_idx, token_str) in tokens_str.iter().enumerate() {
             if skip_tokens > 0 {
@@ -1760,6 +1767,20 @@ impl<'a> ChartParser<'a> {
             if skip_next_token {
                 skip_next_token = false;
                 continue;
+            }
+
+            // Once a one-shot meter measure has been pushed, restore the
+            // prevailing meter. The freshly started measure was stamped with the
+            // one-shot meter when it was created; correct it (it has no content
+            // yet) so following chords land in the reverted time signature.
+            if let Some((revert_ts, revert_bpm)) = oneshot_revert {
+                if measures.len() > oneshot_measure_idx {
+                    time_sig = revert_ts;
+                    beats_per_measure = revert_bpm;
+                    current_measure.time_signature =
+                        (time_sig.numerator as u8, time_sig.denominator as u8);
+                    oneshot_revert = None;
+                }
             }
 
             // Floating suspension figure (`4-3`, `2-3`, `3`, `2`): the prior
@@ -2875,13 +2896,15 @@ impl<'a> ChartParser<'a> {
             // The leading `T` (Time) is required so meter changes never collide
             // with number/Nashville slash chords like `4/6`. Bare fractions are
             // only honored on the header line (see parse_metadata_line).
-            if let Some(ts_body) = token_str.strip_prefix('T') {
+            //
+            // A `!` prefix (`!T2/4`) makes it one-shot: the meter applies to the
+            // single next measure, then reverts to the prevailing meter — the
+            // same "one-time" sigil used for durations.
+            let oneshot = token_str.starts_with("!T");
+            let ts_token: &str = token_str.strip_prefix('!').unwrap_or(token_str);
+            if let Some(ts_body) = ts_token.strip_prefix('T') {
                 if ts_body.contains('/') {
                     if let Some((num, den)) = Self::parse_time_signature(ts_body) {
-                        // Update the time signature for subsequent measures
-                        time_sig = TimeSignature::new(num as u32, den as u32);
-                        self.time_signature = Some(time_sig);
-
                         // Finalize the current measure before the time sig change
                         if !current_measure.chords.is_empty() {
                             measures.push(current_measure.clone());
@@ -2889,7 +2912,18 @@ impl<'a> ChartParser<'a> {
                             current_measure_beats = 0.0;
                         }
 
-                        // Update time signature for new measures
+                        if oneshot {
+                            // Remember what to restore once this single measure
+                            // is pushed. Leave self.time_signature untouched so
+                            // the prevailing meter still governs later lines.
+                            oneshot_revert = Some((time_sig, beats_per_measure));
+                            oneshot_measure_idx = measures.len();
+                        } else {
+                            // Persistent change: subsequent measures keep this.
+                            self.time_signature = Some(TimeSignature::new(num as u32, den as u32));
+                        }
+
+                        time_sig = TimeSignature::new(num as u32, den as u32);
                         current_measure.time_signature = (num, den);
                         beats_per_measure = num as f64;
                         continue;
@@ -4477,6 +4511,55 @@ Intro 1
             assert_eq!(note.duration, 8);
             assert!(note.dotted);
         }
+    }
+
+    #[test]
+    fn global_duration_applies_to_sections_until_overridden() {
+        // A top-level `/Duration` (before any section) sets a chart-wide default
+        // that each section inherits; a section's own `/Duration` overrides it.
+        let input = r#"
+Global Duration
+120bpm 4/4 #C
+
+/Duration 2
+
+VS 2
+C G Am F
+
+CH 2
+/Duration 4
+C E G Am Bm Dm F G
+"#;
+        let chart = parse_chart(input).expect("Should parse");
+
+        // Verse inherits the global half-note default: 2 chords per 4/4 measure.
+        let verse = chart.sections[0].measures();
+        assert_eq!(verse.len(), 2);
+        assert_eq!(verse[0].chords.len(), 2);
+
+        // Chorus overrides to quarter notes: 4 chords per measure.
+        let chorus = chart.sections[1].measures();
+        assert_eq!(chorus.len(), 2);
+        assert_eq!(chorus[0].chords.len(), 4);
+    }
+
+    #[test]
+    fn inline_t_prefix_time_signature_change() {
+        // `T2/4` changes meter mid-line; the leading `T` distinguishes it from a
+        // number/slash chord like `4/6`.
+        let input = r#"
+Meter Change
+120bpm 4/4 #C
+
+VS 3
+C T2/4 Am T4/4 G
+"#;
+        let chart = parse_chart(input).expect("Should parse");
+        let measures = chart.sections[0].measures();
+        assert_eq!(measures.len(), 3);
+        assert_eq!(measures[0].time_signature, (4, 4));
+        assert_eq!(measures[1].time_signature, (2, 4));
+        assert_eq!(measures[2].time_signature, (4, 4));
     }
 
     #[test]

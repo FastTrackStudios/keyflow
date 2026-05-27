@@ -629,20 +629,33 @@ impl LayoutPipeline {
 
     fn export_pdf(&self, result: &ChartLayoutResult) -> Result<Vec<u8>, String> {
         let svg_pages = self.export_svg_pages(result);
+        // Register every font the SVG can reference, under the same names as
+        // `with_embedded_fonts`, so svg2pdf's usvg resolves them exactly like
+        // resvg does for the PNG export. Omitting any (previously Chicago, the
+        // title font) made the PDF fall back to a system face and diverge.
         let leland = self.font_bundle.symbol_font_data();
-        let leland_text = self.font_bundle.aux_font_data();
+        let leland_text = self.font_bundle.leland_text_font_data();
         let musejazz = self.font_bundle.text_font_data();
+        let musejazz_music = self.font_bundle.musejazz_font_data();
+        let chicago = self.font_bundle.chicago_font_data();
+        let bravura = self.font_bundle.bravura_font_data();
+        let freesans = self.font_bundle.freesans_font_data();
 
         PdfSerializer::serialize_from_svg(
             &svg_pages,
             &[
                 ("Leland", leland.as_slice()),
+                ("Bravura", bravura.as_slice()),
                 ("Leland Text", leland_text.as_slice()),
                 ("LelandText", leland_text.as_slice()),
-                ("MuseJazz", musejazz.as_slice()),
+                ("Edwin", leland_text.as_slice()),
+                ("MuseJazz", musejazz_music.as_slice()),
                 ("MuseJazz Text", musejazz.as_slice()),
                 ("MuseJazzText", musejazz.as_slice()),
-                ("Edwin", leland_text.as_slice()),
+                ("Chicago", chicago.as_slice()),
+                ("ChicagoFLF", chicago.as_slice()),
+                ("FreeSans", freesans.as_slice()),
+                ("sans-serif", chicago.as_slice()),
             ],
         )
         .map_err(|e| format!("Failed to export PDF: {e}"))
@@ -883,13 +896,25 @@ fn run(cli: Cli) -> Result<(), String> {
             let source = read_source(&input)?;
             let chart = parse_chart(&source)?;
             let pipeline = LayoutPipeline::new()?;
-            let layout = pipeline.layout(&chart);
+            // Use the same A4 paged layout the PNG export uses (Page preset,
+            // page offsets off) so the PDF is page-for-page visually identical
+            // to `kf png`. `layout()` arranges pages with offsets into one
+            // continuous scene, which is for on-screen scrolling, not paper.
+            let layout = pipeline.layout_preset(
+                &chart,
+                PresetMode::Page,
+                BreakpointArg::Desktop,
+                BreakpointArg::Desktop.default_width_pt(),
+            );
 
             println!(
-                "Layout: {} page(s), {:.0}x{:.0} pt",
+                "Layout: {} A4 page(s), {:.0}x{:.0} pt",
                 layout.pages.len(),
-                layout.total_width,
-                layout.total_height
+                layout.pages.first().map_or(layout.total_width, |p| p.width),
+                layout
+                    .pages
+                    .first()
+                    .map_or(layout.total_height, |p| p.height),
             );
 
             let pdf_bytes = pipeline.export_pdf(&layout)?;
