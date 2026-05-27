@@ -384,11 +384,11 @@ pub fn render_suspensions(
                 Placement::Above => frame.chord_y,
                 Placement::Below => below_y,
             };
-            (chord_root_size, gx, y)
+            (chord_root_size * 0.90, gx, y)
         } else {
             // Attached superscript hugging the chord whose left edge sits
             // closest to the figure's beat.
-            let size = chord_root_size * 0.80;
+            let size = chord_root_size * 0.72;
             let chord = chord_bounds.iter().min_by(|a, b| {
                 (a.x0 - beat_x)
                     .abs()
@@ -402,7 +402,7 @@ pub fn render_suspensions(
                 (None, Placement::Below) => (size, beat_x, below_y),
             }
         };
-        let paints = vec![PaintCommand::text(
+        let paints = vec![PaintCommand::text_italic(
             &item.figure,
             "FreeSans",
             font_size,

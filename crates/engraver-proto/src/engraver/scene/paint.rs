@@ -426,6 +426,27 @@ impl PaintCommand {
         }
     }
 
+    /// Create an italic, left-anchored text command.
+    #[must_use]
+    pub fn text_italic(
+        text: impl Into<String>,
+        font_family: impl Into<String>,
+        font_size: f64,
+        position: Point,
+        color: Color,
+    ) -> Self {
+        Self::Text {
+            text: text.into(),
+            font_family: font_family.into(),
+            font_size,
+            position,
+            color,
+            anchor: TextAnchor::Start,
+            weight: FontWeight::Normal,
+            style: FontStyle::Italic,
+        }
+    }
+
     /// Create a centered text command.
     ///
     /// The position is the center point of the text. The renderer will
