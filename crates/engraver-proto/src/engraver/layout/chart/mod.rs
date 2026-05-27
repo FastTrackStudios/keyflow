@@ -1694,6 +1694,20 @@ impl ChartLayoutEngine {
                         }
                         for (item, node) in
                             measure
+                                .suspensions
+                                .iter()
+                                .zip(notation_renderer::render_suspensions(
+                                    &measure.suspensions,
+                                    &notation_frame,
+                                    &mut id_counter,
+                                ))
+                        {
+                            let above =
+                                matches!(item.placement, crate::chart::notations::Placement::Above);
+                            pending_notation.push((node, above, false));
+                        }
+                        for (item, node) in
+                            measure
                                 .hairpins
                                 .iter()
                                 .zip(notation_renderer::render_hairpins(
@@ -2690,6 +2704,25 @@ impl ChartLayoutEngine {
                                 .iter()
                                 .zip(notation_renderer::render_figured_bass(
                                     &measure.figured_bass,
+                                    &notation_frame,
+                                    &mut id_counter,
+                                ))
+                        {
+                            let _ = item;
+                            if let Some(bounds) =
+                                notation_renderer::scene_ink_bounds(&node, Affine::IDENTITY)
+                            {
+                                system_skyline.add_above(bounds);
+                                system_skyline.add_below(bounds);
+                            }
+                            placed.push(node);
+                        }
+                        for (item, node) in
+                            measure
+                                .suspensions
+                                .iter()
+                                .zip(notation_renderer::render_suspensions(
+                                    &measure.suspensions,
                                     &notation_frame,
                                     &mut id_counter,
                                 ))

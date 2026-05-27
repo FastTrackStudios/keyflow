@@ -36,7 +36,7 @@ pub use melody::{Melody, MelodyNote, MelodyVariables, OctaveModifier};
 pub use memory::ChordMemory;
 pub use notations::{
     BarlineStyle, Dynamic, DynamicLevel, FiguredBass, FiguredBassRow, Hairpin, HairpinKind,
-    Placement, RepeatMark, StaffText, Volta,
+    Placement, RepeatMark, StaffText, SuspensionFigure, Volta,
 };
 pub use position::ChartPosition;
 pub use rhythm::{BeatStructure, ResolvedRhythm, SectionRhythms, Spillback};

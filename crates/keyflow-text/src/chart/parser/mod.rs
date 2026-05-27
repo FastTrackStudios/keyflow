@@ -152,7 +152,12 @@ impl<'a> ChartParser<'a> {
             .unwrap_or("")
             .trim();
         let branches = Self::split_top_level_parallel_branches_spanned(inner);
-        if branches.len() < 2 {
+        // A chords-only chart joins a single lane (`<< <chords> >>`); multi-lane
+        // joins add `; <melody>` etc. An empty join is never a lane join. The
+        // alias-ref validation below still rejects inline-content parallels like
+        // `<< C#m ; m { ... } >>`, so single literal branches fall back to
+        // section parsing rather than being mistaken for a one-lane join.
+        if branches.is_empty() {
             return Ok(false);
         }
 

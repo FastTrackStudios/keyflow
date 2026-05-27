@@ -27,7 +27,7 @@ use vello::peniko::Color;
 
 use crate::chart::notations::{
     Dynamic, DynamicLevel, FiguredBass, FiguredBassRow, Hairpin, HairpinKind, Placement, StaffText,
-    Volta,
+    SuspensionFigure, Volta,
 };
 use crate::engraver::layout::shape::{Shape, ShapeElement};
 use crate::engraver::scene::id::{ElementType, SemanticId};
@@ -340,6 +340,44 @@ pub fn render_figured_bass(
             paints,
         );
         node.set_element_type("figured_bass");
+        *id_counter += 1;
+        nodes.push(node);
+    }
+
+    nodes
+}
+
+/// Render suspension figures (`4-3`, `2-3`, `3`) as a small superscript at the
+/// chord-symbol baseline, anchored to the figure's beat. One scene node per
+/// figure, matching the order of `items` so callers can zip them back.
+pub fn render_suspensions(
+    items: &[SuspensionFigure],
+    frame: &MeasureFrame<'_>,
+    id_counter: &mut u64,
+) -> Vec<SceneNode> {
+    let mut nodes = Vec::with_capacity(items.len());
+    // Scaled down like a chord extension, lifted slightly above the baseline.
+    let font_size = frame.spatium * 1.45 * 0.75;
+    let superscript_lift = font_size * 0.36;
+
+    for item in items {
+        let x = frame.beat_x(item.beat);
+        let y = match item.placement {
+            Placement::Below => frame.staff_bottom() + frame.spatium * 4.2,
+            Placement::Above => frame.chord_y - superscript_lift,
+        };
+        let paints = vec![PaintCommand::text(
+            &item.figure,
+            "MuseJazz Text",
+            font_size,
+            Point::new(x, y),
+            Color::BLACK,
+        )];
+        let mut node = SceneNode::leaf(
+            SemanticId::new(ElementType::Articulation, *id_counter),
+            paints,
+        );
+        node.set_element_type("suspension");
         *id_counter += 1;
         nodes.push(node);
     }

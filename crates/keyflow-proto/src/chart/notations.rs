@@ -170,6 +170,27 @@ pub struct FiguredBass {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Suspension figures (e.g. 4-3, 2-3, 3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A suspension/resolution figure attached to a beat — e.g. `4-3`, `2-3`,
+/// `3`, `2`. Renders as a small superscript next to the chord symbol, or in
+/// its own slot when it floats as a continuation of the prior chord (the held
+/// chord keeps sounding while the figure marks the suspension/resolution).
+///
+/// Distinct from [`FiguredBass`]: a single inline figure, not a stacked
+/// numeral column, and it tracks the chord rather than the bass line.
+#[derive(Debug, Clone, PartialEq, Eq, Facet)]
+pub struct SuspensionFigure {
+    /// The figure text exactly as written, e.g. `"4-3"`, `"2-3"`, `"3"`.
+    pub figure: String,
+    /// 1-based beat position within the measure.
+    pub beat: u8,
+    /// Above (default) or below the staff.
+    pub placement: Placement,
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Free-form staff text
 // ─────────────────────────────────────────────────────────────────────────────
 

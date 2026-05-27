@@ -23,7 +23,7 @@ use crate::time::{
 use keyflow_proto::chart::commands::Command;
 use keyflow_proto::chart::{
     Dynamic, DynamicLevel, FiguredBass, FiguredBassRow, Hairpin, HairpinKind, Placement,
-    RepeatMark, StaffText, Volta,
+    RepeatMark, StaffText, SuspensionFigure, Volta,
 };
 
 // region:    --- Token Helpers
@@ -230,6 +230,133 @@ impl<'a> ChartParser<'a> {
             "below" | "_" => Some(Placement::Below),
             _ => None,
         }
+    }
+
+    /// A floating slash-bass token like `/D`, `/Bb`, `/F#` — a leading slash
+    /// followed by a bare note name (optional accidental) and nothing else.
+    /// These inherit the previous chord's root (`Bb` → `Bb/D`) but display
+    /// verbatim. Returns the bass-note text (without the slash).
+    ///
+    /// Deliberately rejects rhythm slashes (`//`, `/.`), durations (`/4`),
+    /// commands (`/fermata`), and slash-family notation (`/maj7`).
+    fn parse_floating_slash_bass(token: &str) -> Option<&str> {
+        let bass = token.strip_prefix('/')?;
+        if bass.is_empty() || bass.contains('/') {
+            return None;
+        }
+        let mut chars = bass.chars();
+        let first = chars.next()?;
+        if !matches!(first, 'A'..='G' | 'a'..='g') {
+            return None;
+        }
+        // Remaining chars (if any) must be a single accidental.
+        match chars.as_str() {
+            "" | "#" | "b" | "n" | "\u{266d}" | "\u{266f}" | "\u{266e}" => Some(bass),
+            _ => None,
+        }
+    }
+
+    /// A floating suspension figure token. Only the hyphenated form (`4-3`,
+    /// `2-3`) is recognized when standalone: a lone digit like `2`, `3`, or
+    /// `4` is a valid scale-degree chord in keyflow, so accepting it here would
+    /// swallow real chords. Single-digit figures must be written attached to a
+    /// note-name root (`Eb2`, `F3`), which [`extract_suspension_suffix`]
+    /// handles unambiguously. Returns the figure verbatim.
+    fn parse_bare_suspension_figure(token: &str) -> Option<String> {
+        let (a, b) = token.split_once('-')?;
+        (!a.is_empty()
+            && !b.is_empty()
+            && a.chars().all(|c| c.is_ascii_digit())
+            && b.chars().all(|c| c.is_ascii_digit()))
+        .then(|| token.to_string())
+    }
+
+    /// Split a trailing suspension figure off an attached chord token, e.g.
+    /// `F4-3` → (`F`, `4-3`), `Eb2` → (`Eb`, `2`), `F3` → (`F`, `3`).
+    ///
+    /// A lone trailing digit is only treated as a figure when the remaining
+    /// chord is a bare note root (letter + optional accidental), so chord
+    /// qualities like `Csus4`, `C6`, `Cm7`, `Gm7b5` are left intact.
+    fn extract_suspension_suffix(token: &str) -> (String, Option<String>) {
+        // Slash chords and quoted suffixes are handled elsewhere.
+        if token.contains('/') || token.contains('"') {
+            return (token.to_string(), None);
+        }
+        // Hyphenated figure: `<chord><a>-<b>` — always unambiguous.
+        if let Some(dash) = token.rfind('-') {
+            let (head, fig) = token.split_at(dash);
+            let fig = &fig[1..]; // drop the '-'
+            if let Some((a, _)) = head.rsplit_once(|c: char| !c.is_ascii_digit()) {
+                let lead = &head[a.len() + 1..];
+                if !lead.is_empty()
+                    && lead.chars().all(|c| c.is_ascii_digit())
+                    && fig.chars().all(|c| c.is_ascii_digit())
+                    && !fig.is_empty()
+                {
+                    return (
+                        head[..a.len() + 1].to_string(),
+                        Some(format!("{lead}-{fig}")),
+                    );
+                }
+            } else if head.chars().all(|c| c.is_ascii_digit()) {
+                // Whole head is digits — that's a floating figure, not attached.
+                return (token.to_string(), None);
+            }
+        }
+        // Lone trailing 2/3/4 on a bare note root.
+        if let Some(last) = token.chars().last() {
+            if matches!(last, '2' | '3' | '4') {
+                let head = &token[..token.len() - 1];
+                if Self::is_bare_note_root(head) {
+                    return (head.to_string(), Some(last.to_string()));
+                }
+            }
+        }
+        (token.to_string(), None)
+    }
+
+    /// True for a bare note root: a letter `A`–`G` (either case) optionally
+    /// followed by a single accidental. No quality, extension, or slash.
+    fn is_bare_note_root(s: &str) -> bool {
+        let mut chars = s.chars();
+        match chars.next() {
+            Some('A'..='G' | 'a'..='g') => {}
+            _ => return false,
+        }
+        matches!(
+            chars.as_str(),
+            "" | "#" | "b" | "n" | "\u{266d}" | "\u{266f}" | "\u{266e}"
+        )
+    }
+
+    /// Root portion of the most recent chord (current measure first, then the
+    /// last completed measure). A floating slash-bass inherits this — existing
+    /// bass is dropped so `F/Eb` then `/D` yields `F/D`.
+    fn previous_chord_root(current: &Measure, measures: &[Measure]) -> Option<String> {
+        let prev = current
+            .chords
+            .last()
+            .or_else(|| measures.iter().rev().find_map(|m| m.chords.last()))?;
+        let base = prev
+            .full_symbol
+            .split('/')
+            .next()
+            .unwrap_or(&prev.full_symbol);
+        (!base.is_empty()).then(|| base.to_string())
+    }
+
+    fn push_suspension_at_current_beat(
+        measure: &mut Measure,
+        figure: &str,
+        placement: Placement,
+        current_measure_beats: f64,
+    ) {
+        let beat = current_measure_beats.floor().max(0.0) as u8 + 1;
+        measure.suspensions.push(SuspensionFigure {
+            figure: figure.to_string(),
+            beat,
+            placement,
+        });
     }
 
     fn extract_figured_bass_suffix(token: &str) -> (String, Option<Vec<FiguredBassRow>>) {
@@ -1627,6 +1754,100 @@ impl<'a> ChartParser<'a> {
                 continue;
             }
 
+            // Floating suspension figure (`4-3`, `2-3`, `3`, `2`): the prior
+            // chord keeps sounding; record the figure at the current beat and
+            // let following slash groups extend the held chord. Consumes no
+            // beats of its own and never counts as rhythm.
+            if let Some(figure) = Self::parse_bare_suspension_figure(token_str) {
+                let slash_follows = tokens_str.get(token_idx + 1).is_some_and(|t| {
+                    !t.is_empty() && t.trim_end_matches('.').chars().all(|c| c == '/')
+                });
+
+                if !current_measure.chords.is_empty() {
+                    // Case A — the current bar is still open (the held chord
+                    // carried explicit slashes, e.g. `Bb // 4-3 //`). The figure
+                    // continues that chord in the same bar; a following slash
+                    // group extends it (treated as a continuation).
+                    let beat_anchor = current_measure_beats
+                        .min((beats_per_measure - 1.0).max(0.0))
+                        .max(0.0);
+                    Self::push_suspension_at_current_beat(
+                        &mut current_measure,
+                        &figure,
+                        Placement::Above,
+                        beat_anchor,
+                    );
+                    last_token_was_slash = true;
+                    continue;
+                }
+
+                if let Some(prev) = measures.last().and_then(|m| m.chords.last()).cloned() {
+                    // Case B — the prior bare chord already filled its bar
+                    // (`F 4-3 ///`). The figure opens a NEW bar that restates the
+                    // same chord carrying the figure (a bar of F, then a bar of
+                    // F4-3). A trailing slash group sets the new bar's length;
+                    // otherwise it fills the whole bar.
+                    let mut bar_chord = prev;
+                    bar_chord.commands.clear();
+                    bar_chord.push_pull = None;
+                    if slash_follows {
+                        bar_chord.rhythm = ChordRhythm::slashes(1);
+                        bar_chord.duration = MusicalDuration::from_beats(1.0, time_sig);
+                        current_measure_beats = 1.0;
+                    } else {
+                        bar_chord.rhythm = ChordRhythm::Default;
+                        bar_chord.duration =
+                            MusicalDuration::from_beats(beats_per_measure, time_sig);
+                        current_measure_beats = beats_per_measure;
+                    }
+                    current_measure
+                        .rhythm_elements
+                        .push(RhythmElement::Chord(bar_chord.clone()));
+                    current_measure.chords.push(bar_chord);
+                    Self::push_suspension_at_current_beat(
+                        &mut current_measure,
+                        &figure,
+                        Placement::Above,
+                        0.0,
+                    );
+                    last_token_was_slash = true;
+                    measure_has_slash_rhythm = slash_follows;
+                    if !slash_follows {
+                        measures.push(current_measure.clone());
+                        current_measure = Self::fresh_measure(time_sig);
+                        current_measure_beats = 0.0;
+                        measure_has_slash_rhythm = false;
+                        last_token_was_slash = false;
+                    }
+                    continue;
+                }
+
+                // Degenerate: figure with no preceding chord. Record it and move
+                // on rather than dropping it.
+                Self::push_suspension_at_current_beat(
+                    &mut current_measure,
+                    &figure,
+                    Placement::Above,
+                    0.0,
+                );
+                continue;
+            }
+
+            // Floating slash-bass (`/D`): inherit the previous chord's root as
+            // `<root>/D` for harmony, but display the token verbatim. Rewrite
+            // to the synthetic chord token here and route it through normal
+            // chord parsing below; the original `/D` becomes the display text.
+            let synth_slash_bass: Option<String> = Self::parse_floating_slash_bass(token_str)
+                .and_then(|bass| {
+                    Self::previous_chord_root(&current_measure, &measures).map(|root| (root, bass))
+                })
+                .map(|(root, bass)| format!("{root}/{bass}"));
+            let (effective_token, display_override): (&str, Option<String>) =
+                match &synth_slash_bass {
+                    Some(synth) => (synth.as_str(), Some((*token_str).to_string())),
+                    None => (token_str, None),
+                };
+
             // Inline classical dynamic / hairpin: zero-duration annotations that
             // must NOT consume measure beats. Without this they fall through to
             // chord parsing and inflate the measure count (e.g. `dyn mp C#m //.`
@@ -1788,7 +2009,7 @@ impl<'a> ChartParser<'a> {
 
             // Check for command (e.g., "/fermata", "/accent")
             // Commands are applied to the PREVIOUS chord
-            if token_str.starts_with('/') {
+            if token_str.starts_with('/') && display_override.is_none() {
                 if *token_str == "/octave" {
                     skip_next_token = true;
                     continue;
@@ -2152,6 +2373,18 @@ impl<'a> ChartParser<'a> {
                                 if !current_measure.chords.is_empty()
                                     || !current_measure.rhythm_elements.is_empty()
                                 {
+                                    // Resync beats with the (possibly extended) chord
+                                    // durations. Without this, a slash group that
+                                    // accumulates onto the last chord — e.g. the second
+                                    // `//` in `Bb // 4-3 //`, or `Bb // //` — would leave
+                                    // current_measure_beats stale and let the next chord
+                                    // wrongly share the measure. Mirrors the dotted-slash
+                                    // path above.
+                                    current_measure_beats = current_measure
+                                        .chords
+                                        .iter()
+                                        .map(|c| c.duration.to_beats(time_sig))
+                                        .sum();
                                     // Mark that this measure has slash rhythm, so subsequent
                                     // chords can fill remaining beats
                                     measure_has_slash_rhythm = true;
@@ -2779,9 +3012,13 @@ impl<'a> ChartParser<'a> {
             // Parse chord. Pass through the token's byte span in the original line
             // (line-relative) so diagnostics can point at real source positions.
             let token_span = original_token_spans.get(token_idx).copied();
-            let (chord_token, figured_bass_rows) = Self::extract_figured_bass_suffix(token_str);
+            let (fb_token, figured_bass_rows) = Self::extract_figured_bass_suffix(effective_token);
+            let (chord_token, suspension_figure) = Self::extract_suspension_suffix(&fb_token);
             match self.parse_chord_token(&chord_token, section_type, time_sig, token_span) {
                 Ok(mut chord) => {
+                    if let Some(text) = &display_override {
+                        chord.display_override = Some(text.clone());
+                    }
                     let token_has_explicit_length =
                         Self::token_has_explicit_chord_length(&chord_token);
                     if let Some((rhythm, duration)) = &chord_length_override {
@@ -2874,6 +3111,17 @@ impl<'a> ChartParser<'a> {
                         Self::push_figured_bass_at_current_beat(
                             &mut current_measure,
                             &rows,
+                            Placement::Above,
+                            current_measure_beats,
+                        );
+                    }
+
+                    // Attached suspension figure (`Eb2`, `F4-3`) anchors at the
+                    // chord's own beat.
+                    if let Some(figure) = &suspension_figure {
+                        Self::push_suspension_at_current_beat(
+                            &mut current_measure,
+                            figure,
                             Placement::Above,
                             current_measure_beats,
                         );
@@ -3849,6 +4097,88 @@ mod tests {
         assert_eq!(figured_bass.rows[0].text, "4-3");
         assert_eq!(figured_bass.rows[1].accidental, "");
         assert_eq!(figured_bass.rows[1].text, "2-1");
+    }
+
+    #[test]
+    fn floating_slash_bass_inherits_root_and_displays_verbatim() {
+        // `/D` after Bb is harmonically Bb/D but prints "/D".
+        let measures = parse_line("Bb /D Eb F");
+        assert_eq!(measures.len(), 4);
+        let slash = &measures[1].chords[0];
+        assert_eq!(slash.full_symbol, "Bb/D");
+        assert_eq!(slash.display_override.as_deref(), Some("/D"));
+        assert_eq!(
+            slash.parsed.bass.as_ref().map(|b| format!("{b}")),
+            Some("D".to_string())
+        );
+    }
+
+    #[test]
+    fn floating_slash_bass_drops_prior_bass() {
+        // `F/Eb` then `/D` inherits the root F, not the bass: F/D.
+        let measures = parse_line("F/Eb /D");
+        assert_eq!(measures[1].chords[0].full_symbol, "F/D");
+        assert_eq!(
+            measures[1].chords[0].display_override.as_deref(),
+            Some("/D")
+        );
+    }
+
+    #[test]
+    fn attached_suspension_figure_on_note_root() {
+        // `Eb2` and `F4-3` are a chord plus a suspension figure; the digit is
+        // not folded into the chord quality.
+        let measures = parse_line("Eb2 F4-3");
+        assert_eq!(measures.len(), 2);
+        assert_eq!(measures[0].chords[0].full_symbol, "Eb");
+        assert_eq!(measures[0].suspensions.len(), 1);
+        assert_eq!(measures[0].suspensions[0].figure, "2");
+        assert_eq!(measures[1].chords[0].full_symbol, "F");
+        assert_eq!(measures[1].suspensions[0].figure, "4-3");
+    }
+
+    #[test]
+    fn bare_scale_degree_is_not_a_suspension_figure() {
+        // A lone `4` is a scale-degree chord, never a floating figure.
+        let measures = parse_line("4");
+        assert_eq!(measures[0].chords[0].full_symbol, "4");
+        assert!(measures[0].suspensions.is_empty());
+    }
+
+    #[test]
+    fn floating_hyphenated_figure_holds_chord_for_full_measure() {
+        // `Bb // 4-3 //` is one measure: Bb sustains all four beats with the
+        // 4-3 figure mid-bar, not two separate measures.
+        let measures = parse_line("Bb // 4-3 // /D");
+        assert_eq!(measures.len(), 2);
+        assert_eq!(measures[0].chords.len(), 1);
+        assert_eq!(measures[0].chords[0].full_symbol, "Bb");
+        assert_eq!(
+            measures[0].chords[0]
+                .duration
+                .to_beats(TimeSignature::common_time()),
+            4.0
+        );
+        assert_eq!(measures[0].suspensions.len(), 1);
+        assert_eq!(measures[0].suspensions[0].figure, "4-3");
+        assert_eq!(measures[1].chords[0].full_symbol, "Bb/D");
+    }
+
+    #[test]
+    fn bare_chord_then_spaced_figure_is_two_bars() {
+        // `F 4-3 ///` is TWO bars: a bar of F, then a bar of F restated with
+        // the 4-3 figure (the space-separated figure opens a new bar once the
+        // bare chord has already filled its own). A following chord is bar 3.
+        let measures = parse_line("F 4-3 /// Eb");
+        assert_eq!(measures.len(), 3);
+        let ts = TimeSignature::common_time();
+        assert_eq!(measures[0].chords[0].full_symbol, "F");
+        assert!(measures[0].suspensions.is_empty());
+        assert_eq!(measures[0].chords[0].duration.to_beats(ts), 4.0);
+        assert_eq!(measures[1].chords[0].full_symbol, "F");
+        assert_eq!(measures[1].chords[0].duration.to_beats(ts), 4.0);
+        assert_eq!(measures[1].suspensions[0].figure, "4-3");
+        assert_eq!(measures[2].chords[0].full_symbol, "Eb");
     }
 
     #[test]

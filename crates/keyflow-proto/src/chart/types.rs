@@ -7,7 +7,9 @@ use super::commands::Command;
 use super::cues::TextCue;
 use super::dynamics::DynamicMarking;
 use super::melody::Melody;
-use super::notations::{BarlineStyle, Dynamic, FiguredBass, Hairpin, RepeatMark, StaffText, Volta};
+use super::notations::{
+    BarlineStyle, Dynamic, FiguredBass, Hairpin, RepeatMark, StaffText, SuspensionFigure, Volta,
+};
 use super::track::{Track, TrackType};
 use crate::chord::{Chord, ChordRhythm, PushPullAmount};
 use crate::parsing::TextSpan;
@@ -51,6 +53,11 @@ pub struct ChordInstance {
     /// Source text span for click-to-highlight and editing
     /// Links this chord back to the original input text that generated it.
     pub source_span: Option<TextSpan>,
+
+    /// Verbatim display text to render instead of the computed chord symbol.
+    /// Used by floating slash-bass tokens like `/D`, which inherit the prior
+    /// chord's root harmonically (`Bb/D`) but should print just `/D`.
+    pub display_override: Option<String>,
 }
 
 impl ChordInstance {
@@ -74,7 +81,14 @@ impl ChordInstance {
             push_pull: None,
             commands: Vec::new(),
             source_span: None,
+            display_override: None,
         }
+    }
+
+    /// Set verbatim display text (e.g. `/D` for a floating slash-bass chord).
+    pub fn with_display_override(mut self, text: impl Into<String>) -> Self {
+        self.display_override = Some(text.into());
+        self
     }
 
     pub fn with_push_pull(mut self, push_pull: Option<(bool, PushPullAmount)>) -> Self {
@@ -366,6 +380,9 @@ pub struct Measure {
     /// Stacked-numeral figured-bass annotations anchored to a beat.
     pub figured_bass: Vec<FiguredBass>,
 
+    /// Suspension/resolution figures (`4-3`, `2-3`, `3`) anchored to a beat.
+    pub suspensions: Vec<SuspensionFigure>,
+
     /// Free-form text directions attached to a beat (`StaffText`).
     pub staff_text: Vec<StaffText>,
 
@@ -413,6 +430,7 @@ impl Measure {
             classical_dynamics: Vec::new(),
             hairpins: Vec::new(),
             figured_bass: Vec::new(),
+            suspensions: Vec::new(),
             staff_text: Vec::new(),
             volta_start: None,
             end_barline: BarlineStyle::default(),

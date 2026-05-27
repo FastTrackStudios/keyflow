@@ -1,0 +1,56 @@
+Dwelling Place
+70 BPM #Bb 4/4
+
+Intro 4
+VS 16
+CH 9
+CH 8
+BR 8
+CH 9
+CH 8
+Tag 3
+Out 8
+
+
+let chords = {
+
+
+Intro
+Bb /D Eb2 F4-3
+
+VS 
+Bb /D Eb %
+F4-3 F/Eb Bb F/Eb
+
+Bb /D Eb %
+F4-3 F/Eb Bb F/Eb
+
+CH
+Bb // 4-3 // /D Eb Bb /// Gm7
+F 4-3 /// Eb/D / Eb // /F // Bb Cm7/F // F //
+
+CH
+Bb // 4-3 // /D Eb Bb /// Gm7
+F 4-3 /// Eb/D / Eb // F4-3 // Bb /// F/A
+
+BR
+Gm Dm7 Eb // /F // Bb /// /A / 
+Gm /// /F / Eb Bb/F F3
+
+CH
+Bb // 4-3 // /D Eb Bb /// Gm7
+F 4-3 /// Eb/D / Eb // /F // Bb Cm7/F // F //
+
+CH
+Bb // 4-3 // /D Eb Bb /// Gm7
+F 4-3 /// Eb/D / Eb // F4-3 // Bb
+
+Tag
+F 4-3 /// /D / Eb // F4-3 //
+
+Out
+Bb Eb/Bb Bb Eb/Bb x2
+
+  }
+
+<< <chords> >>

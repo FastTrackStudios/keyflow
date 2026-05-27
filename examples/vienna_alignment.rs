@@ -44,6 +44,7 @@ fn main() {
             push_pull: None,
             commands: vec![],
             source_span: None,
+            display_override: None,
         },
         ChordInstance {
             root: keyflow_proto::primitives::RootNotation::Note(
@@ -58,6 +59,7 @@ fn main() {
             push_pull: None,
             commands: vec![],
             source_span: None,
+            display_override: None,
         },
     ];
 
