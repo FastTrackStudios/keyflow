@@ -1673,24 +1673,24 @@ impl ChartLayoutEngine {
                             );
                             pending_notation.push((node, above, true));
                         }
-                        for node in notation_renderer::render_figured_bass(
-                            &measure.figured_bass,
-                            &notation_frame,
-                            &mut id_counter,
-                        ) {
-                            if let Some(bounds) =
-                                notation_renderer::scene_ink_bounds(&node, Affine::IDENTITY)
-                            {
-                                system_skyline.add_above(bounds);
-                                system_skyline.add_below(bounds);
-                            }
-                            record_system_ink_bottom(
-                                &mut system_ink_bottom,
-                                &mut system_height_contributors,
-                                &node,
-                                "figured_bass",
-                            );
-                            root.add_child(node);
+                        // Figured bass is deferred to the skyline autoplace pass
+                        // like the other annotations. Its natural baseline can
+                        // sit on the chord symbol (a single Above row anchors at
+                        // chord_y), so it must be pushed clear of chord ink
+                        // rather than painted directly on top of it.
+                        for (item, node) in
+                            measure
+                                .figured_bass
+                                .iter()
+                                .zip(notation_renderer::render_figured_bass(
+                                    &measure.figured_bass,
+                                    &notation_frame,
+                                    &mut id_counter,
+                                ))
+                        {
+                            let above =
+                                matches!(item.placement, crate::chart::notations::Placement::Above);
+                            pending_notation.push((node, above, false));
                         }
                         for (item, node) in
                             measure
