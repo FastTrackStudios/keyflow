@@ -11,7 +11,7 @@ Use this skill whenever touching `.kf` files or Keyflow chart syntax. Prefer edi
 
 1. Preserve the authorial chart shape first: section names, line breaks, aliases, comments, and manually chosen annotations matter.
 2. After edits, run `cargo run -p keyflow-cli -- parse <path-to.kf>` and fix section length errors before trusting visual or MusicXML comparisons.
-3. For MusicXML equivalence, use `cargo run -p keyflow-cli -- musicxml-compare <source.musicxml> <chart.kf> --include-source --max-diffs 40`.
+3. For MusicXML equivalence, use `cargo run -p keyflow-cli -- musicxml-compare <source.musicxml> <chart.kf> --max-diffs 40`. Do **not** pass `--include-source` for equivalence — it folds MusicXML-only `source_measure_number`/`width` into the signature, and `.kf` charts never carry those, so every measure reports as different.
 4. If compare output is noisy, fix measure-count alignment first. Melody/chord differences after the first shifted measure may be false positives.
 
 Useful commands:
@@ -21,10 +21,28 @@ cargo run -p keyflow-cli -- parse "examples/png-project-charts/02 LORD OF THE FI
 cargo run -p keyflow-cli -- musicxml-compare \
   "examples/png-project-charts/02 LORD OF THE FIGHT Master RS.musicxml" \
   "examples/png-project-charts/02 LORD OF THE FIGHT Master RS.kf" \
-  --include-source --max-diffs 80
+  --max-diffs 80
 ```
 
-`musicxml-compare` parses the MusicXML and `.kf` into `Chart` objects and compares their expanded measure structures. Use `--include-source` when debugging source measure alignment, widths, or MusicXML-derived measure numbers.
+`musicxml-compare` parses the MusicXML and `.kf` into `Chart` objects and compares their expanded measure structures on a **musical-equivalence** signature: time signature, repeat/volta structure, chord-symbol sequence, dynamics, hairpins, and normalized melody (pitch, resolved octave, duration, articulation, stacked pitches). It deliberately ignores encoding that the two importers populate differently for identical music:
+
+- Chord rhythm storage (`Slashes { count }` vs `Default`) and `MusicalPosition` — a whole-measure chord is the same chord either way.
+- The `rhythm` element list — it only echoes the chords plus silence markers.
+- Melody tie markers and rest/space-only ("silent") voices — an empty MusicXML bar and a `.kf` `s`/rest bar are equal.
+- Free staff text, instrument cues (`@Inst`), and figured bass — engraving annotations the importers format differently (merged `<words>`, dropped accidentals, case/`*` variation). A remaining diff here is annotation drift, not a wrong note.
+
+So a clean run means the **notes, chords, dynamics, and structure match**; remaining diffs are real musical differences worth investigating (e.g. a missing `dyn`, a transposed octave, a one-measure melody offset). Use `--include-source` only when manually debugging source measure alignment/widths — it is a debug aid, not an equivalence check.
+
+`musicxml-kf` converts a MusicXML file to Keyflow text and prints it to **stdout** by default (capture with `> out.kf` or in tests); pass `--output <path>` to write a file. It never overwrites the input-adjacent `.kf`, so a curated chart next to its source is safe.
+
+Round-trip self-validation (import → export → re-parse → compare) confirms the importer/exporter/parser agree:
+
+```bash
+cargo run -p keyflow-cli -- musicxml-kf "song.musicxml" > /tmp/rt.kf
+cargo run -p keyflow-cli -- musicxml-compare "song.musicxml" /tmp/rt.kf
+```
+
+Residual round-trip diffs point at exporter/parser fidelity gaps (e.g. a chord like `B2` re-parses as `B` because keyflow durations use `_`, so a bare trailing digit on a chord symbol is lossy), not at the comparator.
 
 ## MusicXML Repeats
 

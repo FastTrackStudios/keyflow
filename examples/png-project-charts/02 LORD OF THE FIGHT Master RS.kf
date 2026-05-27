@@ -6,183 +6,196 @@ let #fb = ^"#4-3 2-1"
 let cresc = "Cresc. <...<...<"
 let climb = ^"'the CLIMB'"
 
-let climbPickup = {
-  <<
-    <climb> <cresc> ;
-    /octave 4 m { C#8. D# E F# }
-  >>
-}
-
-let openingHits = {
-  <<
-    F#m7_8. G#m7 Amaj7 B ;
-    /octave 2 m { <F# 'C#>8. <G# 'D#> <A 'E> <B 'F#> }
-  >>
-}
-
 count 2
-s1 %
-
 opening 4
-@Guitar "GTR Ostinato + FX"
-r1 r1
-<climbPickup>
-@Bass "Bass In"
-<openingHits>
-
 intro 4
-/Duration 8.
-@Acoustic "AC GTR ONLY"
-"(Band sustain unison C#)"
-<<
-  C#m B/C# | A/C# G#m7/C# | C#m B/C# | A/C# G#m7 ;
-  /octave 3 m { C#2.~ ~C# ~C# ~C#4. 'G# }
->>
-
 vs 8
-@Acoustic "Ac. Gtr. Groove"
-@Bass "Bass 8va up"
-@Drums "No Drums Yet"
-C#m  B2"4-3"  C#m  B2"4-3"
-<<
-  Amaj7 /. /.  F#m7 /. G#m7 /.  C#m /. B/C# /.  A/C# /. G#m7 /. ;
-  /octave 4 m { s2. s C#2.~ ~C#4. r4 G#8 }
->>
-
 vs 8
-C#m  B2"4-3"  C#m  B2"4-3"
-<<
-  Amaj7 /. /.  F#m7 /. G#m7 /.  <cresc> C#m ^"42"  C#m"53" ;
-  /octave 4 m { s2. s C#2.~ ~C#4. r4 G#8 }
->>
-
 ch 19
-<<
+vs 8
+ch 15
+[The Climb] 2
+br 16
+ch 12
+tags 7
+outro 6
+
+let chords = {
+  count
+  s1 %
+
+  opening
+  r1 r1
+  <climb> <cresc> s1
+  @Bass "Bass In"
+  F#m7_8. G#m7 Amaj7 B
+
+  intro
+  /Duration 8.
+  @Acoustic "AC GTR ONLY"
+  "(Band sustain unison C#)"
+  C#m B/C# | A/C# G#m7/C# | C#m B/C# | A/C# G#m7
+
+  vs
+  @Acoustic "Ac. Gtr. Groove"
+  @Drums "No Drums Yet"
+  dyn mp
+  C#m  B2"4-3"  C#m  B2"4-3"
+  Amaj7 /. /.  F#m7 /. G#m7 /.  C#m /. B/C# /.  A/C# /. G#m7 /.
+
+  vs
+  dyn mf
+  C#m  B2"4-3"  C#m  B2"4-3"
+  Amaj7 /. /.  F#m7 /. G#m7 /.  <cresc> C#m ^"42"  C#m"53"
+
+  ch
+  dyn ff
   A  A /. B /.  C#m  s1
   A<#fb>  F#m7 /. B /.  C#m <fb> /. <fb> /.
   A<#fb> /. F#m7<#fb> /.  B11 /. G#m7 /.  C#m <fb> /. <fb> /.
   A<#fb>  F#m7  G#m7  "1st Ending" C#m /. B/C# /.
   A/C# /. G#m/C# /.  C#m /. B/C# /.  "Back for VS 2" A/C# /. G#m7 /.
-  ^"Back for VS 2" s1  s1 ;
-  /octave 3 m {
-    s2. s s C#4. C#8 C# B
-    s2. s C#4. C#8 C# B
-    s2. s C#4. C#8 C# B
-    s2. s 'G#2. ,C#2.
-    C#2. 'C#2.~ ~C#4. G#8 . .
-    C#2.~ ~C#4. G#8 . .
-  }
->>
+  dyn mp
+  ^"Back for VS 2" s1  s1
 
-vs 8
-C#m  B2"4-3"  C#m  B2"4-3"
-<<
-  Amaj7 /. /.  F#m7 /. G#m7 /.  <cresc> C#m ^"42"  C#m"53" ;
-  /octave 4 m { s2. s C#2.~ ~C#4. r4 G#8 }
->>
+  vs
+  dyn f
+  C#m  B2"4-3"  C#m  B2"4-3"
+  Amaj7 /. /.  F#m7 /. G#m7 /.  <cresc> C#m ^"42"  C#m"53"
 
-ch 15
-<<
+  ch
+  dyn ff
   A  A /. B /.  C#m  s1
   A<#fb>  F#m7 /. B /.  C#m <fb> /. <fb> /.
   A<#fb> /. F#m7<#fb> /.  B11 /. G#m7 /.  C#m <fb> /. <fb> /.
-  A<#fb>  F#m7  G#m7  s1  s1 ;
-  /octave 3 m {
-    s2. s s C#4. C#8 C# B
-    s2. s C#4. C#8 C# B
-    s2. s C#4. C#8 C# B
-    s2. s 'G#2. 'G#2. 'G#2.
-  }
->>
+  dyn ff
+  A<#fb>  F#m7  G#m7  s1  s1
 
-[The Climb] 2
-^"2nd Ending > > >" ^"'the CLIMB'"
-<<
-  F#m7_8. G#m7 Amaj7 B ;
-  /octave 2 m { <F# 'C#>8. <G# 'D#> <A 'E> <B 'F#> }
->>
-@Drums "Drum Fill > > >"
-<<
-  A/D_8. B/C# Amaj7/B B/E ;
-  /octave 3 m { Dn8. C# B E }
->>
+  [The Climb]
+  ^"2nd Ending > > >" ^"'the CLIMB'"
+  F#m7_8. G#m7 Amaj7 B
+  @Drums "Drum Fill > > >"
+  A/D_8. B/C# Amaj7/B B/E
 
-br 16
-"=SOARING GROOVE!="
-@Drums "Drums enter"
-@Bass "Bass loco"
-A2  B2  A2  B2
-F#m7  G#m7  C#m ^"4-3" /. ^"4-3" /.
-<<
-  A2 ;
-  /octave 4 m { C#8 . . ,,E G# B }
->>
-B2  A2/C#  B2/D#
-F#m7 /. Eb/B /.  G#m7 /. Eb/B /.  <cresc> C#"Major Triad"  %
+  br
+  @Drums "=SOARING GROOVE!="
+  @Drums "Drums enter"
+  @Bass "Bass loco"
+  dyn ff
+  A2  B2  A2  B2
+  F#m7  G#m7  C#m ^"4-3" /. ^"4-3" /.
+  A2
+  B2  A2/C#  B2/D#
+  F#m7 /. Eb/B /.  G#m7 /. Eb/B /.  <cresc> C#"Major Triad"  %
 
-ch 12
-"=ROARING GROOVE!="
-@Drums "Full Groove Now"
-<<
+  ch
+  "=ROARING GROOVE!="
+  @Drums "Full Groove Now"
+  dyn ff
   A<#fb>  A /. B /.  C#m <fb> /. <fb> /.
   A<#fb>  F#m7 /. B /.  C#m <fb> /. <fb> /.
   A<#fb> /. F#m7<#fb> /.  B11 /. G#m7 /.  C#m <fb> /. <fb> /.
-  s1  s1  s1 ;
-  /octave 3 m {
-    s2. s C#4. C#8 C# B
-    s2. s C#4. C#8 C# B
-    s2. s C#4. C#8 C# B
-    C#4. C#8 . B
-    C#4. C#8 . B
-    C#4. C#8 . B
-  }
->>
+  s1  s1  s1
 
-tags 7
-"TAGS"
-"1" A<#fb>
-@Drums "Groove starts to build"
-"2" F#m7
-<<
-  A<#fb> /. Eb/C#<#fb> /. ;
-  /octave 2 m { 'A4 A8 C#4 C#8 }
->>
-<<
-  F#m7 ;
-  /octave 3 m { F#4 F#8 ,F# A C# }
->>
-<<
-  "3" @Bass "Bass exploration" A  F#m7 ;
-  m { s2. s }
->>
-<cresc> "_" G#m7
+  tags
+  "TAGS"
+  "1" A<#fb>
+  @Drums "Groove starts to build"
+  "2" F#m7
+  A<#fb> /. Eb/C#<#fb> /.
+  F#m7
+  "3" @Bass "Bass exploration" A  F#m7
+  hairpin < 2..4
+  dyn fff@4
+  <cresc> "_" G#m7
 
-outro 6
-/Duration 8.
-^"'the CLIMB'"
-<<
-  A/D B/C# Amaj7/B B/E ;
-  /octave 3 m { Dn C# B E }
->>
-<<
-  F#/G# G#/C# F#m7 A ;
-  /octave 2 m { 'G#8. C# ,<F# 'F#> <E 'E> }
->>
-@Drums "Stop Groove"
-@Guitar "GTR Exploding SFX"
-<<
-  E/D_2. ;
-  /octave 2 m { <Dn 'Dn>2.~ }
->>
-<<
-  /octave 2 m { ~<Dn 'Dn>2.~ }
->>
-@Drums "Thermo-Nuclear Drum Fill >>>"
-<<
-  E/D_4. D6add9 ;
-  /octave 2 m { ~<Dn 'Dn>4. .8 . . }
->>
-<<
-  C#sus4_2. ;
-  /octave 2 m { <C# 'C#>8 r8 r8 r8 r8 r8 }
->>
+  outro
+  /Duration 8.
+  ^"'the CLIMB'"
+  dyn fff
+  A/D B/C# Amaj7/B B/E
+  F#/G# G#/C# F#m7 A
+  @Drums "Stop Groove"
+  @Guitar "GTR Exploding SFX"
+  E/D_2.
+  s1
+  @Drums "Thermo-Nuclear Drum Fill >>>"
+  dyn fff
+  E/D_4. D6add9
+  C#sus4_2.
+}
+
+let melody = {
+  count
+
+  opening
+  s1 .
+  @Guitar "GTR Ostinato + FX"
+  /octave 4
+  C#8. D# E F#
+  <,,F# 'C#>8. <G# 'D#> <A 'E> <B 'F#>
+
+  intro
+  /Duration 8.
+  C#2.~ ~C# ~C# ~C#4. 'G#
+
+  vs
+  @Bass "Bass 8va up"
+  s1 . . .
+  s2. s C#2.~ ~C#4. r4 G#8
+
+  vs
+  s1 . . .
+  s2. s C#2.~ ~C#4. r4 G#8
+
+  ch
+  s2. s s ,,C#4. C#8 C# B
+  s2. s C#4. C#8 C# B
+  s2. s C#4. C#8 C# B
+  s2. s 'G#2. ,C#2.
+  C#2. 'C#2.~ ~C#4. G#8 . .
+  C#2.~ ~C#4. G#8 . .
+
+  vs
+  s1 . . .
+  s2. s ,C#2.~ ~C#4. r4 G#8
+
+  ch
+  s2. s s ,,C#4. C#8 C# B
+  s2. s C#4. C#8 C# B
+  s2. s C#4. C#8 C# B
+  s2. s 'G#2. 'G#2. 'G#2.
+
+  [The Climb]
+  <,,F# 'C#>8. <G# 'D#> <A 'E> <B 'F#>
+  Dn8. C# B E
+
+  br
+  s1 . . . . . .
+  C#8 . . ,,E G# B
+
+  ch
+  s2. s ,,C#4. C#8 C# B
+  s2. s C#4. C#8 C# B
+  s2. s C#4. C#8 C# B
+  C#4. C#8 . B
+  C#4. C#8 . B
+  C#4. C#8 . B
+
+  tags
+  s1 .
+  ,,A4 A8 C#4 C#8
+  F#4 F#8 ,F# A C#
+  s2. s
+
+  outro
+  /Duration 8.
+  Dn C# B E
+  ,G#8. C# ,<F# 'F#> <E 'E>
+  <Dn 'Dn>2.~
+  ~<Dn 'Dn>2.~
+  ~<Dn 'Dn>4. .8 . .
+  <C# 'C#>8 r8 r8 r8 r8 r8
+}
+
+<< <chords> ; <melody> >>
