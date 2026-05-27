@@ -347,33 +347,49 @@ pub fn render_figured_bass(
     nodes
 }
 
-/// Render suspension figures (`4-3`, `2-3`, `3`) as a superscript near the
-/// chord-symbol baseline, anchored to the figure's beat. Sized at 80% of the
-/// chord-symbol root size (`chord_root_size`) so it reads as a chord-scale
-/// annotation, not a tiny figured-bass numeral. One scene node per figure,
-/// matching the order of `items` so callers can zip them back.
+/// Render suspension figures (`4-3`, `2-3`, `3`) as a superscript hugging the
+/// upper-right of their chord symbol, so `F` + `4-3` reads as `F⁴⁻³`. Sized at
+/// 80% of the chord-symbol root size (`chord_root_size`) and drawn in the plain
+/// text font (not the chord/jazz font). `chord_bounds` are the laid-out chord
+/// bounding boxes (sorted by x) used to find the chord at each figure's beat;
+/// the figure is placed just past that chord's right edge. One scene node per
+/// figure, matching the order of `items` so callers can zip them back.
 pub fn render_suspensions(
     items: &[SuspensionFigure],
     frame: &MeasureFrame<'_>,
     chord_root_size: f64,
+    chord_bounds: &[Rect],
     id_counter: &mut u64,
 ) -> Vec<SceneNode> {
     let mut nodes = Vec::with_capacity(items.len());
     // 80% of an actual chord symbol, lifted into superscript position.
     let font_size = chord_root_size * 0.80;
     let superscript_lift = font_size * 0.36;
+    let gap = frame.spatium * 0.25;
 
     for item in items {
-        let x = frame.beat_x(item.beat);
-        let y = match item.placement {
-            Placement::Below => frame.staff_bottom() + frame.spatium * 4.2,
-            Placement::Above => frame.chord_y - superscript_lift,
+        let beat_x = frame.beat_x(item.beat);
+        // The chord this figure belongs to: the one whose left edge sits
+        // closest to the figure's beat. Hug just past its right edge so the
+        // figure reads as a superscript on the chord rather than floating at
+        // the beat column.
+        let chord = chord_bounds.iter().min_by(|a, b| {
+            (a.x0 - beat_x)
+                .abs()
+                .partial_cmp(&(b.x0 - beat_x).abs())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        let (x, baseline) = match (chord, item.placement) {
+            (Some(b), Placement::Above) => (b.x1 + gap, b.y0 + font_size),
+            (Some(b), Placement::Below) => (b.x1 + gap, frame.staff_bottom() + frame.spatium * 4.2),
+            (None, Placement::Above) => (beat_x, frame.chord_y - superscript_lift),
+            (None, Placement::Below) => (beat_x, frame.staff_bottom() + frame.spatium * 4.2),
         };
         let paints = vec![PaintCommand::text(
             &item.figure,
-            "MuseJazz Text",
+            "Leland Text",
             font_size,
-            Point::new(x, y),
+            Point::new(x, baseline),
             Color::BLACK,
         )];
         let mut node = SceneNode::leaf(

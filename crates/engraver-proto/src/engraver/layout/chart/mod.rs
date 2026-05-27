@@ -1529,6 +1529,9 @@ impl ChartLayoutEngine {
                             &ctx,
                         );
                         let chord_obstacles = chord_result.chord_bounds;
+                        // Kept for anchoring suspension figures to their chords;
+                        // `chord_obstacles` itself is consumed as obstacles below.
+                        let suspension_chord_bounds = chord_obstacles.clone();
 
                         for node in &chord_result.nodes {
                             notation_renderer::add_scene_obstacles(
@@ -1700,6 +1703,7 @@ impl ChartLayoutEngine {
                                     &measure.suspensions,
                                     &notation_frame,
                                     self.config.harmony_style.root_size,
+                                    &suspension_chord_bounds,
                                     &mut id_counter,
                                 ))
                         {
@@ -2557,6 +2561,9 @@ impl ChartLayoutEngine {
                             &ctx,
                         );
                         let chord_obstacles = chord_result.chord_bounds;
+                        // Kept for anchoring suspension figures to their chords;
+                        // `chord_obstacles` itself is consumed as obstacles below.
+                        let suspension_chord_bounds = chord_obstacles.clone();
 
                         for node in &chord_result.nodes {
                             notation_renderer::add_scene_obstacles(
@@ -2732,6 +2739,7 @@ impl ChartLayoutEngine {
                                     &measure.suspensions,
                                     &notation_frame,
                                     self.config.harmony_style.root_size,
+                                    &suspension_chord_bounds,
                                     &mut id_counter,
                                 ))
                         {
