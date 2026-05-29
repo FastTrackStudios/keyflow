@@ -556,27 +556,14 @@ impl<'a> ChartParser<'a> {
             return token.to_string();
         }
 
-        // Check if this is a Roman numeral (starts with I, V, i, or v)
-        // Roman numerals should preserve their case
+        // A token starting with I/V/i/v is a Roman numeral — those letters are
+        // never note names, so preserve case (lowercase = minor) regardless of
+        // what follows. This keeps `v7`, `i:m7`, `viidim`, `IVmaj7` correct;
+        // the old check only preserved case when the *second* char was also a
+        // Roman letter, so single-numeral chords like `v7` lost their case.
         let first_char = token.chars().next().unwrap();
-        if first_char == 'I' || first_char == 'V' || first_char == 'i' || first_char == 'v' {
-            // Check if the second character is also a Roman numeral character
-            if let Some(second_char) = token.chars().nth(1) {
-                if second_char == 'I'
-                    || second_char == 'V'
-                    || second_char == 'i'
-                    || second_char == 'v'
-                    || second_char == '/'
-                    || second_char == '_'
-                    || second_char == '\''
-                {
-                    // This is a Roman numeral - preserve case
-                    return token.to_string();
-                }
-            } else {
-                // Single character I, V, i, or v - likely a Roman numeral
-                return token.to_string();
-            }
+        if matches!(first_char, 'I' | 'V' | 'i' | 'v') {
+            return token.to_string();
         }
 
         // If the first character is a lowercase letter (a-g), capitalize it
@@ -4335,6 +4322,15 @@ mod tests {
         assert_eq!(chord_symbols("C:7"), ["C7"]);
         assert_eq!(chord_symbols("1 4:maj9"), ["1", "4maj9"]);
         assert_eq!(chord_symbols("I:7"), ["I7"]);
+    }
+
+    #[test]
+    fn colon_and_quality_work_on_roman_numerals() {
+        assert_eq!(chord_symbols("I:7 IV:maj7"), ["I7", "IVmaj7"]);
+        // Lowercase Roman keeps its case (minor), with or without the colon.
+        assert_eq!(chord_symbols("v:7"), ["vm7"]);
+        assert_eq!(chord_symbols("v7"), ["vm7"]);
+        assert_eq!(chord_symbols("i:m7"), ["im7"]);
     }
 
     #[test]
