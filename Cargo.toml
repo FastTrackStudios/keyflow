@@ -9,7 +9,7 @@ authors = ["FastTrack Studio"]
 license = "MIT OR Apache-2.0"
 
 [workspace.lints.rust]
-unused = "allow"
+unused = "warn"
 
 [workspace.lints.clippy]
 # Permissive stylistic lints — WIP workspace, don't block CI on these.
