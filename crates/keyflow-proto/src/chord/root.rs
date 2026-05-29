@@ -99,7 +99,15 @@ fn detect_parser_order(tokens: &[Token]) -> Vec<ParserType> {
                             ParserType::Roman,
                         ]
                     }
-                    // Accidental + Letter -> Note Name first (could be Roman too)
+                    // Accidental + Roman letter (e.g. `#IV`, `♭VII`) -> Roman first.
+                    TokenType::Letter(c) if is_roman_numeral_letter(*c) => {
+                        vec![
+                            ParserType::Roman,
+                            ParserType::NoteName,
+                            ParserType::ScaleDegree,
+                        ]
+                    }
+                    // Accidental + other letter -> Note Name first (could be Roman too)
                     TokenType::Letter(_) => {
                         vec![
                             ParserType::NoteName,
@@ -133,7 +141,17 @@ fn detect_parser_order(tokens: &[Token]) -> Vec<ParserType> {
 
         // Letter -> Could be Note Name or Roman Numeral
         TokenType::Letter(c) => {
-            if is_roman_numeral_letter(*c) {
+            // Leading ascii `b` is a flat (it lexes as a letter, not a Flat
+            // token). When it sits in front of a Roman numeral — `bIII`,
+            // `bvii` — treat it as a flat Roman, not the note B. A `b` in front
+            // of a digit (`b7`) stays note-first here; that case is ambiguous
+            // (B7 chord vs ♭7 degree) and is resolved with notation-system
+            // context by the chart parser, not by token shape alone.
+            let next_is_roman = matches!(
+                tokens.get(1).map(|t| &t.token_type),
+                Some(TokenType::Letter(n)) if is_roman_numeral_letter(*n)
+            );
+            if (*c == 'b' && next_is_roman) || is_roman_numeral_letter(*c) {
                 // Try Roman first, then Note Name
                 vec![
                     ParserType::Roman,

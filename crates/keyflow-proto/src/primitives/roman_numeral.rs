@@ -23,12 +23,39 @@ impl RomanNumeralToken {
             return None;
         }
 
+        let mut consumed = 0;
+
+        // Leading accidental before the numeral: `bIII`, `#IV`, `♭VII`. ASCII
+        // `b` lexes as `Letter('b')` (only `♭` becomes `Flat`), so accept it
+        // here the same way the extension/alteration parsers do.
+        let mut accidental: Option<Accidental> = None;
+        while consumed < tokens.len() {
+            match &tokens[consumed].token_type {
+                TokenType::Sharp => {
+                    accidental = Some(match accidental {
+                        None | Some(Accidental::Natural) => Accidental::Sharp,
+                        Some(Accidental::Sharp) => Accidental::DoubleSharp,
+                        _ => return None,
+                    });
+                    consumed += 1;
+                }
+                TokenType::Flat | TokenType::Letter('b') => {
+                    accidental = Some(match accidental {
+                        None | Some(Accidental::Natural) => Accidental::Flat,
+                        Some(Accidental::Flat) => Accidental::DoubleFlat,
+                        _ => return None,
+                    });
+                    consumed += 1;
+                }
+                _ => break,
+            }
+        }
+
         // Collect consecutive letters that could form a Roman numeral
         let mut letters = String::new();
         let mut is_upper = None;
-        let mut consumed = 0;
 
-        for token in tokens.iter() {
+        for token in tokens[consumed..].iter() {
             match &token.token_type {
                 TokenType::Letter(c) if Self::is_roman_letter(*c) => {
                     // Check case consistency
@@ -61,7 +88,7 @@ impl RomanNumeralToken {
         Some(RomanNumeralToken {
             degree,
             case,
-            accidental: None,
+            accidental,
             tokens_consumed: consumed,
         })
     }

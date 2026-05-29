@@ -110,7 +110,7 @@ impl RootNotation {
 
     /// Create from a parsed Roman numeral token
     pub fn from_roman_token(token: RomanNumeralToken) -> Self {
-        Self::from_roman_numeral(token.degree, token.case)
+        Self::from_roman_numeral_with_accidental(token.degree, token.case, token.accidental)
     }
 
     /// Parse from a string (auto-detect format)

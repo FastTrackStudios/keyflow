@@ -255,7 +255,7 @@ impl Chord {
         let family = if family.is_none() && extensions.has_any() {
             let inferred = match quality.0 {
                 ChordQuality::Minor => Some(ChordFamily::Minor7),
-                ChordQuality::Diminished => Some(ChordFamily::HalfDiminished),
+                ChordQuality::Diminished => Some(ChordFamily::FullyDiminished),
                 _ => Some(ChordFamily::Dominant7), // Major, Augmented, Suspended
             };
             debug!("Inferred family from extensions: {:?}", inferred);
@@ -534,7 +534,20 @@ impl Chord {
                 Ok((ChordQuality::Major, 0))
             }
 
-            TokenType::Letter('o') | TokenType::Circle => Ok((ChordQuality::Diminished, 1)),
+            // 'o' / '°' is the diminished symbol — except when it starts the
+            // `omit5`/`omit3` keyword, which is an omission, not a quality.
+            // Leave those for the omissions parser to consume.
+            TokenType::Letter('o') => {
+                if consumed + 3 < tokens.len()
+                    && let TokenType::Letter('m') = tokens[1].token_type
+                    && let TokenType::Letter('i') = tokens[2].token_type
+                    && let TokenType::Letter('t') = tokens[3].token_type
+                {
+                    return Ok((ChordQuality::Major, 0));
+                }
+                Ok((ChordQuality::Diminished, 1))
+            }
+            TokenType::Circle => Ok((ChordQuality::Diminished, 1)),
 
             // Augmented: "aug", "+"
             // Note: 'a' could also be the start of "add" (additions) which isn't a quality.
