@@ -256,7 +256,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_clef(&params, &ctx);
+        let (layout, _node) = layout_clef(&params, &ctx);
 
         assert!(!layout.bbox.is_zero_area());
     }

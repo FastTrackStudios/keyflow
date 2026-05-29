@@ -35,9 +35,6 @@ const SQUEEZE_STEP: f64 = 0.2;
 /// Smaller step for final collision-allowing squeeze.
 const FINAL_SQUEEZE_STEP: f64 = 0.05;
 
-/// Minimum compression ratio (don't compress below 50%).
-const MIN_COMPRESSION_RATIO: f64 = 0.5;
-
 /// Iterator for progressive squeeze-to-fit attempts.
 ///
 /// Each iteration reduces both stretch and squeeze factors,
@@ -599,7 +596,6 @@ impl MinimumDistance {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engraver::layout::segment::SegmentType;
 
     fn create_test_segment(tick: i32, ticks: i32, width: f64) -> Segment {
         let mut seg = Segment::chord_rest(tick, ticks);

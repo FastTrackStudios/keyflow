@@ -638,7 +638,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_chord(&params, &ctx);
+        let (layout, _node) = layout_chord(&params, &ctx);
 
         assert!(!layout.bbox.is_zero_area());
     }
@@ -692,7 +692,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_chord(&params, &ctx);
+        let (layout, _node) = layout_chord(&params, &ctx);
 
         // Beamed chords should not have flag children
         // Only note + stem

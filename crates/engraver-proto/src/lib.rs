@@ -6,6 +6,10 @@
 // region:    --- Keyflow Implementation Aliases
 
 pub(crate) mod ast {
+    // Facade glob re-export; consumed transitively as `crate::ast::*`.
+    // `allow` keeps `cargo fix` from pruning it (rustc can't see the
+    // glob's downstream uses).
+    #[allow(unused_imports)]
     pub(crate) use keyflow_syntax::ast::*;
 }
 pub(crate) mod chart {
@@ -21,9 +25,11 @@ pub(crate) mod key {
     pub(crate) use keyflow_proto::key::*;
 }
 pub(crate) mod metadata {
+    #[allow(unused_imports)]
     pub(crate) use keyflow_proto::metadata::*;
 }
 pub(crate) mod parsing {
+    #[allow(unused_imports)]
     pub(crate) use keyflow_syntax::parsing::*;
 }
 pub(crate) mod primitives {

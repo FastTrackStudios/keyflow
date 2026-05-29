@@ -1059,6 +1059,8 @@ fn align_octaves(accidentals: &mut [AccidentalInfo], ctx: &LayoutContext) {
 // === Special Case Predicates ===
 
 /// Check if two accidentals form the "exception of fourth" (flats can kern).
+// Kept (only exercised by `test_exception_of_fourth`); deleting it would break that test.
+#[allow(dead_code)]
 fn is_exception_of_fourth(acc1: &AccidentalInfo, acc2: &AccidentalInfo) -> bool {
     // Both must be flats (or natural + flat)
     let acc1_flat = acc1.accidental_type.is_flat();

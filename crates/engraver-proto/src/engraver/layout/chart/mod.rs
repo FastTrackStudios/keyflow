@@ -112,48 +112,6 @@ fn prevailing_fifths_at(chart: &Chart, section_idx: usize, local_measure: usize)
     fifths
 }
 
-fn collect_page_ink_intervals(scene: &SceneNode, page: &PageLayout) -> Vec<(f64, f64)> {
-    let x0 = page.x_offset + page.margins.left;
-    let x1 = page.x_offset + page.width - page.margins.right;
-    let y0 = page.y_offset;
-    let y1 = page.y_offset + page.height;
-
-    let mut intervals = scene
-        .children
-        .iter()
-        .filter_map(|node| notation_renderer::scene_ink_bounds(node, Affine::IDENTITY))
-        .filter(|bounds| !is_page_background(*bounds, page))
-        .filter(|bounds| bounds.x1 > x0 && bounds.x0 < x1 && bounds.y1 > y0 && bounds.y0 < y1)
-        .map(|bounds| (bounds.y0.max(y0), bounds.y1.min(y1)))
-        .collect::<Vec<_>>();
-    intervals.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
-    intervals
-}
-
-fn empty_vertical_bands(intervals: &[(f64, f64)], scan_y0: f64, scan_y1: f64) -> Vec<(f64, f64)> {
-    if scan_y1 <= scan_y0 {
-        return Vec::new();
-    }
-
-    let mut bands = Vec::new();
-    let mut cursor = scan_y0;
-    for &(start, end) in intervals {
-        if end <= scan_y0 || start >= scan_y1 {
-            continue;
-        }
-        let start = start.max(scan_y0);
-        let end = end.min(scan_y1);
-        if start > cursor {
-            bands.push((cursor, start));
-        }
-        cursor = cursor.max(end);
-    }
-    if cursor < scan_y1 {
-        bands.push((cursor, scan_y1));
-    }
-    bands
-}
-
 fn collect_system_ink_bounds(scene: &SceneNode, page: &PageLayout) -> Vec<Option<Rect>> {
     let mut bounds_by_system = vec![None; page.systems.len()];
     let content_x0 = page.x_offset + page.margins.left;

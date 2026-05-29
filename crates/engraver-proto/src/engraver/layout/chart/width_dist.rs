@@ -296,42 +296,6 @@ impl ChartLayoutEngine {
         summarize_width_comparison(rows)
     }
 
-    pub(super) fn source_measure_width_weights(
-        &self,
-        measure_indices: &[usize],
-        measures: &[crate::chart::types::Measure],
-    ) -> Option<Vec<f64>> {
-        let mut widths = measure_indices
-            .iter()
-            .map(|&idx| measures.get(idx)?.source_measure_width)
-            .collect::<Option<Vec<_>>>()?;
-
-        if widths.is_empty() || widths.iter().any(|w| !w.is_finite() || *w <= 0.0) {
-            return None;
-        }
-
-        // MusicXML exporters often include the clef/key/time prefix in the
-        // first measure's width. For spacing, the invisible left barline of
-        // the first real measure starts after that prefix, so normalize the
-        // first measure against the narrowest later measure in the system.
-        if widths.len() > 1 {
-            let narrowest_later = widths.iter().skip(1).copied().fold(f64::INFINITY, f64::min);
-            if narrowest_later.is_finite() && widths[0] > narrowest_later * 1.2 {
-                widths[0] = narrowest_later;
-            }
-        }
-
-        let average = widths.iter().sum::<f64>() / widths.len() as f64;
-        if average <= 0.0 {
-            return None;
-        }
-        for width in &mut widths {
-            *width /= average;
-        }
-
-        Some(widths)
-    }
-
     pub(super) fn log_system_width_decisions(
         &self,
         section_idx: usize,

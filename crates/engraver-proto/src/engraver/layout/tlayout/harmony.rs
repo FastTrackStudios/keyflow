@@ -885,8 +885,6 @@ mod unicode_fallback {
     pub const FLAT: char = '\u{266D}';
     /// Sharp (♯) - Music sharp sign
     pub const SHARP: char = '\u{266F}';
-    /// Natural (♮) - Music natural sign
-    pub const NATURAL: char = '\u{266E}';
     /// Double sharp - use superscript x
     pub const DOUBLE_SHARP: &str = "x";
     /// Double flat

@@ -186,7 +186,6 @@ fn get_glyph_path(font: &SMuFLFont<'_>, codepoint: char, font_size: f64) -> Opti
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engraver::layout::chart::cursor::{ChartCursor, CursorConfig, CursorStyle};
 
     #[test]
     fn render_stroke_line() {

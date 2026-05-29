@@ -754,7 +754,6 @@ impl MeasureBuilder {
                 id += 1;
             } else if group.notes.len() >= 2 && group.notes.iter().any(|d| d.needs_flag()) {
                 // Beamed group (2+ notes with at least one flagged) - create beam notes
-                let group_start_tick = current_tick;
                 let mut beam_notes: Vec<BeamNoteInfo> = Vec::new();
                 // Use first note's head type for the whole beam group
                 let beam_head_type = get_head_type(rhythm_index);
@@ -812,7 +811,6 @@ impl MeasureBuilder {
                     let _ = bn;
                 }
                 scene_elements.push(SceneElement::BeamGroup {
-                    start_tick: group_start_tick,
                     notes: beam_notes,
                     head_type: beam_head_type,
                     stem_dir: group_stem_dir,
@@ -1187,7 +1185,6 @@ impl MeasureBuilder {
                     root.add_child(container);
                 }
                 SceneElement::BeamGroup {
-                    start_tick: _,
                     notes,
                     head_type,
                     stem_dir,
@@ -1475,7 +1472,6 @@ enum SceneElement {
         rhythm_index: usize,
     },
     BeamGroup {
-        start_tick: i32,
         notes: Vec<BeamNoteInfo>,
         head_type: NoteHeadType,
         stem_dir: StemDirection,

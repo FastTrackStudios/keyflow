@@ -3,17 +3,8 @@
 //! [`LayoutContext`]. Includes count-in measure rendering and the
 //! rhythm-expansion helpers used by `auto_rhythm_slashes`.
 
-use crate::chord::LilySyntax;
-use crate::engraver::layout::context::LayoutContext;
-use crate::engraver::layout::segment_list::SegmentList;
-use crate::engraver::layout::tlayout::{
-    ClefParams, ClefType, NoteHeadType, RestDuration, RestParams, TimeSigParams, TimeSigType,
-    layout_clef, layout_rest, layout_timesig,
-};
+use crate::engraver::layout::tlayout::{ClefType, NoteHeadType};
 use crate::engraver::notation::{Duration, MeasureBuilder, MeasureScene, RhythmEntry};
-use crate::engraver::scene::id::{ElementType, SemanticId};
-use crate::engraver::scene::node::SceneNode;
-use kurbo::Affine;
 use tracing::debug;
 
 use super::rhythm_builder::{self, NoteHeadOverride, RhythmBuildConfig, RhythmSource};
@@ -329,13 +320,6 @@ impl ChartLayoutEngine {
         result
     }
 
-    /// Convert keyflow LilySyntax to engraver Duration.
-    ///
-    /// Delegates to the standalone function in [`rhythm_builder`].
-    fn lily_syntax_to_duration(&self, lily: LilySyntax, dotted: bool, triplet: bool) -> Duration {
-        rhythm_builder::lily_syntax_to_duration(lily, dotted, triplet)
-    }
-
     /// Expand whole/half note durations to quarter notes for auto_rhythm_slashes.
     ///
     /// This converts sustained chord notation (diamonds) to rhythmic slashes,
@@ -399,80 +383,5 @@ impl ChartLayoutEngine {
             }
         }
         expanded
-    }
-
-    /// Layout a count-in measure with a whole rest.
-    ///
-    /// Count-in measures are rendered smaller and show only a whole rest,
-    /// indicating empty beats before the song starts.
-    fn layout_count_in_measure(
-        &self,
-        measure_width: f64,
-        include_clef: bool,
-        include_time_sig: bool,
-        time_signature: (u8, u8),
-        ctx: &LayoutContext<'_>,
-        id_base: u64,
-    ) -> MeasureScene {
-        let spatium = ctx.spatium();
-        let width_spatiums = measure_width / spatium;
-
-        // Create the root scene node for this measure
-        let mut root = SceneNode::group(SemanticId::new(ElementType::Measure, id_base));
-
-        let mut x_offset = 0.0;
-
-        // Optionally render clef
-        if include_clef {
-            let clef_params = ClefParams {
-                id: id_base + 1,
-                clef_type: ClefType::Treble,
-                ..Default::default()
-            };
-            let (clef_layout, mut clef_node) = layout_clef(&clef_params, ctx);
-            clef_node.transform = Affine::translate((x_offset, 0.0));
-            root.add_child(clef_node);
-            x_offset += clef_layout.bbox.width() + spatium * 0.5;
-        }
-
-        // Optionally render time signature
-        if include_time_sig {
-            let ts_params = TimeSigParams {
-                id: id_base + 2,
-                sig_type: TimeSigType::Numeric {
-                    numerator: time_signature.0,
-                    denominator: time_signature.1,
-                },
-                ..Default::default()
-            };
-            let (ts_layout, mut ts_node) = layout_timesig(&ts_params, ctx);
-            ts_node.transform = Affine::translate((x_offset, 0.0));
-            root.add_child(ts_node);
-            x_offset += ts_layout.bbox.width() + spatium * 0.5;
-        }
-
-        // Render whole rest centered in remaining space
-        let rest_params = RestParams {
-            id: id_base + 3,
-            duration: RestDuration::Whole,
-            dots: 0,
-            line: 0, // Center line
-        };
-        let (rest_layout, mut rest_node) = layout_rest(&rest_params, ctx);
-
-        // Center the rest in the remaining measure width
-        let remaining_width = measure_width - x_offset;
-        let rest_x = x_offset + (remaining_width - rest_layout.bbox.width()) / 2.0;
-        rest_node.transform = Affine::translate((rest_x, 0.0));
-        root.add_child(rest_node);
-
-        MeasureScene {
-            scene: root,
-            width: width_spatiums,
-            segments: SegmentList::new(), // Empty segment list for count-in
-            note_line_stacks: Vec::new(),
-            internal_push_positions: Vec::new(),
-            spillback_positions: Vec::new(),
-        }
     }
 }

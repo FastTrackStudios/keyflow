@@ -100,15 +100,6 @@ const fn digit_glyph(digit: u8) -> char {
     }
 }
 
-/// Calculate width of a number in time signature.
-fn number_width(n: u8) -> f64 {
-    if n < 10 {
-        1.0
-    } else {
-        2.0 // Two digits
-    }
-}
-
 /// Layout a time signature.
 #[must_use]
 pub fn layout_timesig(params: &TimeSigParams, ctx: &LayoutContext) -> (LayoutData, SceneNode) {
@@ -345,7 +336,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_timesig(&params, &ctx);
+        let (_layout, node) = layout_timesig(&params, &ctx);
 
         assert_eq!(node.commands.len(), 1);
     }
@@ -362,7 +353,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_timesig(&params, &ctx);
+        let (_layout, node) = layout_timesig(&params, &ctx);
 
         // Single digit numerator + single digit denominator = 2 commands
         assert_eq!(node.commands.len(), 2);
@@ -380,7 +371,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_timesig(&params, &ctx);
+        let (_layout, node) = layout_timesig(&params, &ctx);
 
         assert_eq!(node.commands.len(), 2);
     }
@@ -397,7 +388,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_timesig(&params, &ctx);
+        let (_layout, node) = layout_timesig(&params, &ctx);
 
         // Two digit numerator (2 glyphs) + single digit denominator = 3 commands
         assert_eq!(node.commands.len(), 3);
@@ -415,7 +406,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_timesig(&params, &ctx);
+        let (_layout, node) = layout_timesig(&params, &ctx);
 
         // 3 digits + 2 plus signs in numerator + 1 digit denominator = 6 commands
         assert_eq!(node.commands.len(), 6);

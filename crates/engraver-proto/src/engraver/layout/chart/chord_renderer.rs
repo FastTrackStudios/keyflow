@@ -229,16 +229,6 @@ fn resolve_chord_collisions(
     }
 }
 
-/// Apply position adjustments to chord nodes by modifying their transforms.
-fn apply_collision_adjustments(nodes: &mut [SceneNode], adjustments: &[f64]) {
-    for (node, &adjustment) in nodes.iter_mut().zip(adjustments.iter()) {
-        if adjustment.abs() > 0.001 {
-            // Apply horizontal translation to the existing transform
-            node.transform = node.transform.then_translate(Vec2::new(adjustment, 0.0));
-        }
-    }
-}
-
 /// Create an apostrophe marker node for pushed/pulled chords.
 ///
 /// When `push_alters_rhythm=false`, this creates a visual indicator showing

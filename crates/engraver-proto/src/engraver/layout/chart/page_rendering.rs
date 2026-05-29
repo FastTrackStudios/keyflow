@@ -203,16 +203,6 @@ fn draw_bracket_repeat(
     draw_repeat_dots_with_color(commands, dot_x, staff_y, spatium, red);
 }
 
-/// Draw two repeat dots vertically centred on the middle staff line.
-///
-/// MuseScore places dots at the 2nd and 4th staff-line spaces (counted from
-/// the top), centred horizontally at the supplied `dot_x`. We don't know the
-/// individual staff-line geometry here, so the dots are placed relative to
-/// the staff height handed in as `height` at +0.25 and +0.75 of that height.
-fn draw_repeat_dots(commands: &mut Vec<PaintCommand>, dot_x: f64, staff_y: f64, spatium: f64) {
-    draw_repeat_dots_with_color(commands, dot_x, staff_y, spatium, Color::BLACK);
-}
-
 fn draw_repeat_dots_with_color(
     commands: &mut Vec<PaintCommand>,
     dot_x: f64,

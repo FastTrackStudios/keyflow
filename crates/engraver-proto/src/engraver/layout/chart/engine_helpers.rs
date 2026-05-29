@@ -11,7 +11,7 @@ use vello::peniko::Color;
 use crate::Chart;
 use crate::engraver::layout::context::LayoutContext;
 use crate::engraver::layout::tlayout::{
-    BarlineType, ClefType, HarmonyParams, HarmonyStyle, MarginLabelParams, layout_margin_label,
+    BarlineType, ClefType, MarginLabelParams, layout_margin_label,
     rehearsal_mark::RehearsalMarkStyle,
 };
 use crate::engraver::scene::id::{ElementType, SemanticId};
@@ -19,18 +19,9 @@ use crate::engraver::scene::node::SceneNode;
 use crate::engraver::scene::paint::PaintCommand;
 use crate::sections::SectionType;
 
-use super::{ChartLayoutEngine, chord_layout, count_in_renderer, page_rendering, section_layout};
+use super::{ChartLayoutEngine, count_in_renderer, page_rendering, section_layout};
 
 impl ChartLayoutEngine {
-    /// Convert a Keyflow `ChordInstance` to engraver `HarmonyParams`.
-    pub(super) fn chord_to_harmony_params(
-        &self,
-        chord: &crate::chart::types::ChordInstance,
-        harmony_style: &HarmonyStyle,
-    ) -> HarmonyParams {
-        chord_layout::chord_to_harmony_params(chord, harmony_style)
-    }
-
     /// Create a section label scene node.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn create_section_label(
@@ -97,66 +88,6 @@ impl ChartLayoutEngine {
         );
         container.add_child(label_node);
         container
-    }
-
-    pub(super) fn section_label_stack_height(
-        &self,
-        section: &crate::sections::Section,
-        page_x: f64,
-        margin_width: f64,
-        staff_y: f64,
-        staff_height: f64,
-        letter: Option<char>,
-        ctx: &LayoutContext<'_>,
-    ) -> f64 {
-        if let Some(label_text) = section.metadata.get("repeat_pass.labels") {
-            let mut y = staff_y;
-            let mut bottom = staff_y;
-            for pass_label in repeat_pass_label_parts(label_text) {
-                let section_type = section_type_for_pass_label(pass_label)
-                    .unwrap_or_else(|| section.section_type.clone());
-                let (section_type_name, abbreviation) = self.section_type_to_strings(&section_type);
-                let (layout, _) = layout_margin_label(
-                    &MarginLabelParams {
-                        section_type: section_type_name,
-                        abbreviation,
-                        number: None,
-                        letter: None,
-                        comment: None,
-                        label_override: Some(pass_label.to_string()),
-                        page_x,
-                        margin_width,
-                        staff_y: y,
-                        staff_height,
-                        style: self.get_section_theme(&section_type),
-                        ..Default::default()
-                    },
-                    ctx,
-                );
-                bottom = y + layout.height;
-                y += layout.height + staff_height * 0.15;
-            }
-            return bottom - staff_y;
-        }
-
-        let (section_type, abbreviation) = self.section_type_to_strings(&section.section_type);
-        let (layout, _) = layout_margin_label(
-            &MarginLabelParams {
-                section_type,
-                abbreviation,
-                number: section.number,
-                letter,
-                comment: section.comment.clone(),
-                page_x,
-                margin_width,
-                staff_y,
-                staff_height,
-                style: self.get_section_theme(&section.section_type),
-                ..Default::default()
-            },
-            ctx,
-        );
-        layout.height
     }
 
     pub(super) fn repeat_pass_dynamic_slots(
@@ -235,68 +166,6 @@ impl ChartLayoutEngine {
         node
     }
 
-    /// Count-in text below the staff for a beat position.
-    pub(super) fn create_count_text(
-        &self,
-        count_text: &str,
-        x: f64,
-        staff_y: f64,
-        staff_height: f64,
-        id: u64,
-    ) -> SceneNode {
-        let spatium = self.config.spatium;
-        let y_offset = staff_height + 2.0 * spatium;
-        let font_size = spatium * 2.0;
-
-        let text_command = PaintCommand::text(
-            count_text.to_string(),
-            "FreeSans",
-            font_size,
-            Point::new(x, staff_y + y_offset),
-            Color::from_rgb8(80, 80, 80),
-        );
-
-        let mut node =
-            SceneNode::leaf(SemanticId::new(ElementType::Lyrics, id), vec![text_command]);
-        node.metadata
-            .insert("count_text".to_string(), count_text.to_string());
-        node
-    }
-
-    /// Count-in beat text for a measure number.
-    ///
-    /// - 1-measure count-in: measure 0 gets the full count (1, 2, 3, 4).
-    /// - 2-measure count-in: measure -1 gets the half-time (1 on beat 1,
-    ///   2 on beat 3); measure 0 gets the full count.
-    pub(super) fn get_count_in_text(
-        &self,
-        display_measure_num: i32,
-        beat_idx: usize,
-        _num_beats: usize,
-        count_in_measures: usize,
-    ) -> Option<String> {
-        let count_in = count_in_measures as u8;
-        if count_in == 0 {
-            return None;
-        }
-
-        let first_count_in_measure = 1 - count_in as i32;
-        if display_measure_num < first_count_in_measure || display_measure_num > 0 {
-            return None;
-        }
-
-        let count_in_index = (display_measure_num - first_count_in_measure) as usize;
-        if count_in == 2 && count_in_index == 0 {
-            match beat_idx {
-                0 => Some("1".to_string()),
-                2 => Some("2".to_string()),
-                _ => None,
-            }
-        } else {
-            Some((beat_idx + 1).to_string())
-        }
-    }
-
     /// Compute section letters for consecutive repeats of the same section.
     pub(super) fn compute_section_letters(
         &self,
@@ -325,10 +194,6 @@ impl ChartLayoutEngine {
         chart
             .initial_clef
             .unwrap_or(crate::chart::ChartClef::Treble)
-    }
-
-    pub(super) fn section_type_key(&self, section_type: &SectionType) -> String {
-        section_type.key()
     }
 
     pub(super) fn section_type_to_strings(&self, section_type: &SectionType) -> (String, String) {

@@ -252,7 +252,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_measure(&params, &ctx);
+        let (_layout, node) = layout_measure(&params, &ctx);
 
         // Should have staff lines + left barline + right barline
         assert!(node.children.len() >= 3);

@@ -439,7 +439,7 @@ mod tests {
             note_width,
             ..Default::default()
         };
-        let (layout_right, _) = layout_dynamic(&params_right, &ctx);
+        let (_layout_right, _) = layout_dynamic(&params_right, &ctx);
 
         // Left < Center < Right (approximately, depending on width)
         assert!(layout_left.position.x <= layout_center.position.x);

@@ -269,7 +269,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_keysig(&params, &ctx);
+        let (_layout, node) = layout_keysig(&params, &ctx);
 
         // C major has no accidentals
         assert!(node.commands.is_empty());
@@ -284,7 +284,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_keysig(&params, &ctx);
+        let (_layout, node) = layout_keysig(&params, &ctx);
 
         // G major has 1 sharp
         assert_eq!(node.commands.len(), 1);
@@ -299,7 +299,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_keysig(&params, &ctx);
+        let (_layout, node) = layout_keysig(&params, &ctx);
 
         // D major has 2 sharps
         assert_eq!(node.commands.len(), 2);
@@ -314,7 +314,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_keysig(&params, &ctx);
+        let (_layout, node) = layout_keysig(&params, &ctx);
 
         // F major has 1 flat
         assert_eq!(node.commands.len(), 1);
@@ -329,7 +329,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_keysig(&params, &ctx);
+        let (_layout, node) = layout_keysig(&params, &ctx);
 
         // Bb major has 2 flats
         assert_eq!(node.commands.len(), 2);
@@ -346,7 +346,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_keysig(&params, &ctx);
+        let (_layout, node) = layout_keysig(&params, &ctx);
 
         // Should show 3 naturals
         assert_eq!(node.commands.len(), 3);

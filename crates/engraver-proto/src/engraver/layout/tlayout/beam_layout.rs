@@ -649,10 +649,6 @@ const SLASH_STEM_UP_SE_Y: f64 = 1.0;
 const SLASH_STEM_DOWN_NW_X: f64 = 0.0;
 const SLASH_STEM_DOWN_NW_Y: f64 = -1.0;
 
-/// Notehead width for fallback when anchor is unavailable (in staff spaces).
-/// SMuFL noteheadBlack bounding box width.
-const NOTEHEAD_WIDTH: f64 = 1.18;
-
 /// Standard stem width in staff spaces (from MuseScore default).
 const STEM_WIDTH: f64 = 0.12;
 

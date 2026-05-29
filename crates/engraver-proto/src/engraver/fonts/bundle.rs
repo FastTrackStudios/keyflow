@@ -17,7 +17,6 @@ static LELAND_FONT_BYTES: &[u8] = include_bytes!("../../../fonts/Leland.otf");
 static LELAND_METADATA_BYTES: &[u8] = include_bytes!("../../../fonts/leland_metadata.json");
 static LELAND_TEXT_FONT_BYTES: &[u8] = include_bytes!("../../../fonts/LelandText.otf");
 static BRAVURA_FONT_BYTES: &[u8] = include_bytes!("../../../fonts/Bravura.otf");
-static BRAVURA_METADATA_BYTES: &[u8] = include_bytes!("../../../fonts/bravura_metadata.json");
 static FREESANS_FONT_BYTES: &[u8] = include_bytes!("../../../fonts/FreeSans.ttf");
 static MUSEJAZZ_FONT_BYTES: &[u8] = include_bytes!("../../../fonts/MuseJazz.otf");
 static MUSEJAZZ_TEXT_FONT_BYTES: &[u8] = include_bytes!("../../../fonts/MuseJazzText.otf");
