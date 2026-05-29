@@ -696,41 +696,6 @@ fn grid_ticks_to_duration_with_grid(ticks: i64, ppq: u32, grid: ResolvedMelodyGr
     }
 }
 
-fn grid_ticks_to_duration(ticks: i64, ppq: u32) -> String {
-    let eighth = ppq as i64 / 2;
-    let eighths = ((ticks + eighth / 2) / eighth).max(1); // count of eighth notes
-
-    match eighths {
-        1 => "8".to_string(),      // 1 eighth
-        2 => "4".to_string(),      // 2 eighths = quarter
-        3 => ".4".to_string(),     // 3 eighths = dotted quarter
-        4 => "2".to_string(),      // 4 eighths = half
-        5..=6 => ".2".to_string(), // ~6 eighths = dotted half
-        7..=8 => "1".to_string(),  // 8 eighths = whole
-        _ => "1".to_string(),      // longer = whole (ties handled by expand)
-    }
-}
-
-/// Like grid_ticks_to_duration but for melody contexts where we prefer
-/// keeping notes as eighths for better beaming. Only uses quarter/longer
-/// when the gap is clearly >= 2 eighths.
-fn melody_grid_ticks_to_duration(ticks: i64, ppq: u32) -> String {
-    let eighth = ppq as i64 / 2;
-    let eighths = ((ticks + eighth / 2) / eighth).max(1);
-
-    match eighths {
-        1 => "8".to_string(),
-        // For melody: 2 eighths could be two separate eighths with a rest,
-        // or a quarter. Use quarter only for longer gaps.
-        2 => "4".to_string(),
-        3 => ".4".to_string(),
-        4 => "2".to_string(),
-        5..=6 => ".2".to_string(),
-        7..=8 => "1".to_string(),
-        _ => "1".to_string(),
-    }
-}
-
 /// Compress consecutive identical lines by appending ` xN` (e.g., "line" → "line x2").
 fn compress_repeated_lines(input: &str) -> String {
     let mut out: Vec<String> = Vec::new();
@@ -1295,7 +1260,6 @@ fn extract_quoted_name(marker_name: &str) -> Option<String> {
 /// Section layout info for chart generation.
 struct SectionLayout {
     keyflow_type: String,
-    start_measure: i32,
     length: i32,
     start_tick: i64,
     end_tick: i64,
@@ -1325,9 +1289,6 @@ fn calculate_section_lengths(
             continue;
         }
 
-        let start_measure = section
-            .explicit_start_measure
-            .unwrap_or(section.position.measure);
         let start_tick = i64::from(section.tick);
         let next_section_tick = sections.iter().skip(i + 1).find_map(|next| {
             let next_type = section_type_to_keyflow(next.section_type, next.tick <= songstart_tick);
@@ -1365,7 +1326,6 @@ fn calculate_section_lengths(
 
         result.push(SectionLayout {
             keyflow_type: keyflow_type.to_string(),
-            start_measure,
             length: length as i32,
             start_tick,
             end_tick,

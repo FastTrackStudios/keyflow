@@ -1684,6 +1684,11 @@ fn normalize_key_text_with_explicit_mode(s: &str) -> Option<String> {
 ///    minor keys.
 ///
 /// Returns `None` only when the file has no notes and no usable markers.
+///
+/// Unwired: kept (with tests) as a ready utility. The import pipeline
+/// currently derives key from MIDI key-signature markers rather than note
+/// content; wire this in when content-based inference is wanted.
+#[allow(dead_code)]
 #[must_use]
 pub fn detect_key(midi: &MidiFile) -> Option<Key> {
     // (1) Marker-text scan. Any marker whose text resolves through our
@@ -1708,6 +1713,10 @@ pub fn detect_key(midi: &MidiFile) -> Option<Key> {
 /// Builds a 12-bin pitch-class histogram weighted by note duration and
 /// correlates it against the standard major / minor profiles, returning the
 /// key with the highest correlation.
+///
+/// Unwired in the import pipeline; reached only via [`detect_key`] and the
+/// parser unit tests. See `detect_key` for context.
+#[allow(dead_code)]
 #[must_use]
 pub fn detect_key_by_pitch_class(notes: &[MidiNote]) -> Option<Key> {
     if notes.is_empty() {
@@ -1777,6 +1786,7 @@ pub fn detect_key_by_pitch_class(notes: &[MidiNote]) -> Option<Key> {
 /// Convert a pitch-class (0-11) to a keyflow note name, picking the spelling
 /// (sharp vs flat) that matches the typical key-signature convention for that
 /// PC and mode (e.g. PC=1 → `Db` major but `C#` minor).
+#[allow(dead_code)] // helper for the unwired `detect_key_by_pitch_class`
 fn pc_to_keyflow_text(pc: usize, is_major: bool) -> String {
     // Standard circle-of-fifths spellings for the 12 keys, separately for
     // major and minor, chosen to minimize accidental count in the key sig.
