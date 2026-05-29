@@ -120,6 +120,15 @@ impl Chord {
         chord
     }
 
+    /// Replace the triad quality and recompute the interval set. Used to apply
+    /// a key-implied (diatonic) quality to a bare number-system chord after
+    /// parsing — the seventh family / extensions / alterations already on the
+    /// chord then stack on the new triad (so `2` → ii minor, `2:7` → ii m7).
+    pub fn set_triad_quality(&mut self, quality: ChordQuality) {
+        self.quality = quality;
+        self.compute_intervals();
+    }
+
     /// Create a chord with explicit family (seventh type)
     pub fn with_family(root: RootNotation, quality: ChordQuality, family: ChordFamily) -> Self {
         let mut chord = Self {

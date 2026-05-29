@@ -178,6 +178,21 @@ impl RootNotation {
         )
     }
 
+    /// The plain diatonic scale-degree number (1-7) if this root is a bare
+    /// Nashville number with no accidental. Returns `None` for note names,
+    /// Roman numerals (their case already implies quality), chromatic degrees
+    /// like `b3`, or out-of-range numbers. Used to apply the key's implied
+    /// quality to bare number chords.
+    pub fn diatonic_scale_degree(&self) -> Option<u8> {
+        match &self.original_format {
+            RootFormat::ScaleDegree {
+                degree,
+                accidental: None,
+            } if (1..=7).contains(degree) => Some(*degree),
+            _ => None,
+        }
+    }
+
     /// Get the accidental modifier on a key-relative root, if any.
     /// Returns `None` for note names, `Empty`, or unmodified scale degrees / numerals.
     pub fn accidental(&self) -> Option<Accidental> {

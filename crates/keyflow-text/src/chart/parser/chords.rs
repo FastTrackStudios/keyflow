@@ -11,7 +11,7 @@ use crate::chart::melody::{Melody, MelodyNote};
 use crate::chart::types::{
     ChordInstance, KeyChange, Measure, RestInstance, RhythmElement, SpaceInstance,
 };
-use crate::chord::{ChordRhythm, LilySyntax, NotationSystem};
+use crate::chord::{ChordQuality, ChordRhythm, LilySyntax, NotationSystem};
 use crate::key::Key;
 use crate::parsing::{Lexer, TextSpan};
 use crate::primitives::RootNotation;
@@ -3989,6 +3989,20 @@ impl<'a> ChartParser<'a> {
         }
     }
 
+    /// Whether the token explicitly forces a major triad, overriding the key's
+    /// diatonic quality: `2M`, `2maj`, `2Major`, `2:maj`, `2△`, `2^`. Lowercase
+    /// `m`/`dim`/`aug`/`sus` already parse to a non-major quality, so they're
+    /// handled by the quality check — this only catches the major markers.
+    fn token_specifies_major(chord_part: &str, root: &str) -> bool {
+        let rest = chord_part.strip_prefix(root).unwrap_or(chord_part);
+        let rest = rest.strip_prefix(':').unwrap_or(rest);
+        rest.starts_with('M')
+            || rest.starts_with("maj")
+            || rest.starts_with("Maj")
+            || rest.starts_with('△')
+            || rest.starts_with('^')
+    }
+
     /// A bare leading flat degree: `b` followed by a digit 1-7 (`b3`, `b7`).
     fn is_leading_flat_degree(token: &str) -> bool {
         let b = token.as_bytes();
@@ -4205,6 +4219,28 @@ impl<'a> ChartParser<'a> {
             full_symbol = format!("{}/{}", full_symbol, bass);
         }
 
+        // Give a bare number-system chord its key-implied (diatonic) quality:
+        // `2` in C major is ii (minor), `7` is vii° (diminished). The terse
+        // display (full_symbol) is unchanged — only the chord's actual quality
+        // and intervals are set, so a seventh/extension stacks correctly
+        // (`2:7` → ii m7). Skipped under a `!` literal override, when an
+        // explicit quality is written (`2m`, `2M`, `2maj`, `2dim`…), for Roman
+        // numerals (case already carries quality), and chromatic degrees.
+        let infer_diatonic = !is_override
+            && chord.quality == ChordQuality::Major
+            && !Self::token_specifies_major(&chord_part, &root_from_token);
+        if infer_diatonic {
+            if let Some((key, degree)) =
+                current_key.as_ref().zip(chord.root.diatonic_scale_degree())
+            {
+                if let Some(dq) = key.diatonic_quality(degree) {
+                    if dq != ChordQuality::Major {
+                        chord.set_triad_quality(dq);
+                    }
+                }
+            }
+        }
+
         // Get rhythm and duration (push/pull will be applied later)
         let rhythm = chord.duration.clone().unwrap_or(ChordRhythm::Default);
         let duration = rhythm.to_duration(time_sig);
@@ -4315,6 +4351,46 @@ mod tests {
             .iter()
             .flat_map(|m| m.chords.iter().map(|c| c.full_symbol.clone()))
             .collect()
+    }
+
+    /// Parse a full chart (with a key header) and collect each chord's quality.
+    fn chord_qualities(src: &str) -> Vec<String> {
+        parse_chart(src).unwrap().sections[0]
+            .measures()
+            .iter()
+            .flat_map(|m| m.chords.iter().map(|c| format!("{:?}", c.parsed.quality)))
+            .collect()
+    }
+
+    #[test]
+    fn numbers_take_diatonic_quality_in_major_key() {
+        let q = chord_qualities("P\n4/4 120bpm #C\n\nVS\n1 2 3 4 5 6 7\n");
+        assert_eq!(
+            q,
+            [
+                "Major",
+                "Minor",
+                "Minor",
+                "Major",
+                "Major",
+                "Minor",
+                "Diminished"
+            ]
+        );
+    }
+
+    #[test]
+    fn numbers_take_diatonic_quality_in_minor_key() {
+        let q = chord_qualities("P\n4/4 120bpm #Am\n\nVS\n1 2 4 5\n");
+        assert_eq!(q, ["Minor", "Diminished", "Minor", "Minor"]);
+    }
+
+    #[test]
+    fn diatonic_quality_is_overridable() {
+        // !2 = literal major; 2M / 2maj = explicit major; 2m = explicit minor;
+        // 2:7 keeps the diatonic minor and stacks the seventh (Dm7).
+        let q = chord_qualities("P\n4/4 120bpm #C\n\nVS\n!2 2M 2maj 2m 2:7\n");
+        assert_eq!(q, ["Major", "Major", "Major", "Minor", "Minor"]);
     }
 
     #[test]
