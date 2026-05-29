@@ -12,6 +12,12 @@ pub struct ChartParser<'a> {
     /// (before any section). Each section starts from this default unless it
     /// overrides with its own `/Duration`. `None` means no global default.
     default_duration: Option<String>,
+    /// Running tally of the chart's notation system, accumulated from chord
+    /// lines as they're parsed. Used as the fallback scope (after the current
+    /// line) when resolving an ambiguous `b<digit>` root — see
+    /// `resolve_notation_system`.
+    chart_letter_votes: u32,
+    chart_degree_votes: u32,
 }
 
 impl<'a> ChartParser<'a> {
@@ -21,6 +27,8 @@ impl<'a> ChartParser<'a> {
             aliases: HashMap::new(),
             melody_octave_memory: None,
             default_duration: None,
+            chart_letter_votes: 0,
+            chart_degree_votes: 0,
         }
     }
 }

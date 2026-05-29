@@ -175,13 +175,23 @@ impl Chord {
     /// - "Gsus4_2." -> G suspended 4th, dotted half note
     #[instrument(level = "debug", skip(tokens), fields(token_count = tokens.len()))]
     pub fn parse(tokens: &[Token]) -> Result<Self, ParseError> {
+        Self::parse_with_system(tokens, crate::chord::root::NotationSystem::Auto)
+    }
+
+    /// Parse a chord, using a notation-system hint to resolve the ambiguous
+    /// `b<digit>` root (note B vs flat scale degree). See
+    /// [`crate::chord::root::NotationSystem`].
+    pub fn parse_with_system(
+        tokens: &[Token],
+        system: crate::chord::root::NotationSystem,
+    ) -> Result<Self, ParseError> {
         if tokens.is_empty() {
             return Err(ParseError::EmptyInput);
         }
 
         // Step 1: Parse the root (note name, scale degree, or roman numeral)
         trace!("Parsing root from {} tokens", tokens.len());
-        let root_result = root::parse_root(tokens)?;
+        let root_result = root::parse_root_with_system(tokens, system)?;
         let mut consumed = root_result.tokens_consumed;
         debug!(
             "Parsed root: {:?}, consumed {} tokens",

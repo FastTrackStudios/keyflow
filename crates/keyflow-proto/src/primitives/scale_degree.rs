@@ -35,7 +35,9 @@ impl ScaleDegreeToken {
                     });
                     consumed += 1;
                 }
-                TokenType::Flat => {
+                // ASCII `b` lexes as a letter (only the unicode `♭` becomes a
+                // Flat token), so accept it as a flat here too — `b3`, `b7`.
+                TokenType::Flat | TokenType::Letter('b') => {
                     accidental = Some(match accidental {
                         None | Some(Accidental::Natural) => Accidental::Flat,
                         Some(Accidental::Flat) => Accidental::DoubleFlat,

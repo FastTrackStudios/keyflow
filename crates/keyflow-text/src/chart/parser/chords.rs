@@ -11,7 +11,7 @@ use crate::chart::melody::{Melody, MelodyNote};
 use crate::chart::types::{
     ChordInstance, KeyChange, Measure, RestInstance, RhythmElement, SpaceInstance,
 };
-use crate::chord::{ChordRhythm, LilySyntax};
+use crate::chord::{ChordRhythm, LilySyntax, NotationSystem};
 use crate::key::Key;
 use crate::parsing::{Lexer, TextSpan};
 use crate::primitives::RootNotation;
@@ -1763,6 +1763,13 @@ impl<'a> ChartParser<'a> {
         let mut oneshot_revert: Option<(TimeSignature, f64)> = None;
         let mut oneshot_measure_idx: usize = 0;
 
+        // Notation system for this line, used to disambiguate `b<digit>` roots
+        // (note B vs flat degree). Line wins, then the chart parsed so far.
+        let chord_system = self.resolve_notation_system(&tokens_str);
+        // Contribute this line's decisive tokens to the chart-wide tally so
+        // later ambiguous lines can fall back to it.
+        self.record_line_system_votes(&tokens_str);
+
         for (token_idx, token_str) in tokens_str.iter().enumerate() {
             if skip_tokens > 0 {
                 skip_tokens -= 1;
@@ -3156,9 +3163,26 @@ impl<'a> ChartParser<'a> {
             // Parse chord. Pass through the token's byte span in the original line
             // (line-relative) so diagnostics can point at real source positions.
             let token_span = original_token_spans.get(token_idx).copied();
-            let (fb_token, figured_bass_rows) = Self::extract_figured_bass_suffix(effective_token);
-            let (chord_token, suspension_figure) = Self::extract_suspension_suffix(&fb_token);
-            match self.parse_chord_token(&chord_token, section_type, time_sig, token_span) {
+            // In a degree-based context a bare `b<digit>` is a flat scale degree
+            // (`b3` = ♭3), not the note B with a figured-bass/suspension figure.
+            // Skip the suffix extractors so they don't strip the digit.
+            let (chord_token, figured_bass_rows, suspension_figure) = if chord_system
+                == NotationSystem::Degree
+                && Self::is_leading_flat_degree(effective_token)
+            {
+                (effective_token.to_string(), None, None)
+            } else {
+                let (fb_token, fb_rows) = Self::extract_figured_bass_suffix(effective_token);
+                let (ct, susp) = Self::extract_suspension_suffix(&fb_token);
+                (ct, fb_rows, susp)
+            };
+            match self.parse_chord_token(
+                &chord_token,
+                section_type,
+                time_sig,
+                token_span,
+                chord_system,
+            ) {
                 Ok(mut chord) => {
                     if let Some(text) = &display_override {
                         chord.display_override = Some(text.clone());
@@ -3930,6 +3954,93 @@ fn next_utf8_boundary(s: &str, start: usize) -> usize {
 // region:    --- Chord Token Parsing
 
 impl<'a> ChartParser<'a> {
+    /// Classify a chord token's root notation system, for resolving the
+    /// ambiguous `b<digit>` root. `Some(true)` = degree-based (Nashville
+    /// number or Roman numeral), `Some(false)` = letter name, `None` = the
+    /// token doesn't decide (ambiguous `b`+digit, rests, annotations).
+    fn classify_token_system(token: &str) -> Option<bool> {
+        let t = token.trim_start_matches(['>', '.', '\'', '(']);
+        let mut chars = t.chars();
+        let c0 = chars.next()?;
+        let c1 = t.chars().nth(1);
+        let is_degree_digit = |c: char| ('1'..='7').contains(&c);
+        let is_roman = |c: char| matches!(c, 'I' | 'V' | 'i' | 'v');
+        match c0 {
+            c if is_degree_digit(c) => Some(true),            // 1..7
+            'I' | 'V' | 'i' | 'v' => Some(true),              // Roman numeral
+            'A'..='G' => Some(false),                         // note letter (upper)
+            'a' | 'c' | 'd' | 'e' | 'f' | 'g' => Some(false), // note letter (lower)
+            '#' => match c1 {
+                Some(c) if is_degree_digit(c) || is_roman(c) => Some(true),
+                _ => None,
+            },
+            'b' => match c1 {
+                Some(c) if is_roman(c) => Some(true), // bIII (flat Roman)
+                _ => None,                            // b+digit is the ambiguous case
+            },
+            _ => None,
+        }
+    }
+
+    /// Decide a scope's notation system by majority vote of its decisive
+    /// tokens. `None` when there's a tie or no decisive tokens (defer).
+    fn classify_scope<'t>(tokens: impl Iterator<Item = &'t str>) -> Option<bool> {
+        let (mut letter, mut degree) = (0u32, 0u32);
+        for t in tokens {
+            match Self::classify_token_system(t) {
+                Some(true) => degree += 1,
+                Some(false) => letter += 1,
+                None => {}
+            }
+        }
+        match degree.cmp(&letter) {
+            std::cmp::Ordering::Greater => Some(true),
+            std::cmp::Ordering::Less => Some(false),
+            std::cmp::Ordering::Equal => None,
+        }
+    }
+
+    /// A bare leading flat degree: `b` followed by a digit 1-7 (`b3`, `b7`).
+    fn is_leading_flat_degree(token: &str) -> bool {
+        let b = token.as_bytes();
+        b.first() == Some(&b'b') && matches!(b.get(1), Some(d) if (b'1'..=b'7').contains(d))
+    }
+
+    /// Resolve the notation system for an ambiguous `b<digit>` chord: the
+    /// current line wins, then the chart's accumulated system (from earlier
+    /// lines), else `Auto` (which reads `b7` as the note B).
+    fn resolve_notation_system(&self, line_tokens: &[&str]) -> NotationSystem {
+        let to_system = |is_degree: bool| {
+            if is_degree {
+                NotationSystem::Degree
+            } else {
+                NotationSystem::Letter
+            }
+        };
+        // Line scope wins.
+        if let Some(d) = Self::classify_scope(line_tokens.iter().copied()) {
+            return to_system(d);
+        }
+        // Chart scope: tally from earlier chord lines.
+        match self.chart_degree_votes.cmp(&self.chart_letter_votes) {
+            std::cmp::Ordering::Greater => NotationSystem::Degree,
+            std::cmp::Ordering::Less => NotationSystem::Letter,
+            std::cmp::Ordering::Equal => NotationSystem::Auto,
+        }
+    }
+
+    /// Fold a chord line's decisive tokens into the chart-wide system tally, so
+    /// later lines can fall back to it when their own scope is ambiguous.
+    fn record_line_system_votes(&mut self, line_tokens: &[&str]) {
+        for t in line_tokens {
+            match Self::classify_token_system(t) {
+                Some(true) => self.chart_degree_votes += 1,
+                Some(false) => self.chart_letter_votes += 1,
+                None => {}
+            }
+        }
+    }
+
     /// Parse a single chord token
     ///
     /// # Arguments
@@ -3937,12 +4048,14 @@ impl<'a> ChartParser<'a> {
     /// * `section_type` - Current section type for chord memory
     /// * `time_sig` - Current time signature for duration calculation
     /// * `source_span` - Optional source text span for linking back to input
+    /// * `system` - Notation-system hint for resolving an ambiguous `b<digit>`
     pub(super) fn parse_chord_token(
         &mut self,
         token: &str,
         section_type: &SectionType,
         time_sig: TimeSignature,
         source_span: Option<TextSpan>,
+        system: NotationSystem,
     ) -> Result<ChordInstance, String> {
         use crate::chord::Chord;
         use keyflow_proto::chart::commands::Command;
@@ -4012,15 +4125,25 @@ impl<'a> ChartParser<'a> {
         // But NOT rhythm slashes (e.g., "g//", "C///")
         let (chord_part, bass_part) = Self::split_slash_chord(&token_after_pull);
 
-        // Normalize case for chord parsing - capitalize first letter if it's a note name
-        // This allows "cmaj7" to be parsed as "Cmaj7"
-        let normalized_token = Self::normalize_chord_case(&chord_part);
+        // Normalize case for chord parsing - capitalize first letter if it's a
+        // note name. This allows "cmaj7" to be parsed as "Cmaj7". In a
+        // degree-based context, an ambiguous leading `b`+digit (b5/b6/b7) is a
+        // flat scale degree, so keep its `b` lowercase rather than turning it
+        // into the note B.
+        let keep_lowercase_flat = system == NotationSystem::Degree
+            && chord_part.starts_with('b')
+            && chord_part.as_bytes().get(1).is_some_and(u8::is_ascii_digit);
+        let normalized_token = if keep_lowercase_flat {
+            chord_part.to_string()
+        } else {
+            Self::normalize_chord_case(&chord_part)
+        };
 
         // Parse the chord using the Chord parser
         let mut lexer = Lexer::new(normalized_token.clone());
         let tokens = lexer.tokenize();
 
-        let mut chord = Chord::parse(&tokens)
+        let mut chord = Chord::parse_with_system(&tokens, system)
             .map_err(|e| format!("Failed to parse chord '{}': {:?}", chord_part, e))?;
 
         // Add bass note if this is a slash chord
@@ -4169,6 +4292,63 @@ mod tests {
             }
         }
         out
+    }
+
+    /// Collect rendered chord symbols from a parsed line.
+    fn chord_symbols(line: &str) -> Vec<String> {
+        parse_line(line)
+            .iter()
+            .flat_map(|m| m.chords.iter().map(|c| c.full_symbol.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn contextual_b7_letter_line_is_note_b() {
+        assert_eq!(chord_symbols("C F b7 G"), ["C", "F", "B7", "G"]);
+    }
+
+    #[test]
+    fn contextual_b7_number_line_is_flat_degree() {
+        assert_eq!(chord_symbols("1 4 b7 5"), ["1", "4", "b7", "5"]);
+    }
+
+    #[test]
+    fn contextual_b7_roman_line_is_flat_degree() {
+        assert_eq!(chord_symbols("I IV b7 V"), ["I", "IV", "b7", "V"]);
+    }
+
+    #[test]
+    fn contextual_b7_no_context_defaults_to_note_b() {
+        assert_eq!(chord_symbols("b7"), ["B7"]);
+    }
+
+    #[test]
+    fn flat_degrees_two_three_four_parse_in_number_context() {
+        // These get stripped as sus/figured-bass figures on note B unless the
+        // degree context bypasses the suffix extractors.
+        assert_eq!(chord_symbols("1 b2 b3 b4 5"), ["1", "b2", "b3", "b4", "5"]);
+    }
+
+    #[test]
+    fn b9_is_always_note_b_even_in_number_context() {
+        // Scale degrees only reach 7, so `b9` can only be the note B + a 9th.
+        assert_eq!(chord_symbols("1 4 b9 5"), ["1", "4", "B9", "5"]);
+    }
+
+    #[test]
+    fn contextual_b7_falls_back_to_chart_when_line_is_ambiguous() {
+        // A line that is only `b7` follows the chart's number system -> ♭7.
+        let chart = parse_chart("P\n4/4 120bpm #C\n\nVS\n1 4 5 1\nb7\n").expect("parse chart");
+        let syms: Vec<String> = chart
+            .sections
+            .iter()
+            .flat_map(|s| s.measures().iter())
+            .flat_map(|m| m.chords.iter().map(|c| c.full_symbol.clone()))
+            .collect();
+        assert!(
+            syms.contains(&"b7".to_string()),
+            "expected ♭7, got {syms:?}"
+        );
     }
 
     #[test]
