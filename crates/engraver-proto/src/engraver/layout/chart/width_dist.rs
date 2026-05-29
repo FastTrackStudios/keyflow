@@ -9,7 +9,6 @@
 
 use crate::engraver::layout::context::LayoutContext;
 use crate::engraver::layout::text_metrics::TextFontMetrics;
-use crate::engraver::layout::tlayout::HarmonyStyle;
 use crate::engraver::notation::MeasureScene;
 use tracing::debug;
 

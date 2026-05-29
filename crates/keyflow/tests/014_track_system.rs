@@ -8,8 +8,6 @@
 //! - Track serialization
 //! - Round-trip parsing
 
-use keyflow::chart::Chart;
-
 #[test]
 fn test_single_chord_track_default() {
     let input = r#"

@@ -1,4 +1,3 @@
-use keyflow::chart::Chart;
 use keyflow::sections::SectionType;
 
 // ═══════════════════════════════════════════════════════════════════════════

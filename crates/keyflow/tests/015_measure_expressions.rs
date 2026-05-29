@@ -6,8 +6,6 @@
 //! - Relative expressions: VS 8 then VS +1 = 9
 //! - Subtraction: VS 8 then VS -1 = 7
 
-use keyflow::chart::Chart;
-
 #[test]
 fn test_basic_absolute() {
     let input = r#"

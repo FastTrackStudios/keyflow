@@ -9,7 +9,7 @@ use keyflow_proto::chart::notations::{
 };
 use keyflow_proto::chart::types::{Measure, RhythmElement};
 use keyflow_proto::key::ScaleMode;
-use keyflow_proto::time::{Duration, MusicalDuration, MusicalPositionExt, TimeSignature};
+use keyflow_proto::time::{MusicalDuration, MusicalPositionExt, TimeSignature};
 use keyflow_proto::{Chart, ChordRhythm, SectionType};
 
 #[must_use]

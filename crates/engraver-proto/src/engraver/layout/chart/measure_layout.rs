@@ -180,7 +180,7 @@ pub fn distribute_measure_widths_spring(
     base_measure_width: f64,
     min_widths: &[f64],
     spatium: f64,
-    slope: f64,
+    _slope: f64,
     density: f64,
 ) -> Vec<f64> {
     if stretches.is_empty() {

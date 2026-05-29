@@ -20,7 +20,6 @@ use crate::time::{
     AbsolutePosition, MusicalDuration, MusicalPosition, MusicalPositionExt, TimeSignature,
     TimeSignatureExt,
 };
-use keyflow_proto::chart::commands::Command;
 use keyflow_proto::chart::{
     Dynamic, DynamicLevel, FiguredBass, FiguredBassRow, Hairpin, HairpinKind, Placement,
     RepeatMark, StaffText, SuspensionFigure, Volta,
@@ -1604,7 +1603,7 @@ impl<'a> ChartParser<'a> {
         section_type: &SectionType,
         section_measure_count: Option<usize>,
         default_chord_length: Option<(ChordRhythm, MusicalDuration)>,
-        mut default_melody_duration: Option<String>,
+        default_melody_duration: Option<String>,
         default_melody_octave: Option<u8>,
     ) -> Result<Vec<Measure>, String> {
         self.parse_chord_line_inner(
@@ -3561,7 +3560,7 @@ impl<'a> ChartParser<'a> {
                     default_melody_octave,
                 )?);
             } else {
-                let mut parsed = self.parse_chord_line_inner(
+                let parsed = self.parse_chord_line_inner(
                     trimmed,
                     section_type,
                     Some(1),
@@ -3669,7 +3668,7 @@ impl<'a> ChartParser<'a> {
                 continue;
             }
 
-            let mut parsed = self.parse_chord_line_inner(
+            let parsed = self.parse_chord_line_inner(
                 trimmed,
                 section_type,
                 Some(1),
@@ -3817,7 +3816,7 @@ impl<'a> ChartParser<'a> {
         let mut parts = Vec::new();
         let mut current = String::new();
         let mut brace_depth = 0usize;
-        let mut chars = input.chars().peekable();
+        let chars = input.chars().peekable();
 
         for ch in chars {
             match ch {

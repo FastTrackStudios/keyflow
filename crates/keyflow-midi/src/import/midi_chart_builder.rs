@@ -319,7 +319,7 @@ fn extract_melody_for_section(
     // Legacy aliases used elsewhere in the function. `eighth` here is the
     // quantization unit for snapping; `quarter` is unchanged.
     let eighth = grid_unit;
-    let quarter = ppq as i64;
+    let _quarter = ppq as i64;
 
     // Step 1: Dequantize swing and snap to eighth-note grid.
     // For melody transcription, we snap ALL onsets to the nearest eighth-note
@@ -456,7 +456,7 @@ fn extract_melody_for_section(
         let mut pitch_name = format_pitch_name(&pitch, key_spelling.as_ref());
 
         // Check if we need a natural sign to cancel a previous accidental
-        let pitch_class = note.pitch % 12; // 0-11
+        let _pitch_class = note.pitch % 12; // 0-11
         let diatonic_class = pitch.class.staff_offset() as u8; // 0-6 (C-B)
         let current_alteration = pitch.alteration;
 
@@ -2567,9 +2567,9 @@ fn format_measure(
                             *is_staccato,
                         );
 
-                        let mut adjusted_beats = *beats;
+                        let adjusted_beats = *beats;
 
-                        let next_is_pushed = elements.get(idx + 1).is_some_and(|next| {
+                        let _next_is_pushed = elements.get(idx + 1).is_some_and(|next| {
                             matches!(
                                 next,
                                 MeasureElement::Chord {

@@ -1,4 +1,3 @@
-use keyflow::chart::Chart;
 // Duration trait removed - unused
 
 #[test]

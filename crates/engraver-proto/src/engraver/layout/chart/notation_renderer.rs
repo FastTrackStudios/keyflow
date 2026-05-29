@@ -26,7 +26,7 @@ use kurbo::{Affine, Point, Rect};
 use vello::peniko::Color;
 
 use crate::chart::notations::{
-    Dynamic, DynamicLevel, FiguredBass, FiguredBassRow, Hairpin, HairpinKind, Placement, StaffText,
+    Dynamic, DynamicLevel, FiguredBass, Hairpin, HairpinKind, Placement, StaffText,
     SuspensionFigure, Volta,
 };
 use crate::engraver::layout::shape::{Shape, ShapeElement};
@@ -1010,6 +1010,7 @@ pub fn autoplace_text_node(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::chart::notations::FiguredBassRow;
 
     #[test]
     fn classical_dynamics_render_red() {

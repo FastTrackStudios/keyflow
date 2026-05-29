@@ -25,7 +25,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use keyflow::Chart;
 use keyflow::engraver::layout::chart::{ChartLayoutConfig, ChartLayoutEngine, LayoutMode};
 use keyflow::engraver::style::MStyle;
 

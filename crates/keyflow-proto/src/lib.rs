@@ -18,9 +18,7 @@ pub mod sections;
 pub mod services;
 pub mod time;
 
-pub(crate) mod ast {
-    pub(crate) use keyflow_syntax::ast::*;
-}
+pub(crate) mod ast {}
 
 pub(crate) mod parsing {
     pub(crate) use keyflow_syntax::parsing::*;

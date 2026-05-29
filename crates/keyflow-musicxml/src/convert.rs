@@ -24,11 +24,11 @@
 
 use musicxml::datatypes::{
     BackwardForward, BarStyle as XmlBarStyle, HarmonyArrangement, StartStop, StartStopDiscontinue,
-    UpDownStopContinue, WedgeType,
+    WedgeType,
 };
 use musicxml::elements::{
-    Barline, Direction, DirectionType, DirectionTypeContents, MeasureElement, MeasureStyleContents,
-    PartElement, ScorePartwise, Time, Words,
+    Barline, Direction, DirectionTypeContents, MeasureElement, MeasureStyleContents, PartElement,
+    ScorePartwise, Time, Words,
 };
 
 use keyflow_proto::chart::notations::{
@@ -807,8 +807,8 @@ fn close_open_voltas_at_new_section(
 
     let to_close = open_voltas
         .iter()
-        .filter(|&(key, open)| (open.measure_idx < current_idx))
-        .map(|(key, open)| key.clone())
+        .filter(|&(_key, open)| open.measure_idx < current_idx)
+        .map(|(key, _open)| key.clone())
         .collect::<Vec<_>>();
 
     for key in to_close {
@@ -1184,7 +1184,7 @@ fn melody_note_from_xml(
     // Tie info: a single note can carry both <tie type="start"/> and
     // <tie type="stop"/> (mid-chain of a sustained pitch). Honor both flags
     // independently so callers can model the whole chain.
-    let (info_ties): &[musicxml::elements::Tie] = match &n.content.info {
+    let info_ties: &[musicxml::elements::Tie] = match &n.content.info {
         NoteType::Normal(info) => &info.tie,
         NoteType::Cue(_) | NoteType::Grace(_) => &[],
     };

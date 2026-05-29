@@ -3,8 +3,6 @@
 //! Tests the <Build>, <Down>, <Go Crazy> dynamic marking syntax
 //! Note: We use angle brackets <> to avoid conflict with custom section syntax []
 
-use keyflow::chart::Chart;
-
 #[test]
 fn test_standalone_dynamic_marking() {
     let input = r#"

@@ -290,7 +290,7 @@ impl MelodyNote {
             s = s[..s.len() - 1].trim_end();
         }
 
-        let (pitch_part, duration, dotted, triplet, underscore_form) =
+        let (pitch_part, duration, dotted, triplet, _underscore_form) =
             Self::split_pitch_and_duration(s)?;
 
         if let Some((group_modifier, inner)) = split_chord_note_group_pitch_part(pitch_part) {

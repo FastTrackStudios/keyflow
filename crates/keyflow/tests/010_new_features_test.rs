@@ -7,7 +7,7 @@
 //! - Custom commands (/fermata, /accent)
 //! - Settings system (/SMART_REPEATS=true)
 
-use keyflow::chart::{Chart, Command};
+use keyflow::chart::Command;
 
 #[test]
 fn test_comment_syntax() {

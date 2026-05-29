@@ -14,7 +14,6 @@
 //! - Key: G major
 
 use keyflow::chart::Chart;
-use keyflow::chord::ChordRhythm;
 use keyflow::time::TimeSignature;
 
 // =============================================================================

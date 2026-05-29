@@ -7,8 +7,6 @@
 //! - Octave modifiers (' and ,)
 //! - Relative pitch mode
 
-use keyflow::chart::Chart;
-
 #[test]
 fn test_melody_variable_definition() {
     let input = r#"

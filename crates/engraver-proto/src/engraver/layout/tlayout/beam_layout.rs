@@ -312,7 +312,7 @@ pub fn layout_beam(notes: &[BeamNote], spatium: f64, config: &BeamLayoutConfig) 
     let beam_run = end_anchor_x - start_anchor_x;
 
     for note in notes.iter() {
-        let note_y = note.y_center(spatium);
+        let _note_y = note.y_center(spatium);
 
         // Calculate the actual stem X position (Middle anchor - center of stem)
         let stem_x = stem_x_for_note(note, stem_dir, spatium);

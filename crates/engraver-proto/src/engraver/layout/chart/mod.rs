@@ -65,19 +65,11 @@ pub use collision::{ChordCollisionContext, resolve_chord_positions};
 use std::sync::Arc;
 
 use crate::Chart;
-use crate::chord::LilySyntax;
 use crate::engraver::layout::context::{LayoutContext, LayoutContextOwned};
 use crate::engraver::layout::orchestrator::{PageLayout, PageMargins, SystemLayout};
 use crate::engraver::layout::segment::SegmentType;
-use crate::engraver::layout::segment_list::SegmentList;
 use crate::engraver::layout::text_metrics::TextFontMetrics;
-use crate::engraver::layout::tlayout::{
-    BarlineType, ClefParams, ClefType, HarmonyParams, HarmonyStyle, MarginLabelParams,
-    NoteHeadType, RestDuration, RestParams, SlurDirection, SlurEndpoint, SlurTieConfig,
-    TimeSigParams, TimeSigType, layout_clef, layout_margin_label, layout_rest, layout_tie,
-    layout_timesig,
-};
-use crate::engraver::notation::{Duration, MeasureBuilder, MeasureScene, RhythmEntry};
+use crate::engraver::layout::tlayout::{BarlineType, HarmonyStyle};
 use crate::engraver::scene::id::{ElementType, SemanticId};
 use crate::engraver::scene::node::SceneNode;
 use crate::engraver::scene::paint::PaintCommand;
@@ -86,9 +78,7 @@ use crate::engraver::style::MStyle;
 use crate::key::KeySpelling;
 use crate::sections::SectionType;
 use kurbo::{Affine, Rect};
-use rhythm_builder::{NoteHeadOverride, RhythmBuildConfig, RhythmSource};
 use tracing::debug;
-use vello::peniko::Color;
 
 fn key_signature_fifths(chart: &Chart) -> i8 {
     chart
@@ -1221,24 +1211,23 @@ impl ChartLayoutEngine {
                 // Calculate weights and minimum widths for each measure
                 // Weights come from rhythm builder (handles triplets, etc.)
                 // Min widths come from pre-measured chord symbol widths (Pass 1 results)
-                let (mut measure_weights, measure_min_widths): (Vec<f64>, Vec<f64>) =
-                    measure_indices
-                        .iter()
-                        .filter_map(|&idx| all_measures.get(idx).map(|m| (idx, m)))
-                        .map(|(idx, m)| {
-                            // Weight still uses rhythm builder (correct for triplets/complex rhythms)
-                            let weight = self.estimate_measure_content_weight(m, &text_metrics);
+                let (measure_weights, measure_min_widths): (Vec<f64>, Vec<f64>) = measure_indices
+                    .iter()
+                    .filter_map(|&idx| all_measures.get(idx).map(|m| (idx, m)))
+                    .map(|(idx, m)| {
+                        // Weight still uses rhythm builder (correct for triplets/complex rhythms)
+                        let weight = self.estimate_measure_content_weight(m, &text_metrics);
 
-                            // Min width from pre-measured chord widths (Pass 1)
-                            let global_idx = global_section_measure_offset + idx;
-                            let min_width = chart_measurements
-                                .get(global_idx)
-                                .map(|m| m.min_width)
-                                .unwrap_or(0.0);
+                        // Min width from pre-measured chord widths (Pass 1)
+                        let global_idx = global_section_measure_offset + idx;
+                        let min_width = chart_measurements
+                            .get(global_idx)
+                            .map(|m| m.min_width)
+                            .unwrap_or(0.0);
 
-                            (weight, min_width)
-                        })
-                        .unzip();
+                        (weight, min_width)
+                    })
+                    .unzip();
 
                 // Calculate base measure width based on mode
                 let base_measure_width = if self.config.snippet_mode {
@@ -1326,7 +1315,7 @@ impl ChartLayoutEngine {
                 // measure's local melody extent, so a single high note in one
                 // measure no longer pushes chord symbols up across the whole
                 // system.
-                let chord_y = staff_y + constants::CHORD_Y_OFFSET - melody_extra_above;
+                let _chord_y = staff_y + constants::CHORD_Y_OFFSET - melody_extra_above;
 
                 // Add section label for first system of section (skip for count-in)
                 let mut section_start_dynamic_stack = None;
@@ -1497,7 +1486,7 @@ impl ChartLayoutEngine {
                             .get(&measure_idx)
                             .filter(|_| local_measure_idx != 0)
                         {
-                            let mut kc_node = key_change_indicator_node(
+                            let kc_node = key_change_indicator_node(
                                 kc,
                                 measure_x,
                                 staff_y,
@@ -2398,24 +2387,23 @@ impl ChartLayoutEngine {
                 // Calculate weights and minimum widths for each measure
                 // Weights come from rhythm builder (handles triplets, etc.)
                 // Min widths come from pre-measured chord symbol widths (Pass 1 results)
-                let (mut measure_weights, measure_min_widths): (Vec<f64>, Vec<f64>) =
-                    measure_indices
-                        .iter()
-                        .filter_map(|&idx| all_measures.get(idx).map(|m| (idx, m)))
-                        .map(|(idx, m)| {
-                            // Weight still uses rhythm builder (correct for triplets/complex rhythms)
-                            let weight = self.estimate_measure_content_weight(m, &text_metrics);
+                let (measure_weights, measure_min_widths): (Vec<f64>, Vec<f64>) = measure_indices
+                    .iter()
+                    .filter_map(|&idx| all_measures.get(idx).map(|m| (idx, m)))
+                    .map(|(idx, m)| {
+                        // Weight still uses rhythm builder (correct for triplets/complex rhythms)
+                        let weight = self.estimate_measure_content_weight(m, &text_metrics);
 
-                            // Min width from pre-measured chord widths (Pass 1)
-                            let global_idx = global_section_measure_offset + idx;
-                            let min_width = chart_measurements
-                                .get(global_idx)
-                                .map(|m| m.min_width)
-                                .unwrap_or(0.0);
+                        // Min width from pre-measured chord widths (Pass 1)
+                        let global_idx = global_section_measure_offset + idx;
+                        let min_width = chart_measurements
+                            .get(global_idx)
+                            .map(|m| m.min_width)
+                            .unwrap_or(0.0);
 
-                            (weight, min_width)
-                        })
-                        .unzip();
+                        (weight, min_width)
+                    })
+                    .unzip();
 
                 // Distribute width proportionally using spring physics
                 let has_spacing_expansion = self.has_spacing_expander(
@@ -2469,7 +2457,7 @@ impl ChartLayoutEngine {
                 )));
 
                 // Place chord symbols above the highest note content (MuseScore skyline approach)
-                let chord_y = staff_y + constants::CHORD_Y_OFFSET - melody_extra_above;
+                let _chord_y = staff_y + constants::CHORD_Y_OFFSET - melody_extra_above;
 
                 // Add section label for first system of section (skip for count-in)
                 let mut section_start_dynamic_stack = None;
@@ -2616,7 +2604,7 @@ impl ChartLayoutEngine {
                             .get(&measure_idx)
                             .filter(|_| local_measure_idx != 0)
                         {
-                            let mut kc_node = key_change_indicator_node(
+                            let kc_node = key_change_indicator_node(
                                 kc,
                                 measure_x,
                                 staff_y,

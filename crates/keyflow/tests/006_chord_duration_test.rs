@@ -1,4 +1,3 @@
-use keyflow::chart::Chart;
 use keyflow::chord::ChordRhythm;
 use keyflow::sections::SectionType;
 use keyflow::time::MusicalPositionExt;

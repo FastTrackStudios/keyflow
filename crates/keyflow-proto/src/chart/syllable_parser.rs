@@ -86,7 +86,7 @@ impl SyllableParser {
         let mut chords = Vec::new();
         let mut current_chord: Option<String> = None;
         let mut in_bracket = false;
-        let mut chars = text.chars().peekable();
+        let chars = text.chars().peekable();
 
         for ch in chars {
             match ch {

@@ -647,7 +647,7 @@ mod tests {
 
     #[test]
     fn test_lyric_line_full_text() {
-        let mut line = LyricLine::new(vec![
+        let line = LyricLine::new(vec![
             LyricSyllable::new("Twinkle"),
             LyricSyllable::new("twinkle").hyphenated(),
             LyricSyllable::new("little"),
