@@ -4126,13 +4126,15 @@ impl<'a> ChartParser<'a> {
         let (chord_part, bass_part) = Self::split_slash_chord(&token_after_pull);
 
         // Normalize case for chord parsing - capitalize first letter if it's a
-        // note name. This allows "cmaj7" to be parsed as "Cmaj7". In a
-        // degree-based context, an ambiguous leading `b`+digit (b5/b6/b7) is a
-        // flat scale degree, so keep its `b` lowercase rather than turning it
-        // into the note B.
-        let keep_lowercase_flat = system == NotationSystem::Degree
-            && chord_part.starts_with('b')
-            && chord_part.as_bytes().get(1).is_some_and(u8::is_ascii_digit);
+        // note name. This allows "cmaj7" to be parsed as "Cmaj7". A leading
+        // ASCII `b` is a flat, though: keep it lowercase when it precedes a
+        // Roman numeral (`bIII` — always unambiguous) or a digit in a
+        // degree-based context (`b7` = ♭7), instead of turning it into note B.
+        let second = chord_part.as_bytes().get(1).copied();
+        let next_is_roman = matches!(second, Some(b'I' | b'V' | b'i' | b'v'));
+        let next_is_digit = second.is_some_and(|c| c.is_ascii_digit());
+        let keep_lowercase_flat = chord_part.starts_with('b')
+            && (next_is_roman || (next_is_digit && system == NotationSystem::Degree));
         let normalized_token = if keep_lowercase_flat {
             chord_part.to_string()
         } else {
@@ -4300,6 +4302,13 @@ mod tests {
             .iter()
             .flat_map(|m| m.chords.iter().map(|c| c.full_symbol.clone()))
             .collect()
+    }
+
+    #[test]
+    fn flat_roman_roots_parse_in_a_chart_line() {
+        // `normalize_chord_case` must not uppercase the leading flat into note B.
+        assert_eq!(chord_symbols("I bIII IV"), ["I", "bIII", "IV"]);
+        assert_eq!(chord_symbols("i bvi V"), ["im", "bvim", "V"]);
     }
 
     #[test]
