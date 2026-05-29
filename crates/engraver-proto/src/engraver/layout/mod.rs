@@ -60,10 +60,7 @@ pub use context::{
     LayoutConfiguration, LayoutContext, LayoutContextOwned, LayoutMode, LayoutState,
 };
 pub use kerning::{KerningType, SpacingPadding, SpacingPaddingPixels};
-pub use orchestrator::{
-    LayoutEngine, LayoutEngineBuilder, LayoutEngineConfig, LayoutResult, PageLayout, PageMargins,
-    SystemLayout, layout_score, layout_score_with_config,
-};
+pub use orchestrator::{PageLayout, PageMargins, SystemLayout};
 pub use segment::{ElementId, Segment, SegmentType, VOICES};
 pub use segment_list::SegmentList;
 pub use shape::{Shape, ShapeElement};

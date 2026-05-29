@@ -58,8 +58,6 @@ pub use api::prelude as api_prelude;
 #[cfg(feature = "engraver")]
 pub use engraver::error::{Error, Result};
 #[cfg(feature = "engraver")]
-pub use engraver::model::{Measure, MusicElement, Part, Score, Voice};
-#[cfg(feature = "engraver")]
 pub use engraver::style::{MStyle, Sid, StyleValue};
 #[cfg(feature = "engraver")]
 pub use engraver::{

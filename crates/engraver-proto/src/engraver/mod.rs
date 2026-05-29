@@ -51,9 +51,6 @@ pub mod ui;
 // Error types
 pub use error::{Error, Result};
 
-// Model types
-pub use model::{Measure, MusicElement, Part, Score, Voice};
-
 // Style types
 pub use style::{MStyle, Sid, StyleValue};
 

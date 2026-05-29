@@ -1,73 +1,40 @@
-//! Score data model for music notation.
+//! Shared notation primitives used by the chart layout pipeline.
 //!
-//! This module defines the core data structures for representing musical scores,
-//! from individual notes to complete multi-part compositions.
-
-// region:    --- Modules
+//! This module once held a full MuseScore-style score model
+//! (`Score`/`Part`/`Voice`/`Measure`/`Note`/…). That model was superseded by
+//! the chart-centric pipeline, which operates directly on
+//! `keyflow_proto::Chart`. Only the small, self-contained leaf types still
+//! consumed by layout remain here:
+//!
+//! - [`DurationKind`]/[`Duration`] — note/rest duration values (quantize + notation)
+//! - [`PaperSize`]/[`Margins`] — page geometry presets (chart layout config + style)
+//! - [`NoteHead`] — notehead glyph selection (melody/rhythm rendering)
+//! - [`Pitch`]/[`PitchClass`]/[`Octave`] — melody pitch helpers (chart layout)
+//! - [`ElementId`] — opaque element handle used by collision/skyline layout
 
 mod duration;
-mod element;
-mod header;
-mod layout;
-mod measure;
-mod measure_layout;
 mod note;
 mod page_style;
-mod part;
 mod pitch;
-mod score;
-
-// endregion: --- Modules
-
-// region:    --- Re-exports
 
 pub use duration::{Duration, DurationKind};
-pub use element::{ChordSymbol, Clef, ElementId, KeySignature, MusicElement, Rest, TimeSignature};
-pub use header::{
-    ComputedHeaderLayout, HeaderFrameConfig, HeaderStyles, HeaderTextAlign, HeaderTextStyle,
-    ScoreHeader,
-};
-pub use layout::{
-    LayoutBreak, LineBreakPolicy, PageContentBounds, PageInfo, PageLayout, PageLayoutConfig,
-    RehearsalMark, RehearsalMarkStyle, SystemInfo, SystemLayout, SystemYPosition,
-    compute_all_system_y_positions, compute_page_layout, compute_page_layout_mut,
-    compute_system_layout, spread_systems_on_page,
-};
-pub use measure::Measure;
-pub use measure_layout::{
-    BeatPosition, MeasureInfo, MeasureLayout, MeasureLayoutConfig, calculate_beat_positions,
-    compute_measure_layouts, justify_measure_layouts,
-};
-pub use note::{Accidental, Note, NoteHead, Stem};
-pub use page_style::{LineBreakConfig, Margins, PageStyle, PaperSize, StaffConfig, SystemSpacing};
-pub use part::{Part, PartId};
+pub use note::NoteHead;
+pub use page_style::{Margins, PaperSize};
 pub use pitch::{Octave, Pitch, PitchClass};
-pub use score::{LayoutSettings, Score, ScoreMetadata};
-
-// endregion: --- Re-exports
-
-// region:    --- Voice
 
 use serde::{Deserialize, Serialize};
 
-/// Voice within a measure - a single melodic/rhythmic line.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct Voice {
-    /// Elements in this voice (notes, rests, chords, etc.)
-    pub elements: Vec<MusicElement>,
-}
+/// Unique identifier for a music element (for layout references).
+///
+/// Used by the layout system to track elements during positioning
+/// and collision detection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ElementId(pub usize);
 
-impl Voice {
-    /// Create a new empty voice.
+impl ElementId {
+    /// Create a new element ID.
     #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Add an element to this voice.
-    pub fn add(&mut self, element: MusicElement) {
-        self.elements.push(element);
+    pub const fn new(id: usize) -> Self {
+        Self(id)
     }
 }
-
-// endregion: --- Voice
