@@ -6,7 +6,7 @@
 //! engine impl into something readable without changing behaviour.
 
 use kurbo::Point;
-use vello::peniko::Color;
+use peniko::Color;
 
 use crate::Chart;
 use crate::engraver::layout::context::LayoutContext;

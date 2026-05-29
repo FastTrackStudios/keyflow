@@ -470,7 +470,7 @@ struct MeasureLayoutParams<'a> {
     time_signature: (u8, u8),
     /// When `include_time_sig` is set, the color of the rendered meter glyph.
     /// `None` = default black; a mid-chart meter change passes red.
-    time_sig_color: Option<vello::peniko::Color>,
+    time_sig_color: Option<peniko::Color>,
     /// Chart-level clef used to map melody pitches to staff lines so the
     /// rendered note sits at the correct height for the chosen clef.
     clef: crate::chart::ChartClef,
@@ -480,8 +480,8 @@ struct MeasureLayoutParams<'a> {
 }
 
 /// Red used to highlight mid-chart meter and key changes so they are obvious.
-fn change_highlight_color() -> vello::peniko::Color {
-    vello::peniko::Color::from_rgba8(0xCC, 0x00, 0x00, 0xFF)
+fn change_highlight_color() -> peniko::Color {
+    peniko::Color::from_rgba8(0xCC, 0x00, 0x00, 0xFF)
 }
 
 /// Build a red, in-place key-change indicator (cancelling naturals + the new
@@ -667,7 +667,7 @@ impl ChartLayoutEngine {
         if !result.scene.children.is_empty() {
             let new_background = SceneNode::anonymous_leaf(vec![PaintCommand::filled_rect(
                 Rect::new(page_offset, page_offset, final_width, final_height),
-                vello::peniko::Color::WHITE,
+                peniko::Color::WHITE,
             )]);
             result.scene.children[0] = new_background;
         }
@@ -690,7 +690,7 @@ impl ChartLayoutEngine {
                         final_width,
                         final_height + content_above_page,
                     ),
-                    vello::peniko::Color::WHITE,
+                    peniko::Color::WHITE,
                 )]);
                 result.scene.children[0] = new_background;
             }

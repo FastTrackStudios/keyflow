@@ -5,7 +5,7 @@
 //! All chart types and parsing functionality is re-exported from `keyflow-proto`.
 
 // Re-export all types from keyflow-proto for convenience
-#[cfg(feature = "engraver")]
+#[cfg(feature = "svg")]
 pub use engraver;
 #[cfg(feature = "live")]
 pub use keyflow_live as live;

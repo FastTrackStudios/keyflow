@@ -9,7 +9,7 @@ use crate::engraver::layout::tlayout::BarlineType;
 use crate::engraver::scene::node::SceneNode;
 use crate::engraver::scene::paint::{FontStyle, FontWeight, PaintCommand, TextAnchor};
 use kurbo::Rect;
-use vello::peniko::Color;
+use peniko::Color;
 
 /// Staff line thickness as a fraction of spatium.
 ///

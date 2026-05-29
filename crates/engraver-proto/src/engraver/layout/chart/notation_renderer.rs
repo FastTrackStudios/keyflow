@@ -23,7 +23,7 @@
 //! integrate with system/measure layout, not with per-segment paint.
 
 use kurbo::{Affine, Point, Rect};
-use vello::peniko::Color;
+use peniko::Color;
 
 use crate::chart::notations::{
     Dynamic, DynamicLevel, FiguredBass, Hairpin, HairpinKind, Placement, StaffText,

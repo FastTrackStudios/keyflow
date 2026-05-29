@@ -17,9 +17,9 @@ use keyflow_proto::chart::notations::Placement;
 use keyflow_proto::chart::types::Measure;
 use keyflow_proto::time::MusicalPositionExt;
 use kurbo::{Affine, Point};
+use peniko::Color;
 use std::path::PathBuf;
 use std::sync::Arc;
-use vello::peniko::Color;
 
 /// Create a static MStyle for testing (leaked for 'static lifetime).
 fn test_style() -> &'static MStyle {

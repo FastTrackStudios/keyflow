@@ -6,8 +6,12 @@
 //!
 //! All exporters take a SceneNode and produce output in the target format.
 
+// PDF export pulls in the printpdf/svg2pdf/usvg stack; only available with the
+// full `engraver` feature. SVG export is pure-CPU and available under `svg`.
+#[cfg(feature = "engraver")]
 pub mod pdf;
 pub mod svg;
 
+#[cfg(feature = "engraver")]
 pub use pdf::{PdfExportConfig, PdfExportError, PdfSerializer};
 pub use svg::{SvgExportConfig, SvgSerializer};

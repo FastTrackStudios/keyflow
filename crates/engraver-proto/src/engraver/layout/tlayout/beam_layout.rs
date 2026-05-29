@@ -7,8 +7,8 @@
 //! - Stem length adjustment
 
 use kurbo::{BezPath, Point, Rect};
+use peniko::Color;
 use tracing::debug;
-use vello::peniko::Color;
 
 use crate::engraver::scene::paint::PaintCommand;
 

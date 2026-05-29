@@ -7,8 +7,8 @@
 //! Based on patterns from anyrender's `PaintScene` trait.
 
 use kurbo::{BezPath, Point, Rect, Shape};
+use peniko::Color;
 use serde::{Deserialize, Serialize};
-use vello::peniko::Color;
 
 /// A paint command representing a single drawing operation.
 ///

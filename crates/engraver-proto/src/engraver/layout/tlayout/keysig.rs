@@ -3,7 +3,7 @@
 //! Handles layout of key signatures with sharps or flats.
 
 use kurbo::{Point, Rect};
-use vello::peniko::Color;
+use peniko::Color;
 
 use crate::engraver::layout::context::LayoutContext;
 use crate::engraver::layout::shape::Shape;

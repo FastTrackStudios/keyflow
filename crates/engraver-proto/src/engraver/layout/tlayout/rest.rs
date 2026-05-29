@@ -3,7 +3,7 @@
 //! Handles layout of rest symbols for different durations.
 
 use kurbo::{Point, Rect};
-use vello::peniko::Color;
+use peniko::Color;
 
 use crate::engraver::layout::context::LayoutContext;
 use crate::engraver::layout::shape::Shape;

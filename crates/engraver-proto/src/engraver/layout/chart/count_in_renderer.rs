@@ -18,7 +18,7 @@ use crate::engraver::scene::node::SceneNode;
 use crate::engraver::scene::paint::{FontStyle, FontWeight, PaintCommand, TextAnchor};
 use crate::engraver::style::{MStyle, Sid, StyleValue};
 use kurbo::{Affine, Point};
-use vello::peniko::Color;
+use peniko::Color;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct CountInPulse {

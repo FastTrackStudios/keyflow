@@ -3534,6 +3534,7 @@ dependencies = [
  "macro_rules_attribute",
  "parley 0.2.0",
  "pdf-writer",
+ "peniko 0.6.1",
  "pollster 0.4.0",
  "printpdf",
  "regex",

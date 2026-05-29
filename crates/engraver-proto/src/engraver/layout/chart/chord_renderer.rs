@@ -23,7 +23,7 @@
 //! To disable collision detection, set `min_chord_symbol_gap = 0.0` in config.
 
 use kurbo::{Rect, Vec2};
-use vello::peniko::Color;
+use peniko::Color;
 
 use crate::chart::commands::Command;
 use crate::chart::types::{ChordInstance, Measure, RhythmElement};

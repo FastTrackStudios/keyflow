@@ -39,6 +39,7 @@ pub mod layout;
 pub mod model;
 pub mod notation;
 pub mod quantize;
+#[cfg(feature = "wgpu")]
 pub mod renderer;
 pub mod scene;
 pub mod style;

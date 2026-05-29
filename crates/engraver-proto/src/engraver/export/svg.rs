@@ -32,7 +32,7 @@ pub struct SvgExportConfig {
     /// Whether to pretty-print the SVG with indentation
     pub pretty_print: bool,
     /// Background color (None for transparent)
-    pub background: Option<vello::peniko::Color>,
+    pub background: Option<peniko::Color>,
     /// Default stroke width
     pub default_stroke_width: f64,
     /// Embedded fonts: (font_family_name, font_data_bytes)
@@ -75,7 +75,7 @@ impl SvgExportConfig {
             embed_glyphs: false,
             precision: 2,
             pretty_print: false,
-            background: Some(vello::peniko::Color::WHITE),
+            background: Some(peniko::Color::WHITE),
             default_stroke_width: 0.5,
             embedded_fonts: Vec::new(),
         }
@@ -239,7 +239,7 @@ impl SvgSerializer {
     ///
     /// When a custom viewBox is set (e.g., for per-page export), the background
     /// is positioned at the viewBox origin so it fills the visible area.
-    fn write_background(&mut self, color: vello::peniko::Color) {
+    fn write_background(&mut self, color: peniko::Color) {
         self.write_indent();
         let width = self.format_coord(self.config.width);
         let height = self.format_coord(self.config.height);
@@ -567,7 +567,7 @@ impl SvgSerializer {
 }
 
 /// Convert a Color to SVG color string.
-fn color_to_svg(color: vello::peniko::Color) -> String {
+fn color_to_svg(color: peniko::Color) -> String {
     let rgba = color.to_rgba8();
     if rgba.a == 255 {
         format!("#{:02x}{:02x}{:02x}", rgba.r, rgba.g, rgba.b)
@@ -751,7 +751,7 @@ mod tests {
     use super::*;
     use crate::engraver::scene::id::ElementType;
     use kurbo::{Point, Rect};
-    use vello::peniko::Color;
+    use peniko::Color;
 
     #[test]
     fn test_empty_scene() {

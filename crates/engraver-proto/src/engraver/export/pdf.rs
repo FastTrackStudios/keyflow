@@ -22,12 +22,12 @@ use std::path::Path;
 use std::sync::Arc;
 
 use kurbo::{Affine, Shape};
+use peniko::Color;
 use printpdf::{
     BuiltinFont, Color as PdfColor, FontId, LinePoint, Mm, Op, ParsedFont, PdfDocument, PdfPage,
     PdfSaveOptions, PdfWarnMsg, Point as PdfPoint, PolygonRing, Pt, TextItem,
 };
 use thiserror::Error;
-use vello::peniko::Color;
 
 use crate::engraver::scene::node::SceneNode;
 use crate::engraver::scene::paint::{FontStyle, FontWeight, LineCap, PaintCommand, TextAnchor};
@@ -1491,7 +1491,7 @@ mod tests {
     use super::*;
     use crate::engraver::scene::id::{ElementType, SemanticId};
     use kurbo::{Point, Rect};
-    use vello::peniko::Color;
+    use peniko::Color;
 
     #[test]
     fn test_default_config() {

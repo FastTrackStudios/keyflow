@@ -33,7 +33,7 @@
 
 pub mod autoplace;
 pub mod boundary;
-#[cfg(feature = "engraver")]
+#[cfg(feature = "svg")]
 pub mod chart;
 pub mod context;
 pub mod kerning;
@@ -70,7 +70,7 @@ pub use springs::{HorizontalSpacingContext, SpacingConfig, Spring, SpringRow};
 pub use text_metrics::TextFontMetrics;
 pub use tlayout::{Layout, LayoutData};
 
-#[cfg(feature = "engraver")]
+#[cfg(feature = "svg")]
 pub use chart::{
     ChartCursor, ChartLayoutEngine, ChartLayoutResult, CursorConfig, CursorRgba, CursorState,
     CursorStyle, HighlightCommand, LayoutMode as ChartLayoutMode, MeasureMelodyData,

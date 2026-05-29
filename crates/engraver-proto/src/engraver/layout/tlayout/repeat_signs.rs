@@ -22,7 +22,7 @@
 //! Reference: MuseScore `marker.cpp`, `jump.cpp`
 
 use kurbo::{Point, Rect};
-use vello::peniko::Color;
+use peniko::Color;
 
 use crate::engraver::scene::id::{ElementType, SemanticId};
 use crate::engraver::scene::{PaintCommand, SceneNode};

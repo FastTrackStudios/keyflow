@@ -9,7 +9,14 @@ default = ["text", "engraver"]
 text = ["dep:keyflow-text"]
 midi = ["dep:keyflow-midi"]
 live = ["dep:keyflow-live"]
-engraver = ["dep:engraver"]
+# CPU layout + SVG export (no GPU). Pair with `text` for `.kf` text → SVG.
+# This is what lightweight / wasm consumers (e.g. an editor rendering `.kf`
+# fences) should enable — it never pulls in wgpu/vello.
+svg = ["dep:engraver", "engraver/svg"]
+# Live GPU renderer (wgpu/vello) on top of `svg`.
+wgpu = ["svg", "engraver/wgpu"]
+# Full engraver: svg + wgpu + PDF export.
+engraver = ["svg", "wgpu", "engraver/engraver"]
 highlighting = ["keyflow-text?/highlighting"]
 midi-import = ["engraver", "engraver/midi-import"]
 
@@ -34,7 +41,7 @@ keyflow-proto = { path = "../keyflow-proto" }
 keyflow-text = { path = "../keyflow-text", optional = true }
 keyflow-midi = { path = "../keyflow-midi", optional = true }
 keyflow-live = { path = "../keyflow-live", optional = true }
-engraver = { path = "../engraver", optional = true, default-features = false, features = ["engraver"] }
+engraver = { path = "../engraver", optional = true, default-features = false }
 
 # WASM-specific dependencies
 [target.'cfg(target_arch = "wasm32")'.dependencies]

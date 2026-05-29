@@ -8,6 +8,9 @@
 // region:    --- Modules
 
 pub mod bundle;
+// Glyph tessellation (lyon) produces vertex buffers for the WGPU renderer;
+// only needed with the `wgpu` feature. The SVG path uses outlines.
+#[cfg(feature = "wgpu")]
 pub mod tessellation;
 
 // endregion: --- Modules
@@ -26,7 +29,8 @@ use std::path::Path;
 pub use bundle::ChartFontBundle;
 pub use smufl::{Glyph, Metadata as SMuFLMetadata, StaffSpaces};
 
-// Re-export tessellation utilities
+// Re-export tessellation utilities (GPU renderer only)
+#[cfg(feature = "wgpu")]
 pub use tessellation::{
     GlyphVertex, GlyphVertexConstructor, LyonPen, TessellatedGlyph, get_glyph_id, tessellate_glyph,
     tessellate_glyph_to_ndc,

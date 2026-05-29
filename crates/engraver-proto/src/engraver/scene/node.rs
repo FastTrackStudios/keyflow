@@ -910,7 +910,7 @@ impl SceneNode {
     /// // Find elements at a specific musical position
     /// let elements = index.find_by_position(4, 2);
     /// ```
-    #[cfg(feature = "engraver")]
+    #[cfg(feature = "svg")]
     #[must_use]
     pub fn build_chart_index(&self) -> crate::ChartIndex {
         let mut index = crate::ChartIndex::new();
@@ -919,7 +919,7 @@ impl SceneNode {
         index
     }
 
-    #[cfg(feature = "engraver")]
+    #[cfg(feature = "svg")]
     fn build_chart_index_recursive(&self, index: &mut crate::ChartIndex, counter: &mut u64) {
         // Try to get source link from metadata
         if let Some(source_link) =
@@ -972,7 +972,7 @@ impl SceneNode {
     ///
     /// This is useful for click-to-highlight: find rendered elements at a
     /// specific position in the source text.
-    #[cfg(feature = "engraver")]
+    #[cfg(feature = "svg")]
     pub fn find_by_source_offset(&self, offset: usize) -> Vec<&SceneNode> {
         self.find_all(|node| {
             node.get_json_metadata::<crate::TextSpan>(metadata_keys::SOURCE_SPAN)
@@ -984,7 +984,7 @@ impl SceneNode {
     ///
     /// This is useful for selection handling: find rendered elements that
     /// correspond to a selected range of source text.
-    #[cfg(feature = "engraver")]
+    #[cfg(feature = "svg")]
     pub fn find_by_source_range(&self, start: usize, end: usize) -> Vec<&SceneNode> {
         self.find_all(|node| {
             node.get_json_metadata::<crate::TextSpan>(metadata_keys::SOURCE_SPAN)
@@ -993,7 +993,7 @@ impl SceneNode {
     }
 
     /// Find all nodes at a specific chart position (measure and beat).
-    #[cfg(feature = "engraver")]
+    #[cfg(feature = "svg")]
     pub fn find_by_chart_position(&self, measure: u32, beat: u32) -> Vec<&SceneNode> {
         self.find_all(|node| {
             node.get_json_metadata::<crate::ChartPosition>(metadata_keys::CHART_POSITION)
@@ -1092,7 +1092,7 @@ fn compute_commands_bounds(commands: &[PaintCommand]) -> Rect {
 mod tests {
     use super::*;
     use crate::engraver::scene::id::ElementType;
-    use vello::peniko::Color;
+    use peniko::Color;
 
     #[test]
     fn test_new_node() {

@@ -7,6 +7,7 @@
 use std::sync::Arc;
 
 use crate::engraver::layout::chart::ChartLayoutEngine;
+#[cfg(feature = "wgpu")]
 use crate::engraver::renderer::scene_renderer::VelloSceneRenderer;
 use crate::engraver::style::MStyle;
 
@@ -154,6 +155,9 @@ impl ChartFontBundle {
     /// Registers the SMuFL font, text font, and all named font aliases so that
     /// `PaintCommand::Text` references resolve correctly. This is the canonical
     /// font configuration — both REAPER and web should use this method.
+    ///
+    /// Only available with the `wgpu` (GPU renderer) feature.
+    #[cfg(feature = "wgpu")]
     #[must_use]
     pub fn configure_renderer<'a>(
         &'a self,

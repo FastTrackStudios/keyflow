@@ -4,8 +4,8 @@
 //! and proper notehead stacking for seconds.
 
 use kurbo::{Point, Rect};
+use peniko::Color;
 use tracing::debug;
-use vello::peniko::Color;
 
 use crate::engraver::layout::context::LayoutContext;
 use crate::engraver::layout::shape::Shape;

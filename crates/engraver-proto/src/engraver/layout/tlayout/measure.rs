@@ -3,7 +3,7 @@
 //! Orchestrates layout of all elements within a measure.
 
 use kurbo::{Point, Rect};
-use vello::peniko::Color;
+use peniko::Color;
 
 use crate::engraver::layout::context::LayoutContext;
 use crate::engraver::layout::segment::{Segment, SegmentType};

@@ -4,7 +4,7 @@
 //! MuseScore's tuplet layout algorithm.
 
 use kurbo::{BezPath, Point, Rect};
-use vello::peniko::Color;
+use peniko::Color;
 
 use crate::engraver::scene::id::{ElementType, SemanticId};
 use crate::engraver::scene::paint::{FontStyle, FontWeight, TextAnchor};

@@ -48,26 +48,30 @@ pub(crate) use keyflow_proto::*;
 
 // region:    --- Modules
 
-#[cfg(feature = "engraver")]
+#[cfg(feature = "svg")]
 pub mod engraver;
 
-#[cfg(feature = "engraver")]
+#[cfg(feature = "svg")]
 pub mod api;
 
 // endregion: --- Modules
 
 // region:    --- Re-exports
 
-#[cfg(feature = "engraver")]
+#[cfg(feature = "svg")]
 pub use api::prelude as api_prelude;
 
-#[cfg(feature = "engraver")]
+#[cfg(feature = "svg")]
 pub use engraver::error::{Error, Result};
-#[cfg(feature = "engraver")]
+#[cfg(feature = "svg")]
 pub use engraver::style::{MStyle, Sid, StyleValue};
-#[cfg(feature = "engraver")]
+#[cfg(feature = "svg")]
 pub use engraver::{
-    export, fonts, import, interaction, layout, model, notation, quantize, renderer, scene, style,
+    export, fonts, import, interaction, layout, model, notation, quantize, scene, style,
 };
+// The GPU renderer (wgpu/vello) is only available with the `wgpu` feature;
+// the `svg` feature provides layout + SVG export without it.
+#[cfg(feature = "wgpu")]
+pub use engraver::renderer;
 
 // endregion: --- Re-exports
