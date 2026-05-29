@@ -3322,7 +3322,30 @@ impl<'a> ChartParser<'a> {
             measures.push(current_measure);
         }
 
-        // Handle repeat count
+        self.expand_phrase_repeats(
+            measures,
+            repeat_count,
+            time_sig,
+            beats_per_measure,
+            section_type,
+            section_measure_count,
+        )
+    }
+
+    /// Resolve a phrase's repeat count (explicit `xN` or auto `x^`) and expand
+    /// the measure list accordingly. Split out of `parse_chord_line_inner`:
+    /// it runs once after the token loop and touches none of the loop state,
+    /// only the completed `measures` plus the prevailing meter and section
+    /// context.
+    fn expand_phrase_repeats(
+        &self,
+        mut measures: Vec<Measure>,
+        repeat_count: RepeatCount,
+        time_sig: TimeSignature,
+        beats_per_measure: f64,
+        section_type: &SectionType,
+        section_measure_count: Option<usize>,
+    ) -> Result<Vec<Measure>, String> {
         let final_repeat_count = match repeat_count {
             RepeatCount::Fixed(count) => count,
             RepeatCount::Auto => {
