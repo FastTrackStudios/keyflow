@@ -1588,6 +1588,11 @@ impl<'a> ChartParser<'a> {
     /// source line (parallel containers, repeats), use
     /// [`Self::parse_chord_line_with_offset`] to shift those spans into the
     /// original-line coordinate system.
+    ///
+    /// Test-only: production parses through
+    /// `parse_chord_line_with_default_chord_length`. Kept as a convenience
+    /// entry point for the parser unit tests.
+    #[cfg(test)]
     pub(super) fn parse_chord_line(
         &mut self,
         line: &str,
@@ -1619,6 +1624,9 @@ impl<'a> ChartParser<'a> {
 
     /// Same as [`Self::parse_chord_line`] but shifts every emitted token span
     /// by `line_byte_offset` so spans line up with the surrounding source.
+    ///
+    /// Test-only: only reached via [`Self::parse_chord_line`].
+    #[cfg(test)]
     #[allow(clippy::too_many_lines)]
     pub(super) fn parse_chord_line_with_offset(
         &mut self,
@@ -3788,79 +3796,6 @@ impl<'a> ChartParser<'a> {
         }
 
         split
-    }
-
-    fn split_top_level_measures(input: &str) -> Vec<String> {
-        let mut parts = Vec::new();
-        let mut current = String::new();
-        let mut chars = input.chars().peekable();
-        let mut parallel_depth = 0usize;
-        let mut brace_depth = 0usize;
-
-        while let Some(ch) = chars.next() {
-            if ch == '<' && chars.peek() == Some(&'<') {
-                parallel_depth += 1;
-                current.push('<');
-                current.push('<');
-                chars.next();
-                continue;
-            }
-
-            if ch == '>' && chars.peek() == Some(&'>') {
-                parallel_depth = parallel_depth.saturating_sub(1);
-                current.push('>');
-                current.push('>');
-                chars.next();
-                continue;
-            }
-
-            match ch {
-                '{' => brace_depth += 1,
-                '}' => brace_depth = brace_depth.saturating_sub(1),
-                '|' if parallel_depth == 0 && brace_depth == 0 => {
-                    parts.push(current.trim().to_string());
-                    current.clear();
-                    continue;
-                }
-                _ => {}
-            }
-
-            current.push(ch);
-        }
-
-        if !current.trim().is_empty() {
-            parts.push(current.trim().to_string());
-        }
-
-        parts
-    }
-
-    fn split_top_level_parallel_branches(input: &str) -> Vec<String> {
-        let mut parts = Vec::new();
-        let mut current = String::new();
-        let mut brace_depth = 0usize;
-        let chars = input.chars().peekable();
-
-        for ch in chars {
-            match ch {
-                '{' => brace_depth += 1,
-                '}' => brace_depth = brace_depth.saturating_sub(1),
-                ';' if brace_depth == 0 => {
-                    parts.push(current.trim().to_string());
-                    current.clear();
-                    continue;
-                }
-                _ => {}
-            }
-
-            current.push(ch);
-        }
-
-        if !current.trim().is_empty() {
-            parts.push(current.trim().to_string());
-        }
-
-        parts
     }
 
     /// Like `split_top_level_measures`, but also returns the byte offset of

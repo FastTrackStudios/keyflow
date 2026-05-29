@@ -502,10 +502,6 @@ fn chord_length_to_syntax(rhythm: &ChordRhythm, time_signature: (u8, u8)) -> Str
     }
 }
 
-fn figured_bass_rows_to_syntax(item: &FiguredBass) -> String {
-    figured_bass_rows(item).join("/")
-}
-
 fn figured_bass_rows_to_text(item: &FiguredBass) -> String {
     figured_bass_rows(item).join(" ")
 }
