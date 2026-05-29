@@ -1349,12 +1349,6 @@ fn tick_to_beat(tick: i64, divisions: u32, beats_per_measure: u8) -> u8 {
     clamped + 1
 }
 
-fn position_from_beat(_beat: u8) -> AbsolutePosition {
-    // Kept for code paths that only know the 1-based beat. Prefer
-    // `position_from_tick` which preserves sub-beat precision.
-    AbsolutePosition::at_beginning()
-}
-
 /// Convert a measure-local tick (musicxml `divisions`-per-quarter units) into a
 /// measure-local position. The position's `beats` is 0-based for the meter
 /// denominator (so 6/8 has beats 0..6) and `subdivisions` uses 1000 per beat —
