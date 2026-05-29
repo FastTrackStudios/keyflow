@@ -927,6 +927,15 @@ impl Highlighter {
                     ));
                 }
 
+                // Colon - optional root/quality separator (`1:7`)
+                TokenType::Colon => {
+                    spans.push(HighlightSpan::from_range(
+                        token.pos,
+                        1,
+                        HighlightKind::Modifier,
+                    ));
+                }
+
                 // Illegal token
                 TokenType::Illegal => {
                     spans.push(HighlightSpan::from_range(

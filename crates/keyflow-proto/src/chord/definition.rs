@@ -198,6 +198,12 @@ impl Chord {
             root_result.root, consumed
         );
 
+        // Optional readability separator between the root and the quality:
+        // `1:7`, `4:maj9`, `2:m7`. It carries no meaning of its own — skip it.
+        if consumed < tokens.len() && tokens[consumed].token_type == TokenType::Colon {
+            consumed += 1;
+        }
+
         // Step 2: Parse the quality (if present)
         let quality = if consumed < tokens.len() {
             trace!("Parsing quality from remaining tokens");

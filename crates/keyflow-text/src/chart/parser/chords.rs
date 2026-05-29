@@ -3164,13 +3164,15 @@ impl<'a> ChartParser<'a> {
             // (line-relative) so diagnostics can point at real source positions.
             let token_span = original_token_spans.get(token_idx).copied();
             // In a degree-based context a bare `b<digit>` is a flat scale degree
-            // (`b3` = ♭3), not the note B with a figured-bass/suspension figure.
-            // Skip the suffix extractors so they don't strip the digit.
+            // (`b3` = ♭3) and a merged `17` is degree-1 + a 7th — not the note B
+            // with a figured-bass/suspension figure. Skip the suffix extractors
+            // so they don't strip the digit, and split `17` into `1:7`.
             let (chord_token, figured_bass_rows, suspension_figure) = if chord_system
                 == NotationSystem::Degree
-                && Self::is_leading_flat_degree(effective_token)
+                && (Self::is_leading_flat_degree(effective_token)
+                    || Self::is_merged_degree(effective_token))
             {
-                (effective_token.to_string(), None, None)
+                (Self::split_merged_degree(effective_token), None, None)
             } else {
                 let (fb_token, fb_rows) = Self::extract_figured_bass_suffix(effective_token);
                 let (ct, susp) = Self::extract_suspension_suffix(&fb_token);
@@ -4006,6 +4008,30 @@ impl<'a> ChartParser<'a> {
         b.first() == Some(&b'b') && matches!(b.get(1), Some(d) if (b'1'..=b'7').contains(d))
     }
 
+    /// A degree with its numeric quality run together: `17` (= `1:7`), `46`,
+    /// `b17` — an optional accidental, a degree digit 1-7, then more digits.
+    /// The `:` separator (`1:7`) is the readable form; this is the terse one.
+    fn is_merged_degree(token: &str) -> bool {
+        let b = token.as_bytes();
+        let i = usize::from(matches!(b.first(), Some(b'#' | b'b')));
+        matches!(b.get(i), Some(d) if (b'1'..=b'7').contains(d))
+            && b.get(i + 1).is_some_and(u8::is_ascii_digit)
+    }
+
+    /// Insert the implicit `:` into a merged degree (`17` -> `1:7`), so the
+    /// digit after the degree is parsed as the quality, not eaten as a figure.
+    /// Tokens that aren't a merged degree are returned unchanged.
+    fn split_merged_degree(token: &str) -> String {
+        if Self::is_merged_degree(token) {
+            let b = token.as_bytes();
+            let i = usize::from(matches!(b.first(), Some(b'#' | b'b')));
+            let (head, tail) = token.split_at(i + 1);
+            format!("{head}:{tail}")
+        } else {
+            token.to_string()
+        }
+    }
+
     /// Resolve the notation system for an ambiguous `b<digit>` chord: the
     /// current line wins, then the chart's accumulated system (from earlier
     /// lines), else `Auto` (which reads `b7` as the note B).
@@ -4302,6 +4328,20 @@ mod tests {
             .iter()
             .flat_map(|m| m.chords.iter().map(|c| c.full_symbol.clone()))
             .collect()
+    }
+
+    #[test]
+    fn optional_colon_separates_root_and_quality() {
+        assert_eq!(chord_symbols("C:7"), ["C7"]);
+        assert_eq!(chord_symbols("1 4:maj9"), ["1", "4maj9"]);
+        assert_eq!(chord_symbols("I:7"), ["I7"]);
+    }
+
+    #[test]
+    fn merged_degree_and_quality_parses_without_colon() {
+        // `17` is degree-1 + a 7th (the terse, less-readable form of `1:7`).
+        assert_eq!(chord_symbols("1 17"), ["1", "17"]);
+        assert_eq!(chord_symbols("1 46"), ["1", "46"]);
     }
 
     #[test]
