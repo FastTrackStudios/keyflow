@@ -9,7 +9,6 @@ use super::degree::ChordDegree;
 use super::extensions::Extensions;
 use crate::key::{Key, KeySpelling, SpellingMode};
 use crate::primitives::{Interval, MusicalNote, RootNotation};
-use std::collections::HashMap;
 
 // ============================================================================
 // Interval Computation
@@ -146,12 +145,6 @@ impl Chord {
     #[must_use]
     pub fn has_degree(&self, degree: ChordDegree) -> bool {
         self.intervals.contains_key(&degree)
-    }
-
-    /// Get the internal interval map (for serialization/debugging).
-    #[must_use]
-    pub(crate) fn interval_map(&self) -> &HashMap<ChordDegree, Interval> {
-        &self.intervals
     }
 }
 

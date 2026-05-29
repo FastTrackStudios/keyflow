@@ -400,7 +400,6 @@ fn build_chord_from_notes(
 struct ChordRecognitionCandidate {
     chord: Chord,
     root_pitch: u8,
-    pitch_classes: Vec<u8>,
     score: i32,
 }
 
@@ -491,7 +490,6 @@ fn recognize_midi_chord_candidate(
             ),
             chord,
             root_pitch,
-            pitch_classes,
         });
     }
 
@@ -548,7 +546,6 @@ fn recognize_with_legacy_inversion(
         ),
         chord,
         root_pitch,
-        pitch_classes,
     })
 }
 

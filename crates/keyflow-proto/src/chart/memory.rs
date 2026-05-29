@@ -215,41 +215,6 @@ impl ChordMemory {
         self.global_family.get(family_key).cloned()
     }
 
-    /// Remember a chord in global memory using family-aware key (legacy compatibility)
-    fn remember_global_family(&mut self, family_key: &str, full_symbol: &str) {
-        self.global_family
-            .entry(family_key.to_string())
-            .or_insert_with(|| full_symbol.to_string());
-    }
-
-    /// Remember a chord in section-specific memory using family-aware key (legacy compatibility)
-    fn remember_section_family(
-        &mut self,
-        _section_type: &SectionType,
-        family_key: &str,
-        full_symbol: &str,
-    ) {
-        // Store to section-local family memory instead of legacy section_specific
-        self.section_family
-            .entry(family_key.to_string())
-            .or_insert_with(|| full_symbol.to_string());
-    }
-
-    /// Recall a chord from global memory using family-aware key
-    fn recall_global_family(&self, family_key: &str) -> Option<String> {
-        self.global_family.get(family_key).cloned()
-    }
-
-    /// Recall a chord from section-specific memory using family-aware key
-    fn recall_section_family(
-        &self,
-        _section_type: &SectionType,
-        family_key: &str,
-    ) -> Option<String> {
-        // Use section-local family memory instead of legacy section_specific
-        self.section_family.get(family_key).cloned()
-    }
-
     /// Process a chord token and return the full symbol to use
     ///
     /// This is the main API for the parser to use.
@@ -405,20 +370,6 @@ impl ChordMemory {
             ChordFamily::Minor => "minor",
         };
         format!("{}:{}", root.to_lowercase(), family_str)
-    }
-
-    /// Check if a root is an explicit note name (A-G with optional accidental)
-    /// as opposed to a scale degree (1-7) or Roman numeral (I, ii, etc.)
-    fn is_explicit_note_name(root: &str) -> bool {
-        if root.is_empty() {
-            return false;
-        }
-        let first_char = root.chars().next().unwrap();
-        // Note names start with A-G (case insensitive)
-        matches!(
-            first_char.to_ascii_uppercase(),
-            'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G'
-        )
     }
 
     /// Infer a chord quality from the current key
