@@ -18,24 +18,19 @@ The chord-notation layer is in good shape. Recent arc (newest first):
   (`RootFormat`) honoured by `resolve()` + `Display`; parse branch in
   `Chord::parse` folds a Roman-over-Roman bass into the root. Letter/number slash
   basses unchanged. Documented on the Chords page.
-- **TODO — Roman figured-bass inversions** (`V6`, `V64`, `V65`, `V43`, `V42`/`V2`).
-  Requested alongside secondary dominants; not yet built. Plan:
-  - In **Roman context only**, intercept the inversion figures before the
-    quality/family/sixth parsers in `Chord::parse` (`definition.rs` Steps 3/6 —
-    the `7` family parser, the `6` sixth-chord check ~line 339, and the `5`→power
-    / `4`→sus4 quality reads). The 6/7 overload: bare `V7` stays a root-position
-    dominant 7th, but `65/43/42/2` are inverted 7ths and `6/64` are inverted
-    triads. (`ii6`, `I64`, etc. too.)
-  - Map figure → (is-7th? + bass chord-tone): `6`→1st-inv triad (bass = 3rd),
-    `64`→2nd-inv (5th), `65`→1st-inv 7th (3rd), `43`→2nd-inv 7th (5th),
-    `42`/`2`→3rd-inv 7th (7th). Bass chord-tone is a scale degree off the root
-    degree (root, +2, +4, +6 mod 7).
-  - Represent: set the chord's `bass` to the computed chord-tone for
-    resolution/export, and store the figure for display (a new field, or reuse
-    the figured-bass/`SuspensionFigure` system the user wants tied in). Display
-    must render `V6`/`V65`, not `V/7`.
-  - Tests: figure→bass mapping, family inference, round-trip display, and that
-    non-Roman `C6`/`C7` are untouched.
+- **`^` inline figured bass / inversions** (committed) — `^` after a chord
+  attaches a figured-bass figure: `V^6`/`V^64`/`V^65`/`V^43`/`V^42` (Roman
+  inversions) and `V^4-3` (suspension). This sidesteps the 6/7 overload entirely
+  (the user's call): a plain `V6` stays an added-6th chord; the figure only kicks
+  in behind the `^`. Implemented as `extract_caret_figure` in `chords.rs`, run
+  before the degree-system guard and routed into the existing figured-bass
+  attachment (`measure.figured_bass`, `Placement::Above`); a trailing `_dur`
+  stays on the chord. Exports re-emit via the existing figured-bass exporter
+  (chord-attached → quoted `"65"`; standalone → `^`). Documented on the Chords
+  page. Possible follow-up: the figures are stored as annotations, not yet
+  resolved to an actual inversion *bass note* for playback/MusicXML, and the
+  chord exporter normalises chord-attached figures to the quoted form rather than
+  `^`.
 - **`()` rhythm groups** (committed) — `(a b c)` splits a target duration
   equally among its chords. Default target = one bar (`(C G)` = two half-bar
   chords); override with a trailing slash run (`(D Em)//` = two beats) or lily
