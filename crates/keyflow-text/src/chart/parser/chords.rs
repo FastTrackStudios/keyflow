@@ -14,7 +14,7 @@ use crate::chart::types::{
 use crate::chord::{ChordQuality, ChordRhythm, LilySyntax, NotationSystem};
 use crate::key::Key;
 use crate::parsing::{Lexer, TextSpan};
-use crate::primitives::RootNotation;
+use crate::primitives::{Accidental, RootNotation};
 use crate::sections::SectionType;
 use crate::time::{
     AbsolutePosition, MusicalDuration, MusicalPosition, MusicalPositionExt, TimeSignature,
@@ -399,10 +399,14 @@ impl<'a> ChartParser<'a> {
         };
         let root_part = &token[..caret];
         let trailing = &after[fig_len..]; // e.g. a `_4` duration
+                                          // The figure states the chord exactly, so it must ignore chord memory:
+                                          // append `7` for the seventh figures (explicit family), and prefix `!`
+                                          // on the triad figures so a remembered seventh can't sneak in
+                                          // (`V^65 V^6` → the `V^6` stays a triad).
         let chord_token = if append_seventh {
             format!("{root_part}7{trailing}")
         } else {
-            format!("{root_part}{trailing}")
+            format!("!{root_part}{trailing}")
         };
         let display = format!("{root_part}^{figure}");
         Some((chord_token, display, append_seventh, bass_thirds))
@@ -3272,12 +3276,27 @@ impl<'a> ChartParser<'a> {
                     // a real inversion, while the chart keeps showing `V^65`.
                     if let Some((display, bass_thirds)) = &inversion_apply {
                         if let Some(root_deg) = chord.parsed.root.scale_degree() {
+                            // Diatonic position of the bass tone (root + N thirds).
                             let bass_deg = ((u16::from(root_deg) - 1 + u16::from(*bass_thirds) * 2)
                                 % 7) as u8
                                 + 1;
-                            let bass = RootNotation::from_scale_degree(bass_deg, None);
-                            // The chord resolves as a real inversion (bass set on
-                            // the parsed chord), but the chart shows `V^65`.
+                            // Spell it exactly: with a key in hand the bass is the
+                            // chord's *actual* 3rd/5th/7th, so a chromatic chord
+                            // tone (e.g. the G♯ of `III`) gets the right accidental.
+                            let accidental = self.current_key.as_ref().and_then(|key| {
+                                let notes = chord.parsed.notes(Some(key))?;
+                                let actual = notes.get(*bass_thirds as usize)?;
+                                let diatonic = key.get_scale_degree(bass_deg)?;
+                                match (i16::from(actual.semitone) - i16::from(diatonic.semitone))
+                                    .rem_euclid(12)
+                                {
+                                    0 => None,
+                                    1 => Some(Accidental::Sharp),
+                                    11 => Some(Accidental::Flat),
+                                    _ => None,
+                                }
+                            });
+                            let bass = RootNotation::from_scale_degree(bass_deg, accidental);
                             chord.parsed.set_bass(bass);
                             chord.full_symbol = display.clone();
                             chord.display_override = Some(display.clone());
@@ -4842,6 +4861,41 @@ mod tests {
         assert!(plain[0].figured_bass.is_empty());
         assert!(plain[0].chords[0].parsed.bass.as_ref().is_none());
         assert_eq!(plain[0].chords[0].full_symbol, "V6");
+    }
+
+    #[test]
+    fn caret_inversion_spells_chromatic_bass_and_ignores_chord_memory() {
+        let c_major = Key::parse("C").unwrap();
+        // A key is needed so the bass is spelled from the chord's real tones.
+        let chart = parse_chart("T\n4/4 #C\n\nvs 4\nI III^6 V^65 V^6\n").unwrap();
+        let m = chart.sections[0].measures();
+
+        // `III` is a major chord (E–G♯–B); its 3rd is G♯, so `III^6` puts a
+        // sharpened scale degree in the bass, not the diatonic G.
+        let iii6 = m[1].chords[0].parsed.bass.as_ref().unwrap();
+        assert_eq!(iii6.resolve(Some(&c_major)).unwrap().name, "G#");
+
+        // `V^6` right after `V^65` stays a triad — the remembered seventh from
+        // `V^65` does not carry into it.
+        assert!(
+            m[2].chords[0].parsed.family.is_some(),
+            "V^65 is a seventh chord"
+        );
+        assert!(
+            m[3].chords[0].parsed.family.is_none(),
+            "V^6 must stay a triad despite the preceding V^65"
+        );
+        assert_eq!(
+            m[3].chords[0]
+                .parsed
+                .bass
+                .as_ref()
+                .unwrap()
+                .resolve(Some(&c_major))
+                .unwrap()
+                .name,
+            "B"
+        );
     }
 
     #[test]
