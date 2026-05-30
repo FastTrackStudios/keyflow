@@ -64,9 +64,10 @@ example parse-verified.
   canonicalises octaves to `:`). Wiring: `parse_explicit_octave`,
   `split_pitch_and_duration`, `melody_token_duration_start`, `melody_octave_colon`,
   and the two `Display` sites in `melody.rs`.
-- **Melody notes need a duration on the first note of a block** (later notes
-  inherit). A bare `m{ C D E F }` silently *drops* the melody with a WARN — the
-  doc examples all carry a leading duration (`m{ C8 D E F }`).
+- **Melody notes default to a quarter when no duration is given** (and none to
+  inherit) — `m{ C D E F }` is four quarter notes. Gate is the final `else` in
+  `parse_with_defaults` (`melody.rs`); it appends `_4`. (Previously a bare first
+  note errored and the whole melody was silently dropped.)
 - **Sections / Lyrics pages** are the remaining guide gaps.
 - The `docs/content/` folder will become a Dioxus app later — the dodeca SSG
   scaffolding was removed (`38b104c`), content kept. Doc page edits have been
