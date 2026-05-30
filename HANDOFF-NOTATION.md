@@ -85,9 +85,14 @@ sectioned lanes. Every example parse-verified.
   `annotations.md`: staff text (`"…"` below / `^"…"` above / `_"…"`), instrument
   cues (`@Inst "…"`), dynamics (`dyn <level>[@beat] [above]`, levels ppp–fff +
   sf/sfz/fp), hairpins (`hairpin <|> start..end [above]`).
+- **`repeats.md` (w10):** `%` (repeat a bar), `xN` (repeat a line — *expands*, so
+  the section count is the played count), `|: … :|` (repeat barlines — *marks*,
+  bars written once; multi-bar spans need internal `|`), and `[1]`/`[2]`/`[1,2]`
+  endings placed inline after a bar line (NOT at line start — there `[…]` is a
+  custom section). Verified pattern: `|: 1 | [1] 4 :| | [2] 5 |`.
 - **Remaining guide gaps (still undocumented features, all confirmed real):**
-  repeats & endings (`|: … :|`, voltas); aliases + full-song lanes (`let x = {…}`,
-  `<x>`, `<< <chords> ; <melody> >>`); push/pull timing (`'C` / `C'`).
+  aliases + full-song lanes (`let x = {…}`, `<x>`, `<< <chords> ; <melody> >>`);
+  push/pull timing (`'C` / `C'`, verify semantics first).
 - **Two section-parser bugs found while writing `sections.md` — now FIXED:**
   (1) a sub-labelled header (`CH 3A 10`) as the *first* section with a title line
   present mis-parsed to Intro — `looks_like_section_marker` (metadata.rs) had a
