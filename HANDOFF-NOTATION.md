@@ -58,12 +58,18 @@ sectioned lanes. Every example parse-verified.
   line, `{Chord}`-on-syllable markers, and hyphen melisma. All seven pages
   (Structure, Sections, Chords, Notation, Rhythm, Melody, Lyrics) are written and
   parse-verified.
-- **Two section-parser bugs found while writing `sections.md` (not fixed):**
-  (1) a sub-labelled header (`CH 3A 10`) that is the *first* section *and* a title
-  line is present mis-parses to Intro — works fine elsewhere; (2) `Pre-Chorus` /
-  `PRE-CH` headers parse to Intro (the `parse_pre_section` check only matches
-  `pre` / `pre <space>`, not the hyphen). Both avoided in the doc; worth fixing in
-  `chart/parser/sections.rs`.
+- **Two section-parser bugs found while writing `sections.md` — now FIXED:**
+  (1) a sub-labelled header (`CH 3A 10`) as the *first* section with a title line
+  present mis-parsed to Intro — `looks_like_section_marker` (metadata.rs) had a
+  drifted re-implementation of header detection that didn't know sub-labels; it
+  now delegates to `SectionType::parse_with_measure_count` (also fixed latent
+  first-section breakage for `CH 4 "Big"` / `BR 8 #G`). (2) `Pre-Chorus`/`PRE-CH`
+  parsed to Intro — `parse_with_measure_count` now resolves `pre-`/`post-`
+  prefixes via the new `base_section_type` helper. Both have regression tests.
+- **Known remaining edge (not fixed):** a sub-label with *no* count (`CH 3A`,
+  unusual — you normally write `CH 3A 4`) is read as count 3 because
+  `MeasureExpression::parse("3a")` parses the leading digit. Consistent with/
+  without a title now.
 
 - **Melody supports letters + numbers only, not Roman numerals** (`melody.rs`
   parses scale-degree 1–7 or letter A–G; no numeral path). Corrected the old
