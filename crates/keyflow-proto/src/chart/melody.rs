@@ -811,8 +811,17 @@ fn melody_token_duration_start(token: &str) -> Option<usize> {
     if token.is_empty() {
         return None;
     }
-    // A `:` octave takes a single digit; any duration follows it. The octave
-    // digit itself is never a duration.
+    // An explicit `_` always delimits the duration — check it first, so it wins
+    // over a `:` octave (`C:4_8`) or a `>` group close (`<C E>_8`).
+    if let Some((idx, suffix)) = token
+        .char_indices()
+        .find(|(_, c)| *c == '_')
+        .map(|(idx, _)| (idx, &token[idx + 1..]))
+    {
+        return is_melody_duration_suffix(suffix).then_some(idx);
+    }
+    // A `:` octave takes a single digit; any duration follows it directly. The
+    // octave digit itself is never a duration.
     if let Some(colon) = melody_octave_colon(token) {
         let oct_digit = colon + 1;
         if token[oct_digit..]
@@ -831,13 +840,6 @@ fn melody_token_duration_start(token: &str) -> Option<usize> {
             return Some(token.len() - suffix.len());
         }
         return None;
-    }
-    if let Some((idx, suffix)) = token
-        .char_indices()
-        .find(|(_, c)| *c == '_')
-        .map(|(idx, _)| (idx, &token[idx + 1..]))
-    {
-        return is_melody_duration_suffix(suffix).then_some(idx);
     }
     let start = token
         .char_indices()
@@ -1059,10 +1061,10 @@ impl Melody {
             } else if let Some(duration) = &inherited_duration {
                 format!("{token}{duration}")
             } else {
-                return Err(format!(
-                    "Melody token '{}' needs a duration before it can inherit one",
-                    token
-                ));
+                // No duration written yet and nothing to inherit: default to a
+                // quarter note. The `_` keeps it unambiguous for every token
+                // shape (scale degrees, `:` octaves, chord-note groups).
+                format!("{token}_4")
             };
             let note = MelodyNote::parse(&token_to_parse)?;
             if !no_memory {
@@ -1536,6 +1538,28 @@ mod tests {
     fn test_parenthesised_octave_is_rejected() {
         // The retired `C(4)` syntax is no longer an octave.
         assert!(MelodyNote::parse("C(4)8").is_err());
+    }
+
+    #[test]
+    fn test_unspecified_duration_defaults_to_quarter() {
+        // With no duration written and none to inherit, notes are quarter notes.
+        let melody = Melody::parse("C D E F").unwrap();
+        assert_eq!(melody.notes.len(), 4);
+        for note in &melody.notes {
+            assert_eq!(note.duration, 4);
+            assert!(!note.dotted && !note.triplet);
+        }
+        // The default applies until an explicit duration takes over and sticks.
+        let melody = Melody::parse("C D E8 F").unwrap();
+        assert_eq!(melody.notes[0].duration, 4); // default quarter
+        assert_eq!(melody.notes[1].duration, 4);
+        assert_eq!(melody.notes[2].duration, 8); // explicit eighth
+        assert_eq!(melody.notes[3].duration, 8); // inherits the eighth
+        // Octave-only notes and chord groups default too.
+        assert_eq!(Melody::parse("C:4").unwrap().notes[0].duration, 4);
+        assert_eq!(Melody::parse("<C E G>").unwrap().notes[0].duration, 4);
+        // Scale degrees as well.
+        assert_eq!(Melody::parse("1 2 3").unwrap().notes[0].duration, 4);
     }
 
     #[test]
