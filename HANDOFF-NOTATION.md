@@ -18,19 +18,21 @@ The chord-notation layer is in good shape. Recent arc (newest first):
   (`RootFormat`) honoured by `resolve()` + `Display`; parse branch in
   `Chord::parse` folds a Roman-over-Roman bass into the root. Letter/number slash
   basses unchanged. Documented on the Chords page.
-- **`^` inline figured bass / inversions** (committed) — `^` after a chord
-  attaches a figured-bass figure: `V^6`/`V^64`/`V^65`/`V^43`/`V^42` (Roman
-  inversions) and `V^4-3` (suspension). This sidesteps the 6/7 overload entirely
-  (the user's call): a plain `V6` stays an added-6th chord; the figure only kicks
-  in behind the `^`. Implemented as `extract_caret_figure` in `chords.rs`, run
-  before the degree-system guard and routed into the existing figured-bass
-  attachment (`measure.figured_bass`, `Placement::Above`); a trailing `_dur`
-  stays on the chord. Exports re-emit via the existing figured-bass exporter
-  (chord-attached → quoted `"65"`; standalone → `^`). Documented on the Chords
-  page. Possible follow-up: the figures are stored as annotations, not yet
-  resolved to an actual inversion *bass note* for playback/MusicXML, and the
-  chord exporter normalises chord-attached figures to the quoted form rather than
-  `^`.
+- **`^` figured-bass inversions that RESOLVE** (committed) — `^` after a chord
+  carries an inversion figure. `V^6`/`V^64` are inverted triads, `V^65`/`V^43`/
+  `V^42` inverted sevenths: the chord is realised as a real inversion (parse with
+  a 7th added for the seventh figures, then set the slash bass to the chord tone
+  a 3rd/5th/7th above the root — `V^65` in C resolves to G7/B), while the chart
+  keeps showing `V^65` (`full_symbol`/`display_override`). `extract_caret_inversion`
+  + `extract_caret_figure` in `chords.rs`. A `^`-figure with a dash (`V^4-3`) is a
+  suspension and still attaches as figured bass. Plain `V6` (no `^`) stays an
+  added-6th chord — the `^` avoids the 6/7 overload. Text **annotations** use
+  quotes instead: `^"text"` above, `_"text"` below, `Chord"text"` attached (all
+  already worked). Documented on the Chords page.
+  - Known edges (not fixed): chord-memory can carry a 7th into a following triad
+    inversion (`V^65 V^6` makes the `V^6` a 7th); the inversion bass is set as a
+    diatonic scale degree (fine for diatonic Romans, approximate for chromatic);
+    `full_symbol` is the display `V^65` while `parsed` holds the resolved bass.
 - **`()` rhythm groups** (committed) — `(a b c)` splits a target duration
   equally among its chords. Default target = one bar (`(C G)` = two half-bar
   chords); override with a trailing slash run (`(D Em)//` = two beats) or lily
