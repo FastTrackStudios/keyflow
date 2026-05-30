@@ -11,7 +11,8 @@
 //! Note format: `<pitch><modifiers><duration>` or `<pitch><modifiers>_<duration>`
 //! - Pitch: C, D, E, F, G, A, B (with optional # or b) OR scale degrees 1-7
 //! - Octave modifiers: `'` to jump up an octave, `,` to drop down an octave
-//! - Octave: optional explicit number (overrides relative mode, underscore form only)
+//! - Octave: explicit absolute octave via `:` (e.g. `C:4`), overriding relative
+//!   mode. The legacy bare-digit underscore form (`C5_4`) is still accepted.
 //! - Duration: Lilypond-style (4 = quarter, 8 = eighth, 16 = sixteenth, etc.)
 //! - Triplets: trailing `t` (e.g. `4t`, `8t`)
 //!
@@ -23,7 +24,8 @@
 //! - `C_4` - C quarter note (legacy underscore form)
 //! - `D#'8` - D# eighth note, one octave up from closest
 //! - `Bb,2` - Bb half note, one octave down from closest
-//! - `C5_4` - C5 quarter note (explicit octave)
+//! - `C:48` - C in octave 4, eighth note (explicit octave via `:`)
+//! - `C5_4` - C5 quarter note (legacy explicit octave)
 //! - `3_8` - Scale degree 3 eighth note
 //! - `r4` - quarter rest
 
@@ -442,6 +444,26 @@ impl MelodyNote {
             return Ok((pitch_part, duration, dotted, triplet, true));
         }
 
+        // A `:`-introduced octave takes a single digit (`C:4`); a duration, when
+        // present, follows it with no separator (`C:48` = octave 4, eighth). The
+        // octave digit therefore belongs to the pitch, not the duration.
+        if let Some(colon) = melody_octave_colon(s) {
+            let oct_digit = colon + 1;
+            if s[oct_digit..]
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_digit())
+            {
+                let dur_start = oct_digit + 1;
+                let (pitch_part, duration_part) = s.split_at(dur_start);
+                if duration_part.is_empty() {
+                    return Err(format!("Melody note '{}' has an octave but no duration", s));
+                }
+                let (duration, dotted, triplet) = Self::parse_duration_part(duration_part)?;
+                return Ok((pitch_part, duration, dotted, triplet, false));
+            }
+        }
+
         let duration_start = s
             .char_indices()
             .rfind(|(_, c)| !c.is_ascii_digit() && *c != '.' && *c != 't')
@@ -521,24 +543,50 @@ impl MelodyNote {
         }
     }
 
-    /// Parse explicit octave number from remaining characters
+    /// Parse an explicit octave from the characters left after the pitch.
+    ///
+    /// The octave is introduced by `:` — `C:4` is C in octave 4 (the divider
+    /// mirrors the `root:quality` colon used in chords). A bare digit with no
+    /// colon is still accepted for the underscore form (`C5_4`) so older charts
+    /// keep working. The old parenthesised form `C(4)` is no longer an octave.
     fn parse_explicit_octave(
         chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
     ) -> Result<Option<u8>, String> {
-        if chars.peek().is_some() {
-            let octave_str: String = chars.collect();
-            let octave_str = octave_str
-                .strip_prefix('(')
-                .and_then(|inner| inner.strip_suffix(')'))
-                .unwrap_or(&octave_str);
-            Ok(Some(
-                octave_str
-                    .parse::<u8>()
-                    .map_err(|_| format!("Invalid octave: {}", octave_str))?,
-            ))
-        } else {
-            Ok(None)
+        let colon = chars.peek() == Some(&':');
+        if colon {
+            chars.next();
         }
+        let octave = if colon || chars.peek().is_some_and(|c| c.is_ascii_digit()) {
+            let mut digits = String::new();
+            while let Some(&c) = chars.peek() {
+                if c.is_ascii_digit() {
+                    digits.push(c);
+                    chars.next();
+                } else {
+                    break;
+                }
+            }
+            if digits.is_empty() {
+                return Err("Expected an octave number after ':'".to_string());
+            }
+            Some(
+                digits
+                    .parse::<u8>()
+                    .map_err(|_| format!("Invalid octave: {}", digits))?,
+            )
+        } else {
+            None
+        };
+
+        // Anything still unconsumed is malformed — most often a stray `(` from
+        // the retired parenthesised octave syntax. Point the writer at `:`.
+        if let Some(&c) = chars.peek() {
+            return Err(format!(
+                "Unexpected '{}' in melody note — write octaves with ':' (e.g. C:4)",
+                c
+            ));
+        }
+        Ok(octave)
     }
 
     /// Get duration in beats (assuming quarter note = 1 beat)
@@ -581,7 +629,7 @@ impl fmt::Display for MelodyNote {
 
         // Add explicit octave if set
         if let Some(oct) = self.octave {
-            write!(f, "({})", oct)?;
+            write!(f, ":{}", oct)?;
         }
 
         let prefer_bare_duration = self.scale_degree.is_none();
@@ -620,7 +668,7 @@ fn write_pitch_without_duration(note: &MelodyNote, f: &mut fmt::Formatter<'_>) -
         OctaveModifier::None => {}
     }
     if let Some(oct) = note.octave {
-        write!(f, "({})", oct)?;
+        write!(f, ":{}", oct)?;
     }
     Ok(())
 }
@@ -722,6 +770,22 @@ fn modifier_from_delta(delta: i16) -> OctaveModifier {
     }
 }
 
+/// Byte index of the `:` that introduces an octave on a melody token, i.e. a
+/// `:` that sits outside any `<…>` chord-note group. Returns `None` when there
+/// is no such colon (group-internal colons belong to the inner notes).
+fn melody_octave_colon(token: &str) -> Option<usize> {
+    let mut depth = 0i32;
+    for (i, c) in token.char_indices() {
+        match c {
+            '<' => depth += 1,
+            '>' => depth -= 1,
+            ':' if depth == 0 => return Some(i),
+            _ => {}
+        }
+    }
+    None
+}
+
 fn melody_token_has_duration(token: &str) -> bool {
     melody_token_duration_start(token).is_some()
 }
@@ -747,21 +811,26 @@ fn melody_token_duration_start(token: &str) -> Option<usize> {
     if token.is_empty() {
         return None;
     }
+    // A `:` octave takes a single digit; any duration follows it. The octave
+    // digit itself is never a duration.
+    if let Some(colon) = melody_octave_colon(token) {
+        let oct_digit = colon + 1;
+        if token[oct_digit..]
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_digit())
+        {
+            let dur_start = oct_digit + 1;
+            let suffix = &token[dur_start..];
+            return is_melody_duration_suffix(suffix).then_some(dur_start);
+        }
+    }
     if let Some(close) = token.rfind('>') {
         let suffix = &token[close + 1..];
         if is_melody_duration_suffix(suffix) {
             return Some(token.len() - suffix.len());
         }
         return None;
-    }
-    if let Some(close) = token.rfind(')')
-        && token[..close].contains('(')
-    {
-        let suffix = &token[close + 1..];
-        if suffix.is_empty() {
-            return None;
-        }
-        return is_melody_duration_suffix(suffix).then_some(close + 1);
     }
     if let Some((idx, suffix)) = token
         .char_indices()
@@ -1208,8 +1277,12 @@ mod tests {
 
     #[test]
     fn test_note_display() {
-        let note = MelodyNote::parse("D#5_8").unwrap();
-        assert_eq!(format!("{}", note), "D#5_8");
+        // An explicit octave displays in the canonical `:` form, whether it was
+        // written with `:` or the legacy bare-digit underscore form.
+        let note = MelodyNote::parse("D#:58").unwrap();
+        assert_eq!(format!("{}", note), "D#:58");
+        let legacy = MelodyNote::parse("D#5_8").unwrap();
+        assert_eq!(format!("{}", legacy), "D#:58");
 
         let dotted = MelodyNote::parse("A_4.").unwrap();
         assert_eq!(format!("{}", dotted), "A4.");
@@ -1438,6 +1511,34 @@ mod tests {
     }
 
     #[test]
+    fn test_colon_octave_forms() {
+        // `:` introduces the octave; a duration may follow it directly (`C:48`)
+        // or after an underscore (`C:4_8`).
+        for s in ["C:48", "C:4_8"] {
+            let note = MelodyNote::parse(s).unwrap();
+            assert_eq!(note.octave, Some(4), "{s}");
+            assert_eq!(note.duration, 8, "{s}");
+        }
+        // Octave-only notes inherit the running duration inside a block.
+        let melody = Melody::parse("C:48 D:4 E:4").unwrap();
+        assert_eq!(melody.notes.len(), 3);
+        for (note, oct) in melody.notes.iter().zip([4, 4, 4]) {
+            assert_eq!(note.octave, Some(oct));
+            assert_eq!(note.duration, 8); // inherited from C:48
+        }
+        // Per-note octaves inside a chord-note group.
+        let group = MelodyNote::parse("<C:3 E:4>8").unwrap();
+        assert_eq!(group.octave, Some(3));
+        assert_eq!(group.extra_pitches[0], ("E".to_string(), Some(4)));
+    }
+
+    #[test]
+    fn test_parenthesised_octave_is_rejected() {
+        // The retired `C(4)` syntax is no longer an octave.
+        assert!(MelodyNote::parse("C(4)8").is_err());
+    }
+
+    #[test]
     fn test_melody_chord_note_group() {
         let melody = Melody::parse("<F# 'C#>4.").unwrap();
         assert_eq!(melody.notes.len(), 1);
@@ -1478,7 +1579,7 @@ mod tests {
 
     #[test]
     fn test_melody_duration_memory_keeps_underscore_form() {
-        let melody = Melody::parse("C#(3)2.~ ~C#(3) ~C#(3) ~C#(3)4. G#(3)").unwrap();
+        let melody = Melody::parse("C#:32.~ ~C#:3 ~C#:3 ~C#:34. G#:3").unwrap();
 
         assert_eq!(melody.notes[0].octave, Some(3));
         assert_eq!(melody.notes[0].duration, 2);
@@ -1498,14 +1599,14 @@ mod tests {
     }
 
     #[test]
-    fn test_melody_parenthesized_absolute_octave_round_trips() {
-        let melody = Melody::parse("C#(3)8. D#(4)").unwrap();
+    fn test_melody_colon_absolute_octave_round_trips() {
+        let melody = Melody::parse("C#:38. D#:4").unwrap();
 
         assert_eq!(melody.notes[0].octave, Some(3));
         assert_eq!(melody.notes[1].octave, Some(4));
         assert_eq!(melody.notes[1].duration, 8);
         assert!(melody.notes[1].dotted);
-        assert_eq!(format!("{}", melody), "m{ C#(3)8. D#(4)8. }");
+        assert_eq!(format!("{}", melody), "m{ C#:38. D#:48. }");
     }
 
     #[test]

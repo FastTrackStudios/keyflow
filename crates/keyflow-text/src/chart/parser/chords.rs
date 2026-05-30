@@ -3,8 +3,8 @@
 //! Handles parsing of chord lines, individual chord tokens, and related
 //! functionality including duration calculation, slash chords, and push/pull notation.
 
-use super::ChartParser;
 use super::helpers::{PushPullModifier, RepeatCount};
+use super::ChartParser;
 use crate::chart::cues::TextCue;
 use crate::chart::dynamics::DynamicMarking;
 use crate::chart::melody::{Melody, MelodyNote};
@@ -83,7 +83,11 @@ impl<'a> ChartParser<'a> {
         }
         out.push_str(&line[cursor..]);
 
-        if changed { out } else { line.to_string() }
+        if changed {
+            out
+        } else {
+            line.to_string()
+        }
     }
 
     fn expand_alias_token(&self, token: &str) -> Option<String> {
@@ -3107,7 +3111,7 @@ impl<'a> ChartParser<'a> {
                     let mut repeat_chord = prev_chord.clone();
                     repeat_chord.original_token = ".".to_string();
                     repeat_chord.position = AbsolutePosition::at_beginning(); // Will be recalculated
-                    // Clear push/pull - the dot repeat doesn't inherit the timing modifier
+                                                                              // Clear push/pull - the dot repeat doesn't inherit the timing modifier
                     repeat_chord.push_pull = None;
                     // Inherit the source chord's rhythm and duration
                     // "F/C ." = two measures (F/C for 4 beats, then F/C repeated for 4 beats)
@@ -3326,7 +3330,7 @@ impl<'a> ChartParser<'a> {
                             (time_sig.numerator as u8, time_sig.denominator as u8);
                         current_measure_beats = 0.0;
                         measure_has_slash_rhythm = false; // Reset for new measure
-                        // Auto-created measure, not by separator
+                                                          // Auto-created measure, not by separator
                     }
                 }
                 Err(_e) => {
@@ -4423,9 +4427,11 @@ mod tests {
             expand_chord_groups(r#"C "a (b) c" G"#, c44).unwrap(),
             r#"C "a (b) c" G"#
         );
+        // A `( )` inside a melody block is left alone — chord-group expansion
+        // never reaches into `m{…}`.
         assert_eq!(
-            expand_chord_groups("C m{ D(4) E } G", c44).unwrap(),
-            "C m{ D(4) E } G"
+            expand_chord_groups("C m{ (D E) } G", c44).unwrap(),
+            "C m{ (D E) } G"
         );
     }
 
