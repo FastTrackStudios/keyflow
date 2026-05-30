@@ -43,13 +43,24 @@ on the root; everything after the root parses identically across systems.
 
 ### Docs (guide pages under `docs/content/guide/`)
 
-Done: `_index.md`, `structure.md` (w1), `chords.md` (w2), `notation-systems.md`
-(w3), `rhythm.md` (w4), `melody.md` (w5). The rhythm page covers the measure-fill
-default, slashes, `()` groups + triplets, `_N` durations, `%`, and `|`. The
-melody page covers `m{…}` blocks, letter/number pitch, relative octaves + `'`/`,`
-nudges + `(N)` pin + `/octave`, the shared durations (rests `r` / space `s` / tie
-`~`), stacked `<…>` notes, and pairing via `<< … ; … >>` + sectioned lanes. Every
-example parse-verified.
+Done (weights renumbered to put Sections after Structure): `_index.md`,
+`structure.md` (w1), `sections.md` (w2), `chords.md` (w3),
+`notation-systems.md` (w4), `rhythm.md` (w5), `melody.md` (w6). The sections page
+covers section names + abbreviations, length in bars, replay-by-name, quoted
+labels, custom `[…]` sections, and a key change on a header. The rhythm page
+covers the measure-fill default, slashes, `()` groups + triplets, `_N` durations,
+`%`, and `|`. The melody page covers `m{…}` blocks, letter/number pitch, relative
+octaves + `'`/`,` nudges + `:` pin + `/octave`, the shared durations (rests `r` /
+space `s` / tie `~`), stacked `<…>` notes, and pairing via `<< … ; … >>` +
+sectioned lanes. Every example parse-verified.
+
+- **Lyrics page** is the last remaining guide gap.
+- **Two section-parser bugs found while writing `sections.md` (not fixed):**
+  (1) a sub-labelled header (`CH 3A 10`) that is the *first* section *and* a title
+  line is present mis-parses to Intro — works fine elsewhere; (2) `Pre-Chorus` /
+  `PRE-CH` headers parse to Intro (the `parse_pre_section` check only matches
+  `pre` / `pre <space>`, not the hyphen). Both avoided in the doc; worth fixing in
+  `chart/parser/sections.rs`.
 
 - **Melody supports letters + numbers only, not Roman numerals** (`melody.rs`
   parses scale-degree 1–7 or letter A–G; no numeral path). Corrected the old
