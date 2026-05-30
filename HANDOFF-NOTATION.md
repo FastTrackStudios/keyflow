@@ -29,10 +29,12 @@ The chord-notation layer is in good shape. Recent arc (newest first):
   added-6th chord — the `^` avoids the 6/7 overload. Text **annotations** use
   quotes instead: `^"text"` above, `_"text"` below, `Chord"text"` attached (all
   already worked). Documented on the Chords page.
-  - Known edges (not fixed): chord-memory can carry a 7th into a following triad
-    inversion (`V^65 V^6` makes the `V^6` a 7th); the inversion bass is set as a
-    diatonic scale degree (fine for diatonic Romans, approximate for chromatic);
-    `full_symbol` is the display `V^65` while `parsed` holds the resolved bass.
+  - Edges tightened (committed): the inverted bass is spelled from the chord's
+    *real* tones when a key is set, so a chromatic chord tone gets the right
+    accidental (`III^6` → `#5`/G♯ in C); and the figure ignores chord memory —
+    triad figures (`^6`/`^64`) prefix `!` so a remembered seventh can't sneak in
+    (`V^65 V^6` keeps `V^6` a triad), seventh figures pin the family with `7`.
+    (`full_symbol` is the display `V^65`; `parsed` holds the resolved inversion.)
 - **`()` rhythm groups** (committed) — `(a b c)` splits a target duration
   equally among its chords. Default target = one bar (`(C G)` = two half-bar
   chords); override with a trailing slash run (`(D Em)//` = two beats) or lily
