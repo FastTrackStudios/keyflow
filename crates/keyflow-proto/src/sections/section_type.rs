@@ -237,12 +237,16 @@ impl SectionType {
 
         // Try exact matches first (case-insensitive)
         match s_lower {
-            "verse" | "vs" | "v" => return Ok(SectionType::Verse),
-            "chorus" | "ch" | "c" => return Ok(SectionType::Chorus),
-            "bridge" | "br" | "b" => return Ok(SectionType::Bridge),
-            "intro" | "in" | "i" => return Ok(SectionType::Intro),
+            // Single-letter abbreviations are intentionally NOT accepted: they
+            // would shadow chord roots (C, B) and Roman numerals (I, V) on a
+            // content line. Section abbreviations are two or more letters (CH,
+            // VS, BR, IN, OUT, …).
+            "verse" | "vs" => return Ok(SectionType::Verse),
+            "chorus" | "ch" => return Ok(SectionType::Chorus),
+            "bridge" | "br" => return Ok(SectionType::Bridge),
+            "intro" | "in" => return Ok(SectionType::Intro),
             "opening" | "open" => return Ok(SectionType::Opening),
-            "outro" | "out" | "o" => return Ok(SectionType::Outro),
+            "outro" | "out" => return Ok(SectionType::Outro),
             "instrumental" | "inst" | "instrument" => return Ok(SectionType::Instrumental),
             "solo" => return Ok(SectionType::Solo),
             "count" | "countin" | "count-in" => return Ok(SectionType::CountIn),
@@ -518,13 +522,15 @@ impl SectionType {
         let comment = comment.or(sub_label_comment);
 
         let section_type = match section_str {
+            // Single-letter abbreviations are intentionally NOT accepted here —
+            // see the note in `parse`. They would shadow chord roots / numerals.
             "intro" | "in" => Some(SectionType::Intro),
             "opening" | "open" => Some(SectionType::Opening),
-            "verse" | "vs" | "v" => Some(SectionType::Verse),
-            "chorus" | "ch" | "c" => Some(SectionType::Chorus),
-            "bridge" | "br" | "b" => Some(SectionType::Bridge),
-            "outro" | "out" | "o" => Some(SectionType::Outro),
-            "instrumental" | "inst" | "i" => Some(SectionType::Instrumental),
+            "verse" | "vs" => Some(SectionType::Verse),
+            "chorus" | "ch" => Some(SectionType::Chorus),
+            "bridge" | "br" => Some(SectionType::Bridge),
+            "outro" | "out" => Some(SectionType::Outro),
+            "instrumental" | "inst" => Some(SectionType::Instrumental),
             "count" | "countin" | "count-in" => Some(SectionType::CountIn),
             "tag" | "tags" => Some(SectionType::Custom("Tags".to_string())),
             "hits" | "hit" => Some(SectionType::Hits),
@@ -863,6 +869,38 @@ mod tests {
         assert_eq!(SectionType::parse_with_measure_count(""), None);
         // Invalid expression should cause parse to fail
         assert_eq!(SectionType::parse_with_measure_count("vs abc"), None);
+    }
+
+    #[test]
+    fn test_single_letter_abbrevs_are_not_sections() {
+        // Single-letter section abbreviations are intentionally rejected so they
+        // don't shadow chord roots (C, B) or Roman numerals (I, V) on a content
+        // line. A line like `C G` must parse as chords, not "Chorus / g".
+        for s in ["c", "C", "b", "B", "v", "V", "i", "I", "o", "O"] {
+            assert_eq!(
+                SectionType::parse(s).ok(),
+                None,
+                "single letter {s:?} should not parse as a section type"
+            );
+            assert_eq!(
+                SectionType::parse_with_measure_count(s),
+                None,
+                "single letter {s:?} should not parse as a section marker"
+            );
+        }
+        // `C G` (chord-root + chord-like token) must not be grabbed as a section.
+        assert_eq!(SectionType::parse_with_measure_count("C G"), None);
+
+        // Two-letter abbreviations still work.
+        assert_eq!(
+            SectionType::parse_with_measure_count("ch").map(|p| p.section_type),
+            Some(SectionType::Chorus)
+        );
+        assert_eq!(
+            SectionType::parse_with_measure_count("vs 8").map(|p| p.section_type),
+            Some(SectionType::Verse)
+        );
+        assert_eq!(SectionType::parse("br").ok(), Some(SectionType::Bridge));
     }
 
     #[test]
