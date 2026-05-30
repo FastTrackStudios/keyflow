@@ -54,9 +54,19 @@ example parse-verified.
 - **Melody supports letters + numbers only, not Roman numerals** (`melody.rs`
   parses scale-degree 1–7 or letter A–G; no numeral path). Corrected the old
   `notation-systems.md` "letter/number/numeral" claim to "letter or number".
-- **Melody octave vs duration gotcha:** a bare trailing number is the *duration*
-  (`C4` = quarter note); an explicit octave needs parens `C(4)` (or the
-  underscore form `C5_4`). `split_pitch_and_duration` in `melody.rs`.
+- **Melody octave is `:` now, not `()`** (uncommitted). `C:4` = C in octave 4
+  (mirrors the chord `root:quality` colon); single-digit octave, so `C:48` = oct
+  4 eighth and `C:4_8` also works. Bare trailing number is still the *duration*
+  (`C4` = quarter). The old `C(4)` parens are rejected with a guiding error, which
+  frees `()` for future melody rhythm groups. Migrated the curated
+  `04 PRESENCE Master RS.kf` chart (`(N)`→`:N`, parse output byte-identical to
+  before) and fixed the long-standing `test_note_display` failure (display now
+  canonicalises octaves to `:`). Wiring: `parse_explicit_octave`,
+  `split_pitch_and_duration`, `melody_token_duration_start`, `melody_octave_colon`,
+  and the two `Display` sites in `melody.rs`.
+- **Melody notes need a duration on the first note of a block** (later notes
+  inherit). A bare `m{ C D E F }` silently *drops* the melody with a WARN — the
+  doc examples all carry a leading duration (`m{ C8 D E F }`).
 - **Sections / Lyrics pages** are the remaining guide gaps.
 - The `docs/content/` folder will become a Dioxus app later — the dodeca SSG
   scaffolding was removed (`38b104c`), content kept. Doc page edits have been
