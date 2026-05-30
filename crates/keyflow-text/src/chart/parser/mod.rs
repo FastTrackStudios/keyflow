@@ -448,6 +448,22 @@ mod tests {
     use crate::time::MusicalPositionExt;
 
     #[test]
+    fn sub_labelled_first_section_after_a_title_is_not_eaten() {
+        // Regression: with a title line present, a sub-labelled first-section
+        // header (`CH 3A 4`) used to be swallowed as a "part name" and the chords
+        // became a default Intro. It must parse as the Chorus it names.
+        let input = "My Song\n4/4 #C\n\nCH 3A 4\nF C G Am\n";
+        let chart = parse_chart(input).expect("Failed to parse chart");
+        assert_eq!(chart.metadata.title, Some("My Song".to_string()));
+        assert_eq!(chart.sections.len(), 1);
+        assert_eq!(chart.sections[0].section.section_type, SectionType::Chorus);
+
+        // A quoted comment and a key change on the first header behave the same.
+        let chart = parse_chart("My Song\n4/4 #C\n\nBR 8 #G\nEm D\n").unwrap();
+        assert_eq!(chart.sections[0].section.section_type, SectionType::Bridge);
+    }
+
+    #[test]
     fn test_parse_simple_chord_line() {
         let input = r#"
 My Song - Artist Name

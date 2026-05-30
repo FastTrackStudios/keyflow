@@ -228,83 +228,26 @@ impl<'a> ChartParser<'a> {
             return false;
         }
 
-        // Check for custom section with brackets (e.g., "[SOLO]", "[SOLO] 8")
+        // Bracketed custom section, e.g. "[SOLO]" / "[SOLO] 8".
         if trimmed.starts_with('[') && trimmed.contains(']') {
             return true;
         }
 
-        // Split into words
-        let words: Vec<&str> = trimmed.split_whitespace().collect();
-        if words.is_empty() {
+        // Inline-content forms put the chords after a `:` or `,`
+        // (e.g. "VS 8: Cm Fm", "intro, Cm"); the marker is the part before it.
+        let marker = match trimmed.find([':', ',']) {
+            Some(i) => trimmed[..i].trim(),
+            None => trimmed,
+        };
+        if marker.is_empty() {
             return false;
         }
 
-        // First word may have trailing comma for inline chords (e.g., "intro,")
-        let first_word_raw = words[0];
-        let first_word = first_word_raw.trim_end_matches(',').to_lowercase();
-
-        // Check if first word is a section type
-        if SectionType::parse(&first_word).is_err() {
-            return false;
-        }
-
-        // If the section type word ends with a comma, it's a section marker with inline chords
-        if first_word_raw.ends_with(',') {
-            return true;
-        }
-
-        // If there's only one word, it's a section marker
-        if words.len() == 1 {
-            return true;
-        }
-
-        // If there are more words, they must be numbers, measure expressions,
-        // or a comma/colon (which indicates inline chords follow)
-        // A title like "Chord Memory Test" would have non-numeric words after the first
-        for word in &words[1..] {
-            // Allow numbers (possibly with trailing comma/colon for inline chords)
-            let word_clean = word.trim_end_matches(&[',', ':'][..]);
-            if word_clean.parse::<u32>().is_ok() {
-                // If it ends with comma or colon, this is the last section marker word
-                // Everything after is inline chords
-                if word.ends_with(',') || word.ends_with(':') {
-                    return true;
-                }
-                continue;
-            }
-            // Allow measure expressions like "8+1", "4x2", "4-1", "+2", "-1"
-            if Self::looks_like_measure_expression(word_clean) {
-                if word.ends_with(',') || word.ends_with(':') {
-                    return true;
-                }
-                continue;
-            }
-            // A standalone comma or colon means inline chords follow
-            if *word == "," || *word == ":" {
-                return true;
-            }
-            // Any other word means this is not a section marker
-            return false;
-        }
-
-        true
-    }
-
-    /// Check if a word looks like a measure expression (e.g., "8+1", "4x2", "+2")
-    fn looks_like_measure_expression(word: &str) -> bool {
-        if word.is_empty() {
-            return false;
-        }
-
-        // Must start with a digit or +/-
-        let first_char = word.chars().next().unwrap();
-        if !first_char.is_ascii_digit() && first_char != '+' && first_char != '-' {
-            return false;
-        }
-
-        // Must contain only digits and operators (+, -, x, *)
-        word.chars()
-            .all(|c| c.is_ascii_digit() || c == '+' || c == '-' || c == 'x' || c == '*')
+        // Defer to the authoritative section-header parser, so sub-labels
+        // (`CH 3A 4`), measure expressions, quoted comments, key changes
+        // (`BR 8 #G`), and pre-/post- sections are recognised exactly as they
+        // are when the section is really parsed — no second, drifting copy.
+        SectionType::parse_with_measure_count(marker).is_some()
     }
 
     /// Parse a metadata line (e.g., "120bpm 4/4 #G")

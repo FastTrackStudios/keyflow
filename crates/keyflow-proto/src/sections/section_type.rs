@@ -521,27 +521,47 @@ impl SectionType {
         // Merge sub-label into comment (prefer quoted/preset comment if present)
         let comment = comment.or(sub_label_comment);
 
-        let section_type = match section_str {
-            // Single-letter abbreviations are intentionally NOT accepted here —
-            // see the note in `parse`. They would shadow chord roots / numerals.
-            "intro" | "in" => Some(SectionType::Intro),
-            "opening" | "open" => Some(SectionType::Opening),
-            "verse" | "vs" => Some(SectionType::Verse),
-            "chorus" | "ch" => Some(SectionType::Chorus),
-            "bridge" | "br" => Some(SectionType::Bridge),
-            "outro" | "out" => Some(SectionType::Outro),
-            "instrumental" | "inst" => Some(SectionType::Instrumental),
-            "count" | "countin" | "count-in" => Some(SectionType::CountIn),
-            "tag" | "tags" => Some(SectionType::Custom("Tags".to_string())),
-            "hits" | "hit" => Some(SectionType::Hits),
-            "interlude" | "inter" | "int" => Some(SectionType::Interlude),
-            "breakdown" | "bd" => Some(SectionType::Breakdown),
-            "vamp" | "vmp" => Some(SectionType::Vamp),
-            _ => None,
-        };
+        // Resolve the base type, then a `pre-`/`post-` prefix wrapping it, so
+        // `Pre-Chorus`, `PRE-CH`, `post-verse`, … all parse (not just bare `pre`).
+        let section_type = base_section_type(section_str)
+            .or_else(|| {
+                section_str
+                    .strip_prefix("pre-")
+                    .and_then(base_section_type)
+                    .map(|inner| SectionType::Pre(Box::new(inner)))
+            })
+            .or_else(|| {
+                section_str
+                    .strip_prefix("post-")
+                    .and_then(base_section_type)
+                    .map(|inner| SectionType::Post(Box::new(inner)))
+            });
 
         section_type
             .map(|st| ParsedSection::full(st, measure_expr, comment).with_key_change(key_change))
+    }
+}
+
+/// Resolve a single section-marker token (already lowercased) to its base
+/// `SectionType`, with no `pre-`/`post-` wrapping. Single-letter abbreviations
+/// are intentionally rejected (see the note in [`SectionType::parse`]) so they
+/// don't shadow chord roots or Roman numerals on a content line.
+fn base_section_type(token: &str) -> Option<SectionType> {
+    match token {
+        "intro" | "in" => Some(SectionType::Intro),
+        "opening" | "open" => Some(SectionType::Opening),
+        "verse" | "vs" => Some(SectionType::Verse),
+        "chorus" | "ch" => Some(SectionType::Chorus),
+        "bridge" | "br" => Some(SectionType::Bridge),
+        "outro" | "out" => Some(SectionType::Outro),
+        "instrumental" | "inst" => Some(SectionType::Instrumental),
+        "count" | "countin" | "count-in" => Some(SectionType::CountIn),
+        "tag" | "tags" => Some(SectionType::Custom("Tags".to_string())),
+        "hits" | "hit" => Some(SectionType::Hits),
+        "interlude" | "inter" | "int" => Some(SectionType::Interlude),
+        "breakdown" | "bd" => Some(SectionType::Breakdown),
+        "vamp" | "vmp" => Some(SectionType::Vamp),
+        _ => None,
     }
 }
 
@@ -890,6 +910,25 @@ mod tests {
         }
         // `C G` (chord-root + chord-like token) must not be grabbed as a section.
         assert_eq!(SectionType::parse_with_measure_count("C G"), None);
+    }
+
+    #[test]
+    fn test_pre_post_section_headers() {
+        let pre_chorus = SectionType::Pre(Box::new(SectionType::Chorus));
+        for s in ["Pre-Chorus 2", "PRE-CH 2", "pre-ch 2", "pre-chorus 2"] {
+            let parsed = SectionType::parse_with_measure_count(s)
+                .unwrap_or_else(|| panic!("{s:?} should parse"));
+            assert_eq!(parsed.section_type, pre_chorus, "{s}");
+            assert_eq!(parsed.measure_expr, Some(MeasureExpression::Absolute(2)));
+        }
+        assert_eq!(
+            SectionType::parse_with_measure_count("pre-verse 4").map(|p| p.section_type),
+            Some(SectionType::Pre(Box::new(SectionType::Verse)))
+        );
+        assert_eq!(
+            SectionType::parse_with_measure_count("Post-Chorus 8").map(|p| p.section_type),
+            Some(SectionType::Post(Box::new(SectionType::Chorus)))
+        );
 
         // Two-letter abbreviations still work.
         assert_eq!(
