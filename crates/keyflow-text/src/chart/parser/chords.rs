@@ -370,6 +370,34 @@ impl<'a> ChartParser<'a> {
         (token.to_string(), None)
     }
 
+    /// Pull an inline `^`-marked figured-bass / inversion figure off a chord
+    /// token: `V^65`, `V^6`, `V^43`, `V^4-3`. The `^` keeps these distinct from
+    /// a plain chord (`V6` is still an added-6th chord) and from the quoted
+    /// `"4-3"` form. Returns the chord token (with the figure removed, any
+    /// trailing duration preserved) and the parsed figured-bass rows. A `^` that
+    /// introduces above-staff text (`^"…"`, its own token) or a non-figure is
+    /// left untouched.
+    fn extract_caret_figure(token: &str) -> (String, Option<Vec<FiguredBassRow>>) {
+        let Some(caret) = token.find('^') else {
+            return (token.to_string(), None);
+        };
+        let after = &token[caret + 1..];
+        if after.starts_with('"') {
+            return (token.to_string(), None); // ^"text" is above-staff text
+        }
+        // The figure runs over figured-bass characters; anything past it (e.g. a
+        // `_4` duration) stays on the chord token.
+        let fig_len = after
+            .find(|c: char| !(c.is_ascii_digit() || matches!(c, '-' | '#' | 'b' | 'n')))
+            .unwrap_or(after.len());
+        let figure = &after[..fig_len];
+        let Some(rows) = Self::parse_figured_bass_text(figure) else {
+            return (token.to_string(), None);
+        };
+        let chord_token = format!("{}{}", &token[..caret], &after[fig_len..]);
+        (chord_token, Some(rows))
+    }
+
     fn parse_figured_bass_rows(input: &str) -> Vec<FiguredBassRow> {
         let row_texts = if input.contains('/') || input.contains(',') {
             input
@@ -3163,16 +3191,20 @@ impl<'a> ChartParser<'a> {
             // (`b3` = ♭3) and a merged `17` is degree-1 + a 7th — not the note B
             // with a figured-bass/suspension figure. Skip the suffix extractors
             // so they don't strip the digit, and split `17` into `1:7`.
+            // `^`-marked figured bass (`V^65`, `V^4-3`) is unambiguous in any
+            // notation system, so strip it before the degree-specific handling.
+            let (caret_token, caret_rows) = Self::extract_caret_figure(effective_token);
+            let effective_token = caret_token.as_str();
             let (chord_token, figured_bass_rows, suspension_figure) = if chord_system
                 == NotationSystem::Degree
                 && (Self::is_leading_flat_degree(effective_token)
                     || Self::is_merged_degree(effective_token))
             {
-                (Self::split_merged_degree(effective_token), None, None)
+                (Self::split_merged_degree(effective_token), caret_rows, None)
             } else {
                 let (fb_token, fb_rows) = Self::extract_figured_bass_suffix(effective_token);
                 let (ct, susp) = Self::extract_suspension_suffix(&fb_token);
-                (ct, fb_rows, susp)
+                (ct, caret_rows.or(fb_rows), susp)
             };
             match self.parse_chord_token(
                 &chord_token,
@@ -4668,6 +4700,29 @@ mod tests {
             syms.contains(&"b7".to_string()),
             "expected ♭7, got {syms:?}"
         );
+    }
+
+    #[test]
+    fn caret_marks_figured_bass_on_a_chord() {
+        // `V^65` is the V chord with figured-bass "65"; the chord itself is V.
+        let measures = parse_line("V^65");
+        assert_eq!(measures[0].chords[0].full_symbol, "V");
+        assert_eq!(measures[0].figured_bass.len(), 1);
+        assert_eq!(measures[0].figured_bass[0].rows[0].text, "65");
+
+        // An inversion triad figure and a suspension figure both work.
+        assert_eq!(parse_line("V^6")[0].figured_bass[0].rows[0].text, "6");
+        assert_eq!(parse_line("V^4-3")[0].figured_bass[0].rows[0].text, "4-3");
+
+        // Without the caret, `V6` stays an ordinary added-6th chord (no figure).
+        let plain = parse_line("V6");
+        assert!(plain[0].figured_bass.is_empty());
+        assert_eq!(plain[0].chords[0].full_symbol, "V6");
+
+        // A `^65` with a trailing duration keeps the duration on the chord.
+        let with_dur = parse_line("V^65_4 V V V");
+        assert_eq!(with_dur[0].chords[0].full_symbol, "V");
+        assert_eq!(with_dur[0].figured_bass[0].rows[0].text, "65");
     }
 
     #[test]
