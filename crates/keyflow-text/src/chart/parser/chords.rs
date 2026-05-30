@@ -370,6 +370,44 @@ impl<'a> ChartParser<'a> {
         (token.to_string(), None)
     }
 
+    /// Recognise a `^`-marked **inversion** figure on a chord (`V^6`, `V^65`,
+    /// `V^43`, …) and return how to realise it as a real inverted chord:
+    /// `(chord_token, display, append_seventh, bass_thirds)`.
+    ///
+    /// - `chord_token` is what to actually parse (the root, plus `7` for the
+    ///   seventh-chord figures), with any trailing `_dur` kept.
+    /// - `display` is the original `root^figure` to show in the chart.
+    /// - `bass_thirds` is how many thirds above the root the bass tone sits
+    ///   (1 = 3rd, 2 = 5th, 3 = 7th), used to set the slash bass.
+    ///
+    /// Suspension figures (`4-3`) and anything unrecognised return `None` and
+    /// fall through to [`extract_caret_figure`] (a plain figured-bass figure).
+    fn extract_caret_inversion(token: &str) -> Option<(String, String, bool, u8)> {
+        let caret = token.find('^')?;
+        let after = &token[caret + 1..];
+        let fig_len = after
+            .find(|c: char| !c.is_ascii_digit())
+            .unwrap_or(after.len());
+        let figure = &after[..fig_len];
+        let (append_seventh, bass_thirds) = match figure {
+            "6" => (false, 1),
+            "64" => (false, 2),
+            "65" => (true, 1),
+            "43" => (true, 2),
+            "42" | "2" => (true, 3),
+            _ => return None,
+        };
+        let root_part = &token[..caret];
+        let trailing = &after[fig_len..]; // e.g. a `_4` duration
+        let chord_token = if append_seventh {
+            format!("{root_part}7{trailing}")
+        } else {
+            format!("{root_part}{trailing}")
+        };
+        let display = format!("{root_part}^{figure}");
+        Some((chord_token, display, append_seventh, bass_thirds))
+    }
+
     /// Pull an inline `^`-marked figured-bass / inversion figure off a chord
     /// token: `V^65`, `V^6`, `V^43`, `V^4-3`. The `^` keeps these distinct from
     /// a plain chord (`V6` is still an added-6th chord) and from the quoted
@@ -3193,6 +3231,18 @@ impl<'a> ChartParser<'a> {
             // so they don't strip the digit, and split `17` into `1:7`.
             // `^`-marked figured bass (`V^65`, `V^4-3`) is unambiguous in any
             // notation system, so strip it before the degree-specific handling.
+            // An *inversion* figure (`V^65`) rewrites to a real inverted chord
+            // (parse `V7`, then set the bass below); the original `V^65` is kept
+            // for display. Other figures (`^4-3`) fall through to figured bass.
+            let inversion_token;
+            let (effective_token, inversion_apply) =
+                match Self::extract_caret_inversion(effective_token) {
+                    Some((ct, display, _append_seventh, bass_thirds)) => {
+                        inversion_token = ct;
+                        (inversion_token.as_str(), Some((display, bass_thirds)))
+                    }
+                    None => (effective_token, None),
+                };
             let (caret_token, caret_rows) = Self::extract_caret_figure(effective_token);
             let effective_token = caret_token.as_str();
             let (chord_token, figured_bass_rows, suspension_figure) = if chord_system
@@ -3216,6 +3266,22 @@ impl<'a> ChartParser<'a> {
                 Ok(mut chord) => {
                     if let Some(text) = &display_override {
                         chord.display_override = Some(text.clone());
+                    }
+                    // Realise a `^` inversion: set the slash bass to the chord
+                    // tone (3rd/5th/7th above the root) so the chord resolves as
+                    // a real inversion, while the chart keeps showing `V^65`.
+                    if let Some((display, bass_thirds)) = &inversion_apply {
+                        if let Some(root_deg) = chord.parsed.root.scale_degree() {
+                            let bass_deg = ((u16::from(root_deg) - 1 + u16::from(*bass_thirds) * 2)
+                                % 7) as u8
+                                + 1;
+                            let bass = RootNotation::from_scale_degree(bass_deg, None);
+                            // The chord resolves as a real inversion (bass set on
+                            // the parsed chord), but the chart shows `V^65`.
+                            chord.parsed.set_bass(bass);
+                            chord.full_symbol = display.clone();
+                            chord.display_override = Some(display.clone());
+                        }
                     }
                     let token_has_explicit_length =
                         Self::token_has_explicit_chord_length(&chord_token);
@@ -4703,26 +4769,79 @@ mod tests {
     }
 
     #[test]
-    fn caret_marks_figured_bass_on_a_chord() {
-        // `V^65` is the V chord with figured-bass "65"; the chord itself is V.
-        let measures = parse_line("V^65");
-        assert_eq!(measures[0].chords[0].full_symbol, "V");
-        assert_eq!(measures[0].figured_bass.len(), 1);
-        assert_eq!(measures[0].figured_bass[0].rows[0].text, "65");
+    fn caret_inversion_resolves_to_a_real_inverted_chord() {
+        let c_major = Key::parse("C").unwrap();
+        let chord = |s: &str| {
+            // One chord per line; resolve against C major to check the bass.
+            let m = parse_line(s);
+            m[0].chords[0].clone()
+        };
 
-        // An inversion triad figure and a suspension figure both work.
-        assert_eq!(parse_line("V^6")[0].figured_bass[0].rows[0].text, "6");
+        // `V^65` shows as V^65 but resolves to a real first-inversion dominant
+        // 7th: a seventh chord with the 3rd (B in C) in the bass.
+        let v65 = chord("V^65");
+        assert_eq!(v65.full_symbol, "V^65");
+        assert!(v65.parsed.family.is_some(), "^65 implies a seventh chord");
+        let bass = v65.parsed.bass.as_ref().expect("inversion sets a bass");
+        assert_eq!(bass.resolve(Some(&c_major)).unwrap().name, "B");
+
+        // `V^6` is a first-inversion *triad* (no seventh), 3rd in the bass.
+        let v6 = chord("V^6");
+        assert_eq!(v6.full_symbol, "V^6");
+        assert!(v6.parsed.family.is_none(), "^6 is a triad");
+        assert_eq!(
+            v6.parsed
+                .bass
+                .as_ref()
+                .unwrap()
+                .resolve(Some(&c_major))
+                .unwrap()
+                .name,
+            "B"
+        );
+
+        // `V^43` → 7th, 5th (D) in the bass; `V^42` → 7th, 7th (F) in the bass.
+        assert_eq!(
+            chord("V^43")
+                .parsed
+                .bass
+                .as_ref()
+                .unwrap()
+                .resolve(Some(&c_major))
+                .unwrap()
+                .name,
+            "D"
+        );
+        assert_eq!(
+            chord("V^42")
+                .parsed
+                .bass
+                .as_ref()
+                .unwrap()
+                .resolve(Some(&c_major))
+                .unwrap()
+                .name,
+            "F"
+        );
+
+        // A trailing duration is preserved on the chord.
+        let with_dur = parse_line("V^65_2 V");
+        assert_eq!(with_dur[0].chords[0].full_symbol, "V^65");
+        assert_eq!(
+            with_dur[0].chords[0]
+                .duration
+                .to_beats(TimeSignature::common_time()),
+            2.0
+        );
+
+        // A suspension figure (`^4-3`) is not an inversion — it stays a figure.
         assert_eq!(parse_line("V^4-3")[0].figured_bass[0].rows[0].text, "4-3");
 
-        // Without the caret, `V6` stays an ordinary added-6th chord (no figure).
+        // Without the caret, `V6` is still an ordinary added-6th chord.
         let plain = parse_line("V6");
         assert!(plain[0].figured_bass.is_empty());
+        assert!(plain[0].chords[0].parsed.bass.as_ref().is_none());
         assert_eq!(plain[0].chords[0].full_symbol, "V6");
-
-        // A `^65` with a trailing duration keeps the duration on the chord.
-        let with_dur = parse_line("V^65_4 V V V");
-        assert_eq!(with_dur[0].chords[0].full_symbol, "V");
-        assert_eq!(with_dur[0].figured_bass[0].rows[0].text, "65");
     }
 
     #[test]
