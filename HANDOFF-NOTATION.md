@@ -44,14 +44,20 @@ on the root; everything after the root parses identically across systems.
 ### Docs (guide pages under `docs/content/guide/`)
 
 Done: `_index.md`, `structure.md` (w1), `chords.md` (w2), `notation-systems.md`
-(w3), `rhythm.md` (w4). The rhythm page covers the measure-fill default, slashes
-(`/` = one beat), `()` groups + triplets, `_N` note values + stickiness +
-`/Duration` + `!`, `%` repeat, and optional `|`. Every code example was
-parse-verified.
+(w3), `rhythm.md` (w4), `melody.md` (w5). The rhythm page covers the measure-fill
+default, slashes, `()` groups + triplets, `_N` durations, `%`, and `|`. The
+melody page covers `m{…}` blocks, letter/number pitch, relative octaves + `'`/`,`
+nudges + `(N)` pin + `/octave`, the shared durations (rests `r` / space `s` / tie
+`~`), stacked `<…>` notes, and pairing via `<< … ; … >>` + sectioned lanes. Every
+example parse-verified.
 
-- **Melody page (next).** Both `notation-systems.md` ("The same for melody")
-  and `rhythm.md` ("What's next") promise melody uses the same
-  letter/number/numeral choice and the same durations. Page doesn't exist yet.
+- **Melody supports letters + numbers only, not Roman numerals** (`melody.rs`
+  parses scale-degree 1–7 or letter A–G; no numeral path). Corrected the old
+  `notation-systems.md` "letter/number/numeral" claim to "letter or number".
+- **Melody octave vs duration gotcha:** a bare trailing number is the *duration*
+  (`C4` = quarter note); an explicit octave needs parens `C(4)` (or the
+  underscore form `C5_4`). `split_pitch_and_duration` in `melody.rs`.
+- **Sections / Lyrics pages** are the remaining guide gaps.
 - The `docs/content/` folder will become a Dioxus app later — the dodeca SSG
   scaffolding was removed (`38b104c`), content kept. Doc page edits have been
   left uncommitted in the working tree by convention while content is in flux.
