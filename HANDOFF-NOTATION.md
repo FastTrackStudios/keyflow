@@ -54,7 +54,10 @@ octaves + `'`/`,` nudges + `:` pin + `/octave`, the shared durations (rests `r` 
 space `s` / tie `~`), stacked `<…>` notes, and pairing via `<< … ; … >>` +
 sectioned lanes. Every example parse-verified.
 
-- **Lyrics page** is the last remaining guide gap.
+- **The guide is now complete** — `lyrics.md` (w7) covers the `[lyrics]` track
+  line, `{Chord}`-on-syllable markers, and hyphen melisma. All seven pages
+  (Structure, Sections, Chords, Notation, Rhythm, Melody, Lyrics) are written and
+  parse-verified.
 - **Two section-parser bugs found while writing `sections.md` (not fixed):**
   (1) a sub-labelled header (`CH 3A 10`) that is the *first* section *and* a title
   line is present mis-parses to Intro — works fine elsewhere; (2) `Pre-Chorus` /
