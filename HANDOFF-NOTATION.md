@@ -77,13 +77,17 @@ octaves + `'`/`,` nudges + `:` pin + `/octave`, the shared durations (rests `r` 
 space `s` / tie `~`), stacked `<…>` notes, and pairing via `<< … ; … >>` +
 sectioned lanes. Every example parse-verified.
 
-- **The guide is now complete** — eight pages, all parse-verified: Structure (w1),
-  Sections (w2), Chords (w3), Notation (w4), Rhythm (w5), Melody (w6), Lyrics (w7),
-  Key & Meter Changes (w8). `lyrics.md` covers the `[lyrics]` track line,
-  `{Chord}`-on-syllable markers, and hyphen melisma. `key-meter-changes.md` covers
-  inline `#Key` key changes, `T6/8`-style meter changes (hold until the next `T`;
-  bare `N/D` mid-line is a chord, so the `T` is required), and `!T2/4` for a
-  one-measure meter change that reverts on its own.
+- **Guide is nine pages, all parse-verified:** Structure (w1), Sections (w2),
+  Chords (w3), Notation (w4), Rhythm (w5), Melody (w6), Lyrics (w7), Key & Meter
+  Changes (w8), Annotations & Expression (w9). `key-meter-changes.md`: inline
+  `#Key` changes, `T6/8` meter changes (hold until the next `T`; bare `N/D`
+  mid-line is a chord, so `T` is required), `!T2/4` one-measure change.
+  `annotations.md`: staff text (`"…"` below / `^"…"` above / `_"…"`), instrument
+  cues (`@Inst "…"`), dynamics (`dyn <level>[@beat] [above]`, levels ppp–fff +
+  sf/sfz/fp), hairpins (`hairpin <|> start..end [above]`).
+- **Remaining guide gaps (still undocumented features, all confirmed real):**
+  repeats & endings (`|: … :|`, voltas); aliases + full-song lanes (`let x = {…}`,
+  `<x>`, `<< <chords> ; <melody> >>`); push/pull timing (`'C` / `C'`).
 - **Two section-parser bugs found while writing `sections.md` — now FIXED:**
   (1) a sub-labelled header (`CH 3A 10`) as the *first* section with a title line
   present mis-parsed to Intro — `looks_like_section_marker` (metadata.rs) had a
