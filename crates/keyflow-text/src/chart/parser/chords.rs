@@ -1698,6 +1698,11 @@ impl<'a> ChartParser<'a> {
             .replace(":|", " @repeat-end |")
             .replace("m {", "m{");
 
+        // Preprocess: Expand `()` rhythm groups into explicit per-chord lily
+        // durations (e.g. `(C G)` → `C_2 G_2`, `(D Em G)` → `D_2t Em_2t G_2t`).
+        // Identity for lines with no group, so spans/tokens are unchanged there.
+        let line_to_parse = expand_chord_groups(&line_to_parse, time_sig)?;
+
         // Preprocess: Calculate automatic durations for chords between measure separators
         // If chords are between | separators, split the measure evenly
         // e.g., "| G C |" → "G_2 C_2", "G C | D" → "G_2 C_2 D_1"
@@ -4362,6 +4367,193 @@ mod tests {
             .collect()
     }
 
+    /// Like [`parse_line`] but with an explicit section measure count, for
+    /// content that spans more than one bar.
+    fn parse_line_n(line: &str, count: usize) -> Vec<crate::chart::types::Measure> {
+        let mut chart = crate::chart::Chart::new();
+        let mut parser = ChartParser::new(&mut chart);
+        parser
+            .parse_chord_line(line, &SectionType::Verse, Some(count))
+            .expect("parse_chord_line failed")
+    }
+
+    // --- `()` rhythm grouping ---------------------------------------------
+
+    #[test]
+    fn expand_chord_groups_rewrites_to_lily_durations() {
+        let c44 = TimeSignature::common_time();
+        // Default target is one measure, split equally.
+        assert_eq!(expand_chord_groups("(C G)", c44).unwrap(), "C_2 G_2");
+        // Three over a measure → half-note triplet.
+        assert_eq!(
+            expand_chord_groups("(D Em G)", c44).unwrap(),
+            "D_2t Em_2t G_2t"
+        );
+        // Slash run sets the target: two beats, one each.
+        assert_eq!(expand_chord_groups("(D Em)//", c44).unwrap(), "D_4 Em_4");
+        assert_eq!(expand_chord_groups("(D Em) //", c44).unwrap(), "D_4 Em_4");
+        // Attached lily target: a quarter split three ways → eighth triplet.
+        assert_eq!(
+            expand_chord_groups("(D Em G)_4", c44).unwrap(),
+            "D_8t Em_8t G_8t"
+        );
+        // A group is just one element among bare chords.
+        assert_eq!(
+            expand_chord_groups("G C (Em D) G", c44).unwrap(),
+            "G C Em_2 D_2 G"
+        );
+        // Chord descriptors inside a group are preserved.
+        assert_eq!(expand_chord_groups("(Dm7 G7)", c44).unwrap(), "Dm7_2 G7_2");
+    }
+
+    #[test]
+    fn expand_chord_groups_respects_meter() {
+        // In 6/8 a measure is six eighth-beats; two chords → dotted quarters.
+        let c68 = TimeSignature::new(6, 8);
+        assert_eq!(expand_chord_groups("(A B)", c68).unwrap(), "A_4. B_4.");
+    }
+
+    #[test]
+    fn expand_chord_groups_leaves_non_groups_untouched() {
+        let c44 = TimeSignature::common_time();
+        // No parens → identity (so spans/tokens are unchanged for normal lines).
+        assert_eq!(expand_chord_groups("C F G Am", c44).unwrap(), "C F G Am");
+        // Parens inside quotes and m{…} melody blocks are left alone.
+        assert_eq!(
+            expand_chord_groups(r#"C "a (b) c" G"#, c44).unwrap(),
+            r#"C "a (b) c" G"#
+        );
+        assert_eq!(
+            expand_chord_groups("C m{ D(4) E } G", c44).unwrap(),
+            "C m{ D(4) E } G"
+        );
+    }
+
+    #[test]
+    fn expand_chord_groups_reports_errors() {
+        let c44 = TimeSignature::common_time();
+        assert!(expand_chord_groups("(C G", c44).is_err());
+        assert!(expand_chord_groups("()", c44).is_err());
+        // Five over a measure has no power-of-two/triplet notation → error.
+        assert!(expand_chord_groups("(C D E F G)", c44).is_err());
+    }
+
+    #[test]
+    fn beats_to_lily_suffix_picks_canonical_token() {
+        let c44 = TimeSignature::common_time();
+        assert_eq!(beats_to_lily_suffix(2.0, c44).as_deref(), Some("_2")); // half
+        assert_eq!(beats_to_lily_suffix(1.0, c44).as_deref(), Some("_4")); // quarter
+        assert_eq!(beats_to_lily_suffix(1.5, c44).as_deref(), Some("_4.")); // dotted quarter
+        assert_eq!(beats_to_lily_suffix(4.0 / 3.0, c44).as_deref(), Some("_2t"));
+        assert_eq!(beats_to_lily_suffix(1.0 / 3.0, c44).as_deref(), Some("_8t"));
+        assert_eq!(beats_to_lily_suffix(0.8, c44), None); // quintuplet — unsupported
+    }
+
+    #[test]
+    fn group_splits_a_bar_equally() {
+        let ts = TimeSignature::common_time();
+        let measures = parse_line("(C G)");
+        assert_eq!(measures.len(), 1);
+        assert_eq!(measures[0].chords.len(), 2);
+        assert_eq!(measures[0].chords[0].full_symbol, "C");
+        assert_eq!(measures[0].chords[0].duration.to_beats(ts), 2.0);
+        assert_eq!(measures[0].chords[1].full_symbol, "G");
+        assert_eq!(measures[0].chords[1].duration.to_beats(ts), 2.0);
+    }
+
+    #[test]
+    fn group_of_three_is_a_whole_measure_triplet() {
+        let ts = TimeSignature::common_time();
+        let measures = parse_line("(D Em G)");
+        assert_eq!(measures.len(), 1);
+        assert_eq!(measures[0].chords.len(), 3);
+        for chord in &measures[0].chords {
+            // Duration is stored at milli-beat resolution, so 4/3 lands on 1.333.
+            assert!((chord.duration.to_beats(ts) - 4.0 / 3.0).abs() < 1e-3);
+            // The notation carries a triplet so the engraver brackets it.
+            match &chord.rhythm {
+                ChordRhythm::Explicit(nd) => assert!(
+                    nd.tuplet.is_some(),
+                    "expected a tuplet on a triplet group member"
+                ),
+                other => panic!("expected Explicit rhythm, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn group_is_one_element_among_bare_chords() {
+        let ts = TimeSignature::common_time();
+        let measures = parse_line_n("G C (Em D) G", 4);
+        assert_eq!(measures.len(), 4);
+        // The three bare chords each own a whole bar.
+        assert_eq!(measures[0].chords[0].full_symbol, "G");
+        assert_eq!(measures[0].chords[0].duration.to_beats(ts), 4.0);
+        assert_eq!(measures[1].chords[0].full_symbol, "C");
+        // The grouped bar holds both chords, half each.
+        assert_eq!(measures[2].chords.len(), 2);
+        assert_eq!(measures[2].chords[0].full_symbol, "Em");
+        assert_eq!(measures[2].chords[0].duration.to_beats(ts), 2.0);
+        assert_eq!(measures[2].chords[1].full_symbol, "D");
+        assert_eq!(measures[2].chords[1].duration.to_beats(ts), 2.0);
+        assert_eq!(measures[3].chords[0].full_symbol, "G");
+    }
+
+    #[test]
+    fn group_slash_target_sets_total_beats() {
+        let ts = TimeSignature::common_time();
+        // `(D Em)//` → two beats split one each.
+        let measures = parse_line("(D Em)//");
+        assert_eq!(measures[0].chords.len(), 2);
+        assert_eq!(measures[0].chords[0].duration.to_beats(ts), 1.0);
+        assert_eq!(measures[0].chords[1].duration.to_beats(ts), 1.0);
+    }
+
+    // --- `|` bar lines ----------------------------------------------------
+
+    #[test]
+    fn chords_inside_one_bar_split_it_evenly() {
+        let ts = TimeSignature::common_time();
+        // `| G C Em D |` → one bar, four chords, one beat each in 4/4.
+        let measures = parse_line("| G C Em D |");
+        assert_eq!(measures.len(), 1);
+        assert_eq!(measures[0].chords.len(), 4);
+        for (chord, name) in measures[0].chords.iter().zip(["G", "C", "Em", "D"]) {
+            assert_eq!(chord.full_symbol, name);
+            assert_eq!(chord.duration.to_beats(ts), 1.0);
+        }
+    }
+
+    #[test]
+    fn bar_line_per_chord_is_one_chord_per_bar() {
+        let ts = TimeSignature::common_time();
+        // A leading `|` before each chord opens a fresh bar; each chord fills it.
+        // Works with or without spaces around the bars.
+        for line in ["|G |C |Em |D", "|G|C|Em|D"] {
+            let measures = parse_line_n(line, 4);
+            assert_eq!(measures.len(), 4, "line: {line}");
+            for (m, name) in measures.iter().zip(["G", "C", "Em", "D"]) {
+                assert_eq!(m.chords.len(), 1, "line: {line}");
+                assert_eq!(m.chords[0].full_symbol, name);
+                assert_eq!(m.chords[0].duration.to_beats(ts), 4.0);
+            }
+        }
+    }
+
+    #[test]
+    fn bars_split_independently() {
+        let ts = TimeSignature::common_time();
+        // `| G C | Em D | F |` → two half-bar pairs, then a whole-bar F.
+        let measures = parse_line_n("| G C | Em D | F |", 3);
+        assert_eq!(measures.len(), 3);
+        assert_eq!(measures[0].chords[0].duration.to_beats(ts), 2.0);
+        assert_eq!(measures[0].chords[1].duration.to_beats(ts), 2.0);
+        assert_eq!(measures[1].chords[0].full_symbol, "Em");
+        assert_eq!(measures[1].chords[1].duration.to_beats(ts), 2.0);
+        assert_eq!(measures[2].chords[0].full_symbol, "F");
+        assert_eq!(measures[2].chords[0].duration.to_beats(ts), 4.0);
+    }
+
     #[test]
     fn numbers_take_diatonic_quality_in_major_key() {
         let q = chord_qualities("P\n4/4 120bpm #C\n\nVS\n1 2 3 4 5 6 7\n");
@@ -5986,6 +6178,229 @@ fn parse_lily_duration_beats(token: &str, time_sig: TimeSignature) -> Option<(f6
     };
     let beats = f64::from(time_sig.denominator) / note_denominator;
     Some((if dotted { beats * 1.5 } else { beats }, dotted))
+}
+
+/// Inverse of [`parse_lily_duration_beats`], extended with triplets: find the
+/// lily duration token whose value equals `beats` in the given meter, and
+/// return its suffix including the leading underscore (e.g. `"_2"`, `"_4."`,
+/// `"_8t"`). Searches plain, dotted, triplet, then dotted-triplet forms of each
+/// note value, longest note first, so the canonical token wins. Returns `None`
+/// when no notatable note value matches (e.g. a quintuplet division). Used by
+/// [`expand_chord_groups`] to rewrite `()` rhythm groups.
+fn beats_to_lily_suffix(beats: f64, time_sig: TimeSignature) -> Option<String> {
+    const EPS: f64 = 1e-6;
+    let denom = f64::from(time_sig.denominator);
+    for value in [1u32, 2, 4, 8, 16, 32] {
+        let base = denom / f64::from(value);
+        // (beats for this form, suffix after the number)
+        let candidates = [
+            (base, ""),
+            (base * 1.5, "."),
+            (base * 2.0 / 3.0, "t"),
+            (base * 1.5 * 2.0 / 3.0, "t."),
+        ];
+        for (cand, suffix) in candidates {
+            if (cand - beats).abs() < EPS {
+                return Some(format!("_{value}{suffix}"));
+            }
+        }
+    }
+    None
+}
+
+/// Resolve a `()` chord group's *target duration* in beats, starting at byte
+/// index `after_paren` (the position just past the closing `)`). The target is,
+/// in priority order:
+///   1. an attached lily suffix — `)_4`, `)_8t`, `)_2.`
+///   2. a slash run — `)//`, `) //`, `)/.` (each slash = one beat, `.` dots it)
+///   3. otherwise one full measure (`beats_per_measure`).
+/// Returns the target beats and the byte index where parsing should resume
+/// (past any consumed suffix/slashes). A slash run immediately followed by an
+/// alphanumeric/`#` is a floating slash-bass (`/E`, `/3`), not a target, and is
+/// left for the main parser.
+fn group_target_beats(
+    line: &str,
+    after_paren: usize,
+    beats_per_measure: f64,
+    time_sig: TimeSignature,
+) -> Result<(f64, usize), String> {
+    let bytes = line.as_bytes();
+
+    // 1. Attached lily suffix: `_4`, `_8t`, `_2.`
+    if bytes.get(after_paren) == Some(&b'_') {
+        let num_start = after_paren + 1;
+        let mut k = num_start;
+        while k < bytes.len() && bytes[k].is_ascii_digit() {
+            k += 1;
+        }
+        let value: f64 = line[num_start..k]
+            .parse()
+            .map_err(|_| "Expected a duration after '_' on a chord group".to_string())?;
+        let mut triplet = false;
+        let mut dotted = false;
+        if bytes.get(k) == Some(&b't') {
+            triplet = true;
+            k += 1;
+        }
+        if bytes.get(k) == Some(&b'.') {
+            dotted = true;
+            k += 1;
+        }
+        let mut beats = f64::from(time_sig.denominator) / value;
+        if triplet {
+            beats *= 2.0 / 3.0;
+        }
+        if dotted {
+            beats *= 1.5;
+        }
+        return Ok((beats, k));
+    }
+
+    // 2. Slash run (allow whitespace between `)` and the slashes).
+    let mut k = after_paren;
+    while matches!(bytes.get(k), Some(&b' ') | Some(&b'\t')) {
+        k += 1;
+    }
+    if bytes.get(k) == Some(&b'/') {
+        let mut slashes = 0u32;
+        let mut dotted = false;
+        while k < bytes.len() {
+            match bytes[k] {
+                b'/' => {
+                    slashes += 1;
+                    k += 1;
+                }
+                b'.' => {
+                    dotted = true;
+                    k += 1;
+                }
+                _ => break,
+            }
+        }
+        let next_is_token_char = bytes
+            .get(k)
+            .is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'#');
+        if slashes > 0 && !next_is_token_char {
+            let mut beats = f64::from(slashes);
+            if dotted {
+                beats *= 1.5;
+            }
+            return Ok((beats, k));
+        }
+    }
+
+    // 3. Default: one full measure. Consume nothing.
+    Ok((beats_per_measure, after_paren))
+}
+
+/// Expand `()` rhythm groups into explicit per-chord lily durations.
+///
+/// A `(a b c …)` group has a *target duration* (see [`group_target_beats`])
+/// divided equally among its N inner chords. Each chord is rewritten with the
+/// lily token for `target / N`, so the existing chord-line parser renders the
+/// division — including triplets — with no further special-casing:
+/// ```text
+///   (C G)       -> C_2 G_2            two half notes
+///   (D Em G)    -> D_2t Em_2t G_2t    half-note triplet over the bar
+///   (D Em)//    -> D_4 Em_4           group = 2 beats, one each
+///   (D Em G)_4  -> D_8t Em_8t G_8t    eighth-note triplet over a quarter
+/// ```
+/// Quoted text and `m{…}` melody blocks are copied verbatim, so their
+/// parentheses (e.g. melody octaves) are left untouched. Note: byte offsets of
+/// expanded lines no longer map 1:1 to the source, so source spans on a line
+/// that contains a group are approximate.
+fn expand_chord_groups(line: &str, time_sig: TimeSignature) -> Result<String, String> {
+    if !line.contains('(') {
+        return Ok(line.to_string());
+    }
+    let beats_per_measure = f64::from(time_sig.numerator);
+    let bytes = line.as_bytes();
+    let mut out = String::with_capacity(line.len());
+    let mut i = 0usize;
+    while i < bytes.len() {
+        let ch = line[i..].chars().next().unwrap();
+
+        // Copy quoted strings verbatim.
+        if ch == '"' {
+            let start = i;
+            i += 1;
+            while i < bytes.len() && bytes[i] != b'"' {
+                i += 1;
+            }
+            if i < bytes.len() {
+                i += 1; // include the closing quote
+            }
+            out.push_str(&line[start..i]);
+            continue;
+        }
+
+        // Copy `m{…}` melody blocks verbatim (track brace depth).
+        if ch == 'm' && bytes.get(i + 1) == Some(&b'{') {
+            let start = i;
+            i += 2;
+            let mut depth = 1u32;
+            while i < bytes.len() && depth > 0 {
+                match bytes[i] {
+                    b'{' => depth += 1,
+                    b'}' => depth -= 1,
+                    _ => {}
+                }
+                i += 1;
+            }
+            out.push_str(&line[start..i]);
+            continue;
+        }
+
+        if ch == '(' {
+            let inner_start = i + 1;
+            let mut j = inner_start;
+            let mut depth = 1u32;
+            while j < bytes.len() {
+                match bytes[j] {
+                    b'(' => depth += 1,
+                    b')' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+                j += 1;
+            }
+            if depth != 0 {
+                return Err("Unclosed '(' in chord rhythm group".to_string());
+            }
+            let elems: Vec<&str> = line[inner_start..j].split_whitespace().collect();
+            if elems.is_empty() {
+                return Err("Empty '()' chord rhythm group".to_string());
+            }
+            let (target_beats, resume) =
+                group_target_beats(line, j + 1, beats_per_measure, time_sig)?;
+            let each = target_beats / elems.len() as f64;
+            let suffix = beats_to_lily_suffix(each, time_sig).ok_or_else(|| {
+                format!(
+                    "Chord group of {} chords cannot be evenly notated over {} beat(s); \
+                     supported divisions are powers of two and triplets",
+                    elems.len(),
+                    target_beats
+                )
+            })?;
+            for (idx, e) in elems.iter().enumerate() {
+                if idx > 0 {
+                    out.push(' ');
+                }
+                out.push_str(e);
+                out.push_str(&suffix);
+            }
+            i = resume;
+            continue;
+        }
+
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    Ok(out)
 }
 
 #[cfg(test)]
