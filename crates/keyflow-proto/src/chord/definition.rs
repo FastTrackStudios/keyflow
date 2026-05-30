@@ -424,6 +424,19 @@ impl Chord {
         consumed += bass.1;
         debug!("Parsed bass: {:?}, total consumed: {}", bass.0, consumed);
 
+        // Step 9c: A Roman numeral over another Roman numeral is a secondary /
+        // applied chord (`V/V` = "five of five"), not a slash bass. Fold the
+        // target into the root so it resolves relative to the tonicised degree;
+        // every other `/x` (note, scale degree) stays an ordinary slash bass.
+        let mut root = root_result.root;
+        let bass = match bass.0 {
+            Some(b) if root.is_roman() && b.is_roman() => {
+                root = root.with_applied_target(b);
+                None
+            }
+            other => other,
+        };
+
         // Step 10: Parse the duration (if present)
         let duration = if consumed < tokens.len() {
             trace!("Attempting to parse duration from remaining tokens");
@@ -448,21 +461,21 @@ impl Chord {
 
         debug!(
             "Chord parsing complete: root={:?}, quality={:?}, family={:?}, extensions={:?}, duration={:?}",
-            root_result.root, quality, final_family, extensions, duration
+            root, quality, final_family, extensions, duration
         );
 
         let mut chord = Self {
             origin: String::new(),     // Will be set from tokens if needed
             descriptor: String::new(), // Will be computed
             normalized: String::new(), // Will be computed in normalize()
-            root: root_result.root,
+            root,
             quality,
             family: final_family,
             extensions,
             alterations: alterations.clone(),
             additions: additions.0,
             omissions: omissions.0,
-            bass: bass.0,
+            bass,
             bass_vertical: false,
             duration,
             intervals: HashMap::new(),
@@ -1359,6 +1372,48 @@ mod tests {
     use crate::key::Key;
     use crate::parsing::Lexer;
     use crate::primitives::MusicalNote;
+
+    fn parse_chord(s: &str) -> Chord {
+        let mut lexer = Lexer::new(s.to_string());
+        Chord::parse(&lexer.tokenize()).unwrap()
+    }
+
+    #[test]
+    fn secondary_dominant_resolves_against_tonicised_degree() {
+        let c_major = Key::parse("C").unwrap();
+
+        // V/V in C: target V = G, then V of G = D. Default major triad.
+        let vv = parse_chord("V/V");
+        assert_eq!(vv.root_note(Some(&c_major)).unwrap().name, "D");
+        assert_eq!(format!("{}", vv.root), "V/V");
+        assert!(vv.bass.is_none(), "a secondary chord is not a slash bass");
+        assert!(vv.root.applied_target().is_some());
+
+        // V/vi: vi = A, then V of A = E.
+        assert_eq!(
+            parse_chord("V/vi").root_note(Some(&c_major)).unwrap().name,
+            "E"
+        );
+        // V/ii: ii = D, then V of D = A.
+        assert_eq!(
+            parse_chord("V/ii").root_note(Some(&c_major)).unwrap().name,
+            "A"
+        );
+
+        // V7/V keeps the dominant-7th family, rooted on the resolved D.
+        let v7v = parse_chord("V7/V");
+        assert_eq!(v7v.root_note(Some(&c_major)).unwrap().name, "D");
+        assert!(v7v.family.is_some());
+        assert_eq!(format!("{}", v7v.root), "V/V");
+
+        // A plain slash bass is unchanged: `1/3` and `G/B` stay slash chords.
+        let slash = parse_chord("1/3");
+        assert!(slash.bass.is_some());
+        assert!(slash.root.applied_target().is_none());
+        let letter = parse_chord("G/B");
+        assert!(letter.bass.is_some());
+        assert!(letter.root.applied_target().is_none());
+    }
 
     #[test]
     fn test_parse_c_major() {
