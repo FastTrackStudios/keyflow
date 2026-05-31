@@ -20,7 +20,7 @@
 //!
 //! All functions are pure: no global state, no I/O.
 
-use crate::chart::{Chart, ChordInstance, parse_chart};
+use crate::chart::{Chart, parse_chart};
 use crate::parsing::TextSpan;
 
 #[cfg(feature = "highlighting")]
@@ -118,61 +118,6 @@ fn collect_highlights(text: &str) -> Vec<HighlightSpan> {
             ));
         }
         line_start += line.len();
-    }
-    out
-}
-
-/// Doc-absolute source spans for each parsed chord, recovered by matching every
-/// chord's `original_token` against the document's whitespace/`|`-delimited
-/// tokens in document order.
-///
-/// Why this exists: the parser's per-chord `ChordInstance::source_span` is
-/// currently **line-relative** — `parse_chord_line_inner` shifts spans by a
-/// `line_byte_offset` that production parsing leaves at `0`, so the spans only
-/// make sense within a single line and can't map a document offset back to a
-/// chord. Editor features (inlay overlays, hover) need a reliable doc-absolute
-/// span, so we re-derive one here. Chords occur in the same order in the chart
-/// and in the source, so one forward scan aligns them; a chord whose token
-/// can't be relocated (e.g. heavily normalized) is skipped, keeping the rest
-/// aligned.
-#[must_use]
-pub fn chord_doc_spans<'a>(text: &str, chart: &'a Chart) -> Vec<(TextSpan, &'a ChordInstance)> {
-    // Tokenize the document into (offset, token), splitting on whitespace and
-    // measure bars. These are the same boundaries chords sit between.
-    let bytes = text.as_bytes();
-    let mut tokens: Vec<(usize, &str)> = Vec::new();
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i].is_ascii_whitespace() || bytes[i] == b'|' {
-            i += 1;
-            continue;
-        }
-        let start = i;
-        while i < bytes.len() && !bytes[i].is_ascii_whitespace() && bytes[i] != b'|' {
-            i += 1;
-        }
-        tokens.push((start, &text[start..i]));
-    }
-
-    let mut out = Vec::new();
-    let mut ti = 0;
-    for section in &chart.sections {
-        for measure in section.measures() {
-            for ci in &measure.chords {
-                let want = ci.original_token.trim();
-                if want.is_empty() {
-                    continue;
-                }
-                while ti < tokens.len() && tokens[ti].1 != want {
-                    ti += 1;
-                }
-                let Some(&(off, tok)) = tokens.get(ti) else {
-                    return out; // ran out of source tokens to match
-                };
-                out.push((TextSpan::new(off, tok.len()), ci));
-                ti += 1;
-            }
-        }
     }
     out
 }

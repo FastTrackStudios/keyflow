@@ -112,9 +112,80 @@ impl<'a> ChartParser<'a> {
         // Phase 3: Post-processing
         self.post_process();
 
+        // Phase 3.5: assign document-absolute source spans to every chord.
+        self.assign_chord_source_spans(input);
+
         let _ = line_idx; // Suppress unused warning
 
         Ok(())
+    }
+
+    /// Assign **document-absolute** `source_span`s to every parsed chord.
+    ///
+    /// The line-by-line parser emits each chord's `source_span` relative to its
+    /// own chord line — `parse_chord_line_inner`'s `line_byte_offset` is `0` in
+    /// production (only the `#[cfg(test)]` path shifts it). Line-relative spans
+    /// are useless for mapping a document offset back to a chord, which is
+    /// exactly what click-to-highlight (engraver), editor inlay overlays, and
+    /// hover all need.
+    ///
+    /// Rather than thread a doc offset through the whole line pipeline (a large,
+    /// risky refactor of the core parser), we recover absolute spans in one pass
+    /// here: chords occur in the same order in the chart and in the source, so a
+    /// single forward scan that matches each chord's `original_token` against the
+    /// document's whitespace/`|`-delimited tokens lines them up. A chord whose
+    /// token can't be relocated keeps its prior span and the scan stays aligned
+    /// for the rest. (CM6's block parser instead carries an absolute `lineStart`
+    /// cursor — `lineStart += line.length + 1` — and emits `lineStart + col`; the
+    /// equivalent here would be threading that offset through `parse_sections` →
+    /// `parse_section_measures` → `parse_chord_line_inner`.)
+    fn assign_chord_source_spans(&mut self, input: &str) {
+        use crate::parsing::TextSpan;
+
+        // Tokenize the document on whitespace + measure bars — the boundaries
+        // chords sit between.
+        let bytes = input.as_bytes();
+        let mut tokens: Vec<(usize, &str)> = Vec::new();
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i].is_ascii_whitespace() || bytes[i] == b'|' {
+                i += 1;
+                continue;
+            }
+            let start = i;
+            while i < bytes.len() && !bytes[i].is_ascii_whitespace() && bytes[i] != b'|' {
+                i += 1;
+            }
+            tokens.push((start, &input[start..i]));
+        }
+
+        let line_col = |off: usize| -> (u32, u32) {
+            let upto = &input[..off];
+            let line = upto.bytes().filter(|&b| b == b'\n').count() as u32 + 1;
+            let col = (off - upto.rfind('\n').map_or(0, |n| n + 1)) as u32 + 1;
+            (line, col)
+        };
+
+        let mut ti = 0;
+        for section in &mut self.sections {
+            for measure in section.measures_mut() {
+                for ci in &mut measure.chords {
+                    let want = ci.original_token.trim();
+                    if want.is_empty() {
+                        continue;
+                    }
+                    while ti < tokens.len() && tokens[ti].1 != want {
+                        ti += 1;
+                    }
+                    let Some(&(off, tok)) = tokens.get(ti) else {
+                        return; // ran out of source tokens to match
+                    };
+                    let (line, col) = line_col(off);
+                    ci.source_span = Some(TextSpan::with_location(off, tok.len(), line, col));
+                    ti += 1;
+                }
+            }
+        }
     }
 
     fn try_parse_sectioned_lane_parallel(&mut self, lines: &[&str]) -> Result<bool, String> {
@@ -461,6 +532,34 @@ mod tests {
         // A quoted comment and a key change on the first header behave the same.
         let chart = parse_chart("My Song\n4/4 #C\n\nBR 8 #G\nEm D\n").unwrap();
         assert_eq!(chart.sections[0].section.section_type, SectionType::Bridge);
+    }
+
+    #[test]
+    fn chord_source_spans_are_document_absolute() {
+        // The two `5` tokens sit at their literal document offsets (20 and 27),
+        // not the line-relative offsets the parser emits internally (2 and 9).
+        let text = "120bpm 4/4 #C\n\nvs\n1 5 #G 1 5\n";
+        let chart = parse_chart(text).expect("parse");
+        let mut starts = Vec::new();
+        for s in &chart.sections {
+            for m in s.measures() {
+                for c in &m.chords {
+                    if let Some(span) = c.source_span {
+                        starts.push(span.start);
+                        // The span covers exactly its source token.
+                        assert_eq!(&text[span.start..span.end()], c.original_token.trim());
+                    }
+                }
+            }
+        }
+        assert!(
+            starts.contains(&text.find('5').unwrap()),
+            "first 5 should be at its doc offset; spans = {starts:?}"
+        );
+        assert!(
+            starts.contains(&text.rfind('5').unwrap()),
+            "second 5 should be at its doc offset; spans = {starts:?}"
+        );
     }
 
     #[test]

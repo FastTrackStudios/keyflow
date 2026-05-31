@@ -80,10 +80,8 @@ pub fn hover(text: &str, byte_offset: usize, chart: &Chart) -> Option<HoverInfo>
     // covering the cursor and resolve against `key_at_position` — not the
     // chart-level key. A key-relative symbol (Nashville / Roman) shows its
     // absolute letter-name chord; a note-name chord shows its scale degree.
-    if let Some(ci) = chord_at_offset(text, chart, offset) {
-        // `range` is the doc-absolute token under the cursor; `ci.source_span`
-        // is line-relative and unreliable here, so anchor to `range`.
-        let span = range;
+    if let Some(ci) = chord_at_offset(chart, offset) {
+        let span = ci.source_span.unwrap_or(range);
         if let Some(key) = chart
             .key_at_position(&ci.position)
             .or(chart.current_key.as_ref())
@@ -148,15 +146,21 @@ pub fn hover(text: &str, byte_offset: usize, chart: &Chart) -> Option<HoverInfo>
     None
 }
 
-/// Find the parsed chord instance whose **doc-absolute** span covers `offset`.
+/// Find the parsed chord instance whose source span covers `offset`.
 ///
-/// Uses [`super::chord_doc_spans`] rather than `ChordInstance::source_span`,
-/// because the latter is line-relative in production parses (see that fn).
-fn chord_at_offset<'a>(text: &str, chart: &'a Chart, offset: usize) -> Option<&'a ChordInstance> {
-    super::chord_doc_spans(text, chart)
-        .into_iter()
-        .find(|(span, _)| offset >= span.start && offset < span.end())
-        .map(|(_, ci)| ci)
+/// `ChordInstance::source_span` is document-absolute (assigned in
+/// `ChartParser::assign_chord_source_spans`), so a direct containment check
+/// maps a cursor offset to its chord.
+fn chord_at_offset(chart: &Chart, offset: usize) -> Option<&ChordInstance> {
+    chart
+        .sections
+        .iter()
+        .flat_map(|section| section.measures())
+        .flat_map(|measure| measure.chords.iter())
+        .find(|ci| {
+            ci.source_span
+                .is_some_and(|span| offset >= span.start && offset < span.end())
+        })
 }
 
 #[cfg(test)]
