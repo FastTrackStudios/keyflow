@@ -12,6 +12,7 @@ use super::notations::{
 };
 use super::track::{Track, TrackType};
 use crate::chord::{Chord, ChordRhythm, PushPullAmount};
+use crate::key::Key;
 use crate::parsing::TextSpan;
 use crate::primitives::RootNotation;
 use crate::sections::Section;
@@ -110,6 +111,31 @@ impl ChordInstance {
     pub fn with_source_span(mut self, span: TextSpan) -> Self {
         self.source_span = Some(span);
         self
+    }
+
+    /// Resolve a key-relative chord (written as a Nashville number or Roman
+    /// numeral) to its absolute letter-name symbol in `key` — e.g. `5maj7` in
+    /// C major → `Gmaj7`, `V7` in C → `G7`.
+    ///
+    /// Returns `None` for chords already written as note names (nothing to
+    /// resolve) or whose root doesn't resolve against `key`. Resolution swaps
+    /// the chord's root for the absolute note and re-renders via `Chord`'s
+    /// `Display`, so quality / extensions / bass survive unchanged.
+    ///
+    /// Callers that span key changes should pass the key in effect at this
+    /// chord's position (see [`Chart::key_at_position`]) rather than a single
+    /// chart-level key.
+    ///
+    /// [`Chart::key_at_position`]: crate::chart::Chart::key_at_position
+    #[must_use]
+    pub fn resolved_symbol(&self, key: &Key) -> Option<String> {
+        if !self.root.is_key_relative() {
+            return None;
+        }
+        let note = self.parsed.root.resolve(Some(key))?;
+        let mut absolute = self.parsed.clone();
+        absolute.root = RootNotation::from_note_name(note);
+        Some(absolute.to_string())
     }
 
     /// Convert this chord instance to LilyPond chordmode notation

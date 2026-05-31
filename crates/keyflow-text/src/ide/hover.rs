@@ -1,11 +1,12 @@
 //! Hover info for the token under the cursor.
 //!
-//! Today this is rule-based and works against the token slice. Future
-//! revisions should consult the parsed `Chart` to enrich hovers (e.g.
-//! resolve scale degrees against the active key, show measure / beat
-//! position, look up melody-variable definitions).
+//! Chord / scale-degree hovers consult the parsed `Chart`: the chord instance
+//! under the cursor is resolved against the key **in effect at its position**
+//! (`Chart::key_at_position`), so a `5` after a mid-song `#G` key change
+//! resolves in G, not the chart's initial key. `$`/`/` tokens and unparsed
+//! tokens fall back to the rule-based slice handling.
 
-use crate::chart::Chart;
+use crate::chart::{Chart, ChordInstance};
 use crate::parsing::TextSpan;
 
 #[derive(Debug, Clone)]
@@ -74,7 +75,53 @@ pub fn hover(text: &str, byte_offset: usize, chart: &Chart) -> Option<HoverInfo>
         });
     }
 
-    // Scale-degree number (1..=7) or roman numeral.
+    // Chord / scale-degree resolved against the key IN EFFECT at this position.
+    // Key changes can happen in any measure, so look up the chord instance
+    // covering the cursor and resolve against `key_at_position` — not the
+    // chart-level key. A key-relative symbol (Nashville / Roman) shows its
+    // absolute letter-name chord; a note-name chord shows its scale degree.
+    if let Some(ci) = chord_at_offset(text, chart, offset) {
+        // `range` is the doc-absolute token under the cursor; `ci.source_span`
+        // is line-relative and unreliable here, so anchor to `range`.
+        let span = range;
+        if let Some(key) = chart
+            .key_at_position(&ci.position)
+            .or(chart.current_key.as_ref())
+        {
+            let key_str = format!("{key}");
+            let degree = ci
+                .parsed
+                .root
+                .resolve(Some(key))
+                .and_then(|n| key.degree_of_note(&n));
+            let deg_str = degree
+                .map(|d| format!(" · scale degree {d}"))
+                .unwrap_or_default();
+            let markdown = if let Some(resolved) = ci.resolved_symbol(key) {
+                // Key-relative: `5` → `G`, `V7` → `G7`.
+                format!(
+                    "**`{}`** → **`{}`** in **{}**{}",
+                    ci.original_token.trim(),
+                    resolved,
+                    key_str,
+                    deg_str
+                )
+            } else {
+                // Already a note-name chord — show its function in the key.
+                format!(
+                    "**`{}`** — chord in **{}**{}",
+                    ci.full_symbol, key_str, deg_str
+                )
+            };
+            return Some(HoverInfo {
+                markdown,
+                range: span,
+            });
+        }
+    }
+
+    // Scale-degree number (1..=7) or roman numeral — fallback for tokens not
+    // matched to a parsed chord instance above (uses the chart-level key).
     if let Ok(deg) = token.parse::<u8>() {
         if (1..=7).contains(&deg) {
             let key_str = chart
@@ -101,6 +148,17 @@ pub fn hover(text: &str, byte_offset: usize, chart: &Chart) -> Option<HoverInfo>
     None
 }
 
+/// Find the parsed chord instance whose **doc-absolute** span covers `offset`.
+///
+/// Uses [`super::chord_doc_spans`] rather than `ChordInstance::source_span`,
+/// because the latter is line-relative in production parses (see that fn).
+fn chord_at_offset<'a>(text: &str, chart: &'a Chart, offset: usize) -> Option<&'a ChordInstance> {
+    super::chord_doc_spans(text, chart)
+        .into_iter()
+        .find(|(span, _)| offset >= span.start && offset < span.end())
+        .map(|(_, ci)| ci)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -123,5 +181,30 @@ mod tests {
     fn hover_returns_none_on_whitespace() {
         let chart = Chart::new();
         assert!(hover("   ", 1, &chart).is_none());
+    }
+
+    #[test]
+    fn hover_resolves_degree_against_section_key() {
+        // `#G` mid-stream changes the key: the first `5` resolves in C → G;
+        // the second `5` (after the change) resolves in G → D. Only
+        // per-position resolution gives both.
+        let text = "120bpm 4/4 #C\n\nvs\n1 5 #G 1 5\n";
+        let chart = crate::ide::analyze(text).chart;
+
+        let first5 = text.find('5').expect("first 5");
+        let h1 = hover(text, first5, &chart).expect("hover on first 5");
+        assert!(
+            h1.markdown.contains('G'),
+            "first 5 (key C) should resolve to G: {}",
+            h1.markdown
+        );
+
+        let last5 = text.rfind('5').expect("second 5");
+        let h2 = hover(text, last5, &chart).expect("hover on second 5");
+        assert!(
+            h2.markdown.contains('D'),
+            "second 5 (key G after #G) should resolve to D: {}",
+            h2.markdown
+        );
     }
 }
