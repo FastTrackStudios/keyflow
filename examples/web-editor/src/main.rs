@@ -20,19 +20,27 @@
 use dioxus::prelude::*;
 use editor::{Editor, EditorState, editor_view};
 use editor_keyflow::render_svg;
-use editor_keyflow_lang::{HighlightTheme, highlight_css, keyflow_decorations};
+use editor_keyflow_lang::{
+    HighlightTheme, highlight_css, keyflow_decorations, keyflow_hover, overlays_enabled,
+    toggle_overlays,
+};
 
 /// Layout-only styles for this example (the split panes + preview chrome).
 /// Token colors come from [`highlight_css`], injected at runtime.
 const STYLE: Asset = asset!("/assets/web-editor.css");
 
-/// Seed chart — a clean lead sheet so the editor opens on something real.
-const SEED: &str = "Blue Bossa\n\
-                    4/4 140bpm #C\n\
+/// Seed chart — written in the Nashville number system in the key of C so the
+/// resolved-chord overlays (1 → C, 5 → G, 6m → Am, …) are visible on open.
+const SEED: &str = "Number System Demo\n\
+                    4/4 120bpm #C\n\
                     \n\
-                    VS {head}\n\
-                    Cm7 | Fm7 | Dm7b5 | G7\n\
-                    Cm7 | Ebm7 Ab7 | Dbmaj7 | Dm7b5 G7\n";
+                    VS {verse}\n\
+                    1 | 5 | 6m | 4\n\
+                    1 | 5 | 4 1 | 1\n\
+                    \n\
+                    CH {chorus}\n\
+                    4 | 5 | 1 | 6m\n\
+                    4 | 5 | 1 | 1\n";
 
 fn main() {
     #[cfg(target_arch = "wasm32")]
@@ -45,7 +53,16 @@ fn main() {
 fn App() -> Element {
     // The whole editor state lives here; `<Editor>` reads it to render and
     // writes a fresh state on every input.
-    let state = use_signal(|| EditorState::new(SEED.to_string()));
+    let mut state = use_signal(|| EditorState::new(SEED.to_string()));
+
+    // Resolved-chord overlay toggle. The decoration source reads a process
+    // global; this signal mirrors it for the button label, and toggling nudges
+    // `state` so the editor recomputes decorations.
+    let mut overlays_on = use_signal(overlays_enabled);
+    let mut flip_overlays = move |_| {
+        overlays_on.set(toggle_overlays());
+        state.with_mut(|_| {}); // mark dirty → editor re-runs the decoration source
+    };
 
     // Standard editing keymap (Backspace/Delete/Tab/select-all + markdown
     // niceties that are harmless on a chart). Enter/typing go through the
@@ -75,7 +92,12 @@ fn App() -> Element {
         div { class: "page",
             header { class: "bar",
                 h1 { "Keyflow Editor" }
-                p { class: "hint", "Type a chart on the left — colors, squiggles, and the engraved preview update live." }
+                p { class: "hint", "Type a chart on the left — colors, squiggles, resolved-chord overlays, and hover info. Engraved preview updates live." }
+                button {
+                    class: "toggle",
+                    onclick: move |e| flip_overlays(e),
+                    if overlays_on() { "Resolved overlays: on" } else { "Resolved overlays: off" }
+                }
             }
             div { class: "split",
                 section { class: "editor-pane",
@@ -84,6 +106,7 @@ fn App() -> Element {
                             state,
                             keymap: keymap.clone(),
                             decorations: keyflow_decorations as editor_view::DecorationSource,
+                            hover: keyflow_hover as editor::HoverSource,
                             vim: Some(vim),
                             slash: Some(slash),
                         }
