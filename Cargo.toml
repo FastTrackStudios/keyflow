@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/*", "xtask"]
+members = ["crates/*", "xtask", "examples/web-editor"]
 resolver = "2"
 
 [workspace.package]
@@ -35,6 +35,17 @@ keyflow = { path = "crates/keyflow" }
 keyflow-ui = { path = "crates/keyflow-ui" }
 engraver = { path = "crates/engraver" }
 
+# The standalone Editor (CodeMirror-style contenteditable editor) lives in
+# its own repo at ../../Editor and is shared with Task. `editor` is the
+# umbrella widget; `editor-keyflow-lang` maps keyflow highlighting + IDE
+# diagnostics onto the editor's decoration model; `editor-keyflow` renders
+# `.kf` fences to inline SVG. Web/wasm only for now — the contenteditable
+# view doesn't run on dioxus-native/Blitz yet.
+editor = { path = "../../Editor/crates/editor" }
+editor-state = { path = "../../Editor/crates/editor-state" }
+editor-keyflow = { path = "../../Editor/crates/editor-keyflow" }
+editor-keyflow-lang = { path = "../../Editor/crates/editor-keyflow-lang" }
+
 # FastTrack Studio shared design system. Lives in the sibling fts-ui repo.
 fts-ui = { git = "https://git.starcommand.live/FastTrackStudios/fts-ui.git", branch = "main", package = "fts-ui" }
 
@@ -48,16 +59,20 @@ facet-pretty = { version = "0.46" }
 facet-value = { version = "0.46" }
 facet-yaml = { version = "0.46" }
 
-# VOX service framework. Aligned with daw + architect on the bearcove
-# upstream rev so the FTS workspace ships a single vox copy.
-vox = { git = "https://github.com/bearcove/vox", rev = "27eef573efd388bddaad0befdd59143a7e98b830" }
-vox-types = { git = "https://github.com/bearcove/vox", rev = "27eef573efd388bddaad0befdd59143a7e98b830" }
-vox-stream = { git = "https://github.com/bearcove/vox", rev = "27eef573efd388bddaad0befdd59143a7e98b830" }
+# VOX service framework. Pinned to the starcommand fork @ f31f1040 (vox
+# 0.8.2) — the rev `architect` (local path below) uses, and the one whose
+# tokio deps are `#[cfg(not(wasm))]`-gated so the editor builds for wasm.
+# The `[patch."https://github.com/bearcove/vox"]` block below folds every
+# transitive bearcove/vox reference onto this same rev.
+vox = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-types = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-stream = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
 
-# architect framework — defines #[architect::rpc] for sync-trait → vox
-# RPC bridging. Path dep onto local checkout, matching daw's setup.
-architect = { git = "https://git.starcommand.live/FastTrackStudios/architect.git", branch = "main" }
-architect-rpc-derive = { git = "https://git.starcommand.live/FastTrackStudios/architect.git", branch = "main" }
+# architect framework — defines #[architect::rpc] for sync-trait → vox RPC
+# bridging. Local path (matching Task) so architect's vox-0.8.2 / runtime-
+# only profile drives the whole graph and the wasm build stays mio-free.
+architect = { path = "../../architect/macros/architect" }
+architect-rpc-derive = { path = "../../architect/macros/architect-rpc-derive" }
 
 # Rendering
 anyrender = { git = "https://github.com/DioxusLabs/anyrender.git", branch = "main" }
@@ -129,3 +144,66 @@ generational-box = { git = "https://git.starcommand.live/codywright/dioxus", rev
 manganis = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "manganis" }
 manganis-core = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "manganis-core" }
 manganis-macro = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "manganis-macro" }
+
+# Vendored mermaid-rs-renderer fork (web-time for wasm32) lives in the Editor
+# repo and backs editor-mermaid. `[patch]` only applies from the build-root
+# workspace, so keyflow carries it too even though Editor declares it
+# internally — without this, editor-mermaid pulls upstream 0.2.2 which panics
+# on wasm32.
+mermaid-rs-renderer = { path = "../../Editor/vendor/mermaid-rs-renderer" }
+
+# ── Editor wasm dependency unification ───────────────────────────────
+# The Editor (via editor-keyflow → engraver → keyflow-proto → daw-proto)
+# reaches the vox RPC stack. Without these patches keyflow's graph carries
+# THREE conflicting vox copies (bearcove / Codys-Wright / starcommand) and
+# the wrong daw-proto profile, which pulls vox's full tokio-net transport →
+# `mio`, which can't build for `wasm32`. These mirror Task's working web
+# build verbatim (paths adapted to keyflow's location): they fold every vox
+# reference onto the single starcommand fork and point daw-proto + actions-
+# proto at their local checkouts so daw-proto's runtime-only (wasm-friendly)
+# vox profile applies. See Task/Cargo.toml for the original rationale.
+[patch."https://github.com/FastTrackStudios/input_actions.git"]
+actions-proto = { path = "../input_actions/crates/actions-proto" }
+
+[patch."https://git.starcommand.live/FastTrackStudios/input_actions.git"]
+actions-proto = { path = "../input_actions/crates/actions-proto" }
+
+# Redirect daw-proto (keyflow-proto's timing-primitive source) to the local
+# checkout so its runtime-only vox profile applies instead of the git
+# version's full tokio-net profile — the specific fix that lets the editor's
+# wasm build link without mio.
+[patch."https://git.starcommand.live/FastTrackStudios/daw.git"]
+daw-proto = { path = "../daw/crates/daw-proto" }
+
+# Fold every bearcove/vox reference onto the single starcommand fork so the
+# graph carries exactly one vox (architect's generated Handler impls only
+# unify across one vox-types).
+[patch."https://github.com/bearcove/vox"]
+vox                = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-core           = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-codegen        = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-jit            = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-jit-abi        = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-jit-cal        = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-macros-core    = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-macros-parse   = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-postcard       = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-schema         = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-service-macros = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-types          = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-websocket      = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+facet-cbor         = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+
+# Redirect every transitive bearcove/moire reference onto the codywright fork
+# so vox + architect share one moire compilation.
+[patch."https://github.com/bearcove/moire"]
+moire             = { git = "https://git.starcommand.live/codywright/moire", rev = "aea86f91f84cdf6052e4310e8a0541d87f37c624" }
+moire-macros      = { git = "https://git.starcommand.live/codywright/moire", rev = "aea86f91f84cdf6052e4310e8a0541d87f37c624" }
+moire-macros-noop = { git = "https://git.starcommand.live/codywright/moire", rev = "aea86f91f84cdf6052e4310e8a0541d87f37c624" }
+moire-runtime     = { git = "https://git.starcommand.live/codywright/moire", rev = "aea86f91f84cdf6052e4310e8a0541d87f37c624" }
+moire-tokio       = { git = "https://git.starcommand.live/codywright/moire", rev = "aea86f91f84cdf6052e4310e8a0541d87f37c624" }
+moire-trace-capture = { git = "https://git.starcommand.live/codywright/moire", rev = "aea86f91f84cdf6052e4310e8a0541d87f37c624" }
+moire-trace-types = { git = "https://git.starcommand.live/codywright/moire", rev = "aea86f91f84cdf6052e4310e8a0541d87f37c624" }
+moire-types       = { git = "https://git.starcommand.live/codywright/moire", rev = "aea86f91f84cdf6052e4310e8a0541d87f37c624" }
+moire-wasm        = { git = "https://git.starcommand.live/codywright/moire", rev = "aea86f91f84cdf6052e4310e8a0541d87f37c624" }
+moire-wire        = { git = "https://git.starcommand.live/codywright/moire", rev = "aea86f91f84cdf6052e4310e8a0541d87f37c624" }

@@ -1,0 +1,32 @@
+[package]
+name = "web-editor"
+description = "Keyflow web editor — the standalone Editor (contenteditable) wired with keyflow syntax highlighting + live IDE diagnostics, beside a live engraved SVG preview. Web/wasm only. Run: dx serve --package web-editor --platform web"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+# The shared Editor widget + its keyflow language bindings, all from the
+# ../../Editor repo. `editor-keyflow-lang` is the highlighting/diagnostics
+# decoration source; `editor-keyflow` renders the live `.kf` SVG preview.
+editor = { workspace = true }
+editor-keyflow = { workspace = true }
+editor-keyflow-lang = { workspace = true }
+
+# Declared directly (keyflow has no workspace `dioxus`); the workspace
+# `[patch.crates-io]` redirects this to the codywright dioxus fork the rest
+# of the workspace shares. `web` selects the wasm renderer.
+dioxus = { version = "0.7", features = ["web"] }
+tracing = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tracing-wasm = "0.2"
+# getrandom 0.3 (transitive via the editor/vox stack) needs the `wasm_js`
+# backend feature on wasm32, paired with the `--cfg getrandom_backend=
+# "wasm_js"` flag in `.cargo/config.toml`. Both are required.
+getrandom = { version = "0.3", features = ["wasm_js"] }
+
+[lints]
+workspace = true
