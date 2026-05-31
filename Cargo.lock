@@ -116,7 +116,7 @@ version = "0.1.0"
 dependencies = [
  "convert_case 0.6.0",
  "facet 0.46.4",
- "vox 0.5.0",
+ "vox 0.8.2",
 ]
 
 [[package]]
@@ -720,8 +720,8 @@ dependencies = [
 name = "architect"
 version = "0.1.0"
 dependencies = [
- "architect-derive 0.1.0",
- "architect-rpc-derive 0.1.0",
+ "architect-derive",
+ "architect-rpc-derive",
  "chrono",
  "eyre",
  "facet 0.46.4",
@@ -733,21 +733,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "architect"
-version = "0.1.0"
-source = "git+https://git.starcommand.live/FastTrackStudios/architect.git?branch=main#3adf922be306c8b3fb9ee9ac1903adc5aa8a6eca"
-dependencies = [
- "architect-derive 0.1.0 (git+https://git.starcommand.live/FastTrackStudios/architect.git?branch=main)",
- "architect-rpc-derive 0.1.0 (git+https://git.starcommand.live/FastTrackStudios/architect.git?branch=main)",
- "chrono",
- "facet 0.46.4",
- "facet-core 0.46.4",
- "thiserror 2.0.18",
- "uuid",
- "vox 0.5.0",
-]
-
-[[package]]
 name = "architect-derive"
 version = "0.1.0"
 dependencies = [
@@ -758,29 +743,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "architect-derive"
-version = "0.1.0"
-source = "git+https://git.starcommand.live/FastTrackStudios/architect.git?branch=main#3adf922be306c8b3fb9ee9ac1903adc5aa8a6eca"
-dependencies = [
- "heck 0.5.0",
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
 name = "architect-rpc-derive"
 version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
-name = "architect-rpc-derive"
-version = "0.1.0"
-source = "git+https://git.starcommand.live/FastTrackStudios/architect.git?branch=main#3adf922be306c8b3fb9ee9ac1903adc5aa8a6eca"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2980,7 +2944,7 @@ name = "daw"
 version = "0.1.0"
 source = "git+https://git.starcommand.live/FastTrackStudios/daw.git?branch=main#c9f38669f35fbcd60b953a983cd9f90c414d956c"
 dependencies = [
- "architect 0.1.0 (git+https://git.starcommand.live/FastTrackStudios/architect.git?branch=main)",
+ "architect",
  "daw-control",
  "daw-module",
  "daw-proto",
@@ -2990,7 +2954,7 @@ dependencies = [
  "facet 0.46.4",
  "tokio",
  "tracing",
- "vox 0.5.0",
+ "vox 0.8.2",
 ]
 
 [[package]]
@@ -3021,7 +2985,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
- "vox 0.5.0",
+ "vox 0.8.2",
 ]
 
 [[package]]
@@ -3038,11 +3002,11 @@ name = "daw-proto"
 version = "0.1.0"
 dependencies = [
  "actions-proto",
- "architect 0.1.0 (git+https://git.starcommand.live/FastTrackStudios/architect.git?branch=main)",
+ "architect",
  "facet 0.46.4",
  "futures",
- "vox 0.5.0",
- "vox-types 0.5.0",
+ "vox 0.8.2",
+ "vox-types 0.8.2",
 ]
 
 [[package]]
@@ -3050,7 +3014,7 @@ name = "daw-reaper"
 version = "0.1.0"
 source = "git+https://git.starcommand.live/FastTrackStudios/daw.git?branch=main#c9f38669f35fbcd60b953a983cd9f90c414d956c"
 dependencies = [
- "architect 0.1.0 (git+https://git.starcommand.live/FastTrackStudios/architect.git?branch=main)",
+ "architect",
  "base64 0.22.1",
  "camino",
  "crossbeam-channel",
@@ -3067,7 +3031,7 @@ dependencies = [
  "eyre",
  "facet-json",
  "libloading 0.8.9",
- "moire 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "moire 1.0.1",
  "reaper-high",
  "reaper-low",
  "reaper-medium",
@@ -3075,8 +3039,8 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
- "vox 0.5.0",
- "vox-stream 0.5.0",
+ "vox 0.8.2",
+ "vox-stream 0.8.2",
 ]
 
 [[package]]
@@ -7085,7 +7049,7 @@ dependencies = [
 name = "keyflow-daw-analysis"
 version = "0.0.1"
 dependencies = [
- "architect 0.1.0",
+ "architect",
  "daw",
  "eyre",
  "facet 0.46.4",
@@ -7099,13 +7063,13 @@ name = "keyflow-daw-analysis"
 version = "0.1.0"
 source = "git+https://git.starcommand.live/FastTrackStudios/keyflow.git?branch=main#aa9fe94987e6ee892701cbcfc98261febe71cdd3"
 dependencies = [
- "architect 0.1.0 (git+https://git.starcommand.live/FastTrackStudios/architect.git?branch=main)",
+ "architect",
  "daw",
  "eyre",
  "facet 0.46.4",
  "keyflow 0.1.0",
  "tracing",
- "vox 0.5.0",
+ "vox 0.8.2",
 ]
 
 [[package]]
@@ -7168,7 +7132,7 @@ dependencies = [
 name = "keyflow-proto"
 version = "0.1.0"
 dependencies = [
- "architect 0.1.0",
+ "architect",
  "color-palette",
  "daw-proto",
  "facet 0.46.4",
@@ -7188,7 +7152,7 @@ name = "keyflow-proto"
 version = "0.1.0"
 source = "git+https://git.starcommand.live/FastTrackStudios/keyflow.git?branch=main#aa9fe94987e6ee892701cbcfc98261febe71cdd3"
 dependencies = [
- "architect 0.1.0 (git+https://git.starcommand.live/FastTrackStudios/architect.git?branch=main)",
+ "architect",
  "color-palette",
  "daw-proto",
  "facet 0.46.4",
@@ -8131,24 +8095,29 @@ dependencies = [
 
 [[package]]
 name = "moire"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b78f25dd75fa1513149b6e2a1899394310be28f088b5805e97f94f1ac9a90ed"
+version = "1.0.0"
+source = "git+https://git.starcommand.live/FastTrackStudios/moire.git?rev=7a2f1dc#7a2f1dc4f188e8ea43f94743facb9bd7cb6cbce5"
 dependencies = [
- "moire-macros-noop 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "moire-tokio 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "moire-wasm 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "moire-macros-noop 1.0.0",
+ "moire-tokio 1.0.0",
+ "moire-wasm 1.0.0",
 ]
 
 [[package]]
 name = "moire"
 version = "1.0.1"
-source = "git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624#aea86f91f84cdf6052e4310e8a0541d87f37c624"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4b78f25dd75fa1513149b6e2a1899394310be28f088b5805e97f94f1ac9a90ed"
 dependencies = [
- "moire-macros-noop 1.0.1 (git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624)",
- "moire-tokio 1.0.1 (git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624)",
- "moire-wasm 1.0.1 (git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624)",
+ "moire-macros-noop 1.0.1",
+ "moire-tokio 1.0.1",
+ "moire-wasm 1.0.1",
 ]
+
+[[package]]
+name = "moire-macros-noop"
+version = "1.0.0"
+source = "git+https://git.starcommand.live/FastTrackStudios/moire.git?rev=7a2f1dc#7a2f1dc4f188e8ea43f94743facb9bd7cb6cbce5"
 
 [[package]]
 name = "moire-macros-noop"
@@ -8157,9 +8126,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fecbc9919bb9bd47d5f75ca6037bb1b4f3df7a85de666e8300dbe76e4e569ba"
 
 [[package]]
-name = "moire-macros-noop"
-version = "1.0.1"
-source = "git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624#aea86f91f84cdf6052e4310e8a0541d87f37c624"
+name = "moire-runtime"
+version = "1.0.0"
+source = "git+https://git.starcommand.live/FastTrackStudios/moire.git?rev=7a2f1dc#7a2f1dc4f188e8ea43f94743facb9bd7cb6cbce5"
+dependencies = [
+ "ctor",
+ "facet 0.46.4",
+ "facet-json",
+ "facet-value",
+ "moire-trace-capture 1.0.0",
+ "moire-trace-types 1.0.0",
+ "moire-types 1.0.0",
+ "moire-wire 1.0.0",
+ "tokio",
+]
 
 [[package]]
 name = "moire-runtime"
@@ -8171,26 +8151,21 @@ dependencies = [
  "facet 0.46.4",
  "facet-json",
  "facet-value",
- "moire-trace-capture 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "moire-trace-types 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "moire-types 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "moire-wire 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "moire-trace-capture 1.0.1",
+ "moire-trace-types 1.0.1",
+ "moire-types 1.0.1",
+ "moire-wire 1.0.1",
  "tokio",
 ]
 
 [[package]]
-name = "moire-runtime"
-version = "1.0.1"
-source = "git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624#aea86f91f84cdf6052e4310e8a0541d87f37c624"
+name = "moire-tokio"
+version = "1.0.0"
+source = "git+https://git.starcommand.live/FastTrackStudios/moire.git?rev=7a2f1dc#7a2f1dc4f188e8ea43f94743facb9bd7cb6cbce5"
 dependencies = [
- "ctor",
- "facet 0.46.4",
- "facet-json",
- "facet-value",
- "moire-trace-capture 1.0.1 (git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624)",
- "moire-trace-types 1.0.1 (git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624)",
- "moire-types 1.0.1 (git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624)",
- "moire-wire 1.0.1 (git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624)",
+ "moire-runtime 1.0.0",
+ "moire-types 1.0.0",
+ "parking_lot",
  "tokio",
 ]
 
@@ -8200,21 +8175,19 @@ version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c45ddd94e02c0e3e17099292c0da7324ef3c0f075291be5c3d6cdfca7eb00bfb"
 dependencies = [
- "moire-runtime 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "moire-types 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "moire-runtime 1.0.1",
+ "moire-types 1.0.1",
  "parking_lot",
  "tokio",
 ]
 
 [[package]]
-name = "moire-tokio"
-version = "1.0.1"
-source = "git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624#aea86f91f84cdf6052e4310e8a0541d87f37c624"
+name = "moire-trace-capture"
+version = "1.0.0"
+source = "git+https://git.starcommand.live/FastTrackStudios/moire.git?rev=7a2f1dc#7a2f1dc4f188e8ea43f94743facb9bd7cb6cbce5"
 dependencies = [
- "moire-runtime 1.0.1 (git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624)",
- "moire-types 1.0.1 (git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624)",
- "parking_lot",
- "tokio",
+ "libc",
+ "moire-trace-types 1.0.0",
 ]
 
 [[package]]
@@ -8224,16 +8197,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "433f93a7745057540250ed54745abbf01721f9793864b339c74eb386c01a4101"
 dependencies = [
  "libc",
- "moire-trace-types 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "moire-trace-types 1.0.1",
 ]
 
 [[package]]
-name = "moire-trace-capture"
-version = "1.0.1"
-source = "git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624#aea86f91f84cdf6052e4310e8a0541d87f37c624"
+name = "moire-trace-types"
+version = "1.0.0"
+source = "git+https://git.starcommand.live/FastTrackStudios/moire.git?rev=7a2f1dc#7a2f1dc4f188e8ea43f94743facb9bd7cb6cbce5"
 dependencies = [
- "libc",
- "moire-trace-types 1.0.1 (git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624)",
+ "facet 0.46.4",
 ]
 
 [[package]]
@@ -8246,11 +8218,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "moire-trace-types"
-version = "1.0.1"
-source = "git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624#aea86f91f84cdf6052e4310e8a0541d87f37c624"
+name = "moire-types"
+version = "1.0.0"
+source = "git+https://git.starcommand.live/FastTrackStudios/moire.git?rev=7a2f1dc#7a2f1dc4f188e8ea43f94743facb9bd7cb6cbce5"
 dependencies = [
  "facet 0.46.4",
+ "facet-value",
+ "moire-trace-types 1.0.0",
 ]
 
 [[package]]
@@ -8261,17 +8235,22 @@ checksum = "0b2970c9dd44af04277bd5b2cc79840f69d38b895fbfb3c775345d43d9c2b80e"
 dependencies = [
  "facet 0.46.4",
  "facet-value",
- "moire-trace-types 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "moire-trace-types 1.0.1",
 ]
 
 [[package]]
-name = "moire-types"
-version = "1.0.1"
-source = "git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624#aea86f91f84cdf6052e4310e8a0541d87f37c624"
+name = "moire-wasm"
+version = "1.0.0"
+source = "git+https://git.starcommand.live/FastTrackStudios/moire.git?rev=7a2f1dc#7a2f1dc4f188e8ea43f94743facb9bd7cb6cbce5"
 dependencies = [
- "facet 0.46.4",
- "facet-value",
- "moire-trace-types 1.0.1 (git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624)",
+ "async-channel 2.5.0",
+ "async-lock",
+ "event-listener 5.4.1",
+ "futures-channel",
+ "futures-util",
+ "gloo-timers",
+ "moire-types 1.0.0",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]
@@ -8286,23 +8265,19 @@ dependencies = [
  "futures-channel",
  "futures-util",
  "gloo-timers",
- "moire-types 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "moire-types 1.0.1",
  "wasm-bindgen-futures",
 ]
 
 [[package]]
-name = "moire-wasm"
-version = "1.0.1"
-source = "git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624#aea86f91f84cdf6052e4310e8a0541d87f37c624"
+name = "moire-wire"
+version = "1.0.0"
+source = "git+https://git.starcommand.live/FastTrackStudios/moire.git?rev=7a2f1dc#7a2f1dc4f188e8ea43f94743facb9bd7cb6cbce5"
 dependencies = [
- "async-channel 2.5.0",
- "async-lock",
- "event-listener 5.4.1",
- "futures-channel",
- "futures-util",
- "gloo-timers",
- "moire-types 1.0.1 (git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624)",
- "wasm-bindgen-futures",
+ "facet 0.46.4",
+ "facet-json",
+ "moire-trace-types 1.0.0",
+ "moire-types 1.0.0",
 ]
 
 [[package]]
@@ -8313,19 +8288,8 @@ checksum = "26bcd72404eb6f10196d54caa94ac90e1715d898d3effb8329e300a752347b9c"
 dependencies = [
  "facet 0.46.4",
  "facet-json",
- "moire-trace-types 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "moire-types 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "moire-wire"
-version = "1.0.1"
-source = "git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624#aea86f91f84cdf6052e4310e8a0541d87f37c624"
-dependencies = [
- "facet 0.46.4",
- "facet-json",
- "moire-trace-types 1.0.1 (git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624)",
- "moire-types 1.0.1 (git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624)",
+ "moire-trace-types 1.0.1",
+ "moire-types 1.0.1",
 ]
 
 [[package]]
@@ -11418,7 +11382,7 @@ version = "0.1.0"
 source = "git+https://git.starcommand.live/FastTrackStudios/session.git?branch=main#8c71428282558b0670b394682206339c2bfbf3bc"
 dependencies = [
  "actions-proto",
- "architect 0.1.0 (git+https://git.starcommand.live/FastTrackStudios/architect.git?branch=main)",
+ "architect",
  "chrono",
  "daw",
  "daw-proto",
@@ -11428,7 +11392,7 @@ dependencies = [
  "eyre",
  "keyflow 0.1.0",
  "keyflow-daw-analysis 0.1.0",
- "moire 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "moire 1.0.1",
  "reaper-high",
  "reaper-low",
  "reaper-medium",
@@ -11439,7 +11403,7 @@ dependencies = [
  "tracing",
  "utils",
  "uuid",
- "vox 0.5.0",
+ "vox 0.8.2",
 ]
 
 [[package]]
@@ -11448,7 +11412,7 @@ version = "0.1.0"
 source = "git+https://git.starcommand.live/FastTrackStudios/session.git?branch=main#8c71428282558b0670b394682206339c2bfbf3bc"
 dependencies = [
  "actions-proto",
- "architect 0.1.0 (git+https://git.starcommand.live/FastTrackStudios/architect.git?branch=main)",
+ "architect",
  "daw",
  "eyre",
  "facet 0.46.4",
@@ -11461,8 +11425,8 @@ dependencies = [
  "tracing",
  "utils",
  "uuid",
- "vox 0.5.0",
- "vox-types 0.5.0",
+ "vox 0.8.2",
+ "vox-types 0.8.2",
 ]
 
 [[package]]
@@ -14040,7 +14004,7 @@ dependencies = [
  "facet 0.46.4",
  "facet-pretty",
  "facet-reflect",
- "moire 1.0.1 (git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624)",
+ "moire 1.0.0",
  "tokio",
  "tracing",
  "vox-core 0.4.0",
@@ -14053,32 +14017,13 @@ dependencies = [
 
 [[package]]
 name = "vox"
-version = "0.5.0"
-source = "git+https://github.com/bearcove/vox?rev=27eef573efd388bddaad0befdd59143a7e98b830#27eef573efd388bddaad0befdd59143a7e98b830"
-dependencies = [
- "facet 0.46.4",
- "facet-pretty",
- "facet-reflect",
- "moire 1.0.1 (git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624)",
- "tokio",
- "tracing",
- "vox-core 0.5.0",
- "vox-jit 0.5.0",
- "vox-postcard 0.5.0",
- "vox-service-macros 0.5.0",
- "vox-stream 0.5.0",
- "vox-types 0.5.0",
-]
-
-[[package]]
-name = "vox"
 version = "0.8.2"
 source = "git+https://git.starcommand.live/FastTrackStudios/vox?rev=f31f10400c245740a072fa61bb96ef3a3fc2bd93#f31f10400c245740a072fa61bb96ef3a3fc2bd93"
 dependencies = [
  "facet 0.46.4",
  "facet-pretty",
  "facet-reflect",
- "moire 1.0.1 (git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624)",
+ "moire 1.0.0",
  "tokio",
  "tracing",
  "vox-core 0.8.2",
@@ -14101,36 +14046,13 @@ dependencies = [
  "facet-reflect",
  "futures-util",
  "getrandom 0.4.2",
- "moire 1.0.1 (git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624)",
+ "moire 1.0.0",
  "smallvec 1.15.1",
  "tokio",
  "tracing",
  "vox-jit 0.4.0",
  "vox-postcard 0.4.0",
  "vox-types 0.4.0",
- "wasm-bindgen-futures",
- "zerocopy",
-]
-
-[[package]]
-name = "vox-core"
-version = "0.5.0"
-source = "git+https://github.com/bearcove/vox?rev=27eef573efd388bddaad0befdd59143a7e98b830#27eef573efd388bddaad0befdd59143a7e98b830"
-dependencies = [
- "facet 0.46.4",
- "facet-cbor 0.3.4",
- "facet-core 0.46.4",
- "facet-error",
- "facet-reflect",
- "futures-util",
- "getrandom 0.4.2",
- "moire 1.0.1 (git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624)",
- "smallvec 1.15.1",
- "tokio",
- "tracing",
- "vox-jit 0.5.0",
- "vox-postcard 0.5.0",
- "vox-types 0.5.0",
  "wasm-bindgen-futures",
  "zerocopy",
 ]
@@ -14147,7 +14069,7 @@ dependencies = [
  "facet-reflect",
  "futures-util",
  "getrandom 0.4.2",
- "moire 1.0.1 (git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624)",
+ "moire 1.0.0",
  "smallvec 1.15.1",
  "tokio",
  "tracing",
@@ -14192,27 +14114,6 @@ dependencies = [
 
 [[package]]
 name = "vox-jit"
-version = "0.5.0"
-source = "git+https://github.com/bearcove/vox?rev=27eef573efd388bddaad0befdd59143a7e98b830#27eef573efd388bddaad0befdd59143a7e98b830"
-dependencies = [
- "arc-swap",
- "cranelift-codegen",
- "cranelift-frontend",
- "cranelift-jit",
- "cranelift-module",
- "cranelift-native",
- "facet 0.46.4",
- "facet-core 0.46.4",
- "libc",
- "museair",
- "vox-jit-abi 0.5.0",
- "vox-jit-cal 0.5.0",
- "vox-postcard 0.5.0",
- "vox-schema 0.5.0",
-]
-
-[[package]]
-name = "vox-jit"
 version = "0.8.2"
 source = "git+https://git.starcommand.live/FastTrackStudios/vox?rev=f31f10400c245740a072fa61bb96ef3a3fc2bd93#f31f10400c245740a072fa61bb96ef3a3fc2bd93"
 dependencies = [
@@ -14246,17 +14147,6 @@ dependencies = [
 
 [[package]]
 name = "vox-jit-abi"
-version = "0.5.0"
-source = "git+https://github.com/bearcove/vox?rev=27eef573efd388bddaad0befdd59143a7e98b830#27eef573efd388bddaad0befdd59143a7e98b830"
-dependencies = [
- "arc-swap",
- "facet-core 0.46.4",
- "museair",
- "vox-jit-cal 0.5.0",
-]
-
-[[package]]
-name = "vox-jit-abi"
 version = "0.8.2"
 source = "git+https://git.starcommand.live/FastTrackStudios/vox?rev=f31f10400c245740a072fa61bb96ef3a3fc2bd93#f31f10400c245740a072fa61bb96ef3a3fc2bd93"
 dependencies = [
@@ -14270,15 +14160,6 @@ dependencies = [
 name = "vox-jit-cal"
 version = "0.4.0"
 source = "git+https://github.com/Codys-Wright/vox.git?rev=5ce8cdd9#5ce8cdd9c3110a605f72abe42a81f0069aeda0b3"
-dependencies = [
- "facet 0.46.4",
- "facet-core 0.46.4",
-]
-
-[[package]]
-name = "vox-jit-cal"
-version = "0.5.0"
-source = "git+https://github.com/bearcove/vox?rev=27eef573efd388bddaad0befdd59143a7e98b830#27eef573efd388bddaad0befdd59143a7e98b830"
 dependencies = [
  "facet 0.46.4",
  "facet-core 0.46.4",
@@ -14307,18 +14188,6 @@ dependencies = [
 
 [[package]]
 name = "vox-macros-core"
-version = "0.5.0"
-source = "git+https://github.com/bearcove/vox?rev=27eef573efd388bddaad0befdd59143a7e98b830#27eef573efd388bddaad0befdd59143a7e98b830"
-dependencies = [
- "facet-cargo-toml",
- "heck 0.5.0",
- "proc-macro2",
- "quote",
- "vox-macros-parse 0.5.0",
-]
-
-[[package]]
-name = "vox-macros-core"
 version = "0.8.2"
 source = "git+https://git.starcommand.live/FastTrackStudios/vox?rev=f31f10400c245740a072fa61bb96ef3a3fc2bd93#f31f10400c245740a072fa61bb96ef3a3fc2bd93"
 dependencies = [
@@ -14333,15 +14202,6 @@ dependencies = [
 name = "vox-macros-parse"
 version = "0.4.0"
 source = "git+https://github.com/Codys-Wright/vox.git?rev=5ce8cdd9#5ce8cdd9c3110a605f72abe42a81f0069aeda0b3"
-dependencies = [
- "proc-macro2",
- "unsynn",
-]
-
-[[package]]
-name = "vox-macros-parse"
-version = "0.5.0"
-source = "git+https://github.com/bearcove/vox?rev=27eef573efd388bddaad0befdd59143a7e98b830#27eef573efd388bddaad0befdd59143a7e98b830"
 dependencies = [
  "proc-macro2",
  "unsynn",
@@ -14367,19 +14227,6 @@ dependencies = [
  "vox-jit-abi 0.4.0",
  "vox-jit-cal 0.4.0",
  "vox-schema 0.4.0",
-]
-
-[[package]]
-name = "vox-postcard"
-version = "0.5.0"
-source = "git+https://github.com/bearcove/vox?rev=27eef573efd388bddaad0befdd59143a7e98b830#27eef573efd388bddaad0befdd59143a7e98b830"
-dependencies = [
- "facet 0.46.4",
- "facet-core 0.46.4",
- "facet-reflect",
- "vox-jit-abi 0.5.0",
- "vox-jit-cal 0.5.0",
- "vox-schema 0.5.0",
 ]
 
 [[package]]
@@ -14410,18 +14257,6 @@ dependencies = [
 
 [[package]]
 name = "vox-schema"
-version = "0.5.0"
-source = "git+https://github.com/bearcove/vox?rev=27eef573efd388bddaad0befdd59143a7e98b830#27eef573efd388bddaad0befdd59143a7e98b830"
-dependencies = [
- "blake3",
- "facet 0.46.4",
- "facet-cbor 0.3.4",
- "facet-core 0.46.4",
- "indexmap",
-]
-
-[[package]]
-name = "vox-schema"
 version = "0.8.2"
 source = "git+https://git.starcommand.live/FastTrackStudios/vox?rev=f31f10400c245740a072fa61bb96ef3a3fc2bd93#f31f10400c245740a072fa61bb96ef3a3fc2bd93"
 dependencies = [
@@ -14443,15 +14278,6 @@ dependencies = [
 
 [[package]]
 name = "vox-service-macros"
-version = "0.5.0"
-source = "git+https://github.com/bearcove/vox?rev=27eef573efd388bddaad0befdd59143a7e98b830#27eef573efd388bddaad0befdd59143a7e98b830"
-dependencies = [
- "proc-macro2",
- "vox-macros-core 0.5.0",
-]
-
-[[package]]
-name = "vox-service-macros"
 version = "0.8.2"
 source = "git+https://git.starcommand.live/FastTrackStudios/vox?rev=f31f10400c245740a072fa61bb96ef3a3fc2bd93#f31f10400c245740a072fa61bb96ef3a3fc2bd93"
 dependencies = [
@@ -14465,22 +14291,10 @@ version = "0.4.0"
 source = "git+https://github.com/Codys-Wright/vox.git?rev=5ce8cdd9#5ce8cdd9c3110a605f72abe42a81f0069aeda0b3"
 dependencies = [
  "libc",
- "moire 1.0.1 (git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624)",
+ "moire 1.0.0",
  "tokio",
  "vox-core 0.4.0",
  "vox-types 0.4.0",
-]
-
-[[package]]
-name = "vox-stream"
-version = "0.5.0"
-source = "git+https://github.com/bearcove/vox?rev=27eef573efd388bddaad0befdd59143a7e98b830#27eef573efd388bddaad0befdd59143a7e98b830"
-dependencies = [
- "libc",
- "moire 1.0.1 (git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624)",
- "tokio",
- "vox-core 0.5.0",
- "vox-types 0.5.0",
 ]
 
 [[package]]
@@ -14489,7 +14303,7 @@ version = "0.8.2"
 source = "git+https://git.starcommand.live/FastTrackStudios/vox?rev=f31f10400c245740a072fa61bb96ef3a3fc2bd93#f31f10400c245740a072fa61bb96ef3a3fc2bd93"
 dependencies = [
  "libc",
- "moire 1.0.1 (git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624)",
+ "moire 1.0.0",
  "tokio",
  "tracing",
  "vox-core 0.8.2",
@@ -14513,39 +14327,13 @@ dependencies = [
  "futures-channel",
  "heck 0.5.0",
  "indexmap",
- "moire 1.0.1 (git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624)",
+ "moire 1.0.0",
  "smallvec 1.15.1",
  "structstruck",
  "tokio",
  "vox-jit 0.4.0",
  "vox-postcard 0.4.0",
  "vox-schema 0.4.0",
-]
-
-[[package]]
-name = "vox-types"
-version = "0.5.0"
-source = "git+https://github.com/bearcove/vox?rev=27eef573efd388bddaad0befdd59143a7e98b830#27eef573efd388bddaad0befdd59143a7e98b830"
-dependencies = [
- "bitflags 2.11.1",
- "blake3",
- "bytes",
- "facet 0.46.4",
- "facet-cbor 0.3.4",
- "facet-core 0.46.4",
- "facet-path",
- "facet-reflect",
- "futures-channel",
- "heck 0.5.0",
- "indexmap",
- "moire 1.0.1 (git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624)",
- "smallvec 1.15.1",
- "structstruck",
- "tokio",
- "vox-jit 0.5.0",
- "vox-postcard 0.5.0",
- "vox-schema 0.5.0",
- "wasmtimer",
 ]
 
 [[package]]
@@ -14564,7 +14352,7 @@ dependencies = [
  "futures-channel",
  "heck 0.5.0",
  "indexmap",
- "moire 1.0.1 (git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624)",
+ "moire 1.0.0",
  "smallvec 1.15.1",
  "structstruck",
  "tokio",
@@ -17096,6 +16884,26 @@ dependencies = [
 ]
 
 [[patch.unused]]
+name = "vox-ffi"
+version = "0.8.2"
+source = "git+https://git.starcommand.live/FastTrackStudios/vox?rev=f31f10400c245740a072fa61bb96ef3a3fc2bd93#f31f10400c245740a072fa61bb96ef3a3fc2bd93"
+
+[[patch.unused]]
+name = "vox-websocket"
+version = "0.8.2"
+source = "git+https://git.starcommand.live/FastTrackStudios/vox?rev=f31f10400c245740a072fa61bb96ef3a3fc2bd93#f31f10400c245740a072fa61bb96ef3a3fc2bd93"
+
+[[patch.unused]]
+name = "vox-ffi"
+version = "0.8.2"
+source = "git+https://git.starcommand.live/FastTrackStudios/vox?rev=f31f10400c245740a072fa61bb96ef3a3fc2bd93#f31f10400c245740a072fa61bb96ef3a3fc2bd93"
+
+[[patch.unused]]
+name = "vox-websocket"
+version = "0.8.2"
+source = "git+https://git.starcommand.live/FastTrackStudios/vox?rev=f31f10400c245740a072fa61bb96ef3a3fc2bd93#f31f10400c245740a072fa61bb96ef3a3fc2bd93"
+
+[[patch.unused]]
 name = "dioxus"
 version = "0.7.6"
 source = "git+https://git.starcommand.live/codywright/dioxus?rev=32d9f5154fa9124b05be73b82e8b04fe717a730f#32d9f5154fa9124b05be73b82e8b04fe717a730f"
@@ -17204,18 +17012,3 @@ source = "git+https://git.starcommand.live/codywright/dioxus?rev=32d9f5154fa9124
 name = "manganis-macro"
 version = "0.7.6"
 source = "git+https://git.starcommand.live/codywright/dioxus?rev=32d9f5154fa9124b05be73b82e8b04fe717a730f#32d9f5154fa9124b05be73b82e8b04fe717a730f"
-
-[[patch.unused]]
-name = "vox-codegen"
-version = "0.8.2"
-source = "git+https://git.starcommand.live/FastTrackStudios/vox?rev=f31f10400c245740a072fa61bb96ef3a3fc2bd93#f31f10400c245740a072fa61bb96ef3a3fc2bd93"
-
-[[patch.unused]]
-name = "vox-websocket"
-version = "0.8.2"
-source = "git+https://git.starcommand.live/FastTrackStudios/vox?rev=f31f10400c245740a072fa61bb96ef3a3fc2bd93#f31f10400c245740a072fa61bb96ef3a3fc2bd93"
-
-[[patch.unused]]
-name = "moire-macros"
-version = "1.0.1"
-source = "git+https://git.starcommand.live/codywright/moire?rev=aea86f91f84cdf6052e4310e8a0541d87f37c624#aea86f91f84cdf6052e4310e8a0541d87f37c624"

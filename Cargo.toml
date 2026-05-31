@@ -175,13 +175,22 @@ actions-proto = { path = "../input_actions/crates/actions-proto" }
 [patch."https://git.starcommand.live/FastTrackStudios/daw.git"]
 daw-proto = { path = "../daw/crates/daw-proto" }
 
-# Fold every bearcove/vox reference onto the single starcommand fork so the
-# graph carries exactly one vox (architect's generated Handler impls only
-# unify across one vox-types).
+# Transitive deps (daw-module, session, …) pull architect from git. Redirect to
+# the local checkout (now pinned to vox f31f1040) so the whole graph shares one
+# architect + one vox-types.
+[patch."https://git.starcommand.live/FastTrackStudios/architect.git"]
+architect = { path = "../../architect/macros/architect" }
+architect-rpc-derive = { path = "../../architect/macros/architect-rpc-derive" }
+
+# Fold every transitive vox reference (bearcove + Codys-Wright) onto the single
+# FastTrackStudios fork @ f31f1040 (vox 0.8.2, the Uuid-opaque-scalar fork
+# architect+Task pin) so the graph carries exactly one vox — architect's
+# generated Handler impls only unify across one vox-types. The crate list is the
+# union daw/session/input_actions reference.
 [patch."https://github.com/bearcove/vox"]
 vox                = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
 vox-core           = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-codegen        = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-ffi            = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
 vox-jit            = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
 vox-jit-abi        = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
 vox-jit-cal        = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
@@ -190,20 +199,38 @@ vox-macros-parse   = { git = "https://git.starcommand.live/FastTrackStudios/vox"
 vox-postcard       = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
 vox-schema         = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
 vox-service-macros = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-stream         = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
 vox-types          = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
 vox-websocket      = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
 facet-cbor         = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
 
-# Redirect every transitive bearcove/moire reference onto the codywright fork
-# so vox + architect share one moire compilation.
+[patch."https://github.com/Codys-Wright/vox.git"]
+vox                = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-core           = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-ffi            = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-jit            = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-jit-abi        = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-jit-cal        = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-macros-core    = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-macros-parse   = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-postcard       = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-schema         = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-service-macros = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-stream         = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-types          = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-websocket      = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+facet-cbor         = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+
+# Redirect every transitive bearcove/moire reference onto the FastTrackStudios
+# moire fork @ 7a2f1dc — the rev daw/session pair with the FTS vox fork (avoids
+# duplicate moire-runtime #[ctor] registrations).
 [patch."https://github.com/bearcove/moire"]
-moire             = { git = "https://git.starcommand.live/codywright/moire", rev = "aea86f91f84cdf6052e4310e8a0541d87f37c624" }
-moire-macros      = { git = "https://git.starcommand.live/codywright/moire", rev = "aea86f91f84cdf6052e4310e8a0541d87f37c624" }
-moire-macros-noop = { git = "https://git.starcommand.live/codywright/moire", rev = "aea86f91f84cdf6052e4310e8a0541d87f37c624" }
-moire-runtime     = { git = "https://git.starcommand.live/codywright/moire", rev = "aea86f91f84cdf6052e4310e8a0541d87f37c624" }
-moire-tokio       = { git = "https://git.starcommand.live/codywright/moire", rev = "aea86f91f84cdf6052e4310e8a0541d87f37c624" }
-moire-trace-capture = { git = "https://git.starcommand.live/codywright/moire", rev = "aea86f91f84cdf6052e4310e8a0541d87f37c624" }
-moire-trace-types = { git = "https://git.starcommand.live/codywright/moire", rev = "aea86f91f84cdf6052e4310e8a0541d87f37c624" }
-moire-types       = { git = "https://git.starcommand.live/codywright/moire", rev = "aea86f91f84cdf6052e4310e8a0541d87f37c624" }
-moire-wasm        = { git = "https://git.starcommand.live/codywright/moire", rev = "aea86f91f84cdf6052e4310e8a0541d87f37c624" }
-moire-wire        = { git = "https://git.starcommand.live/codywright/moire", rev = "aea86f91f84cdf6052e4310e8a0541d87f37c624" }
+moire             = { git = "https://git.starcommand.live/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-macros-noop = { git = "https://git.starcommand.live/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-runtime     = { git = "https://git.starcommand.live/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-tokio       = { git = "https://git.starcommand.live/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-trace-capture = { git = "https://git.starcommand.live/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-trace-types = { git = "https://git.starcommand.live/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-types       = { git = "https://git.starcommand.live/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-wasm        = { git = "https://git.starcommand.live/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-wire        = { git = "https://git.starcommand.live/FastTrackStudios/moire.git", rev = "7a2f1dc" }
