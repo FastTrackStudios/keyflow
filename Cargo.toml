@@ -234,3 +234,16 @@ moire-trace-types = { git = "https://git.starcommand.live/FastTrackStudios/moire
 moire-types       = { git = "https://git.starcommand.live/FastTrackStudios/moire.git", rev = "7a2f1dc" }
 moire-wasm        = { git = "https://git.starcommand.live/FastTrackStudios/moire.git", rev = "7a2f1dc" }
 moire-wire        = { git = "https://git.starcommand.live/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+
+# ── Build profiles ───────────────────────────────────────────────────
+# A debug wasm build (`dx serve`) leaves dependencies at opt-level 0, which
+# leaves the engraver's large layout functions with so many locals that
+# walrus (dx's wasm post-processor) rejects the module ("too many locals:
+# locals exceed maximum"). Optimizing dependencies fixes it; our own crates
+# stay at opt-level 1 for fast incremental rebuilds. Profiles only apply from
+# the build-root workspace, so this must live here (not in ../../Editor).
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 2
