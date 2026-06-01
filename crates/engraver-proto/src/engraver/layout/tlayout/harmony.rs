@@ -503,13 +503,21 @@ pub fn layout_harmony(
         }
     };
 
-    // 1. Root note (letter) - always use text font
+    // 1. Root note (letter) - always use text font.
+    //
+    // Nashville/degree roots (`1`..`7`, `b3`, `#4`) render with shorter glyphs
+    // than capital letters in the chord font (MuseJazz digits are ~5-8% shorter
+    // than its caps), so at the same point size a `5` reads smaller than a `C`.
+    // Scale a degree root up until its tallest digit reaches the font's cap
+    // height — number chords end up exactly as big as letter chords. Letter
+    // roots are unaffected (`root_pt == style.root_size`).
     let root_letter = &params.root;
-    let root_width = measure_text_width(root_letter, style.root_size, false);
+    let root_pt = degree_root_size(root_letter, text_metrics, style.root_size, cap_height);
+    let root_width = measure_text_width(root_letter, root_pt, false);
     commands.push(PaintCommand::text(
         root_letter.clone(),
         &style.font_family,
-        style.root_size,
+        root_pt,
         Point::new(cursor_x, baseline_y),
         style.color,
     ));
@@ -799,6 +807,29 @@ pub fn layout_harmony(
     node.transform = kurbo::Affine::translate((params.position.x, params.position.y));
 
     (layout_data, node)
+}
+
+/// Point size for a chord root, scaled so Nashville/degree roots render as tall
+/// as letter roots.
+///
+/// A letter root (`C`, `F#`) already fills the font's cap height, so it renders
+/// at `root_size` unchanged. A degree root contains a digit (`5`, `b3`, `#4`)
+/// whose glyph is drawn shorter than a capital in the chord font; we scale the
+/// whole root up by `cap_height / tallest_digit_height` so its tallest digit
+/// reaches cap height — i.e. exactly as big as a letter chord symbol. Falls
+/// back to `root_size` if the font yields no usable glyph height.
+fn degree_root_size(root: &str, metrics: &TextFontMetrics, root_size: f64, cap_height: f64) -> f64 {
+    let tallest_digit = root
+        .chars()
+        .filter(|c| c.is_ascii_digit())
+        .map(|c| metrics.glyph_height(c, root_size))
+        .filter(|h| *h > 0.0)
+        .fold(0.0_f64, f64::max);
+
+    if tallest_digit <= 0.0 || cap_height <= 0.0 {
+        return root_size;
+    }
+    root_size * (cap_height / tallest_digit)
 }
 
 /// Which symbol set to use for chord symbols.

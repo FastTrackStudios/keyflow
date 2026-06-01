@@ -2313,3 +2313,74 @@ mod content_bounds_guard {
         );
     }
 }
+
+#[cfg(test)]
+mod degree_root_size_guard {
+    use crate::engraver::fonts::ChartFontBundle;
+    use crate::engraver::layout::chart::LayoutMode;
+    use crate::engraver::layout::text_metrics::TextFontMetrics;
+    use crate::engraver::scene::node::SceneNode;
+    use crate::engraver::scene::paint::PaintCommand;
+
+    fn chord_glyphs(n: &SceneNode, out: &mut Vec<(char, f64)>) {
+        for c in &n.commands {
+            if let PaintCommand::Text {
+                text,
+                font_size,
+                font_family,
+                ..
+            } = c
+            {
+                if font_family.contains("MuseJazz") {
+                    if let Some(ch) = text.chars().next() {
+                        out.push((ch, *font_size));
+                    }
+                }
+            }
+        }
+        for ch in &n.children {
+            chord_glyphs(ch, out);
+        }
+    }
+
+    /// Nashville/degree chord roots must render as tall as letter chord roots:
+    /// the MuseJazz font draws digits shorter than capitals, so a degree root is
+    /// scaled up until its digit's glyph ink reaches the font's cap height.
+    /// Guards the "numbers aren't as big as the chord symbols" fix.
+    #[test]
+    fn degree_roots_render_at_cap_height() {
+        let fonts = ChartFontBundle::new().unwrap();
+        let fm = TextFontMetrics::new(fonts.text_font_data().clone());
+        let style = crate::api::style::leak_lead_sheet_style();
+        let engine = fonts.create_layout_engine(style);
+
+        let chart = keyflow_text::chart::parse_chart("1 5 7").unwrap();
+        let r = engine.layout_chart(&chart, &LayoutMode::ContinuousScroll { width: 800.0 });
+        let mut glyphs = Vec::new();
+        chord_glyphs(&r.scene, &mut glyphs);
+
+        // The chord-symbol digits (1, 5, 7) should each have been scaled so the
+        // rendered glyph height matches cap height (within a small tolerance),
+        // and the scaled point size should exceed the base 14pt.
+        let cap = fm.cap_height(14.0);
+        let mut checked = 0;
+        for (ch, fs) in &glyphs {
+            if ch.is_ascii_digit() {
+                let gh = fm.glyph_height(*ch, *fs);
+                assert!(
+                    (gh - cap).abs() < 0.4,
+                    "digit '{ch}' glyph height {gh:.2} should match cap height {cap:.2}"
+                );
+                assert!(
+                    *fs > 14.0,
+                    "digit '{ch}' should be scaled above the base 14pt, got {fs:.2}"
+                );
+                checked += 1;
+            }
+        }
+        assert!(
+            checked >= 3,
+            "expected the three degree roots, checked {checked}"
+        );
+    }
+}
