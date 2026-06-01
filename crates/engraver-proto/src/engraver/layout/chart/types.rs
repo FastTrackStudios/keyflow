@@ -308,9 +308,87 @@ impl ChartLayoutResult {
     /// without disturbing the layout the paginated/print paths rely on.
     #[must_use]
     pub fn content_bounds(&self) -> Option<kurbo::Rect> {
-        fn walk(node: &SceneNode, acc: &mut Option<kurbo::Rect>) {
+        use crate::engraver::scene::paint::{PaintCommand, TextAnchor};
+        use kurbo::{Affine, Point, Rect};
+
+        // `PaintCommand::bounding_box()` returns `None` for Text and Glyph
+        // because an exact extent needs font metrics. For a crop box an
+        // approximation is enough — and *necessary*: chord symbols, lyrics,
+        // section labels, and melody noteheads are all text/glyphs that sit
+        // OUTSIDE the staff/barline paths. Without them the crop wraps only the
+        // staff and clips the chord numbers above it.
+        //
+        // Commands are in their node's LOCAL space; the serializer renders each
+        // under `parent_transform * node.transform`, so chord symbols live at
+        // (0,0) inside a translated group. We must accumulate the same affine
+        // and map each local box into scene space — otherwise transformed
+        // content lands at the origin and the bounds (and crop) are garbage.
+        fn transform_rect(t: Affine, r: Rect) -> Rect {
+            let corners = [
+                t * Point::new(r.x0, r.y0),
+                t * Point::new(r.x1, r.y0),
+                t * Point::new(r.x0, r.y1),
+                t * Point::new(r.x1, r.y1),
+            ];
+            let mut out = Rect::new(
+                f64::INFINITY,
+                f64::INFINITY,
+                f64::NEG_INFINITY,
+                f64::NEG_INFINITY,
+            );
+            for p in corners {
+                out.x0 = out.x0.min(p.x);
+                out.y0 = out.y0.min(p.y);
+                out.x1 = out.x1.max(p.x);
+                out.y1 = out.y1.max(p.y);
+            }
+            out
+        }
+
+        fn text_box(text: &str, font_size: f64, pos: Point, anchor: TextAnchor) -> Rect {
+            // Generous average advance / ascent / descent — over-estimating the
+            // box only adds a hair of margin; under-estimating clips glyphs.
+            let w = text.chars().count() as f64 * font_size * 0.62;
+            let (x0, x1) = match anchor {
+                TextAnchor::Start => (pos.x, pos.x + w),
+                TextAnchor::Middle => (pos.x - w / 2.0, pos.x + w / 2.0),
+                TextAnchor::End => (pos.x - w, pos.x),
+            };
+            Rect::new(x0, pos.y - font_size * 0.85, x1, pos.y + font_size * 0.25)
+        }
+
+        fn cmd_bounds(cmd: &PaintCommand) -> Option<Rect> {
+            match cmd {
+                PaintCommand::Text {
+                    text,
+                    font_size,
+                    position,
+                    anchor,
+                    ..
+                } => Some(text_box(text, *font_size, *position, *anchor)),
+                PaintCommand::Glyph { position, size, .. } => {
+                    // SMuFL: font-size = size * 4 (1 em = 4 staff spaces),
+                    // drawn baseline-left.
+                    let em = size * 4.0;
+                    Some(Rect::new(
+                        position.x,
+                        position.y - em * 0.9,
+                        position.x + em * 1.2,
+                        position.y + em * 0.3,
+                    ))
+                }
+                other => other.bounding_box(),
+            }
+        }
+
+        fn walk(node: &SceneNode, parent: Affine, acc: &mut Option<Rect>) {
+            if !node.visible {
+                return;
+            }
+            let t = parent * node.transform;
             for cmd in &node.commands {
-                if let Some(r) = cmd.bounding_box() {
+                if let Some(r) = cmd_bounds(cmd) {
+                    let r = transform_rect(t, r);
                     *acc = Some(match *acc {
                         Some(a) => a.union(r),
                         None => r,
@@ -318,11 +396,11 @@ impl ChartLayoutResult {
                 }
             }
             for child in &node.children {
-                walk(child, acc);
+                walk(child, t, acc);
             }
         }
         let mut acc = None;
-        walk(&self.scene, &mut acc);
+        walk(&self.scene, Affine::IDENTITY, &mut acc);
         acc
     }
 

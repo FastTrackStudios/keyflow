@@ -2279,3 +2279,37 @@ fn mid_chart_key_change_renders_in_red() {
         "expected a red key-change accidental glyph, got {colors:?}"
     );
 }
+
+#[cfg(test)]
+mod content_bounds_guard {
+    use crate::engraver::fonts::ChartFontBundle;
+    use crate::engraver::layout::chart::LayoutMode;
+
+    /// `content_bounds()` must account for node transforms. Chord symbols are
+    /// placed via a parent-group transform with the text at local (0,0); a
+    /// transform-blind bounds collapses them to the origin, so cropping a
+    /// snippet's viewBox to those bounds clips every chord off the page. Guards
+    /// the regression where `1 4 6 5` rendered no chord numbers in the editor.
+    #[test]
+    fn content_bounds_includes_transformed_chord_symbols() {
+        let fonts = ChartFontBundle::new().unwrap();
+        let style = crate::api::style::leak_lead_sheet_style();
+        let engine = fonts.create_layout_engine(style);
+        let chart = keyflow_text::chart::parse_chart("1 4 6 5").unwrap();
+        let r = engine.layout_chart(&chart, &LayoutMode::ContinuousScroll { width: 800.0 });
+        let b = r.content_bounds().expect("non-empty scene");
+        // The last chord ("5") renders near x=595; the bounds must reach it.
+        assert!(
+            b.x1 >= 590.0,
+            "content_bounds must span the transformed chord symbols (x1={:.1})",
+            b.x1
+        );
+        // The chord row (baseline ~y=40) must be within the vertical span.
+        assert!(
+            b.y0 <= 40.0 && b.y1 >= 40.0,
+            "chord baseline ~40 must be within bounds ({:.1}..{:.1})",
+            b.y0,
+            b.y1
+        );
+    }
+}
