@@ -91,6 +91,31 @@ impl SvgExportConfig {
             .push((font_family.to_string(), font_data));
         self
     }
+
+    /// The `@font-face` rules for this config's embedded fonts, as standalone
+    /// CSS (no `<style>`/CDATA wrapper).
+    ///
+    /// Embedding the (multi-MB) font bytes in every exported SVG is wasteful
+    /// when many SVGs share the same fonts and live in one document — e.g. a
+    /// live editor re-engraving on each keystroke. Inject this CSS **once** at
+    /// page/document level and serialize the SVGs *without* embedded fonts:
+    /// inline `<svg>` text resolves these families by name from the document
+    /// stylesheet, so each render carries glyphs only, not megabytes of base64.
+    /// Identical bytes to [`Self::with_embedded_font`]'s per-SVG `@font-face`.
+    #[must_use]
+    pub fn font_face_css(&self) -> String {
+        use std::fmt::Write as _;
+        let mut css = String::new();
+        for (font_family, font_data) in &self.embedded_fonts {
+            let (format, mime) = detect_font_format(font_data);
+            let base64_data = base64_encode(font_data);
+            let _ = write!(
+                css,
+                "@font-face {{\n  font-family: '{font_family}';\n  src: url('data:{mime};base64,{base64_data}') format('{format}');\n  font-weight: normal;\n  font-style: normal;\n}}\n"
+            );
+        }
+        css
+    }
 }
 
 /// SVG serializer that converts scene graphs to SVG strings.

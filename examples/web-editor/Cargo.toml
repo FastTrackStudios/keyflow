@@ -27,6 +27,9 @@ tracing-wasm = "0.2"
 # backend feature on wasm32, paired with the `--cfg getrandom_backend=
 # "wasm_js"` flag in `.cargo/config.toml`. Both are required.
 getrandom = { version = "0.3", features = ["wasm_js"] }
+# Debounce the engraved-preview re-render so it runs once typing settles,
+# not on every keystroke (keeps the main thread free while editing).
+gloo-timers = { version = "0.3", features = ["futures"] }
 
 [lints]
 workspace = true

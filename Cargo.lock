@@ -14782,6 +14782,7 @@ dependencies = [
  "editor-keyflow",
  "editor-keyflow-lang",
  "getrandom 0.3.4",
+ "gloo-timers",
  "tracing",
  "tracing-wasm",
 ]
