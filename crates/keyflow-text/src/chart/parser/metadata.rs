@@ -397,7 +397,12 @@ impl<'a> ChartParser<'a> {
 
         // All parts must be recognized as metadata tokens
         for part in &parts {
-            let is_tempo = part.ends_with("bpm") || part.parse::<u32>().is_ok();
+            // A bare number 1-7 is a Nashville scale degree (a chord), not a
+            // tempo — real tempos are larger. Without this, `1 4 6 5` reads as a
+            // pure-metadata line and is consumed before the chord check, so the
+            // chart renders nothing.
+            let is_tempo =
+                part.ends_with("bpm") || part.parse::<u32>().is_ok_and(|n| !(1..=7).contains(&n));
             let is_time_sig = Self::parse_time_signature(part).is_some();
             let is_key =
                 (part.starts_with('#') || part.starts_with('b')) && Key::parse(part).is_ok();

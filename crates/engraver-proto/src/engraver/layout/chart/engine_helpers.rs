@@ -175,25 +175,24 @@ impl ChartLayoutEngine {
     }
 
     /// Map the proto-side ChartClef onto the engraver's ClefType. Defaults
-    /// to Treble for lead-sheet charts that don't declare a clef.
+    /// to Bass for charts that don't declare a clef.
     pub(super) fn chart_clef_for(&self, chart: &Chart) -> ClefType {
         use crate::chart::ChartClef;
         match chart.initial_clef {
-            Some(ChartClef::Bass) => ClefType::Bass,
+            // No clef declared → bass by default.
+            Some(ChartClef::Bass) | None => ClefType::Bass,
             Some(ChartClef::Alto) => ClefType::Alto,
             Some(ChartClef::Tenor) => ClefType::Tenor,
             // Percussion has no SMuFL clef glyph in our font set yet —
             // fall back to Treble so prefix layout still measures sensibly.
-            Some(ChartClef::Treble) | Some(ChartClef::Percussion) | None => ClefType::Treble,
+            Some(ChartClef::Treble) | Some(ChartClef::Percussion) => ClefType::Treble,
         }
     }
 
     /// Proto-side clef (untranslated) for callers that need to feed
     /// `melody_pitch_to_line_for_clef` or other pitch-mapping code.
     pub(super) fn chart_proto_clef_for(&self, chart: &Chart) -> crate::chart::ChartClef {
-        chart
-            .initial_clef
-            .unwrap_or(crate::chart::ChartClef::Treble)
+        chart.initial_clef.unwrap_or(crate::chart::ChartClef::Bass)
     }
 
     pub(super) fn section_type_to_strings(&self, section_type: &SectionType) -> (String, String) {
