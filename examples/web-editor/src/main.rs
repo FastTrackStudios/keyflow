@@ -34,11 +34,11 @@ const STYLE: Asset = asset!("/assets/web-editor.css");
 const SEED: &str = "Number System Demo\n\
                     4/4 120bpm #C\n\
                     \n\
-                    VS {verse}\n\
+                    VS\n\
                     1 | 5 | 6m | 4\n\
                     1 | 5 | 4 1 | 1\n\
                     \n\
-                    CH {chorus}\n\
+                    CH\n\
                     4 | 5 | 1 | 6m\n\
                     4 | 5 | 1 | 1\n";
 
