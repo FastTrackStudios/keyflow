@@ -1010,22 +1010,34 @@ pub fn parse_chord(chord_str: &str) -> HarmonyParams {
     let chars: Vec<char> = chord_str.chars().collect();
     let mut i = 0;
 
-    // Parse root note: an uppercase note letter / Roman numeral (A–G, I–VII),
-    // or a Nashville scale-degree number (1–7). Without the digit case a bare
-    // `1` falls through to the default root "C" and the digit is parsed as an
-    // extension — so `1` printed as `C1`, `5` as `C5`, etc.
+    // Parse the root:
+    //  - an uppercase note letter / Roman numeral (A–G, I–VII), optionally
+    //    followed by an accidental (`C#`, `Bb`), or
+    //  - a Nashville scale-degree number (1–7), optionally preceded by an
+    //    accidental (`b3`, `#4`).
+    //
+    // Without the number-system cases a bare `1` falls through to the default
+    // root "C" with the digit parsed as an extension — so `1` printed as `C1`,
+    // `5` as `C5`. For an altered degree the accidental comes *before* the
+    // number, so it's kept with the digit as the root (the harmony renderer
+    // draws the root string left-to-right, preserving `b3` order).
     if i < chars.len() && chars[i].is_ascii_uppercase() {
         params.root = chars[i].to_string();
         i += 1;
+        // Note-letter root accidental, drawn after the letter (`C#`, `Bb`).
+        if i < chars.len() && (chars[i] == '#' || chars[i] == 'b') {
+            params.root_accidental = chars[i].to_string();
+            i += 1;
+        }
     } else if i < chars.len() && chars[i].is_ascii_digit() {
         params.root = chars[i].to_string();
         i += 1;
-    }
-
-    // Parse root accidental (# or b)
-    if i < chars.len() && (chars[i] == '#' || chars[i] == 'b') {
-        params.root_accidental = chars[i].to_string();
-        i += 1;
+    } else if i + 1 < chars.len()
+        && (chars[i] == '#' || chars[i] == 'b')
+        && chars[i + 1].is_ascii_digit()
+    {
+        params.root = format!("{}{}", chars[i], chars[i + 1]);
+        i += 2;
     }
 
     let remaining: String = chars[i..].iter().collect();
@@ -1284,6 +1296,12 @@ mod tests {
         let m = parse_chord("6m");
         assert_eq!(m.root, "6");
         assert_eq!(m.quality, "m");
+        // Altered scale degrees keep their leading accidental with the number.
+        assert_eq!(parse_chord("b3").root, "b3");
+        assert_eq!(parse_chord("#4").root, "#4");
+        let b7m = parse_chord("b7m");
+        assert_eq!(b7m.root, "b7");
+        assert_eq!(b7m.quality, "m");
         // Letter chords are unaffected (root + accidental + quality).
         let cs = parse_chord("C#m7");
         assert_eq!(cs.root, "C");
