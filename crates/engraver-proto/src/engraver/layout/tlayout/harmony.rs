@@ -1010,8 +1010,14 @@ pub fn parse_chord(chord_str: &str) -> HarmonyParams {
     let chars: Vec<char> = chord_str.chars().collect();
     let mut i = 0;
 
-    // Parse root note (A-G)
+    // Parse root note: an uppercase note letter / Roman numeral (A–G, I–VII),
+    // or a Nashville scale-degree number (1–7). Without the digit case a bare
+    // `1` falls through to the default root "C" and the digit is parsed as an
+    // extension — so `1` printed as `C1`, `5` as `C5`, etc.
     if i < chars.len() && chars[i].is_ascii_uppercase() {
+        params.root = chars[i].to_string();
+        i += 1;
+    } else if i < chars.len() && chars[i].is_ascii_digit() {
         params.root = chars[i].to_string();
         i += 1;
     }
@@ -1261,6 +1267,28 @@ mod tests {
         assert_eq!(params.root, "D");
         assert_eq!(params.quality, "m");
         assert_eq!(params.extension, "7");
+    }
+
+    #[test]
+    fn test_parse_chord_nashville_number_roots() {
+        // Regression: a bare scale-degree number used to fall through to the
+        // default root "C" with the digit parsed as an extension, printing
+        // `1` as `C1`. The digit is the root now.
+        for d in ["1", "2", "3", "4", "5", "6", "7"] {
+            let params = parse_chord(d);
+            assert_eq!(params.root, d, "degree {d} should be its own root");
+            assert_eq!(params.quality, "");
+            assert_eq!(params.extension, "");
+        }
+        // Quality still parses off a number root.
+        let m = parse_chord("6m");
+        assert_eq!(m.root, "6");
+        assert_eq!(m.quality, "m");
+        // Letter chords are unaffected (root + accidental + quality).
+        let cs = parse_chord("C#m7");
+        assert_eq!(cs.root, "C");
+        assert_eq!(cs.root_accidental, "#");
+        assert_eq!(cs.quality, "m");
     }
 
     #[test]
