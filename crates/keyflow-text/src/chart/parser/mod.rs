@@ -115,6 +115,11 @@ impl<'a> ChartParser<'a> {
         // Phase 3.5: assign document-absolute source spans to every chord.
         self.assign_chord_source_spans(input);
 
+        // Phase 3.6: assign document-absolute source spans to every explicitly
+        // written section header, so the editor can badge it with the resolved
+        // name (`VS` → `Verse 1a`).
+        self.assign_section_source_spans(input);
+
         let _ = line_idx; // Suppress unused warning
 
         Ok(())
@@ -185,6 +190,68 @@ impl<'a> ChartParser<'a> {
                     ti += 1;
                 }
             }
+        }
+    }
+
+    /// Assign **document-absolute** `source_span`s to every explicitly-written
+    /// section header (`VS`, `CH 8 #G`, `^BR`, ...).
+    ///
+    /// Same problem and approach as [`assign_chord_source_spans`]: the line
+    /// pipeline trims each line, so by the time sections exist their header
+    /// offsets are gone. We recover them by scanning the raw `input` for header
+    /// lines in document order and lining each up with the next chart section
+    /// of the same type. Sections with no written header — implicit Intros
+    /// synthesized from bare chord content — are skipped (they keep
+    /// `source_span = None`, so no name badge is drawn). Header lines that don't
+    /// correspond to a section (or whose type doesn't match) are skipped over,
+    /// so an extra/recalled header never desyncs the rest.
+    fn assign_section_source_spans(&mut self, input: &str) {
+        use crate::parsing::TextSpan;
+        use crate::sections::SectionType;
+
+        // Collect (start, len, line, col, type_key) for each section-header line.
+        let mut headers: Vec<(usize, usize, u32, u32, String)> = Vec::new();
+        let mut offset = 0usize;
+        let mut line_no = 1u32;
+        for line in input.split_inclusive('\n') {
+            let content = line.strip_suffix('\n').unwrap_or(line);
+            let content = content.strip_suffix('\r').unwrap_or(content);
+            let trimmed = content.trim();
+            // The marker is everything before a `,` comment; strip a `^`
+            // subsection prefix the way the section parser does.
+            let marker = match trimmed.find(',') {
+                Some(c) => trimmed[..c].trim(),
+                None => trimmed,
+            };
+            let marker = marker.strip_prefix('^').unwrap_or(marker);
+            if let Some(parsed) = (!marker.is_empty())
+                .then(|| SectionType::parse_with_measure_count(marker))
+                .flatten()
+            {
+                // Span the whole trimmed header line (marker + any comment/key),
+                // so the badge lands at end of line rather than mid-header.
+                let lead = content.len() - content.trim_start().len();
+                let start = offset + lead;
+                let end = offset + content.trim_end().len();
+                let col = lead as u32 + 1;
+                headers.push((start, end - start, line_no, col, parsed.section_type.key()));
+            }
+            offset += line.len();
+            line_no += 1;
+        }
+
+        let mut hi = 0;
+        for section in &mut self.sections {
+            if section.implicit {
+                continue;
+            }
+            let want = section.section.section_type.key();
+            while hi < headers.len() && headers[hi].4 != want {
+                hi += 1;
+            }
+            let Some(h) = headers.get(hi) else { break };
+            section.source_span = Some(TextSpan::with_location(h.0, h.1, h.2, h.3));
+            hi += 1;
         }
     }
 

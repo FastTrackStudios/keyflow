@@ -585,6 +585,12 @@ pub struct ChartSection {
 
     /// Chord-syllable alignment (computed in post-processing when both chords and lyrics exist)
     pub alignment: Option<SectionAlignment>,
+
+    /// True if this section was synthesized by the parser because chord content
+    /// appeared with no section header written (e.g. a bare `1 4 6 5` chart).
+    /// Such sections have no header text, so the engraver must not draw a
+    /// section label for them and the editor must not place a name badge.
+    pub implicit: bool,
 }
 
 impl ChartSection {
@@ -596,7 +602,15 @@ impl ChartSection {
             source_span: None,
             template_span: None,
             alignment: None,
+            implicit: false,
         }
+    }
+
+    /// Mark this section as implicit (no section header was written for it).
+    #[must_use]
+    pub fn as_implicit(mut self) -> Self {
+        self.implicit = true;
+        self
     }
 
     /// Create a section with a default chord track containing the given measures
@@ -637,6 +651,7 @@ impl ChartSection {
             source_span: None,
             template_span: None,
             alignment: None,
+            implicit: false,
         }
     }
 
@@ -654,6 +669,7 @@ impl ChartSection {
             source_span: Some(source_span),
             template_span: Some(template_span),
             alignment: None,
+            implicit: false,
         }
     }
 

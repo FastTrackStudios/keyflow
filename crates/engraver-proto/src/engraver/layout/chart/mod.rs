@@ -1277,7 +1277,10 @@ impl ChartLayoutEngine {
 
                 // Add section label for first system of section (skip for count-in)
                 let mut section_start_dynamic_stack = None;
-                if sys_idx == 0 && chart_section.section.section_type.should_show_header() {
+                if sys_idx == 0
+                    && !chart_section.implicit
+                    && chart_section.section.section_type.should_show_header()
+                {
                     let letter = section_letters.get(&section_idx).copied();
                     let y_slots = self.repeat_pass_dynamic_slots(
                         &chart_section.section,
@@ -2419,7 +2422,10 @@ impl ChartLayoutEngine {
 
                 // Add section label for first system of section (skip for count-in)
                 let mut section_start_dynamic_stack = None;
-                if sys_idx == 0 && chart_section.section.section_type.should_show_header() {
+                if sys_idx == 0
+                    && !chart_section.implicit
+                    && chart_section.section.section_type.should_show_header()
+                {
                     let letter = section_letters.get(&section_idx).copied();
                     let y_slots = self.repeat_pass_dynamic_slots(
                         &chart_section.section,

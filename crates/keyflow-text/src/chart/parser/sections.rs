@@ -341,7 +341,11 @@ impl<'a> ChartParser<'a> {
                     }
 
                     let section = Section::new(section_type);
-                    let chart_section = ChartSection::new(section).with_measures(measures);
+                    // No section header was written — this Intro is synthesized
+                    // so the engraver/editor don't show a bogus "Intro" label.
+                    let chart_section = ChartSection::new(section)
+                        .with_measures(measures)
+                        .as_implicit();
                     self.sections.push(chart_section);
                 }
             } else {
