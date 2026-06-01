@@ -296,6 +296,36 @@ pub struct ChartLayoutResult {
 }
 
 impl ChartLayoutResult {
+    /// Tight bounding box (scene coordinates) of everything actually drawn —
+    /// staff, chord symbols, section labels, melodies, annotations. Returns
+    /// `None` for an empty scene.
+    ///
+    /// `total_width`/`total_height` describe the **page box**: content plus
+    /// page margins, inter-system spacing, and below-staff reserve that an A4
+    /// print wants but an inline snippet does not. For a one-system chart that
+    /// padding can be ~5× the music's own height. Shrink-wrapping a snippet's
+    /// SVG viewBox to these bounds (plus a little padding) drops the dead space
+    /// without disturbing the layout the paginated/print paths rely on.
+    #[must_use]
+    pub fn content_bounds(&self) -> Option<kurbo::Rect> {
+        fn walk(node: &SceneNode, acc: &mut Option<kurbo::Rect>) {
+            for cmd in &node.commands {
+                if let Some(r) = cmd.bounding_box() {
+                    *acc = Some(match *acc {
+                        Some(a) => a.union(r),
+                        None => r,
+                    });
+                }
+            }
+            for child in &node.children {
+                walk(child, acc);
+            }
+        }
+        let mut acc = None;
+        walk(&self.scene, &mut acc);
+        acc
+    }
+
     /// Get layout metrics for a specific page.
     ///
     /// Returns detailed spacing information for debugging and verification.
