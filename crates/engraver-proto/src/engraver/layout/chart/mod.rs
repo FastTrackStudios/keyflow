@@ -2116,6 +2116,28 @@ impl ChartLayoutEngine {
         let mut global_system_index = 0usize;
         let mut global_measure_index = 0usize;
 
+        // Title header (title / artist / tempo / key) above the music — the same
+        // block the paginated path draws, but only when the chart actually names
+        // itself. A bare chord snippet (`Cmaj7 | …`) stays header-free and tight;
+        // a titled chart (`Vienna - Billy Joel`) shows its header in the inline
+        // render too. No count-in here (continuous mode synthesizes none), so the
+        // time signature passed is unused.
+        if chart.metadata.title.is_some() {
+            let (header_height, _) = self.add_title_header(
+                &mut root,
+                0.0,
+                total_height,
+                width,
+                &chart.metadata,
+                chart.tempo.as_ref(),
+                0,
+                (4, 4),
+                false,
+                Vec::new(),
+            );
+            total_height += header_height;
+        }
+
         // Track previous chord to hide duplicates
         let mut previous_chord_symbol: Option<String> = None;
 
