@@ -1,6 +1,8 @@
 use std::io::Read;
 use std::path::PathBuf;
 
+mod docs;
+
 use clap::{Parser, Subcommand, ValueEnum};
 use keyflow::Chart;
 use keyflow::engraver::export::pdf::PdfSerializer;
@@ -197,6 +199,23 @@ enum Commands {
         /// 2.0 gives a Retina-resolution PNG.
         #[arg(long, default_value_t = 2.0)]
         scale: f32,
+    },
+    /// Preprocess a markdown docs tree: render ```` ```kf ```` blocks to inline
+    /// SVG, writing a generated mirror tree a stock dodeca (`ddc`) build serves.
+    ///
+    /// dodeca is left untouched — authors keep writing ```` ```kf ```` in the
+    /// source; point `ddc`'s `content` at `--out`. Run before `ddc build`, or
+    /// with `--watch` alongside `ddc serve`.
+    Docs {
+        /// Source content directory (authored markdown).
+        #[arg(short, long, default_value = "docs/content")]
+        input: PathBuf,
+        /// Generated output directory (what dodeca builds). Rebuilt each run.
+        #[arg(short, long, default_value = "docs/.rendered")]
+        output: PathBuf,
+        /// Re-render whenever the source tree changes (dev loop).
+        #[arg(long)]
+        watch: bool,
     },
 }
 
@@ -594,6 +613,36 @@ impl LayoutPipeline {
             .with_embedded_font("FreeSans", freesans)
             .with_embedded_font("sans-serif", chicago);
         config
+    }
+
+    /// Inline-docs SVG: continuous-scroll, **content-cropped**, and **font-less**.
+    ///
+    /// Mirrors the editor's `render_svg_live`. The viewBox is shrink-wrapped to
+    /// the drawn content (via `ChartLayoutResult::content_bounds`) so a one-system
+    /// chart isn't marooned in a print page box, and fonts are *not* embedded —
+    /// the SVG references families by name, resolved by [`Self::font_face_css`]
+    /// injected once per page. Returns `None` for an empty / contentless chart.
+    fn render_live_svg(&self, chart: &Chart) -> Option<String> {
+        const PAD: f64 = 6.0;
+        let mode = LayoutMode::ContinuousScroll { width: 800.0 };
+        let config = ChartLayoutConfig::master_rhythm().with_page_offsets(true);
+        let result = self.engine.layout_chart_with_config(chart, &mode, &config);
+        let b = result.content_bounds()?;
+        let config = SvgExportConfig::for_page(
+            b.x0 - PAD,
+            b.y0 - PAD,
+            b.width() + 2.0 * PAD,
+            b.height() + 2.0 * PAD,
+        );
+        let mut serializer = SvgSerializer::new(config);
+        Some(serializer.serialize(&result.scene))
+    }
+
+    /// The `@font-face` rules for the engraving fonts, as standalone CSS. Inject
+    /// once per page that has font-less charts (from [`Self::render_live_svg`]).
+    fn font_face_css(&self) -> String {
+        self.with_embedded_fonts(SvgExportConfig::default())
+            .font_face_css()
     }
 
     /// SVG for ContinuousScroll layouts (single image, scene-sized).
@@ -1462,6 +1511,48 @@ fn run(cli: Cli) -> Result<(), String> {
                     eprintln!("--- Page {} ---", i + 1);
                 }
                 println!("{}", svg);
+            }
+            Ok(())
+        }
+        Commands::Docs {
+            input,
+            output,
+            watch,
+        } => {
+            let pipeline = LayoutPipeline::new()?;
+            let font_css = pipeline.font_face_css();
+            // Chart text → font-less SVG; `None` (parse error / empty) makes the
+            // preprocessor leave the block as its original fenced source.
+            let render = |src: &str| -> Option<String> {
+                let chart = parse_chart(src).ok()?;
+                pipeline.render_live_svg(&chart)
+            };
+
+            let run_once = || -> Result<(), String> {
+                let n = docs::build(&input, &output, &render, &font_css)?;
+                eprintln!(
+                    "kf docs: rendered {n} chart(s) — {} → {}",
+                    input.display(),
+                    output.display()
+                );
+                Ok(())
+            };
+
+            run_once()?;
+
+            if watch {
+                eprintln!("kf docs: watching {} (poll)…", input.display());
+                let mut last = docs::tree_fingerprint(&input);
+                loop {
+                    std::thread::sleep(std::time::Duration::from_millis(300));
+                    let now = docs::tree_fingerprint(&input);
+                    if now != last {
+                        last = now;
+                        if let Err(e) = run_once() {
+                            eprintln!("kf docs: {e}");
+                        }
+                    }
+                }
             }
             Ok(())
         }
