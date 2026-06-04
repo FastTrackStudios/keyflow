@@ -1809,12 +1809,16 @@ fn test_section_markers_extraction() {
         );
     }
 
-    // Verify expected sections exist
+    // Count-In is intentionally NOT treated as a section marker — it stays a
+    // cue marker (see `import::midi_import::tests::test_section_markers`), so it
+    // must not appear among the extracted sections.
     let count_in = sections
         .iter()
         .find(|s| s.section_type == MidiSectionType::CountIn);
-    assert!(count_in.is_some(), "Should have Count-In section");
-    assert_eq!(count_in.unwrap().position.measure, 2);
+    assert!(
+        count_in.is_none(),
+        "Count-In should remain a cue marker, not a section"
+    );
 
     let hits = sections
         .iter()
@@ -1855,17 +1859,19 @@ fn test_chord_normalization() {
     assert_eq!(normalize_chord_name("Abaug/maj7"), "Abmaj7#5");
     assert_eq!(normalize_chord_name("Caugmaj7"), "Cmaj7#5");
 
-    // Test add9 normalization
-    assert_eq!(normalize_chord_name("Abmaj add9"), "Ab(add9)");
-    assert_eq!(normalize_chord_name("C add9"), "C(add9)");
+    // Test add9 normalization. "maj add9" is a major triad with an added 9th
+    // (no implied 7th) and normalizes to the bare "add9" suffix — no parens.
+    assert_eq!(normalize_chord_name("Abmaj add9"), "Abadd9");
+    assert_eq!(normalize_chord_name("C add9"), "Cadd9");
 
     // Test standalone maj -> empty
     assert_eq!(normalize_chord_name("Cmaj"), "C");
     assert_eq!(normalize_chord_name("Ebmaj"), "Eb");
 
-    // Test sus4 -> sus
-    assert_eq!(normalize_chord_name("Csus4"), "Csus");
-    assert_eq!(normalize_chord_name("Gsus4"), "Gsus");
+    // sus chords canonicalize to the explicit "sus4" form (keyflow-text's
+    // canonical spelling, applied as the final normalization step).
+    assert_eq!(normalize_chord_name("Csus4"), "Csus4");
+    assert_eq!(normalize_chord_name("Gsus4"), "Gsus4");
 
     // Test already normalized names pass through
     assert_eq!(normalize_chord_name("Cm"), "Cm");
@@ -2215,8 +2221,8 @@ fn test_generate_keyflow_chart() {
     );
     assert!(chart_text.contains("/push = triplet"));
 
-    // Verify sections are present
-    assert!(chart_text.contains("COUNT"));
+    // Verify sections are present. Count-In is a cue marker, not a section, so
+    // the generated chart does not emit a "COUNT" section header.
     assert!(chart_text.contains("HITS"));
     assert!(chart_text.contains("IN"));
     assert!(chart_text.contains("VS"));
@@ -2427,8 +2433,8 @@ fn test_generate_chart_from_detected_notes() {
     assert!(chart_text.contains("bpm 4/4 #Eb"));
     assert!(chart_text.contains("/push = triplet") || chart_text.contains("/push"));
 
-    // Verify sections are present
-    assert!(chart_text.contains("COUNT"));
+    // Verify sections are present. Count-In is a cue marker, not a section, so
+    // the generated chart does not emit a "COUNT" section header.
     assert!(chart_text.contains("HITS"));
     assert!(chart_text.contains("IN"));
     assert!(chart_text.contains("VS"));

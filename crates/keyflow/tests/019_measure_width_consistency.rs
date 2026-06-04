@@ -111,6 +111,32 @@ fn find_barline_positions(scene: &SceneNode) -> Vec<f64> {
     positions
 }
 
+/// Per-measure widths computed from the `Measure` container nodes' world
+/// bounds. The chart layout draws barlines as anonymous leaf nodes (geometry in
+/// their paint commands, not their transform), so they can't be located by
+/// element id; the `Measure` containers carry a real world transform and known
+/// content bounds, giving each measure a concrete width.
+fn measure_widths_from_containers(scene: &SceneNode) -> Vec<(usize, f64)> {
+    let mut widths: Vec<f64> = scene
+        .iter_with_transforms()
+        .filter_map(|(node, transform)| {
+            let id = node.id.as_ref()?;
+            if id.element_type != ElementType::Measure {
+                return None;
+            }
+            let bounds = node.compute_bounds();
+            if bounds.is_zero_area() {
+                return None;
+            }
+            let world = transform.transform_rect_bbox(bounds);
+            Some(world.width())
+        })
+        .collect();
+    // Drop any zero-width artifacts; keep document order.
+    widths.retain(|w| *w > 0.0);
+    widths.into_iter().enumerate().collect()
+}
+
 /// Calculate measure widths from barline positions.
 /// Returns (measure_index, width) pairs.
 fn calculate_measure_widths(barline_positions: &[f64]) -> Vec<(usize, f64)> {
@@ -211,24 +237,31 @@ fn test_vs_measures_have_identical_content_structure() {
     // Measures 1,3,5 should all have same structure: Cm .
     // Measure 7 is different: Cm Cm9
 
+    // A pushed first chord of a section gets a leading tacet space ("s") chord
+    // inserted by `apply_push_pull_adjustments` (same behavior verified by
+    // 016_push_triplets). Compare the real (non-space) chord content here.
+    let real_chords = |m: &keyflow::chart::types::Measure| -> Vec<String> {
+        m.chords
+            .iter()
+            .filter(|c| c.full_symbol != "s")
+            .map(|c| c.full_symbol.clone())
+            .collect()
+    };
+
     for &idx in &[0, 2, 4, 6] {
-        let m = &measures[idx];
-        assert_eq!(m.chords.len(), 2, "Measure {} should have 2 chords", idx);
+        let chords = real_chords(&measures[idx]);
+        assert_eq!(chords.len(), 2, "Measure {} should have 2 chords", idx);
         assert_eq!(
-            m.chords[0].full_symbol, "F/C",
+            chords[0], "F/C",
             "Measure {} first chord should be F/C",
             idx
         );
     }
 
     for &idx in &[1, 3, 5] {
-        let m = &measures[idx];
-        assert_eq!(m.chords.len(), 2, "Measure {} should have 2 chords", idx);
-        assert_eq!(
-            m.chords[0].full_symbol, "Cm",
-            "Measure {} first chord should be Cm",
-            idx
-        );
+        let chords = real_chords(&measures[idx]);
+        assert_eq!(chords.len(), 2, "Measure {} should have 2 chords", idx);
+        assert_eq!(chords[0], "Cm", "Measure {} first chord should be Cm", idx);
     }
 }
 
@@ -244,8 +277,9 @@ fn test_identical_measures_have_same_width() {
     // Layout in paginated mode
     let result = engine.layout_chart(&chart, &LayoutMode::paginated_a4());
 
-    let barline_positions = find_barline_positions(&result.scene);
-    let measure_widths = calculate_measure_widths(&barline_positions);
+    // Barlines are anonymous leaf nodes in this layout, so widths come from the
+    // `Measure` container bounds instead (see `measure_widths_from_containers`).
+    let measure_widths = measure_widths_from_containers(&result.scene);
 
     // Debug output
     eprintln!("\n=== Measure Widths ===");
@@ -436,10 +470,18 @@ fn test_push_pull_detection_in_vs1() {
         }
     }
 
-    // The ' prefix means push, so 'F/C has a push
+    // The ' prefix means push, so 'F/C has a push. A leading tacet space ("s")
+    // chord is inserted before a pushed section-leading chord, so the pushed
+    // chord is the first NON-space chord (see 016_push_triplets for the same
+    // behavior).
     let first_measure = &measures[0];
+    let first_real = first_measure
+        .chords
+        .iter()
+        .find(|c| c.full_symbol != "s")
+        .expect("VS1 measure 0 should have a real chord");
     assert!(
-        first_measure.chords[0].push_pull.is_some(),
+        first_real.push_pull.is_some(),
         "First chord of VS1 measure 0 should have push/pull (it has ' prefix)"
     );
 }

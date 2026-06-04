@@ -64,7 +64,7 @@ SOLO 4
 @guitar "lead"
 | Am | F | C | G !STOPGROOVE |
 
-OU 4
+OUT 4
 | C | Am | !STOP F | G !STOP |
 "#;
 

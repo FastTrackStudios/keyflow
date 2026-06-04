@@ -68,9 +68,12 @@ VS 4
     assert_eq!(first_measure.chords.len(), 1);
     assert_eq!(first_measure.melodies.len(), 1);
     assert_eq!(first_measure.chords[0].full_symbol, "Cmaj7");
+    // Post-processing resolves relative melody notes to absolute octaves (via
+    // `resolve_melody_octaves`), which Display renders with the `:` octave form.
+    // From the default C4 reference, Bb and B both resolve to octave 3.
     assert_eq!(
         format!("{}", first_measure.melodies[0]),
-        "m{ r2 r4t Bb4t B4t }"
+        "m{ r2 r4t Bb:34t B:34t }"
     );
 }
 
@@ -87,7 +90,8 @@ VS 4
     let chart = keyflow::parse(input).unwrap();
     let rendered = format!("{}", chart);
 
-    assert!(rendered.contains("<< Cmaj7/// ; m{ r2 r4t Bb4t B4t } >>"));
+    // Octaves are resolved to absolute during post-processing and render via `:`.
+    assert!(rendered.contains("<< Cmaj7/// ; m{ r2 r4t Bb:34t B:34t } >>"));
 }
 
 #[test]

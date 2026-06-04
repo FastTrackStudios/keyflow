@@ -733,7 +733,12 @@ r1 | r2 r4 r8 r16 r32 r32
 /// For: C_1 | G_2 D_4 Em_8 G_16 D_32 r32
 #[test]
 fn test_chord_position_properties() {
+    // Disable auto-rhythm-slashes (default-on for master rhythm charts) so each
+    // chord keeps its written note value — this test verifies per-note-value
+    // glyphs/durations (whole=1920, half=960, …), which auto-expansion to
+    // quarter slashes would erase.
     let source = r#"
+/AUTO_RHYTHM_SLASHES=false
 #G
 
 VS
