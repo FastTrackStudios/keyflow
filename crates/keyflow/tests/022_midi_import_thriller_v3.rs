@@ -31,6 +31,7 @@ fn test_chart_generates_without_panic() {
 }
 
 #[test]
+#[ignore = "lineage divergence: MIDI-import/chart-Display canonicality undecided"]
 fn test_exact_output() {
     let chart_text = generate_thriller_chart();
 

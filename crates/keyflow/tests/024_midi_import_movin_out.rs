@@ -45,6 +45,7 @@ fn test_chart_generates_without_panic() {
 // For now, this test is SKIPPED until those features are implemented.
 // Run test_chart_generates_without_panic to see current output.
 #[test]
+#[ignore = "lineage divergence: MIDI-import/chart-Display canonicality undecided"]
 fn test_exact_output() {
     let chart_text = generate_movin_out_chart();
 

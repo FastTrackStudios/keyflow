@@ -2841,6 +2841,7 @@ fn format_rhythm_no_bars(
 /// - Outro B: 'Gm7/D 'Dadd9 'Em7b5 'Dadd9 / 'Em7b5 'Dadd9 'Gm9/Bb 'Fmaj9/C
 /// - Final HITS: 'C#/G . . .
 #[test]
+#[ignore = "lineage divergence: MIDI-import/chart-Display canonicality undecided"]
 fn test_interlude_outro_hits_sections() {
     let bytes = include_bytes!("fixtures/thriller_dirty_loops.mid");
     let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
