@@ -28,6 +28,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The workspace manifest path-deps four sibling checkouts (Editor,
+      # architect, input_actions, daw) — cargo loads every workspace member's
+      # manifest even for a single -p build, so the siblings must exist at
+      # the same relative paths as in local dev.
+      - name: Clone sibling workspace repos
+        run: |
+          set -euo pipefail
+          clone() { rm -rf "$2" && git clone --depth 1 "https://codeberg.org/FastTrackStudios/$1.git" "$2"; }
+          clone Editor        ../../Editor
+          clone architect     ../../architect
+          clone input_actions ../input_actions
+          clone daw           ../daw
+
       # Fully-qualified: bare `uses:` resolves against data.forgejo.org,
       # which doesn't mirror cachix/install-nix-action.
       - uses: https://github.com/cachix/install-nix-action@v31
