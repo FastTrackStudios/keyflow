@@ -28,6 +28,22 @@ jobs:
           name: fasttrackstudio
         continue-on-error: true
 
+      # Codeberg rate-limits anonymous git-over-https; the workspace pulls
+      # a dozen git deps from it. The job token authenticates the fetches.
+      - name: Authenticate codeberg git fetches
+        run: |
+          git config --global url."https://oauth2:${{ secrets.GITHUB_TOKEN }}@codeberg.org/".insteadOf "https://codeberg.org/"
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ci-cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ci-cargo-${{ runner.os }}-
+
       - name: cargo xtask ci
         run: |
           # catthehacker containers ship a /homeless-shelter dir, which trips
