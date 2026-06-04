@@ -41,10 +41,10 @@ engraver = { path = "crates/engraver" }
 # diagnostics onto the editor's decoration model; `editor-keyflow` renders
 # `.kf` fences to inline SVG. Web/wasm only for now — the contenteditable
 # view doesn't run on dioxus-native/Blitz yet.
-editor = { path = "../../Editor/crates/editor" }
-editor-state = { path = "../../Editor/crates/editor-state" }
-editor-keyflow = { path = "../../Editor/crates/editor-keyflow" }
-editor-keyflow-lang = { path = "../../Editor/crates/editor-keyflow-lang" }
+editor = { git = "https://codeberg.org/FastTrackStudios/Editor.git", branch = "main" }
+editor-state = { git = "https://codeberg.org/FastTrackStudios/Editor.git", branch = "main" }
+editor-keyflow = { git = "https://codeberg.org/FastTrackStudios/Editor.git", branch = "main" }
+editor-keyflow-lang = { git = "https://codeberg.org/FastTrackStudios/Editor.git", branch = "main" }
 
 # FastTrack Studio shared design system. Lives in the sibling fts-ui repo.
 fts-ui = { git = "https://git.starcommand.live/FastTrackStudios/fts-ui.git", branch = "main", package = "fts-ui" }
@@ -71,8 +71,8 @@ vox-stream = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = 
 # architect framework — defines #[architect::rpc] for sync-trait → vox RPC
 # bridging. Local path (matching Task) so architect's vox-0.8.2 / runtime-
 # only profile drives the whole graph and the wasm build stays mio-free.
-architect = { path = "../../architect/macros/architect" }
-architect-rpc-derive = { path = "../../architect/macros/architect-rpc-derive" }
+architect = { git = "https://codeberg.org/FastTrackStudios/architect.git", branch = "main" }
+architect-rpc-derive = { git = "https://codeberg.org/FastTrackStudios/architect.git", branch = "main" }
 
 # Rendering
 anyrender = { git = "https://github.com/DioxusLabs/anyrender.git", branch = "main" }
@@ -150,7 +150,7 @@ manganis-macro = { git = "https://git.starcommand.live/codywright/dioxus", rev =
 # workspace, so keyflow carries it too even though Editor declares it
 # internally — without this, editor-mermaid pulls upstream 0.2.2 which panics
 # on wasm32.
-mermaid-rs-renderer = { path = "../../Editor/vendor/mermaid-rs-renderer" }
+mermaid-rs-renderer = { git = "https://codeberg.org/FastTrackStudios/Editor.git", branch = "main" }
 
 # ── Editor wasm dependency unification ───────────────────────────────
 # The Editor (via editor-keyflow → engraver → keyflow-proto → daw-proto)
@@ -163,24 +163,10 @@ mermaid-rs-renderer = { path = "../../Editor/vendor/mermaid-rs-renderer" }
 # proto at their local checkouts so daw-proto's runtime-only (wasm-friendly)
 # vox profile applies. See Task/Cargo.toml for the original rationale.
 [patch."https://github.com/FastTrackStudios/input_actions.git"]
-actions-proto = { path = "../input_actions/crates/actions-proto" }
+actions-proto = { git = "https://codeberg.org/FastTrackStudios/input_actions.git", branch = "main" }
 
 [patch."https://git.starcommand.live/FastTrackStudios/input_actions.git"]
-actions-proto = { path = "../input_actions/crates/actions-proto" }
-
-# Redirect daw-proto (keyflow-proto's timing-primitive source) to the local
-# checkout so its runtime-only vox profile applies instead of the git
-# version's full tokio-net profile — the specific fix that lets the editor's
-# wasm build link without mio.
-[patch."https://codeberg.org/FastTrackStudios/daw.git"]
-daw-proto = { path = "../daw/crates/daw-proto" }
-
-# Transitive deps (daw-module, session, …) pull architect from git. Redirect to
-# the local checkout (now pinned to vox f31f1040) so the whole graph shares one
-# architect + one vox-types.
-[patch."https://codeberg.org/FastTrackStudios/architect.git"]
-architect = { path = "../../architect/macros/architect" }
-architect-rpc-derive = { path = "../../architect/macros/architect-rpc-derive" }
+actions-proto = { git = "https://codeberg.org/FastTrackStudios/input_actions.git", branch = "main" }
 
 # Fold every transitive vox reference (bearcove + Codys-Wright) onto the single
 # FastTrackStudios fork @ f31f1040 (vox 0.8.2, the Uuid-opaque-scalar fork
