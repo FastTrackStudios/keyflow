@@ -6,7 +6,6 @@
 //! - /push setting for default push mode
 
 use keyflow::chord::{PushPullAmount, PushPullBase};
-use keyflow::time::MusicalPositionExt;
 
 #[test]
 fn test_triplet_push_shortcut() {

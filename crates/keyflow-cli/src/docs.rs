@@ -201,8 +201,8 @@ fn transform_fences(lines: &[&str], render: &RenderFn<'_>) -> (String, usize) {
                     }
                     _ => {
                         // Fallback: reproduce the original block verbatim.
-                        for k in i..=close_idx.min(lines.len().saturating_sub(1)) {
-                            out.push_str(lines[k]);
+                        for line in &lines[i..=close_idx.min(lines.len().saturating_sub(1))] {
+                            out.push_str(line);
                             out.push('\n');
                         }
                     }

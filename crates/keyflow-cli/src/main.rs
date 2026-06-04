@@ -247,11 +247,6 @@ fn parse_chart(source: &str) -> Result<Chart, String> {
     keyflow::parse(source).map_err(|e| format!("{e}"))
 }
 
-fn parse_midi_chart(input: &str) -> Result<Chart, String> {
-    let bytes = read_bytes(input)?;
-    keyflow::midi::parse_midi_bytes(&bytes)
-}
-
 fn generate_midi_chart_text(input: &str) -> Result<String, String> {
     let bytes = read_bytes(input)?;
     keyflow::midi::generate_chart_text_from_midi_bytes(&bytes)

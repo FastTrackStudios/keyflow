@@ -46,17 +46,13 @@
 /// through `fts-ui`.
 ///
 /// `use keyflow_ui::prelude::*;` therefore brings in:
-/// - `dioxus::prelude` (or `dioxus_native::prelude` under the `native`
-///   feature) — `rsx!`, `#[component]`, signals, …
+/// - `dioxus::prelude` — `rsx!`, `#[component]`, signals, … (dioxus-native
+///   is only the renderer; the component framework is always `dioxus`)
 /// - `fts_ui::prelude` — every FTS component, layout primitive, theme
 ///   token, and the `cn!` class-merge macro.
 ///
 /// Down-stream callers should never need to `use fts_ui::…` directly.
 pub mod prelude {
-    #[cfg(feature = "native")]
-    pub use dioxus_native::prelude::*;
-
-    #[cfg(not(feature = "native"))]
     pub use dioxus::prelude::*;
 
     pub use fts_ui::cn;

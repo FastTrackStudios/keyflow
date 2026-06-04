@@ -69,9 +69,8 @@ fn workspace_root() -> PathBuf {
 /// Create a layout engine with standard test settings.
 fn create_test_engine() -> ChartLayoutEngine {
     let root = workspace_root();
-    let text_font_path = root.join("libs/reference/sheet-music/musescore/fonts/FreeSans.ttf");
-    let musejazz_font_path =
-        root.join("libs/reference/sheet-music/musescore/fonts/musejazz/MuseJazzText.otf");
+    let text_font_path = root.join("crates/engraver-proto/fonts/FreeSans.ttf");
+    let musejazz_font_path = root.join("crates/engraver-proto/fonts/MuseJazzText.otf");
 
     let text_font_data = Arc::new(
         std::fs::read(&text_font_path)

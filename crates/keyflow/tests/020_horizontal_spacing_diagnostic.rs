@@ -15,7 +15,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use keyflow::engraver::layout::chart::{ChartLayoutConfig, ChartLayoutEngine, LayoutMode};
-use keyflow::engraver::scene::traverse::SceneNodeExt;
 use keyflow::engraver::style::MStyle;
 
 /// Test chart with explicit durations to diagnose spacing
@@ -39,9 +38,8 @@ fn workspace_root() -> PathBuf {
 
 fn create_test_engine() -> ChartLayoutEngine {
     let root = workspace_root();
-    let text_font_path = root.join("libs/reference/sheet-music/musescore/fonts/FreeSans.ttf");
-    let musejazz_font_path =
-        root.join("libs/reference/sheet-music/musescore/fonts/musejazz/MuseJazzText.otf");
+    let text_font_path = root.join("crates/engraver-proto/fonts/FreeSans.ttf");
+    let musejazz_font_path = root.join("crates/engraver-proto/fonts/MuseJazzText.otf");
 
     let text_font_data = Arc::new(
         std::fs::read(&text_font_path)
@@ -115,7 +113,7 @@ fn test_layout_segment_ticks() {
     for (measure_idx, beats) in measures.iter() {
         eprintln!("\nMeasure {}:", measure_idx);
         let mut sorted_beats: Vec<_> = beats.iter().collect();
-        sorted_beats.sort_by(|a, b| a.beat.cmp(&b.beat));
+        sorted_beats.sort_by_key(|a| a.beat);
 
         for bp in sorted_beats {
             eprintln!(
@@ -292,7 +290,7 @@ fn test_snippet_mode_layout() {
     for (measure_idx, beats) in measures.iter() {
         eprintln!("\nMeasure {}:", measure_idx);
         let mut sorted_beats: Vec<_> = beats.iter().collect();
-        sorted_beats.sort_by(|a, b| a.beat.cmp(&b.beat));
+        sorted_beats.sort_by_key(|a| a.beat);
 
         // Calculate measure bounds from first/last beat
         if let (Some(first), Some(last)) = (sorted_beats.first(), sorted_beats.last()) {

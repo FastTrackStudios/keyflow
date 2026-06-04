@@ -15,7 +15,7 @@ use engraver::import::{
     generate_chart_text, MarkerEvent, MarkerType, MidiChartConfig, MidiFile, MidiNote, MidiTrack,
     TempoEvent, TimeSignatureEvent,
 };
-use engraver::layout::chart::{ChartLayoutConfig, ChartLayoutEngine, LayoutMode};
+use engraver::layout::chart::{ChartLayoutConfig, LayoutMode};
 use engraver::style::MStyle;
 use keyflow::chord::{detect_chords_from_midi_notes, MidiNote as KeyflowMidiNote};
 

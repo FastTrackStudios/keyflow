@@ -11,21 +11,18 @@
 //! - Push/pull detection based on triplet subdivisions (640/320 ticks at 960 PPQ)
 //! - Section type mapping (Count-In -> COUNT, VS 1 -> VS, etc.)
 
-use keyflow::time::MusicalPositionExt;
 use std::collections::BTreeMap;
 
-use keyflow::chart::Chart;
 use keyflow::chord::{
     detect_chords_from_midi_notes, DetectedChord, MidiNote as KeyflowMidiNote, PushPullAmount,
     PushPullBase,
 };
 use keyflow::engraver::import::{
-    normalize_chord_name, ChordMarker, MidiFile, MidiNote, PushPull, SectionMarker,
+    normalize_chord_name, ChordMarker, MidiFile, PushPull, SectionMarker,
     SectionType as MidiSectionType,
 };
 use keyflow::key::{KeySpelling, SpellingMode};
 use keyflow::primitives::MusicalNote;
-use keyflow::sections::SectionType;
 
 // ============================================================================
 // Chord Detection from MIDI Notes
@@ -215,35 +212,6 @@ fn detect_section_push_type(
     }
 }
 
-/// Format a chord symbol with push/pull notation.
-fn format_chord_with_timing(
-    symbol: &str,
-    is_pushed: bool,
-    push_amount: &Option<String>,
-    use_short_push: bool,
-) -> String {
-    match (is_pushed, push_amount) {
-        (false, None) => symbol.to_string(),
-        (false, Some(amt)) => {
-            // Pull - suffix with amount
-            if use_short_push && amt == "t" {
-                format!("{}'", symbol)
-            } else {
-                format!("{}{}'", symbol, amt)
-            }
-        }
-        (true, Some(amt)) => {
-            // Push - prefix with amount
-            if use_short_push && amt == "t" {
-                format!("'{}", symbol)
-            } else {
-                format!("'{}{}", amt, symbol)
-            }
-        }
-        (true, None) => symbol.to_string(), // Shouldn't happen
-    }
-}
-
 /// Convert duration in ticks to Keyflow duration notation.
 /// Returns (notation, is_triplet) where notation is like "8", "4", "2", "1"
 fn ticks_to_duration_notation(duration_ppq: i64, ppq: u32) -> (String, bool) {
@@ -280,30 +248,6 @@ fn ticks_to_duration_notation(duration_ppq: i64, ppq: u32) -> (String, bool) {
     } else {
         // Default to quarter
         ("4".to_string(), false)
-    }
-}
-
-/// Format a duration suffix for a chord (e.g., "_8t" for triplet eighth).
-fn format_duration_suffix(duration_ppq: i64, ppq: u32, is_default: bool) -> String {
-    if is_default {
-        return String::new();
-    }
-
-    let (base, is_triplet) = ticks_to_duration_notation(duration_ppq, ppq);
-    if is_triplet {
-        format!("_{}t", base)
-    } else {
-        format!("_{}", base)
-    }
-}
-
-/// Format a rest with proper notation (e.g., "r8t" for triplet eighth rest).
-fn format_rest(duration_ppq: i64, ppq: u32) -> String {
-    let (base, is_triplet) = ticks_to_duration_notation(duration_ppq, ppq);
-    if is_triplet {
-        format!("r{}t", base)
-    } else {
-        format!("r{}", base)
     }
 }
 
@@ -578,28 +522,6 @@ enum MeasureElement {
         ticks: i64,                 // Actual duration in ticks
         start_tick_in_measure: i64, // Position within the measure (for beat boundary splitting)
     },
-}
-
-/// Format a duration as Keyflow suffix (e.g., "_8t" for triplet eighth, "_4" for quarter)
-fn format_duration_suffix_beats(beats: i32, is_triplet_context: bool) -> String {
-    match beats {
-        1 => "_4".to_string(),        // quarter note
-        2 => "_2".to_string(),        // half note
-        3 => "_2.".to_string(),       // dotted half
-        4 => "".to_string(),          // whole note (full measure) - no suffix
-        _ => format!("_4x{}", beats), // fallback
-    }
-}
-
-/// Format a rest duration as Keyflow notation
-fn format_rest_beats(beats: i32) -> String {
-    match beats {
-        1 => "r4".to_string(),
-        2 => "r2".to_string(),
-        3 => "r2.".to_string(),
-        4 => "r1".to_string(),
-        _ => format!("r4x{}", beats),
-    }
 }
 
 /// Generate slash notation for beats (grouped together like "///")
@@ -1018,7 +940,7 @@ fn split_rest_at_beat_boundaries(
 
     let mut result = Vec::new();
     let mut remaining = duration_ticks;
-    let mut current_pos = start_tick_in_measure;
+    let current_pos = start_tick_in_measure;
 
     // Calculate position within current beat (0 = on beat, 320 = 1st triplet, 640 = 2nd triplet)
     let pos_in_beat = current_pos % ticks_per_beat;
@@ -1035,7 +957,6 @@ fn split_rest_at_beat_boundaries(
                 result.push(chunk);
                 fill_remaining -= chunk;
                 remaining -= chunk;
-                current_pos += chunk;
             }
         }
     }
@@ -1045,7 +966,6 @@ fn split_rest_at_beat_boundaries(
     while remaining >= ticks_per_beat - tolerance {
         result.push(ticks_per_beat);
         remaining -= ticks_per_beat;
-        current_pos += ticks_per_beat;
     }
 
     // For remaining triplet-based duration on a beat boundary, prefer r4t over r8t r8t
@@ -1454,16 +1374,6 @@ fn generate_duration_slashes(beats: i32, beats_per_measure: i32) -> String {
     }
 }
 
-/// The standard Thriller groove pattern
-/// Returns (pushed_chord, on_beat_chord) with appropriate push notation
-fn thriller_groove_pattern(use_short_push: bool) -> (String, String) {
-    if use_short_push {
-        ("'F/C".to_string(), "Cm".to_string())
-    } else {
-        ("'tF/C".to_string(), "Cm".to_string())
-    }
-}
-
 /// Fill measures for simple sections (groove or hits).
 /// Respects actual MIDI measure positions - chords stay at their original measures.
 /// When multiple chords are in the same MIDI measure, spreads them to adjacent output measures.
@@ -1477,7 +1387,7 @@ fn fill_groove_measures(
     _beats_per_measure: i32,
 ) -> Vec<String> {
     // Convert chords to keyflow notation with their relative measure positions
-    let mut chord_entries: Vec<(i32, String)> = section_chords
+    let chord_entries: Vec<(i32, String)> = section_chords
         .iter()
         .map(|chord| {
             let logical_m = chord.logical_measure(ppq, 4); // 4/4 time
@@ -2990,7 +2900,7 @@ fn test_interlude_outro_hits_sections() {
     // The Cm chord carries over from the end of the previous CH section
     // ========================================================================
     let (_, start, len) = interlude_sections[0];
-    let (interlude_a, push_a) = generate_section(start, len);
+    let (interlude_a, _push_a) = generate_section(start, len);
     println!("Interlude A:\n{}\n", interlude_a);
 
     // Interlude A: Cm carries over from previous CH section's 'Cm in measure 2

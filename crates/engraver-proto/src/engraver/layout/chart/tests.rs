@@ -2275,7 +2275,7 @@ fn mid_chart_key_change_renders_in_red() {
     let result = engine.layout_chart(&chart, &LayoutMode::default());
     let colors = glyph_colors_of(&result.scene, ElementType::KeySignature);
     assert!(
-        colors.iter().any(|c| *c == red),
+        colors.contains(&red),
         "expected a red key-change accidental glyph, got {colors:?}"
     );
 }
@@ -2330,12 +2330,10 @@ mod degree_root_size_guard {
                 font_family,
                 ..
             } = c
+                && font_family.contains("MuseJazz")
+                && let Some(ch) = text.chars().next()
             {
-                if font_family.contains("MuseJazz") {
-                    if let Some(ch) = text.chars().next() {
-                        out.push((ch, *font_size));
-                    }
-                }
+                out.push((ch, *font_size));
             }
         }
         for ch in &n.children {

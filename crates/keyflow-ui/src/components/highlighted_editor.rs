@@ -4,7 +4,7 @@
 //! providing real-time syntax highlighting as the user types.
 
 use crate::prelude::*;
-use dioxus_core::Task;
+use dioxus::dioxus_core::Task;
 use keyflow::text::highlighting::{Highlighter, Renderer, Theme};
 use keyflow::text::ide::{self, Severity};
 
@@ -62,10 +62,7 @@ pub fn HighlightedEditor(
                     if (ta) {{ ta.value = `{escaped}`; }}
                 }})();"#
             );
-            #[cfg(feature = "web")]
             dioxus::prelude::document::eval(&js);
-            #[cfg(feature = "native")]
-            dioxus_native::prelude::document::eval(&js);
 
             needs_dom_sync.set(false);
         }

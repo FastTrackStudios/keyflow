@@ -29,6 +29,7 @@ use editor_keyflow_lang::{
 /// resetting the timer, so layout/serialization runs once you pause — never on
 /// the keystroke itself. ~150ms reads as "instant" while fully unblocking the
 /// main thread during a fast typing burst.
+#[cfg(target_arch = "wasm32")]
 const PREVIEW_DEBOUNCE_MS: u32 = 150;
 
 /// Layout-only styles for this example (the split panes + preview chrome).

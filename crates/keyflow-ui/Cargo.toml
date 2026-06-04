@@ -21,7 +21,7 @@ anyrender_vello_hybrid = { workspace = true, optional = true, features = ["webgl
 peniko = { workspace = true, optional = true }
 
 # Dioxus UI framework - use dioxus-native when native feature is enabled
-dioxus = { git = "https://git.starcommand.live/codywright/dioxus", rev = "2a776101ae2544244c296734561d71bc0ebb46a6", package = "dioxus", optional = true }
+dioxus = { version = "0.7.9", optional = true }
 dioxus-native = { workspace = true, optional = true }
 
 # Vello scene types (for building scenes to hand off to ChartGraphics)
@@ -66,7 +66,7 @@ default = ["web"]
 # Web/desktop (WebView-based) rendering
 web = ["dioxus", "dioxus/desktop", "desktop-panels"]
 # Native GPU-accelerated rendering via Blitz
-native = ["dioxus-native", "desktop-panels"]
+native = ["dioxus", "dioxus-native", "desktop-panels"]
 # Desktop panel components (ChartView, ChartPreviewPanel) with full app dependencies
 desktop-panels = [
     "anyrender_vello",
