@@ -47,7 +47,7 @@ editor-keyflow = { git = "https://codeberg.org/FastTrackStudios/Editor.git", bra
 editor-keyflow-lang = { git = "https://codeberg.org/FastTrackStudios/Editor.git", branch = "main" }
 
 # FastTrack Studio shared design system. Lives in the sibling fts-ui repo.
-fts-ui = { git = "https://git.starcommand.live/FastTrackStudios/fts-ui.git", branch = "main", package = "fts-ui" }
+fts-ui = { git = "https://codeberg.org/FastTrackStudios/fts-ui.git", branch = "main", package = "fts-ui" }
 
 # Facet reflection — align the stack to the current 0.46 line.
 facet = { version = "0.46" }
