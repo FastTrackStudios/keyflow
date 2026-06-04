@@ -27,9 +27,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: cachix/install-nix-action@v31
-        with:
-          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      # Fully-qualified: bare `uses:` resolves against data.forgejo.org,
+      # which doesn't mirror cachix/install-nix-action.
+      - uses: https://github.com/cachix/install-nix-action@v31
 
       # ddc (dodeca) ships prebuilt binaries — no nix package, no cargo build.
       - name: Install dodeca
