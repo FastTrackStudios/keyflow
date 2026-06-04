@@ -40,6 +40,11 @@ jobs:
           clone architect     ../../architect
           clone input_actions ../input_actions
           clone daw           ../daw
+          # Editor's manifests reach back into keyflow via
+          # ../FastTrackStudio/keyflow (local disk layout, no 's') —
+          # bridge it to this checkout.
+          mkdir -p ../../FastTrackStudio
+          ln -sfn "$(pwd)" ../../FastTrackStudio/keyflow
 
       # Fully-qualified: bare `uses:` resolves against data.forgejo.org,
       # which doesn't mirror cachix/install-nix-action.
