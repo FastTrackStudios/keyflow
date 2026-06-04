@@ -149,7 +149,8 @@ fn transform_markdown(src: &str, render: &RenderFn<'_>) -> (String, usize) {
 }
 
 /// Scan markdown lines, replacing each ` ```kf ` fenced block with its rendered
-/// SVG. A block whose body fails to render (parse error / empty) is left as the
+/// SVG and each ` ```kf-src ` block with syntax-highlighted HTML. A ` ```kf `
+/// block whose body fails to render (parse error / empty) is left as the
 /// original fenced code so a typo shows the source, not a hard failure.
 fn transform_fences(lines: &[&str], render: &RenderFn<'_>) -> (String, usize) {
     let mut out = String::new();
@@ -159,6 +160,22 @@ fn transform_fences(lines: &[&str], render: &RenderFn<'_>) -> (String, usize) {
     while i < lines.len() {
         let line = lines[i];
         if let Some(fence) = open_fence(line) {
+            if fence.lang == "kf-src" {
+                // Collect the block body up to the matching closing fence,
+                // stripping the fence's own indentation (CommonMark: content
+                // of an indented fence is dedented by the fence indent).
+                let indent = line.len() - line.trim_start_matches(' ').len();
+                let mut j = i + 1;
+                let mut body = Vec::new();
+                while j < lines.len() && !is_close_fence(lines[j], &fence) {
+                    body.push(dedent(lines[j], indent));
+                    j += 1;
+                }
+                out.push_str(&line[..indent]);
+                out.push_str(&highlight_block(&body));
+                i = j + 1; // skip past the closing fence
+                continue;
+            }
             if fence.lang == "kf" {
                 // Collect the block body up to the matching closing fence.
                 let mut j = i + 1;
@@ -231,6 +248,43 @@ fn open_fence(line: &str) -> Option<Fence> {
     }
     let lang = info.split_whitespace().next().unwrap_or("").to_string();
     Some(Fence { ch, len, lang })
+}
+
+/// Strip up to `n` leading spaces from `line` (CommonMark fence dedent).
+fn dedent(line: &str, n: usize) -> &str {
+    let strip = line.chars().take(n).take_while(|&c| c == ' ').count();
+    &line[strip..]
+}
+
+/// Render a ` ```kf-src ` block body as syntax-highlighted HTML.
+///
+/// Produces the same wrapper markup dodeca emits for fenced code (so the site
+/// stylesheet and copy-button JS apply unchanged), with a `kf-src` marker class
+/// and a `kf` language header. Highlighting is the editor's own line
+/// highlighter; spans carry CSS classes only (`kf-root`, `kf-quality`, …) and
+/// the palette lives in the site stylesheet.
+///
+/// The whole block is emitted as a SINGLE line, with source newlines encoded
+/// as `&#10;` inside the `<code>`. Raw HTML in markdown is a CommonMark
+/// "type 6" block that a blank line terminates — one physical line sidesteps
+/// that entirely, and lets the block sit inside list items at any indent.
+fn highlight_block(body: &[&str]) -> String {
+    use keyflow::text::highlighting::{Highlighter, Renderer};
+
+    let mut out = String::from(
+        "<div class=\"code-block kf-src\"><div class=\"code-header\">kf</div><pre><code>",
+    );
+    for (n, line) in body.iter().enumerate() {
+        if n > 0 {
+            out.push_str("&#10;");
+        }
+        if !line.trim().is_empty() {
+            let spans = Highlighter::highlight_line(line);
+            out.push_str(&Renderer::to_html_classes(line, &spans));
+        }
+    }
+    out.push_str("</code></pre><button class=\"copy-btn\">Copy</button></div>\n");
+    out
 }
 
 /// Whether `line` closes an open `fence`: only fence characters of the same
@@ -355,6 +409,48 @@ mod tests {
         assert!(
             out.contains("<figure class=\"kf-chart\">\n<svg>"),
             "figure starts at <svg>"
+        );
+    }
+
+    #[test]
+    fn kf_src_fence_becomes_highlighted_html() {
+        let md = "Before\n\n```kf-src\nVS 4\nGm7 | C7\n\nCH 4\n```\n\nAfter\n";
+        let (out, n) = transform_markdown(md, &stub);
+        assert_eq!(n, 0, "kf-src renders no chart");
+        assert!(
+            out.contains("<div class=\"code-block kf-src\">"),
+            "wrapper emitted: {out}"
+        );
+        assert!(!out.contains("```"), "fence consumed");
+        assert!(
+            out.contains("class=\"kf-"),
+            "highlight spans present: {out}"
+        );
+        // single-line emission: source newlines become &#10; entities, so a
+        // blank body line can't terminate the CommonMark HTML block
+        let html_line = out
+            .lines()
+            .find(|l| l.contains("code-block kf-src"))
+            .unwrap();
+        assert!(html_line.contains("&#10;&#10;"), "blank line encoded");
+        assert!(html_line.ends_with("</div>"), "block is one physical line");
+        assert!(
+            !out.contains("kf-fonts.css"),
+            "no font link for source-only blocks"
+        );
+    }
+
+    #[test]
+    fn kf_src_fence_indented_in_list_keeps_indent() {
+        let md = "- item:\n  ```kf-src\n  m{ 1 2 3 4 }\n  ```\n- next\n";
+        let (out, _) = transform_markdown(md, &stub);
+        assert!(
+            out.contains("\n  <div class=\"code-block kf-src\">"),
+            "block keeps the fence's list indent: {out}"
+        );
+        assert!(
+            out.contains("<pre><code>m<span"),
+            "body dedented (no leading spaces) and highlighted: {out}"
         );
     }
 

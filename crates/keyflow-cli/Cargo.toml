@@ -9,7 +9,7 @@ name = "kf"
 path = "src/main.rs"
 
 [dependencies]
-keyflow = { workspace = true, features = ["text", "midi", "engraver"] }
+keyflow = { workspace = true, features = ["text", "midi", "engraver", "highlighting"] }
 keyflow-musicxml = { workspace = true }
 
 clap = { version = "4", features = ["derive"] }

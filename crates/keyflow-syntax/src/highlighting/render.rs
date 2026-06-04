@@ -103,6 +103,57 @@ impl Renderer {
         }
     }
 
+    /// Render highlighted spans to HTML using CSS classes only.
+    ///
+    /// Like [`to_html_inline`](Self::to_html_inline) but emits no inline
+    /// styles — each span carries just its `HighlightKind::css_class()`
+    /// (`kf-root`, `kf-quality`, …), leaving the palette to a stylesheet.
+    /// Unhighlighted gaps are HTML-escaped verbatim.
+    ///
+    /// Span offsets are snapped to char boundaries: the highlighter can
+    /// produce char-misaligned offsets around multibyte text (e.g. `♭`), and
+    /// this renderer must never panic or drop source text — worst case a
+    /// span's styling shifts by a character.
+    #[must_use]
+    pub fn to_html_classes(source: &str, spans: &[HighlightSpan]) -> String {
+        /// Floor `i` to the nearest char boundary at or below it.
+        fn snap(s: &str, mut i: usize) -> usize {
+            i = i.min(s.len());
+            while i > 0 && !s.is_char_boundary(i) {
+                i -= 1;
+            }
+            i
+        }
+
+        let mut html = String::with_capacity(source.len() * 2);
+        let mut pos = 0;
+
+        for span in spans {
+            let start = snap(source, span.span.start).max(pos);
+            let end = snap(source, span.span.end()).max(start);
+
+            if start > pos {
+                html.push_str(&Self::escape_html(&source[pos..start]));
+            }
+
+            if end > start {
+                html.push_str(&format!(
+                    "<span class=\"{}\">{}</span>",
+                    span.kind.css_class(),
+                    Self::escape_html(&source[start..end])
+                ));
+            }
+
+            pos = end;
+        }
+
+        if pos < source.len() {
+            html.push_str(&Self::escape_html(&source[pos..]));
+        }
+
+        html
+    }
+
     /// Convert a style to inline CSS.
     fn style_to_css(style: &Style) -> String {
         let mut css = format!("color:{};", style.color.to_css());
