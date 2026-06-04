@@ -29,4 +29,8 @@ jobs:
         continue-on-error: true
 
       - name: cargo xtask ci
-        run: nix develop .#ci --impure --command cargo xtask ci
+        run: |
+          # catthehacker containers ship a /homeless-shelter dir, which trips
+          # nix's purity check the moment any derivation actually builds.
+          sudo rm -rf /homeless-shelter 2>/dev/null || rm -rf /homeless-shelter || true
+          nix develop .#ci --impure --command cargo xtask ci
