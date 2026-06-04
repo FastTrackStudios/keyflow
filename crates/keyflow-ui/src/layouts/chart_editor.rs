@@ -140,10 +140,16 @@ pub fn ChartEditorLayout() -> Element {
     // (`--destructive`, `--warning`, etc.) are defined for child CSS,
     // and so `fts-ui` components pick up the active preset.
     // `ToastProvider` lets descendants call `use_toast()`.
-    let theme_state = use_signal(default_theme_state);
+    // Default to Dark to match the host app's dark `:root` theme — the bare
+    // `default_theme_state` is Light, which renders the whole editor white.
+    let theme_state = use_signal(|| ThemeState::new(default_theme_preset(), ThemeMode::Dark));
     rsx! {
+        // `h-full` so the editor fills the host pane: ThemeProvider's own div is
+        // only `min-h-full`, which doesn't give `ChartEditorLayoutInner`'s
+        // `h-full` a definite parent height (preview collapses to ~29px otherwise).
         ThemeProvider {
             state: theme_state,
+            class: "h-full",
             toast::ToastProvider { ChartEditorLayoutInner {} }
         }
     }

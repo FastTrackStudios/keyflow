@@ -2,8 +2,6 @@
 //!
 //! Tests the ->NNNbpm inline tempo change syntax
 
-use keyflow::chart::Chart;
-
 #[test]
 fn test_inline_tempo_change() {
     let input = r#"

@@ -5,7 +5,6 @@
 //! - ':N tuplet syntax: ':5C = quintuplet push
 //! - /push setting for default push mode
 
-use keyflow::chart::Chart;
 use keyflow::chord::{PushPullAmount, PushPullBase};
 use keyflow::time::MusicalPositionExt;
 

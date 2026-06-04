@@ -65,19 +65,11 @@ pub use collision::{ChordCollisionContext, resolve_chord_positions};
 use std::sync::Arc;
 
 use crate::Chart;
-use crate::chord::LilySyntax;
 use crate::engraver::layout::context::{LayoutContext, LayoutContextOwned};
 use crate::engraver::layout::orchestrator::{PageLayout, PageMargins, SystemLayout};
 use crate::engraver::layout::segment::SegmentType;
-use crate::engraver::layout::segment_list::SegmentList;
 use crate::engraver::layout::text_metrics::TextFontMetrics;
-use crate::engraver::layout::tlayout::{
-    BarlineType, ClefParams, ClefType, HarmonyParams, HarmonyStyle, MarginLabelParams,
-    NoteHeadType, RestDuration, RestParams, SlurDirection, SlurEndpoint, SlurTieConfig,
-    TimeSigParams, TimeSigType, layout_clef, layout_margin_label, layout_rest, layout_tie,
-    layout_timesig,
-};
-use crate::engraver::notation::{Duration, MeasureBuilder, MeasureScene, RhythmEntry};
+use crate::engraver::layout::tlayout::{BarlineType, HarmonyStyle};
 use crate::engraver::scene::id::{ElementType, SemanticId};
 use crate::engraver::scene::node::SceneNode;
 use crate::engraver::scene::paint::PaintCommand;
@@ -86,9 +78,7 @@ use crate::engraver::style::MStyle;
 use crate::key::KeySpelling;
 use crate::sections::SectionType;
 use kurbo::{Affine, Rect};
-use rhythm_builder::{NoteHeadOverride, RhythmBuildConfig, RhythmSource};
 use tracing::debug;
-use vello::peniko::Color;
 
 fn key_signature_fifths(chart: &Chart) -> i8 {
     chart
@@ -101,46 +91,25 @@ fn key_signature_fifths(chart: &Chart) -> i8 {
         .unwrap_or(0)
 }
 
-fn collect_page_ink_intervals(scene: &SceneNode, page: &PageLayout) -> Vec<(f64, f64)> {
-    let x0 = page.x_offset + page.margins.left;
-    let x1 = page.x_offset + page.width - page.margins.right;
-    let y0 = page.y_offset;
-    let y1 = page.y_offset + page.height;
-
-    let mut intervals = scene
-        .children
-        .iter()
-        .filter_map(|node| notation_renderer::scene_ink_bounds(node, Affine::IDENTITY))
-        .filter(|bounds| !is_page_background(*bounds, page))
-        .filter(|bounds| bounds.x1 > x0 && bounds.x0 < x1 && bounds.y1 > y0 && bounds.y0 < y1)
-        .map(|bounds| (bounds.y0.max(y0), bounds.y1.min(y1)))
-        .collect::<Vec<_>>();
-    intervals.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
-    intervals
-}
-
-fn empty_vertical_bands(intervals: &[(f64, f64)], scan_y0: f64, scan_y1: f64) -> Vec<(f64, f64)> {
-    if scan_y1 <= scan_y0 {
-        return Vec::new();
-    }
-
-    let mut bands = Vec::new();
-    let mut cursor = scan_y0;
-    for &(start, end) in intervals {
-        if end <= scan_y0 || start >= scan_y1 {
-            continue;
+/// Prevailing key-signature fifths in effect at a section-local measure,
+/// applying every key change at or before it (in playback order). Lets each
+/// system's prefix show the key actually sounding there rather than always the
+/// chart's opening key.
+fn prevailing_fifths_at(chart: &Chart, section_idx: usize, local_measure: usize) -> i8 {
+    let mut fifths = chart
+        .initial_key
+        .as_ref()
+        .map(prefix_renderer::key_to_fifths)
+        .unwrap_or(0);
+    for kc in &chart.key_changes {
+        let kc_measure = kc.position.total_duration.measure as usize;
+        let applies = kc.section_index < section_idx
+            || (kc.section_index == section_idx && kc_measure <= local_measure);
+        if applies {
+            fifths = prefix_renderer::key_to_fifths(&kc.to_key);
         }
-        let start = start.max(scan_y0);
-        let end = end.min(scan_y1);
-        if start > cursor {
-            bands.push((cursor, start));
-        }
-        cursor = cursor.max(end);
     }
-    if cursor < scan_y1 {
-        bands.push((cursor, scan_y1));
-    }
-    bands
+    fifths
 }
 
 fn collect_system_ink_bounds(scene: &SceneNode, page: &PageLayout) -> Vec<Option<Rect>> {
@@ -329,19 +298,19 @@ fn record_system_ink_bottom(
     if !should_count_for_system_height(node) {
         return;
     }
-    if let Some(bounds) = notation_renderer::scene_ink_bounds(node, Affine::IDENTITY) {
-        if bounds.y1 > *system_ink_bottom {
-            *system_ink_bottom = bounds.y1;
-            contributors.push(format!(
-                "{} y1={:.1} bounds=({:.1},{:.1},{:.1},{:.1})",
-                node_spacing_reason(node, reason),
-                bounds.y1,
-                bounds.x0,
-                bounds.y0,
-                bounds.x1,
-                bounds.y1
-            ));
-        }
+    if let Some(bounds) = notation_renderer::scene_ink_bounds(node, Affine::IDENTITY)
+        && bounds.y1 > *system_ink_bottom
+    {
+        *system_ink_bottom = bounds.y1;
+        contributors.push(format!(
+            "{} y1={:.1} bounds=({:.1},{:.1},{:.1},{:.1})",
+            node_spacing_reason(node, reason),
+            bounds.y1,
+            bounds.x0,
+            bounds.y0,
+            bounds.x1,
+            bounds.y1
+        ));
     }
 }
 
@@ -499,12 +468,53 @@ struct MeasureLayoutParams<'a> {
     include_clef: bool,
     include_time_sig: bool,
     time_signature: (u8, u8),
+    /// When `include_time_sig` is set, the color of the rendered meter glyph.
+    /// `None` = default black; a mid-chart meter change passes red.
+    time_sig_color: Option<peniko::Color>,
     /// Chart-level clef used to map melody pitches to staff lines so the
     /// rendered note sits at the correct height for the chosen clef.
     clef: crate::chart::ChartClef,
     ctx: &'a LayoutContext<'a>,
     id_base: u64,
     is_boundary: bool,
+}
+
+/// Red used to highlight mid-chart meter and key changes so they are obvious.
+fn change_highlight_color() -> peniko::Color {
+    peniko::Color::from_rgba8(0xCC, 0x00, 0x00, 0xFF)
+}
+
+/// Build a red, in-place key-change indicator (cancelling naturals + the new
+/// key's accidentals, MuseScore-style) sitting in the barline gap just before
+/// `measure_x`, on the staff. Returns the positioned scene node.
+fn key_change_indicator_node(
+    kc: &keyflow_proto::chart::types::KeyChange,
+    measure_x: f64,
+    staff_y: f64,
+    spatium: f64,
+    ctx: &LayoutContext,
+    id: u64,
+) -> SceneNode {
+    use crate::engraver::layout::tlayout::keysig::{
+        ClefContext, KeySigParams, KeySigType, layout_keysig,
+    };
+    use prefix_renderer::key_to_fifths;
+
+    let to_fifths = key_to_fifths(&kc.to_key);
+    let prev_fifths = kc.from_key.as_ref().map(key_to_fifths);
+    let params = KeySigParams {
+        id,
+        key: KeySigType::Standard(to_fifths),
+        clef: ClefContext::Treble,
+        show_naturals: prev_fifths.is_some(),
+        prev_key: prev_fifths.map(KeySigType::Standard),
+        color: Some(change_highlight_color()),
+    };
+    let (layout, mut node) = layout_keysig(&params, ctx);
+    let width = layout.bbox.width();
+    let x = (measure_x - width - spatium * 0.5).max(0.0);
+    node.transform = Affine::translate((x, staff_y + 2.0 * spatium));
+    node
 }
 
 /// Chart layout engine.
@@ -657,7 +667,7 @@ impl ChartLayoutEngine {
         if !result.scene.children.is_empty() {
             let new_background = SceneNode::anonymous_leaf(vec![PaintCommand::filled_rect(
                 Rect::new(page_offset, page_offset, final_width, final_height),
-                vello::peniko::Color::WHITE,
+                peniko::Color::WHITE,
             )]);
             result.scene.children[0] = new_background;
         }
@@ -680,7 +690,7 @@ impl ChartLayoutEngine {
                         final_width,
                         final_height + content_above_page,
                     ),
-                    vello::peniko::Color::WHITE,
+                    peniko::Color::WHITE,
                 )]);
                 result.scene.children[0] = new_background;
             }
@@ -770,6 +780,17 @@ impl ChartLayoutEngine {
             .time_signature
             .map(|ts| (ts.numerator as u8, ts.denominator as u8))
             .unwrap_or((4u8, 4u8));
+
+        // Prevailing meter, carried across sections/systems in playback order so a
+        // measure whose `time_signature` differs from its predecessor renders an
+        // inline meter change. Seeded with the chart's initial meter.
+        // `prev_prevailing_ts` + `ts_run_len` detect a one-measure excursion (e.g.
+        // the auto-revert after `!T2/4`): that revert is drawn but NOT highlighted,
+        // since the return-to-normal is adjacent and obvious. A revert that is
+        // several measures after the change is highlighted like any other change.
+        let mut prevailing_ts = time_signature;
+        let mut prev_prevailing_ts: Option<(u8, u8)> = None;
+        let mut ts_run_len: usize = 0;
 
         // Detect count-in from parsed chart sections if not configured explicitly.
         // If the chart has a CountIn section, use its measure count.
@@ -938,6 +959,16 @@ impl ChartLayoutEngine {
                     .push(spillback);
             }
 
+            // Mid-chart key changes in this section, keyed by section-local
+            // measure index (the parser stores the change's measure ordinal in
+            // total_duration.measures).
+            let key_changes_in_section: std::collections::HashMap<usize, _> = chart
+                .key_changes
+                .iter()
+                .filter(|kc| kc.section_index == section_idx)
+                .map(|kc| (kc.position.total_duration.measure as usize, kc))
+                .collect();
+
             // Group measures into systems (count-based for consistent layout)
             let systems = self.group_measures_into_systems(chart_section.measures(), content_width);
 
@@ -1103,12 +1134,16 @@ impl ChartLayoutEngine {
                 let include_key_sig = true; // Key sig on every system (standard notation)
                 let include_time_sig = global_system_index == 0; // Time sig only on first system
 
-                // Get key signature from chart (number of sharps/flats)
-                let key_signature: i8 = chart
-                    .initial_key
-                    .as_ref()
-                    .map(prefix_renderer::key_to_fifths)
-                    .unwrap_or(0);
+                // Key signature prevailing at this system's downbeat (follows
+                // mid-chart key changes), and whether the change happens right
+                // here — if so the prefix is drawn red in place rather than
+                // stacking a separate red indicator over it.
+                let system_first_measure = measure_indices.first().copied().unwrap_or(0);
+                let key_signature: i8 =
+                    prevailing_fifths_at(chart, section_idx, system_first_measure);
+                let system_starts_with_key_change = measure_indices
+                    .first()
+                    .is_some_and(|m| key_changes_in_section.contains_key(m));
 
                 let (clef_width, key_sig_width, time_sig_width, prefix_width) =
                     prefix_renderer::calculate_prefix_width(
@@ -1134,24 +1169,23 @@ impl ChartLayoutEngine {
                 // Calculate weights and minimum widths for each measure
                 // Weights come from rhythm builder (handles triplets, etc.)
                 // Min widths come from pre-measured chord symbol widths (Pass 1 results)
-                let (mut measure_weights, measure_min_widths): (Vec<f64>, Vec<f64>) =
-                    measure_indices
-                        .iter()
-                        .filter_map(|&idx| all_measures.get(idx).map(|m| (idx, m)))
-                        .map(|(idx, m)| {
-                            // Weight still uses rhythm builder (correct for triplets/complex rhythms)
-                            let weight = self.estimate_measure_content_weight(m, &text_metrics);
+                let (measure_weights, measure_min_widths): (Vec<f64>, Vec<f64>) = measure_indices
+                    .iter()
+                    .filter_map(|&idx| all_measures.get(idx).map(|m| (idx, m)))
+                    .map(|(idx, m)| {
+                        // Weight still uses rhythm builder (correct for triplets/complex rhythms)
+                        let weight = self.estimate_measure_content_weight(m, &text_metrics);
 
-                            // Min width from pre-measured chord widths (Pass 1)
-                            let global_idx = global_section_measure_offset + idx;
-                            let min_width = chart_measurements
-                                .get(global_idx)
-                                .map(|m| m.min_width)
-                                .unwrap_or(0.0);
+                        // Min width from pre-measured chord widths (Pass 1)
+                        let global_idx = global_section_measure_offset + idx;
+                        let min_width = chart_measurements
+                            .get(global_idx)
+                            .map(|m| m.min_width)
+                            .unwrap_or(0.0);
 
-                            (weight, min_width)
-                        })
-                        .unzip();
+                        (weight, min_width)
+                    })
+                    .unzip();
 
                 // Calculate base measure width based on mode
                 let base_measure_width = if self.config.snippet_mode {
@@ -1207,7 +1241,7 @@ impl ChartLayoutEngine {
                 self.log_system_width_decisions(
                     section_idx,
                     sys_idx,
-                    &measure_indices,
+                    measure_indices,
                     all_measures,
                     &measure_weights,
                     &measure_min_widths,
@@ -1239,11 +1273,14 @@ impl ChartLayoutEngine {
                 // measure's local melody extent, so a single high note in one
                 // measure no longer pushes chord symbols up across the whole
                 // system.
-                let chord_y = staff_y + constants::CHORD_Y_OFFSET - melody_extra_above;
+                let _chord_y = staff_y + constants::CHORD_Y_OFFSET - melody_extra_above;
 
                 // Add section label for first system of section (skip for count-in)
                 let mut section_start_dynamic_stack = None;
-                if sys_idx == 0 && chart_section.section.section_type.should_show_header() {
+                if sys_idx == 0
+                    && !chart_section.implicit
+                    && chart_section.section.section_type.should_show_header()
+                {
                     let letter = section_letters.get(&section_idx).copied();
                     let y_slots = self.repeat_pass_dynamic_slots(
                         &chart_section.section,
@@ -1290,6 +1327,7 @@ impl ChartLayoutEngine {
                     include_key_sig,
                     include_time_sig,
                     key_signature,
+                    key_sig_color: system_starts_with_key_change.then(change_highlight_color),
                     time_signature: ts,
                     clef_width,
                     clef_type: self.chart_clef_for(chart),
@@ -1367,20 +1405,59 @@ impl ChartLayoutEngine {
                         // is_boundary: first measure of section needs width for pushed chords
                         // that render both here AND spill back to previous section
                         let is_section_boundary = measure_idx == 0;
+                        // A measure whose meter differs from the prevailing one
+                        // renders the new time signature inline. It is highlighted
+                        // red unless it merely closes a one-measure excursion (the
+                        // auto-revert after `!T2/4`): that return-to-normal renders
+                        // in default black because it is adjacent and obvious.
+                        let measure_ts = measure.time_signature;
+                        let ts_changed = measure_ts != prevailing_ts;
+                        let is_oneshot_revert =
+                            ts_changed && ts_run_len == 1 && prev_prevailing_ts == Some(measure_ts);
+                        let highlight = ts_changed && !is_oneshot_revert;
                         let measure_result = self.layout_measure(MeasureLayoutParams {
                             measure,
                             melody_data,
                             spillbacks,
                             measure_width: this_measure_width,
                             include_clef: false,
-                            include_time_sig: false,
-                            time_signature,
+                            include_time_sig: ts_changed,
+                            time_signature: measure_ts,
+                            time_sig_color: highlight.then(change_highlight_color),
                             clef: self.chart_proto_clef_for(chart),
                             ctx: &ctx,
                             id_base: id_counter,
                             is_boundary: is_section_boundary,
                         });
                         id_counter += 10;
+                        if ts_changed {
+                            prev_prevailing_ts = Some(prevailing_ts);
+                            prevailing_ts = measure_ts;
+                            ts_run_len = 1;
+                        } else {
+                            ts_run_len += 1;
+                        }
+
+                        // Red key-change indicator when a key change lands on a
+                        // measure mid-system. A change on the system's first
+                        // measure is shown by the red prefix key signature
+                        // instead (see `system_starts_with_key_change`), so skip
+                        // it here to avoid stacking two key sigs.
+                        if let Some(kc) = key_changes_in_section
+                            .get(&measure_idx)
+                            .filter(|_| local_measure_idx != 0)
+                        {
+                            let kc_node = key_change_indicator_node(
+                                kc,
+                                measure_x,
+                                staff_y,
+                                self.config.spatium,
+                                &ctx,
+                                id_counter,
+                            );
+                            id_counter += 1;
+                            root.add_child(kc_node);
+                        }
 
                         // Get ChordRest segment x-positions (already in points after spacing)
                         let segment_positions: Vec<f64> =
@@ -1529,6 +1606,9 @@ impl ChartLayoutEngine {
                             &ctx,
                         );
                         let chord_obstacles = chord_result.chord_bounds;
+                        // Kept for anchoring suspension figures to their chords;
+                        // `chord_obstacles` itself is consumed as obstacles below.
+                        let suspension_chord_bounds = chord_obstacles.clone();
 
                         for node in &chord_result.nodes {
                             notation_renderer::add_scene_obstacles(
@@ -1673,24 +1753,40 @@ impl ChartLayoutEngine {
                             );
                             pending_notation.push((node, above, true));
                         }
-                        for node in notation_renderer::render_figured_bass(
-                            &measure.figured_bass,
-                            &notation_frame,
-                            &mut id_counter,
-                        ) {
-                            if let Some(bounds) =
-                                notation_renderer::scene_ink_bounds(&node, Affine::IDENTITY)
-                            {
-                                system_skyline.add_above(bounds);
-                                system_skyline.add_below(bounds);
-                            }
-                            record_system_ink_bottom(
-                                &mut system_ink_bottom,
-                                &mut system_height_contributors,
-                                &node,
-                                "figured_bass",
-                            );
-                            root.add_child(node);
+                        // Figured bass is deferred to the skyline autoplace pass
+                        // like the other annotations. Its natural baseline can
+                        // sit on the chord symbol (a single Above row anchors at
+                        // chord_y), so it must be pushed clear of chord ink
+                        // rather than painted directly on top of it.
+                        for (item, node) in
+                            measure
+                                .figured_bass
+                                .iter()
+                                .zip(notation_renderer::render_figured_bass(
+                                    &measure.figured_bass,
+                                    &notation_frame,
+                                    &mut id_counter,
+                                ))
+                        {
+                            let above =
+                                matches!(item.placement, crate::chart::notations::Placement::Above);
+                            pending_notation.push((node, above, false));
+                        }
+                        for (item, node) in
+                            measure
+                                .suspensions
+                                .iter()
+                                .zip(notation_renderer::render_suspensions(
+                                    &measure.suspensions,
+                                    &notation_frame,
+                                    self.config.harmony_style.root_size,
+                                    &suspension_chord_bounds,
+                                    &mut id_counter,
+                                ))
+                        {
+                            let above =
+                                matches!(item.placement, crate::chart::notations::Placement::Above);
+                            pending_notation.push((node, above, false));
                         }
                         for (item, node) in
                             measure
@@ -1903,9 +1999,15 @@ impl ChartLayoutEngine {
         // Compaction should preserve ink clearance, not a second system-spacing
         // reserve. Larger north/south reserves are useful during initial system
         // construction, but after all notation is rendered we can safely pack
-        // systems by visible ink bounds. If text/chord ink is not actively
-        // colliding, leave only a small readable gap.
-        let target_gap = (self.config.spatium * 1.5).max(8.0);
+        // systems by visible ink bounds. We still hold a baseline gap equal to
+        // the configured `system_spacing` so compacted lines never sit tighter
+        // than the pre-compactor layout — only genuine dead space beyond that
+        // baseline is removed.
+        let target_gap = self
+            .config
+            .system_spacing
+            .max(self.config.spatium * 1.5)
+            .max(8.0);
 
         for _ in 0..1 {
             let mut page_shift_plans: Vec<(u32, Vec<(usize, f64)>)> = Vec::new();
@@ -2014,6 +2116,28 @@ impl ChartLayoutEngine {
         let mut global_system_index = 0usize;
         let mut global_measure_index = 0usize;
 
+        // Title header (title / artist / tempo / key) above the music — the same
+        // block the paginated path draws, but only when the chart actually names
+        // itself. A bare chord snippet (`Cmaj7 | …`) stays header-free and tight;
+        // a titled chart (`Vienna - Billy Joel`) shows its header in the inline
+        // render too. No count-in here (continuous mode synthesizes none), so the
+        // time signature passed is unused.
+        if chart.metadata.title.is_some() {
+            let (header_height, _) = self.add_title_header(
+                &mut root,
+                0.0,
+                total_height,
+                width,
+                &chart.metadata,
+                chart.tempo.as_ref(),
+                0,
+                (4, 4),
+                false,
+                Vec::new(),
+            );
+            total_height += header_height;
+        }
+
         // Track previous chord to hide duplicates
         let mut previous_chord_symbol: Option<String> = None;
 
@@ -2052,6 +2176,17 @@ impl ChartLayoutEngine {
             .time_signature
             .map(|ts| (ts.numerator as u8, ts.denominator as u8))
             .unwrap_or((4u8, 4u8));
+
+        // Prevailing meter, carried across sections/systems in playback order so a
+        // measure whose `time_signature` differs from its predecessor renders an
+        // inline meter change. Seeded with the chart's initial meter.
+        // `prev_prevailing_ts` + `ts_run_len` detect a one-measure excursion (e.g.
+        // the auto-revert after `!T2/4`): that revert is drawn but NOT highlighted,
+        // since the return-to-normal is adjacent and obvious. A revert that is
+        // several measures after the change is highlighted like any other change.
+        let mut prevailing_ts = time_signature;
+        let mut prev_prevailing_ts: Option<(u8, u8)> = None;
+        let mut ts_run_len: usize = 0;
 
         // Detect count-in from parsed chart sections if not configured explicitly.
         let _count_in_measures = if self.config.count_in_measures > 0 {
@@ -2142,6 +2277,16 @@ impl ChartLayoutEngine {
                     .push(spillback);
             }
 
+            // Mid-chart key changes in this section, keyed by section-local
+            // measure index (the parser stores the change's measure ordinal in
+            // total_duration.measures).
+            let key_changes_in_section: std::collections::HashMap<usize, _> = chart
+                .key_changes
+                .iter()
+                .filter(|kc| kc.section_index == section_idx)
+                .map(|kc| (kc.position.total_duration.measure as usize, kc))
+                .collect();
+
             // Group measures into systems (count-based for consistent layout)
             let systems = self.group_measures_into_systems(chart_section.measures(), content_width);
 
@@ -2183,12 +2328,16 @@ impl ChartLayoutEngine {
                 let include_key_sig = true; // Key sig on every system (standard notation)
                 let include_time_sig = global_system_index == 0;
 
-                // Get key signature from chart (number of sharps/flats)
-                let key_signature: i8 = chart
-                    .initial_key
-                    .as_ref()
-                    .map(prefix_renderer::key_to_fifths)
-                    .unwrap_or(0);
+                // Key signature prevailing at this system's downbeat (follows
+                // mid-chart key changes), and whether the change happens right
+                // here — if so the prefix is drawn red in place rather than
+                // stacking a separate red indicator over it.
+                let system_first_measure = measure_indices.first().copied().unwrap_or(0);
+                let key_signature: i8 =
+                    prevailing_fifths_at(chart, section_idx, system_first_measure);
+                let system_starts_with_key_change = measure_indices
+                    .first()
+                    .is_some_and(|m| key_changes_in_section.contains_key(m));
 
                 let (clef_width, key_sig_width, time_sig_width, prefix_width) =
                     prefix_renderer::calculate_prefix_width(
@@ -2221,24 +2370,23 @@ impl ChartLayoutEngine {
                 // Calculate weights and minimum widths for each measure
                 // Weights come from rhythm builder (handles triplets, etc.)
                 // Min widths come from pre-measured chord symbol widths (Pass 1 results)
-                let (mut measure_weights, measure_min_widths): (Vec<f64>, Vec<f64>) =
-                    measure_indices
-                        .iter()
-                        .filter_map(|&idx| all_measures.get(idx).map(|m| (idx, m)))
-                        .map(|(idx, m)| {
-                            // Weight still uses rhythm builder (correct for triplets/complex rhythms)
-                            let weight = self.estimate_measure_content_weight(m, &text_metrics);
+                let (measure_weights, measure_min_widths): (Vec<f64>, Vec<f64>) = measure_indices
+                    .iter()
+                    .filter_map(|&idx| all_measures.get(idx).map(|m| (idx, m)))
+                    .map(|(idx, m)| {
+                        // Weight still uses rhythm builder (correct for triplets/complex rhythms)
+                        let weight = self.estimate_measure_content_weight(m, &text_metrics);
 
-                            // Min width from pre-measured chord widths (Pass 1)
-                            let global_idx = global_section_measure_offset + idx;
-                            let min_width = chart_measurements
-                                .get(global_idx)
-                                .map(|m| m.min_width)
-                                .unwrap_or(0.0);
+                        // Min width from pre-measured chord widths (Pass 1)
+                        let global_idx = global_section_measure_offset + idx;
+                        let min_width = chart_measurements
+                            .get(global_idx)
+                            .map(|m| m.min_width)
+                            .unwrap_or(0.0);
 
-                            (weight, min_width)
-                        })
-                        .unzip();
+                        (weight, min_width)
+                    })
+                    .unzip();
 
                 // Distribute width proportionally using spring physics
                 let has_spacing_expansion = self.has_spacing_expander(
@@ -2265,7 +2413,7 @@ impl ChartLayoutEngine {
                 self.log_system_width_decisions(
                     section_idx,
                     sys_idx,
-                    &measure_indices,
+                    measure_indices,
                     all_measures,
                     &measure_weights,
                     &measure_min_widths,
@@ -2292,11 +2440,14 @@ impl ChartLayoutEngine {
                 )));
 
                 // Place chord symbols above the highest note content (MuseScore skyline approach)
-                let chord_y = staff_y + constants::CHORD_Y_OFFSET - melody_extra_above;
+                let _chord_y = staff_y + constants::CHORD_Y_OFFSET - melody_extra_above;
 
                 // Add section label for first system of section (skip for count-in)
                 let mut section_start_dynamic_stack = None;
-                if sys_idx == 0 && chart_section.section.section_type.should_show_header() {
+                if sys_idx == 0
+                    && !chart_section.implicit
+                    && chart_section.section.section_type.should_show_header()
+                {
                     let letter = section_letters.get(&section_idx).copied();
                     let y_slots = self.repeat_pass_dynamic_slots(
                         &chart_section.section,
@@ -2339,6 +2490,7 @@ impl ChartLayoutEngine {
                     include_key_sig,
                     include_time_sig,
                     key_signature,
+                    key_sig_color: system_starts_with_key_change.then(change_highlight_color),
                     time_signature: ts,
                     clef_width,
                     clef_type: self.chart_clef_for(chart),
@@ -2396,20 +2548,59 @@ impl ChartLayoutEngine {
 
                         // is_boundary: first measure of section needs width for pushed chords
                         let is_section_boundary = measure_idx == 0;
+                        // A measure whose meter differs from the prevailing one
+                        // renders the new time signature inline. It is highlighted
+                        // red unless it merely closes a one-measure excursion (the
+                        // auto-revert after `!T2/4`): that return-to-normal renders
+                        // in default black because it is adjacent and obvious.
+                        let measure_ts = measure.time_signature;
+                        let ts_changed = measure_ts != prevailing_ts;
+                        let is_oneshot_revert =
+                            ts_changed && ts_run_len == 1 && prev_prevailing_ts == Some(measure_ts);
+                        let highlight = ts_changed && !is_oneshot_revert;
                         let measure_result = self.layout_measure(MeasureLayoutParams {
                             measure,
                             melody_data,
                             spillbacks,
                             measure_width: this_measure_width,
                             include_clef: false,
-                            include_time_sig: false,
-                            time_signature,
+                            include_time_sig: ts_changed,
+                            time_signature: measure_ts,
+                            time_sig_color: highlight.then(change_highlight_color),
                             clef: self.chart_proto_clef_for(chart),
                             ctx: &ctx,
                             id_base: id_counter,
                             is_boundary: is_section_boundary,
                         });
                         id_counter += 10;
+                        if ts_changed {
+                            prev_prevailing_ts = Some(prevailing_ts);
+                            prevailing_ts = measure_ts;
+                            ts_run_len = 1;
+                        } else {
+                            ts_run_len += 1;
+                        }
+
+                        // Red key-change indicator when a key change lands on a
+                        // measure mid-system. A change on the system's first
+                        // measure is shown by the red prefix key signature
+                        // instead (see `system_starts_with_key_change`), so skip
+                        // it here to avoid stacking two key sigs.
+                        if let Some(kc) = key_changes_in_section
+                            .get(&measure_idx)
+                            .filter(|_| local_measure_idx != 0)
+                        {
+                            let kc_node = key_change_indicator_node(
+                                kc,
+                                measure_x,
+                                staff_y,
+                                self.config.spatium,
+                                &ctx,
+                                id_counter,
+                            );
+                            id_counter += 1;
+                            root.add_child(kc_node);
+                        }
 
                         let segment_positions: Vec<f64> =
                             self.get_chord_rest_positions(&measure_result);
@@ -2536,6 +2727,9 @@ impl ChartLayoutEngine {
                             &ctx,
                         );
                         let chord_obstacles = chord_result.chord_bounds;
+                        // Kept for anchoring suspension figures to their chords;
+                        // `chord_obstacles` itself is consumed as obstacles below.
+                        let suspension_chord_bounds = chord_obstacles.clone();
 
                         for node in &chord_result.nodes {
                             notation_renderer::add_scene_obstacles(
@@ -2691,6 +2885,27 @@ impl ChartLayoutEngine {
                                 .zip(notation_renderer::render_figured_bass(
                                     &measure.figured_bass,
                                     &notation_frame,
+                                    &mut id_counter,
+                                ))
+                        {
+                            let _ = item;
+                            if let Some(bounds) =
+                                notation_renderer::scene_ink_bounds(&node, Affine::IDENTITY)
+                            {
+                                system_skyline.add_above(bounds);
+                                system_skyline.add_below(bounds);
+                            }
+                            placed.push(node);
+                        }
+                        for (item, node) in
+                            measure
+                                .suspensions
+                                .iter()
+                                .zip(notation_renderer::render_suspensions(
+                                    &measure.suspensions,
+                                    &notation_frame,
+                                    self.config.harmony_style.root_size,
+                                    &suspension_chord_bounds,
                                     &mut id_counter,
                                 ))
                         {

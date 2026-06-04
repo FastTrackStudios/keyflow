@@ -3,7 +3,7 @@
 //! Handles layout of rest symbols for different durations.
 
 use kurbo::{Point, Rect};
-use vello::peniko::Color;
+use peniko::Color;
 
 use crate::engraver::layout::context::LayoutContext;
 use crate::engraver::layout::shape::Shape;
@@ -305,7 +305,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_rest(&params, &ctx);
+        let (layout, _node) = layout_rest(&params, &ctx);
 
         assert!(!layout.bbox.is_zero_area());
     }
@@ -320,7 +320,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_rest(&params, &ctx);
+        let (_layout, node) = layout_rest(&params, &ctx);
 
         // Should have rest + dot = 2 commands
         assert!(node.commands.len() >= 2);

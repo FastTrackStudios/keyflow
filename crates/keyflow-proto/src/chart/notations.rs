@@ -22,15 +22,11 @@ use facet::Facet;
 /// Where a staff-attached element renders relative to the staff.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Facet)]
 #[repr(u8)]
+#[derive(Default)]
 pub enum Placement {
+    #[default]
     Above,
     Below,
-}
-
-impl Default for Placement {
-    fn default() -> Self {
-        Self::Above
-    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -171,6 +167,32 @@ pub struct FiguredBass {
     /// MusicXML `words@relative-x`, when present. This nudges the annotation
     /// horizontally from its beat or source anchor.
     pub source_relative_x: Option<f64>,
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Suspension figures (e.g. 4-3, 2-3, 3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A suspension/resolution figure attached to a beat — e.g. `4-3`, `2-3`,
+/// `3`, `2`. Renders as a small superscript next to the chord symbol, or in
+/// its own slot when it floats as a continuation of the prior chord (the held
+/// chord keeps sounding while the figure marks the suspension/resolution).
+///
+/// Distinct from [`FiguredBass`]: a single inline figure, not a stacked
+/// numeral column, and it tracks the chord rather than the bass line.
+#[derive(Debug, Clone, PartialEq, Eq, Facet)]
+pub struct SuspensionFigure {
+    /// The figure text exactly as written, e.g. `"4-3"`, `"2-3"`, `"3"`.
+    pub figure: String,
+    /// 1-based beat position within the measure.
+    pub beat: u8,
+    /// Above (default) or below the staff.
+    pub placement: Placement,
+    /// `false` for an attached figure (`Eb2`, `F4-3`) — renders as a small
+    /// superscript hugging the upper-right of its chord symbol. `true` for a
+    /// floating figure (`Bb // 4-3`, `F 4-3 ///`) — renders as its own symbol
+    /// in the chord row at `beat`, the held chord sounding underneath.
+    pub standalone: bool,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

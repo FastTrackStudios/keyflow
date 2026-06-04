@@ -2,36 +2,36 @@ Presence
 8th=63bpm 4/4 #E
 
 count 4
-| << ^"04" ^"***2 Bars***" ^"Click-Count" ; m { r1 } >> | << r1 ; m { r2 r4 r8 E(4)8 } >> | << ^"INTRO" ^"AC GTR ONLY" Em_4 Eb/G#_4 Am_2 ; m { G#(4)8. B(4)16~ ~B(4)8 C#(5)8~ ~C#(5)2 } >> | << Am_4 Bm_4 C#m_2 ; m { C#(4)8. D#(4)16~ ~D#(4)8 E(4)8~ ~E(4)2 } >> |
+| << ^"04" ^"***2 Bars***" ^"Click-Count" ; m { r1 } >> | << r1 ; m { r2 r4 r8 E:48 } >> | << ^"INTRO" ^"AC GTR ONLY" Em_4 Eb/G#_4 Am_2 ; m { G#:48. B:416~ ~B:48 C#:58~ ~C#:52 } >> | << Am_4 Bm_4 C#m_2 ; m { C#:48. D#:416~ ~D#:48 E:48~ ~E:42 } >> |
 
 opening 1
-| << "B3" Bsus4 ; m { F#(4)1 } >> |
+| << "B3" Bsus4 ; m { F#:41 } >> |
 
 vs 8
-| << !E_4 Eb/G#_4 !A_2 ; m { E(2)8. G#(2)16~ ~G#(2)8 A(2)8~ ~A(2)2 } >> | << !B_2 C#m_2 ; m { B(2)4. C#(3)8~ ~C#(3)2 } >> | << !A_2 E/G#_2 ; m { A(2)4 A(2)4 G#(2)4 G#(2)4 } >> | << "B3" Bsus4_2 E/G#_2 ; m { B(2)4 B(2)4 B(2)4 G#(2)4 } >> |
-    | !A_2 E/G#_2 | !B_2 C#m_2 | "B4-3" F#m7 | << "BAND IN" A/E_4 !E_4 B11_2 ; m { E(2)4. E(2)8~ ~E(2)4 B(2)4 } >> |
+| << !E_4 Eb/G#_4 !A_2 ; m { E:28. G#:216~ ~G#:28 A:28~ ~A:22 } >> | << !B_2 C#m_2 ; m { B:24. C#:38~ ~C#:32 } >> | << !A_2 E/G#_2 ; m { A:24 A:24 G#:24 G#:24 } >> | << "B3" Bsus4_2 E/G#_2 ; m { B:24 B:24 B:24 G#:24 } >> |
+    | !A_2 E/G#_2 | !B_2 C#m_2 | "B4-3" F#m7 | << "BAND IN" A/E_4 !E_4 B11_2 ; m { E:24. E:28~ ~E:24 B:24 } >> |
 
 vs 8
-| << "BAND IN GENTLY" !E_4 Eb/G#_4 !A_2 ; m { E(2)8. G#(2)16~ ~G#(2)8 A(2)8~ ~A(2)2 } >> | << !B_2 C#m_2 ; m { B(2)4. C#(3)8~ ~C#(3)2 } >> | !A_2 E/G#_2 | "B3" Bsus4_2 E/G#_2 |
+| << "BAND IN GENTLY" !E_4 Eb/G#_4 !A_2 ; m { E:28. G#:216~ ~G#:28 A:28~ ~A:22 } >> | << !B_2 C#m_2 ; m { B:24. C#:38~ ~C#:32 } >> | !A_2 E/G#_2 | "B3" Bsus4_2 E/G#_2 |
     | !A_2 E/G#_2 | !B_2 C#m_2 | "B4-3" F#m7 | "Cresc. <...<...<" !E |
 
 ch 31
 | "Big, Broad, Wide Open Groove >" !B | C#m | !A | C#m |
     | !B | C#m | !A | "Dim >...>...>" C#m |
-    | F#m7_2 E/G#_2 | "B74-3" "Dim >...>...>" !A | << ^"1st Ending" ^"REINTRO" ^"AC GTR ONLY" Em_4 Eb/G#_4 Am_2 ; m { G#(4)8. B(4)16~ ~B(4)8 C#(5)8~ ~C#(5)2 } >> | << "BAND IN" Am_4 Bm_4 C#m_4 B11_4 ; m { C#(4)8. D#(4)16~ ~D#(4)8 E(4)8~ ~E(4)4 C#(4)4 } >> |
-    | << "BAND IN GENTLY" !E_4 Eb/G#_4 !A_2 ; m { E(2)8. G#(2)16~ ~G#(2)8 A(2)8~ ~A(2)2 } >> | << !B_2 C#m_2 ; m { B(2)4. C#(3)8~ ~C#(3)2 } >> | !A_2 E/G#_2 | "B3" Bsus4_2 E/G#_2 |
+    | F#m7_2 E/G#_2 | "B74-3" "Dim >...>...>" !A | << ^"1st Ending" ^"REINTRO" ^"AC GTR ONLY" Em_4 Eb/G#_4 Am_2 ; m { G#:48. B:416~ ~B:48 C#:58~ ~C#:52 } >> | << "BAND IN" Am_4 Bm_4 C#m_4 B11_4 ; m { C#:48. D#:416~ ~D#:48 E:48~ ~E:44 C#:44 } >> |
+    | << "BAND IN GENTLY" !E_4 Eb/G#_4 !A_2 ; m { E:28. G#:216~ ~G#:28 A:28~ ~A:22 } >> | << !B_2 C#m_2 ; m { B:24. C#:38~ ~C#:32 } >> | !A_2 E/G#_2 | "B3" Bsus4_2 E/G#_2 |
     | !A_2 E/G#_2 | !B_2 C#m_2 | "B4-3" F#m7 | "Cresc. <...<...<" !E |
     | "Big, Broad, Wide Open Groove >" !B | C#m | !A | C#m |
     | !B | C#m | !A | "Dim >...>...>" C#m |
-    | F#m7_2 E/G#_2 | "B74-3" "Dim >...>...>" !A | << ^"2nd Ending > > >" "Cresc. <...<...<" ^"BAND OUT" !E ; m { E(2)4 E(2)4 E(2)8 r8 r4 } >> |
+    | F#m7_2 E/G#_2 | "B74-3" "Dim >...>...>" !A | << ^"2nd Ending > > >" "Cresc. <...<...<" ^"BAND OUT" !E ; m { E:24 E:24 E:28 r8 r4 } >> |
 
 ch 11
-| << "==STOP===GROOVE=" !B ; m { <B(1) B(2)>1 } >> | << "*Back to Groove > > >" C#m ; m { <C#(2) C#(3)>1 } >> | !A | C#m_2 F#m7_2 |
+| << "==STOP===GROOVE=" !B ; m { <B:1 B:2>1 } >> | << "*Back to Groove > > >" C#m ; m { <C#:2 C#:3>1 } >> | !A | C#m_2 F#m7_2 |
     | !B | C#m | !A | "Dim >...>...>" C#m |
-    | "wind it down..." F#m7_2 E/G#_2 | "B74-3" !A | << "==STOP===GROOVE=" C#m ; m { C#(3)1 } >> |
+    | "wind it down..." F#m7_2 E/G#_2 | "B74-3" !A | << "==STOP===GROOVE=" C#m ; m { C#:31 } >> |
 
 Tag 2
-| << "Dim >...>...>" F#m7_2 E/G#_2 ; m { F#(2)2 G#(2)2 } >> | << "B74-3" "BAND OUT" !A ; m { A(2)2 B(2)2 } >> |
+| << "Dim >...>...>" F#m7_2 E/G#_2 ; m { F#:22 G#:22 } >> | << "B74-3" "BAND OUT" !A ; m { A:22 B:22 } >> |
 
 out 4
-| << ^"AC GTR ONLY" "Rall..." Em_4 Eb/G#_4 Am_2 ; m { G#(4)8. B(4)16~ ~B(4)8 C#(5)8~ ~C#(5)2 } >> | << "BAND IN" Am_4 Bm_4 C#m_2 ; m { C#(4)8. D#(4)16~ ~D#(4)8 E(4)8~ ~E(4)2 } >> | << "B i g  R a l l . . ." "B74-3" F#m7 ; m { F#(2)2 B(2)2 } >> | << E2 ; m { E(2)1 } >> |
+| << ^"AC GTR ONLY" "Rall..." Em_4 Eb/G#_4 Am_2 ; m { G#:48. B:416~ ~B:48 C#:58~ ~C#:52 } >> | << "BAND IN" Am_4 Bm_4 C#m_2 ; m { C#:48. D#:416~ ~D#:48 E:48~ ~E:42 } >> | << "B i g  R a l l . . ." "B74-3" F#m7 ; m { F#:22 B:22 } >> | << E2 ; m { E:21 } >> |

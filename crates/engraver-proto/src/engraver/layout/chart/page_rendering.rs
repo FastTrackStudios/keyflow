@@ -9,7 +9,7 @@ use crate::engraver::layout::tlayout::BarlineType;
 use crate::engraver::scene::node::SceneNode;
 use crate::engraver::scene::paint::{FontStyle, FontWeight, PaintCommand, TextAnchor};
 use kurbo::Rect;
-use vello::peniko::Color;
+use peniko::Color;
 
 /// Staff line thickness as a fraction of spatium.
 ///
@@ -203,16 +203,6 @@ fn draw_bracket_repeat(
     draw_repeat_dots_with_color(commands, dot_x, staff_y, spatium, red);
 }
 
-/// Draw two repeat dots vertically centred on the middle staff line.
-///
-/// MuseScore places dots at the 2nd and 4th staff-line spaces (counted from
-/// the top), centred horizontally at the supplied `dot_x`. We don't know the
-/// individual staff-line geometry here, so the dots are placed relative to
-/// the staff height handed in as `height` at +0.25 and +0.75 of that height.
-fn draw_repeat_dots(commands: &mut Vec<PaintCommand>, dot_x: f64, staff_y: f64, spatium: f64) {
-    draw_repeat_dots_with_color(commands, dot_x, staff_y, spatium, Color::BLACK);
-}
-
 fn draw_repeat_dots_with_color(
     commands: &mut Vec<PaintCommand>,
     dot_x: f64,
@@ -291,20 +281,41 @@ pub fn add_page_footer(
     page_height: f64,
 ) {
     let footer_text = "Created with FastTrackStudio";
+    let version_text = concat!("v.alpha.", env!("CARGO_PKG_VERSION"));
     let font_size = 8.0;
+    let version_font_size = 6.0;
     let footer_y = page_y + page_height - 15.0; // 15 points from bottom
     let center_x = page_x + page_width / 2.0;
 
-    root.add_child(SceneNode::anonymous_leaf(vec![PaintCommand::Text {
-        text: footer_text.to_string(),
-        font_family: "sans-serif".to_string(),
-        font_size,
-        position: kurbo::Point::new(center_x, footer_y),
-        color: Color::from_rgb8(160, 160, 160), // Light gray
-        anchor: TextAnchor::Middle,
-        weight: FontWeight::Normal,
-        style: FontStyle::Normal,
-    }]));
+    // Rough monospace-ish width estimate so the version subscript sits just to
+    // the right of the centered main text.
+    let footer_width = footer_text.chars().count() as f64 * font_size * 0.5;
+    let version_x = center_x + footer_width / 2.0 + 3.0;
+    let version_y = footer_y + 2.0; // dropped baseline -> subscript
+
+    let color = Color::from_rgb8(160, 160, 160); // Light gray
+    root.add_child(SceneNode::anonymous_leaf(vec![
+        PaintCommand::Text {
+            text: footer_text.to_string(),
+            font_family: "sans-serif".to_string(),
+            font_size,
+            position: kurbo::Point::new(center_x, footer_y),
+            color,
+            anchor: TextAnchor::Middle,
+            weight: FontWeight::Normal,
+            style: FontStyle::Normal,
+        },
+        PaintCommand::Text {
+            text: version_text.to_string(),
+            font_family: "sans-serif".to_string(),
+            font_size: version_font_size,
+            position: kurbo::Point::new(version_x, version_y),
+            color,
+            anchor: TextAnchor::Start,
+            weight: FontWeight::Normal,
+            style: FontStyle::Normal,
+        },
+    ]));
 }
 
 /// Configuration for count-in snippet in header.

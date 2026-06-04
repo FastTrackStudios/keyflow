@@ -8,7 +8,7 @@
 //! - Solo sections (Guitar Solo, Synth Solo, Drum Solo)
 //! - Sixteenth note rhythms
 
-use keyflow::engraver::import::{generate_chart_text, MidiChartConfig, MidiFile};
+use keyflow::engraver::import::{MidiChartConfig, MidiFile, generate_chart_text};
 
 fn load_midi() -> MidiFile {
     let bytes = include_bytes!("fixtures/movin_out_sammy_rae.mid");
@@ -23,6 +23,7 @@ fn generate_movin_out_chart() -> String {
             "Movin' Out - Sammy Rae & The Friends\nTranscribed By: Cody Wright".to_string(),
         ),
         swing: midi.swing(),
+        ..Default::default()
     };
     generate_chart_text(&midi, &config)
 }

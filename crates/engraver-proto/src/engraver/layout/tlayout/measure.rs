@@ -3,7 +3,7 @@
 //! Orchestrates layout of all elements within a measure.
 
 use kurbo::{Point, Rect};
-use vello::peniko::Color;
+use peniko::Color;
 
 use crate::engraver::layout::context::LayoutContext;
 use crate::engraver::layout::segment::{Segment, SegmentType};
@@ -252,7 +252,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_measure(&params, &ctx);
+        let (_layout, node) = layout_measure(&params, &ctx);
 
         // Should have staff lines + left barline + right barline
         assert!(node.children.len() >= 3);

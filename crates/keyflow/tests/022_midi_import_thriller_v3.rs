@@ -5,7 +5,7 @@
 //! into Keyflow chart text and asserts the output matches the expected notation
 //! EXACTLY — no differences allowed.
 
-use keyflow::engraver::import::{generate_chart_text, MidiChartConfig, MidiFile};
+use keyflow::engraver::import::{MidiChartConfig, MidiFile, generate_chart_text};
 
 fn load_midi() -> MidiFile {
     let bytes = include_bytes!("fixtures/thriller_dirty_loops_v3.mid");
@@ -18,6 +18,7 @@ fn generate_thriller_chart() -> String {
         key_root: Some("Eb".to_string()),
         title: Some("Thriller - Dirty Loops, Cory Wong\nTranscribed By: Cody Wright".to_string()),
         swing: midi.swing(),
+        ..Default::default()
     };
     generate_chart_text(&midi, &config)
 }

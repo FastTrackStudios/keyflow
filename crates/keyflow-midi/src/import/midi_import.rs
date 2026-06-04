@@ -1684,6 +1684,11 @@ fn normalize_key_text_with_explicit_mode(s: &str) -> Option<String> {
 ///    minor keys.
 ///
 /// Returns `None` only when the file has no notes and no usable markers.
+///
+/// Unwired: kept (with tests) as a ready utility. The import pipeline
+/// currently derives key from MIDI key-signature markers rather than note
+/// content; wire this in when content-based inference is wanted.
+#[allow(dead_code)]
 #[must_use]
 pub fn detect_key(midi: &MidiFile) -> Option<Key> {
     // (1) Marker-text scan. Any marker whose text resolves through our
@@ -1708,6 +1713,10 @@ pub fn detect_key(midi: &MidiFile) -> Option<Key> {
 /// Builds a 12-bin pitch-class histogram weighted by note duration and
 /// correlates it against the standard major / minor profiles, returning the
 /// key with the highest correlation.
+///
+/// Unwired in the import pipeline; reached only via [`detect_key`] and the
+/// parser unit tests. See `detect_key` for context.
+#[allow(dead_code)]
 #[must_use]
 pub fn detect_key_by_pitch_class(notes: &[MidiNote]) -> Option<Key> {
     if notes.is_empty() {
@@ -1777,6 +1786,7 @@ pub fn detect_key_by_pitch_class(notes: &[MidiNote]) -> Option<Key> {
 /// Convert a pitch-class (0-11) to a keyflow note name, picking the spelling
 /// (sharp vs flat) that matches the typical key-signature convention for that
 /// PC and mode (e.g. PC=1 → `Db` major but `C#` minor).
+#[allow(dead_code)] // helper for the unwired `detect_key_by_pitch_class`
 fn pc_to_keyflow_text(pc: usize, is_major: bool) -> String {
     // Standard circle-of-fifths spellings for the 12 keys, separately for
     // major and minor, chosen to minimize accidental count in the key sig.
@@ -2028,7 +2038,7 @@ mod tests {
 
     #[test]
     fn test_parse_thriller_midi() {
-        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
 
         // Basic structure checks
@@ -2098,7 +2108,7 @@ mod tests {
 
     #[test]
     fn test_chord_marker_positions() {
-        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
 
         println!("=== Thriller MIDI Chord Position Analysis ===\n");
@@ -2174,7 +2184,7 @@ mod tests {
 
     #[test]
     fn test_tick_to_position_basic() {
-        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
 
         let songstart = midi.songstart_tick();
@@ -2226,7 +2236,7 @@ mod tests {
 
     #[test]
     fn test_section_markers() {
-        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
 
         let sections = midi.section_markers();
@@ -2389,7 +2399,7 @@ mod tests {
 
     #[test]
     fn test_count_in_measures() {
-        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
 
         let ppq = midi.ppq();
@@ -2425,7 +2435,7 @@ mod tests {
 
     #[test]
     fn test_absolute_section_positions() {
-        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
 
         let sections = midi.section_markers_absolute();
@@ -2500,7 +2510,7 @@ mod tests {
 
     #[test]
     fn test_chord_positions_absolute() {
-        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
 
         let chords = midi.chord_markers_absolute();
@@ -2539,7 +2549,7 @@ mod tests {
 
     #[test]
     fn test_push_pull_detection() {
-        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
         let ppq = midi.ppq();
 
@@ -2604,7 +2614,7 @@ mod tests {
 
     #[test]
     fn test_keyflow_notation_generation() {
-        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
         let ppq = midi.ppq();
 
@@ -2638,7 +2648,7 @@ mod tests {
 
     #[test]
     fn test_verse_chord_structure() {
-        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
         let ppq = midi.ppq();
 
@@ -2704,7 +2714,7 @@ mod tests {
 
     #[test]
     fn test_measure_keyflow_export() {
-        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
         let ppq = midi.ppq();
 
@@ -2764,7 +2774,7 @@ mod tests {
     /// - 'tEbmaj (pushed triplet eighth, 3 beats long)
     #[test]
     fn test_chorus_chord_structure() {
-        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
         let ppq = midi.ppq();
 
@@ -2898,9 +2908,9 @@ mod keyflow_comparison_tests {
     /// 2. How keyflow normalizes those chord names
     #[test]
     fn test_midi_vs_keyflow_chord_naming() {
-        use keyflow_proto::{Chord, parsing::Lexer};
+        use keyflow_proto::{Chord, Lexer};
 
-        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
 
         let chords = midi.chord_markers();
@@ -2989,7 +2999,7 @@ mod keyflow_comparison_tests {
     /// This validates that chords are placed in the correct measures/beats.
     #[test]
     fn test_chord_position_accuracy() {
-        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
         let ppq = midi.ppq();
 
@@ -3071,7 +3081,7 @@ mod keyflow_comparison_tests {
         use keyflow_proto::key::{KeySpelling, SpellingMode};
         use keyflow_proto::primitives::MusicalNote;
 
-        let bytes = include_bytes!("../../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
+        let bytes = include_bytes!("../../../keyflow/tests/fixtures/thriller_dirty_loops.mid");
         let midi = MidiFile::parse(bytes).expect("Failed to parse MIDI file");
         let ppq = midi.ppq();
 

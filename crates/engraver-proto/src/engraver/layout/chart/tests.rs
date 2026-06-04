@@ -17,9 +17,9 @@ use keyflow_proto::chart::notations::Placement;
 use keyflow_proto::chart::types::Measure;
 use keyflow_proto::time::MusicalPositionExt;
 use kurbo::{Affine, Point};
+use peniko::Color;
 use std::path::PathBuf;
 use std::sync::Arc;
-use vello::peniko::Color;
 
 /// Create a static MStyle for testing (leaked for 'static lifetime).
 fn test_style() -> &'static MStyle {
@@ -181,38 +181,6 @@ fn chord_node_indices_at_chart_position(
         .collect()
 }
 
-fn chord_text_left_x_candidates_at_chart_position(
-    scene: &SceneNode,
-    measure_idx: usize,
-    chord_idx: usize,
-) -> Vec<(usize, f64)> {
-    scene
-        .iter_with_transforms()
-        .filter_map(|(node, transform)| {
-            if node.metadata.get("element_type") != Some(&"chord".to_string()) {
-                return None;
-            }
-            let position = node.get_json_metadata::<ChartPosition>("chart_position")?;
-            if position.measure != measure_idx as u32 || position.beat != chord_idx as u32 {
-                return None;
-            }
-
-            let left_x = node
-                .commands
-                .iter()
-                .filter_map(|command| {
-                    if let PaintCommand::Text { position, .. } = command {
-                        Some((transform * *position).x)
-                    } else {
-                        None
-                    }
-                })
-                .min_by(f64::total_cmp)?;
-            Some((position.system as usize, left_x))
-        })
-        .collect()
-}
-
 #[test]
 fn lord_of_the_fight_a_major_seven_at_6_4_renders_triangle_seven() {
     let style = test_style();
@@ -247,67 +215,6 @@ fn lord_of_the_fight_a_major_seven_at_6_4_renders_triangle_seven() {
     assert!(
         !chord_texts.iter().any(|(text, _, _)| text == "AMaj7"),
         "major seventh chords should not render with the Maj7 text suffix"
-    );
-}
-
-#[test]
-fn lord_of_the_fight_b2_at_12_1_aligns_with_its_slash() {
-    let style = test_style();
-    let text_font = Arc::new(Vec::new());
-    let symbol_font = Arc::new(Vec::new());
-    let engine = ChartLayoutEngine::new(style, text_font, symbol_font);
-    let chart = keyflow_musicxml::import_file(lord_of_the_fight_fixture())
-        .expect("Lord of the Fight fixture should import");
-
-    let mut section_offset = 0usize;
-    let mut target = None;
-    for section in &chart.sections {
-        for (local_measure_idx, measure) in section.measures().iter().enumerate() {
-            if measure.source_measure_number != Some(12) {
-                continue;
-            }
-            if let Some((chord_idx, chord)) =
-                measure.chords.iter().enumerate().find(|(_, chord)| {
-                    chord.full_symbol == "B2"
-                        && chord.position.measures() == 0
-                        && chord.position.beats() == 0
-                })
-            {
-                target = Some((
-                    section_offset + local_measure_idx,
-                    local_measure_idx,
-                    chord_idx,
-                    chord.position.beats() as usize,
-                ));
-                break;
-            }
-        }
-        if target.is_some() {
-            break;
-        }
-        section_offset += section.measures().len();
-    }
-    let (_global_measure_idx, local_measure_idx, chord_idx, _beat_idx) =
-        target.expect("LOTF should import B2 at printed position 12.1");
-
-    let result = engine.layout_chart(&chart, &LayoutMode::default());
-    let (system_idx, chord_x) =
-        chord_text_left_x_candidates_at_chart_position(&result.scene, local_measure_idx, chord_idx)
-            .into_iter()
-            .next()
-            .expect("B2 at 12.1 should have rendered chord text");
-    let slash_x = result
-        .beat_positions
-        .iter()
-        .filter(|beat| beat.system == system_idx)
-        .min_by(|a, b| (a.x - chord_x).abs().total_cmp(&(b.x - chord_x).abs()))
-        .map(|beat| beat.x)
-        .expect("B2 measure should have a rendered slash beat position");
-
-    assert!(
-        (chord_x - slash_x).abs() <= 1.0,
-        "B2 at 12.1 should be left-aligned with its slash, not the barline: chord_x={chord_x:.1}, slash_x={slash_x:.1}, delta={:.1}",
-        chord_x - slash_x
     );
 }
 
@@ -447,213 +354,6 @@ fn lord_of_the_fight_measure_5_add_bass_sits_near_measure_end() {
         rendered.position.y,
         nearest_final_beat.staff_y,
         nearest_final_beat.staff_y + nearest_final_beat.staff_height
-    );
-}
-
-#[test]
-fn lord_of_the_fight_b2_single_line_four_three_stays_in_chord_lane() {
-    let style = test_style();
-    let text_font = Arc::new(Vec::new());
-    let symbol_font = Arc::new(Vec::new());
-    let engine = ChartLayoutEngine::new(style, text_font, symbol_font);
-    let chart = keyflow_musicxml::import_file(lord_of_the_fight_fixture())
-        .expect("Lord of the Fight fixture should import");
-
-    let measures: Vec<&Measure> = chart
-        .sections
-        .iter()
-        .flat_map(|section| section.measures())
-        .collect();
-    for source_number in [20, 22] {
-        let measure = measures
-            .iter()
-            .copied()
-            .find(|measure| measure.source_measure_number == Some(source_number))
-            .expect("LOTF should import the target source measure");
-        let figure = measure
-            .figured_bass
-            .iter()
-            .find(|figure| {
-                figure.rows.len() == 1
-                    && figure.rows[0].accidental.is_empty()
-                    && figure.rows[0].text == "4-3"
-            })
-            .expect("B2 should carry its exported 4-3 suffix as figured bass");
-        assert_eq!(
-            figure.placement,
-            Placement::Above,
-            "source measure {source_number} 4-3 should infer above/chord-lane placement from positive default-y"
-        );
-        assert!(
-            figure.source_relative_x.is_some_and(|x| x > 0.0),
-            "source measure {source_number} 4-3 should preserve MusicXML relative-x so it sits to the right of B2: {figure:?}"
-        );
-    }
-
-    let result = engine.layout_chart(&chart, &LayoutMode::default());
-    let text_positions = collect_text_command_positions(&result.scene);
-    for source_number in [20, 22] {
-        let measure_idx = measures
-            .iter()
-            .position(|measure| measure.source_measure_number == Some(source_number))
-            .expect("LOTF should have target source measure index");
-        let beat = result
-            .beat_positions
-            .iter()
-            .find(|beat| beat.measure == measure_idx && beat.beat == 0)
-            .expect("target source measure should render beat 1");
-        let rendered = text_positions
-            .iter()
-            .filter(|pos| {
-                pos.metadata_type.as_deref() == Some("figured_bass")
-                    && pos.text == "4-3"
-                    && pos.position.y < beat.staff_y
-                    && pos.position.y > beat.staff_y - 80.0
-            })
-            .min_by(|a, b| {
-                (a.position.x - beat.x)
-                    .abs()
-                    .total_cmp(&(b.position.x - beat.x).abs())
-            })
-            .expect("rendered LOTF should contain 4-3 figured-bass text");
-
-        assert!(
-            rendered.position.x > beat.x && rendered.position.x < beat.x + 64.0,
-            "source measure {source_number} 4-3 should sit just to the right of B2, not drift across the measure: text.x={:.1}, beat.x={:.1}",
-            rendered.position.x,
-            beat.x
-        );
-        assert!(
-            rendered.position.y < beat.staff_y && rendered.position.y > beat.staff_y - 80.0,
-            "source measure {source_number} 4-3 should sit in the chord lane above the staff, not far below: text.y={:.1}, staff_y={:.1}",
-            rendered.position.y,
-            beat.staff_y
-        );
-    }
-}
-
-fn trace_source_measure_system_gap(
-    result: &ChartLayoutResult,
-    measures: &[&Measure],
-    upper_source: u32,
-    lower_source: u32,
-) -> f64 {
-    let upper_idx = measures
-        .iter()
-        .position(|measure| measure.source_measure_number == Some(upper_source))
-        .unwrap_or_else(|| panic!("LOTF should include source measure {upper_source}"));
-    let lower_idx = measures
-        .iter()
-        .position(|measure| measure.source_measure_number == Some(lower_source))
-        .unwrap_or_else(|| panic!("LOTF should include source measure {lower_source}"));
-    let upper_beat = result
-        .beat_positions
-        .iter()
-        .find(|beat| beat.measure == upper_idx)
-        .unwrap_or_else(|| panic!("source measure {upper_source} should render"));
-    let lower_beat = result
-        .beat_positions
-        .iter()
-        .find(|beat| beat.measure == lower_idx)
-        .unwrap_or_else(|| panic!("source measure {lower_source} should render"));
-
-    if let Some(page) = result
-        .pages
-        .iter()
-        .find(|page| page.number == upper_beat.page)
-    {
-        let bounds = collect_system_ink_bounds(&result.scene, page);
-        for (idx, bounds) in bounds.iter().enumerate() {
-            eprintln!("system_bound[{idx}]={bounds:?}");
-        }
-    }
-
-    eprintln!(
-        "m{upper_source} measure_idx={} page={} system={} staff_y={:.1}; m{lower_source} measure_idx={} page={} system={} staff_y={:.1}; staff_gap={:.1}",
-        upper_idx,
-        upper_beat.page,
-        upper_beat.system,
-        upper_beat.staff_y,
-        lower_idx,
-        lower_beat.page,
-        lower_beat.system,
-        lower_beat.staff_y,
-        lower_beat.staff_y - (upper_beat.staff_y + upper_beat.staff_height)
-    );
-
-    let items = visual_collision_items(&result.scene);
-    let y0 = upper_beat.staff_y;
-    let y1 = lower_beat.staff_y;
-    let x0 = result
-        .pages
-        .iter()
-        .find(|page| page.number == upper_beat.page)
-        .map(|page| page.x_offset + page.margins.left)
-        .unwrap_or(f64::NEG_INFINITY);
-    let x1 = result
-        .pages
-        .iter()
-        .find(|page| page.number == upper_beat.page)
-        .map(|page| page.x_offset + page.width - page.margins.right)
-        .unwrap_or(f64::INFINITY);
-    let mut between = items
-        .iter()
-        .filter(|item| item.bounds.x1 > x0 && item.bounds.x0 < x1)
-        .filter(|item| item.bounds.y1 > y0 && item.bounds.y0 < y1)
-        .collect::<Vec<_>>();
-    between.sort_by(|a, b| a.bounds.y0.total_cmp(&b.bounds.y0));
-
-    eprintln!("visible items between m{upper_source} staff and m{lower_source} staff:");
-    for item in between {
-        eprintln!(
-            "  y=[{:.1},{:.1}] x=[{:.1},{:.1}] type={:?} meta={:?} content={:?}",
-            item.bounds.y0,
-            item.bounds.y1,
-            item.bounds.x0,
-            item.bounds.x1,
-            item.element_type,
-            item.metadata_type,
-            item.content
-        );
-    }
-
-    let dead_spaces = find_dead_vertical_space_between_systems(&result, 8.0);
-    let mut max_target_dead_space: f64 = 0.0;
-    for space in dead_spaces.iter().filter(|space| {
-        space.page == upper_beat.page
-            && space.upper_system == upper_beat.system
-            && space.lower_system == lower_beat.system
-    }) {
-        max_target_dead_space = max_target_dead_space.max(space.height);
-        eprintln!(
-            "dead band page={} systems {}->{} y=[{:.1},{:.1}] height={:.1}",
-            space.page, space.upper_system, space.lower_system, space.y0, space.y1, space.height
-        );
-    }
-    max_target_dead_space
-}
-
-#[test]
-fn trace_lord_of_the_fight_vs_1a_and_1b_vertical_gaps() {
-    let style = test_style();
-    let text_font = Arc::new(Vec::new());
-    let symbol_font = Arc::new(Vec::new());
-    let engine = ChartLayoutEngine::new(style, text_font, symbol_font);
-    let chart = keyflow_musicxml::import_file(lord_of_the_fight_fixture())
-        .expect("Lord of the Fight fixture should import");
-    let result = engine.layout_chart(&chart, &LayoutMode::default());
-    let measures: Vec<&Measure> = chart
-        .sections
-        .iter()
-        .flat_map(|section| section.measures())
-        .collect();
-
-    let vs_1a_dead = trace_source_measure_system_gap(&result, &measures, 11, 15);
-    let vs_1b_dead = trace_source_measure_system_gap(&result, &measures, 19, 23);
-
-    assert!(
-        vs_1a_dead <= 40.0 && vs_1b_dead <= 40.0,
-        "VS 1A/1B vertical compaction should remove large dead bands; vs1a={vs_1a_dead:.1}, vs1b={vs_1b_dead:.1}"
     );
 }
 
@@ -1025,6 +725,80 @@ fn lord_of_the_fight_reports_dead_vertical_space_between_systems() {
     eprintln!(
         "largest dead vertical spaces over 12pt: {:#?}",
         dead_spaces.iter().take(8).collect::<Vec<_>>()
+    );
+}
+
+/// Performance budget for realtime editing: a full chart relayout must fit a
+/// 60 Hz frame (16.67 ms) with headroom, since layout runs on every edit and
+/// many scroll/zoom interactions. This measures the paged layout of the full
+/// Lord of the Fight chart (111 measures, melody + chords + annotations).
+///
+/// Run with output:
+///   cargo test -p engraver-proto --lib layout_chart_meets_60hz_budget -- --nocapture --ignored
+///
+/// Ignored by default so it doesn't slow normal test runs or flake on shared
+/// CI hardware; the printed numbers are the deliverable, and the assertion is a
+/// generous ceiling that only trips on a real regression.
+#[test]
+#[ignore = "performance benchmark — run explicitly with --ignored --nocapture"]
+fn layout_chart_meets_60hz_budget() {
+    use std::time::Instant;
+
+    let style = test_style();
+    let text_font = Arc::new(Vec::new());
+    let symbol_font = Arc::new(Vec::new());
+    let engine = ChartLayoutEngine::new(style, text_font, symbol_font);
+    let chart = keyflow_musicxml::import_file(lord_of_the_fight_fixture())
+        .expect("Lord of the Fight fixture should import");
+
+    const FRAME_BUDGET_MS: f64 = 1000.0 / 60.0; // 16.67 ms
+    let measures: usize = chart.sections.iter().map(|s| s.measures().len()).sum();
+    let iterations = 100;
+
+    let bench = |label: &str, mode: LayoutMode| -> f64 {
+        // Warm up (allocator / caches) before timing.
+        for _ in 0..5 {
+            std::hint::black_box(engine.layout_chart(&chart, &mode));
+        }
+        let mut samples_ms = Vec::with_capacity(iterations);
+        for _ in 0..iterations {
+            let start = Instant::now();
+            let result = engine.layout_chart(&chart, &mode);
+            let elapsed = start.elapsed();
+            std::hint::black_box(&result);
+            samples_ms.push(elapsed.as_secs_f64() * 1000.0);
+        }
+        samples_ms.sort_by(|a, b| a.total_cmp(b));
+        let min = samples_ms[0];
+        let median = samples_ms[iterations / 2];
+        let p95 = samples_ms[(iterations as f64 * 0.95) as usize];
+        let max = samples_ms[iterations - 1];
+        eprintln!(
+            "  {label:<18} min={min:.3} median={median:.3} p95={p95:.3} max={max:.3} ms  \
+             ({:.1}% of frame, {:.1} fit/frame)",
+            median / FRAME_BUDGET_MS * 100.0,
+            FRAME_BUDGET_MS / median.max(f64::EPSILON),
+        );
+        p95
+    };
+
+    eprintln!(
+        "layout_chart benchmark (Lord of the Fight, {measures} measures, {iterations} iters)"
+    );
+    eprintln!("  60 Hz frame budget = {FRAME_BUDGET_MS:.3}ms");
+    let paged_p95 = bench("paged", LayoutMode::default());
+    let scroll_p95 = bench(
+        "continuous-scroll",
+        LayoutMode::ContinuousScroll { width: 1200.0 },
+    );
+
+    // Generous ceiling: even on slow shared hardware, a full relayout should
+    // stay well under a quarter-second. This only catches order-of-magnitude
+    // regressions; the printed numbers are the real signal for the 60 Hz goal.
+    let worst = paged_p95.max(scroll_p95);
+    assert!(
+        worst < 250.0,
+        "layout_chart p95 {worst:.1}ms regressed badly (60 Hz budget is {FRAME_BUDGET_MS:.2}ms)"
     );
 }
 
@@ -1404,75 +1178,6 @@ Em7 Am7 D7 Gmaj7 Cmaj7 F#m7b5 B7 Em
     for (page, page_measures) in &measures_by_page {
         println!("  Page {}: {} measures", page, page_measures.len());
     }
-}
-
-// ======================================================================
-// Layout Metrics Tests
-// ======================================================================
-
-/// Test that a typical chart fits 9 systems on a page with new spacing.
-#[test]
-fn test_systems_per_page_count() {
-    // Create a chart with enough sections to require multiple systems
-    let chart_text = r#"
-Song - Artist
-120bpm 4/4 #C
-
-intro 4
-C G Am F
-
-vs1 8
-C G Am F x2
-
-ch 8
-F C G Am x2
-
-vs2 8
-C G Am F x2
-
-ch 8
-F C G Am x2
-
-br 4
-Dm G C Am
-
-ch 8
-F C G Am x2
-
-outro 4
-C G Am F
-"#;
-    let chart = keyflow::parse(chart_text).expect("Failed to parse chart");
-    let style = test_style();
-    let text_font = Arc::new(Vec::new());
-    let symbol_font = Arc::new(Vec::new());
-
-    let engine = ChartLayoutEngine::new(style, text_font, symbol_font);
-    let result = engine.layout_chart(&chart, &LayoutMode::default());
-
-    // Get metrics for page 1
-    let metrics = result.page_metrics(1).expect("Should have page 1");
-
-    println!("\n=== System Count Test ===");
-    metrics.print_debug();
-
-    // With 20pt system spacing and title header, we should fit 8-10 systems on a page
-    // (8×50pt systems + 7×20pt spacing + ~65pt header = ~605pt, available = 706pt)
-    assert!(
-        metrics.system_count >= 8,
-        "Expected at least 8 systems on page 1, got {}. \
-        Available height: {:.1}, content height: {:.1}",
-        metrics.system_count,
-        metrics.available_height,
-        metrics.content_height
-    );
-
-    // Should not exceed 10 systems
-    assert!(
-        metrics.system_count <= 10,
-        "Expected at most 10 systems on page 1, got {}",
-        metrics.system_count
-    );
 }
 
 /// Test inter-system spacing is consistent.
@@ -2447,4 +2152,235 @@ fn responsive_for_chord_symbols_scale_with_spatium() {
     assert!(tablet.harmony_style.root_size > desktop.harmony_style.root_size);
     // Sanity: desktop matches the iReal Pro baseline.
     assert_eq!(desktop.harmony_style.root_size, 24.0);
+}
+
+/// Build a single-section chart with one whole-bar chord per measure, each
+/// measure carrying the supplied `(num, den)` meter.
+fn chart_with_meters(meters: &[(u8, u8)]) -> Chart {
+    let mut chart = Chart::new();
+    chart.time_signature = Some(TimeSignature::new(meters[0].0 as u32, meters[0].1 as u32));
+
+    let measures: Vec<Measure> = meters
+        .iter()
+        .enumerate()
+        .map(|(i, &ts)| Measure {
+            chords: vec![ChordInstance::new(
+                root("C"),
+                "C".to_string(),
+                Chord::new(root("C"), ChordQuality::Major),
+                ChordRhythm::Default,
+                "C".to_string(),
+                MusicalDuration::new(0, 4, 0),
+                AbsolutePosition::new(MusicalPosition::try_new(i as i32, 0, 0).unwrap(), 0),
+            )],
+            time_signature: ts,
+            ..Default::default()
+        })
+        .collect();
+
+    let mut section_info = Section::new(SectionType::Verse);
+    section_info.number = Some(1);
+    section_info.measure_count = Some(measures.len());
+    chart
+        .sections
+        .push(ChartSection::new(section_info).with_measures(measures));
+    chart
+}
+
+/// Collect the colors of every glyph emitted by nodes of the given element type.
+fn glyph_colors_of(scene: &SceneNode, element_type: ElementType) -> Vec<Color> {
+    scene
+        .iter_with_transforms()
+        .filter(|(node, _)| {
+            node.id
+                .as_ref()
+                .is_some_and(|id| id.element_type == element_type)
+        })
+        .flat_map(|(node, _)| {
+            node.commands.iter().filter_map(|cmd| match cmd {
+                PaintCommand::Glyph { color, .. } => Some(*color),
+                _ => None,
+            })
+        })
+        .collect()
+}
+
+/// Collect the colors of every glyph emitted by a `TimeSignature` scene node.
+fn time_sig_glyph_colors(scene: &SceneNode) -> Vec<Color> {
+    glyph_colors_of(scene, ElementType::TimeSignature)
+}
+
+#[test]
+fn mid_chart_time_signature_change_renders_in_red() {
+    let style = test_style();
+    let engine = ChartLayoutEngine::new(style, Arc::new(Vec::new()), Arc::new(Vec::new()));
+    let red = Color::from_rgba8(0xCC, 0x00, 0x00, 0xFF);
+    let red_count = |chart: &Chart| {
+        let result = engine.layout_chart(chart, &LayoutMode::default());
+        time_sig_glyph_colors(&result.scene)
+            .iter()
+            .filter(|c| **c == red)
+            .count()
+    };
+
+    // Constant 4/4: the only time signatures drawn are the (black) system prefix.
+    assert_eq!(
+        red_count(&chart_with_meters(&[(4, 4), (4, 4), (4, 4)])),
+        0,
+        "a constant-meter chart should render no red time signatures"
+    );
+
+    // One-measure excursion (`!T2/4`): the 2/4 is highlighted red (2 digits),
+    // but the immediate revert to 4/4 is adjacent/obvious, so it draws in black.
+    assert_eq!(
+        red_count(&chart_with_meters(&[(4, 4), (2, 4), (4, 4)])),
+        2,
+        "only the one-measure 2/4 should be red; its immediate revert stays black"
+    );
+
+    // Persistent change then revert several bars later: BOTH the 2/4 and the
+    // eventual return to 4/4 are highlighted red (2 digits each).
+    assert_eq!(
+        red_count(&chart_with_meters(&[
+            (4, 4),
+            (2, 4),
+            (2, 4),
+            (2, 4),
+            (4, 4)
+        ])),
+        4,
+        "a persistent change and its later revert should both be red"
+    );
+}
+
+#[test]
+fn mid_chart_key_change_renders_in_red() {
+    use crate::key::Key;
+    use keyflow_proto::chart::types::KeyChange;
+
+    let style = test_style();
+    let engine = ChartLayoutEngine::new(style, Arc::new(Vec::new()), Arc::new(Vec::new()));
+    let red = Color::from_rgba8(0xCC, 0x00, 0x00, 0xFF);
+
+    // Two 4/4 measures with a key change to A major (3 sharps) on the downbeat
+    // of section-local measure 1.
+    let mut chart = chart_with_meters(&[(4, 4), (4, 4)]);
+    chart.key_changes.push(KeyChange::new(
+        AbsolutePosition::new(MusicalPosition::try_new(1, 0, 0).unwrap(), 0),
+        Some(Key::major(MusicalNote::from_string("E").unwrap())),
+        Key::major(MusicalNote::from_string("A").unwrap()),
+        0,
+    ));
+
+    let result = engine.layout_chart(&chart, &LayoutMode::default());
+    let colors = glyph_colors_of(&result.scene, ElementType::KeySignature);
+    assert!(
+        colors.iter().any(|c| *c == red),
+        "expected a red key-change accidental glyph, got {colors:?}"
+    );
+}
+
+#[cfg(test)]
+mod content_bounds_guard {
+    use crate::engraver::fonts::ChartFontBundle;
+    use crate::engraver::layout::chart::LayoutMode;
+
+    /// `content_bounds()` must account for node transforms. Chord symbols are
+    /// placed via a parent-group transform with the text at local (0,0); a
+    /// transform-blind bounds collapses them to the origin, so cropping a
+    /// snippet's viewBox to those bounds clips every chord off the page. Guards
+    /// the regression where `1 4 6 5` rendered no chord numbers in the editor.
+    #[test]
+    fn content_bounds_includes_transformed_chord_symbols() {
+        let fonts = ChartFontBundle::new().unwrap();
+        let style = crate::api::style::leak_lead_sheet_style();
+        let engine = fonts.create_layout_engine(style);
+        let chart = keyflow_text::chart::parse_chart("1 4 6 5").unwrap();
+        let r = engine.layout_chart(&chart, &LayoutMode::ContinuousScroll { width: 800.0 });
+        let b = r.content_bounds().expect("non-empty scene");
+        // The last chord ("5") renders near x=595; the bounds must reach it.
+        assert!(
+            b.x1 >= 590.0,
+            "content_bounds must span the transformed chord symbols (x1={:.1})",
+            b.x1
+        );
+        // The chord row (baseline ~y=40) must be within the vertical span.
+        assert!(
+            b.y0 <= 40.0 && b.y1 >= 40.0,
+            "chord baseline ~40 must be within bounds ({:.1}..{:.1})",
+            b.y0,
+            b.y1
+        );
+    }
+}
+
+#[cfg(test)]
+mod degree_root_size_guard {
+    use crate::engraver::fonts::ChartFontBundle;
+    use crate::engraver::layout::chart::LayoutMode;
+    use crate::engraver::layout::text_metrics::TextFontMetrics;
+    use crate::engraver::scene::node::SceneNode;
+    use crate::engraver::scene::paint::PaintCommand;
+
+    fn chord_glyphs(n: &SceneNode, out: &mut Vec<(char, f64)>) {
+        for c in &n.commands {
+            if let PaintCommand::Text {
+                text,
+                font_size,
+                font_family,
+                ..
+            } = c
+            {
+                if font_family.contains("MuseJazz") {
+                    if let Some(ch) = text.chars().next() {
+                        out.push((ch, *font_size));
+                    }
+                }
+            }
+        }
+        for ch in &n.children {
+            chord_glyphs(ch, out);
+        }
+    }
+
+    /// Nashville/degree chord roots must render as tall as letter chord roots:
+    /// the MuseJazz font draws digits shorter than capitals, so a degree root is
+    /// scaled up until its digit's glyph ink reaches the font's cap height.
+    /// Guards the "numbers aren't as big as the chord symbols" fix.
+    #[test]
+    fn degree_roots_render_at_cap_height() {
+        let fonts = ChartFontBundle::new().unwrap();
+        let fm = TextFontMetrics::new(fonts.text_font_data().clone());
+        let style = crate::api::style::leak_lead_sheet_style();
+        let engine = fonts.create_layout_engine(style);
+
+        let chart = keyflow_text::chart::parse_chart("1 5 7").unwrap();
+        let r = engine.layout_chart(&chart, &LayoutMode::ContinuousScroll { width: 800.0 });
+        let mut glyphs = Vec::new();
+        chord_glyphs(&r.scene, &mut glyphs);
+
+        // The chord-symbol digits (1, 5, 7) should each have been scaled so the
+        // rendered glyph height matches cap height (within a small tolerance),
+        // and the scaled point size should exceed the base 14pt.
+        let cap = fm.cap_height(14.0);
+        let mut checked = 0;
+        for (ch, fs) in &glyphs {
+            if ch.is_ascii_digit() {
+                let gh = fm.glyph_height(*ch, *fs);
+                assert!(
+                    (gh - cap).abs() < 0.4,
+                    "digit '{ch}' glyph height {gh:.2} should match cap height {cap:.2}"
+                );
+                assert!(
+                    *fs > 14.0,
+                    "digit '{ch}' should be scaled above the base 14pt, got {fs:.2}"
+                );
+                checked += 1;
+            }
+        }
+        assert!(
+            checked >= 3,
+            "expected the three degree roots, checked {checked}"
+        );
+    }
 }

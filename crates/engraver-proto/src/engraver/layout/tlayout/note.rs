@@ -4,7 +4,7 @@
 //! accidentals, dots, and ledger lines.
 
 use kurbo::{Point, Rect};
-use vello::peniko::Color;
+use peniko::Color;
 
 use crate::engraver::layout::context::LayoutContext;
 use crate::engraver::layout::shape::Shape;
@@ -649,7 +649,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_note(&params, &ctx);
+        let (_layout, node) = layout_note(&params, &ctx);
 
         // Should have notehead + 2 dots = 3 commands minimum
         assert!(node.commands.len() >= 3);

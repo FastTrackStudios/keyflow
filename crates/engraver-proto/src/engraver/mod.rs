@@ -39,6 +39,7 @@ pub mod layout;
 pub mod model;
 pub mod notation;
 pub mod quantize;
+#[cfg(feature = "wgpu")]
 pub mod renderer;
 pub mod scene;
 pub mod style;
@@ -50,9 +51,6 @@ pub mod ui;
 
 // Error types
 pub use error::{Error, Result};
-
-// Model types
-pub use model::{Measure, MusicElement, Part, Score, Voice};
 
 // Style types
 pub use style::{MStyle, Sid, StyleValue};

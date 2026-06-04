@@ -39,9 +39,11 @@ impl ChartLayoutConfig {
                 left: 72.0,   // Extra left margin for section labels
             },
             spatium: 5.0,
-            // System spacing: 20pt (4 spatiums) allows ~10 systems per page
-            // 10×50pt (system) + 9×20pt (spacing) = 680pt, fits in 756pt available
-            system_spacing: 20.0,
+            // System spacing: 40pt (8 spatiums). Doubled from 20pt to leave a
+            // minimum vertical gap between systems for text annotations
+            // (staff text, figures, dynamics) without them crowding the
+            // staff above/below.
+            system_spacing: 40.0,
             max_measures_per_system: 4,
             min_measure_width: 100.0,
             harmony_style: HarmonyStyle::musejazz(),

@@ -112,9 +112,147 @@ impl<'a> ChartParser<'a> {
         // Phase 3: Post-processing
         self.post_process();
 
+        // Phase 3.5: assign document-absolute source spans to every chord.
+        self.assign_chord_source_spans(input);
+
+        // Phase 3.6: assign document-absolute source spans to every explicitly
+        // written section header, so the editor can badge it with the resolved
+        // name (`VS` → `Verse 1a`).
+        self.assign_section_source_spans(input);
+
         let _ = line_idx; // Suppress unused warning
 
         Ok(())
+    }
+
+    /// Assign **document-absolute** `source_span`s to every parsed chord.
+    ///
+    /// The line-by-line parser emits each chord's `source_span` relative to its
+    /// own chord line — `parse_chord_line_inner`'s `line_byte_offset` is `0` in
+    /// production (only the `#[cfg(test)]` path shifts it). Line-relative spans
+    /// are useless for mapping a document offset back to a chord, which is
+    /// exactly what click-to-highlight (engraver), editor inlay overlays, and
+    /// hover all need.
+    ///
+    /// Rather than thread a doc offset through the whole line pipeline (a large,
+    /// risky refactor of the core parser), we recover absolute spans in one pass
+    /// here: chords occur in the same order in the chart and in the source, so a
+    /// single forward scan that matches each chord's `original_token` against the
+    /// document's whitespace/`|`-delimited tokens lines them up. A chord whose
+    /// token can't be relocated keeps its prior span and the scan stays aligned
+    /// for the rest. (CM6's block parser instead carries an absolute `lineStart`
+    /// cursor — `lineStart += line.length + 1` — and emits `lineStart + col`; the
+    /// equivalent here would be threading that offset through `parse_sections` →
+    /// `parse_section_measures` → `parse_chord_line_inner`.)
+    fn assign_chord_source_spans(&mut self, input: &str) {
+        use crate::parsing::TextSpan;
+
+        // Tokenize the document on whitespace + measure bars — the boundaries
+        // chords sit between.
+        let bytes = input.as_bytes();
+        let mut tokens: Vec<(usize, &str)> = Vec::new();
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i].is_ascii_whitespace() || bytes[i] == b'|' {
+                i += 1;
+                continue;
+            }
+            let start = i;
+            while i < bytes.len() && !bytes[i].is_ascii_whitespace() && bytes[i] != b'|' {
+                i += 1;
+            }
+            tokens.push((start, &input[start..i]));
+        }
+
+        let line_col = |off: usize| -> (u32, u32) {
+            let upto = &input[..off];
+            let line = upto.bytes().filter(|&b| b == b'\n').count() as u32 + 1;
+            let col = (off - upto.rfind('\n').map_or(0, |n| n + 1)) as u32 + 1;
+            (line, col)
+        };
+
+        let mut ti = 0;
+        for section in &mut self.sections {
+            for measure in section.measures_mut() {
+                for ci in &mut measure.chords {
+                    let want = ci.original_token.trim();
+                    if want.is_empty() {
+                        continue;
+                    }
+                    while ti < tokens.len() && tokens[ti].1 != want {
+                        ti += 1;
+                    }
+                    let Some(&(off, tok)) = tokens.get(ti) else {
+                        return; // ran out of source tokens to match
+                    };
+                    let (line, col) = line_col(off);
+                    ci.source_span = Some(TextSpan::with_location(off, tok.len(), line, col));
+                    ti += 1;
+                }
+            }
+        }
+    }
+
+    /// Assign **document-absolute** `source_span`s to every explicitly-written
+    /// section header (`VS`, `CH 8 #G`, `^BR`, ...).
+    ///
+    /// Same problem and approach as [`assign_chord_source_spans`]: the line
+    /// pipeline trims each line, so by the time sections exist their header
+    /// offsets are gone. We recover them by scanning the raw `input` for header
+    /// lines in document order and lining each up with the next chart section
+    /// of the same type. Sections with no written header — implicit Intros
+    /// synthesized from bare chord content — are skipped (they keep
+    /// `source_span = None`, so no name badge is drawn). Header lines that don't
+    /// correspond to a section (or whose type doesn't match) are skipped over,
+    /// so an extra/recalled header never desyncs the rest.
+    fn assign_section_source_spans(&mut self, input: &str) {
+        use crate::parsing::TextSpan;
+        use crate::sections::SectionType;
+
+        // Collect (start, len, line, col, type_key) for each section-header line.
+        let mut headers: Vec<(usize, usize, u32, u32, String)> = Vec::new();
+        let mut offset = 0usize;
+        let mut line_no = 1u32;
+        for line in input.split_inclusive('\n') {
+            let content = line.strip_suffix('\n').unwrap_or(line);
+            let content = content.strip_suffix('\r').unwrap_or(content);
+            let trimmed = content.trim();
+            // The marker is everything before a `,` comment; strip a `^`
+            // subsection prefix the way the section parser does.
+            let marker = match trimmed.find(',') {
+                Some(c) => trimmed[..c].trim(),
+                None => trimmed,
+            };
+            let marker = marker.strip_prefix('^').unwrap_or(marker);
+            if let Some(parsed) = (!marker.is_empty())
+                .then(|| SectionType::parse_with_measure_count(marker))
+                .flatten()
+            {
+                // Span the whole trimmed header line (marker + any comment/key),
+                // so the badge lands at end of line rather than mid-header.
+                let lead = content.len() - content.trim_start().len();
+                let start = offset + lead;
+                let end = offset + content.trim_end().len();
+                let col = lead as u32 + 1;
+                headers.push((start, end - start, line_no, col, parsed.section_type.key()));
+            }
+            offset += line.len();
+            line_no += 1;
+        }
+
+        let mut hi = 0;
+        for section in &mut self.sections {
+            if section.implicit {
+                continue;
+            }
+            let want = section.section.section_type.key();
+            while hi < headers.len() && headers[hi].4 != want {
+                hi += 1;
+            }
+            let Some(h) = headers.get(hi) else { break };
+            section.source_span = Some(TextSpan::with_location(h.0, h.1, h.2, h.3));
+            hi += 1;
+        }
     }
 
     fn try_parse_sectioned_lane_parallel(&mut self, lines: &[&str]) -> Result<bool, String> {
@@ -140,7 +278,6 @@ impl<'a> ChartParser<'a> {
                 toc_lines.push(*line);
             }
         }
-        let section_plan = Self::section_plan_from_toc(&toc_lines)?;
 
         let trimmed = content_lines[parallel_idx];
         if !trimmed.starts_with("<<") || !trimmed.ends_with(">>") {
@@ -153,12 +290,25 @@ impl<'a> ChartParser<'a> {
             .unwrap_or("")
             .trim();
         let branches = Self::split_top_level_parallel_branches_spanned(inner);
-        if branches.len() < 2 {
+        // A chords-only chart joins a single lane (`<< <chords> >>`); multi-lane
+        // joins add `; <melody>` etc. An empty join is never a lane join. The
+        // alias-ref validation below still rejects inline-content parallels like
+        // `<< C#m ; m { ... } >>`, so single literal branches fall back to
+        // section parsing rather than being mistaken for a one-lane join.
+        if branches.is_empty() {
             return Ok(false);
         }
 
-        let mut merged_sections: Option<Vec<ChartSection>> = None;
-        for (_, branch) in branches {
+        // Validate that every branch is an `<alias>` reference to a known alias
+        // BEFORE committing to the lane-parallel interpretation. An inline
+        // parallel block like `<< C#m B/C# ; m { ... } >>` has literal content
+        // branches, not alias refs — that is a normal measure, not a whole-chart
+        // lane join, so fall back to section parsing. Doing this before
+        // `section_plan_from_toc` avoids surfacing a confusing TOC error for a
+        // section that merely contains an inline parallel (e.g. after
+        // `/Duration`).
+        let mut resolved_branches = Vec::with_capacity(branches.len());
+        for (_, branch) in &branches {
             let branch = branch.trim();
             let Some(alias_name) = branch
                 .strip_prefix('<')
@@ -169,8 +319,24 @@ impl<'a> ChartParser<'a> {
             let Some(content) = self.aliases.get(alias_name).cloned() else {
                 return Ok(false);
             };
+            resolved_branches.push((alias_name.to_string(), content));
+        }
+
+        // The section plan (table of contents) owns the measure counts. It can
+        // be written explicitly above the lane join, or — when omitted — derived
+        // from the section headers of the first lane, which must then carry the
+        // counts itself.
+        let section_plan = if toc_lines.is_empty() {
+            Self::section_plan_from_lane(&resolved_branches[0].1)?
+        } else {
+            Self::section_plan_from_toc(&toc_lines)?
+        };
+
+        let mut merged_sections: Option<Vec<ChartSection>> = None;
+        for (alias_name, content) in &resolved_branches {
+            let alias_name = alias_name.as_str();
             let lane_sections =
-                self.parse_sectioned_lane_alias(alias_name, &content, &section_plan)?;
+                self.parse_sectioned_lane_alias(alias_name, content, &section_plan)?;
             if let Some(existing) = merged_sections.as_mut() {
                 Self::merge_section_lanes(existing, lane_sections, alias_name, false)?;
             } else {
@@ -210,14 +376,46 @@ impl<'a> ChartParser<'a> {
         let mut parser = ChartParser::new(&mut lane_chart);
         parser.aliases = self.aliases.clone();
         parser.melody_octave_memory = self.melody_octave_memory;
+        parser.default_duration = self.default_duration.clone();
         parser.parse_sections(&lines, 0)?;
         parser.post_process();
 
         if parser.sections.is_empty() {
-            return Err(format!("sectioned lane alias <{alias_name}> has no sections"));
+            return Err(format!(
+                "sectioned lane alias <{alias_name}> has no sections"
+            ));
         }
 
         Ok(lane_chart.sections)
+    }
+
+    /// Derive a section plan from a lane's own content when no explicit
+    /// table of contents was written above the lane join. Each section header
+    /// found in the lane must include a measure count, since there is no TOC to
+    /// supply it.
+    fn section_plan_from_lane(content: &str) -> Result<Vec<String>, String> {
+        let mut plan = Vec::new();
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if let Some(parsed) = SectionType::parse_with_measure_count(trimmed) {
+                if parsed.measure_expr.is_none() {
+                    return Err(format!(
+                        "Lane section header '{trimmed}' must include a measure count \
+                         when there is no table of contents above the lane join"
+                    ));
+                }
+                plan.push(trimmed.to_string());
+            }
+        }
+        if plan.is_empty() {
+            return Err(
+                "Lane parallel has no section headers and no table of contents".to_string(),
+            );
+        }
+        Ok(plan)
     }
 
     fn section_plan_from_toc(lines: &[&str]) -> Result<Vec<String>, String> {
@@ -238,7 +436,10 @@ impl<'a> ChartParser<'a> {
         Ok(plan)
     }
 
-    fn apply_section_plan_to_lane(content: &str, section_plan: &[String]) -> Result<String, String> {
+    fn apply_section_plan_to_lane(
+        content: &str,
+        section_plan: &[String],
+    ) -> Result<String, String> {
         let mut section_idx = 0usize;
         let mut output = Vec::new();
         for line in content.lines() {
@@ -249,7 +450,9 @@ impl<'a> ChartParser<'a> {
             }
             if SectionType::parse_with_measure_count(trimmed).is_some() {
                 let Some(planned) = section_plan.get(section_idx) else {
-                    return Err(format!("Lane has extra section '{trimmed}' beyond table of contents"));
+                    return Err(format!(
+                        "Lane has extra section '{trimmed}' beyond table of contents"
+                    ));
                 };
                 let planned_type = SectionType::parse_with_measure_count(planned)
                     .map(|parsed| parsed.section_type);
@@ -361,7 +564,8 @@ impl<'a> ChartParser<'a> {
         base.staff_text.extend(lane.staff_text.clone());
         base.figured_bass.extend(lane.figured_bass.clone());
         base.dynamics.extend(lane.dynamics.clone());
-        base.classical_dynamics.extend(lane.classical_dynamics.clone());
+        base.classical_dynamics
+            .extend(lane.classical_dynamics.clone());
         base.hairpins.extend(lane.hairpins.clone());
         base.melodies.extend(lane.melodies.clone());
     }
@@ -380,6 +584,50 @@ mod tests {
     use crate::sections::SectionType;
     use crate::time::MusicalDuration;
     use crate::time::MusicalPositionExt;
+
+    #[test]
+    fn sub_labelled_first_section_after_a_title_is_not_eaten() {
+        // Regression: with a title line present, a sub-labelled first-section
+        // header (`CH 3A 4`) used to be swallowed as a "part name" and the chords
+        // became a default Intro. It must parse as the Chorus it names.
+        let input = "My Song\n4/4 #C\n\nCH 3A 4\nF C G Am\n";
+        let chart = parse_chart(input).expect("Failed to parse chart");
+        assert_eq!(chart.metadata.title, Some("My Song".to_string()));
+        assert_eq!(chart.sections.len(), 1);
+        assert_eq!(chart.sections[0].section.section_type, SectionType::Chorus);
+
+        // A quoted comment and a key change on the first header behave the same.
+        let chart = parse_chart("My Song\n4/4 #C\n\nBR 8 #G\nEm D\n").unwrap();
+        assert_eq!(chart.sections[0].section.section_type, SectionType::Bridge);
+    }
+
+    #[test]
+    fn chord_source_spans_are_document_absolute() {
+        // The two `5` tokens sit at their literal document offsets (20 and 27),
+        // not the line-relative offsets the parser emits internally (2 and 9).
+        let text = "120bpm 4/4 #C\n\nvs\n1 5 #G 1 5\n";
+        let chart = parse_chart(text).expect("parse");
+        let mut starts = Vec::new();
+        for s in &chart.sections {
+            for m in s.measures() {
+                for c in &m.chords {
+                    if let Some(span) = c.source_span {
+                        starts.push(span.start);
+                        // The span covers exactly its source token.
+                        assert_eq!(&text[span.start..span.end()], c.original_token.trim());
+                    }
+                }
+            }
+        }
+        assert!(
+            starts.contains(&text.find('5').unwrap()),
+            "first 5 should be at its doc offset; spans = {starts:?}"
+        );
+        assert!(
+            starts.contains(&text.rfind('5').unwrap()),
+            "second 5 should be at its doc offset; spans = {starts:?}"
+        );
+    }
 
     #[test]
     fn test_parse_simple_chord_line() {

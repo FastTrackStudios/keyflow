@@ -241,107 +241,108 @@ fn extract_from_explicit(
         let is_first_chord = chord_count == 0;
 
         // Internal push chord: split the previous beat to create the push anticipation
-        if config.push_alters_rhythm && is_push_chord && !is_first_chord {
-            if let RhythmElement::Chord(chord) = element
-                && let Some((_, amount)) = &chord.push_pull
+        if config.push_alters_rhythm
+            && is_push_chord
+            && !is_first_chord
+            && let RhythmElement::Chord(chord) = element
+            && let Some((_, amount)) = &chord.push_pull
+        {
+            // We need to carve out space from the previous rhythm entry
+            // to place the push anticipation
+            if let Some(last_entry) = result.entries.last()
+                && last_entry.duration().ticks() >= QUARTER_TICKS
             {
-                // We need to carve out space from the previous rhythm entry
-                // to place the push anticipation
-                if let Some(last_entry) = result.entries.last()
-                    && last_entry.duration().ticks() >= QUARTER_TICKS
-                {
-                    let last_ticks = last_entry.duration().ticks();
-                    let was_rest = matches!(last_entry, RhythmEntry::Rest(_));
+                let last_ticks = last_entry.duration().ticks();
+                let was_rest = matches!(last_entry, RhythmEntry::Rest(_));
 
-                    // Remove the last entry
-                    result.entries.pop();
+                // Remove the last entry
+                result.entries.pop();
 
-                    // If the last entry was longer than a quarter, preserve the extra
-                    let remaining_ticks = last_ticks - QUARTER_TICKS;
-                    if remaining_ticks > 0 {
-                        let remaining_dur = ticks_to_duration(remaining_ticks);
-                        if was_rest {
-                            result.entries.push(RhythmEntry::Rest(remaining_dur));
-                        } else {
-                            result.entries.push(RhythmEntry::Note(remaining_dur));
-                        }
+                // If the last entry was longer than a quarter, preserve the extra
+                let remaining_ticks = last_ticks - QUARTER_TICKS;
+                if remaining_ticks > 0 {
+                    let remaining_dur = ticks_to_duration(remaining_ticks);
+                    if was_rest {
+                        result.entries.push(RhythmEntry::Rest(remaining_dur));
+                    } else {
+                        result.entries.push(RhythmEntry::Note(remaining_dur));
                     }
+                }
 
-                    let start_idx = result.entries.len();
-                    let is_triplet_group = match (amount.base, amount.level) {
-                        (PushPullBase::Triplet, 1) => {
-                            if was_rest {
-                                result
-                                    .entries
-                                    .push(RhythmEntry::Rest(Duration::TripletQuarter));
-                            } else {
-                                result
-                                    .entries
-                                    .push(RhythmEntry::Note(Duration::TripletQuarter));
-                            }
+                let start_idx = result.entries.len();
+                let is_triplet_group = match (amount.base, amount.level) {
+                    (PushPullBase::Triplet, 1) => {
+                        if was_rest {
                             result
                                 .entries
-                                .push(RhythmEntry::Note(Duration::TripletEighth));
-                            true
+                                .push(RhythmEntry::Rest(Duration::TripletQuarter));
+                        } else {
+                            result
+                                .entries
+                                .push(RhythmEntry::Note(Duration::TripletQuarter));
                         }
-                        (PushPullBase::Standard, 1) => {
-                            if was_rest {
-                                result.entries.push(RhythmEntry::Rest(Duration::Eighth));
-                            } else {
-                                result.entries.push(RhythmEntry::Note(Duration::Eighth));
-                            }
-                            result.entries.push(RhythmEntry::Note(Duration::Eighth));
-                            false
-                        }
-                        (PushPullBase::Standard, 2) => {
-                            if was_rest {
-                                result
-                                    .entries
-                                    .push(RhythmEntry::Rest(Duration::DottedEighth));
-                            } else {
-                                result
-                                    .entries
-                                    .push(RhythmEntry::Note(Duration::DottedEighth));
-                            }
-                            result.entries.push(RhythmEntry::Note(Duration::Sixteenth));
-                            false
-                        }
-                        _ => {
-                            if was_rest {
-                                result.entries.push(RhythmEntry::Rest(Duration::Eighth));
-                            } else {
-                                result.entries.push(RhythmEntry::Note(Duration::Eighth));
-                            }
-                            result.entries.push(RhythmEntry::Note(Duration::Eighth));
-                            false
-                        }
-                    };
-
-                    // Record internal push position (chord_idx -> segment_idx of push note)
-                    result
-                        .internal_push_positions
-                        .push((chord_count, result.entries.len() - 1));
-
-                    if is_triplet_group {
                         result
-                            .tuplet_specs
-                            .push(TupletSpec::triplet(start_idx, result.entries.len()));
+                            .entries
+                            .push(RhythmEntry::Note(Duration::TripletEighth));
+                        true
                     }
-
-                    // Now add the remaining duration of the push chord itself
-                    // (the slash beats that follow the push)
-                    let push_chord_ticks = duration.ticks();
-                    if push_chord_ticks > QUARTER_TICKS {
-                        // The push chord has more duration beyond the push beat
-                        let extra_ticks = push_chord_ticks - QUARTER_TICKS;
-                        let extra_dur = ticks_to_duration(extra_ticks);
-                        result.entries.push(RhythmEntry::Note(extra_dur));
+                    (PushPullBase::Standard, 1) => {
+                        if was_rest {
+                            result.entries.push(RhythmEntry::Rest(Duration::Eighth));
+                        } else {
+                            result.entries.push(RhythmEntry::Note(Duration::Eighth));
+                        }
+                        result.entries.push(RhythmEntry::Note(Duration::Eighth));
+                        false
                     }
-                    // If push chord is exactly 1 beat, the push subdivision already covers it
+                    (PushPullBase::Standard, 2) => {
+                        if was_rest {
+                            result
+                                .entries
+                                .push(RhythmEntry::Rest(Duration::DottedEighth));
+                        } else {
+                            result
+                                .entries
+                                .push(RhythmEntry::Note(Duration::DottedEighth));
+                        }
+                        result.entries.push(RhythmEntry::Note(Duration::Sixteenth));
+                        false
+                    }
+                    _ => {
+                        if was_rest {
+                            result.entries.push(RhythmEntry::Rest(Duration::Eighth));
+                        } else {
+                            result.entries.push(RhythmEntry::Note(Duration::Eighth));
+                        }
+                        result.entries.push(RhythmEntry::Note(Duration::Eighth));
+                        false
+                    }
+                };
 
-                    chord_count += 1;
-                    continue;
+                // Record internal push position (chord_idx -> segment_idx of push note)
+                result
+                    .internal_push_positions
+                    .push((chord_count, result.entries.len() - 1));
+
+                if is_triplet_group {
+                    result
+                        .tuplet_specs
+                        .push(TupletSpec::triplet(start_idx, result.entries.len()));
                 }
+
+                // Now add the remaining duration of the push chord itself
+                // (the slash beats that follow the push)
+                let push_chord_ticks = duration.ticks();
+                if push_chord_ticks > QUARTER_TICKS {
+                    // The push chord has more duration beyond the push beat
+                    let extra_ticks = push_chord_ticks - QUARTER_TICKS;
+                    let extra_dur = ticks_to_duration(extra_ticks);
+                    result.entries.push(RhythmEntry::Note(extra_dur));
+                }
+                // If push chord is exactly 1 beat, the push subdivision already covers it
+
+                chord_count += 1;
+                continue;
             }
         }
 

@@ -7,8 +7,8 @@
 //! - Stem length adjustment
 
 use kurbo::{BezPath, Point, Rect};
+use peniko::Color;
 use tracing::debug;
-use vello::peniko::Color;
 
 use crate::engraver::scene::paint::PaintCommand;
 
@@ -312,7 +312,7 @@ pub fn layout_beam(notes: &[BeamNote], spatium: f64, config: &BeamLayoutConfig) 
     let beam_run = end_anchor_x - start_anchor_x;
 
     for note in notes.iter() {
-        let note_y = note.y_center(spatium);
+        let _note_y = note.y_center(spatium);
 
         // Calculate the actual stem X position (Middle anchor - center of stem)
         let stem_x = stem_x_for_note(note, stem_dir, spatium);
@@ -648,10 +648,6 @@ const SLASH_STEM_UP_SE_Y: f64 = 1.0;
 /// From Bravura metadata: [0.0, -1.0]
 const SLASH_STEM_DOWN_NW_X: f64 = 0.0;
 const SLASH_STEM_DOWN_NW_Y: f64 = -1.0;
-
-/// Notehead width for fallback when anchor is unavailable (in staff spaces).
-/// SMuFL noteheadBlack bounding box width.
-const NOTEHEAD_WIDTH: f64 = 1.18;
 
 /// Standard stem width in staff spaces (from MuseScore default).
 const STEM_WIDTH: f64 = 0.12;

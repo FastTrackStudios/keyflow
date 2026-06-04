@@ -39,7 +39,7 @@ pub use context::VelloRenderContext;
 
 // region:    --- RenderConfig
 
-use vello::peniko::Color;
+use peniko::Color;
 
 /// Renderer configuration.
 #[derive(Debug, Clone)]

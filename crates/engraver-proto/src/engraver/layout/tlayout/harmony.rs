@@ -15,7 +15,7 @@
 use std::sync::Arc;
 
 use kurbo::{Point, Rect};
-use vello::peniko::Color;
+use peniko::Color;
 
 use crate::engraver::layout::context::LayoutContext;
 use crate::engraver::layout::text_metrics::TextFontMetrics;
@@ -503,13 +503,21 @@ pub fn layout_harmony(
         }
     };
 
-    // 1. Root note (letter) - always use text font
+    // 1. Root note (letter) - always use text font.
+    //
+    // Nashville/degree roots (`1`..`7`, `b3`, `#4`) render with shorter glyphs
+    // than capital letters in the chord font (MuseJazz digits are ~5-8% shorter
+    // than its caps), so at the same point size a `5` reads smaller than a `C`.
+    // Scale a degree root up until its tallest digit reaches the font's cap
+    // height — number chords end up exactly as big as letter chords. Letter
+    // roots are unaffected (`root_pt == style.root_size`).
     let root_letter = &params.root;
-    let root_width = measure_text_width(root_letter, style.root_size, false);
+    let root_pt = degree_root_size(root_letter, text_metrics, style.root_size, cap_height);
+    let root_width = measure_text_width(root_letter, root_pt, false);
     commands.push(PaintCommand::text(
         root_letter.clone(),
         &style.font_family,
-        style.root_size,
+        root_pt,
         Point::new(cursor_x, baseline_y),
         style.color,
     ));
@@ -801,6 +809,29 @@ pub fn layout_harmony(
     (layout_data, node)
 }
 
+/// Point size for a chord root, scaled so Nashville/degree roots render as tall
+/// as letter roots.
+///
+/// A letter root (`C`, `F#`) already fills the font's cap height, so it renders
+/// at `root_size` unchanged. A degree root contains a digit (`5`, `b3`, `#4`)
+/// whose glyph is drawn shorter than a capital in the chord font; we scale the
+/// whole root up by `cap_height / tallest_digit_height` so its tallest digit
+/// reaches cap height — i.e. exactly as big as a letter chord symbol. Falls
+/// back to `root_size` if the font yields no usable glyph height.
+fn degree_root_size(root: &str, metrics: &TextFontMetrics, root_size: f64, cap_height: f64) -> f64 {
+    let tallest_digit = root
+        .chars()
+        .filter(|c| c.is_ascii_digit())
+        .map(|c| metrics.glyph_height(c, root_size))
+        .filter(|h| *h > 0.0)
+        .fold(0.0_f64, f64::max);
+
+    if tallest_digit <= 0.0 || cap_height <= 0.0 {
+        return root_size;
+    }
+    root_size * (cap_height / tallest_digit)
+}
+
 /// Which symbol set to use for chord symbols.
 /// Different fonts have different codepoints for the same symbols.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -885,8 +916,6 @@ mod unicode_fallback {
     pub const FLAT: char = '\u{266D}';
     /// Sharp (♯) - Music sharp sign
     pub const SHARP: char = '\u{266F}';
-    /// Natural (♮) - Music natural sign
-    pub const NATURAL: char = '\u{266E}';
     /// Double sharp - use superscript x
     pub const DOUBLE_SHARP: &str = "x";
     /// Double flat
@@ -1012,16 +1041,34 @@ pub fn parse_chord(chord_str: &str) -> HarmonyParams {
     let chars: Vec<char> = chord_str.chars().collect();
     let mut i = 0;
 
-    // Parse root note (A-G)
+    // Parse the root:
+    //  - an uppercase note letter / Roman numeral (A–G, I–VII), optionally
+    //    followed by an accidental (`C#`, `Bb`), or
+    //  - a Nashville scale-degree number (1–7), optionally preceded by an
+    //    accidental (`b3`, `#4`).
+    //
+    // Without the number-system cases a bare `1` falls through to the default
+    // root "C" with the digit parsed as an extension — so `1` printed as `C1`,
+    // `5` as `C5`. For an altered degree the accidental comes *before* the
+    // number, so it's kept with the digit as the root (the harmony renderer
+    // draws the root string left-to-right, preserving `b3` order).
     if i < chars.len() && chars[i].is_ascii_uppercase() {
         params.root = chars[i].to_string();
         i += 1;
-    }
-
-    // Parse root accidental (# or b)
-    if i < chars.len() && (chars[i] == '#' || chars[i] == 'b') {
-        params.root_accidental = chars[i].to_string();
+        // Note-letter root accidental, drawn after the letter (`C#`, `Bb`).
+        if i < chars.len() && (chars[i] == '#' || chars[i] == 'b') {
+            params.root_accidental = chars[i].to_string();
+            i += 1;
+        }
+    } else if i < chars.len() && chars[i].is_ascii_digit() {
+        params.root = chars[i].to_string();
         i += 1;
+    } else if i + 1 < chars.len()
+        && (chars[i] == '#' || chars[i] == 'b')
+        && chars[i + 1].is_ascii_digit()
+    {
+        params.root = format!("{}{}", chars[i], chars[i + 1]);
+        i += 2;
     }
 
     let remaining: String = chars[i..].iter().collect();
@@ -1263,6 +1310,34 @@ mod tests {
         assert_eq!(params.root, "D");
         assert_eq!(params.quality, "m");
         assert_eq!(params.extension, "7");
+    }
+
+    #[test]
+    fn test_parse_chord_nashville_number_roots() {
+        // Regression: a bare scale-degree number used to fall through to the
+        // default root "C" with the digit parsed as an extension, printing
+        // `1` as `C1`. The digit is the root now.
+        for d in ["1", "2", "3", "4", "5", "6", "7"] {
+            let params = parse_chord(d);
+            assert_eq!(params.root, d, "degree {d} should be its own root");
+            assert_eq!(params.quality, "");
+            assert_eq!(params.extension, "");
+        }
+        // Quality still parses off a number root.
+        let m = parse_chord("6m");
+        assert_eq!(m.root, "6");
+        assert_eq!(m.quality, "m");
+        // Altered scale degrees keep their leading accidental with the number.
+        assert_eq!(parse_chord("b3").root, "b3");
+        assert_eq!(parse_chord("#4").root, "#4");
+        let b7m = parse_chord("b7m");
+        assert_eq!(b7m.root, "b7");
+        assert_eq!(b7m.quality, "m");
+        // Letter chords are unaffected (root + accidental + quality).
+        let cs = parse_chord("C#m7");
+        assert_eq!(cs.root, "C");
+        assert_eq!(cs.root_accidental, "#");
+        assert_eq!(cs.quality, "m");
     }
 
     #[test]

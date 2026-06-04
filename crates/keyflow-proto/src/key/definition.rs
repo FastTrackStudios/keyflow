@@ -30,6 +30,19 @@ impl Key {
         Self::new(root, ScaleMode::aeolian())
     }
 
+    /// The diatonic triad quality of a scale degree (1-7) in this key — e.g.
+    /// in C major degree 2 is minor and degree 7 is diminished. Returns `None`
+    /// for out-of-range degrees. Used to give bare number-system chords their
+    /// implied quality (`2` = ii minor) without writing it out.
+    pub fn diatonic_quality(&self, degree: u8) -> Option<crate::chord::ChordQuality> {
+        use super::scale::harmonization::{HarmonizationDepth, harmonize_scale};
+        if !(1..=7).contains(&degree) {
+            return None;
+        }
+        let chords = harmonize_scale(&self.mode, &self.root, HarmonizationDepth::Triads);
+        chords.get((degree - 1) as usize).map(|c| c.quality)
+    }
+
     /// Get the root note of the key
     pub fn root(&self) -> &MusicalNote {
         &self.root

@@ -228,83 +228,26 @@ impl<'a> ChartParser<'a> {
             return false;
         }
 
-        // Check for custom section with brackets (e.g., "[SOLO]", "[SOLO] 8")
+        // Bracketed custom section, e.g. "[SOLO]" / "[SOLO] 8".
         if trimmed.starts_with('[') && trimmed.contains(']') {
             return true;
         }
 
-        // Split into words
-        let words: Vec<&str> = trimmed.split_whitespace().collect();
-        if words.is_empty() {
+        // Inline-content forms put the chords after a `:` or `,`
+        // (e.g. "VS 8: Cm Fm", "intro, Cm"); the marker is the part before it.
+        let marker = match trimmed.find([':', ',']) {
+            Some(i) => trimmed[..i].trim(),
+            None => trimmed,
+        };
+        if marker.is_empty() {
             return false;
         }
 
-        // First word may have trailing comma for inline chords (e.g., "intro,")
-        let first_word_raw = words[0];
-        let first_word = first_word_raw.trim_end_matches(',').to_lowercase();
-
-        // Check if first word is a section type
-        if SectionType::parse(&first_word).is_err() {
-            return false;
-        }
-
-        // If the section type word ends with a comma, it's a section marker with inline chords
-        if first_word_raw.ends_with(',') {
-            return true;
-        }
-
-        // If there's only one word, it's a section marker
-        if words.len() == 1 {
-            return true;
-        }
-
-        // If there are more words, they must be numbers, measure expressions,
-        // or a comma/colon (which indicates inline chords follow)
-        // A title like "Chord Memory Test" would have non-numeric words after the first
-        for word in &words[1..] {
-            // Allow numbers (possibly with trailing comma/colon for inline chords)
-            let word_clean = word.trim_end_matches(&[',', ':'][..]);
-            if word_clean.parse::<u32>().is_ok() {
-                // If it ends with comma or colon, this is the last section marker word
-                // Everything after is inline chords
-                if word.ends_with(',') || word.ends_with(':') {
-                    return true;
-                }
-                continue;
-            }
-            // Allow measure expressions like "8+1", "4x2", "4-1", "+2", "-1"
-            if Self::looks_like_measure_expression(word_clean) {
-                if word.ends_with(',') || word.ends_with(':') {
-                    return true;
-                }
-                continue;
-            }
-            // A standalone comma or colon means inline chords follow
-            if *word == "," || *word == ":" {
-                return true;
-            }
-            // Any other word means this is not a section marker
-            return false;
-        }
-
-        true
-    }
-
-    /// Check if a word looks like a measure expression (e.g., "8+1", "4x2", "+2")
-    fn looks_like_measure_expression(word: &str) -> bool {
-        if word.is_empty() {
-            return false;
-        }
-
-        // Must start with a digit or +/-
-        let first_char = word.chars().next().unwrap();
-        if !first_char.is_ascii_digit() && first_char != '+' && first_char != '-' {
-            return false;
-        }
-
-        // Must contain only digits and operators (+, -, x, *)
-        word.chars()
-            .all(|c| c.is_ascii_digit() || c == '+' || c == '-' || c == 'x' || c == '*')
+        // Defer to the authoritative section-header parser, so sub-labels
+        // (`CH 3A 4`), measure expressions, quoted comments, key changes
+        // (`BR 8 #G`), and pre-/post- sections are recognised exactly as they
+        // are when the section is really parsed — no second, drifting copy.
+        SectionType::parse_with_measure_count(marker).is_some()
     }
 
     /// Parse a metadata line (e.g., "120bpm 4/4 #G")
@@ -312,6 +255,20 @@ impl<'a> ChartParser<'a> {
         let parts: Vec<&str> = line.split_whitespace().collect();
 
         for part in parts {
+            // Clef keyword (e.g. `64 BPM #E 4/4 bass`). Checked first so `bass`
+            // isn't mistaken for a B-flat key token.
+            if let Some(clef) = match part.to_ascii_lowercase().as_str() {
+                "treble" | "g-clef" => Some(crate::chart::ChartClef::Treble),
+                "bass" | "f-clef" => Some(crate::chart::ChartClef::Bass),
+                "alto" => Some(crate::chart::ChartClef::Alto),
+                "tenor" => Some(crate::chart::ChartClef::Tenor),
+                "perc" | "percussion" => Some(crate::chart::ChartClef::Percussion),
+                _ => None,
+            } {
+                self.initial_clef = Some(clef);
+                continue;
+            }
+
             // Try tempo
             if part.ends_with("bpm") || part.parse::<u32>().is_ok() {
                 if let Some(tempo) = Self::parse_tempo(part) {
@@ -377,6 +334,17 @@ impl<'a> ChartParser<'a> {
             return Ok(());
         }
 
+        // A top-level `/Duration` (before any section) sets a chart-wide default
+        // duration applied to every section unless that section overrides it.
+        let trimmed = line.trim();
+        if let Some(value) = trimmed
+            .strip_prefix("/duration ")
+            .or_else(|| trimmed.strip_prefix("/Duration "))
+        {
+            self.default_duration = Some(value.trim().to_string());
+            return Ok(());
+        }
+
         self.settings.parse_setting_line(line)
     }
 
@@ -429,7 +397,12 @@ impl<'a> ChartParser<'a> {
 
         // All parts must be recognized as metadata tokens
         for part in &parts {
-            let is_tempo = part.ends_with("bpm") || part.parse::<u32>().is_ok();
+            // A bare number 1-7 is a Nashville scale degree (a chord), not a
+            // tempo — real tempos are larger. Without this, `1 4 6 5` reads as a
+            // pure-metadata line and is consumed before the chord check, so the
+            // chart renders nothing.
+            let is_tempo =
+                part.ends_with("bpm") || part.parse::<u32>().is_ok_and(|n| !(1..=7).contains(&n));
             let is_time_sig = Self::parse_time_signature(part).is_some();
             let is_key =
                 (part.starts_with('#') || part.starts_with('b')) && Key::parse(part).is_ok();

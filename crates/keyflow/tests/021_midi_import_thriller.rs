@@ -16,12 +16,12 @@ use std::collections::BTreeMap;
 
 use keyflow::chart::Chart;
 use keyflow::chord::{
-    detect_chords_from_midi_notes, DetectedChord, MidiNote as KeyflowMidiNote, PushPullAmount,
-    PushPullBase,
+    DetectedChord, MidiNote as KeyflowMidiNote, PushPullAmount, PushPullBase,
+    detect_chords_from_midi_notes,
 };
 use keyflow::engraver::import::{
-    normalize_chord_name, ChordMarker, MidiFile, MidiNote, PushPull, SectionMarker,
-    SectionType as MidiSectionType,
+    ChordMarker, MidiFile, MidiNote, PushPull, SectionMarker, SectionType as MidiSectionType,
+    normalize_chord_name,
 };
 use keyflow::key::{KeySpelling, SpellingMode};
 use keyflow::primitives::MusicalNote;
@@ -440,7 +440,7 @@ fn merge_consecutive_chords(elements: Vec<ChordOrRest>) -> Vec<ChordOrRest> {
                     {
                         // Merge if same chord symbol and the new chord starts near where the old one ends
                         let gap = start_ppq - prev_end;
-                        *prev_symbol == symbol && gap < 960 && gap >= 0
+                        *prev_symbol == symbol && (0..960).contains(&gap)
                     } else {
                         false
                     }
@@ -505,7 +505,7 @@ fn apply_groove_pattern_push(elements: Vec<ChordOrRest>) -> Vec<ChordOrRest> {
             } => {
                 // Check if this is F/C (or F) followed by Cm
                 let is_f_chord = symbol == "F/C" || symbol == "F" || symbol.starts_with("F/");
-                let next_is_cm = elements.get(i + 1).map_or(false, |next| {
+                let next_is_cm = elements.get(i + 1).is_some_and(|next| {
                     if let ChordOrRest::Chord {
                         symbol: next_sym, ..
                     } = next
@@ -752,19 +752,17 @@ fn build_measures(
                     // Add rest if there's a gap before this chord (beat-level or tick-level)
                     let gap_ticks = chord_start_clamped - current_tick;
                     let min_rest_ticks = ticks_per_beat / 4; // At least a sixteenth note gap
-                    if start_beat > current_beat
-                        || (start_beat == current_beat && gap_ticks >= min_rest_ticks)
+                    if (start_beat > current_beat
+                        || (start_beat == current_beat && gap_ticks >= min_rest_ticks))
+                        && gap_ticks >= min_rest_ticks
                     {
-                        if gap_ticks >= min_rest_ticks {
-                            let gap_beats =
-                                ((gap_ticks + ticks_per_beat - 1) / ticks_per_beat) as i32;
-                            let start_pos = current_tick - measure_start;
-                            measure_elements.push(MeasureElement::Rest {
-                                beats: gap_beats.max(1),
-                                ticks: gap_ticks,
-                                start_tick_in_measure: start_pos,
-                            });
-                        }
+                        let gap_beats = ((gap_ticks + ticks_per_beat - 1) / ticks_per_beat) as i32;
+                        let start_pos = current_tick - measure_start;
+                        measure_elements.push(MeasureElement::Rest {
+                            beats: gap_beats.max(1),
+                            ticks: gap_ticks,
+                            start_tick_in_measure: start_pos,
+                        });
                     }
 
                     measure_elements.push(MeasureElement::Chord {
@@ -908,7 +906,7 @@ fn build_measures(
             if let Some(MeasureElement::Chord { symbol, .. }) = measure_elements
                 .iter()
                 .filter(|e| matches!(e, MeasureElement::Chord { .. }))
-                .last()
+                .next_back()
             {
                 last_chord_symbol = Some(symbol.clone());
             }
@@ -1205,7 +1203,7 @@ fn format_measure(
                         let mut adjusted_beats = *beats;
 
                         // Check if next element is a pushed chord
-                        let next_is_pushed = elements.get(idx + 1).map_or(false, |next| {
+                        let next_is_pushed = elements.get(idx + 1).is_some_and(|next| {
                             matches!(
                                 next,
                                 MeasureElement::Chord {
@@ -1785,7 +1783,7 @@ fn generate_keyflow_chart_from_notes(midi: &MidiFile) -> String {
     // Process each section
     let section_lengths = calculate_section_lengths(&sections);
 
-    for (_i, (keyflow_type, start_measure, length)) in section_lengths.iter().enumerate() {
+    for (keyflow_type, start_measure, length) in section_lengths.iter() {
         // Calculate tick range for this section
         let section_start_tick = ((*start_measure as i64) - 1) * ticks_per_measure;
         let section_end_tick = section_start_tick + ((*length as i64) * ticks_per_measure);
@@ -2038,7 +2036,7 @@ fn test_push_pull_detection_hits_section() {
 #[test]
 fn test_hits_section_rhythm_with_rests() {
     use keyflow::engraver::import::{
-        format_measure_rhythm, generate_measure_rhythm, RhythmElement,
+        RhythmElement, format_measure_rhythm, generate_measure_rhythm,
     };
 
     let bytes = include_bytes!("fixtures/thriller_dirty_loops.mid");
@@ -2342,7 +2340,10 @@ fn test_generated_chart_parseable() {
             }
 
             // Verify basic structure
-            assert!(chart.sections.len() > 0, "Should have at least one section");
+            assert!(
+                !chart.sections.is_empty(),
+                "Should have at least one section"
+            );
         }
         Err(e) => {
             println!("\nParse error: {:?}", e);
@@ -2969,6 +2970,8 @@ fn test_interlude_outro_hits_sections() {
 
         let push_type =
             detect_section_push_type(&detected, section_start, section_end, ppq, songstart);
+        // WIP: short-push detection is force-enabled while the heuristic is tuned.
+        #[allow(clippy::overly_complex_bool_expr)]
         let use_short_push = push_type.is_some() || true;
 
         let elements = build_rhythm_elements(&detected, section_start, section_end, ppq, songstart);

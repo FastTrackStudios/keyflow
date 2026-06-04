@@ -32,7 +32,7 @@ pub struct SvgExportConfig {
     /// Whether to pretty-print the SVG with indentation
     pub pretty_print: bool,
     /// Background color (None for transparent)
-    pub background: Option<vello::peniko::Color>,
+    pub background: Option<peniko::Color>,
     /// Default stroke width
     pub default_stroke_width: f64,
     /// Embedded fonts: (font_family_name, font_data_bytes)
@@ -75,7 +75,7 @@ impl SvgExportConfig {
             embed_glyphs: false,
             precision: 2,
             pretty_print: false,
-            background: Some(vello::peniko::Color::WHITE),
+            background: Some(peniko::Color::WHITE),
             default_stroke_width: 0.5,
             embedded_fonts: Vec::new(),
         }
@@ -90,6 +90,31 @@ impl SvgExportConfig {
         self.embedded_fonts
             .push((font_family.to_string(), font_data));
         self
+    }
+
+    /// The `@font-face` rules for this config's embedded fonts, as standalone
+    /// CSS (no `<style>`/CDATA wrapper).
+    ///
+    /// Embedding the (multi-MB) font bytes in every exported SVG is wasteful
+    /// when many SVGs share the same fonts and live in one document — e.g. a
+    /// live editor re-engraving on each keystroke. Inject this CSS **once** at
+    /// page/document level and serialize the SVGs *without* embedded fonts:
+    /// inline `<svg>` text resolves these families by name from the document
+    /// stylesheet, so each render carries glyphs only, not megabytes of base64.
+    /// Identical bytes to [`Self::with_embedded_font`]'s per-SVG `@font-face`.
+    #[must_use]
+    pub fn font_face_css(&self) -> String {
+        use std::fmt::Write as _;
+        let mut css = String::new();
+        for (font_family, font_data) in &self.embedded_fonts {
+            let (format, mime) = detect_font_format(font_data);
+            let base64_data = base64_encode(font_data);
+            let _ = write!(
+                css,
+                "@font-face {{\n  font-family: '{font_family}';\n  src: url('data:{mime};base64,{base64_data}') format('{format}');\n  font-weight: normal;\n  font-style: normal;\n}}\n"
+            );
+        }
+        css
     }
 }
 
@@ -239,7 +264,7 @@ impl SvgSerializer {
     ///
     /// When a custom viewBox is set (e.g., for per-page export), the background
     /// is positioned at the viewBox origin so it fills the visible area.
-    fn write_background(&mut self, color: vello::peniko::Color) {
+    fn write_background(&mut self, color: peniko::Color) {
         self.write_indent();
         let width = self.format_coord(self.config.width);
         let height = self.format_coord(self.config.height);
@@ -567,7 +592,7 @@ impl SvgSerializer {
 }
 
 /// Convert a Color to SVG color string.
-fn color_to_svg(color: vello::peniko::Color) -> String {
+fn color_to_svg(color: peniko::Color) -> String {
     let rgba = color.to_rgba8();
     if rgba.a == 255 {
         format!("#{:02x}{:02x}{:02x}", rgba.r, rgba.g, rgba.b)
@@ -751,7 +776,7 @@ mod tests {
     use super::*;
     use crate::engraver::scene::id::ElementType;
     use kurbo::{Point, Rect};
-    use vello::peniko::Color;
+    use peniko::Color;
 
     #[test]
     fn test_empty_scene() {

@@ -226,11 +226,11 @@ fn merge_intervals(mut intervals: Vec<(f64, f64)>) -> Vec<(f64, f64)> {
         if end <= start {
             continue;
         }
-        if let Some(last) = merged.last_mut() {
-            if start <= last.1 {
-                last.1 = last.1.max(end);
-                continue;
-            }
+        if let Some(last) = merged.last_mut()
+            && start <= last.1
+        {
+            last.1 = last.1.max(end);
+            continue;
         }
         merged.push((start, end));
     }

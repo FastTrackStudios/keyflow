@@ -49,6 +49,14 @@ pub struct RootNotation {
     resolved_note: Option<MusicalNote>,
     /// The original format as written by the user
     original_format: RootFormat,
+    /// Applied / secondary-chord target (`V/V` = "five of five"). When set, this
+    /// root is resolved relative to `applied_target` treated as a temporary
+    /// (major) tonic, rather than against the song key, and it displays as
+    /// `numerator/target`. Only Roman-over-Roman roots set this; an ordinary
+    /// slash bass stays on the chord's `bass` field. Stored as a `RootFormat`
+    /// (not a boxed `RootNotation`) to keep the type non-recursive for `Facet`.
+    #[facet(default)]
+    applied_target: Option<RootFormat>,
 }
 
 impl RootNotation {
@@ -57,6 +65,7 @@ impl RootNotation {
         Self {
             resolved_note: None,
             original_format: RootFormat::Empty,
+            applied_target: None,
         }
     }
 
@@ -66,6 +75,7 @@ impl RootNotation {
         Self {
             resolved_note: None, // Needs key context to resolve
             original_format: RootFormat::ScaleDegree { degree, accidental },
+            applied_target: None,
         }
     }
 
@@ -91,6 +101,7 @@ impl RootNotation {
                 case,
                 accidental,
             },
+            applied_target: None,
         }
     }
 
@@ -99,6 +110,7 @@ impl RootNotation {
         Self {
             resolved_note: Some(note.clone()),
             original_format: RootFormat::NoteName(note.name()),
+            applied_target: None,
         }
     }
 
@@ -110,7 +122,7 @@ impl RootNotation {
 
     /// Create from a parsed Roman numeral token
     pub fn from_roman_token(token: RomanNumeralToken) -> Self {
-        Self::from_roman_numeral(token.degree, token.case)
+        Self::from_roman_numeral_with_accidental(token.degree, token.case, token.accidental)
     }
 
     /// Parse from a string (auto-detect format)
@@ -178,6 +190,41 @@ impl RootNotation {
         )
     }
 
+    /// Whether this root was written as a Roman numeral.
+    pub fn is_roman(&self) -> bool {
+        matches!(self.original_format, RootFormat::RomanNumeral { .. })
+    }
+
+    /// Mark this root as an applied / secondary chord whose `target` (another
+    /// Roman numeral) is tonicised — `V/V`. The target is resolved against the
+    /// song key, then this root is resolved against that target as a major
+    /// tonic. See [`RootNotation::resolve`].
+    #[must_use]
+    pub fn with_applied_target(mut self, target: RootNotation) -> Self {
+        self.applied_target = Some(target.original_format);
+        self
+    }
+
+    /// The applied-chord target's `RootFormat`, if this is a secondary chord.
+    pub fn applied_target(&self) -> Option<&RootFormat> {
+        self.applied_target.as_ref()
+    }
+
+    /// The plain diatonic scale-degree number (1-7) if this root is a bare
+    /// Nashville number with no accidental. Returns `None` for note names,
+    /// Roman numerals (their case already implies quality), chromatic degrees
+    /// like `b3`, or out-of-range numbers. Used to apply the key's implied
+    /// quality to bare number chords.
+    pub fn diatonic_scale_degree(&self) -> Option<u8> {
+        match &self.original_format {
+            RootFormat::ScaleDegree {
+                degree,
+                accidental: None,
+            } if (1..=7).contains(degree) => Some(*degree),
+            _ => None,
+        }
+    }
+
     /// Get the accidental modifier on a key-relative root, if any.
     /// Returns `None` for note names, `Empty`, or unmodified scale degrees / numerals.
     pub fn accidental(&self) -> Option<Accidental> {
@@ -218,6 +265,26 @@ impl RootNotation {
     /// * `Some(MusicalNote)` if resolved successfully
     /// * `None` if key context is required but not provided
     pub fn resolve(&self, key: Option<&crate::key::Key>) -> Option<MusicalNote> {
+        // Applied / secondary chord (`V/V`): resolve the target against the song
+        // key to get a temporary tonic, then resolve the numerator against that
+        // tonic (treated as major). `V/V` in C → target V = G → numerator V in G
+        // major = D.
+        if let Some(target_format) = &self.applied_target {
+            let target = RootNotation {
+                resolved_note: None,
+                original_format: target_format.clone(),
+                applied_target: None,
+            };
+            let tonic = target.resolve(key)?;
+            let applied_key = crate::key::Key::major(tonic);
+            let numerator = RootNotation {
+                resolved_note: None,
+                original_format: self.original_format.clone(),
+                applied_target: None,
+            };
+            return numerator.resolve(Some(&applied_key));
+        }
+
         // If already resolved, return it
         if let Some(ref note) = self.resolved_note {
             return Some(note.clone());
@@ -384,7 +451,17 @@ impl fmt::Display for RootNotation {
             RootFormat::NoteName(name) => name.clone(),
             RootFormat::Empty => String::new(), // Empty display for rests
         };
-        write!(f, "{}", display_str)
+        write!(f, "{}", display_str)?;
+        // Applied / secondary chord renders `numerator/target` (`V/V`).
+        if let Some(target_format) = &self.applied_target {
+            let target = RootNotation {
+                resolved_note: None,
+                original_format: target_format.clone(),
+                applied_target: None,
+            };
+            write!(f, "/{}", target)?;
+        }
+        Ok(())
     }
 }
 

@@ -27,7 +27,6 @@ use std::sync::Arc;
 
 use keyflow::engraver::layout::chart::{ChartLayoutConfig, ChartLayoutEngine, LayoutMode};
 use keyflow::engraver::style::MStyle;
-use keyflow::Chart;
 
 // =============================================================================
 // SMuFL Glyph Definitions
@@ -175,7 +174,7 @@ fn assert_glyph(
 ) {
     let actual = bp.glyph_codepoint;
     assert!(
-        actual.map_or(false, |c| expected.matches(c)),
+        actual.is_some_and(|c| expected.matches(c)),
         "{}: expected {} (U+{:04X}), got {:?}",
         context,
         expected.name(),
@@ -246,12 +245,12 @@ fn reaper_position_to_tick(measure: u32, beat: u32, fraction: u32, ticks_per_bea
 }
 
 /// Find beat position at a REAPER-style position.
-fn find_at_reaper_position<'a>(
-    positions: &'a [keyflow::engraver::layout::chart::BeatPosition],
+fn find_at_reaper_position(
+    positions: &[keyflow::engraver::layout::chart::BeatPosition],
     measure: u32,
     beat: u32,
     fraction: u32,
-) -> Option<&'a keyflow::engraver::layout::chart::BeatPosition> {
+) -> Option<&keyflow::engraver::layout::chart::BeatPosition> {
     let target_tick = reaper_position_to_tick(measure, beat, fraction, 480);
     positions.iter().find(|bp| bp.contains_tick(target_tick))
 }
@@ -626,7 +625,7 @@ r1 | r2 r4 r8 r16 r32 r32
         .iter()
         .filter(|bp| bp.measure == 1) // Measure 2 is index 1
         .filter(|bp| bp.duration_ticks == 60) // 32nd note = 60 ticks
-        .last();
+        .next_back();
 
     assert!(last_32nd.is_some(), "Should find the last 32nd rest");
     let bp = last_32nd.unwrap();

@@ -41,6 +41,10 @@ pub enum TokenType {
     // Comment marker
     Semicolon, // ; (for comments)
 
+    // Optional readability separator between a chord's root and its quality:
+    // `1:7`, `4:maj9`.
+    Colon, // :
+
     // Repeat marker
     GreaterThan, // > (for accent shorthand ->)
 
@@ -75,6 +79,7 @@ impl Display for TokenType {
             TokenType::Comma => write!(f, ","),
             TokenType::At => write!(f, "@"),
             TokenType::Semicolon => write!(f, ";"),
+            TokenType::Colon => write!(f, ":"),
             TokenType::GreaterThan => write!(f, ">"),
             TokenType::Space => write!(f, " "),
             TokenType::Illegal => write!(f, "ILLEGAL"),

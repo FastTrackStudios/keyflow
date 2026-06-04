@@ -23,11 +23,11 @@
 //! integrate with system/measure layout, not with per-segment paint.
 
 use kurbo::{Affine, Point, Rect};
-use vello::peniko::Color;
+use peniko::Color;
 
 use crate::chart::notations::{
-    Dynamic, DynamicLevel, FiguredBass, FiguredBassRow, Hairpin, HairpinKind, Placement, StaffText,
-    Volta,
+    Dynamic, DynamicLevel, FiguredBass, Hairpin, HairpinKind, Placement, StaffText,
+    SuspensionFigure, Volta,
 };
 use crate::engraver::layout::shape::{Shape, ShapeElement};
 use crate::engraver::scene::id::{ElementType, SemanticId};
@@ -78,18 +78,18 @@ impl<'a> MeasureFrame<'a> {
     /// X position of a 1-based beat. Uses real chord-segment positions when
     /// available, otherwise falls back to an even grid.
     fn beat_x(&self, beat: u8) -> f64 {
-        if beat <= 1 {
-            if let Some(x) = self.system_start_dynamic_x {
-                return x;
-            }
+        if beat <= 1
+            && let Some(x) = self.system_start_dynamic_x
+        {
+            return x;
         }
 
         let beat_idx = beat.saturating_sub(1) as usize;
-        if let Some(segments) = self.segment_positions {
-            if !segments.is_empty() {
-                let idx = beat_idx.min(segments.len() - 1);
-                return self.measure_x + segments[idx] * self.spatium;
-            }
+        if let Some(segments) = self.segment_positions
+            && !segments.is_empty()
+        {
+            let idx = beat_idx.min(segments.len() - 1);
+            return self.measure_x + segments[idx] * self.spatium;
         }
         let beats = self.beats_per_measure.max(1) as f64;
         let beat_clamped = (beat.max(1) as f64 - 1.0).min(beats - 1.0);
@@ -340,6 +340,88 @@ pub fn render_figured_bass(
             paints,
         );
         node.set_element_type("figured_bass");
+        *id_counter += 1;
+        nodes.push(node);
+    }
+
+    nodes
+}
+
+/// Render suspension figures (`4-3`, `2-3`, `3`) in the plain text font
+/// (`FreeSans` — the chord font Leland Text has no digit glyphs).
+///
+/// Two layouts depending on `SuspensionFigure::standalone`:
+/// - attached (`Eb2`, `F4-3`): a superscript at 80% of the chord root size,
+///   hugging the upper-right of its chord symbol (matched via `chord_bounds`),
+///   so it reads as `Eb²` / `F⁴⁻³`.
+/// - standalone (`Bb // 4-3`, `F 4-3 ///`): its own chord-row symbol at full
+///   chord size, placed at the figure's beat column — the held chord sounds
+///   underneath without printing its name.
+///
+/// One scene node per figure, matching the order of `items` so callers can zip.
+pub fn render_suspensions(
+    items: &[SuspensionFigure],
+    frame: &MeasureFrame<'_>,
+    chord_root_size: f64,
+    chord_bounds: &[Rect],
+    id_counter: &mut u64,
+) -> Vec<SceneNode> {
+    let mut nodes = Vec::with_capacity(items.len());
+    let gap = frame.spatium * 0.25;
+    let below_y = frame.staff_bottom() + frame.spatium * 4.2;
+
+    for item in items {
+        let beat_x = frame.beat_x(item.beat);
+        let (font_size, x, baseline) = if item.standalone {
+            // Own chord-row symbol at the beat column, full chord size. Use a
+            // measure-local grid fraction rather than beat_x(): in slash-filled
+            // measures the segment table can place a late beat far outside the
+            // bar, but a figure over "beat 3" just wants 3/N across the measure.
+            let beats = f64::from(frame.beats_per_measure.max(1));
+            let frac = ((f64::from(item.beat.max(1)) - 1.0) / beats).clamp(0.0, 1.0);
+            let gx = frame.measure_x + frame.spatium * 0.5 + frac * frame.measure_width;
+            let y = match item.placement {
+                Placement::Above => frame.chord_y,
+                Placement::Below => below_y,
+            };
+            (chord_root_size * 0.78, gx, y)
+        } else {
+            // Attached superscript hugging the chord whose left edge sits
+            // closest to the figure's beat.
+            let size = chord_root_size * 0.66;
+            let chord = chord_bounds.iter().min_by(|a, b| {
+                (a.x0 - beat_x)
+                    .abs()
+                    .partial_cmp(&(b.x0 - beat_x).abs())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            match (chord, item.placement) {
+                (Some(b), Placement::Above) => (size, b.x1 + gap, b.y0 + size),
+                (Some(b), Placement::Below) => (size, b.x1 + gap, below_y),
+                (None, Placement::Above) => (size, beat_x, frame.chord_y - size * 0.36),
+                (None, Placement::Below) => (size, beat_x, below_y),
+            }
+        };
+        let paints = vec![PaintCommand::text(
+            &item.figure,
+            "FreeSans",
+            font_size,
+            Point::new(x, baseline),
+            Color::BLACK,
+        )];
+        // Oblique the figure by shearing geometrically rather than relying on
+        // `font-style: italic` — FreeSans has no italic face, so resvg (PNG)
+        // synthesizes a slant but svg2pdf (PDF) leaves it upright, making the
+        // two exports disagree. A baseline-anchored x-shear slants identically
+        // in both. shear ≈ tan(11°).
+        let shear = 0.2_f64;
+        let skew = Affine::new([1.0, 0.0, -shear, 1.0, shear * baseline, 0.0]);
+        let mut node = SceneNode::leaf(
+            SemanticId::new(ElementType::Articulation, *id_counter),
+            paints,
+        )
+        .with_transform(skew);
+        node.set_element_type("suspension");
         *id_counter += 1;
         nodes.push(node);
     }
@@ -928,6 +1010,7 @@ pub fn autoplace_text_node(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::chart::notations::FiguredBassRow;
 
     #[test]
     fn classical_dynamics_render_red() {

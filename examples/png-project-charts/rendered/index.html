@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Keyflow chart gallery</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 14px/1.5 -apple-system, system-ui, "Segoe UI", sans-serif;
+         margin: 0; padding: 24px; max-width: 1400px; margin: 0 auto;
+         background: #fafafa; color: #222; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #1a1a1a; color: #ddd; }
+    figure { background: #2a2a2a; }
+    .src { color: #888; }
+  }
+  h1 { margin: 0 0 4px; font-size: 28px; }
+  h2 { margin: 32px 0 4px; font-size: 20px; }
+  .hint { color: #777; margin: 0 0 32px; }
+  .src { color: #888; font-size: 12px; margin: 0 0 12px; }
+  .chart { margin-bottom: 48px; padding-bottom: 24px; border-bottom: 1px solid #ddd; }
+  @media (prefers-color-scheme: dark) { .chart { border-bottom-color: #333; } }
+  .variants { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+              gap: 16px; }
+  figure { margin: 0; background: white; border-radius: 8px; padding: 12px;
+           box-shadow: 0 1px 3px rgba(0,0,0,.1); display: flex; flex-direction: column;
+           align-items: center; }
+  figcaption { font-size: 12px; font-weight: 600; text-transform: uppercase;
+               letter-spacing: 0.05em; color: #666; margin-bottom: 8px; }
+  figure img { max-width: 100%; height: auto; border: 1px solid #eee; }
+  @media (prefers-color-scheme: dark) {
+    figure { background: #2a2a2a; }
+    figure img { border-color: #444; }
+    figcaption { color: #aaa; }
+  }
+  .failed .err { color: #c33; font-size: 12px; padding: 24px; text-align: center; }
+  code { background: rgba(127,127,127,.15); padding: 2px 6px; border-radius: 3px; font-size: 12px; }
+</style>
+</head><body>
+<h1>MusicXML import gallery</h1>
+<p class="hint">Regenerate with <code>cargo run -p keyflow-cli -- musicxml-gallery</code>.</p>
+<section class="chart">
+  <h2>All That I Am</h2>
+  <p class="src">Source: <code>examples/png-project-charts/01 ALL THAT I AM Master RS VS2 in C.musicxml</code></p>
+  <div class="variants">
+    <figure class="variant variant-page"><figcaption>page</figcaption><img src="01 ALL THAT I AM Master RS VS2 in C/page.p1.png" alt="All That I Am page" loading="lazy" /></figure>
+    <figure class="variant variant-page"><figcaption>page</figcaption><img src="01 ALL THAT I AM Master RS VS2 in C/page.p2.png" alt="All That I Am page" loading="lazy" /></figure>
+  </div>
+</section>
+<section class="chart">
+  <h2>All That I Am</h2>
+  <p class="src">Source: <code>examples/png-project-charts/01 ALL THAT I AM Master RS VS2 in G.musicxml</code></p>
+  <div class="variants">
+    <figure class="variant variant-page"><figcaption>page</figcaption><img src="01 ALL THAT I AM Master RS VS2 in G/page.p1.png" alt="All That I Am page" loading="lazy" /></figure>
+    <figure class="variant variant-page"><figcaption>page</figcaption><img src="01 ALL THAT I AM Master RS VS2 in G/page.p2.png" alt="All That I Am page" loading="lazy" /></figure>
+  </div>
+</section>
+<section class="chart">
+  <h2>Lord of the Fight</h2>
+  <p class="src">Source: <code>examples/png-project-charts/02 LORD OF THE FIGHT Master RS.musicxml</code></p>
+  <div class="variants">
+    <figure class="variant variant-page"><figcaption>page</figcaption><img src="02 LORD OF THE FIGHT Master RS/page.p1.png" alt="Lord of the Fight page" loading="lazy" /></figure>
+    <figure class="variant variant-page"><figcaption>page</figcaption><img src="02 LORD OF THE FIGHT Master RS/page.p2.png" alt="Lord of the Fight page" loading="lazy" /></figure>
+    <figure class="variant variant-page"><figcaption>page</figcaption><img src="02 LORD OF THE FIGHT Master RS/page.p3.png" alt="Lord of the Fight page" loading="lazy" /></figure>
+  </div>
+</section>
+<section class="chart">
+  <h2>Presence</h2>
+  <p class="src">Source: <code>examples/png-project-charts/04 PRESENCE Master RS.musicxml</code></p>
+  <div class="variants">
+    <figure class="variant variant-page"><figcaption>page</figcaption><img src="04 PRESENCE Master RS/page.p1.png" alt="Presence page" loading="lazy" /></figure>
+    <figure class="variant variant-page"><figcaption>page</figcaption><img src="04 PRESENCE Master RS/page.p2.png" alt="Presence page" loading="lazy" /></figure>
+  </div>
+</section>
+<section class="chart">
+  <h2>I Know a Name</h2>
+  <p class="src">Source: <code>examples/png-project-charts/07 I KNOW A NAME Master RS*.musicxml</code></p>
+  <div class="variants">
+    <figure class="variant variant-page"><figcaption>page</figcaption><img src="07 I KNOW A NAME Master RS*/page.p1.png" alt="I Know a Name page" loading="lazy" /></figure>
+    <figure class="variant variant-page"><figcaption>page</figcaption><img src="07 I KNOW A NAME Master RS*/page.p2.png" alt="I Know a Name page" loading="lazy" /></figure>
+    <figure class="variant variant-page"><figcaption>page</figcaption><img src="07 I KNOW A NAME Master RS*/page.p3.png" alt="I Know a Name page" loading="lazy" /></figure>
+  </div>
+</section>
+<section class="chart">
+  <h2>Hannah's Song</h2>
+  <p class="src">Source: <code>examples/png-project-charts/09 HANNAH'S SONG Master RS.musicxml</code></p>
+  <div class="variants">
+    <figure class="variant variant-page"><figcaption>page</figcaption><img src="09 HANNAH'S SONG Master RS/page.p1.png" alt="Hannah's Song page" loading="lazy" /></figure>
+    <figure class="variant variant-page"><figcaption>page</figcaption><img src="09 HANNAH'S SONG Master RS/page.p2.png" alt="Hannah's Song page" loading="lazy" /></figure>
+    <figure class="variant variant-page"><figcaption>page</figcaption><img src="09 HANNAH'S SONG Master RS/page.p3.png" alt="Hannah's Song page" loading="lazy" /></figure>
+  </div>
+</section>
+<section class="chart">
+  <h2>Reason Why</h2>
+  <p class="src">Source: <code>examples/png-project-charts/10 REASON WHY Master RS.musicxml</code></p>
+  <div class="variants">
+    <figure class="variant variant-page"><figcaption>page</figcaption><img src="10 REASON WHY Master RS/page.p1.png" alt="Reason Why page" loading="lazy" /></figure>
+    <figure class="variant variant-page"><figcaption>page</figcaption><img src="10 REASON WHY Master RS/page.p2.png" alt="Reason Why page" loading="lazy" /></figure>
+  </div>
+</section>
+</body></html>

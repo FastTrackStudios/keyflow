@@ -6,7 +6,9 @@
 use std::sync::Arc;
 
 use anyrender::{Glyph, PaintScene};
+use kurbo::Stroke;
 use kurbo::{Affine, BezPath, Circle, Ellipse, Line, Point, Rect, RoundedRect};
+use peniko::{Blob, Color, Fill, FontData};
 use skrifa::{
     MetadataProvider,
     instance::Size,
@@ -14,8 +16,6 @@ use skrifa::{
     prelude::LocationRef,
     raw::{FileRef, FontRef},
 };
-use vello::kurbo::Stroke;
-use vello::peniko::{Blob, Color, Fill, FontData};
 
 use crate::engraver::fonts::SMuFLFont;
 use crate::engraver::scene::node::SceneNode;
@@ -717,20 +717,20 @@ impl<'a> Default for VelloSceneRenderer<'a> {
 }
 
 /// Convert our LineCap to Vello's Cap.
-fn convert_line_cap(cap: LineCap) -> vello::kurbo::Cap {
+fn convert_line_cap(cap: LineCap) -> kurbo::Cap {
     match cap {
-        LineCap::Butt => vello::kurbo::Cap::Butt,
-        LineCap::Round => vello::kurbo::Cap::Round,
-        LineCap::Square => vello::kurbo::Cap::Square,
+        LineCap::Butt => kurbo::Cap::Butt,
+        LineCap::Round => kurbo::Cap::Round,
+        LineCap::Square => kurbo::Cap::Square,
     }
 }
 
 /// Convert our LineJoin to Vello's Join.
-fn convert_line_join(join: LineJoin) -> vello::kurbo::Join {
+fn convert_line_join(join: LineJoin) -> kurbo::Join {
     match join {
-        LineJoin::Miter => vello::kurbo::Join::Miter,
-        LineJoin::Round => vello::kurbo::Join::Round,
-        LineJoin::Bevel => vello::kurbo::Join::Bevel,
+        LineJoin::Miter => kurbo::Join::Miter,
+        LineJoin::Round => kurbo::Join::Round,
+        LineJoin::Bevel => kurbo::Join::Bevel,
     }
 }
 
@@ -922,17 +922,14 @@ mod tests {
 
     #[test]
     fn test_line_cap_conversion() {
-        assert!(matches!(
-            convert_line_cap(LineCap::Butt),
-            vello::kurbo::Cap::Butt
-        ));
+        assert!(matches!(convert_line_cap(LineCap::Butt), kurbo::Cap::Butt));
         assert!(matches!(
             convert_line_cap(LineCap::Round),
-            vello::kurbo::Cap::Round
+            kurbo::Cap::Round
         ));
         assert!(matches!(
             convert_line_cap(LineCap::Square),
-            vello::kurbo::Cap::Square
+            kurbo::Cap::Square
         ));
     }
 
@@ -940,15 +937,15 @@ mod tests {
     fn test_line_join_conversion() {
         assert!(matches!(
             convert_line_join(LineJoin::Miter),
-            vello::kurbo::Join::Miter
+            kurbo::Join::Miter
         ));
         assert!(matches!(
             convert_line_join(LineJoin::Round),
-            vello::kurbo::Join::Round
+            kurbo::Join::Round
         ));
         assert!(matches!(
             convert_line_join(LineJoin::Bevel),
-            vello::kurbo::Join::Bevel
+            kurbo::Join::Bevel
         ));
     }
 

@@ -31,6 +31,18 @@ pub fn chord_to_harmony_params(
     harmony_style: &HarmonyStyle,
 ) -> HarmonyParams {
     let mut params = parse_chord(&chord.full_symbol);
+    // A floating slash-bass keeps its inherited harmony in `full_symbol`
+    // (e.g. Bb/D) but should print verbatim (`/D`). Render the override text
+    // as a single baseline segment with no quality/extension/bass.
+    if let Some(text) = &chord.display_override {
+        params.root = text.clone();
+        params.root_accidental = String::new();
+        params.quality = String::new();
+        params.extension = String::new();
+        params.alterations = Vec::new();
+        params.bass = None;
+        params.bass_accidental = String::new();
+    }
     params.style = harmony_style.clone();
     if chord.parsed.bass_vertical {
         params.bass_arrangement = BassArrangement::Vertical;

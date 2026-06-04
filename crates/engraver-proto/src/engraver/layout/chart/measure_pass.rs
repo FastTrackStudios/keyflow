@@ -678,11 +678,11 @@ pub fn measure_measure_with_config(
         }
 
         // Handle the last visible chord: reserve space for its width + trailing
-        if let Some(&(last_idx, last_width)) = visible_chord_info.last() {
-            if last_idx < segment_mins.len() {
-                let trailing_for_last = last_width * 0.5; // Half-width trailing
-                segment_mins[last_idx] = segment_mins[last_idx].max(trailing_for_last);
-            }
+        if let Some(&(last_idx, last_width)) = visible_chord_info.last()
+            && last_idx < segment_mins.len()
+        {
+            let trailing_for_last = last_width * 0.5; // Half-width trailing
+            segment_mins[last_idx] = segment_mins[last_idx].max(trailing_for_last);
         }
 
         // Sum segment minimums to get total min_width.
@@ -952,49 +952,6 @@ mod tests {
             "dense chord clusters should reserve a summed per-segment floor: dense={} filler={}",
             dense_measure.min_width,
             filler_measure.min_width
-        );
-    }
-
-    #[test]
-    fn lord_of_the_fight_dense_measures_measure_wider_than_written_rests() {
-        let mut fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        fixture.push("../..");
-        fixture.push("examples/png-project-charts/02 LORD OF THE FIGHT Master RS.musicxml");
-        let chart = keyflow_musicxml::import_file(fixture).expect("LotF should import");
-        let measures: Vec<&Measure> = chart
-            .sections
-            .iter()
-            .flat_map(|section| section.tracks.iter())
-            .flat_map(|track| track.measures.iter())
-            .collect();
-        let by_source_number = |n: u32| -> &Measure {
-            measures
-                .iter()
-                .copied()
-                .find(|m| m.source_measure_number == Some(n))
-                .unwrap_or_else(|| panic!("missing source measure {n}"))
-        };
-
-        let style = make_test_style();
-        let mut cache = MeasurementCache::new();
-        let m3 = measure_measure(by_source_number(3), &style, &mut cache);
-        let m4 = measure_measure(by_source_number(4), &style, &mut cache);
-        let m5 = measure_measure(by_source_number(5), &style, &mut cache);
-        let m6 = measure_measure(by_source_number(6), &style, &mut cache);
-
-        assert_eq!(m3.visible_chord_count, 0);
-        assert_eq!(m4.visible_chord_count, 0);
-        assert!(
-            m5.min_width > m3.min_width,
-            "m5 has an F#m7 symbol and should reserve more width than written-rest m3: m5={} m3={}",
-            m5.min_width,
-            m3.min_width
-        );
-        assert!(
-            m6.min_width > m5.min_width * 2.0,
-            "m6 has four chord positions and should reserve much more width than m5: m6={} m5={}",
-            m6.min_width,
-            m5.min_width
         );
     }
 

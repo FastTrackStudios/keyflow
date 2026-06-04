@@ -278,14 +278,14 @@ fn parse_musicxml_harmonies(xml: &str) -> Vec<ExpectedHarmony> {
                     cursor = cursor.saturating_sub(duration_ticks(child, divisions));
                 }
                 "harmony" => {
-                    if let Some(symbol) = harmony_symbol(child) {
-                        if let Ok(chord) = keyflow_text::api::parse::chord(&symbol) {
-                            harmonies.push(MeasureHarmony {
-                                offset: cursor,
-                                symbol,
-                                chord,
-                            });
-                        }
+                    if let Some(symbol) = harmony_symbol(child)
+                        && let Ok(chord) = keyflow_text::api::parse::chord(&symbol)
+                    {
+                        harmonies.push(MeasureHarmony {
+                            offset: cursor,
+                            symbol,
+                            chord,
+                        });
                     }
                 }
                 "barline" => {
@@ -435,13 +435,13 @@ fn harmony_symbol(node: roxmltree::Node<'_, '_>) -> Option<String> {
         }
     );
 
-    if let Some(bass) = bass {
-        if let Some(step) = child_text(bass, "bass-step") {
-            let alter = child_text(bass, "bass-alter").and_then(alter_suffix);
-            symbol.push('/');
-            symbol.push_str(step.trim());
-            symbol.push_str(alter.unwrap_or_default());
-        }
+    if let Some(bass) = bass
+        && let Some(step) = child_text(bass, "bass-step")
+    {
+        let alter = child_text(bass, "bass-alter").and_then(alter_suffix);
+        symbol.push('/');
+        symbol.push_str(step.trim());
+        symbol.push_str(alter.unwrap_or_default());
     }
 
     Some(normalize_chord_name(&symbol))

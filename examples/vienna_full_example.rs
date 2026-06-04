@@ -217,6 +217,7 @@ fn create_mock_chord(
         push_pull: None,
         commands: vec![],
         source_span: None,
+        display_override: None,
     }
 }
 

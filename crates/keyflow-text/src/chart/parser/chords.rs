@@ -3,27 +3,26 @@
 //! Handles parsing of chord lines, individual chord tokens, and related
 //! functionality including duration calculation, slash chords, and push/pull notation.
 
-use super::helpers::{PushPullModifier, RepeatCount};
 use super::ChartParser;
+use super::helpers::{PushPullModifier, RepeatCount};
 use crate::chart::cues::TextCue;
 use crate::chart::dynamics::DynamicMarking;
 use crate::chart::melody::{Melody, MelodyNote};
 use crate::chart::types::{
     ChordInstance, KeyChange, Measure, RestInstance, RhythmElement, SpaceInstance,
 };
-use crate::chord::{ChordRhythm, LilySyntax};
+use crate::chord::{ChordQuality, ChordRhythm, LilySyntax, NotationSystem};
 use crate::key::Key;
 use crate::parsing::{Lexer, TextSpan};
-use crate::primitives::RootNotation;
+use crate::primitives::{Accidental, RootNotation};
 use crate::sections::SectionType;
 use crate::time::{
     AbsolutePosition, MusicalDuration, MusicalPosition, MusicalPositionExt, TimeSignature,
     TimeSignatureExt,
 };
-use keyflow_proto::chart::commands::Command;
 use keyflow_proto::chart::{
     Dynamic, DynamicLevel, FiguredBass, FiguredBassRow, Hairpin, HairpinKind, Placement,
-    RepeatMark, StaffText, Volta,
+    RepeatMark, StaffText, SuspensionFigure, Volta,
 };
 
 // region:    --- Token Helpers
@@ -84,11 +83,7 @@ impl<'a> ChartParser<'a> {
         }
         out.push_str(&line[cursor..]);
 
-        if changed {
-            out
-        } else {
-            line.to_string()
-        }
+        if changed { out } else { line.to_string() }
     }
 
     fn expand_alias_token(&self, token: &str) -> Option<String> {
@@ -188,8 +183,16 @@ impl<'a> ChartParser<'a> {
             .split_once("..")
             .or_else(|| span.split_once('-'))
             .unwrap_or(("1", "1"));
-        let start_beat = start.trim_start_matches('@').parse::<u8>().ok().unwrap_or(1);
-        let end_beat = end.trim_start_matches('@').parse::<u8>().ok().unwrap_or(start_beat);
+        let start_beat = start
+            .trim_start_matches('@')
+            .parse::<u8>()
+            .ok()
+            .unwrap_or(1);
+        let end_beat = end
+            .trim_start_matches('@')
+            .parse::<u8>()
+            .ok()
+            .unwrap_or(start_beat);
         let placement = parts
             .next()
             .and_then(Self::parse_placement)
@@ -228,6 +231,130 @@ impl<'a> ChartParser<'a> {
         }
     }
 
+    /// A floating slash-bass token like `/D`, `/Bb`, `/F#` — a leading slash
+    /// followed by a bare note name (optional accidental) and nothing else.
+    /// These inherit the previous chord's root (`Bb` → `Bb/D`) but display
+    /// verbatim. Returns the bass-note text (without the slash).
+    ///
+    /// Deliberately rejects rhythm slashes (`//`, `/.`), durations (`/4`),
+    /// commands (`/fermata`), and slash-family notation (`/maj7`).
+    fn parse_floating_slash_bass(token: &str) -> Option<&str> {
+        let bass = token.strip_prefix('/')?;
+        if bass.is_empty() || bass.contains('/') {
+            return None;
+        }
+        let mut chars = bass.chars();
+        let first = chars.next()?;
+        if !matches!(first, 'A'..='G' | 'a'..='g') {
+            return None;
+        }
+        // Remaining chars (if any) must be a single accidental.
+        match chars.as_str() {
+            "" | "#" | "b" | "n" | "\u{266d}" | "\u{266f}" | "\u{266e}" => Some(bass),
+            _ => None,
+        }
+    }
+
+    /// A floating suspension figure token. Only the hyphenated form (`4-3`,
+    /// `2-3`) is recognized when standalone: a lone digit like `2`, `3`, or
+    /// `4` is a valid scale-degree chord in keyflow, so accepting it here would
+    /// swallow real chords. Single-digit figures must be written attached to a
+    /// note-name root (`Eb2`, `F3`), which [`extract_suspension_suffix`]
+    /// handles unambiguously. Returns the figure verbatim.
+    fn parse_bare_suspension_figure(token: &str) -> Option<String> {
+        let (a, b) = token.split_once('-')?;
+        (!a.is_empty()
+            && !b.is_empty()
+            && a.chars().all(|c| c.is_ascii_digit())
+            && b.chars().all(|c| c.is_ascii_digit()))
+        .then(|| token.to_string())
+    }
+
+    /// Split a trailing suspension figure off an attached chord token, e.g.
+    /// `F4-3` → (`F`, `4-3`), `Eb2` → (`Eb`, `2`), `F3` → (`F`, `3`),
+    /// `E3-4-3` → (`E`, `3-4-3`).
+    ///
+    /// Only fires when the chord part is a bare note root (letter + optional
+    /// accidental) and the suffix is a figure: a hyphenated digit run (`d-d`,
+    /// `d-d-d`, …, always a figure) or a lone `2`/`3`/`4` (the suspension
+    /// degrees — so `Csus4`, `C6`, `Cm7`, `Gm7b5` stay intact).
+    fn extract_suspension_suffix(token: &str) -> (String, Option<String>) {
+        // Slash chords and quoted suffixes are handled elsewhere.
+        if token.contains('/') || token.contains('"') {
+            return (token.to_string(), None);
+        }
+        // Length of the leading bare note root (letter + optional accidental).
+        let root_len = Self::bare_note_root_len(token);
+        if root_len == 0 {
+            return (token.to_string(), None);
+        }
+        let (root, suffix) = token.split_at(root_len);
+        let is_figure = if suffix.contains('-') {
+            // Hyphenated digit run: every dash-separated part is digits.
+            suffix
+                .split('-')
+                .all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_digit()))
+        } else {
+            // Lone suspension degree.
+            matches!(suffix, "2" | "3" | "4")
+        };
+        if is_figure {
+            (root.to_string(), Some(suffix.to_string()))
+        } else {
+            (token.to_string(), None)
+        }
+    }
+
+    /// Byte length of a leading bare note root: a letter `A`–`G` (either case)
+    /// plus an optional single accidental. Returns 0 if the token doesn't
+    /// start with a note name.
+    fn bare_note_root_len(s: &str) -> usize {
+        let mut chars = s.char_indices();
+        match chars.next() {
+            Some((_, 'A'..='G' | 'a'..='g')) => {}
+            _ => return 0,
+        }
+        match chars.next() {
+            Some((i, c @ ('#' | 'b' | 'n' | '\u{266d}' | '\u{266f}' | '\u{266e}'))) => {
+                i + c.len_utf8() // root = note letter + this accidental
+            }
+            Some((i, _)) => i, // root is just the note letter
+            None => s.len(),   // single-char token, all root
+        }
+    }
+
+    /// Root portion of the most recent chord (current measure first, then the
+    /// last completed measure). A floating slash-bass inherits this — existing
+    /// bass is dropped so `F/Eb` then `/D` yields `F/D`.
+    fn previous_chord_root(current: &Measure, measures: &[Measure]) -> Option<String> {
+        let prev = current
+            .chords
+            .last()
+            .or_else(|| measures.iter().rev().find_map(|m| m.chords.last()))?;
+        let base = prev
+            .full_symbol
+            .split('/')
+            .next()
+            .unwrap_or(&prev.full_symbol);
+        (!base.is_empty()).then(|| base.to_string())
+    }
+
+    fn push_suspension_at_current_beat(
+        measure: &mut Measure,
+        figure: &str,
+        placement: Placement,
+        current_measure_beats: f64,
+        standalone: bool,
+    ) {
+        let beat = current_measure_beats.floor().max(0.0) as u8 + 1;
+        measure.suspensions.push(SuspensionFigure {
+            figure: figure.to_string(),
+            beat,
+            placement,
+            standalone,
+        });
+    }
+
     fn extract_figured_bass_suffix(token: &str) -> (String, Option<Vec<FiguredBassRow>>) {
         if let Some((chord_token, quoted)) = split_chord_attached_quote(token) {
             let text = unescape_quoted(quoted);
@@ -237,6 +364,76 @@ impl<'a> ChartParser<'a> {
         }
 
         (token.to_string(), None)
+    }
+
+    /// Recognise a `^`-marked **inversion** figure on a chord (`V^6`, `V^65`,
+    /// `V^43`, …) and return how to realise it as a real inverted chord:
+    /// `(chord_token, display, append_seventh, bass_thirds)`.
+    ///
+    /// - `chord_token` is what to actually parse (the root, plus `7` for the
+    ///   seventh-chord figures), with any trailing `_dur` kept.
+    /// - `display` is the original `root^figure` to show in the chart.
+    /// - `bass_thirds` is how many thirds above the root the bass tone sits
+    ///   (1 = 3rd, 2 = 5th, 3 = 7th), used to set the slash bass.
+    ///
+    /// Suspension figures (`4-3`) and anything unrecognised return `None` and
+    /// fall through to [`extract_caret_figure`] (a plain figured-bass figure).
+    fn extract_caret_inversion(token: &str) -> Option<(String, String, bool, u8)> {
+        let caret = token.find('^')?;
+        let after = &token[caret + 1..];
+        let fig_len = after
+            .find(|c: char| !c.is_ascii_digit())
+            .unwrap_or(after.len());
+        let figure = &after[..fig_len];
+        let (append_seventh, bass_thirds) = match figure {
+            "6" => (false, 1),
+            "64" => (false, 2),
+            "65" => (true, 1),
+            "43" => (true, 2),
+            "42" | "2" => (true, 3),
+            _ => return None,
+        };
+        let root_part = &token[..caret];
+        let trailing = &after[fig_len..]; // e.g. a `_4` duration
+        // The figure states the chord exactly, so it must ignore chord memory:
+        // append `7` for the seventh figures (explicit family), and prefix `!`
+        // on the triad figures so a remembered seventh can't sneak in
+        // (`V^65 V^6` → the `V^6` stays a triad).
+        let chord_token = if append_seventh {
+            format!("{root_part}7{trailing}")
+        } else {
+            format!("!{root_part}{trailing}")
+        };
+        let display = format!("{root_part}^{figure}");
+        Some((chord_token, display, append_seventh, bass_thirds))
+    }
+
+    /// Pull an inline `^`-marked figured-bass / inversion figure off a chord
+    /// token: `V^65`, `V^6`, `V^43`, `V^4-3`. The `^` keeps these distinct from
+    /// a plain chord (`V6` is still an added-6th chord) and from the quoted
+    /// `"4-3"` form. Returns the chord token (with the figure removed, any
+    /// trailing duration preserved) and the parsed figured-bass rows. A `^` that
+    /// introduces above-staff text (`^"…"`, its own token) or a non-figure is
+    /// left untouched.
+    fn extract_caret_figure(token: &str) -> (String, Option<Vec<FiguredBassRow>>) {
+        let Some(caret) = token.find('^') else {
+            return (token.to_string(), None);
+        };
+        let after = &token[caret + 1..];
+        if after.starts_with('"') {
+            return (token.to_string(), None); // ^"text" is above-staff text
+        }
+        // The figure runs over figured-bass characters; anything past it (e.g. a
+        // `_4` duration) stays on the chord token.
+        let fig_len = after
+            .find(|c: char| !(c.is_ascii_digit() || matches!(c, '-' | '#' | 'b' | 'n')))
+            .unwrap_or(after.len());
+        let figure = &after[..fig_len];
+        let Some(rows) = Self::parse_figured_bass_text(figure) else {
+            return (token.to_string(), None);
+        };
+        let chord_token = format!("{}{}", &token[..caret], &after[fig_len..]);
+        (chord_token, Some(rows))
     }
 
     fn parse_figured_bass_rows(input: &str) -> Vec<FiguredBassRow> {
@@ -429,27 +626,14 @@ impl<'a> ChartParser<'a> {
             return token.to_string();
         }
 
-        // Check if this is a Roman numeral (starts with I, V, i, or v)
-        // Roman numerals should preserve their case
+        // A token starting with I/V/i/v is a Roman numeral — those letters are
+        // never note names, so preserve case (lowercase = minor) regardless of
+        // what follows. This keeps `v7`, `i:m7`, `viidim`, `IVmaj7` correct;
+        // the old check only preserved case when the *second* char was also a
+        // Roman letter, so single-numeral chords like `v7` lost their case.
         let first_char = token.chars().next().unwrap();
-        if first_char == 'I' || first_char == 'V' || first_char == 'i' || first_char == 'v' {
-            // Check if the second character is also a Roman numeral character
-            if let Some(second_char) = token.chars().nth(1) {
-                if second_char == 'I'
-                    || second_char == 'V'
-                    || second_char == 'i'
-                    || second_char == 'v'
-                    || second_char == '/'
-                    || second_char == '_'
-                    || second_char == '\''
-                {
-                    // This is a Roman numeral - preserve case
-                    return token.to_string();
-                }
-            } else {
-                // Single character I, V, i, or v - likely a Roman numeral
-                return token.to_string();
-            }
+        if matches!(first_char, 'I' | 'V' | 'i' | 'v') {
+            return token.to_string();
         }
 
         // If the first character is a lowercase letter (a-g), capitalize it
@@ -836,6 +1020,59 @@ impl<'a> ChartParser<'a> {
                 })
                 .collect();
 
+            // Mask annotation tokens that carry no rhythmic duration:
+            // `dyn <level> [placement]` and `hairpin <dir> <span> [placement]`.
+            // Like melody blocks, these must not be counted as chords or receive
+            // auto-durations, or they steal beats from the real chords and
+            // inflate the measure count (e.g. `dyn mp C#m //.` -> two measures).
+            let annotation_mask: Vec<bool> = {
+                let mut mask = vec![false; tokens.len()];
+                let mut i = 0;
+                while i < tokens.len() {
+                    let consumed = match tokens[i] {
+                        "dyn" | "dynamic" => {
+                            // keyword + level + optional placement
+                            let mut n = 1;
+                            if i + n < tokens.len() {
+                                n += 1;
+                            }
+                            if i + n < tokens.len()
+                                && Self::parse_placement(tokens[i + n]).is_some()
+                            {
+                                n += 1;
+                            }
+                            n
+                        }
+                        "hairpin" => {
+                            // keyword + direction + span + optional placement
+                            let mut n = 1;
+                            if i + n < tokens.len() {
+                                n += 1;
+                            }
+                            if i + n < tokens.len() {
+                                n += 1;
+                            }
+                            if i + n < tokens.len()
+                                && Self::parse_placement(tokens[i + n]).is_some()
+                            {
+                                n += 1;
+                            }
+                            n
+                        }
+                        _ => 0,
+                    };
+                    if consumed > 0 {
+                        for slot in mask.iter_mut().skip(i).take(consumed) {
+                            *slot = true;
+                        }
+                        i += consumed;
+                    } else {
+                        i += 1;
+                    }
+                }
+                mask
+            };
+
             // Check if segment has standalone slashes (e.g., "/", "//", "///", "////")
             // If so, don't apply auto-duration - the slashes provide duration info
             let has_standalone_slashes = tokens
@@ -849,8 +1086,8 @@ impl<'a> ChartParser<'a> {
                 .iter()
                 .enumerate()
                 .filter(|(i, t)| {
-                    // Skip tokens inside melody blocks
-                    if melody_mask[*i] {
+                    // Skip tokens inside melody blocks or annotation sequences
+                    if melody_mask[*i] || annotation_mask[*i] {
                         return false;
                     }
                     // Count as chord if it's not a command, cue, or other special token.
@@ -880,8 +1117,8 @@ impl<'a> ChartParser<'a> {
                         .iter()
                         .enumerate()
                         .filter(|(i, t)| {
-                            // Skip tokens inside melody blocks
-                            if melody_mask[*i] {
+                            // Skip tokens inside melody blocks or annotation sequences
+                            if melody_mask[*i] || annotation_mask[*i] {
                                 return false;
                             }
                             !t.starts_with('/')
@@ -938,8 +1175,8 @@ impl<'a> ChartParser<'a> {
                     segment_result.push(' ');
                 }
 
-                // Keep melody block tokens as-is (no duration mangling)
-                if melody_mask[tok_idx] {
+                // Keep melody-block and annotation tokens as-is (no duration mangling)
+                if melody_mask[tok_idx] || annotation_mask[tok_idx] {
                     segment_result.push_str(token);
                     continue;
                 }
@@ -1117,8 +1354,16 @@ impl<'a> ChartParser<'a> {
         let mut pending_hairpins: Vec<Hairpin> = Vec::new();
         let mut pending_staff_text: Vec<StaffText> = Vec::new();
 
-        let mut section_chord_length: Option<(ChordRhythm, MusicalDuration)> = None;
-        let mut section_melody_duration: Option<String> = None;
+        // Seed each section from the chart-wide `/Duration` default (if any).
+        // A `/Duration` inside the section overrides these below.
+        let mut section_chord_length: Option<(ChordRhythm, MusicalDuration)> =
+            self.default_duration.as_ref().and_then(|v| {
+                Self::parse_chord_length_value(
+                    v,
+                    self.time_signature.unwrap_or(TimeSignature::common_time()),
+                )
+            });
+        let mut section_melody_duration: Option<String> = self.default_duration.clone();
         let mut section_melody_octave: Option<u8> = self.melody_octave_memory;
         let logical_lines = Self::join_multiline_parallel_containers(lines);
 
@@ -1275,8 +1520,7 @@ impl<'a> ChartParser<'a> {
                                     .staff_text
                                     .append(&mut pending_staff_text);
                             }
-                            if !pending_classical_dynamics.is_empty()
-                                && !melody_measures.is_empty()
+                            if !pending_classical_dynamics.is_empty() && !melody_measures.is_empty()
                             {
                                 melody_measures[0]
                                     .classical_dynamics
@@ -1401,6 +1645,11 @@ impl<'a> ChartParser<'a> {
     /// source line (parallel containers, repeats), use
     /// [`Self::parse_chord_line_with_offset`] to shift those spans into the
     /// original-line coordinate system.
+    ///
+    /// Test-only: production parses through
+    /// `parse_chord_line_with_default_chord_length`. Kept as a convenience
+    /// entry point for the parser unit tests.
+    #[cfg(test)]
     pub(super) fn parse_chord_line(
         &mut self,
         line: &str,
@@ -1416,7 +1665,7 @@ impl<'a> ChartParser<'a> {
         section_type: &SectionType,
         section_measure_count: Option<usize>,
         default_chord_length: Option<(ChordRhythm, MusicalDuration)>,
-        mut default_melody_duration: Option<String>,
+        default_melody_duration: Option<String>,
         default_melody_octave: Option<u8>,
     ) -> Result<Vec<Measure>, String> {
         self.parse_chord_line_inner(
@@ -1432,6 +1681,9 @@ impl<'a> ChartParser<'a> {
 
     /// Same as [`Self::parse_chord_line`] but shifts every emitted token span
     /// by `line_byte_offset` so spans line up with the surrounding source.
+    ///
+    /// Test-only: only reached via [`Self::parse_chord_line`].
+    #[cfg(test)]
     #[allow(clippy::too_many_lines)]
     pub(super) fn parse_chord_line_with_offset(
         &mut self,
@@ -1516,6 +1768,11 @@ impl<'a> ChartParser<'a> {
             .replace(":|", " @repeat-end |")
             .replace("m {", "m{");
 
+        // Preprocess: Expand `()` rhythm groups into explicit per-chord lily
+        // durations (e.g. `(C G)` → `C_2 G_2`, `(D Em G)` → `D_2t Em_2t G_2t`).
+        // Identity for lines with no group, so spans/tokens are unchanged there.
+        let line_to_parse = expand_chord_groups(&line_to_parse, time_sig)?;
+
         // Preprocess: Calculate automatic durations for chords between measure separators
         // If chords are between | separators, split the measure evenly
         // e.g., "| G C |" → "G_2 C_2", "G C | D" → "G_2 C_2 D_1"
@@ -1556,10 +1813,232 @@ impl<'a> ChartParser<'a> {
         let mut chord_length_override: Option<(ChordRhythm, MusicalDuration)> =
             default_chord_length;
         let mut skip_next_token = false;
+        // Number of upcoming tokens to skip — used by multi-token annotations
+        // like `dyn <level> [above]` and `hairpin <dir> <span> [above]` that
+        // are consumed in one place but span several tokens.
+        let mut skip_tokens: usize = 0;
+        // One-shot meter change (`!T2/4`): apply the new meter to exactly the
+        // next measure, then revert to the prevailing meter. `oneshot_revert`
+        // holds the (time_sig, beats_per_measure) to restore; the revert fires
+        // once `measures.len()` passes `oneshot_measure_idx` — i.e. the moment
+        // the one-shot measure has been pushed.
+        let mut oneshot_revert: Option<(TimeSignature, f64)> = None;
+        let mut oneshot_measure_idx: usize = 0;
+
+        // Notation system for this line, used to disambiguate `b<digit>` roots
+        // (note B vs flat degree). Line wins, then the chart parsed so far.
+        let chord_system = self.resolve_notation_system(&tokens_str);
+        // Contribute this line's decisive tokens to the chart-wide tally so
+        // later ambiguous lines can fall back to it.
+        self.record_line_system_votes(&tokens_str);
 
         for (token_idx, token_str) in tokens_str.iter().enumerate() {
+            if skip_tokens > 0 {
+                skip_tokens -= 1;
+                continue;
+            }
             if skip_next_token {
                 skip_next_token = false;
+                continue;
+            }
+
+            // Once a one-shot meter measure has been pushed, restore the
+            // prevailing meter. The freshly started measure was stamped with the
+            // one-shot meter when it was created; correct it (it has no content
+            // yet) so following chords land in the reverted time signature.
+            if let Some((revert_ts, revert_bpm)) = oneshot_revert {
+                if measures.len() > oneshot_measure_idx {
+                    time_sig = revert_ts;
+                    beats_per_measure = revert_bpm;
+                    current_measure.time_signature =
+                        (time_sig.numerator as u8, time_sig.denominator as u8);
+                    oneshot_revert = None;
+                }
+            }
+
+            // Floating suspension figure (`4-3`, `2-3`, `3`, `2`): the prior
+            // chord keeps sounding; record the figure at the current beat and
+            // let following slash groups extend the held chord. Consumes no
+            // beats of its own and never counts as rhythm.
+            if let Some(figure) = Self::parse_bare_suspension_figure(token_str) {
+                let slash_follows = tokens_str.get(token_idx + 1).is_some_and(|t| {
+                    !t.is_empty() && t.trim_end_matches('.').chars().all(|c| c == '/')
+                });
+
+                if !current_measure.chords.is_empty() {
+                    // Case A — the current bar is still open (the held chord
+                    // carried explicit slashes, e.g. `Bb // 4-3 //`). The figure
+                    // continues that chord in the same bar; a following slash
+                    // group extends it (treated as a continuation).
+                    let beat_anchor = current_measure_beats
+                        .min((beats_per_measure - 1.0).max(0.0))
+                        .max(0.0);
+                    Self::push_suspension_at_current_beat(
+                        &mut current_measure,
+                        &figure,
+                        Placement::Above,
+                        beat_anchor,
+                        true,
+                    );
+                    last_token_was_slash = true;
+                    continue;
+                }
+
+                if let Some(prev) = measures.last().and_then(|m| m.chords.last()).cloned() {
+                    // Case B — the prior bare chord already filled its bar
+                    // (`F 4-3 ///`). The figure opens a NEW bar that restates the
+                    // same chord carrying the figure. The following slash group
+                    // sets how many beats the figure holds (`4-3 ///` = 3 beats),
+                    // and the rest of the bar is filled by what comes after (so
+                    // `... /D` lands on beat 4). With no slash, the figure fills
+                    // the whole bar on its own.
+                    let mut bar_chord = prev;
+                    bar_chord.commands.clear();
+                    bar_chord.push_pull = None;
+                    // The figure itself is the visible symbol for this bar (its
+                    // own `4-3`); hide the restated chord's name so the held
+                    // harmony stays for playback without printing `F` over it.
+                    bar_chord.display_override = Some(String::new());
+                    let figure_beats = if slash_follows {
+                        let max = beats_per_measure as usize;
+                        tokens_str
+                            .get(token_idx + 1)
+                            .map(|t| t.chars().filter(|c| *c == '/').count())
+                            .unwrap_or(1)
+                            .clamp(1, max) as u8
+                    } else {
+                        beats_per_measure as u8
+                    };
+                    bar_chord.rhythm = ChordRhythm::slashes(figure_beats);
+                    bar_chord.duration =
+                        MusicalDuration::from_beats(f64::from(figure_beats), time_sig);
+                    current_measure
+                        .rhythm_elements
+                        .push(RhythmElement::Chord(bar_chord.clone()));
+                    current_measure.chords.push(bar_chord);
+                    Self::push_suspension_at_current_beat(
+                        &mut current_measure,
+                        &figure,
+                        Placement::Above,
+                        0.0,
+                        true,
+                    );
+                    current_measure_beats = f64::from(figure_beats);
+                    // The slash group's beats are now owned by the figure chord;
+                    // consume that token so it isn't re-applied.
+                    if slash_follows {
+                        skip_next_token = true;
+                    }
+                    measure_has_slash_rhythm = true;
+                    last_token_was_slash = false;
+                    if (current_measure_beats - beats_per_measure).abs() < 0.001 {
+                        measures.push(current_measure.clone());
+                        current_measure = Self::fresh_measure(time_sig);
+                        current_measure_beats = 0.0;
+                        measure_has_slash_rhythm = false;
+                    }
+                    continue;
+                }
+
+                // Degenerate: figure with no preceding chord. Record it and move
+                // on rather than dropping it.
+                Self::push_suspension_at_current_beat(
+                    &mut current_measure,
+                    &figure,
+                    Placement::Above,
+                    0.0,
+                    true,
+                );
+                continue;
+            }
+
+            // Floating slash-bass (`/D`): inherit the previous chord's root as
+            // `<root>/D` for harmony, but display the token verbatim. Rewrite
+            // to the synthetic chord token here and route it through normal
+            // chord parsing below; the original `/D` becomes the display text.
+            let synth_slash_bass: Option<String> = Self::parse_floating_slash_bass(token_str)
+                .and_then(|bass| {
+                    Self::previous_chord_root(&current_measure, &measures).map(|root| (root, bass))
+                })
+                .map(|(root, bass)| format!("{root}/{bass}"));
+            let (effective_token, display_override): (&str, Option<String>) =
+                match &synth_slash_bass {
+                    Some(synth) => (synth.as_str(), Some((*token_str).to_string())),
+                    None => (token_str, None),
+                };
+
+            // Inline classical dynamic / hairpin: zero-duration annotations that
+            // must NOT consume measure beats. Without this they fall through to
+            // chord parsing and inflate the measure count (e.g. `dyn mp C#m //.`
+            // would parse as two measures). Mirrors the standalone-line forms
+            // `parse_classical_dynamic_line` / `parse_hairpin_line`.
+            if *token_str == "dyn" || *token_str == "dynamic" {
+                if let Some(level_tok) = tokens_str.get(token_idx + 1) {
+                    let default_beat = current_measure_beats.floor().max(0.0) as u8 + 1;
+                    let (level_token, beat) = level_tok
+                        .split_once('@')
+                        .map(|(level, beat)| (level, beat.parse::<u8>().ok().unwrap_or(1)))
+                        .unwrap_or((*level_tok, default_beat));
+                    if let Some(level) = Self::parse_dynamic_level(level_token) {
+                        skip_tokens = 1;
+                        let placement = tokens_str
+                            .get(token_idx + 2)
+                            .and_then(|t| Self::parse_placement(t));
+                        if placement.is_some() {
+                            skip_tokens = 2;
+                        }
+                        current_measure.classical_dynamics.push(Dynamic {
+                            level,
+                            beat,
+                            placement: placement.unwrap_or(Placement::Below),
+                        });
+                    }
+                }
+                continue;
+            }
+
+            if *token_str == "hairpin" {
+                if let (Some(kind_tok), Some(span_tok)) =
+                    (tokens_str.get(token_idx + 1), tokens_str.get(token_idx + 2))
+                {
+                    let kind = match *kind_tok {
+                        "<" | "crescendo" | "cresc" => Some(HairpinKind::Crescendo),
+                        ">" | "decrescendo" | "decresc" | "dim" | "diminuendo" => {
+                            Some(HairpinKind::Decrescendo)
+                        }
+                        _ => None,
+                    };
+                    if let Some(kind) = kind {
+                        let (start, end) = span_tok
+                            .split_once("..")
+                            .or_else(|| span_tok.split_once('-'))
+                            .unwrap_or(("1", "1"));
+                        let start_beat = start
+                            .trim_start_matches('@')
+                            .parse::<u8>()
+                            .ok()
+                            .unwrap_or(1);
+                        let end_beat = end
+                            .trim_start_matches('@')
+                            .parse::<u8>()
+                            .ok()
+                            .unwrap_or(start_beat);
+                        skip_tokens = 2;
+                        let placement = tokens_str
+                            .get(token_idx + 3)
+                            .and_then(|t| Self::parse_placement(t));
+                        if placement.is_some() {
+                            skip_tokens = 3;
+                        }
+                        current_measure.hairpins.push(Hairpin {
+                            kind,
+                            start_beat,
+                            end_measure_offset: 0,
+                            end_beat,
+                            placement: placement.unwrap_or(Placement::Below),
+                        });
+                    }
+                }
                 continue;
             }
 
@@ -1649,7 +2128,7 @@ impl<'a> ChartParser<'a> {
 
             // Check for command (e.g., "/fermata", "/accent")
             // Commands are applied to the PREVIOUS chord
-            if token_str.starts_with('/') {
+            if token_str.starts_with('/') && display_override.is_none() {
                 if *token_str == "/octave" {
                     skip_next_token = true;
                     continue;
@@ -1920,6 +2399,22 @@ impl<'a> ChartParser<'a> {
                                             ChordRhythm::Slashes { .. } | ChordRhythm::Explicit(_)
                                         )
                                     });
+                                // Beats the previous bar already holds in chords *before* its
+                                // last one — captured here so the tie-across-barline branch can
+                                // tell whether extending the fill chord would overflow the bar
+                                // (computing it later conflicts with the `&mut last_chord` borrow).
+                                let prev_other_beats: f64 = measures
+                                    .last()
+                                    .map(|m| {
+                                        let idx = m.chords.len().saturating_sub(1);
+                                        m.chords[..idx]
+                                            .iter()
+                                            .map(|c| c.duration.to_beats(time_sig))
+                                            .sum()
+                                    })
+                                    .unwrap_or(0.0);
+                                let next_measure_index = measures.len();
+                                let sections_len = self.sections.len();
 
                                 if let Some(last_measure) = measures.last_mut() {
                                     if let Some(last_chord) = last_measure.chords.last_mut() {
@@ -1977,23 +2472,83 @@ impl<'a> ChartParser<'a> {
                                             } else {
                                                 slash_count
                                             };
-                                            last_chord.rhythm = ChordRhythm::slashes(new_count);
-                                            last_chord.duration = MusicalDuration::from_beats(
-                                                f64::from(new_count),
-                                                time_sig,
-                                            );
-
-                                            // Also update the chord in rhythm_elements
-                                            for elem in
-                                                last_measure.rhythm_elements.iter_mut().rev()
+                                            // Beats the previous bar holds in chords *other* than
+                                            // this one (the fill chord we're about to extend),
+                                            // captured before the `&mut last_chord` borrow above.
+                                            let other_beats = prev_other_beats;
+                                            if other_beats + f64::from(new_count)
+                                                > beats_per_measure + 0.001
                                             {
-                                                if let RhythmElement::Chord(c) = elem {
-                                                    c.rhythm = ChordRhythm::slashes(new_count);
-                                                    c.duration = MusicalDuration::from_beats(
-                                                        f64::from(new_count),
-                                                        time_sig,
+                                                // Setting the fill chord to `new_count` would
+                                                // overflow its already-full bar (e.g. the trailing
+                                                // `//` in `Eb/D / Eb // Eb/F //`). Tie the chord
+                                                // across the barline: it fills the rest of this bar,
+                                                // and the leftover beats become continuation slashes
+                                                // at the start of the next measure.
+                                                let in_bar =
+                                                    (beats_per_measure - other_beats).max(1.0);
+                                                let overflow =
+                                                    (f64::from(new_count) - in_bar).max(0.0);
+                                                let tied = ChordRhythm::Slashes {
+                                                    count: in_bar as u8,
+                                                    dotted: false,
+                                                    tied: true,
+                                                };
+                                                let in_bar_dur =
+                                                    MusicalDuration::from_beats(in_bar, time_sig);
+                                                last_chord.rhythm = tied.clone();
+                                                last_chord.duration = in_bar_dur;
+                                                for elem in
+                                                    last_measure.rhythm_elements.iter_mut().rev()
+                                                {
+                                                    if let RhythmElement::Chord(c) = elem {
+                                                        c.rhythm = tied.clone();
+                                                        c.duration = in_bar_dur;
+                                                        break;
+                                                    }
+                                                }
+                                                let overflow_beats = overflow.round() as u32;
+                                                for i in 0..overflow_beats {
+                                                    let space = SpaceInstance::new(
+                                                        ChordRhythm::slashes(1),
+                                                        MusicalDuration::from_beats(1.0, time_sig),
+                                                        AbsolutePosition::new(
+                                                            MusicalPosition::try_new(
+                                                                next_measure_index as i32,
+                                                                i as i32,
+                                                                0,
+                                                            )
+                                                            .unwrap_or_else(|_| {
+                                                                MusicalPosition::start()
+                                                            }),
+                                                            sections_len,
+                                                        ),
+                                                        format!("/{}", "/".repeat(i as usize)),
                                                     );
-                                                    break;
+                                                    current_measure
+                                                        .rhythm_elements
+                                                        .push(RhythmElement::Space(space));
+                                                }
+                                                current_measure_beats += f64::from(overflow_beats);
+                                            } else {
+                                                last_chord.rhythm = ChordRhythm::slashes(new_count);
+                                                last_chord.duration = MusicalDuration::from_beats(
+                                                    f64::from(new_count),
+                                                    time_sig,
+                                                );
+
+                                                // Also update the chord in rhythm_elements
+                                                for elem in
+                                                    last_measure.rhythm_elements.iter_mut().rev()
+                                                {
+                                                    if let RhythmElement::Chord(c) = elem {
+                                                        c.rhythm = ChordRhythm::slashes(new_count);
+                                                        c.duration = MusicalDuration::from_beats(
+                                                            f64::from(new_count),
+                                                            time_sig,
+                                                        );
+                                                        break;
+                                                    }
                                                 }
                                             }
                                             true
@@ -2013,6 +2568,18 @@ impl<'a> ChartParser<'a> {
                                 if !current_measure.chords.is_empty()
                                     || !current_measure.rhythm_elements.is_empty()
                                 {
+                                    // Resync beats with the (possibly extended) chord
+                                    // durations. Without this, a slash group that
+                                    // accumulates onto the last chord — e.g. the second
+                                    // `//` in `Bb // 4-3 //`, or `Bb // //` — would leave
+                                    // current_measure_beats stale and let the next chord
+                                    // wrongly share the measure. Mirrors the dotted-slash
+                                    // path above.
+                                    current_measure_beats = current_measure
+                                        .chords
+                                        .iter()
+                                        .map(|c| c.duration.to_beats(time_sig))
+                                        .sum();
                                     // Mark that this measure has slash rhythm, so subsequent
                                     // chords can fill remaining beats
                                     measure_has_slash_rhythm = true;
@@ -2405,24 +2972,42 @@ impl<'a> ChartParser<'a> {
                 continue;
             }
 
-            // Check for time signature change (e.g., "6/8", "3/4")
-            if token_str.contains('/') && !token_str.starts_with('/') {
-                if let Some((num, den)) = Self::parse_time_signature(token_str) {
-                    // Update the time signature for subsequent measures
-                    time_sig = TimeSignature::new(num as u32, den as u32);
-                    self.time_signature = Some(time_sig);
+            // Check for inline time signature change (e.g., "T6/8", "T3/4").
+            // The leading `T` (Time) is required so meter changes never collide
+            // with number/Nashville slash chords like `4/6`. Bare fractions are
+            // only honored on the header line (see parse_metadata_line).
+            //
+            // A `!` prefix (`!T2/4`) makes it one-shot: the meter applies to the
+            // single next measure, then reverts to the prevailing meter — the
+            // same "one-time" sigil used for durations.
+            let oneshot = token_str.starts_with("!T");
+            let ts_token: &str = token_str.strip_prefix('!').unwrap_or(token_str);
+            if let Some(ts_body) = ts_token.strip_prefix('T') {
+                if ts_body.contains('/') {
+                    if let Some((num, den)) = Self::parse_time_signature(ts_body) {
+                        // Finalize the current measure before the time sig change
+                        if !current_measure.chords.is_empty() {
+                            measures.push(current_measure.clone());
+                            current_measure = Self::fresh_measure(time_sig);
+                            current_measure_beats = 0.0;
+                        }
 
-                    // If we have a current measure, finalize it before the time sig change
-                    if !current_measure.chords.is_empty() {
-                        measures.push(current_measure.clone());
-                        current_measure = Self::fresh_measure(time_sig);
-                        current_measure_beats = 0.0;
+                        if oneshot {
+                            // Remember what to restore once this single measure
+                            // is pushed. Leave self.time_signature untouched so
+                            // the prevailing meter still governs later lines.
+                            oneshot_revert = Some((time_sig, beats_per_measure));
+                            oneshot_measure_idx = measures.len();
+                        } else {
+                            // Persistent change: subsequent measures keep this.
+                            self.time_signature = Some(TimeSignature::new(num as u32, den as u32));
+                        }
+
+                        time_sig = TimeSignature::new(num as u32, den as u32);
+                        current_measure.time_signature = (num, den);
+                        beats_per_measure = num as f64;
+                        continue;
                     }
-
-                    // Update time signature for new measures
-                    current_measure.time_signature = (num, den);
-                    beats_per_measure = num as f64;
-                    continue;
                 }
             }
 
@@ -2592,7 +3177,7 @@ impl<'a> ChartParser<'a> {
                     let mut repeat_chord = prev_chord.clone();
                     repeat_chord.original_token = ".".to_string();
                     repeat_chord.position = AbsolutePosition::at_beginning(); // Will be recalculated
-                                                                              // Clear push/pull - the dot repeat doesn't inherit the timing modifier
+                    // Clear push/pull - the dot repeat doesn't inherit the timing modifier
                     repeat_chord.push_pull = None;
                     // Inherit the source chord's rhythm and duration
                     // "F/C ." = two measures (F/C for 4 beats, then F/C repeated for 4 beats)
@@ -2640,13 +3225,93 @@ impl<'a> ChartParser<'a> {
             // Parse chord. Pass through the token's byte span in the original line
             // (line-relative) so diagnostics can point at real source positions.
             let token_span = original_token_spans.get(token_idx).copied();
-            let (chord_token, figured_bass_rows) = Self::extract_figured_bass_suffix(token_str);
-            match self.parse_chord_token(&chord_token, section_type, time_sig, token_span) {
+            // In a degree-based context a bare `b<digit>` is a flat scale degree
+            // (`b3` = ♭3) and a merged `17` is degree-1 + a 7th — not the note B
+            // with a figured-bass/suspension figure. Skip the suffix extractors
+            // so they don't strip the digit, and split `17` into `1:7`.
+            // `^`-marked figured bass (`V^65`, `V^4-3`) is unambiguous in any
+            // notation system, so strip it before the degree-specific handling.
+            // An *inversion* figure (`V^65`) rewrites to a real inverted chord
+            // (parse `V7`, then set the bass below); the original `V^65` is kept
+            // for display. Other figures (`^4-3`) fall through to figured bass.
+            let inversion_token;
+            let (effective_token, inversion_apply) =
+                match Self::extract_caret_inversion(effective_token) {
+                    Some((ct, display, _append_seventh, bass_thirds)) => {
+                        inversion_token = ct;
+                        (inversion_token.as_str(), Some((display, bass_thirds)))
+                    }
+                    None => (effective_token, None),
+                };
+            let (caret_token, caret_rows) = Self::extract_caret_figure(effective_token);
+            let effective_token = caret_token.as_str();
+            let (chord_token, figured_bass_rows, suspension_figure) = if chord_system
+                == NotationSystem::Degree
+                && (Self::is_leading_flat_degree(effective_token)
+                    || Self::is_merged_degree(effective_token))
+            {
+                (Self::split_merged_degree(effective_token), caret_rows, None)
+            } else {
+                let (fb_token, fb_rows) = Self::extract_figured_bass_suffix(effective_token);
+                let (ct, susp) = Self::extract_suspension_suffix(&fb_token);
+                (ct, caret_rows.or(fb_rows), susp)
+            };
+            match self.parse_chord_token(
+                &chord_token,
+                section_type,
+                time_sig,
+                token_span,
+                chord_system,
+            ) {
                 Ok(mut chord) => {
+                    if let Some(text) = &display_override {
+                        chord.display_override = Some(text.clone());
+                    }
+                    // Realise a `^` inversion: set the slash bass to the chord
+                    // tone (3rd/5th/7th above the root) so the chord resolves as
+                    // a real inversion, while the chart keeps showing `V^65`.
+                    if let Some((display, bass_thirds)) = &inversion_apply {
+                        if let Some(root_deg) = chord.parsed.root.scale_degree() {
+                            // Diatonic position of the bass tone (root + N thirds).
+                            let bass_deg = ((u16::from(root_deg) - 1 + u16::from(*bass_thirds) * 2)
+                                % 7) as u8
+                                + 1;
+                            // Spell it exactly: with a key in hand the bass is the
+                            // chord's *actual* 3rd/5th/7th, so a chromatic chord
+                            // tone (e.g. the G♯ of `III`) gets the right accidental.
+                            let accidental = self.current_key.as_ref().and_then(|key| {
+                                let notes = chord.parsed.notes(Some(key))?;
+                                let actual = notes.get(*bass_thirds as usize)?;
+                                let diatonic = key.get_scale_degree(bass_deg)?;
+                                match (i16::from(actual.semitone) - i16::from(diatonic.semitone))
+                                    .rem_euclid(12)
+                                {
+                                    0 => None,
+                                    1 => Some(Accidental::Sharp),
+                                    11 => Some(Accidental::Flat),
+                                    _ => None,
+                                }
+                            });
+                            let bass = RootNotation::from_scale_degree(bass_deg, accidental);
+                            chord.parsed.set_bass(bass);
+                            chord.full_symbol = display.clone();
+                            chord.display_override = Some(display.clone());
+                        }
+                    }
                     let token_has_explicit_length =
                         Self::token_has_explicit_chord_length(&chord_token);
+                    // A rhythm-slash token immediately after this chord (`E/B /`)
+                    // sets its duration explicitly, so the `/Duration` default
+                    // must NOT pre-fill it — otherwise the slash would only add a
+                    // continuation on top of the default instead of overriding it.
+                    let slash_token_follows = tokens_str.get(token_idx + 1).is_some_and(|t| {
+                        !t.is_empty() && t.trim_end_matches('.').chars().all(|c| c == '/')
+                    });
                     if let Some((rhythm, duration)) = &chord_length_override {
-                        if chord.rhythm == ChordRhythm::Default && !token_has_explicit_length {
+                        if chord.rhythm == ChordRhythm::Default
+                            && !token_has_explicit_length
+                            && !slash_token_follows
+                        {
                             chord.rhythm = rhythm.clone();
                             chord.duration = *duration;
                         }
@@ -2740,6 +3405,18 @@ impl<'a> ChartParser<'a> {
                         );
                     }
 
+                    // Attached suspension figure (`Eb2`, `F4-3`) anchors at the
+                    // chord's own beat and hugs it as a superscript.
+                    if let Some(figure) = &suspension_figure {
+                        Self::push_suspension_at_current_beat(
+                            &mut current_measure,
+                            figure,
+                            Placement::Above,
+                            current_measure_beats,
+                            false,
+                        );
+                    }
+
                     current_measure_beats += chord_beats;
 
                     // Attach pending cue to this measure if present
@@ -2766,7 +3443,7 @@ impl<'a> ChartParser<'a> {
                             (time_sig.numerator as u8, time_sig.denominator as u8);
                         current_measure_beats = 0.0;
                         measure_has_slash_rhythm = false; // Reset for new measure
-                                                          // Auto-created measure, not by separator
+                        // Auto-created measure, not by separator
                     }
                 }
                 Err(_e) => {
@@ -2788,7 +3465,30 @@ impl<'a> ChartParser<'a> {
             measures.push(current_measure);
         }
 
-        // Handle repeat count
+        self.expand_phrase_repeats(
+            measures,
+            repeat_count,
+            time_sig,
+            beats_per_measure,
+            section_type,
+            section_measure_count,
+        )
+    }
+
+    /// Resolve a phrase's repeat count (explicit `xN` or auto `x^`) and expand
+    /// the measure list accordingly. Split out of `parse_chord_line_inner`:
+    /// it runs once after the token loop and touches none of the loop state,
+    /// only the completed `measures` plus the prevailing meter and section
+    /// context.
+    fn expand_phrase_repeats(
+        &self,
+        mut measures: Vec<Measure>,
+        repeat_count: RepeatCount,
+        time_sig: TimeSignature,
+        beats_per_measure: f64,
+        section_type: &SectionType,
+        section_measure_count: Option<usize>,
+    ) -> Result<Vec<Measure>, String> {
         let final_repeat_count = match repeat_count {
             RepeatCount::Fixed(count) => count,
             RepeatCount::Auto => {
@@ -3026,7 +3726,7 @@ impl<'a> ChartParser<'a> {
                     default_melody_octave,
                 )?);
             } else {
-                let mut parsed = self.parse_chord_line_inner(
+                let parsed = self.parse_chord_line_inner(
                     trimmed,
                     section_type,
                     Some(1),
@@ -3134,7 +3834,7 @@ impl<'a> ChartParser<'a> {
                 continue;
             }
 
-            let mut parsed = self.parse_chord_line_inner(
+            let parsed = self.parse_chord_line_inner(
                 trimmed,
                 section_type,
                 Some(1),
@@ -3231,79 +3931,6 @@ impl<'a> ChartParser<'a> {
         }
 
         split
-    }
-
-    fn split_top_level_measures(input: &str) -> Vec<String> {
-        let mut parts = Vec::new();
-        let mut current = String::new();
-        let mut chars = input.chars().peekable();
-        let mut parallel_depth = 0usize;
-        let mut brace_depth = 0usize;
-
-        while let Some(ch) = chars.next() {
-            if ch == '<' && chars.peek() == Some(&'<') {
-                parallel_depth += 1;
-                current.push('<');
-                current.push('<');
-                chars.next();
-                continue;
-            }
-
-            if ch == '>' && chars.peek() == Some(&'>') {
-                parallel_depth = parallel_depth.saturating_sub(1);
-                current.push('>');
-                current.push('>');
-                chars.next();
-                continue;
-            }
-
-            match ch {
-                '{' => brace_depth += 1,
-                '}' => brace_depth = brace_depth.saturating_sub(1),
-                '|' if parallel_depth == 0 && brace_depth == 0 => {
-                    parts.push(current.trim().to_string());
-                    current.clear();
-                    continue;
-                }
-                _ => {}
-            }
-
-            current.push(ch);
-        }
-
-        if !current.trim().is_empty() {
-            parts.push(current.trim().to_string());
-        }
-
-        parts
-    }
-
-    fn split_top_level_parallel_branches(input: &str) -> Vec<String> {
-        let mut parts = Vec::new();
-        let mut current = String::new();
-        let mut brace_depth = 0usize;
-        let mut chars = input.chars().peekable();
-
-        while let Some(ch) = chars.next() {
-            match ch {
-                '{' => brace_depth += 1,
-                '}' => brace_depth = brace_depth.saturating_sub(1),
-                ';' if brace_depth == 0 => {
-                    parts.push(current.trim().to_string());
-                    current.clear();
-                    continue;
-                }
-                _ => {}
-            }
-
-            current.push(ch);
-        }
-
-        if !current.trim().is_empty() {
-            parts.push(current.trim().to_string());
-        }
-
-        parts
     }
 
     /// Like `split_top_level_measures`, but also returns the byte offset of
@@ -3438,6 +4065,131 @@ fn next_utf8_boundary(s: &str, start: usize) -> usize {
 // region:    --- Chord Token Parsing
 
 impl<'a> ChartParser<'a> {
+    /// Classify a chord token's root notation system, for resolving the
+    /// ambiguous `b<digit>` root. `Some(true)` = degree-based (Nashville
+    /// number or Roman numeral), `Some(false)` = letter name, `None` = the
+    /// token doesn't decide (ambiguous `b`+digit, rests, annotations).
+    fn classify_token_system(token: &str) -> Option<bool> {
+        let t = token.trim_start_matches(['>', '.', '\'', '(']);
+        let mut chars = t.chars();
+        let c0 = chars.next()?;
+        let c1 = t.chars().nth(1);
+        let is_degree_digit = |c: char| ('1'..='7').contains(&c);
+        let is_roman = |c: char| matches!(c, 'I' | 'V' | 'i' | 'v');
+        match c0 {
+            c if is_degree_digit(c) => Some(true),            // 1..7
+            'I' | 'V' | 'i' | 'v' => Some(true),              // Roman numeral
+            'A'..='G' => Some(false),                         // note letter (upper)
+            'a' | 'c' | 'd' | 'e' | 'f' | 'g' => Some(false), // note letter (lower)
+            '#' => match c1 {
+                Some(c) if is_degree_digit(c) || is_roman(c) => Some(true),
+                _ => None,
+            },
+            'b' => match c1 {
+                Some(c) if is_roman(c) => Some(true), // bIII (flat Roman)
+                _ => None,                            // b+digit is the ambiguous case
+            },
+            _ => None,
+        }
+    }
+
+    /// Decide a scope's notation system by majority vote of its decisive
+    /// tokens. `None` when there's a tie or no decisive tokens (defer).
+    fn classify_scope<'t>(tokens: impl Iterator<Item = &'t str>) -> Option<bool> {
+        let (mut letter, mut degree) = (0u32, 0u32);
+        for t in tokens {
+            match Self::classify_token_system(t) {
+                Some(true) => degree += 1,
+                Some(false) => letter += 1,
+                None => {}
+            }
+        }
+        match degree.cmp(&letter) {
+            std::cmp::Ordering::Greater => Some(true),
+            std::cmp::Ordering::Less => Some(false),
+            std::cmp::Ordering::Equal => None,
+        }
+    }
+
+    /// Whether the token explicitly forces a major triad, overriding the key's
+    /// diatonic quality: `2M`, `2maj`, `2Major`, `2:maj`, `2△`, `2^`. Lowercase
+    /// `m`/`dim`/`aug`/`sus` already parse to a non-major quality, so they're
+    /// handled by the quality check — this only catches the major markers.
+    fn token_specifies_major(chord_part: &str, root: &str) -> bool {
+        let rest = chord_part.strip_prefix(root).unwrap_or(chord_part);
+        let rest = rest.strip_prefix(':').unwrap_or(rest);
+        rest.starts_with('M')
+            || rest.starts_with("maj")
+            || rest.starts_with("Maj")
+            || rest.starts_with('△')
+            || rest.starts_with('^')
+    }
+
+    /// A bare leading flat degree: `b` followed by a digit 1-7 (`b3`, `b7`).
+    fn is_leading_flat_degree(token: &str) -> bool {
+        let b = token.as_bytes();
+        b.first() == Some(&b'b') && matches!(b.get(1), Some(d) if (b'1'..=b'7').contains(d))
+    }
+
+    /// A degree with its numeric quality run together: `17` (= `1:7`), `46`,
+    /// `b17` — an optional accidental, a degree digit 1-7, then more digits.
+    /// The `:` separator (`1:7`) is the readable form; this is the terse one.
+    fn is_merged_degree(token: &str) -> bool {
+        let b = token.as_bytes();
+        let i = usize::from(matches!(b.first(), Some(b'#' | b'b')));
+        matches!(b.get(i), Some(d) if (b'1'..=b'7').contains(d))
+            && b.get(i + 1).is_some_and(u8::is_ascii_digit)
+    }
+
+    /// Insert the implicit `:` into a merged degree (`17` -> `1:7`), so the
+    /// digit after the degree is parsed as the quality, not eaten as a figure.
+    /// Tokens that aren't a merged degree are returned unchanged.
+    fn split_merged_degree(token: &str) -> String {
+        if Self::is_merged_degree(token) {
+            let b = token.as_bytes();
+            let i = usize::from(matches!(b.first(), Some(b'#' | b'b')));
+            let (head, tail) = token.split_at(i + 1);
+            format!("{head}:{tail}")
+        } else {
+            token.to_string()
+        }
+    }
+
+    /// Resolve the notation system for an ambiguous `b<digit>` chord: the
+    /// current line wins, then the chart's accumulated system (from earlier
+    /// lines), else `Auto` (which reads `b7` as the note B).
+    fn resolve_notation_system(&self, line_tokens: &[&str]) -> NotationSystem {
+        let to_system = |is_degree: bool| {
+            if is_degree {
+                NotationSystem::Degree
+            } else {
+                NotationSystem::Letter
+            }
+        };
+        // Line scope wins.
+        if let Some(d) = Self::classify_scope(line_tokens.iter().copied()) {
+            return to_system(d);
+        }
+        // Chart scope: tally from earlier chord lines.
+        match self.chart_degree_votes.cmp(&self.chart_letter_votes) {
+            std::cmp::Ordering::Greater => NotationSystem::Degree,
+            std::cmp::Ordering::Less => NotationSystem::Letter,
+            std::cmp::Ordering::Equal => NotationSystem::Auto,
+        }
+    }
+
+    /// Fold a chord line's decisive tokens into the chart-wide system tally, so
+    /// later lines can fall back to it when their own scope is ambiguous.
+    fn record_line_system_votes(&mut self, line_tokens: &[&str]) {
+        for t in line_tokens {
+            match Self::classify_token_system(t) {
+                Some(true) => self.chart_degree_votes += 1,
+                Some(false) => self.chart_letter_votes += 1,
+                None => {}
+            }
+        }
+    }
+
     /// Parse a single chord token
     ///
     /// # Arguments
@@ -3445,12 +4197,14 @@ impl<'a> ChartParser<'a> {
     /// * `section_type` - Current section type for chord memory
     /// * `time_sig` - Current time signature for duration calculation
     /// * `source_span` - Optional source text span for linking back to input
+    /// * `system` - Notation-system hint for resolving an ambiguous `b<digit>`
     pub(super) fn parse_chord_token(
         &mut self,
         token: &str,
         section_type: &SectionType,
         time_sig: TimeSignature,
         source_span: Option<TextSpan>,
+        system: NotationSystem,
     ) -> Result<ChordInstance, String> {
         use crate::chord::Chord;
         use keyflow_proto::chart::commands::Command;
@@ -3520,15 +4274,27 @@ impl<'a> ChartParser<'a> {
         // But NOT rhythm slashes (e.g., "g//", "C///")
         let (chord_part, bass_part) = Self::split_slash_chord(&token_after_pull);
 
-        // Normalize case for chord parsing - capitalize first letter if it's a note name
-        // This allows "cmaj7" to be parsed as "Cmaj7"
-        let normalized_token = Self::normalize_chord_case(&chord_part);
+        // Normalize case for chord parsing - capitalize first letter if it's a
+        // note name. This allows "cmaj7" to be parsed as "Cmaj7". A leading
+        // ASCII `b` is a flat, though: keep it lowercase when it precedes a
+        // Roman numeral (`bIII` — always unambiguous) or a digit in a
+        // degree-based context (`b7` = ♭7), instead of turning it into note B.
+        let second = chord_part.as_bytes().get(1).copied();
+        let next_is_roman = matches!(second, Some(b'I' | b'V' | b'i' | b'v'));
+        let next_is_digit = second.is_some_and(|c| c.is_ascii_digit());
+        let keep_lowercase_flat = chord_part.starts_with('b')
+            && (next_is_roman || (next_is_digit && system == NotationSystem::Degree));
+        let normalized_token = if keep_lowercase_flat {
+            chord_part.to_string()
+        } else {
+            Self::normalize_chord_case(&chord_part)
+        };
 
         // Parse the chord using the Chord parser
         let mut lexer = Lexer::new(normalized_token.clone());
         let tokens = lexer.tokenize();
 
-        let mut chord = Chord::parse(&tokens)
+        let mut chord = Chord::parse_with_system(&tokens, system)
             .map_err(|e| format!("Failed to parse chord '{}': {:?}", chord_part, e))?;
 
         // Add bass note if this is a slash chord
@@ -3573,6 +4339,28 @@ impl<'a> ChartParser<'a> {
         // Append bass note to full_symbol for slash chords (e.g., "F" + "/C" -> "F/C")
         if let Some(bass) = &chord.bass {
             full_symbol = format!("{}/{}", full_symbol, bass);
+        }
+
+        // Give a bare number-system chord its key-implied (diatonic) quality:
+        // `2` in C major is ii (minor), `7` is vii° (diminished). The terse
+        // display (full_symbol) is unchanged — only the chord's actual quality
+        // and intervals are set, so a seventh/extension stacks correctly
+        // (`2:7` → ii m7). Skipped under a `!` literal override, when an
+        // explicit quality is written (`2m`, `2M`, `2maj`, `2dim`…), for Roman
+        // numerals (case already carries quality), and chromatic degrees.
+        let infer_diatonic = !is_override
+            && chord.quality == ChordQuality::Major
+            && !Self::token_specifies_major(&chord_part, &root_from_token);
+        if infer_diatonic {
+            if let Some((key, degree)) =
+                current_key.as_ref().zip(chord.root.diatonic_scale_degree())
+            {
+                if let Some(dq) = key.diatonic_quality(degree) {
+                    if dq != ChordQuality::Major {
+                        chord.set_triad_quality(dq);
+                    }
+                }
+            }
         }
 
         // Get rhythm and duration (push/pull will be applied later)
@@ -3679,6 +4467,433 @@ mod tests {
         out
     }
 
+    /// Collect rendered chord symbols from a parsed line.
+    fn chord_symbols(line: &str) -> Vec<String> {
+        parse_line(line)
+            .iter()
+            .flat_map(|m| m.chords.iter().map(|c| c.full_symbol.clone()))
+            .collect()
+    }
+
+    /// Parse a full chart (with a key header) and collect each chord's quality.
+    fn chord_qualities(src: &str) -> Vec<String> {
+        parse_chart(src).unwrap().sections[0]
+            .measures()
+            .iter()
+            .flat_map(|m| m.chords.iter().map(|c| format!("{:?}", c.parsed.quality)))
+            .collect()
+    }
+
+    /// Like [`parse_line`] but with an explicit section measure count, for
+    /// content that spans more than one bar.
+    fn parse_line_n(line: &str, count: usize) -> Vec<crate::chart::types::Measure> {
+        let mut chart = crate::chart::Chart::new();
+        let mut parser = ChartParser::new(&mut chart);
+        parser
+            .parse_chord_line(line, &SectionType::Verse, Some(count))
+            .expect("parse_chord_line failed")
+    }
+
+    // --- `()` rhythm grouping ---------------------------------------------
+
+    #[test]
+    fn expand_chord_groups_rewrites_to_lily_durations() {
+        let c44 = TimeSignature::common_time();
+        // Default target is one measure, split equally.
+        assert_eq!(expand_chord_groups("(C G)", c44).unwrap(), "C_2 G_2");
+        // Three over a measure → half-note triplet.
+        assert_eq!(
+            expand_chord_groups("(D Em G)", c44).unwrap(),
+            "D_2t Em_2t G_2t"
+        );
+        // Slash run sets the target: two beats, one each.
+        assert_eq!(expand_chord_groups("(D Em)//", c44).unwrap(), "D_4 Em_4");
+        assert_eq!(expand_chord_groups("(D Em) //", c44).unwrap(), "D_4 Em_4");
+        // Attached lily target: a quarter split three ways → eighth triplet.
+        assert_eq!(
+            expand_chord_groups("(D Em G)_4", c44).unwrap(),
+            "D_8t Em_8t G_8t"
+        );
+        // A group is just one element among bare chords.
+        assert_eq!(
+            expand_chord_groups("G C (Em D) G", c44).unwrap(),
+            "G C Em_2 D_2 G"
+        );
+        // Chord descriptors inside a group are preserved.
+        assert_eq!(expand_chord_groups("(Dm7 G7)", c44).unwrap(), "Dm7_2 G7_2");
+    }
+
+    #[test]
+    fn expand_chord_groups_respects_meter() {
+        // In 6/8 a measure is six eighth-beats; two chords → dotted quarters.
+        let c68 = TimeSignature::new(6, 8);
+        assert_eq!(expand_chord_groups("(A B)", c68).unwrap(), "A_4. B_4.");
+    }
+
+    #[test]
+    fn expand_chord_groups_leaves_non_groups_untouched() {
+        let c44 = TimeSignature::common_time();
+        // No parens → identity (so spans/tokens are unchanged for normal lines).
+        assert_eq!(expand_chord_groups("C F G Am", c44).unwrap(), "C F G Am");
+        // Parens inside quotes and m{…} melody blocks are left alone.
+        assert_eq!(
+            expand_chord_groups(r#"C "a (b) c" G"#, c44).unwrap(),
+            r#"C "a (b) c" G"#
+        );
+        // A `( )` inside a melody block is left alone — chord-group expansion
+        // never reaches into `m{…}`.
+        assert_eq!(
+            expand_chord_groups("C m{ (D E) } G", c44).unwrap(),
+            "C m{ (D E) } G"
+        );
+    }
+
+    #[test]
+    fn expand_chord_groups_reports_errors() {
+        let c44 = TimeSignature::common_time();
+        assert!(expand_chord_groups("(C G", c44).is_err());
+        assert!(expand_chord_groups("()", c44).is_err());
+        // Five over a measure has no power-of-two/triplet notation → error.
+        assert!(expand_chord_groups("(C D E F G)", c44).is_err());
+    }
+
+    #[test]
+    fn beats_to_lily_suffix_picks_canonical_token() {
+        let c44 = TimeSignature::common_time();
+        assert_eq!(beats_to_lily_suffix(2.0, c44).as_deref(), Some("_2")); // half
+        assert_eq!(beats_to_lily_suffix(1.0, c44).as_deref(), Some("_4")); // quarter
+        assert_eq!(beats_to_lily_suffix(1.5, c44).as_deref(), Some("_4.")); // dotted quarter
+        assert_eq!(beats_to_lily_suffix(4.0 / 3.0, c44).as_deref(), Some("_2t"));
+        assert_eq!(beats_to_lily_suffix(1.0 / 3.0, c44).as_deref(), Some("_8t"));
+        assert_eq!(beats_to_lily_suffix(0.8, c44), None); // quintuplet — unsupported
+    }
+
+    #[test]
+    fn group_splits_a_bar_equally() {
+        let ts = TimeSignature::common_time();
+        let measures = parse_line("(C G)");
+        assert_eq!(measures.len(), 1);
+        assert_eq!(measures[0].chords.len(), 2);
+        assert_eq!(measures[0].chords[0].full_symbol, "C");
+        assert_eq!(measures[0].chords[0].duration.to_beats(ts), 2.0);
+        assert_eq!(measures[0].chords[1].full_symbol, "G");
+        assert_eq!(measures[0].chords[1].duration.to_beats(ts), 2.0);
+    }
+
+    #[test]
+    fn group_of_three_is_a_whole_measure_triplet() {
+        let ts = TimeSignature::common_time();
+        let measures = parse_line("(D Em G)");
+        assert_eq!(measures.len(), 1);
+        assert_eq!(measures[0].chords.len(), 3);
+        for chord in &measures[0].chords {
+            // Duration is stored at milli-beat resolution, so 4/3 lands on 1.333.
+            assert!((chord.duration.to_beats(ts) - 4.0 / 3.0).abs() < 1e-3);
+            // The notation carries a triplet so the engraver brackets it.
+            match &chord.rhythm {
+                ChordRhythm::Explicit(nd) => assert!(
+                    nd.tuplet.is_some(),
+                    "expected a tuplet on a triplet group member"
+                ),
+                other => panic!("expected Explicit rhythm, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn group_is_one_element_among_bare_chords() {
+        let ts = TimeSignature::common_time();
+        let measures = parse_line_n("G C (Em D) G", 4);
+        assert_eq!(measures.len(), 4);
+        // The three bare chords each own a whole bar.
+        assert_eq!(measures[0].chords[0].full_symbol, "G");
+        assert_eq!(measures[0].chords[0].duration.to_beats(ts), 4.0);
+        assert_eq!(measures[1].chords[0].full_symbol, "C");
+        // The grouped bar holds both chords, half each.
+        assert_eq!(measures[2].chords.len(), 2);
+        assert_eq!(measures[2].chords[0].full_symbol, "Em");
+        assert_eq!(measures[2].chords[0].duration.to_beats(ts), 2.0);
+        assert_eq!(measures[2].chords[1].full_symbol, "D");
+        assert_eq!(measures[2].chords[1].duration.to_beats(ts), 2.0);
+        assert_eq!(measures[3].chords[0].full_symbol, "G");
+    }
+
+    #[test]
+    fn group_slash_target_sets_total_beats() {
+        let ts = TimeSignature::common_time();
+        // `(D Em)//` → two beats split one each.
+        let measures = parse_line("(D Em)//");
+        assert_eq!(measures[0].chords.len(), 2);
+        assert_eq!(measures[0].chords[0].duration.to_beats(ts), 1.0);
+        assert_eq!(measures[0].chords[1].duration.to_beats(ts), 1.0);
+    }
+
+    // --- `|` bar lines ----------------------------------------------------
+
+    #[test]
+    fn chords_inside_one_bar_split_it_evenly() {
+        let ts = TimeSignature::common_time();
+        // `| G C Em D |` → one bar, four chords, one beat each in 4/4.
+        let measures = parse_line("| G C Em D |");
+        assert_eq!(measures.len(), 1);
+        assert_eq!(measures[0].chords.len(), 4);
+        for (chord, name) in measures[0].chords.iter().zip(["G", "C", "Em", "D"]) {
+            assert_eq!(chord.full_symbol, name);
+            assert_eq!(chord.duration.to_beats(ts), 1.0);
+        }
+    }
+
+    #[test]
+    fn bar_line_per_chord_is_one_chord_per_bar() {
+        let ts = TimeSignature::common_time();
+        // A leading `|` before each chord opens a fresh bar; each chord fills it.
+        // Works with or without spaces around the bars.
+        for line in ["|G |C |Em |D", "|G|C|Em|D"] {
+            let measures = parse_line_n(line, 4);
+            assert_eq!(measures.len(), 4, "line: {line}");
+            for (m, name) in measures.iter().zip(["G", "C", "Em", "D"]) {
+                assert_eq!(m.chords.len(), 1, "line: {line}");
+                assert_eq!(m.chords[0].full_symbol, name);
+                assert_eq!(m.chords[0].duration.to_beats(ts), 4.0);
+            }
+        }
+    }
+
+    #[test]
+    fn bars_split_independently() {
+        let ts = TimeSignature::common_time();
+        // `| G C | Em D | F |` → two half-bar pairs, then a whole-bar F.
+        let measures = parse_line_n("| G C | Em D | F |", 3);
+        assert_eq!(measures.len(), 3);
+        assert_eq!(measures[0].chords[0].duration.to_beats(ts), 2.0);
+        assert_eq!(measures[0].chords[1].duration.to_beats(ts), 2.0);
+        assert_eq!(measures[1].chords[0].full_symbol, "Em");
+        assert_eq!(measures[1].chords[1].duration.to_beats(ts), 2.0);
+        assert_eq!(measures[2].chords[0].full_symbol, "F");
+        assert_eq!(measures[2].chords[0].duration.to_beats(ts), 4.0);
+    }
+
+    #[test]
+    fn numbers_take_diatonic_quality_in_major_key() {
+        let q = chord_qualities("P\n4/4 120bpm #C\n\nVS\n1 2 3 4 5 6 7\n");
+        assert_eq!(
+            q,
+            [
+                "Major",
+                "Minor",
+                "Minor",
+                "Major",
+                "Major",
+                "Minor",
+                "Diminished"
+            ]
+        );
+    }
+
+    #[test]
+    fn numbers_take_diatonic_quality_in_minor_key() {
+        let q = chord_qualities("P\n4/4 120bpm #Am\n\nVS\n1 2 4 5\n");
+        assert_eq!(q, ["Minor", "Diminished", "Minor", "Minor"]);
+    }
+
+    #[test]
+    fn diatonic_quality_is_overridable() {
+        // !2 = literal major; 2M / 2maj = explicit major; 2m = explicit minor;
+        // 2:7 keeps the diatonic minor and stacks the seventh (Dm7).
+        let q = chord_qualities("P\n4/4 120bpm #C\n\nVS\n!2 2M 2maj 2m 2:7\n");
+        assert_eq!(q, ["Major", "Major", "Major", "Minor", "Minor"]);
+    }
+
+    #[test]
+    fn optional_colon_separates_root_and_quality() {
+        assert_eq!(chord_symbols("C:7"), ["C7"]);
+        assert_eq!(chord_symbols("1 4:maj9"), ["1", "4maj9"]);
+        assert_eq!(chord_symbols("I:7"), ["I7"]);
+    }
+
+    #[test]
+    fn colon_and_quality_work_on_roman_numerals() {
+        assert_eq!(chord_symbols("I:7 IV:maj7"), ["I7", "IVmaj7"]);
+        // Lowercase Roman keeps its case (minor), with or without the colon.
+        assert_eq!(chord_symbols("v:7"), ["vm7"]);
+        assert_eq!(chord_symbols("v7"), ["vm7"]);
+        assert_eq!(chord_symbols("i:m7"), ["im7"]);
+    }
+
+    #[test]
+    fn merged_degree_and_quality_parses_without_colon() {
+        // `17` is degree-1 + a 7th (the terse, less-readable form of `1:7`).
+        assert_eq!(chord_symbols("1 17"), ["1", "17"]);
+        assert_eq!(chord_symbols("1 46"), ["1", "46"]);
+    }
+
+    #[test]
+    fn flat_roman_roots_parse_in_a_chart_line() {
+        // `normalize_chord_case` must not uppercase the leading flat into note B.
+        assert_eq!(chord_symbols("I bIII IV"), ["I", "bIII", "IV"]);
+        assert_eq!(chord_symbols("i bvi V"), ["im", "bvim", "V"]);
+    }
+
+    #[test]
+    fn contextual_b7_letter_line_is_note_b() {
+        assert_eq!(chord_symbols("C F b7 G"), ["C", "F", "B7", "G"]);
+    }
+
+    #[test]
+    fn contextual_b7_number_line_is_flat_degree() {
+        assert_eq!(chord_symbols("1 4 b7 5"), ["1", "4", "b7", "5"]);
+    }
+
+    #[test]
+    fn contextual_b7_roman_line_is_flat_degree() {
+        assert_eq!(chord_symbols("I IV b7 V"), ["I", "IV", "b7", "V"]);
+    }
+
+    #[test]
+    fn contextual_b7_no_context_defaults_to_note_b() {
+        assert_eq!(chord_symbols("b7"), ["B7"]);
+    }
+
+    #[test]
+    fn flat_degrees_two_three_four_parse_in_number_context() {
+        // These get stripped as sus/figured-bass figures on note B unless the
+        // degree context bypasses the suffix extractors.
+        assert_eq!(chord_symbols("1 b2 b3 b4 5"), ["1", "b2", "b3", "b4", "5"]);
+    }
+
+    #[test]
+    fn b9_is_always_note_b_even_in_number_context() {
+        // Scale degrees only reach 7, so `b9` can only be the note B + a 9th.
+        assert_eq!(chord_symbols("1 4 b9 5"), ["1", "4", "B9", "5"]);
+    }
+
+    #[test]
+    fn contextual_b7_falls_back_to_chart_when_line_is_ambiguous() {
+        // A line that is only `b7` follows the chart's number system -> ♭7.
+        let chart = parse_chart("P\n4/4 120bpm #C\n\nVS\n1 4 5 1\nb7\n").expect("parse chart");
+        let syms: Vec<String> = chart
+            .sections
+            .iter()
+            .flat_map(|s| s.measures().iter())
+            .flat_map(|m| m.chords.iter().map(|c| c.full_symbol.clone()))
+            .collect();
+        assert!(
+            syms.contains(&"b7".to_string()),
+            "expected ♭7, got {syms:?}"
+        );
+    }
+
+    #[test]
+    fn caret_inversion_resolves_to_a_real_inverted_chord() {
+        let c_major = Key::parse("C").unwrap();
+        let chord = |s: &str| {
+            // One chord per line; resolve against C major to check the bass.
+            let m = parse_line(s);
+            m[0].chords[0].clone()
+        };
+
+        // `V^65` shows as V^65 but resolves to a real first-inversion dominant
+        // 7th: a seventh chord with the 3rd (B in C) in the bass.
+        let v65 = chord("V^65");
+        assert_eq!(v65.full_symbol, "V^65");
+        assert!(v65.parsed.family.is_some(), "^65 implies a seventh chord");
+        let bass = v65.parsed.bass.as_ref().expect("inversion sets a bass");
+        assert_eq!(bass.resolve(Some(&c_major)).unwrap().name, "B");
+
+        // `V^6` is a first-inversion *triad* (no seventh), 3rd in the bass.
+        let v6 = chord("V^6");
+        assert_eq!(v6.full_symbol, "V^6");
+        assert!(v6.parsed.family.is_none(), "^6 is a triad");
+        assert_eq!(
+            v6.parsed
+                .bass
+                .as_ref()
+                .unwrap()
+                .resolve(Some(&c_major))
+                .unwrap()
+                .name,
+            "B"
+        );
+
+        // `V^43` → 7th, 5th (D) in the bass; `V^42` → 7th, 7th (F) in the bass.
+        assert_eq!(
+            chord("V^43")
+                .parsed
+                .bass
+                .as_ref()
+                .unwrap()
+                .resolve(Some(&c_major))
+                .unwrap()
+                .name,
+            "D"
+        );
+        assert_eq!(
+            chord("V^42")
+                .parsed
+                .bass
+                .as_ref()
+                .unwrap()
+                .resolve(Some(&c_major))
+                .unwrap()
+                .name,
+            "F"
+        );
+
+        // A trailing duration is preserved on the chord.
+        let with_dur = parse_line("V^65_2 V");
+        assert_eq!(with_dur[0].chords[0].full_symbol, "V^65");
+        assert_eq!(
+            with_dur[0].chords[0]
+                .duration
+                .to_beats(TimeSignature::common_time()),
+            2.0
+        );
+
+        // A suspension figure (`^4-3`) is not an inversion — it stays a figure.
+        assert_eq!(parse_line("V^4-3")[0].figured_bass[0].rows[0].text, "4-3");
+
+        // Without the caret, `V6` is still an ordinary added-6th chord.
+        let plain = parse_line("V6");
+        assert!(plain[0].figured_bass.is_empty());
+        assert!(plain[0].chords[0].parsed.bass.as_ref().is_none());
+        assert_eq!(plain[0].chords[0].full_symbol, "V6");
+    }
+
+    #[test]
+    fn caret_inversion_spells_chromatic_bass_and_ignores_chord_memory() {
+        let c_major = Key::parse("C").unwrap();
+        // A key is needed so the bass is spelled from the chord's real tones.
+        let chart = parse_chart("T\n4/4 #C\n\nvs 4\nI III^6 V^65 V^6\n").unwrap();
+        let m = chart.sections[0].measures();
+
+        // `III` is a major chord (E–G♯–B); its 3rd is G♯, so `III^6` puts a
+        // sharpened scale degree in the bass, not the diatonic G.
+        let iii6 = m[1].chords[0].parsed.bass.as_ref().unwrap();
+        assert_eq!(iii6.resolve(Some(&c_major)).unwrap().name, "G#");
+
+        // `V^6` right after `V^65` stays a triad — the remembered seventh from
+        // `V^65` does not carry into it.
+        assert!(
+            m[2].chords[0].parsed.family.is_some(),
+            "V^65 is a seventh chord"
+        );
+        assert!(
+            m[3].chords[0].parsed.family.is_none(),
+            "V^6 must stay a triad despite the preceding V^65"
+        );
+        assert_eq!(
+            m[3].chords[0]
+                .parsed
+                .bass
+                .as_ref()
+                .unwrap()
+                .resolve(Some(&c_major))
+                .unwrap()
+                .name,
+            "B"
+        );
+    }
+
     #[test]
     fn chord_token_can_attach_figured_bass_rows() {
         let measures = parse_line("| A\"#4-3/2-1\" /// |");
@@ -3711,6 +4926,244 @@ mod tests {
         assert_eq!(figured_bass.rows[1].accidental, "");
         assert_eq!(figured_bass.rows[1].text, "2-1");
     }
+
+    #[test]
+    fn floating_slash_bass_inherits_root_and_displays_verbatim() {
+        // `/D` after Bb is harmonically Bb/D but prints "/D".
+        let measures = parse_line("Bb /D Eb F");
+        assert_eq!(measures.len(), 4);
+        let slash = &measures[1].chords[0];
+        assert_eq!(slash.full_symbol, "Bb/D");
+        assert_eq!(slash.display_override.as_deref(), Some("/D"));
+        assert_eq!(
+            slash.parsed.bass.as_ref().map(|b| format!("{b}")),
+            Some("D".to_string())
+        );
+    }
+
+    #[test]
+    fn floating_slash_bass_drops_prior_bass() {
+        // `F/Eb` then `/D` inherits the root F, not the bass: F/D.
+        let measures = parse_line("F/Eb /D");
+        assert_eq!(measures[1].chords[0].full_symbol, "F/D");
+        assert_eq!(
+            measures[1].chords[0].display_override.as_deref(),
+            Some("/D")
+        );
+    }
+
+    #[test]
+    fn attached_suspension_figure_on_note_root() {
+        // `Eb2` and `F4-3` are a chord plus a suspension figure; the digit is
+        // not folded into the chord quality.
+        let measures = parse_line("Eb2 F4-3");
+        assert_eq!(measures.len(), 2);
+        assert_eq!(measures[0].chords[0].full_symbol, "Eb");
+        assert_eq!(measures[0].suspensions.len(), 1);
+        assert_eq!(measures[0].suspensions[0].figure, "2");
+        assert_eq!(measures[1].chords[0].full_symbol, "F");
+        assert_eq!(measures[1].suspensions[0].figure, "4-3");
+    }
+
+    #[test]
+    fn attached_multi_part_and_chord_quality_figures() {
+        // Multi-part hyphenated figure keeps every part (`E3-4-3`).
+        let m = parse_line("E3-4-3");
+        assert_eq!(m[0].chords[0].full_symbol, "E");
+        assert_eq!(m[0].suspensions[0].figure, "3-4-3");
+
+        // Real chord qualities are never mistaken for figures.
+        for sym in ["C6", "Csus4", "Cm7", "Gm7b5", "C9"] {
+            let m = parse_line(sym);
+            assert_eq!(m[0].chords[0].full_symbol, sym, "{sym} should stay a chord");
+            assert!(m[0].suspensions.is_empty(), "{sym} should have no figure");
+        }
+    }
+
+    #[test]
+    fn bare_scale_degree_is_not_a_suspension_figure() {
+        // A lone `4` is a scale-degree chord, never a floating figure.
+        let measures = parse_line("4");
+        assert_eq!(measures[0].chords[0].full_symbol, "4");
+        assert!(measures[0].suspensions.is_empty());
+    }
+
+    #[test]
+    fn floating_hyphenated_figure_holds_chord_for_full_measure() {
+        // `Bb // 4-3 //` is one measure: Bb sustains all four beats with the
+        // 4-3 figure mid-bar, not two separate measures.
+        let measures = parse_line("Bb // 4-3 // /D");
+        assert_eq!(measures.len(), 2);
+        assert_eq!(measures[0].chords.len(), 1);
+        assert_eq!(measures[0].chords[0].full_symbol, "Bb");
+        assert_eq!(
+            measures[0].chords[0]
+                .duration
+                .to_beats(TimeSignature::common_time()),
+            4.0
+        );
+        assert_eq!(measures[0].suspensions.len(), 1);
+        assert_eq!(measures[0].suspensions[0].figure, "4-3");
+        assert_eq!(measures[1].chords[0].full_symbol, "Bb/D");
+    }
+
+    #[test]
+    fn bare_chord_then_spaced_figure_opens_a_new_bar() {
+        // `F 4-3 ///` opens a NEW bar restating F with the 4-3 figure. The `///`
+        // gives that figure 3 beats, so the following chord lands on beat 4 of
+        // the SAME bar (not a third bar): bar of F, then bar of [F4-3(3), Eb(1)].
+        let measures = parse_line("F 4-3 /// Eb");
+        assert_eq!(measures.len(), 2);
+        let ts = TimeSignature::common_time();
+        assert_eq!(measures[0].chords[0].full_symbol, "F");
+        assert!(measures[0].suspensions.is_empty());
+        assert_eq!(measures[0].chords[0].duration.to_beats(ts), 4.0);
+        // Bar 2: F restated (3 beats, with 4-3) + Eb filling beat 4.
+        assert_eq!(measures[1].chords[0].full_symbol, "F");
+        assert_eq!(measures[1].chords[0].duration.to_beats(ts), 3.0);
+        assert_eq!(measures[1].suspensions[0].figure, "4-3");
+        assert_eq!(measures[1].chords[1].full_symbol, "Eb");
+        assert_eq!(measures[1].chords[1].duration.to_beats(ts), 1.0);
+    }
+
+    #[test]
+    fn rhythm_slash_overrides_duration_default() {
+        // Under `/Duration 2` (half notes) a trailing rhythm slash sets that
+        // chord's length explicitly, ignoring the default. From "Life Giving
+        // Water": `E B/D# A/C# E/B / /G# / A B E B4` must tile into four 4/4
+        // bars, with `E/B` (one beat, via `/`) and the floating `/G#` → `E/G#`
+        // (one beat) both landing in measure 2.
+        let measures = parse_line("/Duration 2 E B/D# A/C# E/B / /G# / A B E B4");
+        assert_eq!(measures.len(), 4);
+        let ts = TimeSignature::common_time();
+
+        // m0: E, B/D# — the default half-note duration applies (2 beats each).
+        assert_eq!(measures[0].chords[0].full_symbol, "E");
+        assert_eq!(measures[0].chords[0].duration.to_beats(ts), 2.0);
+        assert_eq!(measures[0].chords[1].full_symbol, "B/D#");
+        assert_eq!(measures[0].chords[1].duration.to_beats(ts), 2.0);
+
+        // m1: A/C# (2) + E/B (1, slash overrides default) + E/G# (1, floating
+        // slash-bass + slash). E/G# is in measure 2, not spilled forward.
+        assert_eq!(measures[1].chords.len(), 3);
+        assert_eq!(measures[1].chords[0].full_symbol, "A/C#");
+        assert_eq!(measures[1].chords[0].duration.to_beats(ts), 2.0);
+        assert_eq!(measures[1].chords[1].full_symbol, "E/B");
+        assert_eq!(measures[1].chords[1].duration.to_beats(ts), 1.0);
+        assert_eq!(measures[1].chords[2].full_symbol, "E/G#");
+        assert_eq!(
+            measures[1].chords[2].display_override.as_deref(),
+            Some("/G#")
+        );
+        assert_eq!(measures[1].chords[2].duration.to_beats(ts), 1.0);
+
+        // m3 ends on E + B4 (B carrying an attached suspension figure "4").
+        assert_eq!(measures[3].chords[1].full_symbol, "B");
+        assert_eq!(measures[3].suspensions[0].figure, "4");
+    }
+
+    #[test]
+    fn section_header_trailing_key_change_is_recognized_and_applied() {
+        // `BR 8 #G` (key change on the header) must still register as a Bridge
+        // section — without stripping the `#G`, the header is unrecognized and
+        // its content merges into the previous section. The key change also
+        // applies entering the bridge.
+        let input = "Song\n120 BPM #E 4/4\n\nVS 1\nE\n\nBR 1 #G\nG\n";
+        let chart = parse_chart(input).expect("parse");
+        assert_eq!(chart.sections.len(), 2, "bridge must be its own section");
+        assert_eq!(chart.sections[1].section.section_type, SectionType::Bridge);
+        assert!(
+            chart
+                .key_changes
+                .iter()
+                .any(|kc| format!("{}", kc.to_key).contains('G')),
+            "expected a key change to G entering the bridge, got {:?}",
+            chart.key_changes
+        );
+    }
+
+    #[test]
+    fn life_giving_water_parses_into_its_twelve_sections() {
+        // Full-chart regression: exercises section-scoped `/Duration`, the
+        // rhythm-slash override of the duration default, floating slash-bass,
+        // attached + standalone suspension figures, a trailing key change on a
+        // section header (`BR 8 #G`), a quoted section comment (`CH 6 "New?"`),
+        // and inline time changes (`!T2/4`). parse_chart only succeeds if every
+        // section's parsed measure count matches its header.
+        let chart = parse_chart(LIFE_GIVING_WATER).expect("Life Giving Water should parse");
+        let kinds: Vec<_> = chart
+            .sections
+            .iter()
+            .map(|s| s.section.section_type.clone())
+            .collect();
+        assert_eq!(chart.sections.len(), 12, "section kinds: {kinds:?}");
+        assert_eq!(chart.sections[0].section.section_type, SectionType::Intro);
+        assert_eq!(chart.sections[4].section.section_type, SectionType::Bridge);
+        assert_eq!(
+            chart.sections[6].section.section_type,
+            SectionType::Instrumental
+        );
+        // `BR 8 #G` applied a key change to G entering the bridge.
+        assert!(
+            chart
+                .key_changes
+                .iter()
+                .any(|kc| format!("{}", kc.to_key).contains('G')),
+            "expected key change to G, got {:?}",
+            chart.key_changes
+        );
+    }
+
+    const LIFE_GIVING_WATER: &str = r##"Life Giving Water
+64 BPM #E 4/4
+
+/Duration 2
+
+Intro 4
+/Duration 4
+C#m /// /B / A // E/G# // D //// B4-3 ////
+
+VS 8
+E B/D# A/C# E/B / /G# / A B E B4
+E B/D# A/C# E/B / /G# / A B E B/A
+
+VS 8
+E B/D# A/C# E / /G# / A B E B/A
+E //// A E A B E B/A
+
+CH 8
+E B/D# A/C# E/B / /G# / A C#m B4-3 ////
+E E/G# C#m E/B //// A B E3-4-3 ////
+
+BR 8 #G
+G D/F# C/E G/D C D G D/C
+G D/F# C/E G/B C D/C G D/C
+
+CH 8
+G D/F# C/E G C //// Em D
+G G/B Em G/D C D G D/C
+
+INST 3
+G D/F# C/E G/D / /B / C D
+
+CH "New?" 5
+G D/F# Em G/D C G/B G !T2/4 Am7 #A Esus ////
+
+CH 8
+A E/G# D/F# A/E / A/C# / D //// F#m E
+A E/G# D/F# A/E / A/C# / D // E // F#m E/G#
+
+CH 8
+A E/G# D/F# A/E / A/C# / D //// F#m E
+A A/C# F#m A/E / A/C# / D E F#m ////
+
+Tag 5
+D E F#m ////
+!T2/4 D Esus // E // E5 ////
+
+Out 4
+A E/G# D/F# A/E D // Esus // F#m ////
+"##;
 
     #[test]
     fn percent_repeats_previous_measure() {
@@ -3910,6 +5363,83 @@ Intro 1
     }
 
     #[test]
+    fn global_duration_applies_to_sections_until_overridden() {
+        // A top-level `/Duration` (before any section) sets a chart-wide default
+        // that each section inherits; a section's own `/Duration` overrides it.
+        let input = r#"
+Global Duration
+120bpm 4/4 #C
+
+/Duration 2
+
+VS 2
+C G Am F
+
+CH 2
+/Duration 4
+C E G Am Bm Dm F G
+"#;
+        let chart = parse_chart(input).expect("Should parse");
+
+        // Verse inherits the global half-note default: 2 chords per 4/4 measure.
+        let verse = chart.sections[0].measures();
+        assert_eq!(verse.len(), 2);
+        assert_eq!(verse[0].chords.len(), 2);
+
+        // Chorus overrides to quarter notes: 4 chords per measure.
+        let chorus = chart.sections[1].measures();
+        assert_eq!(chorus.len(), 2);
+        assert_eq!(chorus[0].chords.len(), 4);
+    }
+
+    #[test]
+    fn inline_t_prefix_time_signature_change() {
+        // `T2/4` changes meter mid-line; the leading `T` distinguishes it from a
+        // number/slash chord like `4/6`.
+        let input = r#"
+Meter Change
+120bpm 4/4 #C
+
+VS 3
+C T2/4 Am T4/4 G
+"#;
+        let chart = parse_chart(input).expect("Should parse");
+        let measures = chart.sections[0].measures();
+        assert_eq!(measures.len(), 3);
+        assert_eq!(measures[0].time_signature, (4, 4));
+        assert_eq!(measures[1].time_signature, (2, 4));
+        assert_eq!(measures[2].time_signature, (4, 4));
+    }
+
+    #[test]
+    fn oneshot_t_prefix_reverts_after_one_measure() {
+        // `!T2/4` applies 2/4 to exactly the next measure, then reverts to 4/4.
+        // Contrast with persistent `T2/4`, which would keep 2/4 for the rest.
+        let input = r#"
+One Shot
+120bpm 4/4 #C
+
+VS 4
+C !T2/4 Am C G
+"#;
+        let chart = parse_chart(input).expect("Should parse");
+        let m = chart.sections[0].measures();
+        assert_eq!(m.len(), 4);
+        assert_eq!(m[0].time_signature, (4, 4));
+        assert_eq!(m[1].time_signature, (2, 4)); // the one-shot measure
+        assert_eq!(m[2].time_signature, (4, 4)); // reverted
+        assert_eq!(m[3].time_signature, (4, 4));
+
+        // Persistent form keeps 2/4 from the change onward.
+        let persistent =
+            parse_chart("Persist\n120bpm 4/4 #C\n\nVS 4\nC T2/4 Am C G\n").expect("Should parse");
+        let p = persistent.sections[0].measures();
+        assert_eq!(p[1].time_signature, (2, 4));
+        assert_eq!(p[2].time_signature, (2, 4));
+        assert_eq!(p[3].time_signature, (2, 4));
+    }
+
+    #[test]
     fn explicit_chord_duration_sticks_to_following_chords() {
         let input = r#"
 Sticky Duration Section
@@ -4014,6 +5544,30 @@ let melody = {
         assert_eq!(measures[1].chords.len(), 4);
         assert_eq!(measures[1].chords[2].full_symbol, "Amaj7");
         assert_eq!(measures[1].melodies[0].notes.len(), 4);
+    }
+
+    #[test]
+    fn inline_dynamic_does_not_inflate_measure_count() {
+        // `dyn <level>` inside a bar is a zero-duration annotation; it must not
+        // be counted as a chord (which would steal beats and split the bar).
+        // Regression for the MusicXML round-trip exporter, which emits dynamics
+        // inline like `| dyn mp C#m //. |`.
+        let input = "T\n8th=168bpm 6/8 #E\n\nvs 1\n| dyn mp C#m //. |\n";
+        let chart = parse_chart(input).expect("inline dyn should parse");
+        let measures = chart.sections[0].measures();
+        assert_eq!(measures.len(), 1, "dyn must not add a measure");
+        assert_eq!(measures[0].chords[0].full_symbol, "C#m");
+        assert_eq!(measures[0].classical_dynamics.len(), 1);
+        assert_eq!(measures[0].classical_dynamics[0].level, DynamicLevel::Mp);
+    }
+
+    #[test]
+    fn inline_hairpin_does_not_inflate_measure_count() {
+        let input = "T\n8th=168bpm 6/8 #E\n\nvs 1\n| hairpin < 2..4 C#m //. |\n";
+        let chart = parse_chart(input).expect("inline hairpin should parse");
+        let measures = chart.sections[0].measures();
+        assert_eq!(measures.len(), 1, "hairpin must not add a measure");
+        assert_eq!(measures[0].hairpins.len(), 1);
     }
 
     #[test]
@@ -4854,6 +6408,229 @@ fn parse_lily_duration_beats(token: &str, time_sig: TimeSignature) -> Option<(f6
     };
     let beats = f64::from(time_sig.denominator) / note_denominator;
     Some((if dotted { beats * 1.5 } else { beats }, dotted))
+}
+
+/// Inverse of [`parse_lily_duration_beats`], extended with triplets: find the
+/// lily duration token whose value equals `beats` in the given meter, and
+/// return its suffix including the leading underscore (e.g. `"_2"`, `"_4."`,
+/// `"_8t"`). Searches plain, dotted, triplet, then dotted-triplet forms of each
+/// note value, longest note first, so the canonical token wins. Returns `None`
+/// when no notatable note value matches (e.g. a quintuplet division). Used by
+/// [`expand_chord_groups`] to rewrite `()` rhythm groups.
+fn beats_to_lily_suffix(beats: f64, time_sig: TimeSignature) -> Option<String> {
+    const EPS: f64 = 1e-6;
+    let denom = f64::from(time_sig.denominator);
+    for value in [1u32, 2, 4, 8, 16, 32] {
+        let base = denom / f64::from(value);
+        // (beats for this form, suffix after the number)
+        let candidates = [
+            (base, ""),
+            (base * 1.5, "."),
+            (base * 2.0 / 3.0, "t"),
+            (base * 1.5 * 2.0 / 3.0, "t."),
+        ];
+        for (cand, suffix) in candidates {
+            if (cand - beats).abs() < EPS {
+                return Some(format!("_{value}{suffix}"));
+            }
+        }
+    }
+    None
+}
+
+/// Resolve a `()` chord group's *target duration* in beats, starting at byte
+/// index `after_paren` (the position just past the closing `)`). The target is,
+/// in priority order:
+///   1. an attached lily suffix — `)_4`, `)_8t`, `)_2.`
+///   2. a slash run — `)//`, `) //`, `)/.` (each slash = one beat, `.` dots it)
+///   3. otherwise one full measure (`beats_per_measure`).
+/// Returns the target beats and the byte index where parsing should resume
+/// (past any consumed suffix/slashes). A slash run immediately followed by an
+/// alphanumeric/`#` is a floating slash-bass (`/E`, `/3`), not a target, and is
+/// left for the main parser.
+fn group_target_beats(
+    line: &str,
+    after_paren: usize,
+    beats_per_measure: f64,
+    time_sig: TimeSignature,
+) -> Result<(f64, usize), String> {
+    let bytes = line.as_bytes();
+
+    // 1. Attached lily suffix: `_4`, `_8t`, `_2.`
+    if bytes.get(after_paren) == Some(&b'_') {
+        let num_start = after_paren + 1;
+        let mut k = num_start;
+        while k < bytes.len() && bytes[k].is_ascii_digit() {
+            k += 1;
+        }
+        let value: f64 = line[num_start..k]
+            .parse()
+            .map_err(|_| "Expected a duration after '_' on a chord group".to_string())?;
+        let mut triplet = false;
+        let mut dotted = false;
+        if bytes.get(k) == Some(&b't') {
+            triplet = true;
+            k += 1;
+        }
+        if bytes.get(k) == Some(&b'.') {
+            dotted = true;
+            k += 1;
+        }
+        let mut beats = f64::from(time_sig.denominator) / value;
+        if triplet {
+            beats *= 2.0 / 3.0;
+        }
+        if dotted {
+            beats *= 1.5;
+        }
+        return Ok((beats, k));
+    }
+
+    // 2. Slash run (allow whitespace between `)` and the slashes).
+    let mut k = after_paren;
+    while matches!(bytes.get(k), Some(&b' ') | Some(&b'\t')) {
+        k += 1;
+    }
+    if bytes.get(k) == Some(&b'/') {
+        let mut slashes = 0u32;
+        let mut dotted = false;
+        while k < bytes.len() {
+            match bytes[k] {
+                b'/' => {
+                    slashes += 1;
+                    k += 1;
+                }
+                b'.' => {
+                    dotted = true;
+                    k += 1;
+                }
+                _ => break,
+            }
+        }
+        let next_is_token_char = bytes
+            .get(k)
+            .is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'#');
+        if slashes > 0 && !next_is_token_char {
+            let mut beats = f64::from(slashes);
+            if dotted {
+                beats *= 1.5;
+            }
+            return Ok((beats, k));
+        }
+    }
+
+    // 3. Default: one full measure. Consume nothing.
+    Ok((beats_per_measure, after_paren))
+}
+
+/// Expand `()` rhythm groups into explicit per-chord lily durations.
+///
+/// A `(a b c …)` group has a *target duration* (see [`group_target_beats`])
+/// divided equally among its N inner chords. Each chord is rewritten with the
+/// lily token for `target / N`, so the existing chord-line parser renders the
+/// division — including triplets — with no further special-casing:
+/// ```text
+///   (C G)       -> C_2 G_2            two half notes
+///   (D Em G)    -> D_2t Em_2t G_2t    half-note triplet over the bar
+///   (D Em)//    -> D_4 Em_4           group = 2 beats, one each
+///   (D Em G)_4  -> D_8t Em_8t G_8t    eighth-note triplet over a quarter
+/// ```
+/// Quoted text and `m{…}` melody blocks are copied verbatim, so their
+/// parentheses (e.g. melody octaves) are left untouched. Note: byte offsets of
+/// expanded lines no longer map 1:1 to the source, so source spans on a line
+/// that contains a group are approximate.
+fn expand_chord_groups(line: &str, time_sig: TimeSignature) -> Result<String, String> {
+    if !line.contains('(') {
+        return Ok(line.to_string());
+    }
+    let beats_per_measure = f64::from(time_sig.numerator);
+    let bytes = line.as_bytes();
+    let mut out = String::with_capacity(line.len());
+    let mut i = 0usize;
+    while i < bytes.len() {
+        let ch = line[i..].chars().next().unwrap();
+
+        // Copy quoted strings verbatim.
+        if ch == '"' {
+            let start = i;
+            i += 1;
+            while i < bytes.len() && bytes[i] != b'"' {
+                i += 1;
+            }
+            if i < bytes.len() {
+                i += 1; // include the closing quote
+            }
+            out.push_str(&line[start..i]);
+            continue;
+        }
+
+        // Copy `m{…}` melody blocks verbatim (track brace depth).
+        if ch == 'm' && bytes.get(i + 1) == Some(&b'{') {
+            let start = i;
+            i += 2;
+            let mut depth = 1u32;
+            while i < bytes.len() && depth > 0 {
+                match bytes[i] {
+                    b'{' => depth += 1,
+                    b'}' => depth -= 1,
+                    _ => {}
+                }
+                i += 1;
+            }
+            out.push_str(&line[start..i]);
+            continue;
+        }
+
+        if ch == '(' {
+            let inner_start = i + 1;
+            let mut j = inner_start;
+            let mut depth = 1u32;
+            while j < bytes.len() {
+                match bytes[j] {
+                    b'(' => depth += 1,
+                    b')' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+                j += 1;
+            }
+            if depth != 0 {
+                return Err("Unclosed '(' in chord rhythm group".to_string());
+            }
+            let elems: Vec<&str> = line[inner_start..j].split_whitespace().collect();
+            if elems.is_empty() {
+                return Err("Empty '()' chord rhythm group".to_string());
+            }
+            let (target_beats, resume) =
+                group_target_beats(line, j + 1, beats_per_measure, time_sig)?;
+            let each = target_beats / elems.len() as f64;
+            let suffix = beats_to_lily_suffix(each, time_sig).ok_or_else(|| {
+                format!(
+                    "Chord group of {} chords cannot be evenly notated over {} beat(s); \
+                     supported divisions are powers of two and triplets",
+                    elems.len(),
+                    target_beats
+                )
+            })?;
+            for (idx, e) in elems.iter().enumerate() {
+                if idx > 0 {
+                    out.push(' ');
+                }
+                out.push_str(e);
+                out.push_str(&suffix);
+            }
+            i = resume;
+            continue;
+        }
+
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    Ok(out)
 }
 
 #[cfg(test)]

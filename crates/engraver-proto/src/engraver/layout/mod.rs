@@ -33,7 +33,7 @@
 
 pub mod autoplace;
 pub mod boundary;
-#[cfg(feature = "engraver")]
+#[cfg(feature = "svg")]
 pub mod chart;
 pub mod context;
 pub mod kerning;
@@ -60,10 +60,7 @@ pub use context::{
     LayoutConfiguration, LayoutContext, LayoutContextOwned, LayoutMode, LayoutState,
 };
 pub use kerning::{KerningType, SpacingPadding, SpacingPaddingPixels};
-pub use orchestrator::{
-    LayoutEngine, LayoutEngineBuilder, LayoutEngineConfig, LayoutResult, PageLayout, PageMargins,
-    SystemLayout, layout_score, layout_score_with_config,
-};
+pub use orchestrator::{PageLayout, PageMargins, SystemLayout};
 pub use segment::{ElementId, Segment, SegmentType, VOICES};
 pub use segment_list::SegmentList;
 pub use shape::{Shape, ShapeElement};
@@ -73,7 +70,7 @@ pub use springs::{HorizontalSpacingContext, SpacingConfig, Spring, SpringRow};
 pub use text_metrics::TextFontMetrics;
 pub use tlayout::{Layout, LayoutData};
 
-#[cfg(feature = "engraver")]
+#[cfg(feature = "svg")]
 pub use chart::{
     ChartCursor, ChartLayoutEngine, ChartLayoutResult, CursorConfig, CursorRgba, CursorState,
     CursorStyle, HighlightCommand, LayoutMode as ChartLayoutMode, MeasureMelodyData,

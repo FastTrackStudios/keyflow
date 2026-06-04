@@ -7,9 +7,9 @@ use anyrender::ImageRenderer;
 #[cfg(feature = "desktop-panels")]
 use anyrender_vello::VelloImageRenderer;
 #[cfg(feature = "desktop-panels")]
-use keyflow_ui::examples::{EMPTY_CHART, EXAMPLE_THRILLER};
-#[cfg(feature = "desktop-panels")]
 use keyflow_ui::ChartLayoutManager;
+#[cfg(feature = "desktop-panels")]
+use keyflow_ui::examples::{EMPTY_CHART, EXAMPLE_THRILLER};
 #[cfg(feature = "desktop-panels")]
 use kurbo::Affine;
 
@@ -317,6 +317,21 @@ fn main() -> Result<(), String> {
     println!(
         "render: frames={} total={:.2}ms avg={:.2}ms p95={:.2}ms p99={:.2}ms fps={:.1}",
         cfg.frames, total_ms, avg_ms, p95_ms, p99_ms, fps
+    );
+
+    // Explicit 60 Hz verdict: a frame must finish within 16.67 ms to sustain
+    // 60 fps. p95 is the honest bar — occasional spikes still drop frames.
+    const FRAME_BUDGET_MS: f64 = 1000.0 / 60.0;
+    let verdict = if p95_ms <= FRAME_BUDGET_MS {
+        "UNDER budget"
+    } else {
+        "OVER budget"
+    };
+    println!(
+        "60Hz budget: {:.2}ms/frame — p95 {:.2}ms ({:.0}% of frame) => {verdict}",
+        FRAME_BUDGET_MS,
+        p95_ms,
+        p95_ms / FRAME_BUDGET_MS * 100.0,
     );
 
     Ok(())

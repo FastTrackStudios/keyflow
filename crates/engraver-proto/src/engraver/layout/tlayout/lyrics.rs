@@ -7,7 +7,7 @@
 //! - Melisma lines (extended notes)
 
 use kurbo::{Point, Rect};
-use vello::peniko::Color;
+use peniko::Color;
 
 use crate::engraver::layout::context::LayoutContext;
 use crate::engraver::layout::shape::Shape;
@@ -241,7 +241,7 @@ pub fn compute_verse_positions(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engraver::layout::context::LayoutConfiguration;
+
     use crate::engraver::style::MStyle;
 
     fn test_ctx() -> LayoutContext<'static> {

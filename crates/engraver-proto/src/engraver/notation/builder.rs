@@ -1,7 +1,7 @@
 //! Builders for automatic music notation layout.
 
 use kurbo::{Affine, Point};
-use vello::peniko::Color;
+use peniko::Color;
 
 use crate::engraver::layout::context::LayoutContext;
 use crate::engraver::layout::segment::{Segment, SegmentType};
@@ -111,6 +111,9 @@ pub struct MeasureBuilder {
     time_signature: Option<TimeSignature>,
     /// Whether to render the time-signature glyph
     show_time_signature: bool,
+    /// Optional time-signature glyph color. `None` = default black. A mid-chart
+    /// meter change passes red so it stands out from the prevailing meter.
+    time_signature_color: Option<Color>,
     /// Notation mode (Standard, Rhythmic, etc.)
     mode: NotationMode,
     /// Rhythm pattern (list of durations)
@@ -164,6 +167,7 @@ impl MeasureBuilder {
             show_clef: true,
             time_signature: None,
             show_time_signature: true,
+            time_signature_color: None,
             mode: NotationMode::Standard,
             rhythm: Vec::new(),
             rest_positions: Vec::new(),
@@ -229,6 +233,13 @@ impl MeasureBuilder {
     #[must_use]
     pub fn time_signature(mut self, numerator: u8, denominator: u8) -> Self {
         self.time_signature = Some(TimeSignature::new(numerator, denominator));
+        self
+    }
+
+    /// Set the time-signature glyph color (e.g. red for a mid-chart change).
+    #[must_use]
+    pub fn time_signature_color(mut self, color: Color) -> Self {
+        self.time_signature_color = Some(color);
         self
     }
 
@@ -617,6 +628,7 @@ impl MeasureBuilder {
                         numerator: ts.numerator,
                         denominator: ts.denominator,
                     },
+                    color: self.time_signature_color,
                     ..Default::default()
                 },
                 ctx,
@@ -742,7 +754,6 @@ impl MeasureBuilder {
                 id += 1;
             } else if group.notes.len() >= 2 && group.notes.iter().any(|d| d.needs_flag()) {
                 // Beamed group (2+ notes with at least one flagged) - create beam notes
-                let group_start_tick = current_tick;
                 let mut beam_notes: Vec<BeamNoteInfo> = Vec::new();
                 // Use first note's head type for the whole beam group
                 let beam_head_type = get_head_type(rhythm_index);
@@ -800,7 +811,6 @@ impl MeasureBuilder {
                     let _ = bn;
                 }
                 scene_elements.push(SceneElement::BeamGroup {
-                    start_tick: group_start_tick,
                     notes: beam_notes,
                     head_type: beam_head_type,
                     stem_dir: group_stem_dir,
@@ -1175,7 +1185,6 @@ impl MeasureBuilder {
                     root.add_child(container);
                 }
                 SceneElement::BeamGroup {
-                    start_tick: _,
                     notes,
                     head_type,
                     stem_dir,
@@ -1463,7 +1472,6 @@ enum SceneElement {
         rhythm_index: usize,
     },
     BeamGroup {
-        start_tick: i32,
         notes: Vec<BeamNoteInfo>,
         head_type: NoteHeadType,
         stem_dir: StemDirection,

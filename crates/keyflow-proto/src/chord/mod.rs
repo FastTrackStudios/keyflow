@@ -49,6 +49,7 @@ pub use midi::{
     detect_chords_from_midi_notes_with_spelling, midi_pitch_to_note_name,
 };
 pub use quality::{ChordQuality, SuspendedType};
+pub use root::NotationSystem;
 pub use root::{RootParseResult, parse_root};
 pub use semitone_sequence::{
     SemitoneSequenceError, from_semitones, from_semitones_no_inversion, quality_from_semitones,

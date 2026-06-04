@@ -24,11 +24,11 @@
 
 use musicxml::datatypes::{
     BackwardForward, BarStyle as XmlBarStyle, HarmonyArrangement, StartStop, StartStopDiscontinue,
-    UpDownStopContinue, WedgeType,
+    WedgeType,
 };
 use musicxml::elements::{
-    Barline, Direction, DirectionType, DirectionTypeContents, MeasureElement, MeasureStyleContents,
-    PartElement, ScorePartwise, Time, Words,
+    Barline, Direction, DirectionTypeContents, MeasureElement, MeasureStyleContents, PartElement,
+    ScorePartwise, Time, Words,
 };
 
 use keyflow_proto::chart::notations::{
@@ -549,8 +549,7 @@ fn parse_bpm_credit(text: &str) -> Option<u32> {
         .unwrap_or(after_bpm);
     let digits = tempo_region
         .split(|c: char| !c.is_ascii_digit())
-        .filter(|part| !part.is_empty())
-        .next_back()?;
+        .rfind(|part| !part.is_empty())?;
     digits.parse().ok()
 }
 
@@ -690,7 +689,7 @@ fn key_from_xml(k: &musicxml::elements::Key) -> Option<keyflow_proto::key::Key> 
         Some(XmlMode::Minor) | Some(XmlMode::Aeolian)
     );
     let tonic = tonic_for_fifths(fifths, is_minor)?;
-    let root = MusicalNote::from_string(&tonic)?;
+    let root = MusicalNote::from_string(tonic)?;
     Some(if is_minor {
         KfKey::minor(root)
     } else {
@@ -808,7 +807,8 @@ fn close_open_voltas_at_new_section(
 
     let to_close = open_voltas
         .iter()
-        .filter_map(|(key, open)| (open.measure_idx < current_idx).then(|| key.clone()))
+        .filter(|&(_key, open)| open.measure_idx < current_idx)
+        .map(|(key, _open)| key.clone())
         .collect::<Vec<_>>();
 
     for key in to_close {
@@ -1134,9 +1134,9 @@ fn melody_note_pitch(n: &musicxml::elements::Note) -> Option<(String, u8)> {
         AudibleType::Pitch(p) => {
             let name = note_name(
                 &p.content.step.content,
-                p.content.alter.as_ref().map(|a| a.content.0 as i16),
+                p.content.alter.as_ref().map(|a| a.content.0),
             );
-            let octave = (*p.content.octave.content as u8).min(9);
+            let octave = (*p.content.octave.content).min(9);
             Some((name, octave))
         }
         _ => None,
@@ -1165,9 +1165,9 @@ fn melody_note_from_xml(
         AudibleType::Pitch(p) => {
             let pitch_str = note_name(
                 &p.content.step.content,
-                p.content.alter.as_ref().map(|a| a.content.0 as i16),
+                p.content.alter.as_ref().map(|a| a.content.0),
             );
-            let octave: u8 = (*p.content.octave.content as u8).min(9);
+            let octave: u8 = (*p.content.octave.content).min(9);
             keyflow_proto::chart::melody::MelodyNote::new(pitch_str, 4).with_octave(octave)
         }
         AudibleType::Rest(_) => keyflow_proto::chart::melody::MelodyNote::rest(4),
@@ -1177,14 +1177,14 @@ fn melody_note_from_xml(
         }
     };
 
-    let (duration, dotted) = ticks_to_lily_duration(dur_ticks as u32, divisions);
+    let (duration, dotted) = ticks_to_lily_duration(dur_ticks, divisions);
     note.duration = duration;
     note.dotted = dotted;
 
     // Tie info: a single note can carry both <tie type="start"/> and
     // <tie type="stop"/> (mid-chain of a sustained pitch). Honor both flags
     // independently so callers can model the whole chain.
-    let (info_ties): &[musicxml::elements::Tie] = match &n.content.info {
+    let info_ties: &[musicxml::elements::Tie] = match &n.content.info {
         NoteType::Normal(info) => &info.tie,
         NoteType::Cue(_) | NoteType::Grace(_) => &[],
     };
@@ -1208,8 +1208,8 @@ fn ticks_to_lily_duration(ticks: u32, divisions: u32) -> (u8, bool) {
     // Express ticks as a fraction of a whole note (whole = 4 * divisions).
     let whole = (divisions as u64) * 4;
     let ratio = (ticks as u64 * 64) / whole.max(1); // 64ths
-                                                    // Look up the closest entry in a small table. Each row is
-                                                    // (64ths, lily_dur, dotted).
+    // Look up the closest entry in a small table. Each row is
+    // (64ths, lily_dur, dotted).
     let table: &[(u64, u8, bool)] = &[
         (96, 1, true),  // dotted whole
         (64, 1, false), // whole
@@ -1347,12 +1347,6 @@ fn tick_to_beat(tick: i64, divisions: u32, beats_per_measure: u8) -> u8 {
     let beat_index = tick / divisions as i64;
     let clamped = beat_index.max(0).min((beats_per_measure as i64) - 1) as u8;
     clamped + 1
-}
-
-fn position_from_beat(_beat: u8) -> AbsolutePosition {
-    // Kept for code paths that only know the 1-based beat. Prefer
-    // `position_from_tick` which preserves sub-beat precision.
-    AbsolutePosition::at_beginning()
 }
 
 /// Convert a measure-local tick (musicxml `divisions`-per-quarter units) into a
@@ -1584,7 +1578,7 @@ fn ingest_wedge(
     measures: &mut [Measure],
     open_wedges: &mut std::collections::HashMap<u8, OpenWedge>,
 ) {
-    let number: u8 = w.attributes.number.as_ref().map(|n| **n as u8).unwrap_or(1);
+    let number: u8 = w.attributes.number.as_ref().map(|n| **n).unwrap_or(1);
 
     match w.attributes.r#type {
         WedgeType::Crescendo => {
@@ -1889,11 +1883,11 @@ pub(crate) fn slash_pulses_for_meter(num: u8, den: u8) -> Vec<(u8, bool)> {
     match den {
         4 => {
             // 4/4, 3/4, etc. — one quarter slash per beat (2 eighths each).
-            std::iter::repeat((2u8, false)).take(num as usize).collect()
+            std::iter::repeat_n((2u8, false), num as usize).collect()
         }
         2 => {
             // 2/2, 3/2 — one half slash per beat (4 eighths each).
-            std::iter::repeat((4u8, false)).take(num as usize).collect()
+            std::iter::repeat_n((4u8, false), num as usize).collect()
         }
         8 => {
             // /8 meters: greedy group-of-three.
@@ -1984,6 +1978,25 @@ fn kind_to_suffix(kind: &musicxml::elements::Kind) -> String {
     }
 }
 
+fn normalise_kind_text(t: &str) -> String {
+    // Trim and adapt a handful of common Finale/Sibelius exports to the
+    // tokens keyflow's chord parser expects.
+    match t {
+        "min" => "m".to_string(),
+        "min7" => "m7".to_string(),
+        "min9" => "m9".to_string(),
+        "min11" => "m11".to_string(),
+        "min13" => "m13".to_string(),
+        "maj" => String::new(),
+        "Maj" => String::new(),
+        "MAJ" => String::new(),
+        // Empty (= use_symbols suppresses text) → leave the bare suffix to
+        // the KindValue fallback path.
+        "" => String::new(),
+        other => other.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod meter_tests {
     use super::slash_pulses_for_meter;
@@ -2021,24 +2034,5 @@ mod meter_tests {
     #[test]
     fn half_meters_use_half_slashes() {
         assert_eq!(slash_pulses_for_meter(2, 2), vec![(4, false); 2]);
-    }
-}
-
-fn normalise_kind_text(t: &str) -> String {
-    // Trim and adapt a handful of common Finale/Sibelius exports to the
-    // tokens keyflow's chord parser expects.
-    match t {
-        "min" => "m".to_string(),
-        "min7" => "m7".to_string(),
-        "min9" => "m9".to_string(),
-        "min11" => "m11".to_string(),
-        "min13" => "m13".to_string(),
-        "maj" => String::new(),
-        "Maj" => String::new(),
-        "MAJ" => String::new(),
-        // Empty (= use_symbols suppresses text) → leave the bare suffix to
-        // the KindValue fallback path.
-        "" => String::new(),
-        other => other.to_string(),
     }
 }

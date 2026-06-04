@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use engraver::export::pdf::PdfSerializer;
 use engraver::export::svg::{SvgExportConfig, SvgSerializer};
 use engraver::fonts::ChartFontBundle;
-use engraver::layout::chart::{ChartLayoutConfig, ChartLayoutEngine, LayoutMode};
+use engraver::layout::chart::{ChartLayoutConfig, LayoutMode};
 use engraver::style::MStyle;
 
 fn output_dir() -> PathBuf {

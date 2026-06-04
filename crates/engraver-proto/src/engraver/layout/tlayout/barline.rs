@@ -3,7 +3,7 @@
 //! Handles layout of barlines including single, double, repeat, and end barlines.
 
 use kurbo::{Point, Rect};
-use vello::peniko::Color;
+use peniko::Color;
 
 use crate::engraver::layout::context::LayoutContext;
 use crate::engraver::layout::shape::Shape;
@@ -299,7 +299,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_barline(&params, &ctx);
+        let (_layout, node) = layout_barline(&params, &ctx);
 
         // Double barline has 2 thin lines
         assert_eq!(node.commands.len(), 2);
@@ -314,7 +314,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_barline(&params, &ctx);
+        let (_layout, node) = layout_barline(&params, &ctx);
 
         // End barline has thin + thick
         assert_eq!(node.commands.len(), 2);
@@ -329,7 +329,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_barline(&params, &ctx);
+        let (_layout, node) = layout_barline(&params, &ctx);
 
         // Start repeat: thick + thin + 2 dots = 4 commands
         assert_eq!(node.commands.len(), 4);
@@ -344,7 +344,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_barline(&params, &ctx);
+        let (_layout, node) = layout_barline(&params, &ctx);
 
         // End repeat: 2 dots + thin + thick = 4 commands
         assert_eq!(node.commands.len(), 4);

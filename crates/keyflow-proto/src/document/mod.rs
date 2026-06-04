@@ -125,7 +125,7 @@ mod tests {
 
     #[test]
     fn test_find_block() {
-        let mut blocks = vec![
+        let blocks = vec![
             KfBlock::keyflow("C //// G ////"),
             KfBlock::chordpro("{title: Test}\n[vs]\n[C]Verse"),
         ];

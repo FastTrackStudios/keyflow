@@ -7,8 +7,8 @@
 //! Based on patterns from anyrender's `PaintScene` trait.
 
 use kurbo::{BezPath, Point, Rect, Shape};
+use peniko::Color;
 use serde::{Deserialize, Serialize};
-use vello::peniko::Color;
 
 /// A paint command representing a single drawing operation.
 ///
@@ -423,6 +423,27 @@ impl PaintCommand {
             anchor: TextAnchor::Start,
             weight: FontWeight::Normal,
             style: FontStyle::Normal,
+        }
+    }
+
+    /// Create an italic, left-anchored text command.
+    #[must_use]
+    pub fn text_italic(
+        text: impl Into<String>,
+        font_family: impl Into<String>,
+        font_size: f64,
+        position: Point,
+        color: Color,
+    ) -> Self {
+        Self::Text {
+            text: text.into(),
+            font_family: font_family.into(),
+            font_size,
+            position,
+            color,
+            anchor: TextAnchor::Start,
+            weight: FontWeight::Normal,
+            style: FontStyle::Italic,
         }
     }
 

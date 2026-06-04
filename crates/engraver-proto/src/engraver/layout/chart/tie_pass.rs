@@ -6,7 +6,7 @@
 use crate::engraver::layout::context::LayoutContext;
 use crate::engraver::layout::segment::SegmentType;
 use crate::engraver::layout::tlayout::{SlurDirection, SlurEndpoint, SlurTieConfig, layout_tie};
-use crate::engraver::notation::{Duration, MeasureScene};
+use crate::engraver::notation::MeasureScene;
 use crate::engraver::scene::node::SceneNode;
 
 use super::ChartLayoutEngine;
@@ -163,37 +163,6 @@ impl ChartLayoutEngine {
                         .add_child(SceneNode::anonymous_leaf(tie_layout.commands));
                 }
             }
-        }
-    }
-
-    /// Convert a [`MelodyNote`](crate::chart::melody::MelodyNote)'s
-    /// LilyPond-style duration number + dotted flag into an engraver
-    /// [`Duration`].
-    pub(super) fn melody_note_to_duration(
-        &self,
-        note: &crate::chart::melody::MelodyNote,
-    ) -> Duration {
-        let base_duration = match note.duration {
-            1 => Duration::Whole,
-            2 => Duration::Half,
-            4 => Duration::Quarter,
-            8 => Duration::Eighth,
-            16 => Duration::Sixteenth,
-            32 => Duration::ThirtySecond,
-            _ => Duration::Quarter,
-        };
-
-        if note.dotted {
-            match base_duration {
-                Duration::Whole => Duration::Whole, // no DottedWhole in engraver
-                Duration::Half => Duration::DottedHalf,
-                Duration::Quarter => Duration::DottedQuarter,
-                Duration::Eighth => Duration::DottedEighth,
-                Duration::Sixteenth => Duration::DottedSixteenth,
-                _ => base_duration,
-            }
-        } else {
-            base_duration
         }
     }
 }

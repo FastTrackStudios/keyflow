@@ -12,12 +12,12 @@ use engraver::export::pdf::PdfSerializer;
 use engraver::export::svg::{SvgExportConfig, SvgSerializer};
 use engraver::fonts::ChartFontBundle;
 use engraver::import::{
-    generate_chart_text, MarkerEvent, MarkerType, MidiChartConfig, MidiFile, MidiNote, MidiTrack,
-    TempoEvent, TimeSignatureEvent,
+    MarkerEvent, MarkerType, MidiChartConfig, MidiFile, MidiNote, MidiTrack, TempoEvent,
+    TimeSignatureEvent, generate_chart_text,
 };
 use engraver::layout::chart::{ChartLayoutConfig, ChartLayoutEngine, LayoutMode};
 use engraver::style::MStyle;
-use keyflow::chord::{detect_chords_from_midi_notes, MidiNote as KeyflowMidiNote};
+use keyflow::chord::{MidiNote as KeyflowMidiNote, detect_chords_from_midi_notes};
 
 fn output_dir() -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/output");
@@ -392,6 +392,7 @@ fn test_vienna_rpp_to_chart_text() {
         key_root: Some("Bb".to_string()),
         title: Some("Vienna - Just Friends\nTranscribed By: Cody Wright".to_string()),
         swing: midi.swing(),
+        ..Default::default()
     };
     let chart_text = generate_chart_text(&midi, &config);
 
@@ -413,6 +414,7 @@ fn test_vienna_rpp_to_pdf() {
         key_root: Some("Bb".to_string()),
         title: Some("Vienna - Just Friends\nTranscribed By: Cody Wright".to_string()),
         swing: midi.swing(),
+        ..Default::default()
     };
     let chart_text = generate_chart_text(&midi, &config);
 

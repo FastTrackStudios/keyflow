@@ -134,7 +134,7 @@ impl From<crate::engraver::notation::Duration> for Duration {
 
 // region:    --- crate::core::NoteValue Conversions
 
-#[cfg(feature = "engraver")]
+#[cfg(feature = "svg")]
 impl From<crate::core::NoteValue> for DurationKind {
     fn from(note: crate::core::NoteValue) -> Self {
         match note {
@@ -149,7 +149,7 @@ impl From<crate::core::NoteValue> for DurationKind {
     }
 }
 
-#[cfg(feature = "engraver")]
+#[cfg(feature = "svg")]
 impl From<DurationKind> for crate::core::NoteValue {
     fn from(kind: DurationKind) -> Self {
         match kind {

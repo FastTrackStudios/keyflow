@@ -8,7 +8,6 @@
 //! - `{Cmaj7}Amazing {Dm7}grace {G}how {Cmaj7}sweet`
 //! - Multiple chords on one syllable: `{Cmaj7|Dm7}transition`
 
-use super::lyrics::LyricSyllable;
 use crate::chart::syllable_parser::SyllableParser;
 
 /// Parse lyrics with explicit chord assignments

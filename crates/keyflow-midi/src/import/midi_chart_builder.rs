@@ -319,7 +319,7 @@ fn extract_melody_for_section(
     // Legacy aliases used elsewhere in the function. `eighth` here is the
     // quantization unit for snapping; `quarter` is unchanged.
     let eighth = grid_unit;
-    let quarter = ppq as i64;
+    let _quarter = ppq as i64;
 
     // Step 1: Dequantize swing and snap to eighth-note grid.
     // For melody transcription, we snap ALL onsets to the nearest eighth-note
@@ -456,7 +456,7 @@ fn extract_melody_for_section(
         let mut pitch_name = format_pitch_name(&pitch, key_spelling.as_ref());
 
         // Check if we need a natural sign to cancel a previous accidental
-        let pitch_class = note.pitch % 12; // 0-11
+        let _pitch_class = note.pitch % 12; // 0-11
         let diatonic_class = pitch.class.staff_offset() as u8; // 0-6 (C-B)
         let current_alteration = pitch.alteration;
 
@@ -521,7 +521,7 @@ fn extract_melody_for_section(
             // will distribute it across all measures
             output.push_str(&format!(". {}", melody_block));
         } else {
-            output.push_str(".");
+            output.push('.');
         }
         output.push_str(" | ");
     }
@@ -545,10 +545,10 @@ fn format_pitch_name(pitch: &Pitch, key_spelling: Option<&KeySpelling>) -> Strin
     let acc = match pitch.alteration {
         1 => {
             // Check if we should spell as flat instead
-            if let Some(ks) = key_spelling {
-                if ks.prefers_flat() {
-                    return format_as_flat(pitch);
-                }
+            if let Some(ks) = key_spelling
+                && ks.prefers_flat()
+            {
+                return format_as_flat(pitch);
             }
             "#"
         }
@@ -693,41 +693,6 @@ fn grid_ticks_to_duration_with_grid(ticks: i64, ppq: u32, grid: ResolvedMelodyGr
             _ => "4t",
         }
         .to_string(),
-    }
-}
-
-fn grid_ticks_to_duration(ticks: i64, ppq: u32) -> String {
-    let eighth = ppq as i64 / 2;
-    let eighths = ((ticks + eighth / 2) / eighth).max(1); // count of eighth notes
-
-    match eighths {
-        1 => "8".to_string(),      // 1 eighth
-        2 => "4".to_string(),      // 2 eighths = quarter
-        3 => ".4".to_string(),     // 3 eighths = dotted quarter
-        4 => "2".to_string(),      // 4 eighths = half
-        5..=6 => ".2".to_string(), // ~6 eighths = dotted half
-        7..=8 => "1".to_string(),  // 8 eighths = whole
-        _ => "1".to_string(),      // longer = whole (ties handled by expand)
-    }
-}
-
-/// Like grid_ticks_to_duration but for melody contexts where we prefer
-/// keeping notes as eighths for better beaming. Only uses quarter/longer
-/// when the gap is clearly >= 2 eighths.
-fn melody_grid_ticks_to_duration(ticks: i64, ppq: u32) -> String {
-    let eighth = ppq as i64 / 2;
-    let eighths = ((ticks + eighth / 2) / eighth).max(1);
-
-    match eighths {
-        1 => "8".to_string(),
-        // For melody: 2 eighths could be two separate eighths with a rest,
-        // or a quarter. Use quarter only for longer gaps.
-        2 => "4".to_string(),
-        3 => ".4".to_string(),
-        4 => "2".to_string(),
-        5..=6 => ".2".to_string(),
-        7..=8 => "1".to_string(),
-        _ => "1".to_string(),
     }
 }
 
@@ -1262,12 +1227,12 @@ fn extract_sub_label(marker_name: &str) -> Option<String> {
 /// `"Guitar Solo"` → `Some("Guitar")`, `"SOLO Keys"` → `Some("Keys")`.
 fn extract_solo_instrument(marker_name: &str) -> Option<String> {
     // Try parenthesized instrument: "SOLO A (Trumpet)" or "Solo B (Trumpet)"
-    if let Some(open) = marker_name.find('(') {
-        if let Some(close) = marker_name[open..].find(')') {
-            let instrument = marker_name[open + 1..open + close].trim();
-            if !instrument.is_empty() {
-                return Some(instrument.to_string());
-            }
+    if let Some(open) = marker_name.find('(')
+        && let Some(close) = marker_name[open..].find(')')
+    {
+        let instrument = marker_name[open + 1..open + close].trim();
+        if !instrument.is_empty() {
+            return Some(instrument.to_string());
         }
     }
 
@@ -1295,7 +1260,6 @@ fn extract_quoted_name(marker_name: &str) -> Option<String> {
 /// Section layout info for chart generation.
 struct SectionLayout {
     keyflow_type: String,
-    start_measure: i32,
     length: i32,
     start_tick: i64,
     end_tick: i64,
@@ -1325,9 +1289,6 @@ fn calculate_section_lengths(
             continue;
         }
 
-        let start_measure = section
-            .explicit_start_measure
-            .unwrap_or(section.position.measure);
         let start_tick = i64::from(section.tick);
         let next_section_tick = sections.iter().skip(i + 1).find_map(|next| {
             let next_type = section_type_to_keyflow(next.section_type, next.tick <= songstart_tick);
@@ -1365,7 +1326,6 @@ fn calculate_section_lengths(
 
         result.push(SectionLayout {
             keyflow_type: keyflow_type.to_string(),
-            start_measure,
             length: length as i32,
             start_tick,
             end_tick,
@@ -1625,10 +1585,8 @@ fn build_rhythm_elements(
         // Threshold: chord duration <= half a beat (eighth note or less in 4/4).
         let is_staccato = if is_staccato_pushed {
             true
-        } else if !is_pushed && !is_continuing && actual_duration <= ticks_per_beat / 2 {
-            true
         } else {
-            false
+            !is_pushed && !is_continuing && actual_duration <= ticks_per_beat / 2
         };
 
         // For very short chords (< triplet eighth), quantize the end to grid
@@ -2569,9 +2527,9 @@ fn format_measure(
                             *is_staccato,
                         );
 
-                        let mut adjusted_beats = *beats;
+                        let adjusted_beats = *beats;
 
-                        let next_is_pushed = elements.get(idx + 1).is_some_and(|next| {
+                        let _next_is_pushed = elements.get(idx + 1).is_some_and(|next| {
                             matches!(
                                 next,
                                 MeasureElement::Chord {

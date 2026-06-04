@@ -144,6 +144,7 @@ impl Lexer {
             ';' => {
                 Token::with_location(TokenType::Semicolon, start_pos, 1, start_line, start_column)
             }
+            ':' => Token::with_location(TokenType::Colon, start_pos, 1, start_line, start_column),
             '>' => Token::with_location(
                 TokenType::GreaterThan,
                 start_pos,

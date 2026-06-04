@@ -58,11 +58,11 @@ impl SyllableParser {
                 }
 
                 // Attach chords from inline notation
-                if let Some(chord) = inline_chords.get(word_index) {
-                    if syl_index == 0 {
-                        // Attach to first syllable of word
-                        syllable = syllable.with_chord(chord.clone(), ChordAttachment::BeforeWord);
-                    }
+                if let Some(chord) = inline_chords.get(word_index)
+                    && syl_index == 0
+                {
+                    // Attach to first syllable of word
+                    syllable = syllable.with_chord(chord.clone(), ChordAttachment::BeforeWord);
                 }
 
                 // Mark hyphenation for multi-syllable words
@@ -86,9 +86,9 @@ impl SyllableParser {
         let mut chords = Vec::new();
         let mut current_chord: Option<String> = None;
         let mut in_bracket = false;
-        let mut chars = text.chars().peekable();
+        let chars = text.chars().peekable();
 
-        while let Some(ch) = chars.next() {
+        for ch in chars {
             match ch {
                 '[' => {
                     in_bracket = true;

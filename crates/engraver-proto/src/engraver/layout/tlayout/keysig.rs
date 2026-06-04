@@ -3,7 +3,7 @@
 //! Handles layout of key signatures with sharps or flats.
 
 use kurbo::{Point, Rect};
-use vello::peniko::Color;
+use peniko::Color;
 
 use crate::engraver::layout::context::LayoutContext;
 use crate::engraver::layout::shape::Shape;
@@ -105,6 +105,9 @@ pub struct KeySigParams {
     pub show_naturals: bool,
     /// Previous key (for showing naturals on key change)
     pub prev_key: Option<KeySigType>,
+    /// Optional glyph color override. `None` renders the default black; mid-chart
+    /// key changes pass a red so they stand out from the prevailing key prefix.
+    pub color: Option<Color>,
 }
 
 /// Layout a key signature.
@@ -112,6 +115,7 @@ pub struct KeySigParams {
 pub fn layout_keysig(params: &KeySigParams, ctx: &LayoutContext) -> (LayoutData, SceneNode) {
     let spatium = ctx.spatium();
     let accidental_spacing = spatium * 0.9; // Space between accidentals
+    let color = params.color.unwrap_or(Color::BLACK);
 
     let mut commands = Vec::new();
     let mut x = 0.0;
@@ -135,7 +139,7 @@ pub fn layout_keysig(params: &KeySigParams, ctx: &LayoutContext) -> (LayoutData,
                 ACCIDENTAL_NATURAL,
                 Point::new(x, y),
                 spatium,
-                Color::BLACK,
+                color,
             ));
 
             x += accidental_spacing * 0.8; // Naturals slightly closer
@@ -158,7 +162,7 @@ pub fn layout_keysig(params: &KeySigParams, ctx: &LayoutContext) -> (LayoutData,
                     ACCIDENTAL_SHARP,
                     Point::new(x, y),
                     spatium,
-                    Color::BLACK,
+                    color,
                 ));
 
                 x += accidental_spacing;
@@ -175,7 +179,7 @@ pub fn layout_keysig(params: &KeySigParams, ctx: &LayoutContext) -> (LayoutData,
                     ACCIDENTAL_FLAT,
                     Point::new(x, y),
                     spatium,
-                    Color::BLACK,
+                    color,
                 ));
 
                 x += accidental_spacing;
@@ -265,7 +269,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_keysig(&params, &ctx);
+        let (_layout, node) = layout_keysig(&params, &ctx);
 
         // C major has no accidentals
         assert!(node.commands.is_empty());
@@ -280,7 +284,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_keysig(&params, &ctx);
+        let (_layout, node) = layout_keysig(&params, &ctx);
 
         // G major has 1 sharp
         assert_eq!(node.commands.len(), 1);
@@ -295,7 +299,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_keysig(&params, &ctx);
+        let (_layout, node) = layout_keysig(&params, &ctx);
 
         // D major has 2 sharps
         assert_eq!(node.commands.len(), 2);
@@ -310,7 +314,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_keysig(&params, &ctx);
+        let (_layout, node) = layout_keysig(&params, &ctx);
 
         // F major has 1 flat
         assert_eq!(node.commands.len(), 1);
@@ -325,7 +329,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_keysig(&params, &ctx);
+        let (_layout, node) = layout_keysig(&params, &ctx);
 
         // Bb major has 2 flats
         assert_eq!(node.commands.len(), 2);
@@ -342,7 +346,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (layout, node) = layout_keysig(&params, &ctx);
+        let (_layout, node) = layout_keysig(&params, &ctx);
 
         // Should show 3 naturals
         assert_eq!(node.commands.len(), 3);

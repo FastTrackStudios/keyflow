@@ -6,6 +6,10 @@
 // region:    --- Keyflow Implementation Aliases
 
 pub(crate) mod ast {
+    // Facade glob re-export; consumed transitively as `crate::ast::*`.
+    // `allow` keeps `cargo fix` from pruning it (rustc can't see the
+    // glob's downstream uses).
+    #[allow(unused_imports)]
     pub(crate) use keyflow_syntax::ast::*;
 }
 pub(crate) mod chart {
@@ -21,9 +25,11 @@ pub(crate) mod key {
     pub(crate) use keyflow_proto::key::*;
 }
 pub(crate) mod metadata {
+    #[allow(unused_imports)]
     pub(crate) use keyflow_proto::metadata::*;
 }
 pub(crate) mod parsing {
+    #[allow(unused_imports)]
     pub(crate) use keyflow_syntax::parsing::*;
 }
 pub(crate) mod primitives {
@@ -42,28 +48,30 @@ pub(crate) use keyflow_proto::*;
 
 // region:    --- Modules
 
-#[cfg(feature = "engraver")]
+#[cfg(feature = "svg")]
 pub mod engraver;
 
-#[cfg(feature = "engraver")]
+#[cfg(feature = "svg")]
 pub mod api;
 
 // endregion: --- Modules
 
 // region:    --- Re-exports
 
-#[cfg(feature = "engraver")]
+#[cfg(feature = "svg")]
 pub use api::prelude as api_prelude;
 
-#[cfg(feature = "engraver")]
+#[cfg(feature = "svg")]
 pub use engraver::error::{Error, Result};
-#[cfg(feature = "engraver")]
-pub use engraver::model::{Measure, MusicElement, Part, Score, Voice};
-#[cfg(feature = "engraver")]
+#[cfg(feature = "svg")]
 pub use engraver::style::{MStyle, Sid, StyleValue};
-#[cfg(feature = "engraver")]
+#[cfg(feature = "svg")]
 pub use engraver::{
-    export, fonts, import, interaction, layout, model, notation, quantize, renderer, scene, style,
+    export, fonts, import, interaction, layout, model, notation, quantize, scene, style,
 };
+// The GPU renderer (wgpu/vello) is only available with the `wgpu` feature;
+// the `svg` feature provides layout + SVG export without it.
+#[cfg(feature = "wgpu")]
+pub use engraver::renderer;
 
 // endregion: --- Re-exports

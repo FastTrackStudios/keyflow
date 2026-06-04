@@ -2,14 +2,14 @@
 //!
 //! This exporter writes idiomatic `.kf` syntax for imported charts.
 
+use keyflow_proto::Note;
 use keyflow_proto::chart::melody::Melody;
 use keyflow_proto::chart::notations::{
     Dynamic, FiguredBass, Hairpin, HairpinKind, Placement, RepeatMark, StaffText,
 };
 use keyflow_proto::chart::types::{Measure, RhythmElement};
 use keyflow_proto::key::ScaleMode;
-use keyflow_proto::time::{Duration, MusicalDuration, MusicalPositionExt, TimeSignature};
-use keyflow_proto::Note;
+use keyflow_proto::time::{MusicalDuration, MusicalPositionExt, TimeSignature};
 use keyflow_proto::{Chart, ChordRhythm, SectionType};
 
 #[must_use]
@@ -502,10 +502,6 @@ fn chord_length_to_syntax(rhythm: &ChordRhythm, time_signature: (u8, u8)) -> Str
     }
 }
 
-fn figured_bass_rows_to_syntax(item: &FiguredBass) -> String {
-    figured_bass_rows(item).join("/")
-}
-
 fn figured_bass_rows_to_text(item: &FiguredBass) -> String {
     figured_bass_rows(item).join(" ")
 }
@@ -565,7 +561,10 @@ fn hairpin_to_syntax(hairpin: &Hairpin) -> String {
         HairpinKind::Crescendo => "<",
         HairpinKind::Decrescendo => ">",
     };
-    let mut text = format!("hairpin {kind} {}..{}", hairpin.start_beat, hairpin.end_beat);
+    let mut text = format!(
+        "hairpin {kind} {}..{}",
+        hairpin.start_beat, hairpin.end_beat
+    );
     if hairpin.placement == Placement::Above {
         text.push_str(" above");
     }

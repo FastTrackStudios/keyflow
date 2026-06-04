@@ -1,10 +1,10 @@
 //! ChordPro export - convert Chart to ChordPro format text
 
+use keyflow_proto::Chart;
 use keyflow_proto::chart::{Track, TrackType};
 use keyflow_proto::chord::{
     ChordProChunk, ChordProDirective, ChordProDocument, ChordProLine, ChordProSection,
 };
-use keyflow_proto::{Chart, ChartSection};
 
 /// Export a Chart to ChordPro format
 ///
@@ -199,7 +199,7 @@ fn line_to_text(line: &ChordProLine) -> String {
             .join(""),
         ChordProLine::ChordOnly(chunks) => chunks
             .iter()
-            .filter_map(|chunk| chunk.chord.as_ref().map(|c| c.as_str()))
+            .filter_map(|chunk| chunk.chord.as_deref())
             .collect::<Vec<_>>()
             .join(" "),
         ChordProLine::Comment(text) => format!("# {}", text),

@@ -9,7 +9,6 @@
 
 use crate::engraver::layout::context::LayoutContext;
 use crate::engraver::layout::text_metrics::TextFontMetrics;
-use crate::engraver::layout::tlayout::HarmonyStyle;
 use crate::engraver::notation::MeasureScene;
 use tracing::debug;
 
@@ -295,42 +294,6 @@ impl ChartLayoutEngine {
         }
 
         summarize_width_comparison(rows)
-    }
-
-    pub(super) fn source_measure_width_weights(
-        &self,
-        measure_indices: &[usize],
-        measures: &[crate::chart::types::Measure],
-    ) -> Option<Vec<f64>> {
-        let mut widths = measure_indices
-            .iter()
-            .map(|&idx| measures.get(idx)?.source_measure_width)
-            .collect::<Option<Vec<_>>>()?;
-
-        if widths.is_empty() || widths.iter().any(|w| !w.is_finite() || *w <= 0.0) {
-            return None;
-        }
-
-        // MusicXML exporters often include the clef/key/time prefix in the
-        // first measure's width. For spacing, the invisible left barline of
-        // the first real measure starts after that prefix, so normalize the
-        // first measure against the narrowest later measure in the system.
-        if widths.len() > 1 {
-            let narrowest_later = widths.iter().skip(1).copied().fold(f64::INFINITY, f64::min);
-            if narrowest_later.is_finite() && widths[0] > narrowest_later * 1.2 {
-                widths[0] = narrowest_later;
-            }
-        }
-
-        let average = widths.iter().sum::<f64>() / widths.len() as f64;
-        if average <= 0.0 {
-            return None;
-        }
-        for width in &mut widths {
-            *width /= average;
-        }
-
-        Some(widths)
     }
 
     pub(super) fn log_system_width_decisions(
@@ -691,14 +654,15 @@ impl ChartLayoutEngine {
         {
             melody_density_weight(measure, slope)
         } else {
-            rhythm_result
-                .entries
-                .iter()
-                .map(|e| {
-                    let ticks = e.duration().ticks().max(1) as f64;
-                    spacing::duration_stretch(ticks, constants::TICKS_PER_QUARTER, slope)
-                })
-                .sum()
+            // Chord-only (slash) bar: size it by the whole-measure duration, not
+            // by summing per-chord slash durations. Summing makes a 2+1+1 bar
+            // sprawl ~1.8x wider than a 2+2 bar purely because it has more
+            // slashes, even though the chord symbols fit comfortably. Chord
+            // symbols still reserve non-overlapping room via the min-width pass,
+            // so a bar only grows past base width when its chords actually need
+            // it — not from slash count.
+            let measure_ticks = measure_duration_ticks(measure.time_signature);
+            spacing::duration_stretch(measure_ticks, constants::TICKS_PER_QUARTER, slope)
         };
         let durations = rhythm_result
             .entries

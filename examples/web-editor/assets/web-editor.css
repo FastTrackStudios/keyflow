@@ -1,0 +1,118 @@
+/* Layout chrome for the keyflow web editor. Token colors + diagnostic
+   squiggles are injected at runtime by `editor_keyflow_lang::highlight_css`;
+   the editor's own structural styles come from `editor::EDITOR_STYLE`. */
+
+:root {
+  --bg: #1e1e21;
+  --panel: #26262b;
+  --border: #3a3a40;
+  --fg: #e6e6e6;
+  --muted-foreground: #9a9aa2;
+  --destructive: #e5484d;
+  --warning: #f5a623;
+  --info: #4a9eff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.bar {
+  flex: 0 0 auto;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: "title toggle" "hint toggle";
+  align-items: center;
+  column-gap: 12px;
+}
+
+.bar h1 {
+  grid-area: title;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.bar .hint {
+  grid-area: hint;
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+
+.bar .toggle {
+  grid-area: toggle;
+  padding: 5px 12px;
+  font-size: 12px;
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.bar .toggle:hover {
+  background: color-mix(in srgb, var(--fg) 14%, transparent);
+}
+
+.split {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 0;
+}
+
+.editor-pane,
+.preview-pane {
+  min-height: 0;
+  overflow: auto;
+}
+
+.editor-pane {
+  border-right: 1px solid var(--border);
+}
+
+/* The editor view fills the pane; monospace so highlight cells line up. */
+.editor-frame {
+  position: relative;
+  height: 100%;
+  padding: 12px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.preview-pane {
+  background: #ffffff;
+  padding: 16px;
+}
+
+.kf-render svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.kf-render-error {
+  color: var(--destructive);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+}

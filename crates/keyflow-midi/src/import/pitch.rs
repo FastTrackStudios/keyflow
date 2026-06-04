@@ -56,12 +56,6 @@ impl Pitch {
         }
     }
 
-    pub fn midi_note(&self) -> u8 {
-        let octave_offset = (self.octave.0 + 1) * 12;
-        (i16::from(self.class.base_midi()) + i16::from(octave_offset) + i16::from(self.alteration))
-            as u8
-    }
-
     pub fn from_midi(midi: u8) -> Self {
         let octave = Octave((midi / 12) as i8 - 1);
         let pitch_in_octave = midi % 12;

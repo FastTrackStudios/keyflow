@@ -28,3 +28,6 @@ cc = "1"
 # `grammar.js`. The build script is a no-op until `src/parser.c` exists,
 # so the crate builds (with the rust binding stub) immediately and gains
 # real parsing as soon as `npm run gen` is run by a grammar maintainer.
+
+[lints]
+workspace = true

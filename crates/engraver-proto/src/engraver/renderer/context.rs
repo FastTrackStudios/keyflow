@@ -152,7 +152,7 @@ impl VelloRenderContext {
                 scene,
                 &render_view,
                 &vello::RenderParams {
-                    base_color: vello::peniko::Color::WHITE,
+                    base_color: peniko::Color::WHITE,
                     width: self.config.width,
                     height: self.config.height,
                     antialiasing_method: vello::AaConfig::Msaa16,

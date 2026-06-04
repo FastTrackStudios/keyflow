@@ -91,3 +91,6 @@ wasm-panels = [
     "daw-proto",
     "serde_json",
 ]
+
+[lints]
+workspace = true

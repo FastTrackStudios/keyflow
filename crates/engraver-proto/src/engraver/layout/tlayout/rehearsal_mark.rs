@@ -13,7 +13,7 @@
 //! Vello efficiently renders these using GPU-accelerated vector graphics.
 
 use kurbo::{Point, Rect};
-use vello::peniko::Color;
+use peniko::Color;
 
 use crate::engraver::layout::context::LayoutContext;
 use crate::engraver::scene::node::SceneNode;
@@ -469,7 +469,7 @@ fn split_into_lines(text: &str, available_width: f64, char_width_ratio: f64) -> 
 /// Pre-defined color themes for rehearsal marks.
 pub mod themes {
     use super::RehearsalMarkStyle;
-    use vello::peniko::Color;
+    use peniko::Color;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Tailwind Color Palette
@@ -478,7 +478,7 @@ pub mod themes {
     // ═══════════════════════════════════════════════════════════════════════════
 
     pub mod tailwind {
-        use vello::peniko::Color;
+        use peniko::Color;
 
         // Slate (neutral cool gray)
         pub const SLATE_200: Color = Color::from_rgb8(0xe2, 0xe8, 0xf0);

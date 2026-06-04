@@ -39,6 +39,10 @@ pub struct ParsedSection {
     pub measure_expr: Option<MeasureExpression>,
     /// Optional comment/annotation (e.g., "Down", "Build", "Horns", "Half-time")
     pub comment: Option<String>,
+    /// Optional key-change token on the header line (e.g. `#G` in `BR 8 #G`),
+    /// applied at the start of the section. Stored verbatim for the caller to
+    /// parse with `Key::parse`.
+    pub key_change: Option<String>,
 }
 
 impl ParsedSection {
@@ -48,6 +52,7 @@ impl ParsedSection {
             section_type,
             measure_expr: None,
             comment: None,
+            key_change: None,
         }
     }
 
@@ -60,6 +65,7 @@ impl ParsedSection {
             section_type,
             measure_expr,
             comment: None,
+            key_change: None,
         }
     }
 
@@ -73,7 +79,15 @@ impl ParsedSection {
             section_type,
             measure_expr,
             comment,
+            key_change: None,
         }
+    }
+
+    /// Attach a key-change token (builder).
+    #[must_use]
+    pub fn with_key_change(mut self, key_change: Option<String>) -> Self {
+        self.key_change = key_change;
+        self
     }
 }
 
@@ -223,12 +237,16 @@ impl SectionType {
 
         // Try exact matches first (case-insensitive)
         match s_lower {
-            "verse" | "vs" | "v" => return Ok(SectionType::Verse),
-            "chorus" | "ch" | "c" => return Ok(SectionType::Chorus),
-            "bridge" | "br" | "b" => return Ok(SectionType::Bridge),
-            "intro" | "in" | "i" => return Ok(SectionType::Intro),
+            // Single-letter abbreviations are intentionally NOT accepted: they
+            // would shadow chord roots (C, B) and Roman numerals (I, V) on a
+            // content line. Section abbreviations are two or more letters (CH,
+            // VS, BR, IN, OUT, …).
+            "verse" | "vs" => return Ok(SectionType::Verse),
+            "chorus" | "ch" => return Ok(SectionType::Chorus),
+            "bridge" | "br" => return Ok(SectionType::Bridge),
+            "intro" | "in" => return Ok(SectionType::Intro),
             "opening" | "open" => return Ok(SectionType::Opening),
-            "outro" | "out" | "o" => return Ok(SectionType::Outro),
+            "outro" | "out" => return Ok(SectionType::Outro),
             "instrumental" | "inst" | "instrument" => return Ok(SectionType::Instrumental),
             "solo" => return Ok(SectionType::Solo),
             "count" | "countin" | "count-in" => return Ok(SectionType::CountIn),
@@ -380,6 +398,11 @@ impl SectionType {
     pub fn parse_with_measure_count(input: &str) -> Option<ParsedSection> {
         let input = input.trim();
 
+        // Peel a trailing key-change token (`BR 8 #G`) so the section header is
+        // still recognized; the caller applies it at the section start.
+        let (input, key_change) = extract_trailing_key_change(input);
+        let input = input.trim();
+
         // First, extract any quoted comment at the end: CH 4 "Down"
         let (input_without_quote, quoted_comment) = extract_quoted_comment(input);
         let input = input_without_quote.trim();
@@ -418,11 +441,14 @@ impl SectionType {
                     Some(MeasureExpression::parse(remaining)?)
                 };
 
-                return Some(ParsedSection::full(
-                    SectionType::Custom(name.to_string()),
-                    measure_expr,
-                    comment,
-                ));
+                return Some(
+                    ParsedSection::full(
+                        SectionType::Custom(name.to_string()),
+                        measure_expr,
+                        comment,
+                    )
+                    .with_key_change(key_change),
+                );
             }
         }
 
@@ -446,7 +472,7 @@ impl SectionType {
         //   "SOLO"           → Solo (no instrument, no measures)
         // Note: "SOLO \"Keys\"" is handled by the quoted comment extraction above.
         if let Some(solo_result) = parse_solo_section(&parts, comment.clone()) {
-            return Some(solo_result);
+            return Some(solo_result.with_key_change(key_change));
         }
 
         let section_str = parts[0];
@@ -495,25 +521,63 @@ impl SectionType {
         // Merge sub-label into comment (prefer quoted/preset comment if present)
         let comment = comment.or(sub_label_comment);
 
-        let section_type = match section_str {
-            "intro" | "in" => Some(SectionType::Intro),
-            "opening" | "open" => Some(SectionType::Opening),
-            "verse" | "vs" | "v" => Some(SectionType::Verse),
-            "chorus" | "ch" | "c" => Some(SectionType::Chorus),
-            "bridge" | "br" | "b" => Some(SectionType::Bridge),
-            "outro" | "out" | "o" => Some(SectionType::Outro),
-            "instrumental" | "inst" | "i" => Some(SectionType::Instrumental),
-            "count" | "countin" | "count-in" => Some(SectionType::CountIn),
-            "tag" | "tags" => Some(SectionType::Custom("Tags".to_string())),
-            "hits" | "hit" => Some(SectionType::Hits),
-            "interlude" | "inter" | "int" => Some(SectionType::Interlude),
-            "breakdown" | "bd" => Some(SectionType::Breakdown),
-            "vamp" | "vmp" => Some(SectionType::Vamp),
-            _ => None,
-        };
+        // Resolve the base type, then a `pre-`/`post-` prefix wrapping it, so
+        // `Pre-Chorus`, `PRE-CH`, `post-verse`, … all parse (not just bare `pre`).
+        let section_type = base_section_type(section_str)
+            .or_else(|| {
+                section_str
+                    .strip_prefix("pre-")
+                    .and_then(base_section_type)
+                    .map(|inner| SectionType::Pre(Box::new(inner)))
+            })
+            .or_else(|| {
+                section_str
+                    .strip_prefix("post-")
+                    .and_then(base_section_type)
+                    .map(|inner| SectionType::Post(Box::new(inner)))
+            });
 
-        section_type.map(|st| ParsedSection::full(st, measure_expr, comment))
+        section_type
+            .map(|st| ParsedSection::full(st, measure_expr, comment).with_key_change(key_change))
     }
+}
+
+/// Resolve a single section-marker token (already lowercased) to its base
+/// `SectionType`, with no `pre-`/`post-` wrapping. Single-letter abbreviations
+/// are intentionally rejected (see the note in [`SectionType::parse`]) so they
+/// don't shadow chord roots or Roman numerals on a content line.
+fn base_section_type(token: &str) -> Option<SectionType> {
+    match token {
+        "intro" | "in" => Some(SectionType::Intro),
+        "opening" | "open" => Some(SectionType::Opening),
+        "verse" | "vs" => Some(SectionType::Verse),
+        "chorus" | "ch" => Some(SectionType::Chorus),
+        "bridge" | "br" => Some(SectionType::Bridge),
+        "outro" | "out" => Some(SectionType::Outro),
+        "instrumental" | "inst" => Some(SectionType::Instrumental),
+        "count" | "countin" | "count-in" => Some(SectionType::CountIn),
+        "tag" | "tags" => Some(SectionType::Custom("Tags".to_string())),
+        "hits" | "hit" => Some(SectionType::Hits),
+        "interlude" | "inter" | "int" => Some(SectionType::Interlude),
+        "breakdown" | "bd" => Some(SectionType::Breakdown),
+        "vamp" | "vmp" => Some(SectionType::Vamp),
+        _ => None,
+    }
+}
+
+/// Peel a trailing key-change token (`#G`, `bBb`) off a section-header line.
+/// Only accidental-prefixed tokens that parse as a key are stripped, so
+/// measure counts and sub-labels are never mistaken for a key.
+fn extract_trailing_key_change(input: &str) -> (&str, Option<String>) {
+    if let Some((head, last)) = input.rsplit_once(char::is_whitespace) {
+        if (last.starts_with('#') || last.starts_with('b'))
+            && last.len() >= 2
+            && crate::key::Key::parse(last).is_ok()
+        {
+            return (head.trim_end(), Some(last.to_string()));
+        }
+    }
+    (input, None)
 }
 
 /// Parse a Solo section from whitespace-split parts.
@@ -610,14 +674,14 @@ fn is_sub_label(s: &str) -> bool {
 /// - `CH (Build) 8` → (`CH  8`, Some("Build"))
 /// - `In (Band) x2` → (`In  x2`, Some("Band"))
 fn extract_paren_comment(input: &str) -> (String, Option<String>) {
-    if let Some(open) = input.find('(') {
-        if let Some(close) = input[open..].find(')') {
-            let close = open + close;
-            let comment = input[open + 1..close].trim().to_string();
-            let remaining = format!("{}{}", &input[..open], &input[close + 1..]);
-            if !comment.is_empty() {
-                return (remaining, Some(comment));
-            }
+    if let Some(open) = input.find('(')
+        && let Some(close) = input[open..].find(')')
+    {
+        let close = open + close;
+        let comment = input[open + 1..close].trim().to_string();
+        let remaining = format!("{}{}", &input[..open], &input[close + 1..]);
+        if !comment.is_empty() {
+            return (remaining, Some(comment));
         }
     }
     (input.to_string(), None)
@@ -825,6 +889,57 @@ mod tests {
         assert_eq!(SectionType::parse_with_measure_count(""), None);
         // Invalid expression should cause parse to fail
         assert_eq!(SectionType::parse_with_measure_count("vs abc"), None);
+    }
+
+    #[test]
+    fn test_single_letter_abbrevs_are_not_sections() {
+        // Single-letter section abbreviations are intentionally rejected so they
+        // don't shadow chord roots (C, B) or Roman numerals (I, V) on a content
+        // line. A line like `C G` must parse as chords, not "Chorus / g".
+        for s in ["c", "C", "b", "B", "v", "V", "i", "I", "o", "O"] {
+            assert_eq!(
+                SectionType::parse(s).ok(),
+                None,
+                "single letter {s:?} should not parse as a section type"
+            );
+            assert_eq!(
+                SectionType::parse_with_measure_count(s),
+                None,
+                "single letter {s:?} should not parse as a section marker"
+            );
+        }
+        // `C G` (chord-root + chord-like token) must not be grabbed as a section.
+        assert_eq!(SectionType::parse_with_measure_count("C G"), None);
+    }
+
+    #[test]
+    fn test_pre_post_section_headers() {
+        let pre_chorus = SectionType::Pre(Box::new(SectionType::Chorus));
+        for s in ["Pre-Chorus 2", "PRE-CH 2", "pre-ch 2", "pre-chorus 2"] {
+            let parsed = SectionType::parse_with_measure_count(s)
+                .unwrap_or_else(|| panic!("{s:?} should parse"));
+            assert_eq!(parsed.section_type, pre_chorus, "{s}");
+            assert_eq!(parsed.measure_expr, Some(MeasureExpression::Absolute(2)));
+        }
+        assert_eq!(
+            SectionType::parse_with_measure_count("pre-verse 4").map(|p| p.section_type),
+            Some(SectionType::Pre(Box::new(SectionType::Verse)))
+        );
+        assert_eq!(
+            SectionType::parse_with_measure_count("Post-Chorus 8").map(|p| p.section_type),
+            Some(SectionType::Post(Box::new(SectionType::Chorus)))
+        );
+
+        // Two-letter abbreviations still work.
+        assert_eq!(
+            SectionType::parse_with_measure_count("ch").map(|p| p.section_type),
+            Some(SectionType::Chorus)
+        );
+        assert_eq!(
+            SectionType::parse_with_measure_count("vs 8").map(|p| p.section_type),
+            Some(SectionType::Verse)
+        );
+        assert_eq!(SectionType::parse("br").ok(), Some(SectionType::Bridge));
     }
 
     #[test]

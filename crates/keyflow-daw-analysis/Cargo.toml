@@ -30,3 +30,6 @@ default = ["vox"]
 # Consumer-crate flag the architect-rpc-derive macro checks via
 # `#[cfg(feature = "vox")]` on the generated client/dispatcher aliases.
 vox = []
+
+[lints]
+workspace = true

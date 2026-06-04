@@ -116,6 +116,74 @@ impl TextFontMetrics {
 
         metrics.x_height.map_or(font_size * 0.5, |h| h as f64)
     }
+
+    /// Visual height (outline bounding-box height, ink top to ink bottom) of a
+    /// single glyph at the given size. Returns `0.0` if the glyph has no
+    /// outline (e.g. a space) or can't be loaded.
+    ///
+    /// Unlike [`cap_height`](Self::cap_height) (a single font-global value),
+    /// this is per-glyph — needed because some glyphs (digits in the MuseJazz
+    /// chord font) are drawn shorter than capitals, so matching their visual
+    /// size requires their actual ink height.
+    #[must_use]
+    pub fn glyph_height(&self, c: char, font_size: f64) -> f64 {
+        use skrifa::outline::{DrawSettings, OutlinePen};
+
+        struct BoundsPen {
+            y_min: f32,
+            y_max: f32,
+            drawn: bool,
+        }
+        impl BoundsPen {
+            fn at(&mut self, y: f32) {
+                self.y_min = self.y_min.min(y);
+                self.y_max = self.y_max.max(y);
+                self.drawn = true;
+            }
+        }
+        impl OutlinePen for BoundsPen {
+            fn move_to(&mut self, _x: f32, y: f32) {
+                self.at(y);
+            }
+            fn line_to(&mut self, _x: f32, y: f32) {
+                self.at(y);
+            }
+            fn quad_to(&mut self, _cx: f32, cy: f32, _x: f32, y: f32) {
+                self.at(cy);
+                self.at(y);
+            }
+            fn curve_to(&mut self, _a: f32, b: f32, _c: f32, d: f32, _x: f32, y: f32) {
+                self.at(b);
+                self.at(d);
+                self.at(y);
+            }
+            fn close(&mut self) {}
+        }
+
+        let Ok(FileRef::Font(font_ref)) = FileRef::new(&self.font_data) else {
+            return 0.0;
+        };
+        let Some(gid) = font_ref.charmap().map(c) else {
+            return 0.0;
+        };
+        let outlines = font_ref.outline_glyphs();
+        let Some(glyph) = outlines.get(gid) else {
+            return 0.0;
+        };
+        let mut pen = BoundsPen {
+            y_min: f32::MAX,
+            y_max: f32::MIN,
+            drawn: false,
+        };
+        let settings = DrawSettings::unhinted(
+            Size::new(font_size as f32),
+            skrifa::instance::LocationRef::default(),
+        );
+        if glyph.draw(settings, &mut pen).is_err() || !pen.drawn {
+            return 0.0;
+        }
+        (pen.y_max - pen.y_min) as f64
+    }
 }
 
 impl std::fmt::Debug for TextFontMetrics {

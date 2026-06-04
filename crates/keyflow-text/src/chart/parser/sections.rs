@@ -42,9 +42,15 @@ fn looks_like_chord_content(line: &str) -> bool {
         return false;
     }
 
-    // Check if this looks like metadata (has bpm, time signature pattern, or key)
+    // Check if this looks like metadata (has bpm, time signature pattern, or key).
+    // A bare number is only metadata when it ISN'T a Nashville scale degree
+    // (1–7) — `120` is a tempo, but `1 4 6 5` is music, so it must read as
+    // chord content (otherwise a chart can't start with bare number-system
+    // chords and you'd be forced to add a title/meter line first).
     if first_token.ends_with("bpm")
-        || first_token.parse::<u32>().is_ok()
+        || first_token
+            .parse::<u32>()
+            .is_ok_and(|n| !(1..=7).contains(&n))
         || first_token.contains('/')
         || first_token.starts_with('#')
         || first_token.starts_with('b')
@@ -62,8 +68,8 @@ fn looks_like_chord_content(line: &str) -> bool {
             .iter()
             .filter(|w| {
                 let c = w.chars().next().unwrap_or(' ');
-                // Not A-G, not a slash, not a period (continuation)
-                !matches!(c, 'A'..='G' | '/' | '.' | '\'' | '>')
+                // Not A-G, not a scale degree (1-7), not a slash/continuation.
+                !matches!(c, 'A'..='G' | '1'..='7' | '/' | '.' | '\'' | '>')
             })
             .count();
         if non_chord_words > 1 {
@@ -71,8 +77,13 @@ fn looks_like_chord_content(line: &str) -> bool {
         }
     }
 
-    // Check if first character is a chord root (A-G)
+    // Check if first character is a chord root.
     let first_char = first_token.chars().next().unwrap_or(' ');
+    // Nashville scale-degree root (1–7) — a bare number-system chord like `1`,
+    // `4`, `6m`. The metadata check above already let single digits 1–7 through.
+    if matches!(first_char, '1'..='7') {
+        return true;
+    }
     if matches!(first_char, 'A'..='G') {
         // Make sure it looks like a chord, not just a word starting with A-G
         // Single letter or has chord-like suffix
@@ -172,6 +183,26 @@ impl<'a> ChartParser<'a> {
                 let section_type = parsed.section_type;
                 let measure_expr = parsed.measure_expr;
                 let section_comment = parsed.comment;
+
+                // A key change written on the header line (`BR 8 #G`) takes
+                // effect at the start of this section, before its chords parse,
+                // so scale-degree chords resolve in the new key and the key
+                // signature updates here.
+                if let Some(key_token) = parsed.key_change.as_ref() {
+                    if let Ok(new_key) = crate::key::Key::parse(key_token) {
+                        let section_index = self.chart.sections.len();
+                        let position =
+                            AbsolutePosition::new(MusicalDuration::new(0, 0, 0), section_index);
+                        let key_change = crate::chart::types::KeyChange::new(
+                            position,
+                            self.current_key.clone(),
+                            new_key.clone(),
+                            section_index,
+                        );
+                        self.key_changes.push(key_change);
+                        self.current_key = Some(new_key);
+                    }
+                }
 
                 // Resolve the measure expression using section memory
                 let measure_count = if let Some(expr) = measure_expr.as_ref() {
@@ -310,7 +341,11 @@ impl<'a> ChartParser<'a> {
                     }
 
                     let section = Section::new(section_type);
-                    let chart_section = ChartSection::new(section).with_measures(measures);
+                    // No section header was written — this Intro is synthesized
+                    // so the engraver/editor don't show a bogus "Intro" label.
+                    let chart_section = ChartSection::new(section)
+                        .with_measures(measures)
+                        .as_implicit();
                     self.sections.push(chart_section);
                 }
             } else {

@@ -1,25 +1,45 @@
 [package]
 name = "engraver-proto"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
 description = "Engraver types and rendering pipeline for Keyflow"
 
 [features]
 default = ["engraver"]
-engraver = [
-    "dep:anyrender",
-    "dep:wgpu",
-    "dep:vello",
+
+# CPU-only layout + SVG export. No GPU (wgpu/vello) and no PDF deps, so this
+# compiles cleanly for wasm and lightweight consumers (e.g. an editor that
+# renders `.kf` to inline SVG). The full `engraver` feature builds on top.
+svg = [
     "dep:kurbo",
-    "dep:parley",
+    "dep:peniko",
     "dep:skrifa",
     "dep:smufl",
-    "dep:lyon",
-    "dep:bytemuck",
     "dep:bitflags",
     "dep:serde_json",
     "dep:thiserror",
     "dep:macro_rules_attribute",
+]
+
+# Live GPU renderer: everything in `svg` plus the wgpu/vello scene renderer,
+# glyph tessellation (lyon), and text shaping (parley). This is the
+# heavyweight, non-wasm-friendly tier — only pull it in when you need to paint
+# to a GPU surface (e.g. the interactive editor preview).
+wgpu = [
+    "svg",
+    "dep:wgpu",
+    "dep:vello",
+    "dep:anyrender",
+    "dep:parley",
+    "dep:lyon",
+    "dep:bytemuck",
+]
+
+# Full engraver umbrella: `svg` + the `wgpu` renderer + PDF export. This is the
+# default and what existing consumers (keyflow-ui's live preview) expect.
+engraver = [
+    "svg",
+    "wgpu",
     "dep:printpdf",
     "dep:svg2pdf",
     "dep:usvg",
@@ -48,6 +68,7 @@ anyrender = { workspace = true, optional = true }
 wgpu = { version = "29", features = ["wgsl"], optional = true }
 vello = { version = "0.9", optional = true }
 kurbo = { version = "0.13", optional = true }
+peniko = { version = "0.6", optional = true }
 parley = { version = "0.2", optional = true, default-features = false, features = ["std"] }
 skrifa = { version = "0.26", optional = true }
 smufl = { version = "0.2", optional = true }

@@ -1,0 +1,8 @@
+# Pins the toolchain for rustup users + CI.
+# (The nix dev shell uses the Dioxus flake's toolchain instead; this file is
+# for rustup users. The wasm32 target is required to build the web editor.)
+[toolchain]
+channel = "1.94.1"
+components = ["rustfmt", "clippy", "rust-src"]
+targets = ["wasm32-unknown-unknown"]
+profile = "minimal"

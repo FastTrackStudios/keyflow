@@ -1,0 +1,17 @@
+# Dioxus CLI config for the keyflow web editor.
+#
+#   dx serve --package web-editor --platform web   # browser at :8080
+#
+# Web only — the Editor's contenteditable view doesn't run on
+# dioxus-native/Blitz yet, so there's no desktop platform here.
+
+[application]
+name = "web-editor"
+default_platform = "web"
+
+[web.app]
+title = "Keyflow Editor"
+
+[web.watcher]
+reload_html = true
+watch_path = ["examples/web-editor", "crates"]

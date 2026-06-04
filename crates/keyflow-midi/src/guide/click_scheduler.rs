@@ -81,15 +81,16 @@ impl ClickScheduler {
             let mut pos = measure_start_quarters;
             let measure_end = measure_start_quarters + measure_length;
             while pos < measure_end + tolerance {
-                if pos >= start_quarters - tolerance && pos < end_quarters - tolerance {
-                    if !is_on_beat_grid(pos, measure_start_quarters, beat_unit, tolerance) {
-                        events.push(ClickEvent {
-                            click_type: ClickType::Eighth,
-                            position_quarters: pos,
-                            midi_note: midi_map::CLICK_EIGHTH,
-                            velocity: 80,
-                        });
-                    }
+                if pos >= start_quarters - tolerance
+                    && pos < end_quarters - tolerance
+                    && !is_on_beat_grid(pos, measure_start_quarters, beat_unit, tolerance)
+                {
+                    events.push(ClickEvent {
+                        click_type: ClickType::Eighth,
+                        position_quarters: pos,
+                        midi_note: midi_map::CLICK_EIGHTH,
+                        velocity: 80,
+                    });
                 }
                 pos += eighth_interval;
             }
@@ -100,22 +101,22 @@ impl ClickScheduler {
             let mut pos = measure_start_quarters;
             let measure_end = measure_start_quarters + measure_length;
             while pos < measure_end + tolerance {
-                if pos >= start_quarters - tolerance && pos < end_quarters - tolerance {
-                    if !is_on_beat_grid(pos, measure_start_quarters, beat_unit, tolerance)
-                        && !is_on_subdivision_grid(
-                            pos,
-                            measure_start_quarters,
-                            eighth_interval,
-                            tolerance,
-                        )
-                    {
-                        events.push(ClickEvent {
-                            click_type: ClickType::Sixteenth,
-                            position_quarters: pos,
-                            midi_note: midi_map::CLICK_SIXTEENTH,
-                            velocity: 60,
-                        });
-                    }
+                if pos >= start_quarters - tolerance
+                    && pos < end_quarters - tolerance
+                    && !is_on_beat_grid(pos, measure_start_quarters, beat_unit, tolerance)
+                    && !is_on_subdivision_grid(
+                        pos,
+                        measure_start_quarters,
+                        eighth_interval,
+                        tolerance,
+                    )
+                {
+                    events.push(ClickEvent {
+                        click_type: ClickType::Sixteenth,
+                        position_quarters: pos,
+                        midi_note: midi_map::CLICK_SIXTEENTH,
+                        velocity: 60,
+                    });
                 }
                 pos += sixteenth_interval;
             }

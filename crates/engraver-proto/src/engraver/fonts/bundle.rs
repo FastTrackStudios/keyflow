@@ -7,6 +7,7 @@
 use std::sync::Arc;
 
 use crate::engraver::layout::chart::ChartLayoutEngine;
+#[cfg(feature = "wgpu")]
 use crate::engraver::renderer::scene_renderer::VelloSceneRenderer;
 use crate::engraver::style::MStyle;
 
@@ -17,7 +18,6 @@ static LELAND_FONT_BYTES: &[u8] = include_bytes!("../../../fonts/Leland.otf");
 static LELAND_METADATA_BYTES: &[u8] = include_bytes!("../../../fonts/leland_metadata.json");
 static LELAND_TEXT_FONT_BYTES: &[u8] = include_bytes!("../../../fonts/LelandText.otf");
 static BRAVURA_FONT_BYTES: &[u8] = include_bytes!("../../../fonts/Bravura.otf");
-static BRAVURA_METADATA_BYTES: &[u8] = include_bytes!("../../../fonts/bravura_metadata.json");
 static FREESANS_FONT_BYTES: &[u8] = include_bytes!("../../../fonts/FreeSans.ttf");
 static MUSEJAZZ_FONT_BYTES: &[u8] = include_bytes!("../../../fonts/MuseJazz.otf");
 static MUSEJAZZ_TEXT_FONT_BYTES: &[u8] = include_bytes!("../../../fonts/MuseJazzText.otf");
@@ -155,6 +155,9 @@ impl ChartFontBundle {
     /// Registers the SMuFL font, text font, and all named font aliases so that
     /// `PaintCommand::Text` references resolve correctly. This is the canonical
     /// font configuration — both REAPER and web should use this method.
+    ///
+    /// Only available with the `wgpu` (GPU renderer) feature.
+    #[cfg(feature = "wgpu")]
     #[must_use]
     pub fn configure_renderer<'a>(
         &'a self,

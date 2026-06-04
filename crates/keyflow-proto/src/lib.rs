@@ -18,9 +18,7 @@ pub mod sections;
 pub mod services;
 pub mod time;
 
-pub(crate) mod ast {
-    pub(crate) use keyflow_syntax::ast::*;
-}
+pub(crate) mod ast {}
 
 pub(crate) mod parsing {
     pub(crate) use keyflow_syntax::parsing::*;
@@ -57,7 +55,7 @@ pub use key::{Key, ScaleMode, ScaleType};
 
 pub use metadata::SongMetadata;
 
-pub use keyflow_syntax::parsing::{ParseError, TextSpan, Token, TokenType};
+pub use keyflow_syntax::parsing::{Lexer, ParseError, TextSpan, Token, TokenType};
 
 pub use primitives::{
     Interval, MusicalNote, MusicalNoteToken, Note, RomanCase, RomanNumeralToken, RootFormat,

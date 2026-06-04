@@ -14,7 +14,6 @@
 use std::sync::Arc;
 
 use crate::engraver::fonts::SMuFLFont;
-use crate::engraver::model::Score;
 use crate::engraver::style::MStyle;
 
 // region:    --- Layout Mode
@@ -204,8 +203,6 @@ pub struct LayoutState {
 pub struct LayoutContext<'a> {
     /// Configuration (immutable)
     pub config: &'a LayoutConfiguration,
-    /// Read-only access to score DOM
-    pub score: &'a Score,
     /// MStyle for all spacing/style queries
     pub style: &'a MStyle,
     /// SMuFL font for glyph metrics
@@ -217,13 +214,11 @@ impl<'a> LayoutContext<'a> {
     #[must_use]
     pub fn new(
         config: &'a LayoutConfiguration,
-        score: &'a Score,
         style: &'a MStyle,
         font: &'a SMuFLFont<'a>,
     ) -> Self {
         Self {
             config,
-            score,
             style,
             font,
         }
@@ -290,7 +285,6 @@ impl<'a> LayoutContext<'a> {
 /// ```
 pub struct LayoutContextOwned {
     config: LayoutConfiguration,
-    score: Score,
     style: Arc<MStyle>,
     font: SMuFLFontOwned,
 }
@@ -326,15 +320,9 @@ impl SMuFLFontOwned {
 impl LayoutContextOwned {
     /// Create a new owned context with all data.
     #[must_use]
-    pub fn new(
-        config: LayoutConfiguration,
-        score: Score,
-        style: MStyle,
-        font: SMuFLFont<'static>,
-    ) -> Self {
+    pub fn new(config: LayoutConfiguration, style: MStyle, font: SMuFLFont<'static>) -> Self {
         Self {
             config,
-            score,
             style: Arc::new(style),
             font: SMuFLFontOwned { data: None, font },
         }
@@ -357,7 +345,6 @@ impl LayoutContextOwned {
     pub fn new_minimal_arc(style: Arc<MStyle>) -> Self {
         Self {
             config: LayoutConfiguration::default(),
-            score: Score::default(),
             style,
             font: SMuFLFontOwned::empty(),
         }
@@ -368,7 +355,6 @@ impl LayoutContextOwned {
     pub fn for_test(config: LayoutConfiguration, style: MStyle) -> Self {
         Self {
             config,
-            score: Score::default(),
             style: Arc::new(style),
             font: SMuFLFontOwned::empty(),
         }
@@ -379,7 +365,6 @@ impl LayoutContextOwned {
     pub fn as_context(&self) -> LayoutContext<'_> {
         LayoutContext {
             config: &self.config,
-            score: &self.score,
             style: &self.style,
             font: self.font.as_ref(),
         }
@@ -394,11 +379,6 @@ impl LayoutContextOwned {
         Arc::make_mut(&mut self.style)
     }
 
-    /// Get mutable access to the score.
-    pub fn score_mut(&mut self) -> &mut Score {
-        &mut self.score
-    }
-
     /// Get mutable access to the configuration.
     pub fn config_mut(&mut self) -> &mut LayoutConfiguration {
         &mut self.config
@@ -411,18 +391,16 @@ impl<'a> LayoutContext<'a> {
     /// Create a minimal layout context for testing.
     ///
     /// This constructor is only available in test builds and creates a context
-    /// with stub Score and SMuFLFont references. Use for layout tests that only
-    /// need spatium/style access.
+    /// with a stub SMuFLFont reference. Use for layout tests that only need
+    /// spatium/style access.
     #[cfg(test)]
     #[must_use]
     pub fn new_for_test(_config: LayoutConfiguration, style: &'a MStyle) -> Self {
-        // Leak a default Score, Config, and SMuFLFont
-        let score = Box::leak(Box::new(Score::default()));
+        // Leak a default Config and SMuFLFont for a 'static-ish test context.
         let font = Box::leak(Box::new(SMuFLFont::empty()));
         let config = Box::leak(Box::new(LayoutConfiguration::new()));
         Self {
             config,
-            score,
             style,
             font,
         }
@@ -440,30 +418,27 @@ impl<'a> LayoutContext<'a> {
 #[cfg(test)]
 pub fn test_context() -> LayoutContext<'static> {
     let config = Box::leak(Box::new(LayoutConfiguration::new()));
-    let score = Box::leak(Box::new(crate::engraver::model::Score::default()));
     let style = Box::leak(Box::new(crate::engraver::style::MStyle::default()));
     let font = Box::leak(Box::new(crate::engraver::fonts::SMuFLFont::empty()));
-    LayoutContext::new(config, score, style, font)
+    LayoutContext::new(config, style, font)
 }
 
 /// Create a test context with custom configuration.
 #[cfg(test)]
 pub fn test_context_with_config(config: LayoutConfiguration) -> LayoutContext<'static> {
     let config = Box::leak(Box::new(config));
-    let score = Box::leak(Box::new(crate::engraver::model::Score::default()));
     let style = Box::leak(Box::new(crate::engraver::style::MStyle::default()));
     let font = Box::leak(Box::new(crate::engraver::fonts::SMuFLFont::empty()));
-    LayoutContext::new(config, score, style, font)
+    LayoutContext::new(config, style, font)
 }
 
 /// Create a test context with custom style.
 #[cfg(test)]
 pub fn test_context_with_style(style: crate::engraver::style::MStyle) -> LayoutContext<'static> {
     let config = Box::leak(Box::new(LayoutConfiguration::new()));
-    let score = Box::leak(Box::new(crate::engraver::model::Score::default()));
     let style = Box::leak(Box::new(style));
     let font = Box::leak(Box::new(crate::engraver::fonts::SMuFLFont::empty()));
-    LayoutContext::new(config, score, style, font)
+    LayoutContext::new(config, style, font)
 }
 
 // endregion: --- Test Helpers

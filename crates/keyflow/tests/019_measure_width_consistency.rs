@@ -20,12 +20,12 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use keyflow::Chart;
 use keyflow::engraver::layout::chart::{ChartLayoutConfig, ChartLayoutEngine, LayoutMode};
 use keyflow::engraver::scene::id::ElementType;
 use keyflow::engraver::scene::node::SceneNode;
 use keyflow::engraver::scene::traverse::SceneNodeExt;
 use keyflow::engraver::style::MStyle;
-use keyflow::Chart;
 
 /// The test chart source - Push Pull Triplets
 const TEST_CHART: &str = r#"Push Pull Triplets - Test
@@ -104,7 +104,7 @@ fn find_barline_positions(scene: &SceneNode) -> Vec<f64> {
             if id.element_type != ElementType::Barline {
                 return None;
             }
-            let world_origin = transform * kurbo::Point::ORIGIN;
+            let world_origin = keyflow::engraver::scene::transform::get_translation(&transform);
             Some(world_origin.x)
         })
         .collect();
@@ -170,7 +170,7 @@ fn test_vs_sections_have_correct_measure_count() {
         .filter(|s| {
             matches!(
                 s.section.section_type,
-                keyflow::sections::SectionType::Verse { .. }
+                keyflow::sections::SectionType::Verse
             )
         })
         .collect();
@@ -201,7 +201,7 @@ fn test_vs_measures_have_identical_content_structure() {
         .find(|s| {
             matches!(
                 s.section.section_type,
-                keyflow::sections::SectionType::Verse { .. }
+                keyflow::sections::SectionType::Verse
             )
         })
         .expect("VS section not found");
@@ -350,7 +350,7 @@ fn test_content_weight_calculation() {
         .find(|s| {
             matches!(
                 s.section.section_type,
-                keyflow::sections::SectionType::Verse { .. }
+                keyflow::sections::SectionType::Verse
             )
         })
         .expect("VS section not found");
@@ -369,11 +369,7 @@ fn test_content_weight_calculation() {
             .map(|c| match &c.rhythm {
                 keyflow::chord::ChordRhythm::Slashes { count, dotted, .. } => {
                     let base = *count as f64;
-                    if *dotted {
-                        base * 1.5
-                    } else {
-                        base
-                    }
+                    if *dotted { base * 1.5 } else { base }
                 }
                 keyflow::chord::ChordRhythm::Default => 4.0,
                 keyflow::chord::ChordRhythm::Explicit(nd) => nd.total_ticks_480() as f64 / 480.0,
@@ -414,7 +410,7 @@ fn test_push_pull_detection_in_vs1() {
         .find(|s| {
             matches!(
                 s.section.section_type,
-                keyflow::sections::SectionType::Verse { .. }
+                keyflow::sections::SectionType::Verse
             )
         })
         .expect("VS section not found");
@@ -463,7 +459,7 @@ fn test_spillback_from_in_to_count() {
         .find(|s| {
             matches!(
                 s.section.section_type,
-                keyflow::sections::SectionType::Intro { .. }
+                keyflow::sections::SectionType::Intro
             )
         })
         .expect("IN section not found");
@@ -503,7 +499,7 @@ fn test_spillback_from_vs1_to_in() {
         .find(|s| {
             matches!(
                 s.section.section_type,
-                keyflow::sections::SectionType::Verse { .. }
+                keyflow::sections::SectionType::Verse
             )
         })
         .expect("VS section not found");

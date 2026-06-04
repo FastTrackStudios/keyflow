@@ -243,7 +243,7 @@ pub fn merge_adjacent_groups(groups: Vec<TupletGroup>) -> Vec<TupletGroup> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engraver::notation::Duration;
+
     use crate::engraver::quantize::detector::quantize_duration_batch;
 
     fn make_triplet_eighths(config: &QuantizeConfig) -> Vec<QuantizedDuration> {

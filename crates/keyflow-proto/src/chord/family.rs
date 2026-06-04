@@ -179,7 +179,11 @@ impl ChordFamily {
         // The family depends on the base quality:
         // - Major quality -> Dominant seventh
         // - Minor quality -> Minor seventh
-        // - Diminished quality -> Half-diminished seventh (though usually notated as ø7)
+        // - Diminished quality -> Fully-diminished seventh. A `dim` triad is
+        //   consumed by the quality parser, so `dim7` arrives here as
+        //   Diminished + "7"; the diminished triad plus a diminished 7th is
+        //   the fully-diminished chord (`dim7`/`o7`). Half-diminished is the
+        //   distinct `ø7`/`m7b5` spelling, handled separately above.
         // - Augmented quality -> Augmented seventh (treated as Dominant with altered 5th)
         if consumed < tokens.len()
             && let TokenType::Number(n) = &tokens[consumed].token_type
@@ -187,7 +191,7 @@ impl ChordFamily {
         {
             let family = match quality {
                 ChordQuality::Minor => ChordFamily::Minor7,
-                ChordQuality::Diminished => ChordFamily::HalfDiminished,
+                ChordQuality::Diminished => ChordFamily::FullyDiminished,
                 _ => ChordFamily::Dominant7, // Major, Augmented, Suspended, Power
             };
             return Ok((Some(family), 1));

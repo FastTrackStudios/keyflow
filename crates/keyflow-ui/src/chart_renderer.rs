@@ -5,8 +5,8 @@
 //! (no WASM canvas methods — produces `vello::Scene` for the app to render).
 
 use crate::signals::{PageMeta, PreviewMode, SystemMeta};
-use anyrender::{recording::RenderCommand, Paint};
 use anyrender::{ImageRenderer, PaintScene, Scene as RecordedScene};
+use anyrender::{Paint, recording::RenderCommand};
 #[cfg(feature = "anyrender_vello")]
 type OffscreenRenderer = anyrender_vello::VelloImageRenderer;
 #[cfg(not(feature = "anyrender_vello"))]
@@ -28,7 +28,7 @@ use keyflow::engraver::layout::chart::{
 };
 use keyflow::engraver::renderer::cursor_renderer::render_cursor_commands;
 use keyflow::engraver::renderer::scene_renderer::SceneRenderBuilder;
-use keyflow::engraver::scene::node::{metadata_keys, SceneNode};
+use keyflow::engraver::scene::node::{SceneNode, metadata_keys};
 use keyflow::engraver::style::MStyle;
 use keyflow::{Chart, ChartPosition};
 use kurbo::{Affine, Point, Rect};
@@ -1329,8 +1329,10 @@ impl ChartLayoutManager {
     }
 
     fn insert_transformed_fragment(&mut self, key: TransformedPageKey, value: RecordedScene) {
-        if self.cached_transformed_fragments.contains_key(&key) {
-            self.cached_transformed_fragments.insert(key, value);
+        if let std::collections::hash_map::Entry::Occupied(mut e) =
+            self.cached_transformed_fragments.entry(key)
+        {
+            e.insert(value);
             return;
         }
 

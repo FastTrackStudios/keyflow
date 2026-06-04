@@ -10,14 +10,14 @@
 
 use anyrender::PaintScene;
 use kurbo::{Affine, Line, Point, Rect, RoundedRect};
+use kurbo::{BezPath, Stroke};
+use peniko::{Color, Fill};
 use skrifa::{
     MetadataProvider,
     instance::Size,
     outline::{DrawSettings, OutlinePen},
     prelude::LocationRef,
 };
-use vello::kurbo::{BezPath, Stroke};
-use vello::peniko::{Color, Fill};
 
 use crate::engraver::fonts::SMuFLFont;
 use crate::engraver::layout::chart::cursor::{HighlightCommand, Rgba};
@@ -51,7 +51,7 @@ pub fn render_cursor_commands(
                 width,
             } => {
                 let line = Line::new(Point::new(*x, *y_top), Point::new(*x, *y_bottom));
-                let stroke = Stroke::new(*width).with_caps(vello::kurbo::Cap::Round);
+                let stroke = Stroke::new(*width).with_caps(kurbo::Cap::Round);
                 scene.stroke(&stroke, transform, rgba_to_color(*color), None, &line);
             }
 
@@ -186,7 +186,6 @@ fn get_glyph_path(font: &SMuFLFont<'_>, codepoint: char, font_size: f64) -> Opti
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engraver::layout::chart::cursor::{ChartCursor, CursorConfig, CursorStyle};
 
     #[test]
     fn render_stroke_line() {

@@ -222,6 +222,7 @@ fn create_mock_chord(symbol: &str, measure: i32, beat: i32) -> keyflow_proto::Ch
         push_pull: None,
         commands: vec![],
         source_span: None,
+        display_override: None,
     }
 }
 

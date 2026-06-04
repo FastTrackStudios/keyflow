@@ -208,11 +208,7 @@ impl ChordSyllableAligner {
                     AbsolutePosition::new(MusicalDuration::new(0, syllable_offset, 0), 0)
                 };
 
-                SyllableWithTiming {
-                    text: syl.text.clone(),
-                    position,
-                    original_index: idx,
-                }
+                SyllableWithTiming { position }
             })
             .collect();
 
@@ -285,9 +281,7 @@ impl ChordSyllableAligner {
 /// Internal: Syllable with computed timing
 #[derive(Debug, Clone)]
 struct SyllableWithTiming {
-    text: String,
     position: AbsolutePosition,
-    original_index: usize,
 }
 
 #[cfg(test)]
