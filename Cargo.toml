@@ -84,7 +84,10 @@ peniko = "0.6"
 kurbo = "0.13"
 
 # UI
-dioxus-native = "0.8.0-alpha.0"
+# 0.7.9 line — the 0.8-alpha widget system (blitz custom widgets, anyrender
+# 0.10 pairing) waits for a stable 0.8; bumping it requires the whole FTS
+# component stack (fts-ui, dock-dioxus, session-ui) to move together.
+dioxus-native = "0.7.9"
 
 # Sibling repos
 # `daw-module`/`daw-proto`/`dawfile-reaper` are internal type-only crates.
