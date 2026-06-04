@@ -476,7 +476,7 @@ pub fn layout_harmony(
         .unwrap_or(&style.font_family);
 
     // Track previous character for kerning
-    let mut prev_char: Option<char> = None;
+    let mut prev_char: Option<char>;
 
     // Helper for kerning adjustments (values from MuseScore harmonylayout.cpp KERNED_CHARACTERS)
     // Returns kerning in cap-height units, caller multiplies by cap_height

@@ -763,8 +763,8 @@ impl ChartLayoutEngine {
         let mut global_system_index = 0usize;
         let mut id_counter = 100u64;
 
-        // Track previous chord to hide duplicates
-        let mut previous_chord_symbol: Option<String> = None;
+        // Track previous chord to hide duplicates (reset at each system start)
+        let mut previous_chord_symbol: Option<String>;
 
         // Beat position collection for cursor/highlight rendering
         let mut beat_positions: Vec<BeatPosition> = Vec::new();
@@ -888,10 +888,6 @@ impl ChartLayoutEngine {
             if matches!(chart_section.section.section_type, SectionType::End) {
                 continue;
             }
-
-            // Reset chord tracking at section boundaries (rehearsal marks)
-            // so the first chord of each section always shows
-            previous_chord_symbol = None;
 
             // Preprocess melodies to handle cross-measure spillover
             let beats_per_measure = time_signature.0 as f64;
@@ -2138,8 +2134,8 @@ impl ChartLayoutEngine {
             total_height += header_height;
         }
 
-        // Track previous chord to hide duplicates
-        let mut previous_chord_symbol: Option<String> = None;
+        // Track previous chord to hide duplicates (reset at each system start)
+        let mut previous_chord_symbol: Option<String>;
 
         // Beat position collection for cursor / highlight rendering / DAW transport sync.
         let mut beat_positions: Vec<BeatPosition> = Vec::new();
@@ -2216,10 +2212,6 @@ impl ChartLayoutEngine {
             if matches!(chart_section.section.section_type, SectionType::End) {
                 continue;
             }
-
-            // Reset chord tracking at section boundaries (rehearsal marks)
-            // so the first chord of each section always shows
-            previous_chord_symbol = None;
 
             // Preprocess melodies to handle cross-measure spillover
             let beats_per_measure = time_signature.0 as f64;

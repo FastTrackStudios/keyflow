@@ -18,7 +18,7 @@ editor-keyflow-lang = { workspace = true }
 # Declared directly (keyflow has no workspace `dioxus`); the workspace
 # `[patch.crates-io]` redirects this to the codywright dioxus fork the rest
 # of the workspace shares. `web` selects the wasm renderer.
-dioxus = { version = "0.7", features = ["web"] }
+dioxus = { git = "https://git.starcommand.live/codywright/dioxus", rev = "2a776101ae2544244c296734561d71bc0ebb46a6", package = "dioxus", features = ["web"] }
 tracing = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

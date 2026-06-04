@@ -21,7 +21,7 @@ anyrender_vello_hybrid = { workspace = true, optional = true, features = ["webgl
 peniko = { workspace = true, optional = true }
 
 # Dioxus UI framework - use dioxus-native when native feature is enabled
-dioxus = { version = "0.7.2", optional = true }
+dioxus = { git = "https://git.starcommand.live/codywright/dioxus", rev = "2a776101ae2544244c296734561d71bc0ebb46a6", package = "dioxus", optional = true }
 dioxus-native = { workspace = true, optional = true }
 
 # Vello scene types (for building scenes to hand off to ChartGraphics)

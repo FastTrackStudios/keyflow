@@ -1089,17 +1089,11 @@ pub fn expand_melodies_across_measures(
                 melody.notes.iter().map(|n| n.duration_beats()).sum::<f64>()
             );
             let mut current_measure = measure_idx;
-            let mut beats_remaining_in_measure = beats_per_measure;
 
             // Track running pitch state for relative octave resolution
             // Start at C4 (middle C) as the reference point
             let mut ref_class = PitchClass::C;
             let mut ref_octave: u8 = 4;
-
-            // Check if this measure already has melody content (from previous spillover)
-            if let Some(existing) = result.get(&current_measure) {
-                beats_remaining_in_measure = beats_per_measure - existing.total_beats;
-            }
 
             for note in &melody.notes {
                 let note_beats = note.duration_beats();
@@ -1139,7 +1133,6 @@ pub fn expand_melodies_across_measures(
                     if capacity <= 0.001 {
                         // Measure is full, move to next
                         current_measure += 1;
-                        beats_remaining_in_measure = beats_per_measure;
                         continue;
                     }
 
@@ -1181,7 +1174,6 @@ pub fn expand_melodies_across_measures(
                     // If we consumed all capacity, move to next measure for remaining beats
                     if measure_data.total_beats >= beats_per_measure - 0.001 {
                         current_measure += 1;
-                        beats_remaining_in_measure = beats_per_measure;
                     }
                 }
             }

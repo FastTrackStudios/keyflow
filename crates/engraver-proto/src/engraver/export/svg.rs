@@ -216,8 +216,6 @@ impl SvgSerializer {
 
     /// Write embedded fonts as @font-face declarations.
     fn write_embedded_fonts(&mut self) {
-        use std::io::Write as IoWrite;
-
         self.write_indent();
         writeln!(self.output, "<defs>").unwrap();
         self.indent_level += 1;

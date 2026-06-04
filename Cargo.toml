@@ -84,7 +84,7 @@ peniko = "0.6"
 kurbo = "0.13"
 
 # UI
-dioxus-native = "0.7.1"
+dioxus-native = { git = "https://git.starcommand.live/codywright/dioxus", rev = "2a776101ae2544244c296734561d71bc0ebb46a6", package = "dioxus-native" }
 
 # Sibling repos
 # `daw-module`/`daw-proto`/`dawfile-reaper` are internal type-only crates.
@@ -122,28 +122,28 @@ keyflow-musicxml = { path = "crates/keyflow-musicxml" }
 # dioxus) and fts-ui, so the whole workspace must share daw's dioxus fork.
 # These lines are copied verbatim from daw's [patch.crates-io].
 [patch.crates-io]
-dioxus = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus" }
-dioxus-asset-resolver = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-asset-resolver" }
-dioxus-cli-config = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-cli-config" }
-dioxus-config-macros = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-config-macros" }
-dioxus-core = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-core" }
-dioxus-core-macro = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-core-macro" }
-dioxus-core-types = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-core-types" }
-dioxus-devtools = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-devtools" }
-dioxus-devtools-types = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-devtools-types" }
-dioxus-document = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-document" }
-dioxus-history = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-history" }
-dioxus-hooks = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-hooks" }
-dioxus-html = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-html" }
-dioxus-html-internal-macro = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-html-internal-macro" }
-dioxus-rsx = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-rsx" }
-dioxus-signals = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-signals" }
-dioxus-stores = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-stores" }
-dioxus-stores-macro = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "dioxus-stores-macro" }
-generational-box = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "generational-box" }
-manganis = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "manganis" }
-manganis-core = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "manganis-core" }
-manganis-macro = { git = "https://git.starcommand.live/codywright/dioxus", rev = "32d9f5154fa9124b05be73b82e8b04fe717a730f", package = "manganis-macro" }
+dioxus = { git = "https://git.starcommand.live/codywright/dioxus", rev = "2a776101ae2544244c296734561d71bc0ebb46a6", package = "dioxus" }
+dioxus-asset-resolver = { git = "https://git.starcommand.live/codywright/dioxus", rev = "2a776101ae2544244c296734561d71bc0ebb46a6", package = "dioxus-asset-resolver" }
+dioxus-cli-config = { git = "https://git.starcommand.live/codywright/dioxus", rev = "2a776101ae2544244c296734561d71bc0ebb46a6", package = "dioxus-cli-config" }
+dioxus-config-macros = { git = "https://git.starcommand.live/codywright/dioxus", rev = "2a776101ae2544244c296734561d71bc0ebb46a6", package = "dioxus-config-macros" }
+dioxus-core = { git = "https://git.starcommand.live/codywright/dioxus", rev = "2a776101ae2544244c296734561d71bc0ebb46a6", package = "dioxus-core" }
+dioxus-core-macro = { git = "https://git.starcommand.live/codywright/dioxus", rev = "2a776101ae2544244c296734561d71bc0ebb46a6", package = "dioxus-core-macro" }
+dioxus-core-types = { git = "https://git.starcommand.live/codywright/dioxus", rev = "2a776101ae2544244c296734561d71bc0ebb46a6", package = "dioxus-core-types" }
+dioxus-devtools = { git = "https://git.starcommand.live/codywright/dioxus", rev = "2a776101ae2544244c296734561d71bc0ebb46a6", package = "dioxus-devtools" }
+dioxus-devtools-types = { git = "https://git.starcommand.live/codywright/dioxus", rev = "2a776101ae2544244c296734561d71bc0ebb46a6", package = "dioxus-devtools-types" }
+dioxus-document = { git = "https://git.starcommand.live/codywright/dioxus", rev = "2a776101ae2544244c296734561d71bc0ebb46a6", package = "dioxus-document" }
+dioxus-history = { git = "https://git.starcommand.live/codywright/dioxus", rev = "2a776101ae2544244c296734561d71bc0ebb46a6", package = "dioxus-history" }
+dioxus-hooks = { git = "https://git.starcommand.live/codywright/dioxus", rev = "2a776101ae2544244c296734561d71bc0ebb46a6", package = "dioxus-hooks" }
+dioxus-html = { git = "https://git.starcommand.live/codywright/dioxus", rev = "2a776101ae2544244c296734561d71bc0ebb46a6", package = "dioxus-html" }
+dioxus-html-internal-macro = { git = "https://git.starcommand.live/codywright/dioxus", rev = "2a776101ae2544244c296734561d71bc0ebb46a6", package = "dioxus-html-internal-macro" }
+dioxus-rsx = { git = "https://git.starcommand.live/codywright/dioxus", rev = "2a776101ae2544244c296734561d71bc0ebb46a6", package = "dioxus-rsx" }
+dioxus-signals = { git = "https://git.starcommand.live/codywright/dioxus", rev = "2a776101ae2544244c296734561d71bc0ebb46a6", package = "dioxus-signals" }
+dioxus-stores = { git = "https://git.starcommand.live/codywright/dioxus", rev = "2a776101ae2544244c296734561d71bc0ebb46a6", package = "dioxus-stores" }
+dioxus-stores-macro = { git = "https://git.starcommand.live/codywright/dioxus", rev = "2a776101ae2544244c296734561d71bc0ebb46a6", package = "dioxus-stores-macro" }
+generational-box = { git = "https://git.starcommand.live/codywright/dioxus", rev = "2a776101ae2544244c296734561d71bc0ebb46a6", package = "generational-box" }
+manganis = { git = "https://git.starcommand.live/codywright/dioxus", rev = "2a776101ae2544244c296734561d71bc0ebb46a6", package = "manganis" }
+manganis-core = { git = "https://git.starcommand.live/codywright/dioxus", rev = "2a776101ae2544244c296734561d71bc0ebb46a6", package = "manganis-core" }
+manganis-macro = { git = "https://git.starcommand.live/codywright/dioxus", rev = "2a776101ae2544244c296734561d71bc0ebb46a6", package = "manganis-macro" }
 
 # Vendored mermaid-rs-renderer fork (web-time for wasm32) lives in the Editor
 # repo and backs editor-mermaid. `[patch]` only applies from the build-root
@@ -173,6 +173,27 @@ actions-proto = { git = "https://codeberg.org/FastTrackStudios/input_actions.git
 # architect+Task pin) so the graph carries exactly one vox — architect's
 # generated Handler impls only unify across one vox-types. The crate list is the
 # union daw/session/input_actions reference.
+# Same fold for the Codeberg vox mirror: architect/daw pin it by rev and
+# dynamic-template by branch — distinct cargo sources for identical content,
+# which splits vox-types into incompatible copies. A repo can't [patch]
+# itself, so the starcommand mirror (same rev) is the unification target.
+[patch."https://codeberg.org/FastTrackStudios/vox.git"]
+vox                = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-core           = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-ffi            = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-jit            = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-jit-abi        = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-jit-cal        = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-macros-core    = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-macros-parse   = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-postcard       = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-schema         = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-service-macros = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-stream         = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-types          = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+vox-websocket      = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+facet-cbor         = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+
 [patch."https://github.com/bearcove/vox"]
 vox                = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
 vox-core           = { git = "https://git.starcommand.live/FastTrackStudios/vox", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }

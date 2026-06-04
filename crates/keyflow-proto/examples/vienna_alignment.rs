@@ -6,8 +6,8 @@
 //! 3. Enable synced playback, lyric slides, and interactive charts
 
 use keyflow_proto::{
-    AbsolutePosition, ChordInstance, ChordSyllableAligner, LyricLine, LyricSyllable,
-    MusicalDuration, SyllableParser,
+    AbsolutePosition, ChordInstance, ChordSyllableAligner, LyricSyllable, MusicalDuration,
+    SyllableParser,
 };
 
 fn main() {

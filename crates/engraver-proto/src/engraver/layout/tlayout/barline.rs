@@ -115,26 +115,25 @@ pub fn layout_barline(params: &BarlineParams, ctx: &LayoutContext) -> (LayoutDat
 
     let mut commands = Vec::new();
     let mut x = 0.0;
-    let mut total_width = 0.0;
 
-    match params.barline_type {
+    let total_width = match params.barline_type {
         BarlineType::Single => {
             commands.push(draw_thin_line(x, y_top, y_bottom, thin_width));
-            total_width = thin_width;
+            thin_width
         }
 
         BarlineType::Double => {
             commands.push(draw_thin_line(x, y_top, y_bottom, thin_width));
             x += thin_width + gap;
             commands.push(draw_thin_line(x, y_top, y_bottom, thin_width));
-            total_width = x + thin_width;
+            x + thin_width
         }
 
         BarlineType::End => {
             commands.push(draw_thin_line(x, y_top, y_bottom, thin_width));
             x += thin_width + gap;
             commands.push(draw_thick_line(x, y_top, y_bottom, thick_width));
-            total_width = x + thick_width;
+            x + thick_width
         }
 
         BarlineType::StartRepeat => {
@@ -147,7 +146,7 @@ pub fn layout_barline(params: &BarlineParams, ctx: &LayoutContext) -> (LayoutDat
             // Repeat dots
             let dot_commands = draw_repeat_dots(x, spatium);
             commands.extend(dot_commands);
-            total_width = x + spatium * 0.5;
+            x + spatium * 0.5
         }
 
         BarlineType::EndRepeat => {
@@ -160,7 +159,7 @@ pub fn layout_barline(params: &BarlineParams, ctx: &LayoutContext) -> (LayoutDat
             x += thin_width + gap;
             // Thick line
             commands.push(draw_thick_line(x, y_top, y_bottom, thick_width));
-            total_width = x + thick_width;
+            x + thick_width
         }
 
         BarlineType::Dashed => {
@@ -178,7 +177,7 @@ pub fn layout_barline(params: &BarlineParams, ctx: &LayoutContext) -> (LayoutDat
                 ));
                 y += dash_length + dash_gap;
             }
-            total_width = thin_width;
+            thin_width
         }
 
         BarlineType::Dotted => {
@@ -198,7 +197,7 @@ pub fn layout_barline(params: &BarlineParams, ctx: &LayoutContext) -> (LayoutDat
                 ));
                 y += dot_spacing;
             }
-            total_width = dot_radius;
+            dot_radius
         }
 
         BarlineType::Short => {
@@ -206,7 +205,7 @@ pub fn layout_barline(params: &BarlineParams, ctx: &LayoutContext) -> (LayoutDat
             let short_top = -spatium;
             let short_bottom = spatium;
             commands.push(draw_thin_line(x, short_top, short_bottom, thin_width));
-            total_width = thin_width;
+            thin_width
         }
 
         BarlineType::Tick => {
@@ -214,9 +213,9 @@ pub fn layout_barline(params: &BarlineParams, ctx: &LayoutContext) -> (LayoutDat
             let tick_top = y_top - spatium;
             let tick_bottom = y_top;
             commands.push(draw_thin_line(x, tick_top, tick_bottom, thin_width));
-            total_width = thin_width;
+            thin_width
         }
-    }
+    };
 
     let bbox = Rect::new(0.0, y_top, total_width, y_bottom);
     let shape = Shape::from_rect(bbox);

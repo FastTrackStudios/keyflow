@@ -3,8 +3,8 @@
 //! Handles parsing of chord lines, individual chord tokens, and related
 //! functionality including duration calculation, slash chords, and push/pull notation.
 
-use super::ChartParser;
 use super::helpers::{PushPullModifier, RepeatCount};
+use super::ChartParser;
 use crate::chart::cues::TextCue;
 use crate::chart::dynamics::DynamicMarking;
 use crate::chart::melody::{Melody, MelodyNote};
@@ -83,7 +83,11 @@ impl<'a> ChartParser<'a> {
         }
         out.push_str(&line[cursor..]);
 
-        if changed { out } else { line.to_string() }
+        if changed {
+            out
+        } else {
+            line.to_string()
+        }
     }
 
     fn expand_alias_token(&self, token: &str) -> Option<String> {
@@ -395,10 +399,10 @@ impl<'a> ChartParser<'a> {
         };
         let root_part = &token[..caret];
         let trailing = &after[fig_len..]; // e.g. a `_4` duration
-        // The figure states the chord exactly, so it must ignore chord memory:
-        // append `7` for the seventh figures (explicit family), and prefix `!`
-        // on the triad figures so a remembered seventh can't sneak in
-        // (`V^65 V^6` → the `V^6` stays a triad).
+                                          // The figure states the chord exactly, so it must ignore chord memory:
+                                          // append `7` for the seventh figures (explicit family), and prefix `!`
+                                          // on the triad figures so a remembered seventh can't sneak in
+                                          // (`V^65 V^6` → the `V^6` stays a triad).
         let chord_token = if append_seventh {
             format!("{root_part}7{trailing}")
         } else {
@@ -1957,10 +1961,8 @@ impl<'a> ChartParser<'a> {
             // to the synthetic chord token here and route it through normal
             // chord parsing below; the original `/D` becomes the display text.
             let synth_slash_bass: Option<String> = Self::parse_floating_slash_bass(token_str)
-                .and_then(|bass| {
-                    Self::previous_chord_root(&current_measure, &measures).map(|root| (root, bass))
-                })
-                .map(|(root, bass)| format!("{root}/{bass}"));
+                .zip(Self::previous_chord_root(&current_measure, &measures))
+                .map(|(bass, root)| format!("{root}/{bass}"));
             let (effective_token, display_override): (&str, Option<String>) =
                 match &synth_slash_bass {
                     Some(synth) => (synth.as_str(), Some((*token_str).to_string())),
@@ -3177,7 +3179,7 @@ impl<'a> ChartParser<'a> {
                     let mut repeat_chord = prev_chord.clone();
                     repeat_chord.original_token = ".".to_string();
                     repeat_chord.position = AbsolutePosition::at_beginning(); // Will be recalculated
-                    // Clear push/pull - the dot repeat doesn't inherit the timing modifier
+                                                                              // Clear push/pull - the dot repeat doesn't inherit the timing modifier
                     repeat_chord.push_pull = None;
                     // Inherit the source chord's rhythm and duration
                     // "F/C ." = two measures (F/C for 4 beats, then F/C repeated for 4 beats)
@@ -3443,7 +3445,7 @@ impl<'a> ChartParser<'a> {
                             (time_sig.numerator as u8, time_sig.denominator as u8);
                         current_measure_beats = 0.0;
                         measure_has_slash_rhythm = false; // Reset for new measure
-                        // Auto-created measure, not by separator
+                                                          // Auto-created measure, not by separator
                     }
                 }
                 Err(_e) => {
@@ -6441,9 +6443,11 @@ fn beats_to_lily_suffix(beats: f64, time_sig: TimeSignature) -> Option<String> {
 /// Resolve a `()` chord group's *target duration* in beats, starting at byte
 /// index `after_paren` (the position just past the closing `)`). The target is,
 /// in priority order:
-///   1. an attached lily suffix — `)_4`, `)_8t`, `)_2.`
-///   2. a slash run — `)//`, `) //`, `)/.` (each slash = one beat, `.` dots it)
-///   3. otherwise one full measure (`beats_per_measure`).
+///
+/// 1. an attached lily suffix — `)_4`, `)_8t`, `)_2.`
+/// 2. a slash run — `)//`, `) //`, `)/.` (each slash = one beat, `.` dots it)
+/// 3. otherwise one full measure (`beats_per_measure`).
+///
 /// Returns the target beats and the byte index where parsing should resume
 /// (past any consumed suffix/slashes). A slash run immediately followed by an
 /// alphanumeric/`#` is a floating slash-bass (`/E`, `/3`), not a target, and is

@@ -7,10 +7,7 @@
 //! 4. Chord-to-syllable alignment
 //! 5. Use cases: synced lyrics, MIDI, interactive charts
 
-use keyflow_proto::{
-    ChordAttachmentType, ChordSyllableAligner, KfBlockKind, KfDocument, LyricChordParser,
-    SyllableParser,
-};
+use keyflow_proto::{ChordSyllableAligner, KfBlockKind, KfDocument, LyricChordParser};
 
 fn main() {
     println!("╔════════════════════════════════════════════════════════════╗");

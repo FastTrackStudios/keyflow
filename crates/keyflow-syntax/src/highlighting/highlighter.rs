@@ -747,7 +747,7 @@ impl Highlighter {
                         // Roman numeral - highlight the whole numeral (only at word boundaries)
                         let (len, kind) = Self::parse_roman_numeral(&tokens, i);
                         spans.push(HighlightSpan::from_range(start_pos, len, kind));
-                        i += len.saturating_sub(1).max(0);
+                        i += len.saturating_sub(1);
                     } else {
                         // Other letter - might be part of quality or other notation
                         // Let it be handled by subsequent passes

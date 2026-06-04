@@ -55,7 +55,10 @@ impl VelloRenderContext {
     /// Returns `Error::GpuDevice` if surface creation, adapter request,
     /// device request, or Vello renderer construction fails.
     pub fn new(window: Arc<Window>) -> Result<Self> {
-        let instance = Instance::new(&InstanceDescriptor::default());
+        // wgpu 29: InstanceDescriptor lost Default; the display-handle-aware
+        // constructor isn't needed since the surface is created from the
+        // window right below.
+        let instance = Instance::new(InstanceDescriptor::new_without_display_handle());
         let surface = instance
             .create_surface(window.clone())
             .map_err(|e| Error::GpuDevice(format!("create surface: {e}")))?;
@@ -133,10 +136,15 @@ impl VelloRenderContext {
     /// Returns `Error::GpuDevice` if acquiring the surface texture or
     /// running the Vello render pass fails.
     pub fn render(&mut self, scene: &Scene) -> Result<()> {
-        let output = self
-            .surface
-            .get_current_texture()
-            .map_err(|e| Error::GpuDevice(format!("get surface texture: {e}")))?;
+        // wgpu 29: get_current_texture returns an enum instead of a Result.
+        // Suboptimal still renders; every other variant skips/fails the frame.
+        let output = match self.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(t)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
+            other => {
+                return Err(Error::GpuDevice(format!("get surface texture: {other:?}")));
+            }
+        };
 
         let render_view = self
             .render_texture

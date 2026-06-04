@@ -90,12 +90,10 @@ fn try_form_tuplet_group(
 
     // Count consecutive notes of the same tuplet type
     let mut count = 0;
-    let mut total_ticks = 0;
 
     for note in remaining {
         if note.tuplet_type == Some(tuplet_type) {
             count += 1;
-            total_ticks += note.ticks;
         } else {
             break;
         }

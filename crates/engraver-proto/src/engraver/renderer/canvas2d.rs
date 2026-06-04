@@ -226,7 +226,7 @@ impl Canvas2D {
     /// Draw a rounded rectangle outline using lyon stroke tessellation
     pub fn stroke_rounded_rect(&mut self, rect: Rect, radius: f32, thickness: f32, color: Color) {
         use lyon::math::Vector;
-        use lyon::path::builder::{PathBuilder, SvgPathBuilder};
+        use lyon::path::builder::SvgPathBuilder;
 
         let x = rect.x;
         let y = rect.y;
@@ -332,7 +332,7 @@ impl Canvas2D {
     /// Draw a filled rounded rectangle
     pub fn fill_rounded_rect(&mut self, rect: Rect, radius: f32, color: Color) {
         use lyon::math::Vector;
-        use lyon::path::builder::{PathBuilder, SvgPathBuilder};
+        use lyon::path::builder::SvgPathBuilder;
 
         let x = rect.x;
         let y = rect.y;

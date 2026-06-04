@@ -569,13 +569,12 @@ fn base_section_type(token: &str) -> Option<SectionType> {
 /// Only accidental-prefixed tokens that parse as a key are stripped, so
 /// measure counts and sub-labels are never mistaken for a key.
 fn extract_trailing_key_change(input: &str) -> (&str, Option<String>) {
-    if let Some((head, last)) = input.rsplit_once(char::is_whitespace) {
-        if (last.starts_with('#') || last.starts_with('b'))
-            && last.len() >= 2
-            && crate::key::Key::parse(last).is_ok()
-        {
-            return (head.trim_end(), Some(last.to_string()));
-        }
+    if let Some((head, last)) = input.rsplit_once(char::is_whitespace)
+        && (last.starts_with('#') || last.starts_with('b'))
+        && last.len() >= 2
+        && crate::key::Key::parse(last).is_ok()
+    {
+        return (head.trim_end(), Some(last.to_string()));
     }
     (input, None)
 }

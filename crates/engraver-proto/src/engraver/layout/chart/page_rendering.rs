@@ -593,7 +593,6 @@ pub fn add_title_header_with_count_in(
 
     // Composer/Artist - right aligned
     let mut commands = Vec::new();
-    let mut current_y = part_start_y;
     if let Some(composer) = composer_text {
         let artists: Vec<&str> = composer.split(',').map(|s| s.trim()).collect();
         for (i, artist) in artists.iter().enumerate() {
@@ -609,11 +608,6 @@ pub fn add_title_header_with_count_in(
                 style: FontStyle::Normal,
             });
         }
-
-        let max_lines = part_name_lines.len().max(artists.len());
-        current_y = part_start_y + ((max_lines - 1) as f64 * (small_font_size + 2.0));
-    } else {
-        current_y = part_start_y + ((part_name_lines.len() - 1) as f64 * (small_font_size + 2.0));
     }
 
     // Subtitle (medium, centered) - below the title with minimal spacing
@@ -652,7 +646,7 @@ pub fn add_title_header_with_count_in(
     } else {
         version_y + small_font_size
     };
-    current_y = if has_subtitle {
+    let current_y = if has_subtitle {
         subtitle_y.max(left_column_bottom)
     } else {
         left_column_bottom

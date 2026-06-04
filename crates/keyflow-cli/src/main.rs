@@ -4,7 +4,6 @@ use std::path::PathBuf;
 mod docs;
 
 use clap::{Parser, Subcommand, ValueEnum};
-use keyflow::Chart;
 use keyflow::engraver::export::pdf::PdfSerializer;
 use keyflow::engraver::export::svg::{SvgExportConfig, SvgSerializer};
 use keyflow::engraver::fonts::ChartFontBundle;
@@ -12,6 +11,7 @@ use keyflow::engraver::layout::chart::{
     Breakpoint, ChartLayoutConfig, ChartLayoutEngine, ChartLayoutResult, LayoutMode,
 };
 use keyflow::engraver::style::MStyle;
+use keyflow::Chart;
 
 /// Layout preset choice for the `png` / `svg` subcommands.
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -783,11 +783,9 @@ fn render_variant_pngs(
 ) -> Result<Vec<PathBuf>, String> {
     let layout = pipeline.layout_preset(chart, preset, breakpoint, width_pt);
     let svgs: Vec<String> = if layout.pages.is_empty() {
-        vec![
-            pipeline
-                .export_svg_continuous(&layout)
-                .ok_or_else(|| "continuous layout produced no SVG".to_string())?,
-        ]
+        vec![pipeline
+            .export_svg_continuous(&layout)
+            .ok_or_else(|| "continuous layout produced no SVG".to_string())?]
     } else {
         pipeline.export_svg_pages(&layout)
     };
@@ -1457,11 +1455,9 @@ fn run(cli: Cli) -> Result<(), String> {
 
             // ContinuousScroll has no `pages`; render the whole scene as one image.
             let svgs: Vec<String> = if layout.pages.is_empty() {
-                vec![
-                    pipeline
-                        .export_svg_continuous(&layout)
-                        .ok_or_else(|| "continuous layout produced no SVG".to_string())?,
-                ]
+                vec![pipeline
+                    .export_svg_continuous(&layout)
+                    .ok_or_else(|| "continuous layout produced no SVG".to_string())?]
             } else {
                 pipeline.export_svg_pages(&layout)
             };

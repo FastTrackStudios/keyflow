@@ -18,11 +18,11 @@
 //! ```
 
 use dioxus::prelude::*;
-use editor::{Editor, EditorState, editor_view};
+use editor::{editor_view, Editor, EditorState};
 use editor_keyflow::{font_face_css, render_svg_live};
 use editor_keyflow_lang::{
-    HighlightTheme, highlight_css, keyflow_decorations, keyflow_hover, overlays_enabled,
-    toggle_overlays,
+    highlight_css, keyflow_decorations, keyflow_hover, overlays_enabled, toggle_overlays,
+    HighlightTheme,
 };
 
 /// Idle delay before re-engraving the preview. Typing within this window keeps
@@ -94,6 +94,9 @@ fn App() -> Element {
         let my_gen = preview_gen.peek().wrapping_add(1);
         preview_gen.set(my_gen);
         spawn(async move {
+            // wasm-only dep (this app only runs in the browser); the cfg keeps
+            // host builds of the workspace (clippy --all-targets) compiling.
+            #[cfg(target_arch = "wasm32")]
             gloo_timers::future::TimeoutFuture::new(PREVIEW_DEBOUNCE_MS).await;
             // A keystroke landed during the wait → a newer task owns the render.
             if *preview_gen.peek() != my_gen {
