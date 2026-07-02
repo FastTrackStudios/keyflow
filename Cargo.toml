@@ -49,28 +49,23 @@ editor-keyflow-lang = { git = "https://codeberg.org/FastTrackStudios/Editor.git"
 # FastTrack Studio shared design system. Lives in the sibling fts-ui repo.
 fts-ui = { git = "https://codeberg.org/FastTrackStudios/fts-ui.git", branch = "main", package = "fts-ui" }
 
-# Facet reflection — align the stack to the current 0.46 line.
-facet = { version = "0.46" }
-facet-core = { version = "0.46" }
-facet-format = { version = "0.47" }
-facet-json = { version = "0.46" }
-facet-postcard = { version = "0.46" }
-facet-pretty = { version = "0.46" }
-facet-value = { version = "0.46" }
-facet-yaml = { version = "0.46" }
+# Facet reflection — 0.50 line (paired across the FTS stack; see daw).
+facet = { version = "0.50.0-rc.1" }
+facet-core = { version = "0.50.0-rc.1" }
+facet-format = { version = "0.50.0-rc.1" }
+facet-json = { version = "0.50.0-rc.1" }
+facet-postcard = { version = "0.50.0-rc.1" }
+facet-pretty = { version = "0.50.0-rc.1" }
+facet-value = { version = "0.50.0-rc.1" }
 
-# VOX service framework. Pinned to the starcommand fork @ f31f1040 (vox
-# 0.8.2) — the rev `architect` (local path below) uses, and the one whose
-# tokio deps are `#[cfg(not(wasm))]`-gated so the editor builds for wasm.
-# The `[patch."https://github.com/bearcove/vox"]` block below folds every
-# transitive bearcove/vox reference onto this same rev.
-vox = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-types = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-stream = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
+# VOX service framework — consumed from crates.io (upstream facet/vox
+# monorepo), 0.10 line paired with facet 0.50.
+vox = { version = "0.10.0-rc.1", default-features = false, features = ["runtime"] }
+vox-types = { version = "0.10.0-rc.1" }
+vox-stream = { version = "0.10.0-rc.1" }
 
 # architect framework — defines #[architect::rpc] for sync-trait → vox RPC
-# bridging. Local path (matching Task) so architect's vox-0.8.2 / runtime-
-# only profile drives the whole graph and the wasm build stays mio-free.
+# bridging. Codeberg main; path-patched to the local migrated checkout below.
 architect = { git = "https://codeberg.org/FastTrackStudios/architect.git", branch = "main" }
 architect-rpc-derive = { git = "https://codeberg.org/FastTrackStudios/architect.git", branch = "main" }
 
@@ -128,60 +123,38 @@ keyflow-musicxml = { path = "crates/keyflow-musicxml" }
 # on wasm32.
 mermaid-rs-renderer = { git = "https://codeberg.org/FastTrackStudios/Editor.git", branch = "main" }
 
-# ── Editor wasm dependency unification ───────────────────────────────
-# The Editor (via editor-keyflow → engraver → keyflow-proto → daw-proto)
-# reaches the vox RPC stack. Without these patches keyflow's graph carries
-# THREE conflicting vox copies (bearcove / Codys-Wright / starcommand) and
-# the wrong daw-proto profile, which pulls vox's full tokio-net transport →
-# `mio`, which can't build for `wasm32`. These mirror Task's working web
-# build verbatim (paths adapted to keyflow's location): they fold every vox
-# reference onto the single starcommand fork and point daw-proto + actions-
-# proto at their local checkouts so daw-proto's runtime-only (wasm-friendly)
-# vox profile applies. See Task/Cargo.toml for the original rationale.
+# moire from crates.io (pulled by daw's migrated crates) folded onto the FTS
+# fork rev the github patch below also uses — one moire copy graph-wide.
+moire = { git = "https://codeberg.org/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-macros-noop = { git = "https://codeberg.org/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-runtime = { git = "https://codeberg.org/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-tokio = { git = "https://codeberg.org/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-trace-capture = { git = "https://codeberg.org/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-trace-types = { git = "https://codeberg.org/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-types = { git = "https://codeberg.org/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-wasm = { git = "https://codeberg.org/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+moire-wire = { git = "https://codeberg.org/FastTrackStudios/moire.git", rev = "7a2f1dc" }
+
+# Editor/session git-deps reference keyflow.git itself; before this repo's
+# migration landed on codeberg main that dragged a pre-migration (facet 0.46)
+# keyflow copy into the graph, so we fold it onto this workspace's crates.
+# Self-referential but harmless once main carries the migration — kept so a
+# checkout mid-history still resolves one keyflow graph-wide.
+[patch."https://codeberg.org/FastTrackStudios/keyflow.git"]
+keyflow = { path = "crates/keyflow" }
+keyflow-proto = { path = "crates/keyflow-proto" }
+keyflow-text = { path = "crates/keyflow-text" }
+keyflow-midi = { path = "crates/keyflow-midi" }
+keyflow-syntax = { path = "crates/keyflow-syntax" }
+keyflow-chordpro = { path = "crates/keyflow-chordpro" }
+keyflow-daw-analysis = { path = "crates/keyflow-daw-analysis" }
+engraver = { path = "crates/engraver" }
+engraver-proto = { path = "crates/engraver-proto" }
+
+# Some transitive deps still reference input_actions by its old github URL;
+# fold those onto the codeberg main copy.
 [patch."https://github.com/FastTrackStudios/input_actions.git"]
 actions-proto = { git = "https://codeberg.org/FastTrackStudios/input_actions.git", branch = "main" }
-
-[patch."https://git.starcommand.live/FastTrackStudios/input_actions.git"]
-actions-proto = { git = "https://codeberg.org/FastTrackStudios/input_actions.git", branch = "main" }
-
-# Fold every transitive vox reference (bearcove + Codys-Wright) onto the single
-# FastTrackStudios fork @ f31f1040 (vox 0.8.2, the Uuid-opaque-scalar fork
-# architect+Task pin) so the graph carries exactly one vox — architect's
-# generated Handler impls only unify across one vox-types. The crate list is the
-# union daw/session/input_actions reference.
-[patch."https://github.com/bearcove/vox"]
-vox                = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-core           = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-ffi            = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-jit            = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-jit-abi        = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-jit-cal        = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-macros-core    = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-macros-parse   = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-postcard       = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-schema         = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-service-macros = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-stream         = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-types          = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-websocket      = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-facet-cbor         = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-
-[patch."https://github.com/Codys-Wright/vox.git"]
-vox                = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-core           = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-ffi            = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-jit            = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-jit-abi        = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-jit-cal        = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-macros-core    = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-macros-parse   = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-postcard       = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-schema         = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-service-macros = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-stream         = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-types          = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-vox-websocket      = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
-facet-cbor         = { git = "https://codeberg.org/FastTrackStudios/vox.git", rev = "f31f10400c245740a072fa61bb96ef3a3fc2bd93" }
 
 # Redirect every transitive bearcove/moire reference onto the FastTrackStudios
 # moire fork @ 7a2f1dc — the rev daw/session pair with the FTS vox fork (avoids
