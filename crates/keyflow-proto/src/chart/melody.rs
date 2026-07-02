@@ -111,6 +111,12 @@ pub struct MelodyNote {
     /// True when this note is tied FROM the previous note (`<tie type="stop"/>`).
     #[facet(default)]
     pub tie_stop: bool,
+
+    /// The lyric syllable sung on this note (karaoke / vocal lanes). `None`
+    /// means no syllable here — either an instrumental note or a melisma
+    /// continuation (the previous syllable is held across this note).
+    #[facet(default)]
+    pub lyric: Option<String>,
 }
 
 impl MelodyNote {
@@ -129,6 +135,7 @@ impl MelodyNote {
             extra_pitch_modifiers: Vec::new(),
             tie_start: false,
             tie_stop: false,
+            lyric: None,
         }
     }
 
@@ -147,12 +154,19 @@ impl MelodyNote {
             extra_pitch_modifiers: Vec::new(),
             tie_start: false,
             tie_stop: false,
+            lyric: None,
         }
     }
 
     /// Set the octave
     pub fn with_octave(mut self, octave: u8) -> Self {
         self.octave = Some(octave);
+        self
+    }
+
+    /// Attach a lyric syllable to this note.
+    pub fn with_lyric(mut self, lyric: impl Into<String>) -> Self {
+        self.lyric = Some(lyric.into());
         self
     }
 
@@ -332,6 +346,7 @@ impl MelodyNote {
                 extra_pitch_modifiers: Vec::new(),
                 tie_start,
                 tie_stop,
+                lyric: None,
             });
         }
 
@@ -386,6 +401,7 @@ impl MelodyNote {
                 extra_pitch_modifiers: Vec::new(),
                 tie_start,
                 tie_stop,
+                lyric: None,
             });
         }
 
@@ -435,6 +451,7 @@ impl MelodyNote {
             extra_pitch_modifiers: Vec::new(),
             tie_start,
             tie_stop,
+            lyric: None,
         })
     }
 

@@ -9,6 +9,7 @@
 
 // region:    --- Modules
 
+pub mod block;
 pub mod chordpro;
 mod chordpro_integration;
 pub mod chords;
@@ -77,6 +78,19 @@ impl<'a> ChartParser<'a> {
         use crate::primitives::MusicalNote;
         use crate::time::TimeSignature;
 
+        // Block-lane format (`sections {}/rhythm {}/lyrics {}`) is transpiled to
+        // classic section text first, so the rest of the parser is unchanged.
+        // `voice {}` lanes (melody + per-note lyrics) are attached after parsing.
+        let is_block = block::is_block_format(input);
+        let block_src: Option<&str> = if is_block { Some(input) } else { None };
+        let transpiled;
+        let input: &str = if is_block {
+            transpiled = block::transpile(input)?;
+            &transpiled
+        } else {
+            input
+        };
+
         let raw_lines: Vec<&str> = input
             .lines()
             .map(|l| Self::strip_comment(l.trim()))
@@ -107,6 +121,12 @@ impl<'a> ChartParser<'a> {
         // Phase 2: Parse sections and content
         if !self.try_parse_sectioned_lane_parallel(&lines[line_idx..])? {
             line_idx = self.parse_sections(&lines, line_idx)?;
+        }
+
+        // Phase 2.5: attach `voice {}` lanes (melody + per-note lyrics) to the
+        // sections built above, matching by Custom label.
+        if let Some(src) = block_src {
+            block::attach_voices(&mut self.sections, src);
         }
 
         // Phase 3: Post-processing

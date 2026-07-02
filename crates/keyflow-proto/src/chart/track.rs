@@ -102,6 +102,11 @@ pub struct Track {
 
     /// For Lyrics tracks: the lyric line with syllables and optional chord attachments
     pub lyrics: Option<LyricLine>,
+
+    /// Display color for this track/voice (karaoke vocal lanes — lead, harmony,
+    /// audience…). A CSS-style string (`#E2574C`, `red`). `None` = default.
+    #[facet(default)]
+    pub color: Option<String>,
 }
 
 impl Track {
@@ -113,6 +118,7 @@ impl Track {
             measures,
             melody: None,
             lyrics: None,
+            color: None,
         }
     }
 
@@ -124,6 +130,7 @@ impl Track {
             measures: Vec::new(),
             melody: Some(melody),
             lyrics: None,
+            color: None,
         }
     }
 
@@ -135,6 +142,7 @@ impl Track {
             measures,
             melody: None,
             lyrics: None,
+            color: None,
         }
     }
 
@@ -146,12 +154,19 @@ impl Track {
             measures: Vec::new(),
             melody: None,
             lyrics: Some(lyric_line),
+            color: None,
         }
     }
 
     /// Set the track name
     pub fn with_name(mut self, name: impl Into<String>) -> Self {
         self.name = Some(name.into());
+        self
+    }
+
+    /// Set the track/voice display color.
+    pub fn with_color(mut self, color: impl Into<String>) -> Self {
+        self.color = Some(color.into());
         self
     }
 
@@ -169,6 +184,7 @@ impl Default for Track {
             measures: Vec::new(),
             melody: None,
             lyrics: None,
+            color: None,
         }
     }
 }

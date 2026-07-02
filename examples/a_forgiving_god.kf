@@ -1,0 +1,119 @@
+A Forgiving God - SEU Worship
+90bpm 6/8 #D
+
+; ── spine: playback order (INTRO/INST/BREAK/END are instrumental) ──
+sections {
+  INTRO · VS1 · CH1 · INT1 · INT1 · VS2 · CH2
+  INST · INST · BR1 · BR1 · BR1 · BR1
+  INST2 · INST2 · BREAK · BREAK · BREAK
+  BR2 · BR2 · BR2 · BR2 · BR2 · BR2 · TAG · CH3 · END
+}
+
+; ── rhythm: the music truth (letter chords in D) ──
+rhythm {
+  INTRO   D G/D A/D G/D
+  VS1     D G/D | A/D G/D | D G/D | A/D G/D
+  CH1     D G/D A/D G/D
+  INT1    D G/D A/D G/D
+  VS2     D G | A G | D G | A G
+  CH2     D G/D A/D G | D G/D D/F# G
+  INST    G Bm D
+  BR1     G Bm D | G D
+  INST2   G A Bm D
+  BREAK   G D/F#
+  BR2     Bm D G | D/F# G | D/F# G | D/F# G
+  TAG     Bm D G | Bm D G | Bm D G
+  CH3     D G/D A/D G/D | D G/D A/D G/D
+  END     D
+}
+
+; ── lyrics: ChordPro (words once; [chord] anchors to the rhythm) ──
+lyrics {
+  VS1
+    [D]I left my Father when I was [G/D]young
+    [A/D]Wanted the world so I spent it [G/D]all
+    [D]Searching for something I didn't [G/D]know
+    [A/D]Was under the roof of my Father's [G/D]home
+
+  CH1
+    But He's never broke a [D]promise
+    [G/D]Listen cuz He's calling
+    [A/D]Jesus says He wants ya
+    [G/D]He's a forgiving God
+
+  INT1
+    [D]He's a forgiving God
+    [G/D]He's a forgiving God
+    [A/D]He's a forgiving [G/D]God
+
+  VS2
+    [D]I've sinned against Him more ways than [G]one
+    [A]Didn't deserve to be called His [G]son
+    [D]No greater love have I ever [G]known
+    [A]My Father ran to me, said welcome [G]home
+
+  CH2
+    And He's never broke a [D]promise
+    [G/D]Listen cuz He's calling
+    [A/D]Jesus says He wants ya
+    [G]He's a forgiving God
+    [D]No longer have to wander
+    [G/D]Calling sons and daughters
+    [D/F#]After all He is the Father
+    [G]He's a forgiving God
+
+  BR1
+    [G]He's been sitting on the porch
+    Awaiting your arrival
+    [Bm]You never left His heart
+    [D]He's always thinking of you
+    [G]He'll come running out to meet You
+    And throw His arms around you
+    [D]He's a forgiving God
+
+  BR2
+    [Bm]You've been out on your [D]own
+    [G]Now it's time to come home
+    [D/F#]Just run to [G]Jesus
+    [D/F#]Just run to [G]Jesus
+    [D/F#]Just run to [G]Jesus
+
+  TAG
+    [Bm]You've been out on your [D]own
+    [G]Now it's time
+    [Bm]You've been out on your [D]own
+    [G]Now it's time
+    [Bm]You've been out on your [D]own
+    [G]Now it's time to come home
+
+  CH3
+    Cuz He's never broke a [D]promise
+    [G/D]Listen cuz He's calling
+    [A/D]Jesus says He wants ya
+    [G/D]He's a forgiving God
+    [D]No longer have to wander
+    [G/D]Calling sons and daughters
+    [A/D]After all He is the Father
+    [G/D]He's a forgiving God
+}
+
+sync source=afg.wav model=mms-fa {
+  [1:VS1] 18.72 37.92 38.22 38.54 39.16 39.72 39.90 40.24 45.54 46.26 46.46 46.92 47.60 47.84 48.34 48.54 53.54 54.16 54.50 55.28 55.50 56.00 61.38 61.64 62.24 62.46 62.88 63.16 63.48 64.20
+  [2:CH1] 66.52 66.88 68.56 69.88 70.32 70.50 72.58 73.84 74.20 74.58 76.50 77.88 78.22 78.52 79.24 79.40 79.96 80.14 87.14
+  [3:INT1] 89.60 90.14 90.20 90.52 90.60 90.80 90.84 91.12 91.24 94.12 94.34 95.18
+  [4:INT1] 101.56 102.16 102.36 103.20 105.58 106.08 106.26 107.18 109.54 110.28 110.32 111.18
+  [5:VS2] 111.96 117.82 118.24 118.90 119.16 119.50 119.88 120.32 125.48 126.16 126.86 127.02 127.50 127.92 128.14 133.48 133.84 134.32 134.86 135.48 135.60 136.18 141.30 141.46 141.96 142.48 142.80 143.00 143.48 144.20
+  [6:CH2] 146.66 146.74 148.50 149.80 150.22 150.46 152.50 153.82 154.16 154.48 156.44 157.78 158.16 158.48 159.16 159.54 159.90 160.12 161.16 164.12 164.46 165.78 166.10 166.48 168.42 169.76 170.24 170.52 171.90 172.46 173.46 173.88 174.12 174.26 175.48 175.88 176.12 177.16
+  [9:BR1] 195.48 195.86 196.20 196.64 196.74 196.88 198.12 198.68 198.86 200.18 200.36 200.72 200.94 201.10 202.32 202.54 202.80 203.26 203.58 203.92 204.16 204.54 205.00 205.10 205.26 206.02 206.50 206.64 206.86 207.10 207.28 208.10 208.78 209.20 209.40 210.50
+  [10:BR1] 212.24 212.58 212.90 213.34 213.46 213.62 214.90 215.40 215.64 216.92 217.10 217.46 217.68 217.84 219.04 219.26 219.54 220.00 220.34 220.66 220.90 221.26 221.70 221.84 221.98 222.70 223.26 223.40 223.62 223.82 224.00 224.80 225.54 225.84 225.88 226.18
+  [11:BR1] 226.40 226.52 226.76 230.08 230.22 230.34 231.62 232.14 232.38 233.70 233.86 234.22 234.44 234.60 235.82 235.98 236.26 236.72 237.38 237.50 237.64 237.98 238.42 238.56 238.74 239.48 239.96 240.10 240.34 240.54 240.74 241.58 242.20 242.62 242.86 243.96
+  [12:BR1] 245.64 246.02 246.34 246.80 246.92 247.06 248.48 248.86 249.30 250.38 250.56 250.90 251.14 251.32 252.50 252.74 253.06 253.48 254.14 254.24 254.38 254.76 255.18 255.30 255.46 256.22 256.70 256.84 257.08 257.28 257.46 258.32 258.96 259.38 259.60 260.68
+  [18:BR2] 262.64 266.28 266.90 269.86 270.14 270.66 271.04 273.68 274.42 274.94 275.30 277.04 277.64 277.86 278.24 278.58 282.48 283.00 283.58 284.10 284.62 290.12 290.84 291.34
+  [19:BR2] 308.44 308.82 309.28 309.66 309.90 310.16 310.50 310.92 311.08 311.68 311.78 312.14 312.64 313.00 313.42 313.82 316.78 317.14 317.82 318.02 320.96 321.36 322.06 322.22
+  [20:BR2] 325.20 325.52 326.00 326.34 326.62 326.88 327.20 327.58 327.78 328.30 328.48 328.84 329.38 329.76 330.48 330.62 333.52 333.86 334.62 334.76 337.70 338.08 338.76 338.88
+  [21:BR2] 341.92 342.24 342.70 343.06 343.32 343.60 343.96 344.34 344.54 345.04 345.20 345.62 346.08 346.40 347.18 347.34 348.42 348.52 348.68 350.26 354.42 354.80 355.52 355.66
+  [22:BR2] 358.68 359.00 359.48 359.82 360.08 360.30 360.72 361.10 361.30 361.80 361.96 362.34 362.84 363.20 363.94 364.06 365.30 365.48 365.64 367.00 371.20 371.56 374.66 374.80
+  [23:BR2] 375.38 375.74 376.22 376.58 376.84 377.14 377.44 377.84 378.02 378.64 378.72 379.04 383.74 384.14 384.80 384.96 385.88 386.22 386.52 386.90 387.98 388.22 388.92 389.10
+  [24:TAG] 390.22 400.70 400.96 401.50 401.58 401.76 402.00 402.88 405.56 408.84 409.56 409.82 410.04 410.32 410.74 410.96 411.32 411.50 413.04 413.72 413.98 414.20 414.46 418.36 418.60 419.24 420.06 420.42 420.48 420.90
+  [25:CH3] 429.32 429.66 431.48 432.86 433.32 433.54 435.68 437.06 437.44 437.80 439.82 441.22 441.60 441.94 442.66 443.04 443.56 443.68 444.72 447.82 448.20 449.60 449.94 450.32 452.34 453.80 454.28 454.54 456.00 456.58 457.64 458.12 458.38 458.52 459.78 460.18 460.38 461.46
+}
