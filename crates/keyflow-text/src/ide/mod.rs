@@ -20,7 +20,7 @@
 //!
 //! All functions are pure: no global state, no I/O.
 
-use crate::chart::{parse_chart, Chart};
+use crate::chart::{Chart, parse_chart};
 use crate::parsing::TextSpan;
 
 #[cfg(feature = "highlighting")]
@@ -31,9 +31,9 @@ mod diagnostic;
 mod hover;
 mod recovery;
 
-pub use completion::{complete, Completion, CompletionContext, CompletionKind};
+pub use completion::{Completion, CompletionContext, CompletionKind, complete};
 pub use diagnostic::{CodeAction, Diagnostic, Severity};
-pub use hover::{hover, HoverInfo};
+pub use hover::{HoverInfo, hover};
 
 /// Result of analyzing a Keyflow document.
 ///

@@ -18,11 +18,11 @@
 //! ```
 
 use dioxus::prelude::*;
-use editor::{editor_view, Editor, EditorState};
+use editor::{Editor, EditorState, editor_view};
 use editor_keyflow::{font_face_css, render_svg_live};
 use editor_keyflow_lang::{
-    highlight_css, keyflow_decorations, keyflow_hover, overlays_enabled, toggle_overlays,
-    HighlightTheme,
+    HighlightTheme, highlight_css, keyflow_decorations, keyflow_hover, overlays_enabled,
+    toggle_overlays,
 };
 
 /// Idle delay before re-engraving the preview. Typing within this window keeps
