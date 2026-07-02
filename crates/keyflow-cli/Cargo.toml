@@ -8,11 +8,30 @@ description = "CLI tool for parsing and rendering Keyflow charts"
 name = "kf"
 path = "src/main.rs"
 
+[features]
+default = []
+# Self-contained lyrics-to-audio alignment + Demucs separation (embeds the ort
+# native lib). Off by default so the stock `kf` binary stays lean; model weights
+# are always pulled separately. Build with `--features onnx` for `kf sync`.
+onnx = ["keyflow-sync/onnx", "download"]
+# GPU-accelerated inference via CUDA (implies onnx). Falls back to CPU at runtime.
+onnx-cuda = ["keyflow-sync/cuda", "onnx"]
+# Whisper ASR comparison baseline (candle, pure Rust).
+whisper = ["keyflow-sync/whisper", "download"]
+whisper-cuda = ["keyflow-sync/whisper-cuda", "whisper"]
+# Reaper `.rpp` export (audio + lyrics MIDI) via the daw crate.
+reaper = ["dep:dawfile-reaper"]
+# Download model weights (`kf models pull`).
+download = ["keyflow-sync/download"]
+
 [dependencies]
 keyflow = { workspace = true, features = ["text", "midi", "engraver", "highlighting"] }
 keyflow-musicxml = { workspace = true }
+keyflow-orchestra = { path = "../keyflow-orchestra" }
+keyflow-sync = { path = "../keyflow-sync" }
 
 clap = { version = "4", features = ["derive"] }
+dawfile-reaper = { git = "https://codeberg.org/FastTrackStudios/daw.git", branch = "main", optional = true }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 

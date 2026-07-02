@@ -2,8 +2,11 @@ use std::io::Read;
 use std::path::PathBuf;
 
 mod docs;
+mod orchestra;
+mod sync;
 
 use clap::{Parser, Subcommand, ValueEnum};
+use keyflow::Chart;
 use keyflow::engraver::export::pdf::PdfSerializer;
 use keyflow::engraver::export::svg::{SvgExportConfig, SvgSerializer};
 use keyflow::engraver::fonts::ChartFontBundle;
@@ -11,7 +14,6 @@ use keyflow::engraver::layout::chart::{
     Breakpoint, ChartLayoutConfig, ChartLayoutEngine, ChartLayoutResult, LayoutMode,
 };
 use keyflow::engraver::style::MStyle;
-use keyflow::Chart;
 
 /// Layout preset choice for the `png` / `svg` subcommands.
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -216,6 +218,169 @@ enum Commands {
         /// Re-render whenever the source tree changes (dev loop).
         #[arg(long)]
         watch: bool,
+    },
+    /// Align a chart's lyrics to an audio file, writing a timing-map sidecar.
+    ///
+    /// Produces per-word start/end times with a confidence rating, keyed back to
+    /// the chart by (section, word). The `.kf` is never modified — the sidecar is
+    /// the single source of *when*. Needs `--features onnx` + `kf models pull`.
+    Sync {
+        /// Path to the audio file (WAV; transcode others with ffmpeg first).
+        audio: PathBuf,
+        /// Path to the `.kf` chart whose lyrics to align.
+        chart: String,
+        /// Output sidecar path (JSON).
+        #[arg(short, long, default_value = "timing.kf.json")]
+        output: PathBuf,
+        /// Isolate vocals with Demucs before aligning (needs `kf models pull htdemucs`).
+        #[arg(long)]
+        separate: bool,
+        /// Aligner model id from the registry.
+        #[arg(long, default_value = "mms-fa")]
+        model: String,
+        /// Align against this plain-text lyrics file instead of the chart's lyrics.
+        #[arg(long)]
+        lyrics_file: Option<PathBuf>,
+        /// Rating-threshold preset. `singing` uses lower cutoffs than `speech`
+        /// because CTC confidence is inherently lower on sung vocals.
+        #[arg(long, value_enum, default_value_t = RatingsPreset::Singing)]
+        ratings: RatingsPreset,
+        /// Override the "verified" confidence cutoff (0.0–1.0).
+        #[arg(long)]
+        verified_threshold: Option<f32>,
+        /// Override the "review" confidence cutoff (0.0–1.0).
+        #[arg(long)]
+        review_threshold: Option<f32>,
+        /// `<star>` token log-prob — absorbs non-transcript audio (ad-libs,
+        /// instrumental, repeats) so mismatches don't drag words off. Lower is
+        /// stronger absorption; ~ -2.5 is a good start.
+        #[arg(long, default_value_t = -2.5)]
+        star_score: f32,
+        /// Disable the `<star>` token (align every frame to a lyric token).
+        #[arg(long)]
+        no_star: bool,
+        /// Align each section independently against the remaining audio
+        /// (anchored). Robust to recordings that repeat sections more than the
+        /// lyrics list (live worship, jam outros). Sections come from the chart,
+        /// or from blank-line-separated stanzas in --lyrics-file.
+        #[arg(long)]
+        per_section: bool,
+    },
+    /// Align a lane-format chart's lyrics to audio and emit karaoke artifacts:
+    /// the sync lane (written back into the .kf), a lyrics MIDI (lyric meta
+    /// events), an LRC, and optionally a Reaper project (audio + lyrics MIDI).
+    Karaoke {
+        /// Path to the lane-format `.kf` chart (with a `lyrics {}` lane).
+        chart: PathBuf,
+        /// Path to the audio file (WAV).
+        audio: PathBuf,
+        /// Output directory for the derived artifacts.
+        #[arg(short, long, default_value = "karaoke-out")]
+        out_dir: PathBuf,
+        /// Isolate vocals with Demucs before aligning (recommended).
+        #[arg(long)]
+        separate: bool,
+        /// Also export a Reaper `.rpp` (needs the `reaper` feature).
+        #[arg(long)]
+        reaper: bool,
+    },
+    /// Emit a multi-voice melody+lyrics MIDI from a chart's `voice {}` lanes —
+    /// one track/MIDI-channel per colored vocal part. Notated timing; no audio.
+    Voices {
+        /// Path to the `.kf` chart with `voice {}` lanes.
+        chart: PathBuf,
+        /// Output directory.
+        #[arg(short, long, default_value = "voices-out")]
+        out_dir: PathBuf,
+        /// Also export a colored per-voice Reaper project (needs `reaper` feature).
+        #[arg(long)]
+        reaper: bool,
+    },
+    /// Transcribe audio (CTC greedy ASR, no transcript) — an independent
+    /// baseline to compare against `kf sync`. Reveals what's actually sung
+    /// (extra repeats, ad-libs) and gives comparable word timings.
+    Transcribe {
+        /// Path to the audio file (WAV).
+        audio: PathBuf,
+        /// Write word timings to this sidecar (same format as `kf sync`).
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Isolate vocals with Demucs first (recommended).
+        #[arg(long)]
+        separate: bool,
+        /// ASR model id for the CTC engine — must have a word-separator token.
+        #[arg(long, default_value = "w2v2-960h")]
+        model: String,
+        /// ASR engine: `ctc` (wav2vec2 greedy, fast, poor on singing) or
+        /// `whisper` (candle, LM-backed, far better on singing).
+        #[arg(long, value_enum, default_value_t = AsrEngine::Ctc)]
+        engine: AsrEngine,
+        /// (Whisper) Forced-align the transcript for precise word-level
+        /// timestamps (WhisperX-style; needs the onnx feature + `mms-fa`).
+        #[arg(long)]
+        align: bool,
+    },
+    /// Score a separated stem against a reference (SI-SDR / SDR), for comparing
+    /// stem-splitter tools head-to-head.
+    Bench {
+        /// Ground-truth reference stem (WAV).
+        reference: PathBuf,
+        /// Estimated stem to score (WAV).
+        estimate: PathBuf,
+        /// Label for the tool under test (shown in the table).
+        #[arg(long, default_value = "tool")]
+        tool: String,
+    },
+    /// Manage downloadable alignment / separation models.
+    Models {
+        #[command(subcommand)]
+        action: ModelsAction,
+    },
+    /// Analyze a MusicXML/MXL score: instrumentation, articulations, ranges.
+    Score {
+        /// Path to a .musicxml or .mxl file.
+        input: PathBuf,
+    },
+    /// Run the CSS orchestrator engine on a score (articulated MIDI summary).
+    Orchestrate {
+        /// Path to a .musicxml or .mxl file.
+        input: PathBuf,
+        /// Only process parts whose name contains this substring.
+        #[arg(long)]
+        part: Option<String>,
+        /// Force an instrument profile (strings, woodwinds, brass,
+        /// brass_trumpet, generic, harp) instead of name detection.
+        #[arg(long)]
+        profile: Option<String>,
+    },
+}
+
+/// ASR engine for `kf transcribe`.
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum AsrEngine {
+    /// wav2vec2 greedy CTC decode (fast, but poor on singing).
+    Ctc,
+    /// Whisper via candle (LM-backed; far better on singing).
+    Whisper,
+}
+
+/// Rating-threshold preset for `kf sync`.
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum RatingsPreset {
+    /// Cutoffs tuned for read speech (verified ≥0.70, review ≥0.40).
+    Speech,
+    /// Cutoffs tuned for sung vocals (verified ≥0.30, review ≥0.15).
+    Singing,
+}
+
+#[derive(Subcommand)]
+enum ModelsAction {
+    /// List registry models and whether each is cached locally.
+    List,
+    /// Download a model into the cache (needs `--features download`).
+    Pull {
+        /// Model id (see `kf models list`).
+        id: String,
     },
 }
 
@@ -778,9 +943,11 @@ fn render_variant_pngs(
 ) -> Result<Vec<PathBuf>, String> {
     let layout = pipeline.layout_preset(chart, preset, breakpoint, width_pt);
     let svgs: Vec<String> = if layout.pages.is_empty() {
-        vec![pipeline
-            .export_svg_continuous(&layout)
-            .ok_or_else(|| "continuous layout produced no SVG".to_string())?]
+        vec![
+            pipeline
+                .export_svg_continuous(&layout)
+                .ok_or_else(|| "continuous layout produced no SVG".to_string())?,
+        ]
     } else {
         pipeline.export_svg_pages(&layout)
     };
@@ -1450,9 +1617,11 @@ fn run(cli: Cli) -> Result<(), String> {
 
             // ContinuousScroll has no `pages`; render the whole scene as one image.
             let svgs: Vec<String> = if layout.pages.is_empty() {
-                vec![pipeline
-                    .export_svg_continuous(&layout)
-                    .ok_or_else(|| "continuous layout produced no SVG".to_string())?]
+                vec![
+                    pipeline
+                        .export_svg_continuous(&layout)
+                        .ok_or_else(|| "continuous layout produced no SVG".to_string())?,
+                ]
             } else {
                 pipeline.export_svg_pages(&layout)
             };
@@ -1547,6 +1716,109 @@ fn run(cli: Cli) -> Result<(), String> {
             }
             Ok(())
         }
+
+        Commands::Sync {
+            audio,
+            chart,
+            output,
+            separate,
+            model,
+            lyrics_file,
+            ratings,
+            verified_threshold,
+            review_threshold,
+            star_score,
+            no_star,
+            per_section,
+        } => {
+            let source = read_source(&chart)?;
+            let parsed = parse_chart(&source)?;
+            let mut thresholds = match ratings {
+                RatingsPreset::Speech => keyflow_sync::RatingThresholds::SPEECH,
+                RatingsPreset::Singing => keyflow_sync::RatingThresholds::SINGING,
+            };
+            if let Some(v) = verified_threshold {
+                thresholds.verified = v;
+            }
+            if let Some(r) = review_threshold {
+                thresholds.review = r;
+            }
+            sync::cmd_sync(
+                &parsed,
+                sync::SyncOpts {
+                    audio: &audio,
+                    output: &output,
+                    separate,
+                    model_id: &model,
+                    lyrics_file: lyrics_file.as_deref(),
+                    thresholds,
+                    star_score: if no_star { None } else { Some(star_score) },
+                    per_section,
+                },
+            )
+        }
+
+        Commands::Transcribe {
+            audio,
+            output,
+            separate,
+            model,
+            engine,
+            align,
+        } => {
+            let opts = sync::TranscribeOpts {
+                audio: &audio,
+                output: output.as_deref(),
+                separate,
+                model_id: &model,
+                align,
+            };
+            match engine {
+                AsrEngine::Ctc => sync::cmd_transcribe(opts),
+                AsrEngine::Whisper => sync::cmd_transcribe_whisper(opts),
+            }
+        }
+
+        Commands::Karaoke {
+            chart,
+            audio,
+            out_dir,
+            separate,
+            reaper,
+        } => sync::cmd_karaoke(sync::KaraokeOpts {
+            chart: &chart,
+            audio: &audio,
+            out_dir: &out_dir,
+            separate,
+            reaper,
+        }),
+
+        Commands::Voices {
+            chart,
+            out_dir,
+            reaper,
+        } => sync::cmd_voices(sync::VoicesOpts {
+            chart: &chart,
+            out_dir: &out_dir,
+            reaper,
+        }),
+
+        Commands::Bench {
+            reference,
+            estimate,
+            tool,
+        } => sync::cmd_bench(&reference, &estimate, &tool),
+
+        Commands::Models { action } => match action {
+            ModelsAction::List => sync::cmd_models_list(),
+            ModelsAction::Pull { id } => sync::cmd_models_pull(&id),
+        },
+        Commands::Score { input } => orchestra::score_report(&input),
+        Commands::Orchestrate {
+            input,
+            part,
+            profile,
+        } => orchestra::orchestrate(&input, part.as_deref(), profile.as_deref()),
     }
 }
 
