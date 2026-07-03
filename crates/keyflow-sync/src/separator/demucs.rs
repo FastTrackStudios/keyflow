@@ -136,10 +136,10 @@ impl StemSeparator for DemucsOnnx {
             }
             start += step;
         }
-        for s in 0..4 {
+        for source in &mut acc {
             for i in 0..n {
                 if weight[i] > 0.0 {
-                    acc[s][i] /= weight[i];
+                    source[i] /= weight[i];
                 }
             }
         }

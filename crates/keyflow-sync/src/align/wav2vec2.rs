@@ -102,7 +102,7 @@ impl EmissionModel for Wav2Vec2Onnx {
         let hop = WINDOW_SAMPLES - OVERLAP_SAMPLES;
         let mut data: Vec<f32> = Vec::new();
         let mut total_frames = 0usize;
-        let mut vocab = 0usize;
+        let mut vocab;
         let mut start = 0usize;
         loop {
             let end = (start + WINDOW_SAMPLES).min(samples.len());
