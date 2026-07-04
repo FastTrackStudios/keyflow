@@ -105,9 +105,15 @@ impl SectionNumberer {
             }
         }
 
-        // Post-pass: suppress numbers for section types that only appear once.
-        // If the max number for a type is 1 (and no split letters), clear the number
-        // so "VS 1" becomes just "VS" when there's only one verse.
+        // Post-pass: suppress numbers for section types that only ever appear
+        // as a single "generation" (i.e. every occurrence of this type in the
+        // chart is consecutive, so they all share number 1). The number only
+        // exists to distinguish separate generations, so with just one
+        // generation it's noise — "BR", "BR A", "BR B" reads better than
+        // "BR 1", "BR 1 A", "BR 1 B". Once a second, non-consecutive
+        // generation appears (number reaches 2+), every occurrence of that
+        // type keeps its number, split letters included, so the reader can
+        // tell which generation a given repeat belongs to.
         let mut max_numbers: HashMap<String, u32> = HashMap::new();
         for section in sections.iter() {
             if let Some(n) = section.number {
@@ -119,7 +125,7 @@ impl SectionNumberer {
         for section in sections.iter_mut() {
             if let Some(n) = section.number {
                 let key = section.section_type.full_name();
-                if max_numbers.get(&key) == Some(&1) && n == 1 && section.split_letter.is_none() {
+                if max_numbers.get(&key) == Some(&1) && n == 1 {
                     section.number = None;
                 }
             }
@@ -293,5 +299,71 @@ mod tests {
         assert_eq!(sections[1].number, Some(1));
         assert_eq!(sections[2].number, Some(2));
         assert_eq!(sections[3].number, Some(2));
+    }
+
+    #[test]
+    fn test_single_generation_with_splits_suppresses_number() {
+        // BR / BR / BR / BR — one generation of four consecutive bridges.
+        // The number exists only to distinguish separate generations, so
+        // with a single generation it should be suppressed even though each
+        // repeat gets a split letter — "BR", "BR" (a), "BR" (b), "BR" (c)
+        // rather than "BR 1", "BR 1a", "BR 1b", "BR 1c". (The letters
+        // themselves are assigned uppercase by
+        // `engraver_proto::compute_section_letters` at render time, not by
+        // this module — this test only covers the number.)
+        let mut numberer = SectionNumberer::new();
+        let mut sections = vec![
+            Section::new(SectionType::Bridge),
+            Section::new(SectionType::Bridge),
+            Section::new(SectionType::Bridge),
+            Section::new(SectionType::Bridge),
+        ];
+
+        numberer.number_sections(&mut sections);
+
+        assert_eq!(sections[0].number, None);
+        assert_eq!(sections[0].split_letter, Some('a'));
+        assert_eq!(sections[1].number, None);
+        assert_eq!(sections[1].split_letter, Some('b'));
+        assert_eq!(sections[2].number, None);
+        assert_eq!(sections[2].split_letter, Some('c'));
+        assert_eq!(sections[3].number, None);
+        assert_eq!(sections[3].split_letter, Some('d'));
+    }
+
+    #[test]
+    fn test_second_generation_keeps_number_on_both() {
+        // BR / BR / BR / BR / CH / BR — a second, later generation of the
+        // same type means there's now something for the number to
+        // disambiguate, so every bridge (including the first generation's
+        // splits) keeps its number: "BR 1" (a), "BR 1" (b), "BR 1" (c),
+        // "BR 1" (d), then "BR 2" for the lone bridge after the chorus.
+        let mut numberer = SectionNumberer::new();
+        let mut sections = vec![
+            Section::new(SectionType::Bridge),
+            Section::new(SectionType::Bridge),
+            Section::new(SectionType::Bridge),
+            Section::new(SectionType::Bridge),
+            Section::new(SectionType::Chorus),
+            Section::new(SectionType::Bridge),
+        ];
+
+        numberer.number_sections(&mut sections);
+
+        assert_eq!(sections[0].number, Some(1));
+        assert_eq!(sections[0].split_letter, Some('a'));
+        assert_eq!(sections[1].number, Some(1));
+        assert_eq!(sections[1].split_letter, Some('b'));
+        assert_eq!(sections[2].number, Some(1));
+        assert_eq!(sections[2].split_letter, Some('c'));
+        assert_eq!(sections[3].number, Some(1));
+        assert_eq!(sections[3].split_letter, Some('d'));
+
+        // Chorus: single instance, suppressed.
+        assert_eq!(sections[4].number, None);
+
+        // Second generation, alone, no split.
+        assert_eq!(sections[5].number, Some(2));
+        assert_eq!(sections[5].split_letter, None);
     }
 }
