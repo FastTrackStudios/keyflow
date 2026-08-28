@@ -659,7 +659,7 @@ Interlude (2x):
     fn build_my_life_example_parses_with_line_sync() {
         use crate::chart::parse_document;
 
-        let input = include_str!("../../../../examples/build_my_life.kf");
+        let input = include_str!("../../../tests/fixtures/build_my_life.kf");
         let (chart, _doc) = parse_document(input).expect("parse_document");
         let verse = chart
             .sections

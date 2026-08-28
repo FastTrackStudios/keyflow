@@ -1,4 +1,4 @@
-# session — the one PR/push gate.
+# keyflow — the one PR/push gate.
 #
 # Toolchain comes from the repo flake: every step runs under
 # `nix develop .#ci -c`. `--accept-flake-config` picks up the

@@ -1,5 +1,5 @@
 {
-  description = "FastTrackStudio — one workspace: daw / session / signal / keyflow + THE app";
+  description = "Keyflow — the chart language, the Engraver layout engine, and keyflow.fasttrackstudio.app";
 
   # Dendritic layout (den): every .nix under nix/modules/ is a
   # flake-parts module, auto-loaded by import-tree — one file per

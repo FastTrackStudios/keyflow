@@ -9,9 +9,8 @@ node_modules/
 .direnv/
 .claude/worktrees/
 
-# Staged web bundle embedded into the native binary (just rig-install)
-apps/fasttrackstudio/web-dist/
-apps/patchbay/web-dist/
+# Staged web bundle for the keyflow site (dx build output)
+apps/site/web-dist/
 
 # graphify knowledge graph — regenerable via `just graph`, machine-local.
 # Un-ignore graph.json/GRAPH_REPORT.md if you want to share a prebuilt graph.
@@ -20,10 +19,6 @@ graphify-out/
 # nix build result symlinks (result, result-1, result-2, ...)
 result
 result-*
-
-# Symlink to the resolved lumen-blocks checkout, created by `just tailwind`
-# so Tailwind scans the pinned revision instead of every cached one.
-apps/fasttrackstudio/.lumen-blocks
 
 # local reference checkouts (upstream scripts we port from)
 .reference/
@@ -47,5 +42,5 @@ css_ab*.mid
 css_ab*.wav
 css_ab*.tsv
 
-# Alternate target dir used by the old gate.sh helper
-/target-local
+# tree-sitter's generated C parser — regenerate with `just grammar`.
+crates/keyflow/tree-sitter-keyflow/src/parser.c
