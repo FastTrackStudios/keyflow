@@ -1,0 +1,140 @@
+/* Keyflow for iOS. Phone-first: nothing here has a desktop breakpoint. */
+
+:root {
+  --bg: #fbfaf8;
+  --surface: #ffffff;
+  --ink: #17161a;
+  --ink-soft: #5c5a63;
+  --line: #e2dfd9;
+  --accent: #7a4bd6;
+  --key-bg: #ffffff;
+  --key-line: #cfcbc3;
+  --code-bg: #f4f2ee;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121114;
+    --surface: #1a181d;
+    --ink: #f2f0f5;
+    --ink-soft: #a09daa;
+    --line: #2e2b34;
+    --accent: #b494f5;
+    --key-bg: #26232c;
+    --key-line: #3a3642;
+    --code-bg: #201d25;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #121114;
+  --surface: #1a181d;
+  --ink: #f2f0f5;
+  --ink-soft: #a09daa;
+  --line: #2e2b34;
+  --accent: #b494f5;
+  --key-bg: #26232c;
+  --key-line: #3a3642;
+  --code-bg: #201d25;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.5 -apple-system, system-ui, sans-serif;
+  /* Keep content clear of the notch and the home indicator. */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+           env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+.kf-screen { display: flex; flex-direction: column; min-height: 100vh; }
+
+.kf-topbar {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--line);
+}
+.kf-topbar h1 { font-size: 1.15rem; margin: 0; letter-spacing: -0.02em; }
+.kf-icon-link { color: var(--accent); text-decoration: none; font-size: 0.925rem; }
+
+.kf-note { color: var(--ink-soft); font-size: 0.875rem; }
+.kf-empty { padding: 2rem 1rem; text-align: center; }
+
+.kf-chart-list { list-style: none; margin: 0; padding: 0; }
+.kf-chart-list li { border-bottom: 1px solid var(--line); }
+.kf-chart-list a {
+  display: block;
+  /* 44pt is Apple's minimum tap target; a list row that misses it is the
+   * single most common reason a phone UI feels broken. */
+  min-height: 44px;
+  padding: 0.75rem 1rem;
+  color: var(--ink);
+  text-decoration: none;
+}
+.kf-chart-title { font-weight: 550; }
+
+.kf-source-input {
+  flex: 1;
+  width: 100%;
+  min-height: 40vh;
+  border: 0;
+  padding: 1rem;
+  background: var(--code-bg);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  line-height: 1.55;
+  resize: none;
+}
+
+.kf-keyboard-output {
+  margin: 0;
+  padding: 1rem;
+  min-height: 6rem;
+  background: var(--code-bg);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.kf-plane-tabs { display: flex; gap: 0.25rem; padding: 0.5rem; }
+.kf-tab {
+  flex: 1;
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+.kf-tab-current { color: var(--accent); border-color: var(--accent); }
+
+.kf-keyboard {
+  margin-top: auto;
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.5rem 0.4rem calc(0.5rem + env(safe-area-inset-bottom));
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+.kf-key-row { display: flex; gap: 0.35rem; }
+.kf-key {
+  flex: 1;
+  min-width: 0;
+  /* Same 44pt floor as the list rows — this is a keyboard, so it matters
+   * more here than anywhere else in the app. */
+  min-height: 44px;
+  border: 1px solid var(--key-line);
+  border-radius: 0.4rem;
+  background: var(--key-bg);
+  color: var(--ink);
+  font-size: 15px;
+}
+.kf-key:active { background: var(--accent); color: #fff; }

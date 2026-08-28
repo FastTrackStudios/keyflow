@@ -21,13 +21,33 @@ test-doc:
     cargo test --workspace --doc
 
 # The gate CI runs, in the order CI runs it.
-ci: fmt-check check test
+ci: fmt-check check web-check test
 
 fmt:
     cargo fmt --all
 
 fmt-check:
     cargo fmt --all --check
+
+# ── Apps ─────────────────────────────────────────────────────────────────
+
+# Serve keyflow.fasttrackstudio.app with hot reload.
+web:
+    cd apps/web && dx serve --platform web
+
+# Build the shipping web bundle into target/dx/keyflow-web/release/web/public.
+web-build:
+    cd apps/web && dx build --platform web --release
+
+# Check the site compiles for the browser. `cargo check --workspace` builds
+# it for the host, which does NOT catch wasm-only breakage — the WebGL
+# surface and every `cfg(target_arch = "wasm32")` block are invisible there.
+web-check:
+    cargo check -p keyflow-web --target wasm32-unknown-unknown
+
+# The iOS app. Must run on a Mac; see apps/mobile/ios/README.md.
+ios *ARGS:
+    cd apps/mobile && ./ios/build-ios.sh {{ARGS}}
 
 # ── Keyflow CLI ──────────────────────────────────────────────────────────
 

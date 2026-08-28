@@ -1,0 +1,68 @@
+[package]
+name = "keyflow-web"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "keyflow.fasttrackstudio.app — the Keyflow landing page, live editor, and guide"
+
+[build-dependencies]
+# The guide is rendered at build time, so no markdown parser reaches the
+# browser — see build.rs.
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
+
+[dependencies]
+# The language. `text` for the parser; the site never touches keyflow-text
+# directly (facade rule).
+keyflow = { workspace = true, features = ["text", "highlighting"] }
+
+# The editor chrome + chart renderer. `wasm-graphics` is the WebGL2 path
+# (vello_hybrid); it deliberately does NOT pull `web`, which would enable
+# dioxus/desktop and break the wasm build.
+# `wasm-graphics` is the WebGL2 path (vello_hybrid). Named for every target,
+# not just wasm32: the ChartGraphics module is additionally gated on
+# `target_arch = "wasm32"`, so a host build gets the editor chrome and skips
+# the surface. Emphatically NOT `web` — that enables dioxus/desktop, which
+# cannot build for wasm32.
+keyflow-ui = { workspace = true, features = ["wasm-graphics"] }
+
+architect-ui = { workspace = true }
+dioxus = { workspace = true, features = ["router"] }
+
+# Chart-in-URL codec: deflate then base64url, so a whole chart fits in a
+# link with no account and no server.
+base64 = "0.22"
+flate2 = "1"
+
+# Canvas handle for ChartGraphics, and the popstate/clipboard bits.
+web-sys = { version = "0.3", features = [
+    "HtmlCanvasElement",
+    "Window",
+    "Document",
+    "Element",
+    "DomRect",
+] }
+# Pinned exactly, and low: `dx build` refuses to run when the crate version
+# and the wasm-bindgen-cli in the dev shell disagree, and the CLI comes from
+# the pinned nixpkgs (nix/modules/dx.nix). Bump this only together with that
+# pin — a floating "0.2" silently resolves past the CLI and breaks the web
+# build with "Incorrect wasm-bindgen-cli version".
+wasm-bindgen = "=0.2.126"
+kurbo = { workspace = true }
+
+tracing = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tracing-wasm = "0.2"
+# Not called directly. getrandom 0.3 needs BOTH the `wasm_js` cfg (set for
+# the whole target in .cargo/config.toml) and this feature before it will
+# build for wasm32; the cfg alone is a compile_error. It arrives here
+# transitively (uuid, ahash), and only a direct dependency can turn the
+# feature on.
+getrandom = { version = "0.3", features = ["wasm_js"] }
+console_error_panic_hook = "0.1"
+
+[lints]
+workspace = true

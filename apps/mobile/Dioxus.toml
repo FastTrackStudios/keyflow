@@ -1,0 +1,11 @@
+# dx config for the Keyflow iOS app.
+#
+# The app and its keyboard extension are two bundles that must share an App
+# Group container (see ios/README.md) — the extension has no network and no
+# document picker, so the shared container is how a chart written on the
+# keyboard reaches the app.
+[application]
+
+[bundle]
+identifier = "app.fasttrackstudio.keyflow"
+publisher = "FastTrackStudio"

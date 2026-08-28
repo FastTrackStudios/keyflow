@@ -47,5 +47,11 @@ jobs:
         run: ${NIX_DEV} cargo fmt --all --check
       - name: cargo check --workspace
         run: ${NIX_DEV} cargo check --workspace
+      # The site is a wasm binary. `--workspace` above builds it for the
+      # host, which does not compile the WebGL surface or any
+      # `cfg(target_arch = "wasm32")` block — so a browser-only break
+      # sails through the gate without this step.
+      - name: cargo check (wasm)
+        run: ${NIX_DEV} cargo check -p keyflow-web --target wasm32-unknown-unknown
       - name: cargo nextest
         run: ${NIX_DEV} cargo nextest run --workspace --no-fail-fast

@@ -1,0 +1,258 @@
+/* Keyflow site.
+ *
+ * Deliberately small and hand-written: the site is four screens, and a
+ * utility framework would cost more in build machinery than it saves.
+ * Tokens follow the same light/dark split the artifacts and the desktop
+ * app use — a system-preference default, overridable per element. */
+
+:root {
+  --bg: #fbfaf8;
+  --surface: #ffffff;
+  --ink: #17161a;
+  --ink-soft: #5c5a63;
+  --line: #e2dfd9;
+  --accent: #7a4bd6;
+  --accent-ink: #ffffff;
+  --code-bg: #f4f2ee;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121114;
+    --surface: #1a181d;
+    --ink: #f2f0f5;
+    --ink-soft: #a09daa;
+    --line: #2e2b34;
+    --accent: #b494f5;
+    --accent-ink: #17161a;
+    --code-bg: #201d25;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #121114;
+  --surface: #1a181d;
+  --ink: #f2f0f5;
+  --ink-soft: #a09daa;
+  --line: #2e2b34;
+  --accent: #b494f5;
+  --accent-ink: #17161a;
+  --code-bg: #201d25;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  line-height: 1.6;
+}
+
+.kf-shell { display: flex; flex-direction: column; min-height: 100vh; }
+
+.kf-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1rem clamp(1rem, 4vw, 3rem);
+  border-bottom: 1px solid var(--line);
+}
+
+.kf-wordmark {
+  font-weight: 650;
+  font-size: 1.1rem;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.kf-nav { display: flex; gap: 1.25rem; }
+.kf-nav a { color: var(--ink-soft); text-decoration: none; }
+.kf-nav a:hover { color: var(--ink); }
+
+.kf-main { flex: 1; padding: clamp(1.5rem, 4vw, 3rem); }
+
+/* ── Landing ─────────────────────────────────────────────────────── */
+
+.kf-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(1.5rem, 4vw, 3rem);
+  align-items: center;
+  max-width: 78rem;
+  margin: 0 auto clamp(2rem, 6vw, 5rem);
+}
+
+@media (max-width: 60rem) {
+  .kf-hero { grid-template-columns: minmax(0, 1fr); }
+}
+
+.kf-hero-copy h1 {
+  font-size: clamp(2rem, 4.5vw, 3.2rem);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  margin: 0 0 1rem;
+}
+
+.kf-hero-copy p { color: var(--ink-soft); font-size: 1.05rem; max-width: 34rem; }
+
+.kf-cta { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.5rem 0 0.75rem; }
+
+.kf-button {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.925rem;
+  text-decoration: none;
+}
+
+.kf-button:hover { border-color: var(--accent); }
+
+.kf-button-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.kf-note { font-size: 0.85rem; color: var(--ink-soft); }
+
+.kf-hero-demo { display: grid; gap: 1rem; min-width: 0; }
+
+.kf-features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1.5rem;
+  max-width: 78rem;
+  margin: 0 auto;
+}
+
+.kf-feature h2 { font-size: 1.05rem; margin: 0 0 0.4rem; letter-spacing: -0.01em; }
+.kf-feature p { margin: 0; color: var(--ink-soft); font-size: 0.95rem; }
+
+/* ── Chart surface ───────────────────────────────────────────────── */
+
+/* Engraved charts are black on white — that is what a chart is, and
+ * inverting it would misrepresent what the app prints. So the surface stays
+ * paper-coloured in both themes, framed to read as an object on the page
+ * rather than a hole in it. */
+.kf-chart {
+  width: 100%;
+  min-width: 0;
+  padding: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: #ffffff;
+  overflow-x: auto;
+}
+
+/* The SVG carries its own aspect ratio; let it scale to the column. */
+.kf-chart svg { display: block; width: 100%; height: auto; }
+
+.kf-chart-failed { background: var(--code-bg); padding: 0.85rem 1rem; }
+
+.kf-chart-error {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+.kf-source {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  background: var(--code-bg);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+/* ── Editor ──────────────────────────────────────────────────────── */
+
+.kf-editor { display: flex; flex-direction: column; gap: 0.75rem; height: calc(100vh - 9rem); }
+.kf-editor-bar { display: flex; align-items: center; gap: 1rem; }
+
+.kf-editor-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1rem;
+  flex: 1;
+  min-height: 0;
+}
+
+.kf-editor-split .kf-chart { overflow: auto; }
+
+@media (max-width: 60rem) {
+  .kf-editor-split { grid-template-columns: minmax(0, 1fr); }
+  .kf-editor { height: auto; }
+}
+
+.kf-editor-source {
+  width: 100%;
+  height: 100%;
+  min-height: 20rem;
+  resize: none;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--code-bg);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+/* ── Guide ───────────────────────────────────────────────────────── */
+
+.kf-guide {
+  display: grid;
+  grid-template-columns: 14rem minmax(0, 1fr);
+  gap: clamp(1.5rem, 4vw, 3rem);
+  max-width: 68rem;
+  margin: 0 auto;
+}
+
+@media (max-width: 55rem) {
+  .kf-guide { grid-template-columns: minmax(0, 1fr); }
+}
+
+.kf-guide-toc { display: flex; flex-direction: column; gap: 0.35rem; align-self: start; }
+.kf-guide-toc a { color: var(--ink-soft); text-decoration: none; font-size: 0.925rem; }
+.kf-guide-toc a:hover { color: var(--ink); }
+.kf-toc-current { color: var(--accent) !important; font-weight: 600; }
+
+.kf-prose { min-width: 0; max-width: 44rem; }
+.kf-prose h1 { font-size: 2rem; letter-spacing: -0.025em; margin: 0 0 1rem; }
+.kf-prose h2 { font-size: 1.3rem; letter-spacing: -0.015em; margin: 2rem 0 0.5rem; }
+.kf-prose h3 { font-size: 1.05rem; margin: 1.5rem 0 0.4rem; }
+.kf-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  background: var(--code-bg);
+  padding: 0.1em 0.35em;
+  border-radius: 0.3rem;
+}
+.kf-prose pre {
+  background: var(--code-bg);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+}
+.kf-prose pre code { background: none; padding: 0; }
+.kf-prose table { width: 100%; border-collapse: collapse; display: block; overflow-x: auto; }
+.kf-prose th, .kf-prose td { border: 1px solid var(--line); padding: 0.4rem 0.6rem; text-align: left; }
+
+.kf-example { margin: 1.5rem 0; display: grid; gap: 0.75rem; }
+.kf-example figcaption { display: grid; gap: 0.6rem; justify-items: start; }

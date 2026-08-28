@@ -19,6 +19,20 @@ rustflags = [
   "-C", "link-arg=-fuse-ld=mold",
 ]
 
+# getrandom 0.3 refuses wasm32-unknown-unknown unless told which entropy
+# source to use — the cargo *feature* alone is not enough, it gates on this
+# cfg. The browser answer is `wasm_js` (crypto.getRandomValues). Reached
+# transitively (uuid, ahash, …), so it has to be set for the whole target
+# rather than by any one dependency.
+#
+# Note the precedence rule above: this table REPLACES `build.rustflags`, so
+# the frame-pointer flag is repeated here.
+[target.wasm32-unknown-unknown]
+rustflags = [
+  "-C", "force-frame-pointers=yes",
+  "--cfg", 'getrandom_backend="wasm_js"',
+]
+
 # Carried over from the dissolved session/keyflow workspaces: git deps and
 # patched git sources fetch via the git CLI so SSH / credentials work the
 # same way `git` does outside cargo.

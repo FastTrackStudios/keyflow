@@ -20,7 +20,9 @@ fn new_offscreen_renderer(width: u32, height: u32) -> OffscreenRenderer {
 fn new_offscreen_renderer(_width: u32, _height: u32) -> OffscreenRenderer {
     anyrender::NullImageRenderer::new()
 }
-use keyflow::engraver::export::{PdfSerializer, SvgExportConfig, SvgSerializer};
+#[cfg(feature = "pdf")]
+use keyflow::engraver::export::PdfSerializer;
+use keyflow::engraver::export::{SvgExportConfig, SvgSerializer};
 use keyflow::engraver::fonts::ChartFontBundle;
 use keyflow::engraver::layout::chart::cursor::{ChartCursor, CursorState, HighlightCommand, Rgba};
 use keyflow::engraver::layout::chart::{
@@ -1611,6 +1613,10 @@ impl ChartLayoutManager {
     ///
     /// The layout must already be computed in paginated mode (`snippet_mode = false`).
     /// Returns a complete PDF document as bytes.
+    ///
+    /// Behind the `pdf` feature: printpdf's azul dependency does not build
+    /// for iOS, and the browser prints from the SVG export instead.
+    #[cfg(feature = "pdf")]
     pub fn export_pdf_bytes(&self) -> Result<Vec<u8>, String> {
         let layout = self
             .layout_result
@@ -1692,6 +1698,94 @@ impl ChartLayoutManager {
         }
 
         Ok(pages)
+    }
+
+    /// Export the layout as SVG pages that *reference* the chart fonts
+    /// rather than embedding them.
+    ///
+    /// [`Self::export_svg_pages`] embeds Bravura, MuseJazzText and FreeSans
+    /// into every document, which costs roughly 485 KB per page. That is
+    /// the right trade for a file someone downloads — it is self-contained.
+    /// It is the wrong trade for a web page showing several charts, where
+    /// the same fonts would be repeated once per chart.
+    ///
+    /// Pair this with [`Self::font_face_css`], emitted once per document.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no layout has been computed, or it has no pages.
+    pub fn export_svg_pages_linked(&self) -> Result<Vec<String>, String> {
+        let layout = self
+            .layout_result
+            .as_ref()
+            .ok_or_else(|| "No chart layout available to export".to_string())?;
+
+        if layout.pages.is_empty() {
+            return Err("No pages available to export".to_string());
+        }
+
+        Ok(layout
+            .pages
+            .iter()
+            .map(|page| {
+                let config = SvgExportConfig::for_page(
+                    page.x_offset,
+                    page.y_offset,
+                    page.width,
+                    page.height,
+                );
+                SvgSerializer::new(config).serialize(&layout.scene)
+            })
+            .collect())
+    }
+
+    /// Export the layout cropped to the chart's own bounds, with fonts
+    /// referenced rather than embedded.
+    ///
+    /// [`Self::export_svg_pages_linked`] crops to the *page*, which is
+    /// right for print and wrong on the web: a two-bar example laid out on
+    /// A4 arrives as a couple of centimetres of music above a page of empty
+    /// paper. This crops to what was actually drawn.
+    ///
+    /// Pair with [`Self::font_face_css`], emitted once per document.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no layout has been computed.
+    pub fn export_svg_snippet(&self) -> Result<String, String> {
+        let layout = self
+            .layout_result
+            .as_ref()
+            .ok_or_else(|| "No chart layout available to export".to_string())?;
+
+        let (width, height) = self
+            .get_content_dimensions()
+            .ok_or_else(|| "No chart layout available to export".to_string())?;
+
+        let config = SvgExportConfig::for_page(0.0, 0.0, width, height);
+        Ok(SvgSerializer::new(config).serialize(&layout.scene))
+    }
+
+    /// `@font-face` rules for the chart fonts, as data URIs.
+    ///
+    /// Emit once per document alongside [`Self::export_svg_pages_linked`];
+    /// every chart on the page then resolves its fonts from here.
+    #[must_use]
+    pub fn font_face_css(&self) -> String {
+        SvgExportConfig::default()
+            .with_embedded_font(
+                "Bravura",
+                self.font_bundle.symbol_font_data().as_ref().clone(),
+            )
+            .with_embedded_font(
+                "MuseJazzText",
+                self.font_bundle.text_font_data().as_ref().clone(),
+            )
+            .with_embedded_font(
+                "FreeSans",
+                self.font_bundle.aux_font_data().as_ref().clone(),
+            )
+            .font_face_css()
     }
 
     /// Determine which page is currently visible given scroll values.

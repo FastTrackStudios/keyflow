@@ -35,6 +35,8 @@ members = [
     "features/engraver/engraver",
     "features/engraver/proto",
     "features/engraver/score",
+    "apps/web",
+    "apps/mobile",
 ]
 
 [workspace.package]
@@ -50,7 +52,11 @@ repository = "https://github.com/FastTrackStudios/keyflow"
 # `keyflow` and `engraver` are the facades; keyflow-{text,midi,live,…}
 # and engraver-proto are INTERNAL to the domain. Consumers outside this
 # repo go through the two facades.
-keyflow = { path = "crates/keyflow/keyflow" }
+# Defaults OFF at the root: the facade's default pulls `engraver` (wgpu +
+# vello), which the wasm site does not want (it renders through
+# vello_hybrid) and the iOS build cannot take (printpdf's azul dep does not
+# build for iOS). Every consumer names the features it needs.
+keyflow = { path = "crates/keyflow/keyflow", default-features = false }
 keyflow-text = { path = "crates/keyflow/keyflow-text" }
 keyflow-chordpro = { path = "crates/keyflow/keyflow-chordpro" }
 keyflow-midi = { path = "crates/keyflow/keyflow-midi" }
@@ -61,13 +67,27 @@ keyflow-annotate = { path = "crates/keyflow/keyflow-annotate" }
 keyflow-orchestra = { path = "crates/keyflow/keyflow-orchestra" }
 keyflow-sync = { path = "crates/keyflow/keyflow-sync" }
 keyflow-daw-analysis = { path = "crates/keyflow/keyflow-daw-analysis" }
-keyflow-ui = { path = "crates/keyflow/keyflow-ui" }
+# Defaults OFF at the root: keyflow-ui's default is `web`, which enables
+# `dioxus/desktop` — and that drags dioxus-desktop -> tungstenite ->
+# native-tls -> openssl-sys into a wasm32 build, where openssl does not
+# compile. Consumers name the surface they want (`web` / `native` /
+# `wasm-graphics`).
+keyflow-ui = { path = "crates/keyflow/keyflow-ui", default-features = false }
 keyflow-cli = { path = "crates/keyflow/cli" }
 keyflow-lsp = { path = "crates/keyflow/keyflow-lsp" }
 tree-sitter-keyflow = { path = "crates/keyflow/tree-sitter-keyflow" }
 engraver = { path = "features/engraver/engraver", default-features = false }
 engraver-proto = { path = "features/engraver/proto", default-features = false }
 engraver-score = { path = "features/engraver/score" }
+
+# ── apps ──────────────────────────────────────────────────────────────
+# The site. A workspace member so `cargo check --workspace` covers it on
+# the host; the shipping build is `dx build --platform web`.
+keyflow-web = { path = "apps/web" }
+# The iOS app. A workspace member so its keyboard layout and chart library
+# are checked and tested on the host; the shipping build is
+# `dx build --platform ios` (see apps/mobile/ios/README.md).
+keyflow-mobile = { path = "apps/mobile" }
 
 # ── Cross-repo — tagged git deps ────────────────────────────────
 # Defaults OFF at the root so lean consumers (probe-only scanners, the

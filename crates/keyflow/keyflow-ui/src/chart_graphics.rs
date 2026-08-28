@@ -121,7 +121,7 @@ pub use desktop::ChartGraphics;
 mod wasm {
     use anyrender_vello_hybrid::{WebGlImageManager, WebGlScenePainter};
     use rustc_hash::FxHashMap;
-    use vello_hybrid::{RenderSettings, RenderSize, Scene, WebGlRenderer};
+    use vello_hybrid::{RenderSettings, RenderSize, Resources, Scene, WebGlRenderer};
     use web_sys::HtmlCanvasElement;
 
     /// Chart graphics context wrapping vello_hybrid's WebGlRenderer.
@@ -131,6 +131,10 @@ mod wasm {
     /// so `ChartLayoutManager::render_to_scene()` works identically.
     pub struct ChartGraphics {
         renderer: WebGlRenderer,
+        // vello_hybrid 0.0.9 split the image/glyph atlases out of the
+        // renderer into `Resources`, which the caller now owns and passes
+        // to both the image manager and `render`.
+        resources: Resources,
         scene: Scene,
         cached_images: FxHashMap<u64, vello_common::paint::ImageId>,
         width: u32,
@@ -148,6 +152,7 @@ mod wasm {
 
             Self {
                 renderer,
+                resources: Resources::new(),
                 scene,
                 cached_images: FxHashMap::default(),
                 width,
@@ -183,8 +188,11 @@ mod wasm {
             // Build the scene via the PaintScene-compatible painter.
             // WebGlImageManager borrows &mut renderer, so scope it.
             {
-                let image_manager =
-                    WebGlImageManager::new(&mut self.renderer, &mut self.cached_images);
+                let image_manager = WebGlImageManager::new(
+                    &mut self.renderer,
+                    &mut self.resources,
+                    &mut self.cached_images,
+                );
                 let mut painter = WebGlScenePainter::new(&mut self.scene, image_manager);
                 draw_fn(&mut painter);
             }
@@ -194,7 +202,10 @@ mod wasm {
                 width: self.width,
                 height: self.height,
             };
-            if let Err(e) = self.renderer.render(&self.scene, &render_size) {
+            if let Err(e) = self
+                .renderer
+                .render(&self.scene, &mut self.resources, &render_size)
+            {
                 tracing::error!("WebGL chart render failed: {:?}", e);
             }
 

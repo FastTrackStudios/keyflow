@@ -7,7 +7,10 @@ description = "Dioxus UI components for Keyflow chart editing"
 
 [dependencies]
 # Keyflow parsing, types, and engraver (all through the facade)
-keyflow = { workspace = true, features = ["text", "engraver", "pdf", "highlighting"] }
+# CPU layout + SVG only at the base — that is all the chart *model* needs.
+# The GPU renderer rides on `desktop-graphics`, and PDF export on `pdf`,
+# because neither is wanted on the wasm/iOS paths.
+keyflow = { workspace = true, features = ["text", "svg", "highlighting"] }
 
 # FTS shared design system (Button, Card, Tabs, Input, Tooltip, Theme, etc.).
 # The chart **renderer** stays raw (Vello scene mounts under
@@ -46,12 +49,20 @@ roxmltree = "0.20"
 # Icons
 lucide-dioxus = { workspace = true }
 
-# Async runtime (for debounce timers on desktop)
-tokio = { version = "1.49", features = ["time"] }
 
 # Logging
 tracing = "0.1"
 web-time = "1.1.0"
+
+# Debounce timer for the editor's on_change. Split by target: tokio's timer
+# needs a reactor, which does not exist in the browser — `tokio::time::sleep`
+# compiles for wasm32 and then panics at runtime, which is how this stayed
+# hidden. gloo-timers drives the browser side off setTimeout.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1.49", features = ["time"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+gloo-timers = { version = "0.3", features = ["futures"] }
 
 [features]
 default = ["web"]
@@ -63,7 +74,7 @@ native = ["dioxus", "dioxus-native", "desktop-graphics"]
 # renders into. Panel components that wire this to app state (dock layout,
 # transport signals) live in the consuming app, not here — keyflow-ui must
 # stay below the app layer.
-desktop-graphics = ["anyrender_vello", "peniko"]
+desktop-graphics = ["anyrender_vello", "peniko", "keyflow/wgpu"]
 # WASM chart graphics — WebGL2 rendering via vello_hybrid.
 wasm-graphics = [
     "dioxus",
@@ -74,6 +85,9 @@ wasm-graphics = [
     "rustc-hash",
     "peniko",
 ]
+# Chart → PDF export. Off by default: printpdf's azul dep does not build
+# for iOS, and the browser prints from SVG instead.
+pdf = ["keyflow/pdf"]
 
 [lints]
 workspace = true

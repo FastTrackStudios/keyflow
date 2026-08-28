@@ -113,11 +113,12 @@
         fi
 
         echo ""
-        echo "  FastTrackStudio dev shell"
+        echo "  Keyflow dev shell"
         echo "  ─────────────────────────────────────────────"
-        echo "  cargo check --workspace"
-        echo "  cargo build -p fasttrackstudio — THE app (--engine = headless rig)"
-        echo "  (cd apps/fasttrackstudio && dx build --platform web --no-default-features --features signal)"
+        echo "  just check / just test / just ci"
+        echo "  just kf --help              — the keyflow CLI"
+        echo "  just web                    — serve keyflow.fasttrackstudio.app"
+        echo "  (cd apps/mobile && ./ios/build-ios.sh)   — the iOS app"
         echo ""
         echo "  Rust: $(rustc --version)"
         echo "  dx:   $(dx --version 2>/dev/null || echo 'not available')"

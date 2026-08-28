@@ -35,6 +35,10 @@ crates/keyflow/       the language: facade + text/chordpro/midi/musicxml/
                       the LSP, the CLI, the tree-sitter grammar
 features/engraver/    the layout + render engine: facade, proto (the
                       layout model and engine), score (import/export)
+apps/web/             keyflow.fasttrackstudio.app — landing page, editor,
+                      guide. Wasm; charts render as SVG.
+apps/mobile/          Keyflow for iOS — chart library + the Keyflow
+                      keyboard extension
 docs/guides/keyflow/  the language guide — also the source content for
                       the site's embedded tutorial
 docs/spec/            tracey-tracked spec (score-engraving)
@@ -69,6 +73,30 @@ docs/spec/            tracey-tracked spec (score-engraving)
   `<crate>/tests/fixtures/`, never up and out of the crate directory.
 - Async: `tokio::sync::*` for locks/channels; `architect::platform::{spawn,
   sleep, timeout}` for tasks/timers — the wasm-cfg-split seam.
+- **`cargo check --workspace` does not check the site.** It builds
+  `keyflow-web` for the *host*, where every `cfg(target_arch = "wasm32")`
+  block and the whole WebGL surface are invisible. Run `just web-check`
+  (CI does). Two wasm traps already caught this way, both of which
+  *compile* and then fail at runtime or link time:
+  - `tokio::time::sleep` needs a reactor and panics in the browser. The
+    editor debounce is target-split onto `gloo-timers`.
+  - `getrandom` 0.3 needs BOTH the `wasm_js` cfg (`.cargo/config.toml`)
+    and the `wasm_js` feature (a direct dep in `apps/web`). Either alone
+    is a `compile_error!`.
+- **Never enable `keyflow-ui`'s `web` feature from a wasm consumer.** It
+  turns on `dioxus/desktop`, which drags dioxus-desktop → tungstenite →
+  native-tls → openssl-sys, and openssl does not build for wasm32. That is
+  why the root's `keyflow-ui` entry sets `default-features = false`.
+- **A WebGL context is a scarce resource.** `keyflow-ui::ChartGraphics` is
+  for one live surface, not one per chart on a page: browsers cap contexts
+  at around sixteen, and re-creating one per render wedges the renderer.
+  Static charts go through `export_svg_snippet` /
+  `export_svg_pages_linked` instead. Pair the linked exports with
+  `font_face_css` emitted once per document — the embedding variants cost
+  ~485 KB of font data *per chart*.
+- **Engraving belongs in `use_memo`, not `use_effect`.** It is a pure
+  function of the source. An effect that writes a signal the component
+  also reads re-enters on every pass.
 
 ## Build
 

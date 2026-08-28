@@ -1,0 +1,29 @@
+[package]
+name = "keyflow-mobile"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Keyflow for iOS — chart management plus the Keyflow keyboard extension"
+
+[dependencies]
+# `pdf` is deliberately absent: printpdf's azul dependency does not build
+# for iOS. Charts export as SVG on the phone.
+keyflow = { workspace = true, features = ["text", "svg", "highlighting"] }
+
+# The editor chrome and chart renderer. The phone uses the same WebGL/
+# vello_hybrid surface as the site rather than the desktop wgpu path — see
+# `wasm-graphics` in keyflow-ui.
+keyflow-ui = { workspace = true, features = ["wasm-graphics"] }
+
+architect-ui = { workspace = true }
+dioxus = { workspace = true, features = ["router"] }
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[lints]
+workspace = true
