@@ -41,6 +41,12 @@ jobs:
         with:
           shared-key: check
           cache-on-failure: "true"
+      # apps/web/assets/tailwind.css is gitignored build output that
+      # `asset!()` demands at compile time, so the sheet has to exist
+      # before any cargo step. `tailwind-check` also fails loudly if the
+      # @source globs matched nothing — see apps/web/tailwind.css.
+      - name: tailwind
+        run: ${NIX_DEV} just tailwind-check
       - name: Manifests + lockfile
         run: ${NIX_DEV} cargo metadata --locked --format-version 1 > /dev/null
       - name: cargo fmt --check

@@ -21,7 +21,7 @@ test-doc:
     cargo test --workspace --doc
 
 # The gate CI runs, in the order CI runs it.
-ci: fmt-check check web-check test
+ci: fmt-check tailwind-check check web-check test
 
 fmt:
     cargo fmt --all
@@ -29,20 +29,67 @@ fmt:
 fmt-check:
     cargo fmt --all --check
 
+# ── Tailwind ─────────────────────────────────────────────────────────────
+# The site's sheet is compiled from apps/web/tailwind.css, which @sources
+# this crate plus two crates that arrive as GIT DEPS — architect-ui and
+# view-knowledge-graph. A git dep has no stable path on disk, so the globs
+# cannot be written literally.
+#
+# `cargo metadata` knows where cargo actually resolved them. This recipe
+# asks, and symlinks the answers into apps/web/.tailwind-src/ so the
+# @source globs have something real to match. Without it the classes those
+# crates use are simply absent from the sheet, and the failure is SILENT:
+# a @source matching nothing is not an error, the component just renders
+# unstyled.
+_tw-link:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p apps/web/.tailwind-src
+    for crate in architect-ui view-knowledge-graph; do
+        dir=$(cargo metadata --format-version 1 2>/dev/null \
+            | python3 -c "import json,sys,os;p=json.load(sys.stdin)['packages'];print(next(os.path.dirname(x['manifest_path']) for x in p if x['name']=='$crate'))")
+        if [ -z "$dir" ] || [ ! -d "$dir" ]; then
+            echo "cannot resolve $crate — is it in the dependency graph?" >&2
+            exit 1
+        fi
+        ln -sfn "$dir" "apps/web/.tailwind-src/$crate"
+    done
+
+# Compile the site's Tailwind sheet. Gitignored output; `asset!()` needs
+# it at compile time, so this runs before any build of apps/web.
+tailwind: _tw-link
+    cd apps/web && tailwindcss -i ./tailwind.css -o ./assets/tailwind.css --minify
+
+# Fail if the sheet is missing classes the imported components need.
+# Cheap insurance against the silent-@source failure described above.
+tailwind-check: tailwind
+    #!/usr/bin/env bash
+    set -euo pipefail
+    missing=()
+    for class in cursor-grab cursor-grabbing backdrop-blur-sm text-muted-foreground; do
+        grep -q -- "$class" apps/web/assets/tailwind.css || missing+=("$class")
+    done
+    if [ ${#missing[@]} -ne 0 ]; then
+        echo "tailwind sheet is missing: ${missing[*]}" >&2
+        echo "the @source globs in apps/web/tailwind.css matched nothing — run 'just _tw-link'" >&2
+        exit 1
+    fi
+    echo "tailwind sheet covers the imported components"
+
 # ── Apps ─────────────────────────────────────────────────────────────────
 
 # Serve keyflow.fasttrackstudio.app with hot reload.
-web:
+web: tailwind
     cd apps/web && dx serve --platform web
 
 # Build the shipping web bundle into target/dx/keyflow-web/release/web/public.
-web-build:
+web-build: tailwind
     cd apps/web && dx build --platform web --release
 
 # Check the site compiles for the browser. `cargo check --workspace` builds
 # it for the host, which does NOT catch wasm-only breakage — the WebGL
 # surface and every `cfg(target_arch = "wasm32")` block are invisible there.
-web-check:
+web-check: tailwind
     cargo check -p keyflow-web --target wasm32-unknown-unknown
 
 # The iOS app. Must run on a Mac; see apps/mobile/ios/README.md.

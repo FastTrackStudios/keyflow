@@ -54,6 +54,11 @@ fn main() {
 #[component]
 fn App() -> Element {
     rsx! {
+        // Order matters: Tailwind first (it carries the architect-ui design
+        // tokens the imported components resolve against), then the site's
+        // own sheet, which styles the chart surface and page chrome and
+        // must win where the two overlap.
+        document::Link { rel: "stylesheet", href: asset!("/assets/tailwind.css") }
         document::Link { rel: "stylesheet", href: asset!("/assets/site.css") }
         Router::<Route> {}
     }

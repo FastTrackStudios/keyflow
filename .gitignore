@@ -44,3 +44,9 @@ css_ab*.tsv
 
 # tree-sitter's generated C parser — regenerate with `just grammar`.
 crates/keyflow/tree-sitter-keyflow/src/parser.c
+
+# Tailwind: the compiled sheet is build output (`just tailwind`), and
+# .tailwind-src/ is symlinks to resolved git-dep checkouts — both are
+# machine-specific and regenerable.
+apps/web/assets/tailwind.css
+apps/web/.tailwind-src/

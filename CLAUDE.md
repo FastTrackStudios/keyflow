@@ -10,7 +10,8 @@ the `architect` / `daw` / `vendor` splits before it.
 | [daw](https://github.com/FastTrackStudios/daw) | the DAW platform and shared substrate — including `keyflow-proto` and `keyflow-syntax` | git dep, tag `v0.0.2` |
 | [architect](https://github.com/FastTrackStudios/architect) | the framework (entity/RPC, atom, form, auth, permissions, crdt), `architect-ui` | git dep, tag `v0.0.2` |
 | [session](https://github.com/FastTrackStudios/session) | the musical/production vocabulary and the Session app | consumes this repo |
-| [task](https://github.com/FastTrackStudios/task) | the Task product, the Editor stack, the vault/wiki layer | git dep (site only) |
+| [editor](https://github.com/FastTrackStudios/editor) | the embeddable text/markdown editor — sits BELOW this repo | git dep, tag `v0.1.0` |
+| [task](https://github.com/FastTrackStudios/task) | the Task product and the vault/wiki layer | git dep (`view-knowledge-graph`, site only) |
 
 One root Cargo workspace, one lockfile, one `target/`, one flake.
 Intra-repo dependencies are path deps in root `[workspace.dependencies]`,
@@ -35,6 +36,9 @@ crates/keyflow/       the language: facade + text/chordpro/midi/musicxml/
                       the LSP, the CLI, the tree-sitter grammar
 features/engraver/    the layout + render engine: facade, proto (the
                       layout model and engine), score (import/export)
+features/editor/      this repo's half of the editor integration:
+                      editor-keyflow (the fence renderer) and
+                      editor-keyflow-lang (decorations, hover, highlight)
 apps/web/             keyflow.fasttrackstudio.app — landing page, editor,
                       guide. Wasm; charts render as SVG.
 apps/mobile/          Keyflow for iOS — chart library + the Keyflow
@@ -94,6 +98,20 @@ docs/spec/            tracey-tracked spec (score-engraving)
   `export_svg_pages_linked` instead. Pair the linked exports with
   `font_face_css` emitted once per document — the embedding variants cost
   ~485 KB of font data *per chart*.
+- **The editor sits BELOW this repo, and must stay there.** `editor-state`
+  knows nothing about keyflow; `editor-keyflow` implements its
+  `fence_renderer` seam and registers itself. If you find yourself adding
+  `keyflow` to a crate in the editor repo, the code belongs here instead.
+- **The site's Tailwind sheet is build output.** `apps/web/assets/tailwind.css`
+  is gitignored and `asset!()` demands it at compile time, so a fresh
+  clone must `just tailwind` before `cargo check` passes (CI does). It
+  scans two GIT DEPS — architect-ui and view-knowledge-graph — through
+  symlinks that `just _tw-link` resolves via `cargo metadata`, because a
+  git dep has no stable path to glob. **A `@source` that matches nothing
+  is silent**: no error, just missing classes and an unstyled component.
+  `just tailwind-check` exists to make that loud. architect-ui's prebuilt
+  `UTILITIES_CSS` is not a substitute — it lacks `cursor-grab`,
+  `cursor-grabbing` and `backdrop-blur-sm`, which the graph view needs.
 - **Engraving belongs in `use_memo`, not `use_effect`.** It is a pure
   function of the source. An effect that writes a signal the component
   also reads re-enters on every pass.
@@ -110,9 +128,11 @@ just grammar         # regenerate the tree-sitter C parser (gitignored)
 
 ### Known-failing tests on a clean clone
 
-~30 tests fail on a fresh checkout because they read reference corpora
-(`lord_of_the_fight`, the orchestra corpus) that are not in the repo.
-These failed identically in `session` before the split — they are not
+~31 tests fail on a fresh checkout. Thirty read reference corpora
+(`lord_of_the_fight`, the orchestra corpus) that are not in the repo and
+failed identically in `session` before the split; the thirty-first,
+`editor-keyflow-lang … section_headers_get_resolved_name_badges`, fails
+identically in `task` at the commit those crates moved from. None is
 split damage. Fix them by moving the corpus in or marking them
 `#[ignore]`; do not "fix" them by weakening assertions.
 

@@ -35,6 +35,8 @@ members = [
     "features/engraver/engraver",
     "features/engraver/proto",
     "features/engraver/score",
+    "features/editor/editor-keyflow",
+    "features/editor/editor-keyflow-lang",
     "apps/web",
     "apps/mobile",
 ]
@@ -79,6 +81,39 @@ tree-sitter-keyflow = { path = "crates/keyflow/tree-sitter-keyflow" }
 engraver = { path = "features/engraver/engraver", default-features = false }
 engraver-proto = { path = "features/engraver/proto", default-features = false }
 engraver-score = { path = "features/engraver/score" }
+
+# ── editor — its own repo since the 2026-08 split ─────────────────────
+# (FastTrackStudios/editor: document model, markdown pass, Dioxus view,
+# vim, tree-sitter syntax, CRDT, LSP.) It sits BELOW this repo and depends
+# on dioxus and crates.io only — that is what makes it embeddable.
+#
+# The guide renders through it in read-only mode, and it already
+# understands the ```kf fence family natively. `editor-keyflow` (here)
+# implements its `fence_renderer` seam so charts engrave; editor-state
+# knows nothing about keyflow, which is what keeps the graph acyclic.
+editor = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.0" }
+editor-state = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.0" }
+
+# ── features/editor — this repo's half of the editor integration ──────
+# Both need `editor-state` from below and `keyflow-text`/`engraver` from
+# here, so this is the only repo where they can live.
+editor-keyflow = { path = "features/editor/editor-keyflow" }
+editor-keyflow-lang = { path = "features/editor/editor-keyflow-lang" }
+
+# ── task — the vault / knowledge-graph layer ──────────────────────────
+# The guide is a vault: `docs/guides/keyflow/*.md` are wiki notes that
+# cross-link as `[[slug]]`, and the site renders that web as a real
+# knowledge graph. `view-knowledge-graph` is the port of llm_wiki's
+# graph view — deliberately FS-free and pure, so the same code that
+# builds the graph natively builds it in the browser.
+#
+# Note the direction: this depends on `task`, and `task` depends on
+# `keyflow` (via editor-keyflow). Cargo stays acyclic — different
+# packages, and nothing in this dependency's tree touches keyflow, so
+# there is no duplicate-crate hazard — but a change spanning both repos
+# needs two bumps in sequence. Pinned by rev rather than a branch so a
+# push to task's main cannot change this build under us.
+view-knowledge-graph = { git = "https://github.com/FastTrackStudios/task", rev = "263ec348e7faa7fd7ed7cecd9c15c3f9e398301d" }
 
 # ── apps ──────────────────────────────────────────────────────────────
 # The site. A workspace member so `cargo check --workspace` covers it on

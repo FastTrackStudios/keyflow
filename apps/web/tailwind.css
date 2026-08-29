@@ -1,0 +1,45 @@
+/*
+ * Tailwind input for the Keyflow site.
+ *
+ * Compiled to `assets/tailwind.css` by `just tailwind`, which is
+ * gitignored build output — `asset!()` demands it at compile time, so a
+ * fresh clone must run that recipe (or `just web` / `just ci`, which
+ * depend on it) before `cargo check` will pass.
+ *
+ * WHY THIS FILE EXISTS AT ALL
+ *
+ * `architect-ui` ships a prebuilt utilities sheet as `UTILITIES_CSS`, and
+ * for its own components that is enough. It is NOT enough for components
+ * that live in other crates: `view-knowledge-graph` uses `cursor-grab`,
+ * `cursor-grabbing` and `backdrop-blur-sm`, none of which appear in
+ * architect-ui's sheet, because they appear nowhere in architect-ui's
+ * sources. Relying on it would leave the graph's pan/zoom controls
+ * unstyled.
+ *
+ * That failure mode is silent — a `@source` that matches nothing does not
+ * error, you just get fewer classes and an element that renders bare. The
+ * task repo has a long comment about this exact bug biting it at the
+ * August 2026 split. `just tailwind` resolves the git-dep checkouts
+ * through `cargo metadata` precisely so the globs below cannot silently
+ * match nothing.
+ */
+
+/* `source(none)` disables Tailwind v4's automatic content detection,
+ * which is rooted at the working directory and would make the output
+ * depend on where the build ran from. Every source is named explicitly
+ * below, so the result is identical from any cwd. */
+@import "tailwindcss" source(none);
+
+/* The design tokens (--background, --border, --muted-foreground, …) that
+ * every class below resolves against. Symlinked from the resolved
+ * architect-ui checkout by `just tailwind`. */
+@import "./.tailwind-src/architect-ui/assets/fts-theme.css";
+
+/* This crate's own markup. */
+@source "./src/**/*.rs";
+
+/* The imported components. These are git deps with no stable path on
+ * disk; `.tailwind-src/` is a directory of symlinks pointing at whatever
+ * `cargo metadata` says cargo actually resolved. */
+@source "./.tailwind-src/view-knowledge-graph/src/**/*.rs";
+@source "./.tailwind-src/architect-ui/src/**/*.rs";

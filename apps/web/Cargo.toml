@@ -26,6 +26,10 @@ keyflow = { workspace = true, features = ["text", "highlighting"] }
 keyflow-ui = { workspace = true, features = ["wasm-graphics"] }
 
 architect-ui = { workspace = true }
+
+# The guide's knowledge graph. Pure and FS-free by design, so the graph is
+# built in the browser from the same markdown the pages are rendered from.
+view-knowledge-graph = { workspace = true }
 dioxus = { workspace = true, features = ["router"] }
 
 # Chart-in-URL codec: deflate then base64url, so a whole chart fits in a
