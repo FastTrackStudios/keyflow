@@ -198,6 +198,31 @@ impl ChartFontBundle {
         ]
     }
 
+    /// The shared font bundle. Built once per process.
+    ///
+    /// [`Self::new`] copies seven baked-in font blobs — FreeSans alone is
+    /// 1.5 MB — and parses the SMuFL metadata. Nothing cached it, so
+    /// every consumer that wanted a layout engine paid for all of that
+    /// again: a guide page with four charts, four times, on the main
+    /// thread, on every render.
+    ///
+    /// Sharing it is safe and cheap. The bundle is `Send + Sync`, the
+    /// font bytes are already behind `Arc`, and
+    /// [`Self::create_layout_engine`] only clones two of those `Arc`s —
+    /// so a caller that needs its own *style* still gets its own engine
+    /// for almost nothing, over these same bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns the load error if the bundle cannot be built. The failure
+    /// is cached too: the bytes are baked into the binary, so a failure
+    /// here is deterministic.
+    pub fn shared() -> Result<&'static Self, String> {
+        static SHARED: std::sync::OnceLock<Result<ChartFontBundle, String>> =
+            std::sync::OnceLock::new();
+        SHARED.get_or_init(Self::new).as_ref().map_err(Clone::clone)
+    }
+
     /// [`Self::embeddable_fonts`] plus a concrete face for the generic
     /// `sans-serif` family.
     ///

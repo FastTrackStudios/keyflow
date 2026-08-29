@@ -130,8 +130,8 @@ pub fn font_face_css() -> Result<String, RenderError> {
 /// keyflow-cli's exporter". Three crates mirrored each other that way
 /// and one of them drifted, which is how chord symbols came to render in
 /// a system sans. There is one list now, on the font bundle.
-fn pipeline() -> Result<ChartPipeline, RenderError> {
-    ChartPipeline::new().map_err(|e| RenderError::Render(e.to_string()))
+fn pipeline() -> Result<&'static ChartPipeline, RenderError> {
+    ChartPipeline::shared().map_err(|e| RenderError::Render(e.to_string()))
 }
 
 /// Shared layout + crop + serialize. `embed_fonts` toggles between

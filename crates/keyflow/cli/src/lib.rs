@@ -18,6 +18,7 @@ mod orchestra;
 mod sync;
 
 use clap::{Parser, Subcommand, ValueEnum};
+use keyflow::engraver::api::pipeline::{ChartPipeline, Preset, PresetOptions};
 use keyflow::engraver::export::pdf::PdfSerializer;
 use keyflow::engraver::export::svg::{SvgExportConfig, SvgSerializer};
 use keyflow::engraver::fonts::ChartFontBundle;
@@ -729,13 +730,16 @@ fn measure_signature(measure: &keyflow::chart::types::Measure, include_source: b
 }
 
 struct LayoutPipeline {
-    font_bundle: ChartFontBundle,
+    font_bundle: &'static ChartFontBundle,
     engine: ChartLayoutEngine,
 }
 
 impl LayoutPipeline {
     fn new() -> Result<Self, String> {
-        let font_bundle = ChartFontBundle::new()?;
+        // Shared bundle, local style — see the note in keyflow-ui's
+        // `ChartLayoutManager::new`. The CLI and the app must keep
+        // rendering identically, and they both use `MStyle::new()`.
+        let font_bundle = ChartFontBundle::shared()?;
         let style: &'static MStyle = Box::leak(Box::new(MStyle::new()));
         let engine = font_bundle.create_layout_engine(style);
         Ok(Self {
@@ -754,6 +758,9 @@ impl LayoutPipeline {
     ///
     /// `width_pt` is ignored in Page mode (uses A4); meaningful for Snippet
     /// and Responsive where it sets the viewport width.
+    ///
+    /// The preset table itself lives on `ChartPipeline` — this used to be
+    /// one of three copies of it, and the copies disagreed.
     fn layout_preset(
         &self,
         chart: &Chart,
@@ -761,15 +768,12 @@ impl LayoutPipeline {
         breakpoint: BreakpointArg,
         width_pt: f64,
     ) -> ChartLayoutResult {
+        let options = PresetOptions::for_export().with_viewport_pt(width_pt);
         let (mode, config) = match preset {
-            PresetMode::Page => (
-                LayoutMode::paginated_a4(),
-                ChartLayoutConfig::master_rhythm().with_page_offsets(false),
-            ),
-            PresetMode::Snippet => (
-                LayoutMode::snippet(width_pt),
-                ChartLayoutConfig::snippet().with_page_offsets(false),
-            ),
+            PresetMode::Page => ChartPipeline::resolve_preset(Preset::Page, options),
+            PresetMode::Snippet => ChartPipeline::resolve_preset(Preset::Snippet, options),
+            // The CLI takes the breakpoint as a flag rather than deriving
+            // it from a viewport, so it overrides the resolved config.
             PresetMode::Responsive => (
                 LayoutMode::ContinuousScroll { width: width_pt },
                 ChartLayoutConfig::responsive_for(breakpoint.to_engraver()),

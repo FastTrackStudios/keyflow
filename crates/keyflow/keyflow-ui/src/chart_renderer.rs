@@ -20,6 +20,7 @@ fn new_offscreen_renderer(width: u32, height: u32) -> OffscreenRenderer {
 fn new_offscreen_renderer(_width: u32, _height: u32) -> OffscreenRenderer {
     anyrender::NullImageRenderer::new()
 }
+use keyflow::engraver::api::pipeline::{ChartPipeline, Preset, PresetOptions};
 #[cfg(feature = "pdf")]
 use keyflow::engraver::export::PdfSerializer;
 use keyflow::engraver::export::{SvgExportConfig, SvgSerializer};
@@ -75,9 +76,13 @@ fn ticks_per_beat_for_denom(denominator: u8) -> i64 {
 ///
 /// Zoom > 1 makes content larger, so the *effective* viewport shrinks —
 /// a zoomed-in tablet should layout like a phone.
+/// The responsive breakpoint for a viewport, from the pipeline.
+///
+/// Delegated rather than recomputed: the layout hash below is keyed on
+/// this, and a hash that derived the breakpoint its own way could
+/// disagree with the layout actually produced and serve a stale one.
 fn responsive_breakpoint(viewport_points: f64, zoom: f64) -> Breakpoint {
-    let effective = viewport_points / zoom.max(0.25);
-    Breakpoint::from_viewport_pt(effective)
+    ChartPipeline::responsive_breakpoint(viewport_points, zoom)
 }
 
 pub fn layout_mode_for_preview(
@@ -85,31 +90,18 @@ pub fn layout_mode_for_preview(
     viewport_width: f64,
     zoom: f64,
 ) -> (LayoutMode, ChartLayoutConfig) {
-    let raw_points = viewport_width / DPI_SCALE;
-    let viewport_points = LayoutMode::sanitize_dim(raw_points, LETTER_WIDTH).max(240.0);
-    match preview_mode {
-        PreviewMode::Snippet => (
-            LayoutMode::snippet(viewport_points),
-            ChartLayoutConfig::snippet().with_page_offsets(true),
-        ),
-        PreviewMode::Page => (
-            LayoutMode::paginated_letter(),
-            ChartLayoutConfig::master_rhythm().with_page_offsets(true),
-        ),
-        PreviewMode::Responsive => {
-            // Vertical-only scroll: page width snaps to viewport so nothing
-            // overflows horizontally. ContinuousScroll has no page boundary,
-            // so content reflows as one infinite column — the right shape
-            // for a phone/tablet preview that grows downward only.
-            let breakpoint = responsive_breakpoint(viewport_points, zoom);
-            (
-                LayoutMode::ContinuousScroll {
-                    width: viewport_points,
-                },
-                ChartLayoutConfig::responsive_for(breakpoint),
-            )
-        }
-    }
+    // The table lives on `ChartPipeline`; this was one of three copies of
+    // it, and the copies disagreed. Screen defaults — Letter paper, page
+    // offsets on — because a preview stacks its pages in one scrollable
+    // scene, where an export serialises each page on its own.
+    let viewport_points = viewport_width / DPI_SCALE;
+    let options = PresetOptions::for_screen(viewport_points, zoom);
+    let preset = match preview_mode {
+        PreviewMode::Snippet => Preset::Snippet,
+        PreviewMode::Page => Preset::Page,
+        PreviewMode::Responsive => Preset::Responsive,
+    };
+    ChartPipeline::resolve_preset(preset, options)
 }
 
 /// Result of a scene graph hit-test.
@@ -551,7 +543,7 @@ fn replay_recorded_scene(
 /// chart rendering pipeline is backend-agnostic.
 pub struct ChartLayoutManager {
     /// Font bundle (single source of truth for all chart fonts).
-    font_bundle: ChartFontBundle,
+    font_bundle: &'static ChartFontBundle,
     /// Layout engine.
     layout_engine: ChartLayoutEngine,
     /// Cached layout result.
@@ -890,7 +882,17 @@ impl ChartLayoutManager {
 
     /// Create a new chart layout manager with embedded fonts.
     pub fn new() -> Result<Self, String> {
-        let font_bundle = ChartFontBundle::new()?;
+        // The bundle is shared: building one copies ~2.5 MB of baked-in
+        // font bytes and parses the SMuFL metadata, and a page with four
+        // charts used to pay for that four times.
+        //
+        // The STYLE stays local. keyflow-ui and the CLI render with
+        // `MStyle::new()` while `editor-keyflow` renders with the
+        // lead-sheet preset, and those produce genuinely different
+        // engravings — so this shares the expensive part and leaves the
+        // behavioural part alone. Building an engine over the shared
+        // bundle is two `Arc` clones.
+        let font_bundle = ChartFontBundle::shared()?;
 
         let style = Box::leak(Box::new(MStyle::new()));
         let layout_engine = font_bundle.create_layout_engine(style);
