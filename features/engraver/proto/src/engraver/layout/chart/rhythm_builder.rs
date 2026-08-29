@@ -170,7 +170,7 @@ pub fn build_rhythm(source: RhythmSource<'_>, config: &RhythmBuildConfig) -> Rhy
     // Step 4: Apply auto_rhythm_slashes expansion if enabled
     // This converts whole/half notes to quarters for master rhythm chart style
     if config.auto_rhythm_slashes {
-        expand_to_quarters(&mut result);
+        expand_to_quarters(&mut result, config);
     }
 
     result
@@ -666,6 +666,12 @@ fn extract_from_slash(
         && chords
             .iter()
             .all(|c| matches!(c.rhythm, ChordRhythm::Slashes { dotted: true, .. }));
+    // What a musician counts in this meter, and what one beat looks like.
+    // In 6/8 that is TWO dotted quarters — padding to the numerator would
+    // fill the bar with six eighth slashes and tell the player to feel it
+    // in six.
+    let (meter_beats, meter_beat_duration) = beats_per_measure(config.time_signature);
+
     let num_beats = if all_dotted_slashes {
         chords
             .iter()
@@ -676,7 +682,7 @@ fn extract_from_slash(
             .sum::<usize>()
             .max(1)
     } else {
-        non_pushed_count.max(config.time_signature.0 as usize)
+        non_pushed_count.max(meter_beats)
     };
 
     // Build a list of beats, tracking which ones have pushes
@@ -834,10 +840,12 @@ fn extract_from_slash(
                     .push((rhythm_index, spillback.chord_symbol.clone()));
             }
 
+            // An explicit `/.` says dotted outright; otherwise the meter
+            // decides, so a compound bar fills with dotted beats.
             let dur = if all_dotted_slashes {
                 Duration::DottedQuarter
             } else {
-                Duration::Quarter
+                meter_beat_duration
             };
             result.entries.push(RhythmEntry::Note(dur));
             rhythm_index += 1;
@@ -1021,7 +1029,11 @@ fn fill_to_measure(result: &mut RhythmBuildResult, config: &RhythmBuildConfig) {
     let remaining = measure_ticks - result.total_ticks;
 
     if remaining > 0 {
-        let quarter_ticks = 480;
+        // The meter's beat, not a hard-coded quarter: an unfilled 6/8 bar
+        // is two dotted quarters, and filling it with three plain quarters
+        // both mis-reads the meter and does not add up to the bar.
+        let (_, beat) = beats_per_measure(config.time_signature);
+        let quarter_ticks = beat.ticks();
         let num_quarters = remaining / quarter_ticks;
 
         // Track if we have head_type_overrides (from melody extraction)
@@ -1029,7 +1041,7 @@ fn fill_to_measure(result: &mut RhythmBuildResult, config: &RhythmBuildConfig) {
         let had_pitches = !result.note_pitches.is_empty();
 
         for _ in 0..num_quarters {
-            result.entries.push(RhythmEntry::Note(Duration::Quarter));
+            result.entries.push(RhythmEntry::Note(beat));
 
             // If we had head type overrides, add Slash for fill notes
             if had_overrides {
@@ -1048,13 +1060,19 @@ fn fill_to_measure(result: &mut RhythmBuildResult, config: &RhythmBuildConfig) {
     }
 }
 
-/// Expand whole/half notes to quarter slashes for master rhythm chart style.
+/// Expand sustained notes into beat-length slashes for master rhythm
+/// chart style.
 ///
 /// This converts sustained chord notation (diamonds) to rhythmic slashes.
 /// Rests are preserved as-is. Triplet entries (eighths, etc.) are NOT expanded
 /// and their tuplet_specs are preserved with remapped indices.
-fn expand_to_quarters(result: &mut RhythmBuildResult) {
-    let quarter_ticks = 480;
+///
+/// "Beat" is the meter's beat, so a sustained 6/8 bar becomes two dotted
+/// quarters rather than three plain ones — three quarters would be the
+/// right *duration* and the wrong *reading*.
+fn expand_to_quarters(result: &mut RhythmBuildResult, config: &RhythmBuildConfig) {
+    let (_, beat) = beats_per_measure(config.time_signature);
+    let quarter_ticks = beat.ticks();
     let mut expanded = Vec::with_capacity(result.entries.len() * 4);
     let mut expanded_overrides = if result.head_type_overrides.is_empty() {
         Vec::new()
@@ -1080,7 +1098,7 @@ fn expand_to_quarters(result: &mut RhythmBuildResult) {
                     let original_override = result.head_type_overrides.get(i).copied().flatten();
 
                     for _ in 0..num_quarters {
-                        expanded.push(RhythmEntry::Note(Duration::Quarter));
+                        expanded.push(RhythmEntry::Note(beat));
                         if !result.head_type_overrides.is_empty() {
                             expanded_overrides.push(original_override);
                         }
@@ -1132,6 +1150,47 @@ fn expand_to_quarters(result: &mut RhythmBuildResult) {
                 index_map[spec.end_idx]
             };
         }
+    }
+}
+
+/// Whether a meter is **compound** — its beat is a dotted note that
+/// divides into three, not two.
+///
+/// The rule is the conventional one: an eighth- or sixteenth-denominated
+/// meter whose numerator is a multiple of three *greater than three*.
+/// So 6/8, 9/8 and 12/8 are compound (2, 3 and 4 dotted beats); 3/8 is
+/// **not** — three eighths is simple triple, one beat per eighth, which
+/// is why the `> 3` matters and a bare `% 3 == 0` would be wrong.
+///
+/// Quarter-denominated meters are left alone. 6/4 is genuinely ambiguous
+/// — it is read as compound duple in some music and as simple sextuple in
+/// other — and guessing would silently re-bar existing charts.
+#[must_use]
+pub fn is_compound_meter(time_signature: (u8, u8)) -> bool {
+    let (numerator, denominator) = time_signature;
+    matches!(denominator, 8 | 16) && numerator > 3 && numerator % 3 == 0
+}
+
+/// How many beats a measure of this meter holds, and what one beat is.
+///
+/// This is what a musician counts, which is not the same as the meter's
+/// numerator. In 6/8 you count **two**, not six — so a bar of one chord
+/// is two dotted-quarter slashes (`/. /.`), not six eighth slashes.
+/// Getting this wrong is not a spacing nicety: a six-slash 6/8 bar tells
+/// the player to feel the bar in six.
+#[must_use]
+pub fn beats_per_measure(time_signature: (u8, u8)) -> (usize, Duration) {
+    if is_compound_meter(time_signature) {
+        // Three denominator-units per beat: 3 eighths = a dotted quarter,
+        // 3 sixteenths = a dotted eighth.
+        let beat = if time_signature.1 == 8 {
+            Duration::DottedQuarter
+        } else {
+            Duration::DottedEighth
+        };
+        (usize::from(time_signature.0) / 3, beat)
+    } else {
+        (usize::from(time_signature.0), Duration::Quarter)
     }
 }
 
@@ -1297,7 +1356,17 @@ pub fn measure_has_explicit_chord_rhythm(measure: &Measure) -> bool {
                         .push_pull
                         .as_ref()
                         .is_some_and(|(is_push, _)| *is_push);
-                    !is_pushed_first && chord.rhythm.has_lily_duration()
+                    // ...and a SPACE is not explicit rhythm, however it
+                    // arrives. `RhythmElement::Space` is handled below,
+                    // but a section-length pad (`In 5` with four chords)
+                    // is emitted by the parser as a *Chord* carrying a
+                    // space duration, and `has_lily_duration()` is true
+                    // for any `Explicit` — so the pad measure was being
+                    // read as an explicit whole note. In 6/8 that
+                    // rendered four plain slashes: the wrong count in the
+                    // wrong meter, in a bar that is supposed to mean
+                    // "carry on".
+                    !is_pushed_first && chord.rhythm.has_lily_duration() && !chord.rhythm.is_space()
                 }
                 RhythmElement::Rest(_) => true, // Rests count as real rhythm
                 RhythmElement::Space(_) => false, // Space triggers auto-fill
@@ -1315,7 +1384,9 @@ pub fn measure_has_explicit_chord_rhythm(measure: &Measure) -> bool {
                 .push_pull
                 .as_ref()
                 .is_some_and(|(is_push, _)| *is_push);
-        !is_pushed_first && (chord.rhythm.has_lily_duration() || chord.rhythm.is_rest())
+        !is_pushed_first
+            && (chord.rhythm.has_lily_duration() || chord.rhythm.is_rest())
+            && !chord.rhythm.is_space()
     })
 }
 

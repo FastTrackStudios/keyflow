@@ -155,6 +155,50 @@ G // Gm // D ////
 
 "#;
 
+/// A compound-meter chart — 6/8 throughout.
+///
+/// Carried as an example because the meter is the point: in 6/8 a bar of
+/// one chord is **two dotted-quarter beats** (`/. /.`), not six eighth
+/// slashes. A six-slash bar is not a spacing nicety gone wrong, it tells
+/// the player to feel the bar in six. The engraver got this wrong until
+/// `rhythm_builder::beats_per_measure` existed, and this chart is what
+/// caught it.
+///
+/// It also exercises slash-bass chords (`B/F#`), mid-bar changes with
+/// subdivision (`A /// A/F# ///`), accents (`!F#7`), chord memory
+/// (`C#m` inheriting the 7 from the intro's `C#m7`), and bare `VS` / `CH`
+/// section recalls.
+pub const EXAMPLE_IN_MY_ROOM: &str = r#"In My Room - The Beach Boys
+6/8 104bpm #B
+
+Count 2
+In 5
+B G#m C#m7 F#
+VS
+B B/F# B B/F# 
+B A /// A/F# ///  B G#m 
+CH
+C#m A !F#7 !F#7
+B A /// A/F# /// B B
+VS
+CH
+BR
+G#m G#m F# F#
+G#m /// F# /// G#m /// F# ///
+B B
+G#m G#m F# F# C#m7 C#m7 C#m7 F#
+vs 
+B B/F# B B/F# 
+B A /// A/F# ///  B G#m 
+CH
+C#m A !F#7 !F#7
+B A /// A/F# /// B A /// A/F# /// 
+Outro
+B A /// A/F# /// B A /// A/F# /// 
+B A /// A/F# /// B A /// A/F# /// 
+B
+"#;
+
 /// Default chart content for the editor.
 pub const DEFAULT_CHART: &str = EXAMPLE_MESSAGES_OF_HOPE;
 
@@ -177,5 +221,9 @@ pub const EXAMPLES: &[ExampleChart] = &[
     ExampleChart {
         name: "Messengers of Hope - Evan Human",
         source: EXAMPLE_MESSAGES_OF_HOPE,
+    },
+    ExampleChart {
+        name: "In My Room - The Beach Boys (6/8)",
+        source: EXAMPLE_IN_MY_ROOM,
     },
 ];
