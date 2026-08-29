@@ -3687,7 +3687,7 @@ dependencies = [
 [[package]]
 name = "editor"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.0#804a3ab6faf127cd200c4ec3d70313b5f4351755"
+source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.1#4ca8273024249e8c058f3fb9662097cecec5e6b0"
 dependencies = [
  "dioxus",
  "editor-state",
@@ -3717,7 +3717,7 @@ dependencies = [
 [[package]]
 name = "editor-mermaid"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.0#804a3ab6faf127cd200c4ec3d70313b5f4351755"
+source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.1#4ca8273024249e8c058f3fb9662097cecec5e6b0"
 dependencies = [
  "mermaid-rs-renderer",
  "thiserror 2.0.20",
@@ -3727,7 +3727,7 @@ dependencies = [
 [[package]]
 name = "editor-state"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.0#804a3ab6faf127cd200c4ec3d70313b5f4351755"
+source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.1#4ca8273024249e8c058f3fb9662097cecec5e6b0"
 dependencies = [
  "editor-mermaid",
  "editor-syntax",
@@ -3742,7 +3742,7 @@ dependencies = [
 [[package]]
 name = "editor-syntax"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.0#804a3ab6faf127cd200c4ec3d70313b5f4351755"
+source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.1#4ca8273024249e8c058f3fb9662097cecec5e6b0"
 dependencies = [
  "arborium",
  "arborium-theme",
@@ -3752,7 +3752,7 @@ dependencies = [
 [[package]]
 name = "editor-typst"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.0#804a3ab6faf127cd200c4ec3d70313b5f4351755"
+source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.1#4ca8273024249e8c058f3fb9662097cecec5e6b0"
 dependencies = [
  "chrono",
  "comemo",
@@ -3770,7 +3770,7 @@ dependencies = [
 [[package]]
 name = "editor-view"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.0#804a3ab6faf127cd200c4ec3d70313b5f4351755"
+source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.1#4ca8273024249e8c058f3fb9662097cecec5e6b0"
 dependencies = [
  "dioxus",
  "editor-state",
@@ -3786,7 +3786,7 @@ dependencies = [
 [[package]]
 name = "editor-vim"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.0#804a3ab6faf127cd200c4ec3d70313b5f4351755"
+source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.1#4ca8273024249e8c058f3fb9662097cecec5e6b0"
 dependencies = [
  "editor-state",
  "tracing",

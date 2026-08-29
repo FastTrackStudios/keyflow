@@ -262,9 +262,15 @@ body {
 }
 
 /* The graph view fills its container, so the container has to have one —
- * without an explicit height it collapses to nothing. */
+ * without an explicit height it collapses to nothing.
+ *
+ * Taller and squarer than the rail is wide: the force layout spreads
+ * nodes in both axes and labels sit beside them, so a short letterbox
+ * pushed "Repeats & Endings" and "Annotations & Expression" off both
+ * edges. Padding keeps the outermost labels inside the frame. */
 .kf-local-graph-canvas {
-  height: 17rem;
+  height: 20rem;
+  padding: 0.5rem;
   border: 1px solid var(--line);
   border-radius: 0.75rem;
   overflow: hidden;
@@ -368,9 +374,14 @@ body {
   grid-area: guide;
   min-height: 0;
   overflow-y: auto;
-  padding-right: 0.5rem;
+  padding: 0 1rem;
   border-top: 1px solid var(--line);
 }
+
+/* The example picker tracks the prose column rather than the pane, so it
+ * lines up with the text it belongs to. */
+.kf-workbench-guide .kf-example-picker,
+.kf-workbench-guide .kf-prose { max-width: 44rem; margin-inline: auto; }
 
 .kf-workbench-preview { grid-area: preview; min-height: 0; }
 
@@ -480,7 +491,11 @@ body {
  * were doing real work — without this, paragraphs and list items run
  * together. Restated here rather than disabling preflight, which the
  * imported components rely on. */
-.kf-prose { min-width: 0; max-width: 44rem; }
+/* Centred, not left-aligned. The prose column is narrower than the pane
+ * that holds it (deliberately — see the reading-measure note on the
+ * workbench grid), so without this it hugs the left edge of a wide column
+ * with a gulf of empty space beside it. */
+.kf-prose { min-width: 0; max-width: 44rem; margin-inline: auto; }
 .kf-prose p { margin: 0 0 1rem; }
 .kf-prose ul, .kf-prose ol { margin: 0 0 1rem; padding-left: 1.5rem; }
 .kf-prose ul { list-style: disc; }

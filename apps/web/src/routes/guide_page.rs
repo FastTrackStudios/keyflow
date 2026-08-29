@@ -137,8 +137,12 @@ fn LocalGraph(graph: view_knowledge_graph::model::WikiGraph, current: &'static s
                     // `highlighted` would, and here everything IS relevant.
                     active: Some(current.to_string()),
                     // Tighter than the full view: this is a handful of
-                    // nodes in a narrow rail, not a whole map.
-                    spacing: 0.6,
+                    // nodes in a narrow rail, not a whole map. Node
+                    // labels are drawn beside their node, so the layout
+                    // has to leave room for them inside the frame —
+                    // at the default spacing the outer labels clipped.
+                    spacing: 0.45,
+                    node_scale: 0.8,
                     on_node_click: move |id: String| {
                         if guide::page(&id).is_some() {
                             nav.push(Route::GuidePage { slug: id });
