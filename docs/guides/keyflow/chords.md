@@ -20,7 +20,7 @@ C        F#m7       Bbmaj9       G7b9       Dm7b5/F
 A bar of varied chord qualities, engraved:
 
 ```kf+
-Cmaj7 | F#m7b5 | Bbmaj9 | G7b9
+Cmaj7  F#m7b5  Bbmaj9  G7b9
 ```
 
 This page is about writing **one chord, on its own**. (How chords carry their

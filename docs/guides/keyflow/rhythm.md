@@ -12,17 +12,18 @@ makes the common case free: **a bare chord fills its whole bar.** You write the
 progression and nothing else, and only reach for rhythm when a bar holds more
 than one chord. That's why you almost never type a bar line.
 
-```kf-
+```kf+
 C  F  G  Am
 ```
 
-Slashes mark the beats — engraved, a mix of held and strummed bars:
+Four chords, four bars — one chord each. No bar lines, no durations.
+
+When a bar does need more than one chord, slashes mark the beats. Here the
+third bar splits between `G` and `Em`, and the rest are held:
 
 ```kf+
-C //// | F //// | G / / / | C
+C ////  F ////  G // Em //  C
 ```
-
-Four chords, four bars — one chord each. No `|`, no durations.
 
 ## One chord, one bar
 

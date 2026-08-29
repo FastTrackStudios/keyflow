@@ -23,10 +23,10 @@ Two named sections with their bar lengths, engraved:
 
 ```kf+
 VS 4
-C | F | G | Am
+C  F  G  Am
 
 CH 4
-F | C | G | Am
+F  C  G  Am
 ```
 
 That's a four-bar verse followed by a four-bar chorus. Everything between two

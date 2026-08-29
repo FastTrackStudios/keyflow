@@ -23,7 +23,7 @@ A melody paired with its chords, engraved:
 ```kf+
 VS
 <<
-C | F | G | C ;
+C  F  G  C ;
 m { C(4) D E F | E F G A | G A B 'C | 'C B A G }
 >>
 ```

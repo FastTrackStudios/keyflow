@@ -28,7 +28,7 @@ A key change mid-chart (to G at bar 3), engraved:
 
 ```kf+
 4/4 #C
-1 | 5 | #G 1 | 5
+1  5  #G 1  5
 ```
 
 From `#G` onward the chart is in G, so the `1 4 5` after it are G–C–D, not

@@ -25,14 +25,14 @@ classical feel.
 Those same four bars, engraved straight from a ` ```kf ` block:
 
 ```kf+
-C | F | Am | G
+C  F  Am  G
 ```
 
 Write it in numbers instead and it's the same music as scale degrees:
 
 ```kf+
 4/4 #C
-1 | 4 | 6m | 5
+1  4  6m  5
 ```
 
 ## Letter names

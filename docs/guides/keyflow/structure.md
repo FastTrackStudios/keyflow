@@ -24,7 +24,7 @@ Vienna - Billy Joel
 4/4 140bpm #Gm
 
 VS
-Gm | Bb | F | Ab
+Gm  Bb  F  Ab
 ```
 
 1. A **header** at the top describing the song — its title, who wrote it, and

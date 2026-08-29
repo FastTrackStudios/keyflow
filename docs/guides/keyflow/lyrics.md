@@ -20,7 +20,7 @@ Words under the chords, engraved:
 
 ```kf+
 VS 4
-C | C | F | C
+C  C  F  C
 [lyrics] Twinkle twinkle little star
 ```
 

@@ -27,7 +27,7 @@ Staff text and a dynamic alongside the chords, engraved:
 ```kf+
 ^"Swell"
 dyn mf
-1 | 4 | 5 | 1
+1  4  5  1
 ```
 
 Put the line wherever the text belongs in the music — before the bar it
