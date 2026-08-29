@@ -35,10 +35,33 @@ use crate::sections::{MeasureExpression, SectionType};
 use crate::time::TimeSignatureExt;
 
 impl<'a> ChartParser<'a> {
-    /// Strip comments from a line (everything after ;)
+    /// Strip a trailing `;` comment from a line.
+    ///
+    /// `;` carries two meanings, which is what makes this fiddly. It
+    /// starts a comment — `4/4 120bpm #C  ; mid-tempo` — and it is also
+    /// the **track separator** inside a `<< … >>` parallel container
+    /// (`<< C ; m{ C8 D8 } >>`, or a trailing `;` on the chord line of a
+    /// multi-line container).
+    ///
+    /// This runs before the container lines are joined, so it cannot ask
+    /// the parser which one it is looking at. It used to bail on any
+    /// spaced `" ; "`, which is far too broad: it meant a comment on an
+    /// ordinary chord line was never stripped, so `C F G Am ; four bars`
+    /// tried to parse "four" and "bars" as chords and the whole line was
+    /// lost. That is why every annotated example in the guide had to be a
+    /// source-only fence.
+    ///
+    /// A track separator only ever appears on a line that also carries a
+    /// container or melody delimiter, or as a trailing `;`. Everything
+    /// else is a comment.
     fn strip_comment(line: &str) -> &str {
         let trimmed = line.trim();
-        if trimmed.ends_with(';') || trimmed.contains(" ; ") {
+        let is_separator = trimmed.ends_with(';')
+            || trimmed.contains("<<")
+            || trimmed.contains(">>")
+            || trimmed.contains("m{")
+            || trimmed.contains('}');
+        if is_separator {
             return line;
         }
         if let Some(pos) = line.find(';') {
