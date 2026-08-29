@@ -76,6 +76,9 @@ body {
 .kf-nav a:hover { color: var(--ink); }
 
 .kf-main { flex: 1; padding: clamp(1.5rem, 4vw, 3rem); }
+/* The workbench is a working surface, not a document — it gets the whole
+ * viewport rather than the page's reading gutters. */
+.kf-main:has(> .kf-workbench) { padding: 1rem; }
 
 /* ── Landing ─────────────────────────────────────────────────────── */
 
@@ -325,16 +328,19 @@ body {
  * pane scrolls, so typing never pushes the chart off screen. */
 .kf-workbench {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-  grid-template-rows: auto 15rem minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+  grid-template-rows: auto 14rem minmax(0, 1fr);
   grid-template-areas:
     "bar     bar"
     "editor  preview"
     "guide   preview";
   gap: 1rem;
+  /* No max-width, and no `margin: auto`. A chart is as wide as the music
+   * is; capping the workbench at a reading measure wastes exactly the
+   * space the preview needs. The reading measure still applies inside the
+   * guide pane (`.kf-prose`), where it belongs. */
   height: calc(100vh - 8rem);
-  max-width: 96rem;
-  margin: 0 auto;
+  width: 100%;
 }
 
 .kf-workbench-bar {
@@ -358,11 +364,46 @@ body {
   border-top: 1px solid var(--line);
 }
 
-.kf-workbench-preview {
-  grid-area: preview;
+.kf-workbench-preview { grid-area: preview; min-height: 0; }
+
+/* ── Chart preview (pan / zoom / export) ─────────────────────────── */
+
+.kf-preview {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.5rem;
+  height: 100%;
   min-height: 0;
-  overflow: auto;
 }
+
+.kf-preview-bar { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
+.kf-preview-bar .kf-button { padding: 0.2rem 0.6rem; font-size: 0.85rem; }
+.kf-preview-spacer { flex: 1; }
+
+/* The stage clips; the pages inside it are what moves. `touch-action:
+ * none` so a drag pans the chart instead of scrolling the page on a
+ * touchscreen. */
+.kf-preview-stage {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: #ffffff;
+  cursor: grab;
+  touch-action: none;
+}
+.kf-preview-stage:active { cursor: grabbing; }
+
+.kf-preview-pages {
+  transform-origin: 0 0;
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+  width: max-content;
+}
+
+.kf-preview-page svg { display: block; height: auto; }
 
 .kf-example-picker {
   position: sticky;

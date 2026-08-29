@@ -131,7 +131,7 @@ fn engrave(source: &str, snippet: bool, layout_width: f64) -> Result<String, Str
 /// The serialiser emits a standalone `.svg` file, which opens with
 /// `<?xml …?>`. That is correct for a file and invalid inside an HTML
 /// element — the browser renders it as stray text above the chart.
-fn inline_ready(svg: &str) -> String {
+pub(crate) fn inline_ready(svg: &str) -> String {
     let body = match svg.find("<svg") {
         Some(at) => &svg[at..],
         None => svg,

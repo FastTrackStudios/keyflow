@@ -25,7 +25,8 @@ use editor_state::doc::Doc;
 use editor_state::selection::Selection;
 
 use crate::Route;
-use crate::chart_view::{ChartFonts, ChartSvg};
+use crate::chart_preview::ChartPreview;
+use crate::chart_view::ChartFonts;
 use crate::guide;
 use crate::routes::Shell;
 
@@ -128,7 +129,7 @@ pub fn Workbench(slug: String) -> Element {
                 }
 
                 aside { class: "kf-workbench-preview",
-                    ChartSvg { source: source(), snippet: true }
+                    ChartPreview { source: source(), name: page.slug }
                 }
             }
         }

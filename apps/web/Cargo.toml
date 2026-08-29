@@ -12,13 +12,16 @@ keyflow = { workspace = true, features = ["text", "highlighting"] }
 
 # The editor chrome + chart renderer. `wasm-graphics` is the WebGL2 path
 # (vello_hybrid); it deliberately does NOT pull `web`, which would enable
-# dioxus/desktop and break the wasm build.
+# dioxus/desktop and break the wasm build. `pdf` adds vector PDF export —
+# it is off by default because printpdf's azul dep does not build for iOS,
+# but it does build for wasm32, so the site can hand out a real PDF
+# rather than sending people to the print dialog.
 # `wasm-graphics` is the WebGL2 path (vello_hybrid). Named for every target,
 # not just wasm32: the ChartGraphics module is additionally gated on
 # `target_arch = "wasm32"`, so a host build gets the editor chrome and skips
 # the surface. Emphatically NOT `web` — that enables dioxus/desktop, which
 # cannot build for wasm32.
-keyflow-ui = { workspace = true, features = ["wasm-graphics"] }
+keyflow-ui = { workspace = true, features = ["wasm-graphics", "pdf"] }
 
 architect-ui = { workspace = true }
 
@@ -49,12 +52,18 @@ web-sys = { version = "0.3", features = [
     "Document",
     "Element",
     "DomRect",
+    "Blob",
+    "BlobPropertyBag",
+    "Url",
+    "HtmlAnchorElement",
+    "HtmlElement",
 ] }
 # Pinned exactly, and low: `dx build` refuses to run when the crate version
 # and the wasm-bindgen-cli in the dev shell disagree, and the CLI comes from
 # the pinned nixpkgs (nix/modules/dx.nix). Bump this only together with that
 # pin — a floating "0.2" silently resolves past the CLI and breaks the web
 # build with "Incorrect wasm-bindgen-cli version".
+js-sys = "0.3"
 wasm-bindgen = "=0.2.126"
 kurbo = { workspace = true }
 

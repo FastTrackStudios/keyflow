@@ -10,8 +10,9 @@ use dioxus::prelude::*;
 use keyflow_ui::examples;
 
 use crate::Route;
+use crate::chart_preview::ChartPreview;
 use crate::chart_url;
-use crate::chart_view::{ChartFonts, ChartSvg};
+use crate::chart_view::ChartFonts;
 use crate::routes::Shell;
 
 /// `/editor` — the editor seeded with the default example.
@@ -74,7 +75,7 @@ fn EditorScreen(initial: String, from_link: bool) -> Element {
                         value: "{source}",
                         oninput: move |e| source.set(e.value()),
                     }
-                    ChartSvg { source: source(), snippet: false }
+                    ChartPreview { source: source() }
                 }
             }
         }
