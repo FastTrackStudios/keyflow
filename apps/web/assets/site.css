@@ -232,7 +232,28 @@ body {
 .kf-guide-toc a:hover { color: var(--ink); }
 .kf-toc-current { color: var(--accent) !important; font-weight: 600; }
 
+/* Tailwind's preflight zeroes the browser's default margins on p / ul /
+ * ol / li. The guide is prose rendered from markdown, so those defaults
+ * were doing real work — without this, paragraphs and list items run
+ * together. Restated here rather than disabling preflight, which the
+ * imported components rely on. */
 .kf-prose { min-width: 0; max-width: 44rem; }
+.kf-prose p { margin: 0 0 1rem; }
+.kf-prose ul, .kf-prose ol { margin: 0 0 1rem; padding-left: 1.5rem; }
+.kf-prose ul { list-style: disc; }
+.kf-prose ol { list-style: decimal; }
+.kf-prose li { margin: 0.25rem 0; }
+.kf-prose li > ul, .kf-prose li > ol { margin: 0.25rem 0; }
+.kf-prose blockquote {
+  margin: 0 0 1rem;
+  padding-left: 1rem;
+  border-left: 2px solid var(--line);
+  color: var(--ink-soft);
+}
+.kf-prose a { color: var(--accent); }
+.kf-prose hr { border: 0; border-top: 1px solid var(--line); margin: 2rem 0; }
+.kf-prose strong { font-weight: 650; }
+.kf-prose em { font-style: italic; }
 .kf-prose h1 { font-size: 2rem; letter-spacing: -0.025em; margin: 0 0 1rem; }
 .kf-prose h2 { font-size: 1.3rem; letter-spacing: -0.015em; margin: 2rem 0 0.5rem; }
 .kf-prose h3 { font-size: 1.05rem; margin: 1.5rem 0 0.4rem; }
