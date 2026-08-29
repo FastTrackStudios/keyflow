@@ -79,6 +79,86 @@ fn multiple_bare_lines_keep_flowing() {
     );
 }
 
+// ── A section header, with no header block above it ────────────────
+
+/// The section types a chart parsed to, with their bar counts.
+fn sections(src: &str) -> Vec<(String, usize)> {
+    parse_chart(src)
+        .unwrap_or_else(|e| panic!("should parse:\n{src}\n\n{e}"))
+        .sections
+        .iter()
+        .map(|s| (format!("{:?}", s.section.section_type), s.measures().len()))
+        .collect()
+}
+
+#[test]
+fn a_section_header_can_be_the_very_first_line() {
+    // No title, no metadata — the chart starts at the music. The header
+    // must be read as a section, not as the title it happens to sit in
+    // the position of.
+    let chart = parse_chart("VS 8\nG C Em D\n").expect("parse");
+    assert!(chart.metadata.title.is_none(), "`VS 8` became a title");
+    assert!(chart.metadata.subtitle.is_none());
+    assert_eq!(sections("VS 8\nG C Em D\n"), [("Verse".to_string(), 8)]);
+}
+
+#[test]
+fn a_leading_section_header_works_for_every_form() {
+    // Bare name, name + length, custom bracketed section, and a section
+    // that sets its own key.
+    assert_eq!(sections("VS\nG C Em D\n"), [("Verse".to_string(), 4)]);
+    assert_eq!(sections("CH 8\nG C Em D\n"), [("Chorus".to_string(), 8)]);
+    assert_eq!(sections("Intro 2\nG C\n"), [("Intro".to_string(), 2)]);
+    assert_eq!(
+        sections("BR 8 #Ab\nG C Em D\n"),
+        [("Bridge".to_string(), 8)]
+    );
+    assert_eq!(
+        sections("[SOLO] 8\nG C Em D\n"),
+        [("Custom(\"SOLO\")".to_string(), 8)]
+    );
+}
+
+#[test]
+fn a_declared_length_pads_the_section_out() {
+    // `VS 8` with four chords is eight bars: four written, four carried.
+    let chart = parse_chart("VS 8\nG C Em D\n").expect("parse");
+    let verse = &chart.sections[0];
+    assert_eq!(verse.measures().len(), 8);
+    let written = verse
+        .measures()
+        .iter()
+        .filter(|m| m.chords.iter().any(|c| c.full_symbol != "s"))
+        .count();
+    assert_eq!(written, 4, "the four written bars should carry the chords");
+}
+
+#[test]
+fn two_sections_need_no_header_block_either() {
+    assert_eq!(
+        sections("VS 8\nG C Em D\n\nCH 8\nAm F C G\n"),
+        [("Verse".to_string(), 8), ("Chorus".to_string(), 8)]
+    );
+}
+
+#[test]
+fn typing_a_chart_never_loses_what_is_already_there() {
+    // What the live editor sees: one more character on every keystroke.
+    // From the moment the section length lands, every prefix must keep
+    // parsing — a state that fails here is a chart that blinks out while
+    // someone is mid-word.
+    let target = "VS 8\nG C Em D";
+    for end in target.char_indices().map(|(i, c)| i + c.len_utf8()) {
+        let partial = &target[..end];
+        let chart = parse_chart(partial)
+            .unwrap_or_else(|e| panic!("prefix {partial:?} stopped parsing: {e}"));
+        if partial.starts_with("VS 8") {
+            let bars: usize = chart.sections.iter().map(|s| s.measures().len()).sum();
+            assert_eq!(bars, 8, "prefix {partial:?} lost the section length");
+        }
+    }
+}
+
 // ── A title without a metadata line ────────────────────────────────
 
 #[test]
