@@ -42,6 +42,12 @@ css_ab*.mid
 css_ab*.wav
 css_ab*.tsv
 
+# Test artefacts. `028_feature_showcase` and friends write PDFs here on
+# every run, and nothing reads them back — they are for a human to look
+# at, not fixtures. Tracked, they made every test run dirty the tree, and
+# the churn rode along in eight unrelated commits.
+crates/keyflow/keyflow/tests/output/
+
 # tree-sitter's generated C parser — regenerate with `just grammar`.
 crates/keyflow/tree-sitter-keyflow/src/parser.c
 
