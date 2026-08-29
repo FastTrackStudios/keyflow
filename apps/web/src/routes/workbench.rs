@@ -25,8 +25,8 @@ use editor_state::doc::Doc;
 use editor_state::selection::Selection;
 
 use crate::Route;
+use crate::chart::ChartFonts;
 use crate::chart_preview::ChartPreview;
-use crate::chart_view::ChartFonts;
 use crate::guide;
 use crate::keyflow_editor::KeyflowEditor;
 use crate::routes::Shell;

@@ -1,4 +1,4 @@
-//! The chart preview — true-size pages, pan, zoom, and export.
+//! The chart preview — a chart you can move around, zoom, and take away.
 //!
 //! This is a port of the studio preview from the pre-split FastTrackStudio
 //! site (`apps/site/src/components/live_editor.rs` plus the `ExportButton`
@@ -11,23 +11,21 @@
 //! - **A debounced re-render with a generation counter.** Engraving on
 //!   every keystroke blocks the main thread; a newer edit supersedes a
 //!   pending render rather than queueing behind it.
-//! - **Font-less preview SVGs.** The `@font-face` block is injected once
-//!   and each pass serialises paths, not several MB of re-embedded font
-//!   data per keystroke.
 //! - **Export off the render path**, with multi-page SVG as a zip and the
 //!   filename taken from the chart's own title.
 //!
-//! What is *not* ported is that site's own 549-line `ChartLayoutManager`.
-//! It predates the consolidation into `keyflow-ui`, and reviving it would
-//! reintroduce exactly the drift that left its SVG export declaring
-//! `MuseJazzText` while its PDF export carried a comment explaining the
-//! family is really `MuseJazz Text`. One layout manager, one font list.
+//! What is left here is only that shell. The engraving itself — layout,
+//! paper sizing, SVG and PDF serialisation, the filename — is
+//! [`crate::chart`], shared with the static [`Chart`](crate::chart::Chart)
+//! the guide and landing page use. This file had its own copy of all of
+//! it, and that is the drift worth naming: the old site's parallel layout
+//! manager is what left its SVG export declaring `MuseJazzText` while its
+//! PDF export carried a comment explaining the family is really
+//! `MuseJazz Text`. One layout manager, one font list, one engrave.
 
 use dioxus::prelude::*;
-use keyflow_ui::ChartLayoutManager;
 
-/// Points → CSS pixels. Screen DPI over the typographic 72.
-const DPI_SCALE: f64 = 96.0 / 72.0;
+use crate::chart::{ChartShape, Page, blank_page, engrave, export_pdf, export_svg, filename_for};
 
 /// Zoom bounds, matching keyflow-ui's native chart viewports.
 const ZOOM_MIN: f64 = 0.1;
@@ -41,27 +39,6 @@ const PAGE_GAP_PX: f64 = 24.0;
 #[cfg(target_arch = "wasm32")]
 const DEBOUNCE_MS: u32 = 150;
 
-/// One engraved page: real dimensions in CSS px, plus its markup.
-#[derive(Clone, PartialEq)]
-struct Page {
-    width_px: f64,
-    height_px: f64,
-    svg: String,
-}
-
-/// A blank sheet.
-///
-/// Shown before the first render lands, and whenever the source does not
-/// yet lay out — still typing the title, or a parse error. The page should
-/// never simply vanish while someone is mid-thought.
-fn blank_page() -> Page {
-    Page {
-        width_px: 595.0 * DPI_SCALE,
-        height_px: 842.0 * DPI_SCALE,
-        svg: String::new(),
-    }
-}
-
 /// A chart you can move around, zoom, and take away.
 #[component]
 pub fn ChartPreview(
@@ -70,12 +47,14 @@ pub fn ChartPreview(
 ) -> Element {
     let mut pages = use_signal(|| vec![blank_page()]);
     let mut generation = use_signal(|| 0_u64);
-    let mut exporting = use_signal(|| false);
-    let mut status = use_signal(|| Option::<String>::None);
+    let exporting = use_signal(|| false);
+    let status = use_signal(|| Option::<String>::None);
 
     // Debounced re-render. The generation counter is what makes it
     // debounced rather than merely delayed: a render that is no longer the
     // newest drops itself on wake instead of overwriting a fresher one.
+    // (This is why the preview does not use `use_memo` the way `Chart`
+    // does — the point is *not* to engrave on every pass.)
     use_effect(use_reactive!(|(source)| {
         let mine = generation.peek().wrapping_add(1);
         generation.set(mine);
@@ -85,7 +64,7 @@ pub fn ChartPreview(
             if *generation.peek() != mine {
                 return;
             }
-            let rendered = engrave_pages(&source).unwrap_or_else(|e| {
+            let rendered = engrave(&source, ChartShape::Page).unwrap_or_else(|e| {
                 tracing::debug!("chart preview render failed: {e}");
                 vec![blank_page()]
             });
@@ -174,12 +153,7 @@ pub fn ChartPreview(
                     class: "kf-preview-pages",
                     style: "transform: translate({pan().0}px, {pan().1}px) scale({zoom()}); transform-origin: 0 0;",
                     for (i, page) in pages.read().iter().enumerate() {
-                        div {
-                            key: "{i}",
-                            class: "kf-preview-page",
-                            style: "width: {page.width_px}px; height: {page.height_px}px; margin-bottom: {PAGE_GAP_PX}px;",
-                            div { dangerous_inner_html: "{page.svg}" }
-                        }
+                        PreviewPage { key: "{i}", page: page.clone() }
                     }
                 }
             }
@@ -187,6 +161,18 @@ pub fn ChartPreview(
             if let Some(message) = status() {
                 p { class: "kf-chart-error", "{message}" }
             }
+        }
+    }
+}
+
+/// One sheet in the stack, at its true size.
+#[component]
+fn PreviewPage(page: Page) -> Element {
+    rsx! {
+        div {
+            class: "kf-preview-page",
+            style: "width: {page.width_px}px; height: {page.height_px}px; margin-bottom: {PAGE_GAP_PX}px;",
+            div { dangerous_inner_html: "{page.svg}" }
         }
     }
 }
@@ -245,103 +231,6 @@ fn ExportButton(
     }
 }
 
-/// Lay the chart out and serialise each page at its true size.
-fn engrave_pages(source: &str) -> Result<Vec<Page>, String> {
-    if source.trim().is_empty() {
-        return Err("nothing to engrave".to_string());
-    }
-    let mut manager = ChartLayoutManager::new()?;
-    // Paginated (`snippet = false`) — the viewport-width argument is
-    // ignored in that mode, since page layout is always paper-sized.
-    manager.parse_and_layout(source, 800.0, false)?;
-
-    let pages: Vec<Page> = manager
-        .export_svg_pages_sized()?
-        .into_iter()
-        .map(|(w_pt, h_pt, svg)| Page {
-            width_px: w_pt * DPI_SCALE,
-            height_px: h_pt * DPI_SCALE,
-            svg: crate::chart_view::inline_ready(&svg),
-        })
-        .collect();
-
-    Ok(if pages.is_empty() {
-        vec![blank_page()]
-    } else {
-        pages
-    })
-}
-
-/// Filename stem: the chart's own title, or `chart`.
-fn filename_for(source: &str) -> String {
-    keyflow::text::chart::parse_chart(source)
-        .ok()
-        .and_then(|c| c.metadata.title.clone())
-        .map_or_else(|| "chart".to_string(), |t| t.trim().replace(' ', "_"))
-}
-
-/// A laid-out manager ready to export from.
-fn laid_out(source: &str) -> Result<ChartLayoutManager, String> {
-    let mut manager = ChartLayoutManager::new()?;
-    manager.parse_and_layout(source, 595.0, false)?;
-    Ok(manager)
-}
-
-/// SVG export: one file, or a zip of pages.
-fn export_svg(source: &str) -> Result<(Vec<u8>, &'static str, &'static str), String> {
-    // The EMBEDDING variant: this file leaves the page, so it cannot rely
-    // on a stylesheet that stays behind.
-    let pages = laid_out(source)?.export_svg_pages()?;
-    match pages.len() {
-        0 => Err("the chart laid out to no pages".to_string()),
-        1 => Ok((
-            pages.into_iter().next().expect("len == 1").into_bytes(),
-            "image/svg+xml",
-            "svg",
-        )),
-        _ => Ok((
-            zip_pages(&pages, &filename_for(source))?,
-            "application/zip",
-            "zip",
-        )),
-    }
-}
-
-/// PDF export: one multi-page vector document.
-fn export_pdf(source: &str) -> Result<(Vec<u8>, &'static str, &'static str), String> {
-    Ok((
-        laid_out(source)?.export_pdf_bytes()?,
-        "application/pdf",
-        "pdf",
-    ))
-}
-
-/// Bundle per-page SVGs into a zip.
-fn zip_pages(pages: &[String], stem: &str) -> Result<Vec<u8>, String> {
-    use std::io::{Cursor, Write as _};
-
-    use zip::ZipWriter;
-    use zip::write::SimpleFileOptions;
-
-    let mut buffer = Cursor::new(Vec::new());
-    {
-        let mut zip = ZipWriter::new(&mut buffer);
-        let options = SimpleFileOptions::default()
-            .compression_method(zip::CompressionMethod::Deflated)
-            .compression_level(Some(6));
-
-        for (i, svg) in pages.iter().enumerate() {
-            zip.start_file(format!("{stem}_page{}.svg", i + 1), options)
-                .map_err(|e| format!("could not build the zip: {e}"))?;
-            zip.write_all(svg.as_bytes())
-                .map_err(|e| format!("could not build the zip: {e}"))?;
-        }
-        zip.finish()
-            .map_err(|e| format!("could not build the zip: {e}"))?;
-    }
-    Ok(buffer.into_inner())
-}
-
 /// Hand `bytes` to the browser as a download.
 #[cfg(target_arch = "wasm32")]
 fn download(filename: &str, mime: &str, bytes: &[u8]) -> Result<(), String> {
@@ -378,89 +267,4 @@ fn download(filename: &str, mime: &str, bytes: &[u8]) -> Result<(), String> {
 #[cfg(not(target_arch = "wasm32"))]
 fn download(_filename: &str, _mime: &str, _bytes: &[u8]) -> Result<(), String> {
     Err("Downloads are only available in the browser.".to_string())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    const TWO_BARS: &str = "VS: | 1 4 | 5 6- |\n";
-
-    #[test]
-    fn engraves_pages_at_true_paper_size() {
-        let pages = engrave_pages(keyflow_ui::examples::EXAMPLE_THRILLER).unwrap();
-        assert!(!pages.is_empty());
-        // A4 portrait at 96 DPI is ~793x1122 CSS px. The point of the sized
-        // export is that this is paper, not a stretched thumbnail.
-        assert!(
-            pages[0].width_px > 500.0 && pages[0].height_px > pages[0].width_px,
-            "expected a portrait page, got {}x{}",
-            pages[0].width_px,
-            pages[0].height_px
-        );
-    }
-
-    #[test]
-    fn an_empty_chart_reports_rather_than_rendering_nothing() {
-        assert!(engrave_pages("  \n").is_err());
-    }
-
-    #[test]
-    fn the_downloadable_svg_is_self_contained() {
-        // It leaves the page, so it cannot depend on a stylesheet that
-        // stays behind — the one place the embedding export is right.
-        let (bytes, mime, ext) = export_svg(TWO_BARS).unwrap();
-        assert_eq!((mime, ext), ("image/svg+xml", "svg"));
-        let svg = String::from_utf8(bytes).unwrap();
-        assert!(
-            svg.contains("@font-face"),
-            "a downloaded SVG must carry its own fonts"
-        );
-    }
-
-    #[test]
-    fn the_preview_svg_does_not_carry_the_fonts() {
-        // The other half of the trade: re-embedding ~4 MB of font data on
-        // every debounced keystroke is what this avoids.
-        let pages = engrave_pages(TWO_BARS).unwrap();
-        assert!(!pages[0].svg.contains("@font-face"));
-    }
-
-    #[test]
-    fn the_pdf_export_produces_a_pdf() {
-        let (bytes, mime, ext) = export_pdf(TWO_BARS).unwrap();
-        assert_eq!((mime, ext), ("application/pdf", "pdf"));
-        assert!(bytes.starts_with(b"%PDF"));
-    }
-
-    #[test]
-    fn a_multi_page_chart_exports_as_a_zip() {
-        let (bytes, mime, ext) = export_svg(keyflow_ui::examples::EXAMPLE_THRILLER).unwrap();
-        if ext == "zip" {
-            assert_eq!(mime, "application/zip");
-            assert!(bytes.starts_with(b"PK"), "not a zip archive");
-        } else {
-            // Single-page is a legitimate outcome for this fixture; the zip
-            // path is covered directly below.
-            assert_eq!(ext, "svg");
-        }
-    }
-
-    #[test]
-    fn zipping_pages_produces_an_archive_per_page() {
-        let zip = zip_pages(&["<svg/>".into(), "<svg/>".into()], "song").unwrap();
-        assert!(zip.starts_with(b"PK"));
-        let text = String::from_utf8_lossy(&zip);
-        assert!(text.contains("song_page1.svg"));
-        assert!(text.contains("song_page2.svg"));
-    }
-
-    #[test]
-    fn the_filename_comes_from_the_chart_title() {
-        assert_eq!(
-            filename_for("Build My Life - Housefires\n"),
-            "Build_My_Life"
-        );
-        assert_eq!(filename_for(TWO_BARS), "chart");
-    }
 }

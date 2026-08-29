@@ -10,9 +10,9 @@ use dioxus::prelude::*;
 use keyflow_ui::examples;
 
 use crate::Route;
+use crate::chart::ChartFonts;
 use crate::chart_preview::ChartPreview;
 use crate::chart_url;
-use crate::chart_view::ChartFonts;
 use crate::keyflow_editor::KeyflowEditor;
 use crate::routes::Shell;
 

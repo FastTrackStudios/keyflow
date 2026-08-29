@@ -8,7 +8,7 @@
 use dioxus::prelude::*;
 
 use crate::Route;
-use crate::chart_view::{ChartFonts, ChartSvg};
+use crate::chart::{Chart, ChartFonts};
 use crate::routes::Shell;
 
 /// The chart shown on the landing page.
@@ -53,7 +53,7 @@ pub fn Home() -> Element {
 
                 div { class: "kf-hero-demo",
                     pre { class: "kf-source", "{HERO_CHART}" }
-                    ChartSvg { source: HERO_CHART.to_string() }
+                    Chart { source: HERO_CHART.to_string() }
                 }
             }
 

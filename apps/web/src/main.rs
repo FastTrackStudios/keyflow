@@ -8,9 +8,9 @@
 //! database, nothing to sign up for. Accounts come later, and when they do
 //! they are for *keeping* charts, not for using the editor.
 
+mod chart;
 mod chart_preview;
 mod chart_url;
-mod chart_view;
 mod guide;
 mod keyflow_editor;
 mod routes;
