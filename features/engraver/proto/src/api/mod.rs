@@ -91,6 +91,11 @@ pub mod chart {
     }
 
     /// Parse and layout chart text with default fonts and a lead sheet style.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ChartLayoutError::Parse`] if the text is not a chart, or
+    /// [`ChartLayoutError::Fonts`] if the font bundle cannot be built.
     pub fn layout_text(
         text: &str,
         mode: &LayoutMode,
@@ -100,14 +105,21 @@ pub mod chart {
     }
 
     /// Layout a chart with default fonts and a lead sheet style.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ChartLayoutError::Fonts`] if the font bundle cannot be
+    /// built.
     pub fn layout_chart(
         chart: &Chart,
         mode: &LayoutMode,
     ) -> Result<ChartLayoutResult, ChartLayoutError> {
-        let fonts = ChartFontBundle::new().map_err(ChartLayoutError::Fonts)?;
-        let style = style::leak_lead_sheet_style();
-        let engine = fonts.create_layout_engine(style);
-        Ok(engine.layout_chart(chart, mode))
+        // Through the shared pipeline, not a fresh bundle. This used to
+        // build its own — loading and parsing every font again for a
+        // single layout — which also made it a fourth answer to "what
+        // style does a chart engrave in" that nothing kept in step with
+        // the other three.
+        Ok(super::pipeline::ChartPipeline::shared()?.layout(chart, mode))
     }
 }
 

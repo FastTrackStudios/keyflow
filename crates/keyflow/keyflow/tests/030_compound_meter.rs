@@ -82,7 +82,7 @@ fn the_beats_of_a_compound_bar_add_up_to_the_bar() {
 
 #[test]
 fn in_my_room_parses() {
-    let chart = keyflow::text::chart::parse_chart(IN_MY_ROOM).expect("In My Room should parse");
+    let chart = keyflow::parse(IN_MY_ROOM).expect("In My Room should parse");
     assert_eq!(chart.metadata.title.as_deref(), Some("In My Room"));
     assert_eq!(chart.metadata.artist.as_deref(), Some("The Beach Boys"));
     let time_sig = chart.time_signature.as_ref().expect("6/8 header");
@@ -95,7 +95,7 @@ fn every_bar_of_in_my_room_engraves_as_two_dotted_beats() {
     // original bug: EVERY measure — including the `In 5` pad bar, which
     // took a different path and rendered four plain slashes long after
     // the others were fixed.
-    let chart = keyflow::text::chart::parse_chart(IN_MY_ROOM).expect("parse");
+    let chart = keyflow::parse(IN_MY_ROOM).expect("parse");
 
     let mut checked = 0usize;
     for section in &chart.sections {

@@ -1,6 +1,6 @@
 //! Integration tests for lyrics parsing, serialization, and alignment
 
-use keyflow::text::chart::parse_chart;
+use keyflow::parse;
 
 #[test]
 fn test_plain_lyrics_track() {
@@ -13,7 +13,7 @@ C G Am F
 [lyrics] Twinkle twinkle little star
 "#;
 
-    let chart = parse_chart(input).expect("Failed to parse chart");
+    let chart = parse(input).expect("Failed to parse chart");
     assert_eq!(chart.sections.len(), 1);
 
     let section = &chart.sections[0];
@@ -40,7 +40,7 @@ Gm //// | A# //// | F //// | Gm ////
 [lyrics] {Gm}Slow down you {A#}crazy child, {F}you're so {Gm}am-bi-tious
 "#;
 
-    let chart = parse_chart(input).expect("Failed to parse chart");
+    let chart = parse(input).expect("Failed to parse chart");
     let section = &chart.sections[0];
 
     let lyrics_track = section.lyrics_track().unwrap();
@@ -69,7 +69,7 @@ C G Am F
 [lyrics] A-ma-zing grace how sweet
 "#;
 
-    let chart = parse_chart(input).expect("Failed to parse chart");
+    let chart = parse(input).expect("Failed to parse chart");
     let section = &chart.sections[0];
     let lyric_line = section.lyrics_track().unwrap().lyrics.as_ref().unwrap();
 
@@ -94,7 +94,7 @@ C G Am F
 [lyrics] {C}Hello {G}world {Am}how {F}are you
 "#;
 
-    let chart = parse_chart(input).expect("Failed to parse chart");
+    let chart = parse(input).expect("Failed to parse chart");
     let section = &chart.sections[0];
 
     // Alignment should be computed since we have both chords and lyrics
@@ -121,7 +121,7 @@ C G Am F
 [lyrics] {C}Hello {G}world {Am}foo {F}bar
 "#;
 
-    let chart = parse_chart(input).expect("Failed to parse chart");
+    let chart = parse(input).expect("Failed to parse chart");
     let output = chart.to_syntax();
 
     // Verify the output contains the lyrics line with chord markers
@@ -148,7 +148,7 @@ C G Am F
 [lyrics] just plain words here
 "#;
 
-    let chart = parse_chart(input).expect("Failed to parse chart");
+    let chart = parse(input).expect("Failed to parse chart");
     let output = chart.to_syntax();
 
     // Plain lyrics should be serialized without chord markers
@@ -211,7 +211,7 @@ VS
 C G Am F
 "#;
 
-    let chart = parse_chart(input).expect("Failed to parse chart");
+    let chart = parse(input).expect("Failed to parse chart");
     assert!(
         chart.sections[0].alignment.is_none(),
         "Section without lyrics should have no alignment"

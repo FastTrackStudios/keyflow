@@ -34,7 +34,7 @@ ch
 | Am m{ E'4 D4 C4 B,4 } | C m{ C2 D2 E2 F2 G2 A2 B2 C'2 } |
 "#;
 
-    let chart = keyflow::text::chart::parse_chart(chart_text).expect("parse chart");
+    let chart = keyflow::parse(chart_text).expect("parse chart");
 
     // Verify melodies were parsed into measures
     for section in &chart.sections {

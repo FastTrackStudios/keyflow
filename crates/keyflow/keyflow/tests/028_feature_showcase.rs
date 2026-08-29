@@ -68,7 +68,7 @@ OUT 4
 | C | Am | !STOP F | G !STOP |
 "#;
 
-    let chart = keyflow::text::chart::parse_chart(chart_text).expect("parse chart");
+    let chart = keyflow::parse(chart_text).expect("parse chart");
 
     // Layout engine
     let font_bundle = ChartFontBundle::new().expect("load fonts");

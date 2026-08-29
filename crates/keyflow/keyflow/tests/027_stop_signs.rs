@@ -27,7 +27,7 @@ fn output_dir() -> PathBuf {
 fn test_stop_before_chord() {
     // !STOP before a chord → Stop (before) command
     let chart_text = "120bpm 4/4 #C\nvs\n| !STOP C | G |";
-    let chart = keyflow::text::chart::parse_chart(chart_text).expect("parse chart");
+    let chart = keyflow::parse(chart_text).expect("parse chart");
     let measures = chart.sections[0].measures();
 
     assert_eq!(measures[0].chords[0].full_symbol, "C");
@@ -52,7 +52,7 @@ fn test_stop_before_chord() {
 fn test_stop_after_chord() {
     // !STOP after a chord → StopAfter command on that chord
     let chart_text = "120bpm 4/4 #C\nvs\n| C !STOP | G |";
-    let chart = keyflow::text::chart::parse_chart(chart_text).expect("parse chart");
+    let chart = keyflow::parse(chart_text).expect("parse chart");
     let measures = chart.sections[0].measures();
 
     assert_eq!(measures[0].chords[0].full_symbol, "C");
@@ -69,7 +69,7 @@ fn test_stop_after_chord() {
 #[test]
 fn test_stop_groove_before_and_after() {
     let chart_text = "120bpm 4/4 #C\nvs\n| !STOPGROOVE C | G !STOPGROOVE |";
-    let chart = keyflow::text::chart::parse_chart(chart_text).expect("parse chart");
+    let chart = keyflow::parse(chart_text).expect("parse chart");
     let measures = chart.sections[0].measures();
 
     // Measure 0: !STOPGROOVE C → StopGroove (before)
@@ -96,7 +96,7 @@ fn test_stop_groove_before_and_after() {
 #[test]
 fn test_stop_sign_case_insensitive() {
     let chart_text = "120bpm 4/4 #C\nvs\n| !stop C | !StopGroove G |";
-    let chart = keyflow::text::chart::parse_chart(chart_text).expect("parse chart");
+    let chart = keyflow::parse(chart_text).expect("parse chart");
     let measures = chart.sections[0].measures();
 
     assert!(
@@ -119,7 +119,7 @@ fn test_stop_sign_case_insensitive() {
 fn test_stop_no_bleed_to_other_chords() {
     // Stop signs should only attach to the adjacent chord, not bleed
     let chart_text = "120bpm 4/4 #C\nvs\n| !STOP C G | Am |";
-    let chart = keyflow::text::chart::parse_chart(chart_text).expect("parse chart");
+    let chart = keyflow::parse(chart_text).expect("parse chart");
     let measures = chart.sections[0].measures();
 
     assert!(
@@ -159,7 +159,7 @@ ou
 | C !STOP |
 "#;
 
-    let chart = keyflow::text::chart::parse_chart(chart_text).expect("parse chart");
+    let chart = keyflow::parse(chart_text).expect("parse chart");
 
     // Layout engine
     let font_bundle = ChartFontBundle::new().expect("load fonts");

@@ -10,11 +10,11 @@
 //! in the corpus happens to have, so a regression here hides behind all
 //! of them.
 
-use keyflow::text::chart::parse_chart;
+use keyflow::parse;
 
 /// Bars of a parsed chart, flattened, as `[chords]` per bar.
 fn bars(src: &str) -> Vec<String> {
-    parse_chart(src)
+    parse(src)
         .unwrap_or_else(|e| panic!("should parse:\n{src}\n\n{e}"))
         .sections
         .iter()
@@ -49,7 +49,7 @@ fn a_single_chord_is_a_chart() {
 
 #[test]
 fn bare_input_assumes_four_four_and_the_key_of_c() {
-    let chart = parse_chart("G C Em D\n").expect("parse");
+    let chart = parse("G C Em D\n").expect("parse");
     let ts = chart.time_signature.as_ref().expect("an assumed meter");
     assert_eq!((ts.numerator, ts.denominator), (4, 4));
 
@@ -59,7 +59,7 @@ fn bare_input_assumes_four_four_and_the_key_of_c() {
 
 #[test]
 fn bare_input_needs_no_title_and_invents_none() {
-    let chart = parse_chart("G C Em D\n").expect("parse");
+    let chart = parse("G C Em D\n").expect("parse");
     assert!(chart.metadata.title.is_none(), "a bare chart has no title");
     assert!(chart.metadata.subtitle.is_none());
     assert!(chart.metadata.artist.is_none());
@@ -83,7 +83,7 @@ fn multiple_bare_lines_keep_flowing() {
 
 /// The section types a chart parsed to, with their bar counts.
 fn sections(src: &str) -> Vec<(String, usize)> {
-    parse_chart(src)
+    parse(src)
         .unwrap_or_else(|e| panic!("should parse:\n{src}\n\n{e}"))
         .sections
         .iter()
@@ -96,7 +96,7 @@ fn a_section_header_can_be_the_very_first_line() {
     // No title, no metadata — the chart starts at the music. The header
     // must be read as a section, not as the title it happens to sit in
     // the position of.
-    let chart = parse_chart("VS 8\nG C Em D\n").expect("parse");
+    let chart = parse("VS 8\nG C Em D\n").expect("parse");
     assert!(chart.metadata.title.is_none(), "`VS 8` became a title");
     assert!(chart.metadata.subtitle.is_none());
     assert_eq!(sections("VS 8\nG C Em D\n"), [("Verse".to_string(), 8)]);
@@ -122,7 +122,7 @@ fn a_leading_section_header_works_for_every_form() {
 #[test]
 fn a_declared_length_pads_the_section_out() {
     // `VS 8` with four chords is eight bars: four written, four carried.
-    let chart = parse_chart("VS 8\nG C Em D\n").expect("parse");
+    let chart = parse("VS 8\nG C Em D\n").expect("parse");
     let verse = &chart.sections[0];
     assert_eq!(verse.measures().len(), 8);
     let written = verse
@@ -150,8 +150,8 @@ fn typing_a_chart_never_loses_what_is_already_there() {
     let target = "VS 8\nG C Em D";
     for end in target.char_indices().map(|(i, c)| i + c.len_utf8()) {
         let partial = &target[..end];
-        let chart = parse_chart(partial)
-            .unwrap_or_else(|e| panic!("prefix {partial:?} stopped parsing: {e}"));
+        let chart =
+            parse(partial).unwrap_or_else(|e| panic!("prefix {partial:?} stopped parsing: {e}"));
         if partial.starts_with("VS 8") {
             let bars: usize = chart.sections.iter().map(|s| s.measures().len()).sum();
             assert_eq!(bars, 8, "prefix {partial:?} lost the section length");
@@ -170,7 +170,7 @@ fn a_title_without_a_metadata_line_does_not_eat_the_first_section() {
     //
     // Any metadata line at all masked it, which is why it survived: every
     // fixture and guide example has one.
-    let chart = parse_chart("My Song\n\nVS\nG C Em D\n").expect("parse");
+    let chart = parse("My Song\n\nVS\nG C Em D\n").expect("parse");
 
     assert_eq!(chart.metadata.title.as_deref(), Some("My Song"));
     assert_eq!(
@@ -194,7 +194,7 @@ fn a_title_without_a_metadata_line_does_not_eat_the_first_section() {
 fn the_same_holds_for_every_section_name() {
     for (header, want) in [("VS", "Verse"), ("CH", "Chorus"), ("BR", "Bridge")] {
         let src = format!("My Song\n\n{header}\nG C Em D\n");
-        let chart = parse_chart(&src).expect("parse");
+        let chart = parse(&src).expect("parse");
         assert_eq!(
             chart.metadata.subtitle, None,
             "`{header}` became a subtitle"
@@ -212,7 +212,7 @@ fn the_same_holds_for_every_section_name() {
 fn a_real_subtitle_line_is_still_a_subtitle() {
     // The guard must not overshoot: a genuine second line that is not a
     // section header, chord content or metadata is still the subtitle.
-    let chart = parse_chart("My Song\nTranscribed By Someone\n\nVS\nG C Em D\n").expect("parse");
+    let chart = parse("My Song\nTranscribed By Someone\n\nVS\nG C Em D\n").expect("parse");
     assert_eq!(
         chart.metadata.subtitle.as_deref(),
         Some("Transcribed By Someone")
@@ -221,7 +221,7 @@ fn a_real_subtitle_line_is_still_a_subtitle() {
 
 #[test]
 fn parenthesised_subtitles_still_work() {
-    let chart = parse_chart("Vienna (Live) - Billy Joel\n4/4\n\nVS\nG C\n").expect("parse");
+    let chart = parse("Vienna (Live) - Billy Joel\n4/4\n\nVS\nG C\n").expect("parse");
     assert_eq!(chart.metadata.title.as_deref(), Some("Vienna"));
     assert_eq!(chart.metadata.subtitle.as_deref(), Some("Live"));
     assert_eq!(chart.metadata.artist.as_deref(), Some("Billy Joel"));

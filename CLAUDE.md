@@ -91,6 +91,21 @@ docs/spec/            tracey-tracked spec (score-engraving)
   turns on `dioxus/desktop`, which drags dioxus-desktop → tungstenite →
   native-tls → openssl-sys, and openssl does not build for wasm32. That is
   why the root's `keyflow-ui` entry sets `default-features = false`.
+- **`ChartPipeline` is the only way to engrave a chart.** Fonts, layout
+  engine, presets and every SVG/PDF export live on
+  `engraver::api::pipeline::ChartPipeline` — take one with
+  `ChartPipeline::shared()` (or `with_style` if you genuinely need a
+  different style) rather than calling `ChartFontBundle::new()` and
+  wiring an engine by hand. Three places used to do all four steps
+  independently, and they drifted: chord symbols are emitted as
+  `MuseJazz Text`, *with a space*, and one of the three declared
+  `MuseJazzText`, so every chart it exported fell back to a system sans
+  and the `maj7` triangles came out blank. A `font-family` nothing
+  declares does not error — it silently substitutes, which is why
+  `features/engraver/proto/tests/one_pipeline.rs` asserts the invariants
+  instead of trusting review. `ChartFontBundle::new()` outside
+  `ChartFontBundle::shared()` is the smell; the bundle costs seven font
+  files parsed per call.
 - **A WebGL context is a scarce resource.** `keyflow-ui::ChartGraphics` is
   for one live surface, not one per chart on a page: browsers cap contexts
   at around sixteen, and re-creating one per render wedges the renderer.

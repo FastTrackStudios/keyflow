@@ -169,9 +169,13 @@ fn ChartEditorLayoutInner() -> Element {
     let catalog_entries = use_memo(catalog::local_musicxml_catalog);
 
     // Parse error state
+    // The message, not the error: a `Memo` compares its output to decide
+    // whether anything downstream needs to re-run, and the parse error
+    // type is not `PartialEq`. What the panel shows is the message
+    // anyway.
     let parse_error = use_memo(move || {
         let source = CHART_SOURCE.read().clone();
-        keyflow::text::chart::parse_chart(&source).err()
+        keyflow::parse(&source).err().map(|e| e.to_string())
     });
 
     rsx! {

@@ -25,7 +25,7 @@
 //!
 //! // In the app's rendering loop:
 //! let mut manager = ChartLayoutManager::new().unwrap();
-//! let chart = keyflow::text::chart::parse_chart(&*CHART_SOURCE.read()).ok();
+//! let chart = keyflow::parse(&*CHART_SOURCE.read()).ok();
 //! if let Some(chart) = &chart {
 //!     manager.layout_chart_with_mode(chart, width, true);
 //!     let mut scene = vello::Scene::new();

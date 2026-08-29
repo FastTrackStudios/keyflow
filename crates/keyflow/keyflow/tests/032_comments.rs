@@ -17,10 +17,10 @@
 //! source-only fence: the annotation could not live inside a block that
 //! was going to be engraved.
 
-use keyflow::text::chart::parse_chart;
+use keyflow::parse;
 
 fn bars(src: &str) -> Vec<String> {
-    parse_chart(src)
+    parse(src)
         .unwrap_or_else(|e| panic!("should parse:\n{src}\n\n{e}"))
         .sections
         .iter()
@@ -59,8 +59,7 @@ fn a_whole_line_comment_still_works() {
 
 #[test]
 fn a_comment_on_the_metadata_line_still_works() {
-    let chart =
-        parse_chart("T\n4/4 120bpm #C  ; mid-tempo, straight feel\n\nVS\nC F\n").expect("parse");
+    let chart = parse("T\n4/4 120bpm #C  ; mid-tempo, straight feel\n\nVS\nC F\n").expect("parse");
     let ts = chart.time_signature.as_ref().expect("meter");
     assert_eq!((ts.numerator, ts.denominator), (4, 4));
     assert_eq!(chart.tempo.map(|t| t.bpm), Some(120.0));
@@ -86,7 +85,7 @@ fn comments_work_on_rhythm_and_bar_line_forms() {
 /// Chord bars and track count — enough to tell a parsed container from a
 /// mangled one.
 fn shape(src: &str) -> (usize, usize) {
-    let chart = parse_chart(src).unwrap_or_else(|e| panic!("should parse:\n{src}\n\n{e}"));
+    let chart = parse(src).unwrap_or_else(|e| panic!("should parse:\n{src}\n\n{e}"));
     (
         chart.sections.iter().map(|s| s.measures().len()).sum(),
         chart.sections.iter().map(|s| s.tracks.len()).sum(),

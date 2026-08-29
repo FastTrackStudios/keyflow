@@ -352,7 +352,7 @@ mod tests {
             };
             let chart = format!("{text}| 1 4 |\n");
             assert!(
-                keyflow::text::chart::parse_chart(&chart).is_ok(),
+                keyflow::parse(&chart).is_ok(),
                 "section key `{}` types `{text}`, which does not parse",
                 key.label
             );
@@ -366,7 +366,7 @@ mod tests {
             for quality in ["", "m", "7", "maj7", "m7", "sus", "add9"] {
                 let chart = format!("VS: | {root}{quality} |\n");
                 assert!(
-                    keyflow::text::chart::parse_chart(&chart).is_ok(),
+                    keyflow::parse(&chart).is_ok(),
                     "`{root}{quality}` does not parse"
                 );
             }

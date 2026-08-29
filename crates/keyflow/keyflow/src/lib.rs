@@ -108,18 +108,6 @@ impl IntoChart for std::path::PathBuf {
     }
 }
 
-#[cfg(feature = "text")]
-pub trait KeyflowParseExt {
-    fn keyflow_parse(&self) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError>;
-}
-
-#[cfg(feature = "text")]
-impl KeyflowParseExt for str {
-    fn keyflow_parse(&self) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError> {
-        keyflow_text::chart::parse_chart(self).map_err(KeyflowSourceError::Text)
-    }
-}
-
 pub fn parse<T: IntoChart>(
     source: T,
 ) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError> {

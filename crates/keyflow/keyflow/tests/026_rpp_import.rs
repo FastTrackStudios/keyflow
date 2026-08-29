@@ -419,7 +419,7 @@ fn test_vienna_rpp_to_pdf() {
     let chart_text = generate_chart_text(&midi, &config);
 
     // Parse chart text into a Chart
-    let chart = keyflow::text::chart::parse_chart(&chart_text).expect("parse chart text");
+    let chart = keyflow::parse(&chart_text).expect("parse chart text");
 
     // Layout engine
     let font_bundle = ChartFontBundle::new().expect("load fonts");

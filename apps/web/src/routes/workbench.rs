@@ -190,7 +190,7 @@ mod tests {
         for p in guide::GUIDE_PAGES {
             for ex in engraved_fences(p.body) {
                 assert!(
-                    keyflow::text::chart::parse_chart(&ex).is_ok(),
+                    keyflow::parse(&ex).is_ok(),
                     "guide page `{}` would seed the workbench with a chart that does not parse:\n{ex}",
                     p.slug
                 );
@@ -200,6 +200,6 @@ mod tests {
 
     #[test]
     fn the_fallback_starter_parses() {
-        assert!(keyflow::text::chart::parse_chart(STARTER).is_ok());
+        assert!(keyflow::parse(STARTER).is_ok());
     }
 }
