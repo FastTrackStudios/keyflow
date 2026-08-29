@@ -21,13 +21,9 @@ fn new_offscreen_renderer(_width: u32, _height: u32) -> OffscreenRenderer {
     anyrender::NullImageRenderer::new()
 }
 use keyflow::engraver::api::pipeline::{ChartPipeline, Preset, PresetOptions};
-#[cfg(feature = "pdf")]
-use keyflow::engraver::export::PdfSerializer;
-use keyflow::engraver::export::{SvgExportConfig, SvgSerializer};
-use keyflow::engraver::fonts::ChartFontBundle;
 use keyflow::engraver::layout::chart::cursor::{ChartCursor, CursorState, HighlightCommand, Rgba};
 use keyflow::engraver::layout::chart::{
-    BeatPosition, Breakpoint, ChartLayoutConfig, ChartLayoutEngine, ChartLayoutResult, LayoutMode,
+    BeatPosition, Breakpoint, ChartLayoutConfig, ChartLayoutResult, LayoutMode,
 };
 use keyflow::engraver::renderer::cursor_renderer::render_cursor_commands;
 use keyflow::engraver::renderer::scene_renderer::SceneRenderBuilder;
@@ -52,6 +48,9 @@ pub const DPI_SCALE: f64 = SCREEN_DPI / POINTS_PER_INCH;
 /// Kept as constants for ergonomic call sites; values mirror
 /// [`engraver::model::PaperSize::Letter`] / `PaperSize::A4` to one decimal.
 pub const LETTER_WIDTH: f64 = 612.0;
+
+/// Breathing room around a content-cropped snippet, in points.
+const SNIPPET_PADDING: f64 = 6.0;
 pub const LETTER_HEIGHT: f64 = 792.0;
 /// A4 page dimensions in points.
 pub const A4_WIDTH: f64 = 595.0;
@@ -543,9 +542,13 @@ fn replay_recorded_scene(
 /// chart rendering pipeline is backend-agnostic.
 pub struct ChartLayoutManager {
     /// Font bundle (single source of truth for all chart fonts).
-    font_bundle: &'static ChartFontBundle,
+    /// Fonts, layout engine and every export — the shared pipeline.
+    ///
+    /// This crate used to own a bundle and an engine directly, and carry
+    /// its own copies of the export and preset logic. It keeps only what
+    /// is genuinely its own: the interaction state below.
+    pipeline: ChartPipeline,
     /// Layout engine.
-    layout_engine: ChartLayoutEngine,
     /// Cached layout result.
     layout_result: Option<ChartLayoutResult>,
     /// Last layout hash — covers (source, preview_mode) for layout invalidation.
@@ -872,7 +875,7 @@ impl ChartLayoutManager {
         if let Some(tick) = cursor_tick {
             self.update_cursor(tick);
             if let Some(ref state) = self.cached_cursor_state {
-                let font = self.font_bundle.smufl_font();
+                let font = self.pipeline.fonts().smufl_font();
                 render_cursor_commands(scene, &state.commands, offset * transform, Some(font));
             }
         }
@@ -892,14 +895,11 @@ impl ChartLayoutManager {
         // engravings — so this shares the expensive part and leaves the
         // behavioural part alone. Building an engine over the shared
         // bundle is two `Arc` clones.
-        let font_bundle = ChartFontBundle::shared()?;
-
         let style = Box::leak(Box::new(MStyle::new()));
-        let layout_engine = font_bundle.create_layout_engine(style);
+        let pipeline = ChartPipeline::with_style(style).map_err(|e| e.to_string())?;
 
         Ok(Self {
-            font_bundle,
-            layout_engine,
+            pipeline,
             layout_result: None,
             last_chart_hash: 0,
             cached_chart: None,
@@ -1004,7 +1004,8 @@ impl ChartLayoutManager {
         let (mode, config) = layout_mode_for_preview(preview_mode, viewport_width, zoom);
 
         let result = self
-            .layout_engine
+            .pipeline
+            .engine()
             .layout_chart_with_config(chart, &mode, &config);
 
         self.layout_result = Some(result);
@@ -1083,7 +1084,8 @@ impl ChartLayoutManager {
         let (mode, config) = layout_mode_for_preview(preview_mode, viewport_width, zoom);
 
         let result = self
-            .layout_engine
+            .pipeline
+            .engine()
             .layout_chart_with_config(chart, &mode, &config);
 
         self.layout_result = Some(result);
@@ -1269,7 +1271,7 @@ impl ChartLayoutManager {
         let mut fragment = RecordedScene::new();
 
         let base_renderer = SceneRenderBuilder::new().spatium(5.0).build();
-        let mut renderer = self.font_bundle.configure_renderer(base_renderer);
+        let mut renderer = self.pipeline.fonts().configure_renderer(base_renderer);
         for (node, parent_transform) in page_roots {
             renderer.render_with_transform(&mut fragment, node, parent_transform);
         }
@@ -1611,214 +1613,80 @@ impl ChartLayoutManager {
         })
     }
 
+    /// The laid-out result, or the "nothing to export" error.
+    fn result(&self) -> Result<&ChartLayoutResult, String> {
+        self.layout_result
+            .as_ref()
+            .filter(|r| !r.pages.is_empty())
+            .ok_or_else(|| "No chart layout available to export".to_string())
+    }
+
     /// Export the current paginated layout as a multi-page vector PDF.
     ///
-    /// The layout must already be computed in paginated mode (`snippet_mode = false`).
-    /// Returns a complete PDF document as bytes.
+    /// Behind the `pdf` feature: printpdf's azul dependency does not
+    /// build for iOS, and the browser prints from the SVG export instead.
     ///
-    /// Behind the `pdf` feature: printpdf's azul dependency does not build
-    /// for iOS, and the browser prints from the SVG export instead.
+    /// # Errors
+    ///
+    /// Returns an error if nothing is laid out, or the PDF cannot be
+    /// written.
     #[cfg(feature = "pdf")]
     pub fn export_pdf_bytes(&self) -> Result<Vec<u8>, String> {
-        let layout = self
-            .layout_result
-            .as_ref()
-            .ok_or_else(|| "No chart layout available to export".to_string())?;
-
-        if layout.pages.is_empty() {
-            return Err("No pages available to export".to_string());
-        }
-
-        let mut svg_pages = Vec::with_capacity(layout.pages.len());
-        for page in &layout.pages {
-            let config = self.embed_config(SvgExportConfig::for_page(
-                page.x_offset,
-                page.y_offset,
-                page.width,
-                page.height,
-            ));
-            let mut serializer = SvgSerializer::new(config);
-            svg_pages.push(serializer.serialize(&layout.scene));
-        }
-
-        // Same list, same reason: a family the PDF does not carry falls
-        // back to a system font, and the chord glyphs are not in one.
-        let fonts = self.font_bundle.embeddable_fonts();
-        let font_refs: Vec<(&str, &[u8])> = fonts.iter().map(|(n, b)| (*n, b.as_slice())).collect();
-
-        PdfSerializer::serialize_from_svg(&svg_pages, &font_refs)
-            .map_err(|e| format!("Failed to export PDF: {e}"))
+        self.pipeline.export_pdf(self.result()?)
     }
 
-    /// Export the current paginated layout as per-page SVG documents.
+    /// One self-contained SVG per page, fonts embedded.
     ///
-    /// The layout must already be computed in paginated mode (`snippet_mode = false`).
-    /// Returns one SVG string per page.
+    /// For a file that leaves the page — it cannot rely on a stylesheet
+    /// that stays behind. Costs ~485 KB per page; pair the *linked*
+    /// variants with [`Self::font_face_css`] for anything on-screen.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if nothing is laid out.
     pub fn export_svg_pages(&self) -> Result<Vec<String>, String> {
-        let layout = self
-            .layout_result
-            .as_ref()
-            .ok_or_else(|| "No chart layout available to export".to_string())?;
-
-        if layout.pages.is_empty() {
-            return Err("No pages available to export".to_string());
-        }
-
-        let mut pages = Vec::with_capacity(layout.pages.len());
-        for page in &layout.pages {
-            let config = self.embed_config(SvgExportConfig::for_page(
-                page.x_offset,
-                page.y_offset,
-                page.width,
-                page.height,
-            ));
-            let mut serializer = SvgSerializer::new(config);
-            pages.push(serializer.serialize(&layout.scene));
-        }
-
-        Ok(pages)
+        Ok(self.pipeline.export_svg_pages(self.result()?))
     }
 
-    /// Export the layout as SVG pages that *reference* the chart fonts
-    /// rather than embedding them.
-    ///
-    /// [`Self::export_svg_pages`] embeds Bravura, MuseJazzText and FreeSans
-    /// into every document, which costs roughly 485 KB per page. That is
-    /// the right trade for a file someone downloads — it is self-contained.
-    /// It is the wrong trade for a web page showing several charts, where
-    /// the same fonts would be repeated once per chart.
-    ///
-    /// Pair this with [`Self::font_face_css`], emitted once per document.
+    /// One SVG per page, fonts referenced rather than embedded.
     ///
     /// # Errors
     ///
-    /// Returns an error if no layout has been computed, or it has no pages.
+    /// Returns an error if nothing is laid out.
     pub fn export_svg_pages_linked(&self) -> Result<Vec<String>, String> {
-        let layout = self
-            .layout_result
-            .as_ref()
-            .ok_or_else(|| "No chart layout available to export".to_string())?;
-
-        if layout.pages.is_empty() {
-            return Err("No pages available to export".to_string());
-        }
-
-        Ok(layout
-            .pages
-            .iter()
-            .map(|page| {
-                let config = SvgExportConfig::for_page(
-                    page.x_offset,
-                    page.y_offset,
-                    page.width,
-                    page.height,
-                );
-                SvgSerializer::new(config).serialize(&layout.scene)
-            })
-            .collect())
+        Ok(self.pipeline.export_svg_pages_linked(self.result()?))
     }
 
-    /// Export each page as a font-less SVG **with its true paper size**.
+    /// One SVG per page with its true paper size, fonts referenced.
     ///
-    /// Returns `(width_pt, height_pt, svg)` per page, so a preview can lay
-    /// pages out at real A4/Letter dimensions rather than stretching them
-    /// to fit a container — the difference between "a picture of a chart"
-    /// and "the page you are about to print".
-    ///
-    /// Font-less on purpose, and the reason is the live-preview budget:
-    /// re-embedding the bundle on every keystroke serialises several MB per
-    /// pass. Pair with [`Self::font_face_css`], injected once.
+    /// Returns `(width_pt, height_pt, svg)`, so a preview can lay pages
+    /// out at real A4/Letter dimensions rather than stretching them.
     ///
     /// # Errors
     ///
-    /// Returns an error if no layout has been computed, or it has no pages.
+    /// Returns an error if nothing is laid out.
     pub fn export_svg_pages_sized(&self) -> Result<Vec<(f64, f64, String)>, String> {
-        let layout = self
-            .layout_result
-            .as_ref()
-            .ok_or_else(|| "No chart layout available to export".to_string())?;
-
-        if layout.pages.is_empty() {
-            return Err("No pages available to export".to_string());
-        }
-
-        Ok(layout
-            .pages
-            .iter()
-            .map(|page| {
-                let config = SvgExportConfig::for_page(
-                    page.x_offset,
-                    page.y_offset,
-                    page.width,
-                    page.height,
-                );
-                (
-                    page.width,
-                    page.height,
-                    SvgSerializer::new(config).serialize(&layout.scene),
-                )
-            })
-            .collect())
+        Ok(self.pipeline.export_svg_pages_sized(self.result()?))
     }
 
-    /// Export the layout cropped to the chart's own bounds, with fonts
-    /// referenced rather than embedded.
-    ///
-    /// [`Self::export_svg_pages_linked`] crops to the *page*, which is
-    /// right for print and wrong on the web: a two-bar example laid out on
-    /// A4 arrives as a couple of centimetres of music above a page of empty
-    /// paper. This crops to what was actually drawn.
-    ///
-    /// Pair with [`Self::font_face_css`], emitted once per document.
+    /// One SVG cropped to the chart's own bounds, fonts referenced.
     ///
     /// # Errors
     ///
-    /// Returns an error if no layout has been computed.
+    /// Returns an error if nothing is laid out.
     pub fn export_svg_snippet(&self) -> Result<String, String> {
-        let layout = self
-            .layout_result
-            .as_ref()
-            .ok_or_else(|| "No chart layout available to export".to_string())?;
-
-        let (width, height) = self
-            .get_content_dimensions()
-            .ok_or_else(|| "No chart layout available to export".to_string())?;
-
-        let config = SvgExportConfig::for_page(0.0, 0.0, width, height);
-        Ok(SvgSerializer::new(config).serialize(&layout.scene))
+        Ok(self
+            .pipeline
+            .export_svg_snippet(self.result()?, SNIPPET_PADDING))
     }
 
     /// `@font-face` rules for the chart fonts, as data URIs.
     ///
-    /// Emit once per document alongside [`Self::export_svg_pages_linked`]
-    /// or [`Self::export_svg_snippet`]; every chart on the page then
-    /// resolves its fonts from here.
-    ///
-    /// The family list comes from the font bundle, not from this call
-    /// site, so it cannot drift from the names the scene actually emits.
+    /// Emit once per document alongside the *linked* exports; every chart
+    /// on the page then resolves its fonts from here.
     #[must_use]
     pub fn font_face_css(&self) -> String {
-        self.embed_config(SvgExportConfig::default())
-            .font_face_css()
-    }
-
-    /// Attach every embeddable font to an export config.
-    ///
-    /// The list lives on the font bundle so it cannot drift from the
-    /// family names the layout engine emits — this crate is where that
-    /// drift last bit, declaring the chord font as `MuseJazzText` while
-    /// the scene emitted `MuseJazz Text`, so every exported chart fell
-    /// back to a system sans.
-    ///
-    /// The browser list, not the raster one: an `@font-face` for the
-    /// generic `sans-serif` would override the reader's own default.
-    fn embed_config(&self, config: SvgExportConfig) -> SvgExportConfig {
-        self.font_bundle
-            .embeddable_fonts()
-            .into_iter()
-            .fold(config, |c, (family, bytes)| {
-                c.with_embedded_font(family, bytes.as_ref().clone())
-            })
+        self.pipeline.font_face_css()
     }
 
     /// Determine which page is currently visible given scroll values.
@@ -2110,7 +1978,7 @@ impl ChartLayoutManager {
             });
         }
 
-        let font = self.font_bundle.smufl_font();
+        let font = self.pipeline.fonts().smufl_font();
         render_cursor_commands(scene, &commands, transform, Some(font));
     }
 
@@ -2442,8 +2310,8 @@ impl ChartLayoutManager {
     /// Get the font data needed to create a background `ChartLayoutEngine`.
     pub fn font_data(&self) -> (Arc<Vec<u8>>, Arc<Vec<u8>>) {
         (
-            self.font_bundle.text_font_data().clone(),
-            self.font_bundle.symbol_font_data().clone(),
+            self.pipeline.fonts().text_font_data().clone(),
+            self.pipeline.fonts().symbol_font_data().clone(),
         )
     }
 
