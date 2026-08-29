@@ -1716,6 +1716,49 @@ impl ChartLayoutManager {
             .collect())
     }
 
+    /// Export each page as a font-less SVG **with its true paper size**.
+    ///
+    /// Returns `(width_pt, height_pt, svg)` per page, so a preview can lay
+    /// pages out at real A4/Letter dimensions rather than stretching them
+    /// to fit a container — the difference between "a picture of a chart"
+    /// and "the page you are about to print".
+    ///
+    /// Font-less on purpose, and the reason is the live-preview budget:
+    /// re-embedding the bundle on every keystroke serialises several MB per
+    /// pass. Pair with [`Self::font_face_css`], injected once.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no layout has been computed, or it has no pages.
+    pub fn export_svg_pages_sized(&self) -> Result<Vec<(f64, f64, String)>, String> {
+        let layout = self
+            .layout_result
+            .as_ref()
+            .ok_or_else(|| "No chart layout available to export".to_string())?;
+
+        if layout.pages.is_empty() {
+            return Err("No pages available to export".to_string());
+        }
+
+        Ok(layout
+            .pages
+            .iter()
+            .map(|page| {
+                let config = SvgExportConfig::for_page(
+                    page.x_offset,
+                    page.y_offset,
+                    page.width,
+                    page.height,
+                );
+                (
+                    page.width,
+                    page.height,
+                    SvgSerializer::new(config).serialize(&layout.scene),
+                )
+            })
+            .collect())
+    }
+
     /// Export the layout cropped to the chart's own bounds, with fonts
     /// referenced rather than embedded.
     ///

@@ -13,6 +13,7 @@ use crate::Route;
 use crate::chart_preview::ChartPreview;
 use crate::chart_url;
 use crate::chart_view::ChartFonts;
+use crate::keyflow_editor::KeyflowEditor;
 use crate::routes::Shell;
 
 /// `/editor` — the editor seeded with the default example.
@@ -69,11 +70,9 @@ fn EditorScreen(initial: String, from_link: bool) -> Element {
                     }
                 }
                 div { class: "kf-editor-split",
-                    textarea {
-                        class: "kf-editor-source",
-                        spellcheck: false,
-                        value: "{source}",
-                        oninput: move |e| source.set(e.value()),
+                    KeyflowEditor {
+                        initial: source(),
+                        on_change: move |text| source.set(text),
                     }
                     ChartPreview { source: source() }
                 }

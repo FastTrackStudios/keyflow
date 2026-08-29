@@ -328,8 +328,11 @@ body {
  * pane scrolls, so typing never pushes the chart off screen. */
 .kf-workbench {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
-  grid-template-rows: auto 14rem minmax(0, 1fr);
+  /* The editor column leads. The editor is the thing being used, and a
+   * chart line is long — the preview only needs enough room for an A4
+   * page at a readable zoom, which ~40% of a wide viewport gives it. */
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  grid-template-rows: auto 16rem minmax(0, 1fr);
   grid-template-areas:
     "bar     bar"
     "editor  preview"
@@ -353,9 +356,14 @@ body {
 .kf-workbench-bar h1 { margin: 0; font-size: 1.2rem; letter-spacing: -0.02em; }
 .kf-workbench-bar .kf-button { margin-left: auto; }
 
-.kf-workbench-editor { grid-area: editor; min-height: 0; display: flex; }
-.kf-workbench-editor .kf-editor-source { min-height: 0; }
+/* `display: block`, NOT flex. As a flex container this pane sized the
+ * editor to its content — a narrow column hugging the longest line — which
+ * is the opposite of what a code editor wants. */
+.kf-workbench-editor { grid-area: editor; min-height: 0; }
 
+/* The guide keeps a reading measure inside the wide column — prose at
+ * 1000px line length is unreadable, which is why only the EDITOR gets the
+ * full width. */
 .kf-workbench-guide {
   grid-area: guide;
   min-height: 0;
@@ -383,27 +391,39 @@ body {
 /* The stage clips; the pages inside it are what moves. `touch-action:
  * none` so a drag pans the chart instead of scrolling the page on a
  * touchscreen. */
+/* A print-preview backdrop, not a scrolling container: pan and zoom are a
+ * CSS transform on `.kf-preview-pages`, so `overflow: hidden` and the
+ * transform — not native scroll — move content around. */
 .kf-preview-stage {
   position: relative;
   min-height: 0;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 0.75rem;
-  background: #ffffff;
+  background: #26262b;
   cursor: grab;
   touch-action: none;
 }
 .kf-preview-stage:active { cursor: grabbing; }
 
+/* Absolutely positioned so it takes no part in normal flow — its position
+ * comes entirely from the inline transform. */
 .kf-preview-pages {
-  transform-origin: 0 0;
-  display: grid;
-  gap: 1rem;
-  padding: 1rem;
-  width: max-content;
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform;
 }
 
-.kf-preview-page svg { display: block; height: auto; }
+/* Pages sit at their true point-derived size — actual size, not stretched
+ * to the pane. The shadow is what makes it read as paper. */
+.kf-preview-page {
+  background: #ffffff;
+  box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.kf-preview-page svg { display: block; width: 100%; height: 100%; }
 
 .kf-example-picker {
   position: sticky;
@@ -502,3 +522,41 @@ body {
 .kf-example figcaption { display: grid; gap: 0.6rem; justify-items: start; }
 
 .kf-page-actions { display: flex; justify-content: flex-end; margin-bottom: 0.5rem; }
+
+/* ── Keyflow editor pane ─────────────────────────────────────────── */
+/* Structural styles come from `editor::EDITOR_STYLE`; token colours and
+ * diagnostic squiggles are injected at runtime by
+ * `editor_keyflow_lang::highlight_css`. What is left for us is sizing.
+ *
+ * Ported from the pre-split site's live-editor.css — the editor view is
+ * `contenteditable` and sizes to its content, so it needs an explicit
+ * `height: 100%` frame or it renders as a narrow column hugging the
+ * longest line instead of filling the pane. */
+
+.kf-code-editor {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.5rem;
+  min-height: 0;
+  height: 100%;
+}
+.kf-code-editor-bar { display: flex; gap: 0.4rem; }
+.kf-code-editor-bar .kf-button { padding: 0.2rem 0.6rem; font-size: 0.8rem; }
+
+.kf-code-editor-pane {
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--code-bg);
+}
+
+.kf-code-editor-frame {
+  position: relative;
+  height: 100%;
+  min-height: 100%;
+  padding: 1rem;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 21px;
+}

@@ -12,6 +12,7 @@ mod chart_preview;
 mod chart_url;
 mod chart_view;
 mod guide;
+mod keyflow_editor;
 mod routes;
 
 use dioxus::prelude::*;

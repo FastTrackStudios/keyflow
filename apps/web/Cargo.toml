@@ -38,10 +38,19 @@ editor-state = { workspace = true }
 # Registers the chart renderer into editor-state's fence registry, so
 # ```kf+ fences in the guide engrave instead of showing source.
 editor-keyflow = { workspace = true }
+# Keyflow *as a language* inside the editor: syntax decorations, IDE
+# diagnostics, hover, and the resolved-chord overlays (1 -> C in the key
+# of C). This is what makes the workbench a Keyflow editor rather than a
+# textarea that happens to hold Keyflow.
+editor-keyflow-lang = { workspace = true }
 dioxus = { workspace = true, features = ["router"] }
 
 # Chart-in-URL codec: deflate then base64url, so a whole chart fits in a
 # link with no account and no server.
+# Multi-page SVG export ships as a zip — one file per page, the shape the
+# old site's ExportButton used.
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+
 base64 = "0.22"
 flate2 = "1"
 
@@ -80,6 +89,9 @@ tracing-wasm = "0.2"
 # transitively (uuid, ahash), and only a direct dependency can turn the
 # feature on.
 getrandom = { version = "0.3", features = ["wasm_js"] }
+# Debounce for the live preview. tokio's timer needs a reactor that does
+# not exist in a browser.
+gloo-timers = { version = "0.3", features = ["futures"] }
 console_error_panic_hook = "0.1"
 
 [lints]

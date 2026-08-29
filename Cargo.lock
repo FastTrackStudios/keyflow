@@ -7072,9 +7072,11 @@ dependencies = [
  "dioxus",
  "editor",
  "editor-keyflow",
+ "editor-keyflow-lang",
  "editor-state",
  "flate2",
  "getrandom 0.3.4",
+ "gloo-timers",
  "js-sys",
  "keyflow",
  "keyflow-ui",
@@ -7085,6 +7087,7 @@ dependencies = [
  "view-knowledge-graph",
  "wasm-bindgen",
  "web-sys",
+ "zip 2.4.2",
 ]
 
 [[package]]

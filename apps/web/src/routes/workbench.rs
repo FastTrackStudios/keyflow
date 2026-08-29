@@ -28,6 +28,7 @@ use crate::Route;
 use crate::chart_preview::ChartPreview;
 use crate::chart_view::ChartFonts;
 use crate::guide;
+use crate::keyflow_editor::KeyflowEditor;
 use crate::routes::Shell;
 
 /// Fallback when a chapter has no engraved example of its own.
@@ -82,11 +83,13 @@ pub fn Workbench(slug: String) -> Element {
                 }
 
                 section { class: "kf-workbench-editor",
-                    textarea {
-                        class: "kf-editor-source",
-                        spellcheck: false,
-                        value: "{source}",
-                        oninput: move |e| source.set(e.value()),
+                    KeyflowEditor {
+                        // `key` so switching chapters rebuilds the editor
+                        // with the new chapter's example, rather than
+                        // keeping the previous buffer.
+                        key: "{page.slug}",
+                        initial: source(),
+                        on_change: move |text| source.set(text),
                     }
                 }
 
@@ -129,7 +132,7 @@ pub fn Workbench(slug: String) -> Element {
                 }
 
                 aside { class: "kf-workbench-preview",
-                    ChartPreview { source: source(), name: page.slug }
+                    ChartPreview { source: source() }
                 }
             }
         }
