@@ -17,11 +17,11 @@ dropped inline.
 Put a key token — the same `#Key` from the header — on the chord line at the
 point the key changes:
 
-```kf-
+```kf+
 4/4 #C
 
 VS 8
-1  4  5  1   #G   1  4  5  1
+1  4  5  1   ; #G   1  4  5  1
 ```
 
 A key change mid-chart (to G at bar 3), engraved:
@@ -43,9 +43,9 @@ A whole section can also *start* in a new key by putting the token on its header
 
 A meter change is written with a **`T`** in front of the new signature:
 
-```kf-
+```kf+
 VS
-G  D/F#  Em  C   T6/8 Am   T4/4   G  D
+G  D/F#  Em  C   ; T6/8 Am   T4/4   G  D
 ```
 
 `T6/8` switches to 6/8 from that point; `T4/4` switches back. A change holds until
@@ -61,9 +61,9 @@ Often a meter only wobbles for a single bar — one bar of 2/4 in a stream of 4/
 Prefix the change with `!` and it lasts exactly **one measure**, then snaps back
 to the prevailing meter on its own, with no closing `T` needed:
 
-```kf-
+```kf+
 VS
-G  D/F#  Em  G   !T2/4 Am   G  D
+G  D/F#  Em  G   !T2/4 Am   ; G  D
 ```
 
 `Am` is that one bar of 2/4; the `G D` after it are already back in 4/4. The `!`

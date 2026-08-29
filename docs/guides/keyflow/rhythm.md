@@ -30,9 +30,9 @@ C ////  F ////  G // Em //  C
 A chord with no rhythm attached lasts exactly one measure, whatever the time
 signature. Space-separated chords simply march one per bar:
 
-```kf-
-C  F  G  Am        four bars
-Gm Bb F Ab Eb      five bars
+```kf+
+C  F  G  Am        ; four bars
+Gm Bb F Ab Eb      ; five bars
 ```
 
 This is the *measure-fill default*, and everything below is how you override it
@@ -43,9 +43,9 @@ when a bar needs more than one chord.
 A slash `/` is **one beat**. Follow a chord with slashes to give it an exact
 number of beats, so several chords can share a bar:
 
-```kf-
-C // G //           two chords, two beats each   (a 4/4 bar)
-C / G / Em / A /     four chords, one beat each   (a 4/4 bar)
+```kf+
+C // G //           ; two chords, two beats each   (a 4/4 bar)
+C / G / Em / A /     ; four chords, one beat each   (a 4/4 bar)
 ```
 
 In 4/4:
@@ -71,10 +71,10 @@ A dot makes a slash a **dotted** beat: `/.` is 1½ beats in 4/4. This matters mo
 in compound meters like 6/8, where the natural pulse is a dotted quarter — two of
 them fill the bar:
 
-```kf-
+```kf+
 6/8
-Am /. /.            one bar, two dotted-quarter beats
-C /. G /.            two chords, half a bar each
+Am /. /.            ; one bar, two dotted-quarter beats
+C /. G /.            ; two chords, half a bar each
 ```
 
 ## Grouping with ( )
@@ -82,7 +82,7 @@ C /. G /.            two chords, half a bar each
 Parentheses bind chords into one **group** that splits a span of time evenly.
 The plainest use is two chords in a bar:
 
-```kf-
+```kf+
 G  C  (Em D)  G
 ```
 
@@ -139,8 +139,8 @@ The length sticks until another duration changes it. For a default that covers a
 whole section (or the whole chart, if placed before any section), use
 `/Duration`:
 
-```kf-
-/Duration 4          every following chord is a quarter note by default
+```kf+
+/Duration 4          ; every following chord is a quarter note by default
 C F G Am
 ```
 
@@ -156,9 +156,9 @@ C_2 !G_4 F           G is a one-off quarter; F is still a half note
 
 `%` repeats the previous bar exactly:
 
-```kf-
-C  %  %  %           four bars of C
-Am F C G  %          the four-bar phrase, then a copy of its last bar
+```kf+
+C  %  %  %           ; four bars of C
+Am F C G  %          ; the four-bar phrase, then a copy of its last bar
 ```
 
 ## Bar lines, when you want them

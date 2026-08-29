@@ -72,9 +72,9 @@ I  ii  iii  IV  V  vi  vii      → I, iim, iiim, IV, V, vim, viim
 
 For **Nashville numbers**, a bare number is major; add `m` for minor:
 
-```kf-
-1  2  6        → major
-1m  2m  6m     → minor
+```kf+
+1  2  6        ; → major
+1m  2m  6m     ; → minor
 ```
 
 ## The seventh — chord family
@@ -191,10 +191,10 @@ a 4–3 suspension.
 The `^` figures are *structural* (they change the chord). For a plain text
 **annotation** — a cue, a reminder — use **quotes**:
 
-```kf-
-G^"watch the push"     text above the chord
-G_"quietly"            text below (subscript)
-Cmaj7"as written"      text attached to the chord
+```kf+
+G^"watch the push"     ; text above the chord
+G_"quietly"            ; text below (subscript)
+Cmaj7"as written"      ; text attached to the chord
 ```
 
 So `^65` is an inversion, but `^"65"` (quoted) would just be the text "65"
@@ -205,12 +205,12 @@ floating above.
 The pieces stack in order — root, quality, family, extensions, alterations,
 bass:
 
-```kf-
-Am7         A  + minor + 7th
-Cmaj9       C  + major 7th + 9th
-G7b9        G  + dominant 7th + flat 9th
-F#m7b5      F# + half-diminished 7th
-Bbmaj7/D    Bb + major 7th, over D
+```kf+
+Am7         ; A  + minor + 7th
+Cmaj9       ; C  + major 7th + 9th
+G7b9        ; G  + dominant 7th + flat 9th
+F#m7b5      ; F# + half-diminished 7th
+Bbmaj7/D    ; Bb + major 7th, over D
 ```
 
 ## What's next

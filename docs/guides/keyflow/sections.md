@@ -11,16 +11,6 @@ Below the [[structure|header]], a chart is a stack of **sections** — the
 named parts of the song. A section is a header line naming the part, then the
 music underneath it, running until the next header:
 
-```kf-
-VS 4
-C  F  G  Am
-
-CH 4
-F  C  G  Am
-```
-
-Two named sections with their bar lengths, engraved:
-
 ```kf+
 VS 4
 C  F  G  Am
@@ -51,17 +41,17 @@ front of any name — `Pre-Chorus`, `Post-Verse`.
 To tell apart two of the same part — a first and second chorus that differ — drop
 a short label between the name and its length:
 
-```kf-
-CH 3A 4       chorus variant 3A, four bars
+```kf+
+CH 3A 4       ; chorus variant 3A, four bars
 ```
 
 ## Length in bars
 
 The number after the name is the section's length in **bars**:
 
-```kf-
-VS 8          an eight-bar verse
-CH 4          a four-bar chorus
+```kf+
+VS 8          ; an eight-bar verse
+CH 4          ; a four-bar chorus
 ```
 
 Leave it off and Keyflow just counts the bars you wrote — `VS` with four bars of
@@ -74,15 +64,15 @@ out the length you meant.
 Write a section's music once, then **replay it by name** — a header with nothing
 under it recalls what that section played before:
 
-```kf-
+```kf+
 VS 4
 1  4  5  1
 
 CH 4
 4  1  5  1
 
-VS            replays the verse
-CH            replays the chorus
+VS            ; replays the verse
+CH            ; replays the chorus
 ```
 
 So a full song is mostly its section list: lay out `VS`, `CH`, `BR` once, then
@@ -92,7 +82,7 @@ order the repeats however the song goes.
 
 Add a note to a section in quotes — a dynamic, an instruction, a cue:
 
-```kf-
+```kf+
 CH 4 "Big finish"
 IN 2 "drums only"
 ```
@@ -103,7 +93,7 @@ The label rides along with the section and shows on the rendered chart.
 
 For a part that isn't one of the standard names, put your own name in brackets:
 
-```kf-
+```kf+
 [Tag] 2
 [Sax Solo] 8
 ```
@@ -117,8 +107,8 @@ A section can start in a new key: add a key token (see
 [[structure|Structure]]) to its header, and it takes effect from the top
 of that section.
 
-```kf-
-BR 8 #Ab      the bridge moves to A♭
+```kf+
+BR 8 #Ab      ; the bridge moves to A♭
 ```
 
 Number and Roman-numeral chords in that section resolve against the new key, and

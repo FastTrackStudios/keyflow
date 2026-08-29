@@ -144,7 +144,7 @@ For a full chart, keeping chords and melody on one line gets unwieldy. Split the
 into named **lanes** and pair the lanes once. The top section list owns the
 section lengths; each lane just repeats the section name:
 
-```kf-
+```kf+
 intro 4
 
 let chords = {

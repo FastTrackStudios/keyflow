@@ -14,8 +14,8 @@ Songs loop. Rather than write the same bars again, Keyflow has a few ways to say
 
 `%` replays the bar before it (from [[rhythm|Rhythm]]):
 
-```kf-
-1  4  %  5        bar 3 repeats bar 2 (the 4)
+```kf+
+1  4  %  5        ; bar 3 repeats bar 2 (the 4)
 ```
 
 `%` replays the previous bar — engraved, bar 3 repeats the 4:
@@ -28,8 +28,8 @@ Songs loop. Rather than write the same bars again, Keyflow has a few ways to say
 
 Put `x` and a number at the end of a line to play the whole line that many times:
 
-```kf-
-1 4 5 1 x2        these four bars, played twice (eight bars)
+```kf+
+1 4 5 1 x2        ; these four bars, played twice (eight bars)
 ```
 
 ## Repeat a span — `|: … :|`

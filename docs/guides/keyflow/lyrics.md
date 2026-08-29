@@ -10,14 +10,6 @@ order: 7
 Words go under the music as a **`[lyrics]` line** inside a section — right below
 the chords they're sung against:
 
-```kf-
-VS 4
-C  C  F  C
-[lyrics] Twinkle twinkle little star
-```
-
-Words under the chords, engraved:
-
 ```kf+
 VS 4
 C  C  F  C
@@ -67,7 +59,7 @@ land on any syllable:
 
 Stack a `[lyrics]` line for each set of words that shares the same chords:
 
-```kf-
+```kf+
 CH 4
 F  C  G  Am
 [lyrics] first time round we sing this line

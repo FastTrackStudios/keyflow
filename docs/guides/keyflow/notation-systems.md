@@ -40,8 +40,8 @@ Write it in numbers instead and it's the same music as scale degrees:
 Absolute pitch. The root is a note `A`–`G` with an optional accidental, and the
 quality is written out explicitly:
 
-```kf-
-C    F#    Bb    Am    Cmaj7    F#m7b5
+```kf+
+C    ; F#    Bb    Am    Cmaj7    F#m7b5
 ```
 
 Letter names don't depend on the key — `C` is always C.
@@ -96,7 +96,7 @@ When a number or numeral is followed by a quality that *starts with a digit*,
 the two runs of digits can be hard to read — is `17` "degree 1, seventh" or the
 number seventeen? Optionally put a colon between the root and the quality:
 
-```kf-
+```kf+
 1:7      4:maj9      2:m7      5:9
 ```
 
@@ -122,10 +122,10 @@ Letter names are the opposite: fixed pitches that ignore the key.
 Put `#` (sharp) or `b` (flat) before a degree or numeral to raise or lower it —
 exactly how you write a borrowed or chromatic chord:
 
-```kf-
-1  b3  4  b7        (numbers)   ♭3 and ♭7 borrowed
-I  bIII  IV  bVII   (Roman)     ♭III and ♭VII borrowed
-1  #4  5            sharpened 4th
+```kf+
+1  b3  4  b7        ; (numbers)   ♭3 and ♭7 borrowed
+I  bIII  IV  bVII   ; (Roman)     ♭III and ♭VII borrowed
+1  #4  5            ; sharpened 4th
 ```
 
 Since almost no one can type a real ♭ glyph, Keyflow treats the plain letter

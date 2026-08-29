@@ -9,7 +9,7 @@ order: 1
 
 Every Keyflow file has the same two-part shape:
 
-```kf-
+```kf+
 Vienna (Live) - Billy Joel    ← header: what the song is
 4/4 140bpm #Gm
 
@@ -113,7 +113,7 @@ A semicolon starts a comment. Everything after it on the line is ignored:
 
 A complete header, with the music that follows it:
 
-```kf-
+```kf+
 Build My Life - Housefires
 68bpm 4/4 #G
 
