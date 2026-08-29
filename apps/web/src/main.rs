@@ -31,13 +31,19 @@ pub enum Route {
     Chart { data: String },
     #[route("/guide")]
     GuideIndex {},
+    // Before `/guide/:slug`, or "graph" would match as a page slug.
+    #[route("/guide/graph")]
+    GuideGraph {},
     #[route("/guide/:slug")]
     GuidePage { slug: String },
+    // The workbench: the same chapter, with an editor and a live chart.
+    #[route("/learn/:slug")]
+    Workbench { slug: String },
     #[route("/:..segments")]
     NotFound { segments: Vec<String> },
 }
 
-use routes::{Chart, Editor, GuideIndex, GuidePage, Home, NotFound};
+use routes::{Chart, Editor, GuideGraph, GuideIndex, GuidePage, Home, NotFound, Workbench};
 
 fn main() {
     #[cfg(target_arch = "wasm32")]
@@ -47,6 +53,15 @@ fn main() {
     }
     #[cfg(not(target_arch = "wasm32"))]
     tracing_subscriber::fmt::init();
+
+    // The editor renders ```kf fences through a registry rather than a
+    // dependency — `editor-state` sits below the notation domain and must
+    // not know keyflow exists. Without this, charts in the guide render as
+    // source instead of engraving.
+    editor_state::fence_renderer::register_fence_renderer(
+        "kf",
+        std::sync::Arc::new(editor_keyflow::Fences),
+    );
 
     dioxus::launch(App);
 }

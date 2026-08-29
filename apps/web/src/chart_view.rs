@@ -75,7 +75,18 @@ pub fn ChartSvg(
     // source, so it belongs in the render path. The earlier effect-based
     // version wrote a signal the component also read, which re-entered on
     // every pass.
-    let rendered = use_memo(move || engrave(&source, snippet, layout_width));
+    //
+    // `use_reactive!` is load-bearing, not decoration. A bare
+    // `use_memo(move || engrave(&source, ..))` captures `source` by move on
+    // the FIRST render and never re-runs, because a plain `String` prop is
+    // not a reactive dependency — the memo has nothing to subscribe to. The
+    // chart then freezes on whatever it was seeded with while the textarea
+    // happily updates, which is exactly how this shipped the first time.
+    let rendered = use_memo(use_reactive!(|(source, snippet, layout_width)| engrave(
+        &source,
+        snippet,
+        layout_width
+    )));
 
     match &*rendered.read() {
         // Output of our own serialiser over our own parser — not user HTML.
@@ -201,11 +212,61 @@ mod tests {
     }
 
     #[test]
-    fn the_font_face_block_is_emitted_once_and_covers_every_family() {
-        let css = ChartLayoutManager::new().unwrap().font_face_css();
-        for family in ["Bravura", "MuseJazzText", "FreeSans"] {
-            assert!(css.contains(family), "{family} missing from the font CSS");
+    fn every_font_the_svg_asks_for_is_declared_in_the_css() {
+        // The bug this exists to catch: the chart scene emits chord
+        // symbols as `MuseJazz Text` — WITH a space, matching the font's
+        // internal name — while the exporters declared `MuseJazzText`.
+        // The family never resolved, chord symbols fell back to a system
+        // sans, and every `maj7` triangle rendered blank. Same class of
+        // error had Leland's bytes filed under `Bravura`.
+        //
+        // A missing @font-face does not error; it silently falls back. So
+        // the invariant has to be asserted, not eyeballed.
+        let mut manager = ChartLayoutManager::new().unwrap();
+        manager
+            .parse_and_layout("VS: | Cmaj7 F#m7b5 | Bbmaj9 G7b9 |\n", 900.0, true)
+            .unwrap();
+        let svg = manager.export_svg_snippet().unwrap();
+        let css = manager.font_face_css();
+
+        for family in svg_font_families(&svg) {
+            // Generic CSS families are the browser's job, not ours.
+            if matches!(family.as_str(), "sans-serif" | "serif" | "monospace") {
+                continue;
+            }
+            assert!(
+                css.contains(&format!("font-family: '{family}'")),
+                "the chart asks for `{family}` but no @font-face declares it — \
+                 it will silently fall back to a system font"
+            );
         }
+    }
+
+    #[test]
+    fn the_chord_font_is_declared_under_the_name_the_scene_uses() {
+        // Pinned separately because it is the specific regression, and
+        // because "MuseJazz Text" vs "MuseJazzText" is exactly the kind of
+        // difference a reviewer's eye slides over.
+        let css = ChartLayoutManager::new().unwrap().font_face_css();
+        assert!(
+            css.contains("font-family: 'MuseJazz Text'"),
+            "the spaced chord-font family is missing from the font CSS"
+        );
+    }
+
+    /// Every `font-family="..."` value in an SVG document.
+    fn svg_font_families(svg: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut rest = svg;
+        while let Some(i) = rest.find("font-family=\"") {
+            let after = &rest[i + 13..];
+            let Some(j) = after.find('"') else { break };
+            out.push(after[..j].to_string());
+            rest = &after[j..];
+        }
+        out.sort();
+        out.dedup();
+        out
     }
 
     #[test]
@@ -214,24 +275,32 @@ mod tests {
     }
 
     #[test]
-    fn every_guide_example_engraves() {
-        // The guide's `kf+` fences are its claim that a fragment is real
-        // Keyflow. This checks the rest of the pipeline agrees — parsing is
-        // not enough, it has to lay out and serialise too.
+    fn every_engraved_guide_fence_still_engraves() {
+        // A ```kf+ fence is the guide asserting "this is a real chart".
+        // The editor renders these now, but the claim is the same, and
+        // this is what notices when a guide example stops being valid.
         for page in crate::guide::GUIDE_PAGES {
-            for block in page.blocks {
-                if let crate::guide::Block::Keyflow {
-                    source,
-                    engrave: true,
-                } = block
-                {
-                    assert!(
-                        engrave(source, true, 900.0).is_ok(),
-                        "guide page `{}` has a fence that will not engrave:\n{source}",
-                        page.slug
-                    );
-                }
+            for source in engraved_fences(page.source) {
+                assert!(
+                    engrave(&source, true, 900.0).is_ok(),
+                    "guide page `{}` has a kf+ fence that will not engrave:\n{source}",
+                    page.slug
+                );
             }
         }
+    }
+
+    /// Bodies of the ```kf+ fences in a note — the ones the guide marks
+    /// as real charts rather than syntax illustrations.
+    fn engraved_fences(source: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut rest = source;
+        while let Some(i) = rest.find("```kf+\n") {
+            let after = &rest[i + 7..];
+            let Some(j) = after.find("\n```") else { break };
+            out.push(after[..j].to_string());
+            rest = &after[j..];
+        }
+        out
     }
 }

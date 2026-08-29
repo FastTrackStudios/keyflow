@@ -1,18 +1,34 @@
-//! The guide.
+//! The guide — a vault page, rendered by the editor.
 //!
-//! Pages come from `docs/guides/keyflow/*.md`, rendered to HTML at build
-//! time (see `build.rs`). What stays live is the part that has to be: a
-//! ` ```kf+ ` fence — the guides' own marker for "this is a real chart" —
-//! is engraved by the chart renderer and carries a link that opens it in
-//! the editor. So every example in the guide is a chart you can take away
-//! and start editing, which is the point of teaching a language this way.
+//! The page is not pre-rendered HTML. It is the note's markdown, handed to
+//! the real editor in read-only mode, which is what buys:
+//!
+//! - **`[[wikilink]]` navigation.** The editor renders them as links and
+//!   fires `on_link_click` with the target; the site turns that into a
+//!   route. No markdown rewriting, no link syntax of our own.
+//! - **The ```kf fence family, natively.** `kf`, `kf+` and `kf-` are
+//!   already the editor's convention *and* the guides' — a `kf+` fence
+//!   shows source and chart, `kf-` shows highlighted source, `kf` shows
+//!   the chart with a source toggle. `editor-keyflow` registers the
+//!   renderer that engraves them (see [`crate::App`]).
+//! - Everything else the editor does with markdown, for free, and staying
+//!   in step with it rather than drifting.
+//!
+//! Three columns: the table of contents on the left, the note in the
+//! middle, and on the right the **local graph** — this concept and
+//! everything one hop from it, drawn and clickable. That is the view that
+//! makes a vault feel like a vault rather than a chapter list: you can see
+//! what a page touches, and go there, without reading it first.
 
 use dioxus::prelude::*;
+use editor::{Editor, EditorState};
+use editor_state::doc::Doc;
+use editor_state::selection::Selection;
+
+use view_knowledge_graph::{KnowledgeGraphView, model::ColorMode};
 
 use crate::Route;
-use crate::chart_url;
-use crate::chart_view::{ChartFonts, ChartSvg};
-use crate::guide::{self, Block};
+use crate::guide;
 use crate::routes::Shell;
 
 /// `/guide` — opens at the first page.
@@ -23,9 +39,11 @@ pub fn GuideIndex() -> Element {
     }
 }
 
-/// `/guide/:slug` — one guide page, with the contents alongside.
+/// `/guide/:slug` — one note, with its contents and backlinks.
 #[component]
 pub fn GuidePage(slug: String) -> Element {
+    let nav = navigator();
+
     let Some(page) = guide::page(&slug) else {
         return rsx! {
             Shell {
@@ -37,59 +55,138 @@ pub fn GuidePage(slug: String) -> Element {
         };
     };
 
+    // Reading mode, not just `editable: false`: the former also keeps
+    // every source marker hidden regardless of caret position, which is
+    // what makes this read as a document rather than an editor someone
+    // switched off.
+    let state = use_signal(|| EditorState {
+        doc: Doc::from_str(page.body),
+        selection: Selection::caret(0),
+        folds: Vec::new(),
+        reading_mode: true,
+    });
+
+    let graph = use_memo(guide::graph);
+    let slug_for_local = page.slug;
+    let backlinks = use_memo(move || guide::backlinks(&graph.read(), &slug));
+    let local = use_memo(move || guide::local_graph(&graph.read(), slug_for_local));
+
     rsx! {
         Shell {
-            ChartFonts {}
+            document::Link { rel: "stylesheet", href: editor::EDITOR_STYLE }
             div { class: "kf-guide",
-                nav { class: "kf-guide-toc",
-                    for entry in guide::GUIDE_PAGES {
+                GuideToc { current: page.slug }
+
+                article { class: "kf-guide-page",
+                    div { class: "kf-page-actions",
                         Link {
-                            to: Route::GuidePage { slug: entry.slug.to_string() },
-                            class: if entry.slug == page.slug { "kf-toc-current" } else { "" },
-                            "{entry.title}"
+                            to: Route::Workbench { slug: page.slug.to_string() },
+                            class: "kf-button kf-button-primary",
+                            "Try this chapter"
                         }
                     }
-                }
-                article { class: "kf-prose",
-                    for (i, block) in page.blocks.iter().enumerate() {
-                        GuideBlock { key: "{page.slug}-{i}", block: block }
+                    Editor {
+                        state,
+                        // Read-only: contenteditable off, no keymap, no vim.
+                        // Link clicks still fire, which is the whole point.
+                        editable: false,
+                        decorations: editor::editor_view::DecorationSource::ptr(editor::combined_decorations),
+                        on_link_click: move |href: String| {
+                            // A wikilink hands back its target. Anything
+                            // that names a guide page routes internally;
+                            // everything else is left to the browser.
+                            let target = href.split('|').next().unwrap_or(&href).trim().to_owned();
+                            if guide::page(&target).is_some() {
+                                nav.push(Route::GuidePage { slug: target });
+                            }
+                        },
                     }
+
+                    Backlinks { pages: backlinks() }
                 }
+
+                LocalGraph { graph: local(), current: page.slug }
             }
         }
     }
 }
 
+/// This page and everything one hop from it.
+///
+/// Nodes are coloured by community, matching the full graph view, so the
+/// two reads agree about which cluster a concept belongs to. Clicking a
+/// node navigates.
 #[component]
-fn GuideBlock(block: &'static Block) -> Element {
-    match block {
-        // Build-time output from our own guide sources, not user input.
-        Block::Html(html) => rsx! { div { dangerous_inner_html: "{html}" } },
+fn LocalGraph(graph: view_knowledge_graph::model::WikiGraph, current: &'static str) -> Element {
+    let nav = navigator();
 
-        // `kf-`: a syntax illustration. Often not valid Keyflow on its own
-        // (the guides annotate these with `→`), so it is shown as source and
-        // never handed to the parser.
-        Block::Keyflow {
-            source,
-            engrave: false,
-        } => rsx! { pre { class: "kf-source", "{source}" } },
+    // A page with no links has nothing to draw, and an empty box beside
+    // the text reads as broken rather than as "no connections".
+    if graph.nodes.len() < 2 {
+        return rsx! {};
+    }
 
-        // `kf+`: a real chart. Engrave it, and let the reader take it.
-        Block::Keyflow {
-            source,
-            engrave: true,
-        } => rsx! {
-            figure { class: "kf-example",
-                ChartSvg { source: (*source).to_string() }
-                figcaption {
-                    pre { class: "kf-source", "{source}" }
-                    Link {
-                        to: Route::Chart { data: chart_url::encode(source) },
-                        class: "kf-button",
-                        "Open in the editor"
+    rsx! {
+        aside { class: "kf-local-graph",
+            h2 { "Connections" }
+            div { class: "kf-local-graph-canvas",
+                KnowledgeGraphView {
+                    graph,
+                    color_mode: ColorMode::Community,
+                    // Marks the page you are on without dimming the rest —
+                    // `highlighted` would, and here everything IS relevant.
+                    active: Some(current.to_string()),
+                    // Tighter than the full view: this is a handful of
+                    // nodes in a narrow rail, not a whole map.
+                    spacing: 0.6,
+                    on_node_click: move |id: String| {
+                        if guide::page(&id).is_some() {
+                            nav.push(Route::GuidePage { slug: id });
+                        }
+                    },
+                }
+            }
+            Link { to: Route::GuideGraph {}, class: "kf-note", "See the whole graph" }
+        }
+    }
+}
+
+/// The guide's table of contents, in reading order.
+#[component]
+fn GuideToc(current: &'static str) -> Element {
+    rsx! {
+        nav { class: "kf-guide-toc",
+            for entry in guide::GUIDE_PAGES {
+                Link {
+                    to: Route::GuidePage { slug: entry.slug.to_string() },
+                    class: if entry.slug == current { "kf-toc-current" } else { "" },
+                    "{entry.title}"
+                }
+            }
+            Link { to: Route::GuideGraph {}, class: "kf-toc-graph", "Graph" }
+        }
+    }
+}
+
+/// What leads here.
+///
+/// Rendered only when there is something to show — an empty "Referenced
+/// by" heading is worse than none.
+#[component]
+fn Backlinks(pages: Vec<&'static guide::GuidePage>) -> Element {
+    if pages.is_empty() {
+        return rsx! {};
+    }
+    rsx! {
+        footer { class: "kf-backlinks",
+            h2 { "Referenced by" }
+            ul {
+                for p in pages {
+                    li { key: "{p.slug}",
+                        Link { to: Route::GuidePage { slug: p.slug.to_string() }, "{p.title}" }
                     }
                 }
             }
-        },
+        }
     }
 }

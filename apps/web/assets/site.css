@@ -215,17 +215,199 @@ body {
 
 /* ── Guide ───────────────────────────────────────────────────────── */
 
+/* Three columns: contents, the note, the local graph. The note column is
+ * the only one that grows — the rails are fixed so line length stays in
+ * the readable range on a wide display. */
 .kf-guide {
   display: grid;
-  grid-template-columns: 14rem minmax(0, 1fr);
-  gap: clamp(1.5rem, 4vw, 3rem);
-  max-width: 68rem;
+  grid-template-columns: 13rem minmax(0, 1fr) 17rem;
+  gap: clamp(1.25rem, 3vw, 2.5rem);
+  max-width: 84rem;
   margin: 0 auto;
+  align-items: start;
+}
+
+/* The graph rail goes first as the viewport narrows: it is orientation,
+ * and the contents list already covers navigation. */
+@media (max-width: 76rem) {
+  .kf-guide { grid-template-columns: 13rem minmax(0, 1fr); }
+  .kf-local-graph { display: none; }
 }
 
 @media (max-width: 55rem) {
   .kf-guide { grid-template-columns: minmax(0, 1fr); }
 }
+
+.kf-guide-page { min-width: 0; }
+
+/* ── Local graph rail ────────────────────────────────────────────── */
+
+.kf-local-graph {
+  position: sticky;
+  top: 1.5rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.kf-local-graph h2 {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+/* The graph view fills its container, so the container has to have one —
+ * without an explicit height it collapses to nothing. */
+.kf-local-graph-canvas {
+  height: 17rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+/* ── Whole-guide graph ───────────────────────────────────────────── */
+
+.kf-graph-screen {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 14rem;
+  gap: 1rem;
+  height: calc(100vh - 9rem);
+  max-width: 84rem;
+  margin: 0 auto;
+}
+
+.kf-graph-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.kf-graph-bar h1 { font-size: 1.3rem; margin: 0; letter-spacing: -0.02em; }
+
+.kf-graph-search {
+  flex: 1;
+  min-width: 10rem;
+  max-width: 22rem;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.kf-graph-canvas {
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.kf-graph-legend { overflow-y: auto; font-size: 0.85rem; }
+
+@media (max-width: 60rem) {
+  .kf-graph-screen {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+  }
+  .kf-graph-canvas { height: 60vh; }
+}
+
+/* ── Workbench ───────────────────────────────────────────────────── */
+/* Read and experiment at once: editor top-left, chapter bottom-left,
+ * live chart down the right. The editor pane is fixed and the guide
+ * pane scrolls, so typing never pushes the chart off screen. */
+.kf-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  grid-template-rows: auto 15rem minmax(0, 1fr);
+  grid-template-areas:
+    "bar     bar"
+    "editor  preview"
+    "guide   preview";
+  gap: 1rem;
+  height: calc(100vh - 8rem);
+  max-width: 96rem;
+  margin: 0 auto;
+}
+
+.kf-workbench-bar {
+  grid-area: bar;
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.kf-workbench-bar h1 { margin: 0; font-size: 1.2rem; letter-spacing: -0.02em; }
+.kf-workbench-bar .kf-button { margin-left: auto; }
+
+.kf-workbench-editor { grid-area: editor; min-height: 0; display: flex; }
+.kf-workbench-editor .kf-editor-source { min-height: 0; }
+
+.kf-workbench-guide {
+  grid-area: guide;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+  border-top: 1px solid var(--line);
+}
+
+.kf-workbench-preview {
+  grid-area: preview;
+  min-height: 0;
+  overflow: auto;
+}
+
+.kf-example-picker {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.6rem 0;
+  background: var(--bg);
+}
+.kf-example-picker .kf-button { padding: 0.15rem 0.55rem; font-size: 0.8rem; }
+
+/* Below this the three panes stop being readable side by side; stack
+ * them and let the page scroll instead. */
+@media (max-width: 68rem) {
+  .kf-workbench {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 14rem 22rem minmax(0, 1fr);
+    grid-template-areas: "bar" "editor" "preview" "guide";
+    height: auto;
+  }
+  .kf-workbench-guide { overflow-y: visible; }
+}
+
+/* ── Backlinks ───────────────────────────────────────────────────── */
+
+.kf-backlinks {
+  margin-top: 3rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+}
+.kf-backlinks h2 {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.kf-backlinks ul { list-style: none; margin: 0; padding: 0; }
+.kf-backlinks li { margin: 0.2rem 0; }
+.kf-backlinks a { color: var(--accent); text-decoration: none; }
+
+.kf-toc-graph { margin-top: 0.6rem; color: var(--accent) !important; }
 
 .kf-guide-toc { display: flex; flex-direction: column; gap: 0.35rem; align-self: start; }
 .kf-guide-toc a { color: var(--ink-soft); text-decoration: none; font-size: 0.925rem; }
@@ -277,3 +459,5 @@ body {
 
 .kf-example { margin: 1.5rem 0; display: grid; gap: 0.75rem; }
 .kf-example figcaption { display: grid; gap: 0.6rem; justify-items: start; }
+
+.kf-page-actions { display: flex; justify-content: flex-end; margin-bottom: 0.5rem; }

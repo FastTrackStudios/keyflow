@@ -157,6 +157,47 @@ impl ChartFontBundle {
     /// font configuration — both REAPER and web should use this method.
     ///
     /// Only available with the `wgpu` (GPU renderer) feature.
+    /// Every `(font-family, bytes)` pair a rendered scene can reference.
+    ///
+    /// The GPU renderer registers these as named fonts; SVG and PDF export
+    /// need the same list to emit `@font-face` rules, and the two MUST
+    /// agree — a scene node asks for a family by name, and a name the
+    /// output does not declare silently falls back to a system font.
+    ///
+    /// That drift is not hypothetical. Export used to declare `Bravura`,
+    /// `MuseJazzText` and `FreeSans` by hand, which was wrong three ways:
+    /// the chord font is emitted as `MuseJazz Text` *with a space* (it
+    /// matches the font's internal name — see `tlayout::harmony`), so
+    /// chord symbols never resolved and every `maj7` triangle rendered
+    /// blank; and the bytes filed under `Bravura` and `FreeSans` were
+    /// actually Leland and ChicagoFLF. The GPU path was unaffected only
+    /// because it registers both spellings as aliases.
+    ///
+    /// Hence one list, here, used by both.
+    #[must_use]
+    pub fn embeddable_fonts(&self) -> Vec<(&'static str, Arc<Vec<u8>>)> {
+        vec![
+            // Chord symbols. BOTH spellings: the scene emits the spaced
+            // form, older style defaults the unspaced one.
+            ("MuseJazz Text", self.text_font_data.clone()),
+            ("MuseJazzText", self.text_font_data.clone()),
+            ("MuseJazz", self.musejazz_font_data.clone()),
+            // SMuFL.
+            ("Leland", self.symbol_font_data.clone()),
+            ("Leland Text", self.leland_text_font_data.clone()),
+            ("LelandText", self.leland_text_font_data.clone()),
+            ("Edwin", self.leland_text_font_data.clone()),
+            ("Bravura", self.bravura_font_data.clone()),
+            // Document text.
+            ("Chicago", self.aux_font_data.clone()),
+            ("ChicagoFLF", self.aux_font_data.clone()),
+            ("FreeSans", self.freesans_font_data.clone()),
+            ("section-note", self.aux_font_data.clone()),
+            ("title-bold", self.aux_font_data.clone()),
+            ("part-name-bold", self.aux_font_data.clone()),
+        ]
+    }
+
     #[cfg(feature = "wgpu")]
     #[must_use]
     pub fn configure_renderer<'a>(

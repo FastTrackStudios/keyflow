@@ -1,26 +1,28 @@
 //! Compile `docs/guides/keyflow/*.md` into the site.
 //!
-//! The guide is read-only, so there is no reason to ship a markdown parser
-//! to the browser: the whole thing is rendered here and the wasm bundle
-//! carries finished HTML.
+//! The guide is a **vault**: the files under `docs/guides/keyflow/` are
+//! wiki notes with frontmatter, `[[wikilink]]` cross-references, and
+//! Keyflow fences. The site does not pre-render them — it ships the
+//! markdown and renders it through the real editor in read-only mode, so
+//! the guide gets wikilink navigation, folds and the ```kf fence family
+//! for free rather than through a bespoke markdown pass that would drift
+//! from the editor's.
 //!
-//! This reads *outside the crate*, which the repo otherwise forbids
-//! (see CLAUDE.md). The rule exists because `include_str!` across a
-//! boundary is invisible to cargo and fails at compile time rather than
-//! resolution time. A build script is the sanctioned way to do it: the
-//! dependency is explicit, and `cargo:rerun-if-changed` makes cargo aware
-//! of it, so editing a guide rebuilds the site.
+//! (It did have such a pass, briefly. Replacing it with the editor is why
+//! this file lost its markdown renderer and its fence splitter — both
+//! were reimplementing, less well, something the editor already does.)
 //!
-//! # Fence convention
+//! So this build script does very little: read the notes, pull `title` and
+//! `order` out of the frontmatter for the table of contents, and emit the
+//! bodies as `&'static str`. That same text feeds the knowledge graph,
+//! which is built in the browser.
 //!
-//! The guides already distinguish two kinds of Keyflow block, and the site
-//! honours the distinction rather than inventing its own:
-//!
-//! - ` ```kf- ` — **source only**. Illustrates syntax, and often is not
-//!   valid Keyflow on its own (the guides annotate these with `→` to
-//!   explain what a form means). Rendered as a highlighted code block.
-//! - ` ```kf+ ` — **engrave this**. A real chart fragment. Rendered live by
-//!   the chart renderer, with a link that opens it in the editor.
+//! It reads *outside the crate*, which the repo otherwise forbids (see
+//! CLAUDE.md). The rule exists because `include_str!` across a boundary is
+//! invisible to cargo and fails at compile time rather than resolution
+//! time. A build script is the sanctioned way: the dependency is explicit,
+//! and `cargo:rerun-if-changed` makes cargo aware of it, so editing a
+//! guide page rebuilds the site.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -51,20 +53,29 @@ fn main() {
         let raw = std::fs::read_to_string(&path)
             .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
 
-        let (front, body) = split_frontmatter(&raw);
-        let title = front
-            .get("title")
-            .cloned()
-            .unwrap_or_else(|| slug.replace('-', " "));
-        let order: u32 = front
-            .get("order")
+        let front = frontmatter(&raw);
+        let title = fm_scalar(front, "title").unwrap_or_else(|| slug.replace('-', " "));
+        let order: u32 = fm_scalar(front, "order")
             .and_then(|o| o.parse().ok())
             .unwrap_or(u32::MAX);
 
-        pages.insert(
-            (order, slug.clone()),
-            render_page(&slug, &title, order, body),
+        // Two forms of the same note, and they are not interchangeable:
+        //
+        // `source` keeps the frontmatter, because the graph builder reads
+        // `type:` out of it to classify nodes.
+        //
+        // `body` drops it, because that is what the editor renders. The
+        // editor treats frontmatter as an editable property table — right
+        // for a vault app, wrong for a published guide, where it shows up
+        // as a "+ Add property" button above the first heading.
+        let body = strip_frontmatter(&raw);
+        let mut lit = String::new();
+        let _ = write!(
+            lit,
+            "    GuidePage {{\n        slug: {slug:?},\n        title: {title:?},\n        \
+             order: {order},\n        source: {raw:?},\n        body: {body:?},\n    }},\n"
         );
+        pages.insert((order, slug), lit);
     }
 
     assert!(
@@ -98,171 +109,33 @@ fn guides_dir() -> PathBuf {
     repo.join("docs").join("guides").join("keyflow")
 }
 
-/// Split leading `---`-delimited YAML frontmatter from the body.
-///
-/// Deliberately not a YAML parser: the guides use flat `key: value` pairs,
-/// and a dependency to read four scalars would not earn its place.
-fn split_frontmatter(raw: &str) -> (BTreeMap<String, String>, &str) {
-    let mut map = BTreeMap::new();
+/// The note with its frontmatter block removed.
+fn strip_frontmatter(raw: &str) -> &str {
     let Some(rest) = raw.strip_prefix("---\n") else {
-        return (map, raw);
+        return raw;
     };
-    let Some(end) = rest.find("\n---\n") else {
-        return (map, raw);
+    match rest.find("\n---") {
+        // +4 for the closing "\n---", then past its line ending.
+        Some(end) => rest[end + 4..].trim_start_matches(['\r', '\n']),
+        None => raw,
+    }
+}
+
+/// The `---`-delimited frontmatter block, without its fences.
+fn frontmatter(raw: &str) -> &str {
+    let Some(rest) = raw.strip_prefix("---\n") else {
+        return "";
     };
-    for line in rest[..end].lines() {
-        if let Some((k, v)) = line.split_once(':') {
-            map.insert(k.trim().to_owned(), v.trim().to_owned());
-        }
-    }
-    (map, &rest[end + "\n---\n".len()..])
+    rest.find("\n---").map_or("", |end| &rest[..end])
 }
 
-/// Emit one `GuidePage { .. }` literal.
-fn render_page(slug: &str, title: &str, order: u32, body: &str) -> String {
-    let mut blocks = String::new();
-    for block in split_blocks(body) {
-        match block {
-            Block::Markdown(md) => {
-                let _ = write!(blocks, "        Block::Html({:?}),\n", markdown_to_html(md));
-            }
-            Block::Keyflow { source, engrave } => {
-                let _ = write!(
-                    blocks,
-                    "        Block::Keyflow {{ source: {source:?}, engrave: {engrave} }},\n"
-                );
-            }
-        }
-    }
-    format!(
-        "    GuidePage {{\n        \
-         slug: {slug:?},\n        title: {title:?},\n        order: {order},\n        \
-         blocks: &[\n{blocks}        ],\n    }},\n"
-    )
-}
-
-enum Block<'a> {
-    Markdown(&'a str),
-    Keyflow { source: &'a str, engrave: bool },
-}
-
-/// Split a page into prose runs and Keyflow fences.
+/// Read a flat `key: value` line out of a frontmatter block.
 ///
-/// Only `kf-` / `kf+` fences are pulled out; every other fence (```text,
-/// bare ```) stays inside the prose and is rendered as an ordinary code
-/// block by the markdown pass.
-fn split_blocks(body: &str) -> Vec<Block<'_>> {
-    let mut blocks = Vec::new();
-    let mut rest = body;
-
-    while let Some(open) = find_kf_fence(rest) {
-        if open.start > 0 {
-            blocks.push(Block::Markdown(&rest[..open.start]));
-        }
-        let after_open = &rest[open.body_start..];
-        match after_open.find("\n```") {
-            Some(close) => {
-                blocks.push(Block::Keyflow {
-                    source: after_open[..close].trim_matches('\n'),
-                    engrave: open.engrave,
-                });
-                rest = after_open[close..]
-                    .strip_prefix("\n```")
-                    .unwrap_or("")
-                    .trim_start_matches(|c| c != '\n');
-            }
-            // Unterminated fence: treat the remainder as prose rather than
-            // silently swallowing the rest of the page.
-            None => {
-                blocks.push(Block::Markdown(&rest[open.start..]));
-                rest = "";
-                break;
-            }
-        }
-    }
-    if !rest.is_empty() {
-        blocks.push(Block::Markdown(rest));
-    }
-    blocks
-}
-
-struct Fence {
-    start: usize,
-    body_start: usize,
-    engrave: bool,
-}
-
-fn find_kf_fence(hay: &str) -> Option<Fence> {
-    for (marker, engrave) in [("```kf+\n", true), ("```kf-\n", false)] {
-        if let Some(start) = find_at_line_start(hay, marker) {
-            return Some(Fence {
-                start,
-                body_start: start + marker.len(),
-                engrave,
-            });
-        }
-    }
-    None
-}
-
-/// Find `needle` only where it begins a line — a fence inside an indented
-/// block or mid-sentence is not a fence.
-fn find_at_line_start(hay: &str, needle: &str) -> Option<usize> {
-    let mut from = 0;
-    while let Some(hit) = hay[from..].find(needle) {
-        let at = from + hit;
-        if at == 0 || hay.as_bytes()[at - 1] == b'\n' {
-            return Some(at);
-        }
-        from = at + 1;
-    }
-    None
-}
-
-/// Rewrite Obsidian-style wiki links into guide routes.
-///
-/// The guides are vault notes as well as site pages, and they cross-link
-/// each other as `[[slug]]` or `[[slug|Label]]`. Left alone those render as
-/// literal brackets, which is what the first build of the site shipped.
-/// Rewritten *before* the markdown pass so the result is an ordinary link.
-fn wiki_links_to_markdown(md: &str) -> String {
-    let mut out = String::with_capacity(md.len());
-    let mut rest = md;
-
-    while let Some(open) = rest.find("[[") {
-        out.push_str(&rest[..open]);
-        let after = &rest[open + 2..];
-        let Some(close) = after.find("]]") else {
-            // Unclosed: leave the text exactly as written rather than
-            // swallowing the remainder of the page.
-            out.push_str(&rest[open..]);
-            return out;
-        };
-        let (target, label) = match after[..close].split_once('|') {
-            Some((t, l)) => (t.trim(), l.trim()),
-            None => {
-                let t = after[..close].trim();
-                (t, t)
-            }
-        };
-        out.push_str(&format!("[{label}](/guide/{target})"));
-        rest = &after[close + 2..];
-    }
-    out.push_str(rest);
-    out
-}
-
-fn markdown_to_html(md: &str) -> String {
-    use pulldown_cmark::{Options, Parser, html};
-
-    let md = wiki_links_to_markdown(md);
-
-    let mut options = Options::empty();
-    options.insert(Options::ENABLE_TABLES);
-    options.insert(Options::ENABLE_STRIKETHROUGH);
-    options.insert(Options::ENABLE_FOOTNOTES);
-
-    let mut out = String::new();
-    html::push_html(&mut out, Parser::new_ext(&md, options));
-    out
+/// Deliberately not a YAML parser: the guides use flat scalars, and a
+/// dependency to read two of them would not earn its place.
+fn fm_scalar(front: &str, key: &str) -> Option<String> {
+    front.lines().find_map(|line| {
+        let (k, v) = line.split_once(':')?;
+        (k.trim() == key).then(|| v.trim().trim_matches(['"', '\'']).to_owned())
+    })
 }

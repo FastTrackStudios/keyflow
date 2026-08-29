@@ -5,11 +5,6 @@ edition.workspace = true
 license.workspace = true
 description = "keyflow.fasttrackstudio.app — the Keyflow landing page, live editor, and guide"
 
-[build-dependencies]
-# The guide is rendered at build time, so no markdown parser reaches the
-# browser — see build.rs.
-pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
-
 [dependencies]
 # The language. `text` for the parser; the site never touches keyflow-text
 # directly (facade rule).
@@ -30,6 +25,16 @@ architect-ui = { workspace = true }
 # The guide's knowledge graph. Pure and FS-free by design, so the graph is
 # built in the browser from the same markdown the pages are rendered from.
 view-knowledge-graph = { workspace = true }
+
+# The guide is a vault, and it renders through the real editor in
+# read-only mode rather than a bespoke markdown pass. That is what gives
+# it `[[wikilink]]` navigation, folds and the ```kf fence family for free
+# — the editor already understands all of it.
+editor = { workspace = true }
+editor-state = { workspace = true }
+# Registers the chart renderer into editor-state's fence registry, so
+# ```kf+ fences in the guide engrave instead of showing source.
+editor-keyflow = { workspace = true }
 dioxus = { workspace = true, features = ["router"] }
 
 # Chart-in-URL codec: deflate then base64url, so a whole chart fits in a

@@ -67,5 +67,3 @@ string says how the snippet renders:
 
 `kf` and `kf+` charts also carry a small `</>` button (top-right, on hover)
 that flips the source open or closed while you read, plus a copy button.
-
-Back to all [[guides|Guides]].

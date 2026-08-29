@@ -1629,38 +1629,23 @@ impl ChartLayoutManager {
 
         let mut svg_pages = Vec::with_capacity(layout.pages.len());
         for page in &layout.pages {
-            let config =
-                SvgExportConfig::for_page(page.x_offset, page.y_offset, page.width, page.height)
-                    .with_embedded_font(
-                        "Bravura",
-                        self.font_bundle.symbol_font_data().as_ref().clone(),
-                    )
-                    .with_embedded_font(
-                        "MuseJazzText",
-                        self.font_bundle.text_font_data().as_ref().clone(),
-                    )
-                    .with_embedded_font(
-                        "FreeSans",
-                        self.font_bundle.aux_font_data().as_ref().clone(),
-                    );
-
+            let config = self.embed_config(SvgExportConfig::for_page(
+                page.x_offset,
+                page.y_offset,
+                page.width,
+                page.height,
+            ));
             let mut serializer = SvgSerializer::new(config);
             svg_pages.push(serializer.serialize(&layout.scene));
         }
 
-        let symbol_font = self.font_bundle.symbol_font_data();
-        let text_font = self.font_bundle.text_font_data();
-        let aux_font = self.font_bundle.aux_font_data();
+        // Same list, same reason: a family the PDF does not carry falls
+        // back to a system font, and the chord glyphs are not in one.
+        let fonts = self.font_bundle.embeddable_fonts();
+        let font_refs: Vec<(&str, &[u8])> = fonts.iter().map(|(n, b)| (*n, b.as_slice())).collect();
 
-        PdfSerializer::serialize_from_svg(
-            &svg_pages,
-            &[
-                ("Bravura", symbol_font.as_slice()),
-                ("MuseJazzText", text_font.as_slice()),
-                ("FreeSans", aux_font.as_slice()),
-            ],
-        )
-        .map_err(|e| format!("Failed to export PDF: {e}"))
+        PdfSerializer::serialize_from_svg(&svg_pages, &font_refs)
+            .map_err(|e| format!("Failed to export PDF: {e}"))
     }
 
     /// Export the current paginated layout as per-page SVG documents.
@@ -1679,20 +1664,12 @@ impl ChartLayoutManager {
 
         let mut pages = Vec::with_capacity(layout.pages.len());
         for page in &layout.pages {
-            let config =
-                SvgExportConfig::for_page(page.x_offset, page.y_offset, page.width, page.height)
-                    .with_embedded_font(
-                        "Bravura",
-                        self.font_bundle.symbol_font_data().as_ref().clone(),
-                    )
-                    .with_embedded_font(
-                        "MuseJazzText",
-                        self.font_bundle.text_font_data().as_ref().clone(),
-                    )
-                    .with_embedded_font(
-                        "FreeSans",
-                        self.font_bundle.aux_font_data().as_ref().clone(),
-                    );
+            let config = self.embed_config(SvgExportConfig::for_page(
+                page.x_offset,
+                page.y_offset,
+                page.width,
+                page.height,
+            ));
             let mut serializer = SvgSerializer::new(config);
             pages.push(serializer.serialize(&layout.scene));
         }
@@ -1768,24 +1745,26 @@ impl ChartLayoutManager {
 
     /// `@font-face` rules for the chart fonts, as data URIs.
     ///
-    /// Emit once per document alongside [`Self::export_svg_pages_linked`];
-    /// every chart on the page then resolves its fonts from here.
+    /// Emit once per document alongside [`Self::export_svg_pages_linked`]
+    /// or [`Self::export_svg_snippet`]; every chart on the page then
+    /// resolves its fonts from here.
+    ///
+    /// The family list comes from the font bundle, not from this call
+    /// site, so it cannot drift from the names the scene actually emits.
     #[must_use]
     pub fn font_face_css(&self) -> String {
-        SvgExportConfig::default()
-            .with_embedded_font(
-                "Bravura",
-                self.font_bundle.symbol_font_data().as_ref().clone(),
-            )
-            .with_embedded_font(
-                "MuseJazzText",
-                self.font_bundle.text_font_data().as_ref().clone(),
-            )
-            .with_embedded_font(
-                "FreeSans",
-                self.font_bundle.aux_font_data().as_ref().clone(),
-            )
+        self.embed_config(SvgExportConfig::default())
             .font_face_css()
+    }
+
+    /// Attach every embeddable font to an export config.
+    fn embed_config(&self, config: SvgExportConfig) -> SvgExportConfig {
+        self.font_bundle
+            .embeddable_fonts()
+            .into_iter()
+            .fold(config, |c, (family, bytes)| {
+                c.with_embedded_font(family, bytes.as_ref().clone())
+            })
     }
 
     /// Determine which page is currently visible given scroll values.

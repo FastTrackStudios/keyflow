@@ -1,12 +1,16 @@
 //! The site's screens.
 
 mod editor;
+mod graph;
 mod guide_page;
 mod home;
+mod workbench;
 
 pub use editor::{Chart, Editor};
+pub use graph::GuideGraph;
 pub use guide_page::{GuideIndex, GuidePage};
 pub use home::Home;
+pub use workbench::Workbench;
 
 use dioxus::prelude::*;
 
