@@ -115,6 +115,15 @@ impl<'a> ChartParser<'a> {
             } else if !Self::looks_like_metadata_line(line)
                 && !line.is_empty()
                 && !Self::looks_like_chord_content(line)
+                // ...and it is not the first SECTION header. Without this,
+                // a chart that has a title but no metadata line loses its
+                // first section: `My Song` / `VS` / `G C Em D` read `VS`
+                // as the subtitle, and the music then landed in an
+                // implicit Intro instead of the Verse the author wrote.
+                // A metadata line of any kind masked it, which is why it
+                // survived — every chart in the guide and the test corpus
+                // has one.
+                && !Self::looks_like_section_marker(line)
             {
                 // If the line doesn't look like metadata (no bpm, time sig, key),
                 // and doesn't look like chord content, treat it as a subtitle/transcriber line
