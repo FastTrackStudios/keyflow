@@ -22,9 +22,7 @@
 //! themselves are `include_bytes!`-baked into `engraver`, so no
 //! filesystem access is needed at runtime.
 
-use engraver::api;
-use engraver::export::svg::{SvgExportConfig, SvgSerializer};
-use engraver::fonts::ChartFontBundle;
+use engraver::api::pipeline::ChartPipeline;
 use engraver::layout::chart::LayoutMode;
 use thiserror::Error;
 
@@ -121,8 +119,19 @@ pub fn highlight_html(source: &str) -> String {
 /// base64 but the browser parses and caches it a single time, versus
 /// re-embedding it in every keystroke's SVG.
 pub fn font_face_css() -> Result<String, RenderError> {
-    let fonts = ChartFontBundle::new().map_err(RenderError::Render)?;
-    Ok(with_embedded_fonts(&fonts, SvgExportConfig::default()).font_face_css())
+    Ok(pipeline()?.font_face_css())
+}
+
+/// The shared engraving pipeline — one owner of the fonts, the layout
+/// engine and every export.
+///
+/// This crate used to build its own font bundle and carry its own copy
+/// of the family list, with a comment saying the names "mirror
+/// keyflow-cli's exporter". Three crates mirrored each other that way
+/// and one of them drifted, which is how chord symbols came to render in
+/// a system sans. There is one list now, on the font bundle.
+fn pipeline() -> Result<ChartPipeline, RenderError> {
+    ChartPipeline::new().map_err(|e| RenderError::Render(e.to_string()))
 }
 
 /// Shared layout + crop + serialize. `embed_fonts` toggles between
@@ -140,67 +149,16 @@ fn render_inner(source: &str, embed_fonts: bool) -> Result<String, RenderError> 
     let mode = LayoutMode::ContinuousScroll {
         width: LAYOUT_WIDTH,
     };
-    let result =
-        api::chart::layout_text(source, &mode).map_err(|e| RenderError::Render(e.to_string()))?;
+    let chart =
+        keyflow_text::chart::parse_chart(source).map_err(|e| RenderError::Render(e.to_string()))?;
+    let pipeline = pipeline()?;
+    let result = pipeline.layout(&chart, &mode);
 
-    // Shrink-wrap the SVG viewBox to what's actually drawn. The engraver's
-    // `total_width`/`total_height` describe a print page box — content plus A4
-    // margins, inter-system spacing, and below-staff reserve — which for an
-    // inline snippet leaves the music marooned in mostly-empty space (a
-    // one-system chart is ~20pt of music in a ~180pt box). Cropping to the
-    // content bounds (with a little padding) makes the embed size to its
-    // content; the editor's CSS then scales that to the container.
-    let (vx, vy, vw, vh) = match result.content_bounds() {
-        Some(b) => (
-            b.x0 - SNIPPET_PADDING,
-            b.y0 - SNIPPET_PADDING,
-            b.width() + 2.0 * SNIPPET_PADDING,
-            b.height() + 2.0 * SNIPPET_PADDING,
-        ),
-        None => (0.0, 0.0, result.total_width, result.total_height),
-    };
-    let base = SvgExportConfig::for_page(vx, vy, vw, vh);
-    let config = if embed_fonts {
-        let fonts = ChartFontBundle::new().map_err(RenderError::Render)?;
-        with_embedded_fonts(&fonts, base)
+    Ok(if embed_fonts {
+        pipeline.export_svg_snippet_embedded(&result, SNIPPET_PADDING)
     } else {
-        base
-    };
-    let mut serializer = SvgSerializer::new(config);
-    Ok(serializer.serialize(&result.scene))
-}
-
-/// Embed the engraving fonts into the SVG config. Family names
-/// mirror keyflow-cli's exporter so every `font-family` the
-/// scene references — SMuFL music glyphs, chord-symbol text, and
-/// document text, plus their legacy aliases — resolves to baked
-/// bytes.
-fn with_embedded_fonts(fonts: &ChartFontBundle, config: SvgExportConfig) -> SvgExportConfig {
-    let leland = fonts.symbol_font_data().as_ref().clone();
-    let leland_text = fonts.leland_text_font_data().as_ref().clone();
-    let musejazz_text = fonts.text_font_data().as_ref().clone();
-    let musejazz = fonts.musejazz_font_data().as_ref().clone();
-    let chicago = fonts.chicago_font_data().as_ref().clone();
-    let bravura = fonts.bravura_font_data().as_ref().clone();
-    let freesans = fonts.freesans_font_data().as_ref().clone();
-
-    config
-        // SMuFL music font (Leland) + legacy "Bravura" alias.
-        .with_embedded_font("Leland", leland)
-        .with_embedded_font("Bravura", bravura)
-        // Leland Text companion + aliases.
-        .with_embedded_font("Leland Text", leland_text.clone())
-        .with_embedded_font("LelandText", leland_text.clone())
-        .with_embedded_font("Edwin", leland_text)
-        // MuseJazz music + MuseJazz Text chord-symbol font.
-        .with_embedded_font("MuseJazz", musejazz)
-        .with_embedded_font("MuseJazz Text", musejazz_text.clone())
-        .with_embedded_font("MuseJazzText", musejazz_text)
-        // Chicago — default document / title text.
-        .with_embedded_font("Chicago", chicago.clone())
-        .with_embedded_font("ChicagoFLF", chicago.clone())
-        .with_embedded_font("FreeSans", freesans)
-        .with_embedded_font("sans-serif", chicago)
+        pipeline.export_svg_snippet(&result, SNIPPET_PADDING)
+    })
 }
 
 #[cfg(test)]

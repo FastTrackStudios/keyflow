@@ -198,6 +198,28 @@ impl ChartFontBundle {
         ]
     }
 
+    /// [`Self::embeddable_fonts`] plus a concrete face for the generic
+    /// `sans-serif` family.
+    ///
+    /// Use this for **rasterising and PDF**, not for browser CSS.
+    ///
+    /// The scene emits `font-family="sans-serif"` for a few incidental
+    /// runs. A browser resolves that itself, and declaring an
+    /// `@font-face` for it would override the reader's own default — so
+    /// the web path must NOT include it. resvg and usvg have no such
+    /// default: an unresolved generic there renders as nothing, or as
+    /// whatever the host system happens to have, which is how a PNG and
+    /// its PDF came out with different text.
+    ///
+    /// Two lists, then, because the two targets genuinely differ — not
+    /// because anyone forgot to sync them.
+    #[must_use]
+    pub fn embeddable_fonts_for_raster(&self) -> Vec<(&'static str, Arc<Vec<u8>>)> {
+        let mut fonts = self.embeddable_fonts();
+        fonts.push(("sans-serif", self.aux_font_data.clone()));
+        fonts
+    }
+
     #[cfg(feature = "wgpu")]
     #[must_use]
     pub fn configure_renderer<'a>(

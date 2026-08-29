@@ -778,36 +778,25 @@ impl LayoutPipeline {
         self.engine.layout_chart_with_config(chart, &mode, &config)
     }
 
-    /// Embed every named font the chart pipeline ever references into the SVG
-    /// export config. Names must match the values used by HarmonyStyle /
-    /// ChartFontBundle::configure_renderer so resvg can resolve them.
-    fn with_embedded_fonts(&self, mut config: SvgExportConfig) -> SvgExportConfig {
-        let leland = self.font_bundle.symbol_font_data().as_ref().clone();
-        let leland_text = self.font_bundle.leland_text_font_data().as_ref().clone();
-        let musejazz_text = self.font_bundle.text_font_data().as_ref().clone();
-        let musejazz = self.font_bundle.musejazz_font_data().as_ref().clone();
-        let chicago = self.font_bundle.chicago_font_data().as_ref().clone();
-        let bravura = self.font_bundle.bravura_font_data().as_ref().clone();
-        let freesans = self.font_bundle.freesans_font_data().as_ref().clone();
-
-        config = config
-            // SMuFL music font (Leland) — primary + legacy "Bravura" alias.
-            .with_embedded_font("Leland", leland.clone())
-            .with_embedded_font("Bravura", bravura)
-            // Leland Text companion (alternate text/symbol font).
-            .with_embedded_font("Leland Text", leland_text.clone())
-            .with_embedded_font("LelandText", leland_text.clone())
-            .with_embedded_font("Edwin", leland_text)
-            // MuseJazz (music font) + MuseJazz Text (chord-symbol text font).
-            .with_embedded_font("MuseJazz", musejazz)
-            .with_embedded_font("MuseJazz Text", musejazz_text.clone())
-            .with_embedded_font("MuseJazzText", musejazz_text)
-            // Chicago — default document/title text.
-            .with_embedded_font("Chicago", chicago.clone())
-            .with_embedded_font("ChicagoFLF", chicago.clone())
-            .with_embedded_font("FreeSans", freesans)
-            .with_embedded_font("sans-serif", chicago);
-        config
+    /// Attach every embeddable font to an SVG export config.
+    ///
+    /// The list lives on the font bundle
+    /// (`ChartFontBundle::embeddable_fonts_for_raster`) so it cannot
+    /// drift from the family names the layout engine emits. This crate
+    /// used to carry its own copy, as did `keyflow-ui` and
+    /// `editor-keyflow`; one of the three had the chord font under the
+    /// wrong name and exported charts in a system sans for as long as
+    /// nobody compared them.
+    ///
+    /// The *raster* list, because resvg (PNG) and usvg (PDF) have no
+    /// default for the generic `sans-serif` the scene emits.
+    fn with_embedded_fonts(&self, config: SvgExportConfig) -> SvgExportConfig {
+        self.font_bundle
+            .embeddable_fonts_for_raster()
+            .into_iter()
+            .fold(config, |c, (family, bytes)| {
+                c.with_embedded_font(family, bytes.as_ref().clone())
+            })
     }
 
     /// Inline-docs SVG: continuous-scroll, **content-cropped**, and **font-less**.

@@ -1801,6 +1801,15 @@ impl ChartLayoutManager {
     }
 
     /// Attach every embeddable font to an export config.
+    ///
+    /// The list lives on the font bundle so it cannot drift from the
+    /// family names the layout engine emits — this crate is where that
+    /// drift last bit, declaring the chord font as `MuseJazzText` while
+    /// the scene emitted `MuseJazz Text`, so every exported chart fell
+    /// back to a system sans.
+    ///
+    /// The browser list, not the raster one: an `@font-face` for the
+    /// generic `sans-serif` would override the reader's own default.
     fn embed_config(&self, config: SvgExportConfig) -> SvgExportConfig {
         self.font_bundle
             .embeddable_fonts()
