@@ -153,6 +153,11 @@ vox = { version = "0.10.0-rc.5", default-features = false, features = ["runtime"
 architect = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.0.2" }
 # The Dioxus primitive library (was libs/ui/fts-ui, renamed on the split).
 architect-ui = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.0.2" }
+# Telemetry. MUST stay on the same architect tag as the two above -- a split
+# tag pulls two copies of the architect crates into one workspace and their
+# traits refuse to unify. `otel` is inert unless the build bakes
+# TASK_OTLP_ENDPOINT, so dev builds stay telemetry-free.
+architect-telemetry = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.0.2", features = ["otel"] }
 
 # ── MusicXML parsing (keyflow) ─────────────────────────────────────────
 musicxml = "1.1"
