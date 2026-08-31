@@ -1056,6 +1056,36 @@ where
     }
 }
 
+/// Write the gallery's `README.md` and `index.html` into `output_dir`.
+///
+/// Both gallery commands end this way; only the markdown body above
+/// differs between them.
+fn write_gallery(output_dir: &std::path::Path, md: &str, html: &str) -> Result<(), String> {
+    for (name, body) in [("README.md", md), ("index.html", html)] {
+        let path = output_dir.join(name);
+        std::fs::write(&path, body)
+            .map_err(|e| format!("Failed to write {}: {e}", path.display()))?;
+        println!("Wrote {}", path.display());
+    }
+    Ok(())
+}
+
+/// Append one rendered variant to the gallery's HTML.
+fn push_variant_figure(html: &mut String, variant_name: &str, rel: &str, title: &str) {
+    html.push_str(&format!(
+        "    <figure class=\"variant variant-{variant_name}\"><figcaption>{variant_name}</figcaption><img src=\"{rel}\" alt=\"{title} {variant_name}\" loading=\"lazy\" /></figure>\n"
+    ));
+}
+
+/// Note a variant that failed to render, in both outputs and on stderr.
+fn push_variant_failure(md: &mut String, html: &mut String, variant_name: &str, err: &str) {
+    eprintln!("  ⚠ {variant_name}: {err}");
+    md.push_str(&format!("| `{variant_name}` | ⚠ render failed |\n"));
+    html.push_str(&format!(
+        "    <figure class=\"variant variant-{variant_name} failed\"><figcaption>{variant_name}</figcaption><div class=\"err\">⚠ {err}</div></figure>\n"
+    ));
+}
+
 fn run(cli: Cli) -> Result<(), String> {
     match cli.command {
         Commands::Parse { input } => {
@@ -1314,18 +1344,10 @@ fn run(cli: Cli) -> Result<(), String> {
                                 md.push_str(&format!(
                                     "| `{variant_name}` | <img src=\"{rel}\" width=\"320\" /> |\n"
                                 ));
-                                html.push_str(&format!(
-                                    "    <figure class=\"variant variant-{variant_name}\"><figcaption>{variant_name}</figcaption><img src=\"{rel}\" alt=\"{title} {variant_name}\" loading=\"lazy\" /></figure>\n"
-                                ));
+                                push_variant_figure(&mut html, variant_name, &rel, &title);
                             }
                         }
-                        Err(e) => {
-                            eprintln!("  ⚠ {variant_name}: {e}");
-                            md.push_str(&format!("| `{variant_name}` | ⚠ render failed |\n"));
-                            html.push_str(&format!(
-                                "    <figure class=\"variant variant-{variant_name} failed\"><figcaption>{variant_name}</figcaption><div class=\"err\">⚠ {e}</div></figure>\n"
-                            ));
-                        }
+                        Err(e) => push_variant_failure(&mut md, &mut html, variant_name, &e),
                     }
                 }
                 md.push('\n');
@@ -1334,16 +1356,7 @@ fn run(cli: Cli) -> Result<(), String> {
 
             html.push_str("</body></html>\n");
 
-            let md_path = output_dir.join("README.md");
-            std::fs::write(&md_path, &md)
-                .map_err(|e| format!("Failed to write {}: {e}", md_path.display()))?;
-            println!("Wrote {}", md_path.display());
-
-            let html_path = output_dir.join("index.html");
-            std::fs::write(&html_path, &html)
-                .map_err(|e| format!("Failed to write {}: {e}", html_path.display()))?;
-            println!("Wrote {}", html_path.display());
-            Ok(())
+            write_gallery(&output_dir, &md, &html)
         }
 
         Commands::Musicxml {
@@ -1526,18 +1539,10 @@ fn run(cli: Cli) -> Result<(), String> {
                                     .display()
                                     .to_string();
                                 md.push_str(&format!("![{rel}]({rel})\n\n"));
-                                html.push_str(&format!(
-                                    "    <figure class=\"variant variant-{variant_name}\"><figcaption>{variant_name}</figcaption><img src=\"{rel}\" alt=\"{title} {variant_name}\" loading=\"lazy\" /></figure>\n"
-                                ));
+                                push_variant_figure(&mut html, variant_name, &rel, &title);
                             }
                         }
-                        Err(e) => {
-                            eprintln!("  ⚠ {variant_name}: {e}");
-                            md.push_str(&format!("| `{variant_name}` | ⚠ render failed |\n"));
-                            html.push_str(&format!(
-                                "    <figure class=\"variant variant-{variant_name} failed\"><figcaption>{variant_name}</figcaption><div class=\"err\">⚠ {e}</div></figure>\n"
-                            ));
-                        }
+                        Err(e) => push_variant_failure(&mut md, &mut html, variant_name, &e),
                     }
                 }
                 md.push('\n');
@@ -1545,16 +1550,7 @@ fn run(cli: Cli) -> Result<(), String> {
             }
             html.push_str("</body></html>\n");
 
-            let md_path = output_dir.join("README.md");
-            std::fs::write(&md_path, &md)
-                .map_err(|e| format!("Failed to write {}: {e}", md_path.display()))?;
-            println!("Wrote {}", md_path.display());
-
-            let html_path = output_dir.join("index.html");
-            std::fs::write(&html_path, &html)
-                .map_err(|e| format!("Failed to write {}: {e}", html_path.display()))?;
-            println!("Wrote {}", html_path.display());
-            Ok(())
+            write_gallery(&output_dir, &md, &html)
         }
 
         Commands::MusicxmlSpacingCompare { input, tolerance } => {
