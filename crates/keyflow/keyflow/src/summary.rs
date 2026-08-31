@@ -76,12 +76,13 @@ impl ChartSummary {
         // dropped, because a chart that names the same person as both
         // composer and lyricist should credit them once.
         let mut credits = Vec::new();
-        for who in [&m.composer, &m.writer, &m.arranger, &m.lyricist] {
-            if let Some(name) = who {
-                let name = name.trim();
-                if !name.is_empty() && !credits.iter().any(|c: &String| c == name) {
-                    credits.push(name.to_string());
-                }
+        for who in [&m.composer, &m.writer, &m.arranger, &m.lyricist]
+            .into_iter()
+            .flatten()
+        {
+            let name = who.trim();
+            if !name.is_empty() && !credits.iter().any(|c: &String| c == name) {
+                credits.push(name.to_string());
             }
         }
 

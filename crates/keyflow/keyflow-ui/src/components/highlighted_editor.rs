@@ -323,6 +323,21 @@ fn push_escaped(out: &mut String, s: &str) {
     }
 }
 
+/// Sleep for the editor's on_change debounce.
+///
+/// Split by target because tokio's timer needs a reactor: on wasm32
+/// `tokio::time::sleep` compiles and then panics at runtime, so the browser
+/// side goes through `setTimeout` instead.
+#[cfg(not(target_arch = "wasm32"))]
+async fn debounce(ms: u32) {
+    tokio::time::sleep(tokio::time::Duration::from_millis(u64::from(ms))).await;
+}
+
+#[cfg(target_arch = "wasm32")]
+async fn debounce(ms: u32) {
+    gloo_timers::future::TimeoutFuture::new(ms).await;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -354,19 +369,4 @@ mod tests {
         assert!(html.contains("&lt;&lt;bad&gt;&gt;"));
         assert!(!html.contains("<<bad>>"));
     }
-}
-
-/// Sleep for the editor's on_change debounce.
-///
-/// Split by target because tokio's timer needs a reactor: on wasm32
-/// `tokio::time::sleep` compiles and then panics at runtime, so the browser
-/// side goes through `setTimeout` instead.
-#[cfg(not(target_arch = "wasm32"))]
-async fn debounce(ms: u32) {
-    tokio::time::sleep(tokio::time::Duration::from_millis(u64::from(ms))).await;
-}
-
-#[cfg(target_arch = "wasm32")]
-async fn debounce(ms: u32) {
-    gloo_timers::future::TimeoutFuture::new(ms).await;
 }
