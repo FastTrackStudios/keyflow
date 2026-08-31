@@ -168,3 +168,53 @@ fn svg_font_families(svg: &str) -> Vec<String> {
     out.dedup();
     out
 }
+
+#[test]
+fn a_titled_snippet_crops_to_its_music_like_a_titleless_one() {
+    // `layout_snippet` lays the chart out on a 10000pt-tall scratch page
+    // and then shrinks the page to whatever it measures. Anything pinned
+    // to the BOTTOM of that scratch page is therefore measured as
+    // content, and the crop grows to fit it.
+    //
+    // The page footer was pinned there, skipped only when the chart had
+    // no title. So a titleless snippet cropped to ~80pt of music and a
+    // titled one — the site's landing-page hero — cropped to ~10041pt: a
+    // strip of blank white a hundred screens tall with four bars at the
+    // top. Nothing errored; it just rendered.
+    let pipeline = ChartPipeline::shared().expect("the pipeline builds");
+    let mode = LayoutMode::snippet(560.0);
+
+    let titleless = pipeline.layout(&chart("VS: | 1 4 |\n"), &mode);
+    let titled = pipeline.layout(&chart("Hero - Keyflow\n\nVS: | 1 4 |\n"), &mode);
+
+    assert!(
+        titled.total_height < titleless.total_height * 2.0,
+        "a title made the snippet {:.0}pt tall against {:.0}pt without one — \
+         page chrome is being measured as content",
+        titled.total_height,
+        titleless.total_height,
+    );
+
+    let bounds = titled.content_bounds().expect("the scene is not empty");
+    assert!(
+        bounds.height() < 400.0,
+        "the titled snippet's content spans {:.0}pt",
+        bounds.height(),
+    );
+}
+
+#[test]
+fn paper_still_carries_the_footer() {
+    // The other half of the fix: skipping the footer for snippets must
+    // not skip it for the thing it exists for.
+    let pipeline = ChartPipeline::shared().expect("the pipeline builds");
+    let result = pipeline.layout(
+        &chart("Hero - Keyflow\n\nVS: | 1 4 |\n"),
+        &LayoutMode::paginated_a4(),
+    );
+    let svg = pipeline.export_svg_pages_linked(&result).concat();
+    assert!(
+        svg.contains("Created with FastTrackStudio"),
+        "a printed page lost its footer"
+    );
+}
