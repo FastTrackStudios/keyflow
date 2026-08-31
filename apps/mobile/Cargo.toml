@@ -16,6 +16,9 @@ keyflow = { workspace = true, features = ["text", "svg", "highlighting"] }
 keyflow-ui = { workspace = true, features = ["wasm-graphics"] }
 
 architect-ui = { workspace = true }
+# Traces/logs/metrics to the FTS collector. Inert unless the build bakes
+# TASK_OTLP_ENDPOINT (see .github/workflows/keyflow-ios.yml).
+architect-telemetry = { workspace = true }
 dioxus = { workspace = true, features = ["router"] }
 
 serde = { workspace = true }
