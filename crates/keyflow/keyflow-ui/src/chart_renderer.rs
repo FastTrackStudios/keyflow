@@ -1038,27 +1038,7 @@ impl ChartLayoutManager {
         self.last_layout_chart = self.cached_chart.clone();
         self.last_chart_hash = chart_hash;
         self.last_preview_mode = preview_mode;
-        self.cached_cursor_state = None; // Invalidate cursor cache
-        self.cached_cursor_tick = i64::MIN;
-        self.cached_page_fragments.clear();
-        self.cached_page_base_fragments.clear();
-        self.cached_page_detail_fragments.clear();
-        self.cached_page_coarse_fragments.clear();
-        self.cached_transformed_fragments.clear();
-        self.transformed_fragment_order.clear();
-        self.cached_page_lod_images.clear();
-        self.page_lod_renderer = None;
-        self.cached_view_static_image = None;
-        self.cached_view_static_key = None;
-        self.last_view_static_key = None;
-        self.view_static_stable_frames = 0;
-        self.view_static_renderer = None;
-        self.last_transform_key = None;
-        self.transform_stable_frames = 0;
-        self.last_cull_key = None;
-        self.cached_visible_pages.clear();
-        self.cached_focus_page = None;
-        self.rebuild_page_geometry_cache();
+        self.invalidate_derived_caches();
 
         Ok(true)
     }
@@ -1119,27 +1099,7 @@ impl ChartLayoutManager {
         self.last_layout_chart = Some(chart.clone());
         self.last_chart_hash = chart_hash;
         self.last_preview_mode = preview_mode;
-        self.cached_cursor_state = None; // Invalidate cursor cache
-        self.cached_cursor_tick = i64::MIN;
-        self.cached_page_fragments.clear();
-        self.cached_page_base_fragments.clear();
-        self.cached_page_detail_fragments.clear();
-        self.cached_page_coarse_fragments.clear();
-        self.cached_transformed_fragments.clear();
-        self.transformed_fragment_order.clear();
-        self.cached_page_lod_images.clear();
-        self.page_lod_renderer = None;
-        self.cached_view_static_image = None;
-        self.cached_view_static_key = None;
-        self.last_view_static_key = None;
-        self.view_static_stable_frames = 0;
-        self.view_static_renderer = None;
-        self.last_transform_key = None;
-        self.transform_stable_frames = 0;
-        self.last_cull_key = None;
-        self.cached_visible_pages.clear();
-        self.cached_focus_page = None;
-        self.rebuild_page_geometry_cache();
+        self.invalidate_derived_caches();
     }
 
     fn visible_pages_for_viewport(&self, width: f64, height: f64, transform: Affine) -> Vec<u32> {
@@ -1188,6 +1148,36 @@ impl ChartLayoutManager {
             pages.push(layout.pages[0].number);
         }
         pages
+    }
+
+    /// Drop everything derived from the previous layout.
+    ///
+    /// Every path that installs a new `layout_result` must call this.
+    /// It was open-coded at each of the three, so a cache field added to
+    /// one site and missed at another would quietly survive a relayout
+    /// and be drawn against the new scene.
+    fn invalidate_derived_caches(&mut self) {
+        self.cached_cursor_state = None;
+        self.cached_cursor_tick = i64::MIN;
+        self.cached_page_fragments.clear();
+        self.cached_page_base_fragments.clear();
+        self.cached_page_detail_fragments.clear();
+        self.cached_page_coarse_fragments.clear();
+        self.cached_transformed_fragments.clear();
+        self.transformed_fragment_order.clear();
+        self.cached_page_lod_images.clear();
+        self.page_lod_renderer = None;
+        self.cached_view_static_image = None;
+        self.cached_view_static_key = None;
+        self.last_view_static_key = None;
+        self.view_static_stable_frames = 0;
+        self.view_static_renderer = None;
+        self.last_transform_key = None;
+        self.transform_stable_frames = 0;
+        self.last_cull_key = None;
+        self.cached_visible_pages.clear();
+        self.cached_focus_page = None;
+        self.rebuild_page_geometry_cache();
     }
 
     fn rebuild_page_geometry_cache(&mut self) {
@@ -2393,27 +2383,7 @@ impl ChartLayoutManager {
         self.layout_result = Some(result);
         self.last_chart_hash = self.compute_chart_hash(source, preview_mode, viewport_width, zoom);
         self.last_preview_mode = preview_mode;
-        self.cached_cursor_state = None;
-        self.cached_cursor_tick = i64::MIN;
-        self.cached_page_fragments.clear();
-        self.cached_page_base_fragments.clear();
-        self.cached_page_detail_fragments.clear();
-        self.cached_page_coarse_fragments.clear();
-        self.cached_transformed_fragments.clear();
-        self.transformed_fragment_order.clear();
-        self.cached_page_lod_images.clear();
-        self.page_lod_renderer = None;
-        self.cached_view_static_image = None;
-        self.cached_view_static_key = None;
-        self.last_view_static_key = None;
-        self.view_static_stable_frames = 0;
-        self.view_static_renderer = None;
-        self.last_transform_key = None;
-        self.transform_stable_frames = 0;
-        self.last_cull_key = None;
-        self.cached_visible_pages.clear();
-        self.cached_focus_page = None;
-        self.rebuild_page_geometry_cache();
+        self.invalidate_derived_caches();
     }
 }
 
