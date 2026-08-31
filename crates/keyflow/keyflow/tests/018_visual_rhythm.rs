@@ -22,9 +22,7 @@
 
 #![cfg(feature = "engraver")]
 
-use std::path::PathBuf;
-use std::sync::Arc;
-
+use keyflow::engraver::fonts::ChartFontBundle;
 use keyflow::engraver::layout::chart::{ChartLayoutConfig, ChartLayoutEngine, LayoutMode};
 use keyflow::engraver::style::MStyle;
 
@@ -183,35 +181,16 @@ fn assert_glyph(
     );
 }
 
-/// Get the workspace root directory.
-fn workspace_root() -> PathBuf {
-    // CARGO_MANIFEST_DIR points to crates/keyflow/keyflow; go up three levels to the repo root
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .to_path_buf()
-}
-
 /// Helper to create a layout engine for tests.
 fn create_test_engine() -> ChartLayoutEngine {
-    let root = workspace_root();
-    let text_font_path = root.join("features/engraver/proto/fonts/FreeSans.ttf");
-    let musejazz_font_path = root.join("features/engraver/proto/fonts/MuseJazzText.otf");
-
-    let text_font_data = Arc::new(
-        std::fs::read(&text_font_path)
-            .unwrap_or_else(|e| panic!("Failed to load text font at {:?}: {}", text_font_path, e)),
-    );
-    let musejazz_font_data = Arc::new(std::fs::read(&musejazz_font_path).unwrap_or_else(|e| {
-        panic!(
-            "Failed to load MuseJazz font at {:?}: {}",
-            musejazz_font_path, e
-        )
-    }));
+    // The bundle's bytes are baked into the binary. Reading them off
+    // disk through a `../../..` escape breaks as soon as the crate
+    // moves, and it filled the engine's two font slots with FreeSans
+    // and MuseJazzText — where production puts MuseJazz and Leland, so
+    // every width measured here was measured against the wrong faces.
+    let fonts = ChartFontBundle::shared().expect("load fonts");
+    let text_font_data = fonts.text_font_data().clone();
+    let musejazz_font_data = fonts.symbol_font_data().clone();
 
     let style: &'static MStyle = Box::leak(Box::new(MStyle::default()));
     let mut config = ChartLayoutConfig::default();
