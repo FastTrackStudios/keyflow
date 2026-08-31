@@ -13,6 +13,10 @@
   --line: #e4e2e8;
   --accent: #2563eb;
   --accent-ink: #ffffff;
+  /* The far end of the headline's gradient sweep. Sits a short hop round
+   * the wheel from --accent so the travel reads as movement rather than
+   * as two different brand colours arguing. */
+  --accent-far: #7c3aed;
   --code-bg: #f3f2f6;
   --font-sans: "Geist", "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
@@ -27,6 +31,7 @@
     --line: #26262f;
     --accent: #6ea8fe;
     --accent-ink: #0b1220;
+    --accent-far: #a78bfa;
     --code-bg: #131319;
   }
 }
@@ -39,6 +44,7 @@
   --line: #26262f;
   --accent: #6ea8fe;
   --accent-ink: #0b1220;
+  --accent-far: #a78bfa;
   --code-bg: #131319;
 }
 
@@ -264,10 +270,62 @@ body {
  * the headline's own lines, or the two read as one block of text. The
  * display face is set at line-height 1.04, so anything under ~1.4rem
  * here lands inside the headline's own leading. */
+/* "Accelerated" — the one word on the page that is allowed to move.
+ *
+ * A three-stop gradient whose first and last stops are both --accent,
+ * laid out at 200% width and scrolled a full tile per cycle: because the
+ * tile's two edges are the same colour, the loop is seamless and needs
+ * no alternate direction.
+ *
+ * `background-clip: text` paints the gradient through the glyphs, which
+ * means the text colour has to be transparent — so if the clip is not
+ * supported the word would vanish. `@supports` guards it: without
+ * support the word simply stays --accent, which is a perfectly good
+ * second-best rather than an invisible headline.
+ *
+ * `display: inline-block` would break the headline's wrapping; the span
+ * stays inline and the RSX keeps it to a single unbreakable word, so the
+ * gradient never restarts mid-phrase across two line boxes. */
+.kf-accel {
+  color: var(--accent);
+}
+
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .kf-accel {
+    background-image: linear-gradient(
+      100deg,
+      var(--accent) 0%,
+      var(--accent-far) 50%,
+      var(--accent) 100%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: kf-accel-sweep 5s linear infinite;
+  }
+}
+
+@keyframes kf-accel-sweep {
+  from { background-position: 0 0; }
+  to { background-position: 200% 0; }
+}
+
+/* The hero already animates — the source types itself. Someone who has
+ * asked for less motion should not get a second thing moving forever in
+ * their peripheral vision; the gradient stays, it just stops travelling. */
+@media (prefers-reduced-motion: reduce) {
+  .kf-accel { animation: none; }
+}
+
+/* A tagline, not a paragraph. It carries one short line, so it is set
+ * closer to the headline's scale than to body copy — at body size a
+ * single centred-weight line under a 5rem display reads as a caption
+ * that lost its picture. The colour stays soft to keep the hierarchy. */
 .kf-lede {
   color: var(--ink-soft);
-  font-size: 1.125rem;
-  line-height: 1.6;
+  font-size: 1.25rem;
+  line-height: 1.45;
   letter-spacing: -0.005em;
   /* `pretty`, not `balance`: the lede is prose under a balanced
    * headline, and balancing both makes the two blocks echo each other's
@@ -434,7 +492,7 @@ body {
   .kf-hero { max-width: 104rem; }
   .kf-hero-copy { max-width: 44rem; }
   .kf-display { font-size: 4rem; }
-  .kf-lede { font-size: 1.2rem; max-width: 38rem; }
+  .kf-lede { font-size: 1.5rem; max-width: 38rem; }
   .kf-window { --demo-height: 44rem; --source-width: 24rem; --page-width: 30rem; }
 }
 
@@ -445,7 +503,11 @@ body {
    * reading as a pair and starts reading as two things drifting apart. */
   .kf-hero { max-width: 116rem; }
   .kf-display { font-size: 4.5rem; }
-  .kf-lede { font-size: 1.3rem; max-width: 40rem; }
+  .kf-lede { font-size: 1.7rem; max-width: 40rem; }
+  /* Scoped to the hero: `.kf-note` is shared with the editor, the
+   * workbench, the guide and the mobile app, where it is a genuine
+   * small-print label and must stay that size. */
+  .kf-hero-copy .kf-note { font-size: 0.95rem; }
   .kf-window { --demo-height: 52rem; --source-width: 28rem; --page-width: 36rem; }
 }
 
@@ -465,7 +527,8 @@ body {
   .kf-hero { max-width: 138rem; gap: 6rem; }
   .kf-hero-copy { max-width: 52rem; }
   .kf-display { font-size: 5.25rem; }
-  .kf-lede { font-size: 1.45rem; max-width: 46rem; }
+  .kf-lede { font-size: 2rem; max-width: 46rem; }
+  .kf-hero-copy .kf-note { font-size: 1.05rem; }
   .kf-window {
     --demo-height: min(68rem, calc(100vh - 20rem));
     --source-width: 34rem;
