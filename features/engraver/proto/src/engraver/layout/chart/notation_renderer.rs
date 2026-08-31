@@ -1012,14 +1012,9 @@ mod tests {
     use super::*;
     use crate::chart::notations::FiguredBassRow;
 
-    #[test]
-    fn classical_dynamics_render_red() {
-        let dynamics = [Dynamic {
-            level: DynamicLevel::Mf,
-            beat: 1,
-            placement: Placement::Below,
-        }];
-        let frame = MeasureFrame {
+    /// A plain one-measure frame: the geometry these tests do not vary.
+    fn test_frame() -> MeasureFrame<'static> {
+        MeasureFrame {
             measure_x: 100.0,
             measure_width: 120.0,
             staff_y: 40.0,
@@ -1031,7 +1026,17 @@ mod tests {
             segment_positions: None,
             system_start_dynamic_x: None,
             section_start_dynamic_stack: None,
-        };
+        }
+    }
+
+    #[test]
+    fn classical_dynamics_render_red() {
+        let dynamics = [Dynamic {
+            level: DynamicLevel::Mf,
+            beat: 1,
+            placement: Placement::Below,
+        }];
+        let frame = test_frame();
         let mut id_counter = 1;
 
         let nodes = render_dynamics(&dynamics, &frame, &mut id_counter);
@@ -1052,19 +1057,7 @@ mod tests {
             beat: 1,
             placement: Placement::Below,
         }];
-        let frame = MeasureFrame {
-            measure_x: 100.0,
-            measure_width: 120.0,
-            staff_y: 40.0,
-            staff_height: 40.0,
-            chord_y: 20.0,
-            spatium: 10.0,
-            beats_per_measure: 4,
-            source_measure_width: None,
-            segment_positions: None,
-            system_start_dynamic_x: None,
-            section_start_dynamic_stack: None,
-        };
+        let frame = test_frame();
         let mut id_counter = 1;
 
         let nodes = render_dynamics(&dynamics, &frame, &mut id_counter);
@@ -1089,19 +1082,7 @@ mod tests {
             bold: false,
             italic: false,
         }];
-        let frame = MeasureFrame {
-            measure_x: 100.0,
-            measure_width: 120.0,
-            staff_y: 40.0,
-            staff_height: 40.0,
-            chord_y: 20.0,
-            spatium: 10.0,
-            beats_per_measure: 4,
-            source_measure_width: None,
-            segment_positions: None,
-            system_start_dynamic_x: None,
-            section_start_dynamic_stack: None,
-        };
+        let frame = test_frame();
         let text_metrics = crate::engraver::layout::text_metrics::TextFontMetrics::new(
             std::sync::Arc::new(Vec::new()),
         );
@@ -1133,19 +1114,7 @@ mod tests {
             bold: false,
             italic: false,
         }];
-        let frame = MeasureFrame {
-            measure_x: 100.0,
-            measure_width: 120.0,
-            staff_y: 40.0,
-            staff_height: 40.0,
-            chord_y: 20.0,
-            spatium: 10.0,
-            beats_per_measure: 4,
-            source_measure_width: None,
-            segment_positions: None,
-            system_start_dynamic_x: None,
-            section_start_dynamic_stack: None,
-        };
+        let frame = test_frame();
         let text_metrics = crate::engraver::layout::text_metrics::TextFontMetrics::new(
             std::sync::Arc::new(Vec::new()),
         );

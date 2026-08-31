@@ -242,6 +242,18 @@ fn event_position(event: &GuideEvent) -> f64 {
 
 #[cfg(test)]
 mod tests {
+
+    /// Every event sits at or after the one before it.
+    fn assert_sorted_by_position(events: &[GuideEvent]) {
+        for window in events.windows(2) {
+            let pos_a = event_position(&window[0]);
+            let pos_b = event_position(&window[1]);
+            assert!(
+                pos_a <= pos_b + 1e-9,
+                "events should be sorted: {pos_a} <= {pos_b}"
+            );
+        }
+    }
     use super::*;
 
     fn default_configs() -> (ClickConfig, CountInConfig, GuideConfig) {
@@ -345,16 +357,7 @@ mod tests {
             &guide,
         );
 
-        for window in events.windows(2) {
-            let pos_a = event_position(&window[0]);
-            let pos_b = event_position(&window[1]);
-            assert!(
-                pos_a <= pos_b + 1e-9,
-                "events should be sorted: {} <= {}",
-                pos_a,
-                pos_b
-            );
-        }
+        assert_sorted_by_position(&events);
     }
 
     // ── generate_section() tests ────────────────────────────────────────────
@@ -521,16 +524,7 @@ mod tests {
             &guide,
         );
 
-        for window in events.windows(2) {
-            let pos_a = event_position(&window[0]);
-            let pos_b = event_position(&window[1]);
-            assert!(
-                pos_a <= pos_b + 1e-9,
-                "events should be sorted: {} <= {}",
-                pos_a,
-                pos_b
-            );
-        }
+        assert_sorted_by_position(&events);
     }
 
     #[test]
