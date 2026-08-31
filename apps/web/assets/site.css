@@ -1048,6 +1048,82 @@ body {
 
 .kf-toc-stage:first-of-type { margin-top: 0.6rem; }
 
+/* ── Chapter navigation ───────────────────────────────────────────
+ *
+ * The same pair of links twice: cards under the page, and a bare line
+ * above it. `justify-content: space-between` puts Previous left and Next
+ * right; `margin-left: auto` on the next link is what keeps Next on the
+ * right when there is no Previous, without an empty spacer element. */
+.kf-chapter-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: stretch;
+  gap: 1rem;
+  margin: 2.5rem 0 0;
+}
+
+.kf-chapter-link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  padding: 0.7rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  color: var(--ink);
+  text-decoration: none;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.kf-chapter-link:hover { border-color: var(--ink-soft); }
+.kf-chapter-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.kf-chapter-next { margin-left: auto; text-align: right; }
+
+.kf-chapter-dir {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.kf-chapter-prev .kf-chapter-dir::before { content: "\2190\A0"; }
+.kf-chapter-next .kf-chapter-dir::after { content: "\A0\2192"; }
+.kf-chapter-title { font-weight: 550; font-size: 0.95rem; }
+
+/* The top copy. Same links, no chrome: a pair of bordered cards above
+ * the chapter title would read as the start of the page rather than as
+ * a way out of it. */
+.kf-chapter-nav-top { margin: 0 0 1.5rem; }
+
+.kf-chapter-nav-top .kf-chapter-link {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.35rem;
+  padding: 0;
+  border: 0;
+}
+
+.kf-chapter-nav-top .kf-chapter-dir { display: none; }
+
+.kf-chapter-nav-top .kf-chapter-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+
+.kf-chapter-nav-top .kf-chapter-link:hover .kf-chapter-title { color: var(--ink); }
+.kf-chapter-nav-top .kf-chapter-prev .kf-chapter-title::before { content: "\2190\A0"; }
+.kf-chapter-nav-top .kf-chapter-next .kf-chapter-title::after { content: "\A0\2192"; }
+
+/* Stacked on a narrow screen — two cards side by side leave room for
+ * about one word each. */
+@media (max-width: 40rem) {
+  .kf-chapter-nav { flex-direction: column; }
+  .kf-chapter-next { margin-left: 0; text-align: left; }
+  .kf-chapter-nav-top { flex-direction: row; }
+}
+
 /* Tailwind's preflight zeroes the browser's default margins on p / ul /
  * ol / li. The guide is prose rendered from markdown, so those defaults
  * were doing real work — without this, paragraphs and list items run
