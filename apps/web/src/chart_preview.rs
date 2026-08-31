@@ -165,13 +165,13 @@ pub fn ChartPreview(
     }
 }
 
-/// One sheet in the stack, at its true size.
+/// One sheet in the spread, at its true size.
 #[component]
 fn PreviewPage(page: Page) -> Element {
     rsx! {
         div {
             class: "kf-preview-page",
-            style: "width: {page.width_px}px; height: {page.height_px}px; margin-bottom: {PAGE_GAP_PX}px;",
+            style: "width: {page.width_px}px; height: {page.height_px}px; margin-right: {PAGE_GAP_PX}px;",
             div { dangerous_inner_html: "{page.svg}" }
         }
     }
