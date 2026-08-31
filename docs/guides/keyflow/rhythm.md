@@ -3,6 +3,7 @@ title: Rhythm
 kind: concept
 type: concept
 order: 5
+stage: Naming & timing
 ---
 
 # Rhythm
@@ -160,6 +161,9 @@ C_2 !G_4 F           G is a one-off quarter; F is still a half note
 C  %  %  %           ; four bars of C
 Am F C G  %          ; the four-bar phrase, then a copy of its last bar
 ```
+
+`%` is the smallest of the repeat marks; [[repeats|Repeats & Endings]] covers
+the rest — repeating a whole line, a span, and first/second endings.
 
 ## Bar lines, when you want them
 

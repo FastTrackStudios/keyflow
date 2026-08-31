@@ -1029,6 +1029,25 @@ body {
 .kf-guide-toc a:hover { color: var(--ink); }
 .kf-toc-current { color: var(--accent) !important; font-weight: 600; }
 
+/* The stage a run of chapters belongs to. Mono and small-caps to match
+ * the site's other labels, and deliberately NOT a link — it names a
+ * phase of the path, and there is no page behind it to open.
+ *
+ * The first one needs no top margin: it sits directly under the index
+ * link, which is the front door rather than a chapter, and the extra
+ * space there reads as a gap rather than as a division. */
+.kf-toc-stage {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  opacity: 0.65;
+  margin-top: 1rem;
+}
+
+.kf-toc-stage:first-of-type { margin-top: 0.6rem; }
+
 /* Tailwind's preflight zeroes the browser's default margins on p / ul /
  * ol / li. The guide is prose rendered from markdown, so those defaults
  * were doing real work — without this, paragraphs and list items run

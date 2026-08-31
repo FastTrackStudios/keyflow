@@ -3,6 +3,7 @@ title: Lyrics
 kind: concept
 type: concept
 order: 7
+stage: Melody & lyrics
 ---
 
 # Lyrics

@@ -3,6 +3,7 @@ title: Chords
 kind: concept
 type: concept
 order: 3
+stage: Start here
 ---
 
 # Chords
@@ -212,6 +213,24 @@ G7b9        ; G  + dominant 7th + flat 9th
 F#m7b5      ; F# + half-diminished 7th
 Bbmaj7/D    ; Bb + major 7th, over D
 ```
+
+## You can write a chart now
+
+Structure, sections and chords are the whole of a working chart — a header,
+some named parts, and the chords in them. Everything after this page is a
+layer on top of something that already renders:
+
+```kf+
+Blue in Green - Miles Davis
+4/4 65bpm #Bb
+
+VS
+Bbmaj7 A7#9 Dm7 Db7#9
+Cm7 F7#9 Bbmaj7 Dm7
+```
+
+If that is all you need, stop here and go write one. The rest of the guide is
+waiting when a chart asks for something it cannot say yet.
 
 ## What's next
 

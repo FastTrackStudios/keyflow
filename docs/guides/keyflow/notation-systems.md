@@ -3,6 +3,7 @@ title: Notation Systems
 kind: concept
 type: concept
 order: 4
+stage: Naming & timing
 ---
 
 # Notation Systems

@@ -12,8 +12,9 @@
 //! this file lost its markdown renderer and its fence splitter — both
 //! were reimplementing, less well, something the editor already does.)
 //!
-//! So this build script does very little: read the notes, pull `title` and
-//! `order` out of the frontmatter for the table of contents, and emit the
+//! So this build script does very little: read the notes, pull `title`,
+//! `order` and `stage` out of the frontmatter for the table of contents,
+//! and emit the
 //! bodies as `&'static str`. That same text feeds the knowledge graph,
 //! which is built in the browser.
 //!
@@ -58,6 +59,9 @@ fn main() {
         let order: u32 = fm_scalar(front, "order")
             .and_then(|o| o.parse().ok())
             .unwrap_or(u32::MAX);
+        // The stage this chapter belongs to, for the table of contents.
+        // The index page has none — it is the front door, not a step.
+        let stage = fm_scalar(front, "stage").unwrap_or_default();
 
         // Two forms of the same note, and they are not interchangeable:
         //
@@ -73,7 +77,8 @@ fn main() {
         let _ = write!(
             lit,
             "    GuidePage {{\n        slug: {slug:?},\n        title: {title:?},\n        \
-             order: {order},\n        source: {raw:?},\n        body: {body:?},\n    }},\n"
+             order: {order},\n        stage: {stage:?},\n        source: {raw:?},\n        \
+             body: {body:?},\n    }},\n"
         );
         pages.insert((order, slug), lit);
     }

@@ -3,6 +3,7 @@ title: Key & Meter Changes
 kind: concept
 type: concept
 order: 8
+stage: Complete scores
 ---
 
 # Key & Meter Changes

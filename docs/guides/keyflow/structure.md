@@ -3,6 +3,7 @@ title: Structure
 kind: concept
 type: concept
 order: 1
+stage: Start here
 ---
 
 # Structure
