@@ -3927,6 +3927,7 @@ name = "engraver-score"
 version = "0.1.0"
 dependencies = [
  "engraver-proto",
+ "keyflow-musicxml",
  "kurbo 0.13.1",
  "musicxml",
  "peniko 0.6.1",
@@ -7017,6 +7018,7 @@ dependencies = [
  "musicxml",
  "thiserror 2.0.20",
  "tracing",
+ "zip 2.4.2",
 ]
 
 [[package]]
@@ -7040,9 +7042,9 @@ name = "keyflow-orchestra"
 version = "0.1.0"
 dependencies = [
  "keyflow-annotate",
+ "keyflow-musicxml",
  "musicxml",
  "thiserror 2.0.20",
- "zip 2.4.2",
 ]
 
 [[package]]
