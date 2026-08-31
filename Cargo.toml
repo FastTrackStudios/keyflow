@@ -153,6 +153,15 @@ vox = { version = "0.10.0-rc.5", default-features = false, features = ["runtime"
 architect = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.0.2" }
 # The Dioxus primitive library (was libs/ui/fts-ui, renamed on the split).
 architect-ui = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.0.2" }
+
+# The FastTrackStudio account. One identity across Task, Session, Signal,
+# Keyflow and Ignition, served by auth.fasttrackstudio.app.
+#
+# `browser` adds the localStorage-backed token store, so a signed-in
+# session survives a page reload. TODO: pin to a tag once
+# FastTrackStudios/architect#1 merges.
+auth-http = { git = "https://github.com/FastTrackStudios/architect", branch = "feat/standalone-auth-server", features = ["browser"] }
+auth-client = { git = "https://github.com/FastTrackStudios/architect", branch = "feat/standalone-auth-server" }
 # Telemetry. MUST stay on the same architect tag as the two above -- a split
 # tag pulls two copies of the architect crates into one workspace and their
 # traits refuse to unify. `otel` is inert unless the build bakes

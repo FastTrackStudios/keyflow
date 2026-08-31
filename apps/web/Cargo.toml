@@ -25,6 +25,12 @@ keyflow-ui = { workspace = true, features = ["wasm-graphics", "pdf"] }
 
 architect-ui = { workspace = true }
 
+# Sign-in. Deliberately additive: the editor stays usable signed out
+# (see the module docs in src/main.rs), and an account is for *keeping*
+# charts, not for using the thing.
+auth-http = { workspace = true }
+auth-client = { workspace = true }
+
 # The guide's knowledge graph. Pure and FS-free by design, so the graph is
 # built in the browser from the same markdown the pages are rendered from.
 view-knowledge-graph = { workspace = true }

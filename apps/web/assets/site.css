@@ -75,6 +75,136 @@ body {
 .kf-nav a { color: var(--ink-soft); text-decoration: none; }
 .kf-nav a:hover { color: var(--ink); }
 
+/* ── Account ──────────────────────────────────────────────────────
+ *
+ * A side door, not a front gate. The editor works signed out, so this
+ * sits at the end of the nav in the same quiet register as the links
+ * beside it rather than as a call to action. */
+
+.kf-account { position: relative; display: flex; align-items: center; gap: 0.75rem; }
+
+/* Holds the nav's width steady while the stored session is checked, so
+ * the header does not jump when the answer arrives. */
+.kf-account-loading { display: inline-block; width: 3.5rem; }
+
+.kf-account-name {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  max-width: 14ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kf-account-button {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  transition: color 120ms ease;
+}
+
+.kf-account-button:hover { color: var(--ink); }
+.kf-account-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.kf-account-panel {
+  position: absolute;
+  top: calc(100% + 0.9rem);
+  right: 0;
+  z-index: 20;
+  width: min(20rem, calc(100vw - 2rem));
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--bg);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.18);
+}
+
+.kf-account-form { display: flex; flex-direction: column; gap: 0.4rem; }
+
+.kf-account-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.kf-account-note {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+
+.kf-account-form label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  margin-top: 0.35rem;
+}
+
+.kf-account-form input {
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 0.3rem;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.kf-account-form input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.kf-account-form input:disabled { opacity: 0.6; }
+
+.kf-account-error {
+  margin: 0.6rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: #c0392b;
+}
+
+.kf-account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.9rem;
+}
+
+.kf-account-submit {
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--ink);
+  border-radius: 0.3rem;
+  background: var(--ink);
+  color: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.kf-account-submit:disabled { opacity: 0.55; cursor: default; }
+
+.kf-account-link {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  text-decoration: underline;
+}
+
+.kf-account-link:hover { color: var(--ink); }
+
 .kf-main { flex: 1; padding: clamp(1.5rem, 4vw, 3rem); }
 /* The workbench is a working surface, not a document — it gets the whole
  * viewport rather than the page's reading gutters. */
