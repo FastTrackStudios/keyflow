@@ -882,18 +882,8 @@ impl ChartLayoutEngine {
 
             // Preprocess melodies to handle cross-measure spillover
             let beats_per_measure = time_signature.0 as f64;
-            let key_signature = key_signature_fifths(chart);
-            let mut melody_data_map = expand_melodies_across_measures(
-                chart_section.measures(),
-                beats_per_measure,
-                key_signature,
-            );
-            // Stamp the chart-level clef onto each measure's melody data so
-            // pitch→staff-line mapping picks the correct middle-line pitch.
-            let chart_proto_clef = self.chart_proto_clef_for(chart);
-            for md in melody_data_map.values_mut() {
-                md.clef = chart_proto_clef;
-            }
+            let mut melody_data_map =
+                self.expanded_melody_data(chart, chart_section.measures(), beats_per_measure);
 
             // Detect push spillbacks (chords from next measure that push back)
             let mut push_spillback_map = detect_push_spillbacks(chart_section.measures());
@@ -2204,18 +2194,8 @@ impl ChartLayoutEngine {
 
             // Preprocess melodies to handle cross-measure spillover
             let beats_per_measure = time_signature.0 as f64;
-            let key_signature = key_signature_fifths(chart);
-            let mut melody_data_map = expand_melodies_across_measures(
-                chart_section.measures(),
-                beats_per_measure,
-                key_signature,
-            );
-            // Stamp the chart-level clef onto each measure's melody data so
-            // pitch→staff-line mapping picks the correct middle-line pitch.
-            let chart_proto_clef = self.chart_proto_clef_for(chart);
-            for md in melody_data_map.values_mut() {
-                md.clef = chart_proto_clef;
-            }
+            let mut melody_data_map =
+                self.expanded_melody_data(chart, chart_section.measures(), beats_per_measure);
 
             // Detect push spillbacks (chords from next measure that push back)
             let mut push_spillback_map = detect_push_spillbacks(chart_section.measures());

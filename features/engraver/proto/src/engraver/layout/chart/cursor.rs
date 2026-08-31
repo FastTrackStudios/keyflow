@@ -191,35 +191,7 @@ impl ChartCursor {
         let beat = layout.beat_at_tick(tick)?;
         let cursor_x = beat.x_at_tick(tick);
 
-        let mut commands = Vec::new();
-
-        // Build style-specific commands
-        match &self.config.style {
-            CursorStyle::VerticalLine { width } => {
-                self.build_vertical_line(&mut commands, beat, cursor_x, *width);
-            }
-            CursorStyle::MeasureHighlight => {
-                self.build_measure_highlight(&mut commands, beat, layout);
-            }
-            CursorStyle::BeatBox { corner_radius } => {
-                self.build_beat_box(&mut commands, beat, *corner_radius);
-            }
-        }
-
-        // Notehead highlight (common to all styles)
-        if self.config.highlight_notehead {
-            self.build_notehead_highlight(&mut commands, beat);
-        }
-
-        Some(CursorState {
-            page: beat.page,
-            system: beat.system,
-            measure: beat.measure,
-            cursor_x,
-            cursor_y: beat.staff_y,
-            cursor_height: beat.staff_height,
-            commands,
-        })
+        Some(self.state_at(layout, beat, cursor_x))
     }
 
     /// Compute cursor state for a given time in seconds.
@@ -229,8 +201,20 @@ impl ChartCursor {
     pub fn compute_at_time(&self, layout: &ChartLayoutResult, time: f64) -> Option<CursorState> {
         let beat = layout.beat_at_time(time)?;
         let cursor_x = beat.x_at_time(time);
-        let _tick = beat.absolute_tick;
+        Some(self.state_at(layout, beat, cursor_x))
+    }
 
+    /// The cursor state for a beat already located, at `cursor_x`.
+    ///
+    /// The tick and time entry points differ only in how they find the
+    /// beat and the x within it; everything after that is the same, and
+    /// was written out twice.
+    fn state_at(
+        &self,
+        layout: &ChartLayoutResult,
+        beat: &BeatPosition,
+        cursor_x: f64,
+    ) -> CursorState {
         let mut commands = Vec::new();
 
         match &self.config.style {
@@ -245,11 +229,12 @@ impl ChartCursor {
             }
         }
 
+        // Notehead highlight, common to all styles.
         if self.config.highlight_notehead {
             self.build_notehead_highlight(&mut commands, beat);
         }
 
-        Some(CursorState {
+        CursorState {
             page: beat.page,
             system: beat.system,
             measure: beat.measure,
@@ -257,7 +242,7 @@ impl ChartCursor {
             cursor_y: beat.staff_y,
             cursor_height: beat.staff_height,
             commands,
-        })
+        }
     }
 
     // ========================================================================
