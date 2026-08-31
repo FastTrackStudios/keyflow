@@ -205,6 +205,30 @@ impl ChartLayoutEngine {
         chart.initial_clef.unwrap_or(crate::chart::ChartClef::Bass)
     }
 
+    /// A section's melodies, expanded across measure boundaries and
+    /// stamped with the chart-level clef.
+    ///
+    /// The clef stamp matters: `pitch → staff line` mapping reads it to
+    /// pick the middle-line pitch, so a melody expanded without it maps
+    /// against the wrong clef. Both layout passes need the pair done
+    /// together, which is why they take it from here rather than calling
+    /// `expand_melodies_across_measures` and remembering the second step.
+    pub(super) fn expanded_melody_data(
+        &self,
+        chart: &Chart,
+        measures: &[crate::chart::types::Measure],
+        beats_per_measure: f64,
+    ) -> std::collections::HashMap<usize, super::types::MeasureMelodyData> {
+        let key_signature = super::key_signature_fifths(chart);
+        let mut melody_data_map =
+            super::expand_melodies_across_measures(measures, beats_per_measure, key_signature);
+        let chart_proto_clef = self.chart_proto_clef_for(chart);
+        for md in melody_data_map.values_mut() {
+            md.clef = chart_proto_clef;
+        }
+        melody_data_map
+    }
+
     pub(super) fn section_type_to_strings(&self, section_type: &SectionType) -> (String, String) {
         (section_type.full_name(), section_type.abbreviation())
     }
