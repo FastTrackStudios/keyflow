@@ -20,7 +20,7 @@ fn new_offscreen_renderer(width: u32, height: u32) -> OffscreenRenderer {
 fn new_offscreen_renderer(_width: u32, _height: u32) -> OffscreenRenderer {
     anyrender::NullImageRenderer::new()
 }
-use keyflow::engraver::api::pipeline::{ChartPipeline, Preset, PresetOptions};
+use keyflow::engraver::api::pipeline::{ChartPipeline, Paper, Preset, PresetOptions};
 use keyflow::engraver::layout::chart::cursor::{ChartCursor, CursorState, HighlightCommand, Rgba};
 use keyflow::engraver::layout::chart::{
     BeatPosition, Breakpoint, ChartLayoutConfig, ChartLayoutResult, LayoutMode,
@@ -88,13 +88,20 @@ pub fn layout_mode_for_preview(
     preview_mode: PreviewMode,
     viewport_width: f64,
     zoom: f64,
+    paper: Paper,
 ) -> (LayoutMode, ChartLayoutConfig) {
     // The table lives on `ChartPipeline`; this was one of three copies of
-    // it, and the copies disagreed. Screen defaults — Letter paper, page
-    // offsets on — because a preview stacks its pages in one scrollable
-    // scene, where an export serialises each page on its own.
+    // it, and the copies disagreed. Screen defaults — page offsets on —
+    // because a preview stacks its pages in one scrollable scene, where
+    // an export serialises each page on its own.
+    //
+    // `paper` is the caller's, though. `for_screen` picks Letter, which
+    // is right for a US-facing preview and wrong for a site whose export
+    // and blank-page placeholder are both A4 — the two disagreed, and the
+    // shape of the paper on screen was not the shape of the paper that
+    // came out.
     let viewport_points = viewport_width / DPI_SCALE;
-    let options = PresetOptions::for_screen(viewport_points, zoom);
+    let options = PresetOptions::for_screen(viewport_points, zoom).with_paper(paper);
     let preset = match preview_mode {
         PreviewMode::Snippet => Preset::Snippet,
         PreviewMode::Page => Preset::Page,
@@ -566,6 +573,10 @@ pub struct ChartLayoutManager {
     last_source_hash: u64,
     /// Last preview mode (affects fit-to-width calculation).
     last_preview_mode: PreviewMode,
+    /// Paper for [`PreviewMode::Page`]. Letter by default, matching the
+    /// on-screen preset; set it once, at construction, with
+    /// [`ChartLayoutManager::with_paper`].
+    paper: Paper,
     /// Renderer-agnostic cursor for computing highlight commands.
     cursor: ChartCursor,
     /// Last computed cursor state (cached to avoid recomputing every frame when tick hasn't changed).
@@ -883,6 +894,19 @@ impl ChartLayoutManager {
         scene.pop_layer();
     }
 
+    /// Lay [`PreviewMode::Page`] out on `paper` instead of the on-screen
+    /// default of Letter.
+    ///
+    /// Paper is not a rendering detail — it changes the system breaks and
+    /// the width distribution, so a chart laid out on Letter and printed
+    /// on A4 is not the same chart. Set it to whatever this surface
+    /// actually claims to be showing.
+    #[must_use]
+    pub fn with_paper(mut self, paper: Paper) -> Self {
+        self.paper = paper;
+        self
+    }
+
     /// Create a new chart layout manager with embedded fonts.
     pub fn new() -> Result<Self, String> {
         // The bundle is shared: building one copies ~2.5 MB of baked-in
@@ -906,6 +930,7 @@ impl ChartLayoutManager {
             last_layout_chart: None,
             last_source_hash: 0,
             last_preview_mode: PreviewMode::Page,
+            paper: Paper::Letter,
             cursor: ChartCursor::default(),
             cached_cursor_state: None,
             cached_cursor_tick: i64::MIN,
@@ -1001,7 +1026,8 @@ impl ChartLayoutManager {
 
         // Layout using the cached chart
         let chart = self.cached_chart.as_ref().unwrap();
-        let (mode, config) = layout_mode_for_preview(preview_mode, viewport_width, zoom);
+        let (mode, config) =
+            layout_mode_for_preview(preview_mode, viewport_width, zoom, self.paper);
 
         let result = self
             .pipeline
@@ -1081,7 +1107,8 @@ impl ChartLayoutManager {
             return;
         }
 
-        let (mode, config) = layout_mode_for_preview(preview_mode, viewport_width, zoom);
+        let (mode, config) =
+            layout_mode_for_preview(preview_mode, viewport_width, zoom, self.paper);
 
         let result = self
             .pipeline
@@ -2267,6 +2294,10 @@ impl ChartLayoutManager {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         source.hash(&mut hasher);
         preview_mode.hash(&mut hasher);
+        // Paper decides the page box, so it decides system breaks. Left
+        // out of the hash, a manager re-pointed at different paper would
+        // hand back the layout it already had.
+        (self.paper as u8).hash(&mut hasher);
         match preview_mode {
             PreviewMode::Snippet => {
                 ((viewport_width / 16.0).round() as i64).hash(&mut hasher);
