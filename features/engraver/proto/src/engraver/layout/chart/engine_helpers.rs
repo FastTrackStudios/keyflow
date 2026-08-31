@@ -22,6 +22,44 @@ use crate::sections::SectionType;
 use super::{ChartLayoutEngine, count_in_renderer, page_rendering, section_layout};
 
 impl ChartLayoutEngine {
+    /// Lay out one repeat-pass label in the margin.
+    ///
+    /// Drawing the labels and reserving the dynamic slots beneath them
+    /// have to agree on where each one sits, so both ask here rather
+    /// than each building its own `MarginLabelParams`.
+    #[allow(clippy::too_many_arguments)]
+    fn layout_pass_label(
+        &self,
+        pass_label: &str,
+        section: &crate::sections::Section,
+        page_x: f64,
+        margin_width: f64,
+        staff_y: f64,
+        staff_height: f64,
+        ctx: &LayoutContext<'_>,
+    ) -> (crate::layout::tlayout::RehearsalMarkLayoutData, SceneNode) {
+        let section_type =
+            section_type_for_pass_label(pass_label).unwrap_or_else(|| section.section_type.clone());
+        let (section_type_name, abbreviation) = self.section_type_to_strings(&section_type);
+        layout_margin_label(
+            &MarginLabelParams {
+                section_type: section_type_name,
+                abbreviation,
+                number: None,
+                letter: None,
+                comment: None,
+                label_override: Some(pass_label.to_string()),
+                page_x,
+                margin_width,
+                staff_y,
+                staff_height,
+                style: self.get_section_theme(&section_type),
+                ..Default::default()
+            },
+            ctx,
+        )
+    }
+
     /// Create a section label scene node.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn create_section_label(
@@ -43,24 +81,13 @@ impl ChartLayoutEngine {
             let mut y = staff_y;
             let pass_gap = repeat_pass_label_gap(staff_height);
             for pass_label in repeat_pass_label_parts(label_text) {
-                let section_type = section_type_for_pass_label(pass_label)
-                    .unwrap_or_else(|| section.section_type.clone());
-                let (section_type_name, abbreviation) = self.section_type_to_strings(&section_type);
-                let (layout, label_node) = layout_margin_label(
-                    &MarginLabelParams {
-                        section_type: section_type_name,
-                        abbreviation,
-                        number: None,
-                        letter: None,
-                        comment: None,
-                        label_override: Some(pass_label.to_string()),
-                        page_x,
-                        margin_width,
-                        staff_y: y,
-                        staff_height,
-                        style: self.get_section_theme(&section_type),
-                        ..Default::default()
-                    },
+                let (layout, label_node) = self.layout_pass_label(
+                    pass_label,
+                    section,
+                    page_x,
+                    margin_width,
+                    y,
+                    staff_height,
                     ctx,
                 );
                 container.add_child(label_node);
@@ -117,24 +144,13 @@ impl ChartLayoutEngine {
         let pass_gap = repeat_pass_label_gap(staff_height);
         let mut slots = Vec::new();
         for pass_label in repeat_pass_label_parts(label_text) {
-            let section_type = section_type_for_pass_label(pass_label)
-                .unwrap_or_else(|| section.section_type.clone());
-            let (section_type_name, abbreviation) = self.section_type_to_strings(&section_type);
-            let (layout, _) = layout_margin_label(
-                &MarginLabelParams {
-                    section_type: section_type_name,
-                    abbreviation,
-                    number: None,
-                    letter: None,
-                    comment: None,
-                    label_override: Some(pass_label.to_string()),
-                    page_x,
-                    margin_width,
-                    staff_y: y,
-                    staff_height,
-                    style: self.get_section_theme(&section_type),
-                    ..Default::default()
-                },
+            let (layout, _) = self.layout_pass_label(
+                pass_label,
+                section,
+                page_x,
+                margin_width,
+                y,
+                staff_height,
                 ctx,
             );
             slots.push(y + layout.height + pass_gap * 0.72);

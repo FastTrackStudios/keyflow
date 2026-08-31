@@ -493,6 +493,40 @@ fn replay_recorded_scene(
     }
 }
 
+/// The beat nearest a scene point, with its weighted distance.
+///
+/// Y distance counts triple so a click lands on the staff line it was
+/// aimed at rather than a horizontally-closer beat on the line above.
+/// Hit-testing and tick lookup both need the same answer — a click that
+/// selected one beat and scrubbed to another would be its own bug.
+///
+/// `beats` must not be empty.
+fn nearest_beat<'a>(
+    beats: &[&'a BeatPosition],
+    scene_x: f64,
+    scene_y: f64,
+) -> (&'a BeatPosition, f64) {
+    let mut best = beats[0];
+    let mut best_dist = f64::INFINITY;
+    for beat in beats {
+        let y_dist = if scene_y < beat.staff_y {
+            beat.staff_y - scene_y
+        } else if scene_y > beat.staff_y + beat.staff_height {
+            scene_y - (beat.staff_y + beat.staff_height)
+        } else {
+            0.0
+        };
+        let x_center = beat.x + beat.width / 2.0;
+        let x_dist = (scene_x - x_center).abs();
+        let combined = x_dist + y_dist * 3.0;
+        if combined < best_dist {
+            best_dist = combined;
+            best = beat;
+        }
+    }
+    (best, best_dist)
+}
+
 /// Reborrow a recorded `Paint` as one that borrows its payload.
 ///
 /// A `RenderCommand` owns its brush, but `PaintScene` wants a `Paint`
@@ -1892,24 +1926,7 @@ impl ChartLayoutManager {
             return;
         }
 
-        let mut best = &page_beats[0];
-        let mut best_dist = f64::INFINITY;
-        for beat in &page_beats {
-            let y_dist = if scene_y < beat.staff_y {
-                beat.staff_y - scene_y
-            } else if scene_y > beat.staff_y + beat.staff_height {
-                scene_y - (beat.staff_y + beat.staff_height)
-            } else {
-                0.0
-            };
-            let x_center = beat.x + beat.width / 2.0;
-            let x_dist = (scene_x - x_center).abs();
-            let combined = x_dist + y_dist * 3.0;
-            if combined < best_dist {
-                best_dist = combined;
-                best = beat;
-            }
-        }
+        let (best, best_dist) = nearest_beat(&page_beats, scene_x, scene_y);
 
         if best_dist > 80.0 {
             return;
@@ -2213,28 +2230,7 @@ impl ChartLayoutManager {
             return None;
         }
 
-        // Find the beat whose x range is closest to scene_x
-        let mut best = &page_beats[0];
-        let mut best_dist = f64::INFINITY;
-        for beat in &page_beats {
-            let y_dist = if scene_y < beat.staff_y {
-                beat.staff_y - scene_y
-            } else if scene_y > beat.staff_y + beat.staff_height {
-                scene_y - (beat.staff_y + beat.staff_height)
-            } else {
-                0.0
-            };
-
-            let x_center = beat.x + beat.width / 2.0;
-            let x_dist = (scene_x - x_center).abs();
-
-            // Weight Y distance more heavily to prefer beats on the correct staff line
-            let combined = x_dist + y_dist * 3.0;
-            if combined < best_dist {
-                best_dist = combined;
-                best = beat;
-            }
-        }
+        let (best, _) = nearest_beat(&page_beats, scene_x, scene_y);
 
         Some(best.absolute_tick)
     }
