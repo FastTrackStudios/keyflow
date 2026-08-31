@@ -405,26 +405,14 @@ fn replay_recorded_scene(
                 RenderCommand::Stroke(cmd) => target.stroke(
                     &cmd.style,
                     cmd.transform,
-                    match cmd.brush {
-                        Paint::Solid(alpha_color) => Paint::Solid(alpha_color),
-                        Paint::Gradient(ref gradient) => Paint::Gradient(gradient),
-                        Paint::Image(ref image) => Paint::Image(image.as_ref()),
-                        Paint::Resource(id) => Paint::Resource(id),
-                        Paint::Custom(ref custom) => Paint::Custom(custom.as_ref()),
-                    },
+                    borrow_paint(&cmd.brush),
                     cmd.brush_transform,
                     &cmd.shape,
                 ),
                 RenderCommand::Fill(cmd) => target.fill(
                     cmd.fill,
                     cmd.transform,
-                    match cmd.brush {
-                        Paint::Solid(alpha_color) => Paint::Solid(alpha_color),
-                        Paint::Gradient(ref gradient) => Paint::Gradient(gradient),
-                        Paint::Image(ref image) => Paint::Image(image.as_ref()),
-                        Paint::Resource(id) => Paint::Resource(id),
-                        Paint::Custom(ref custom) => Paint::Custom(custom.as_ref()),
-                    },
+                    borrow_paint(&cmd.brush),
                     cmd.brush_transform,
                     &cmd.shape,
                 ),
@@ -435,13 +423,7 @@ fn replay_recorded_scene(
                     &cmd.normalized_coords,
                     cmd.embolden,
                     &cmd.style,
-                    match cmd.brush {
-                        Paint::Solid(alpha_color) => Paint::Solid(alpha_color),
-                        Paint::Gradient(ref gradient) => Paint::Gradient(gradient),
-                        Paint::Image(ref image) => Paint::Image(image.as_ref()),
-                        Paint::Resource(id) => Paint::Resource(id),
-                        Paint::Custom(ref custom) => Paint::Custom(custom.as_ref()),
-                    },
+                    borrow_paint(&cmd.brush),
                     cmd.brush_alpha,
                     cmd.transform,
                     cmd.glyph_transform,
@@ -476,26 +458,14 @@ fn replay_recorded_scene(
             RenderCommand::Stroke(cmd) => target.stroke(
                 &cmd.style,
                 scene_transform * cmd.transform,
-                match cmd.brush {
-                    Paint::Solid(alpha_color) => Paint::Solid(alpha_color),
-                    Paint::Gradient(ref gradient) => Paint::Gradient(gradient),
-                    Paint::Image(ref image) => Paint::Image(image.as_ref()),
-                    Paint::Resource(id) => Paint::Resource(id),
-                    Paint::Custom(ref custom) => Paint::Custom(custom.as_ref()),
-                },
+                borrow_paint(&cmd.brush),
                 cmd.brush_transform,
                 &cmd.shape,
             ),
             RenderCommand::Fill(cmd) => target.fill(
                 cmd.fill,
                 scene_transform * cmd.transform,
-                match cmd.brush {
-                    Paint::Solid(alpha_color) => Paint::Solid(alpha_color),
-                    Paint::Gradient(ref gradient) => Paint::Gradient(gradient),
-                    Paint::Image(ref image) => Paint::Image(image.as_ref()),
-                    Paint::Resource(id) => Paint::Resource(id),
-                    Paint::Custom(ref custom) => Paint::Custom(custom.as_ref()),
-                },
+                borrow_paint(&cmd.brush),
                 cmd.brush_transform,
                 &cmd.shape,
             ),
@@ -506,13 +476,7 @@ fn replay_recorded_scene(
                 &cmd.normalized_coords,
                 cmd.embolden,
                 &cmd.style,
-                match cmd.brush {
-                    Paint::Solid(alpha_color) => Paint::Solid(alpha_color),
-                    Paint::Gradient(ref gradient) => Paint::Gradient(gradient),
-                    Paint::Image(ref image) => Paint::Image(image.as_ref()),
-                    Paint::Resource(id) => Paint::Resource(id),
-                    Paint::Custom(ref custom) => Paint::Custom(custom.as_ref()),
-                },
+                borrow_paint(&cmd.brush),
                 cmd.brush_alpha,
                 scene_transform * cmd.transform,
                 cmd.glyph_transform,
@@ -526,6 +490,21 @@ fn replay_recorded_scene(
                 cmd.std_dev,
             ),
         }
+    }
+}
+
+/// Reborrow a recorded `Paint` as one that borrows its payload.
+///
+/// A `RenderCommand` owns its brush, but `PaintScene` wants a `Paint`
+/// whose image and custom payloads are references. The conversion is
+/// mechanical and was written out at all six replay sites.
+fn borrow_paint(brush: &Paint) -> anyrender::PaintRef<'_> {
+    match brush {
+        Paint::Solid(alpha_color) => Paint::Solid(*alpha_color),
+        Paint::Gradient(gradient) => Paint::Gradient(gradient),
+        Paint::Image(image) => Paint::Image(image.as_ref()),
+        Paint::Resource(id) => Paint::Resource(*id),
+        Paint::Custom(custom) => Paint::Custom(custom.as_ref()),
     }
 }
 
