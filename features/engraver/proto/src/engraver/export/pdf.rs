@@ -1138,26 +1138,7 @@ impl PdfSerializer {
     ) {
         ops.push(Op::SaveGraphicsState);
 
-        if let Some(fill_color) = fill {
-            ops.push(Op::SetFillColor {
-                col: vello_to_pdf_color(fill_color),
-            });
-        }
-        if let Some(stroke_color) = stroke {
-            ops.push(Op::SetOutlineColor {
-                col: vello_to_pdf_color(stroke_color),
-            });
-            ops.push(Op::SetOutlineThickness {
-                pt: Pt(stroke_width as f32),
-            });
-        }
-
-        let mode = match (fill.is_some(), stroke.is_some()) {
-            (true, true) => printpdf::PaintMode::FillStroke,
-            (true, false) => printpdf::PaintMode::Fill,
-            (false, true) => printpdf::PaintMode::Stroke,
-            (false, false) => printpdf::PaintMode::Fill,
-        };
+        let mode = push_paint(ops, fill, stroke, stroke_width);
 
         // Use rounded rect path if corner_radius > 0, otherwise simple polygon
         let points = if corner_radius > 0.0 {
@@ -1237,26 +1218,7 @@ impl PdfSerializer {
 
         ops.push(Op::SaveGraphicsState);
 
-        if let Some(fill_color) = fill {
-            ops.push(Op::SetFillColor {
-                col: vello_to_pdf_color(fill_color),
-            });
-        }
-        if let Some(stroke_color) = stroke {
-            ops.push(Op::SetOutlineColor {
-                col: vello_to_pdf_color(stroke_color),
-            });
-            ops.push(Op::SetOutlineThickness {
-                pt: Pt(stroke_width as f32),
-            });
-        }
-
-        let mode = match (fill.is_some(), stroke.is_some()) {
-            (true, true) => printpdf::PaintMode::FillStroke,
-            (true, false) => printpdf::PaintMode::Fill,
-            (false, true) => printpdf::PaintMode::Stroke,
-            (false, false) => printpdf::PaintMode::Fill,
-        };
+        let mode = push_paint(ops, fill, stroke, stroke_width);
 
         ops.push(Op::DrawPolygon {
             polygon: printpdf::Polygon {
@@ -1289,26 +1251,7 @@ impl PdfSerializer {
 
         ops.push(Op::SaveGraphicsState);
 
-        if let Some(fill_color) = fill {
-            ops.push(Op::SetFillColor {
-                col: vello_to_pdf_color(fill_color),
-            });
-        }
-        if let Some(stroke_color) = stroke {
-            ops.push(Op::SetOutlineColor {
-                col: vello_to_pdf_color(stroke_color),
-            });
-            ops.push(Op::SetOutlineThickness {
-                pt: Pt(stroke_width as f32),
-            });
-        }
-
-        let mode = match (fill.is_some(), stroke.is_some()) {
-            (true, true) => printpdf::PaintMode::FillStroke,
-            (true, false) => printpdf::PaintMode::Fill,
-            (false, true) => printpdf::PaintMode::Stroke,
-            (false, false) => printpdf::PaintMode::Fill,
-        };
+        let mode = push_paint(ops, fill, stroke, stroke_width);
 
         ops.push(Op::DrawPolygon {
             polygon: printpdf::Polygon {
@@ -1323,6 +1266,40 @@ impl PdfSerializer {
 }
 
 /// Convert a vello Color to printpdf Color.
+/// Emit the fill/stroke state for a shape and report the paint mode it implies.
+///
+/// The three shape emitters (rect, circle, polygon) each open-coded this,
+/// so a change to how colour or thickness is written had to be made in
+/// three places to stay consistent.
+fn push_paint(
+    ops: &mut Vec<Op>,
+    fill: Option<Color>,
+    stroke: Option<Color>,
+    stroke_width: f64,
+) -> printpdf::PaintMode {
+    if let Some(fill_color) = fill {
+        ops.push(Op::SetFillColor {
+            col: vello_to_pdf_color(fill_color),
+        });
+    }
+    if let Some(stroke_color) = stroke {
+        ops.push(Op::SetOutlineColor {
+            col: vello_to_pdf_color(stroke_color),
+        });
+        ops.push(Op::SetOutlineThickness {
+            pt: Pt(stroke_width as f32),
+        });
+    }
+
+    // A shape with neither fill nor stroke still paints as Fill, matching
+    // the previous behaviour at all three call sites.
+    match (fill.is_some(), stroke.is_some()) {
+        (true, true) => printpdf::PaintMode::FillStroke,
+        (false, true) => printpdf::PaintMode::Stroke,
+        (true, false) | (false, false) => printpdf::PaintMode::Fill,
+    }
+}
+
 fn vello_to_pdf_color(color: Color) -> PdfColor {
     let rgba = color.to_rgba8();
     PdfColor::Rgb(printpdf::Rgb {
