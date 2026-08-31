@@ -658,7 +658,11 @@ fn articulation_tag(a: &ArticulationsType) -> &'static str {
         ArticulationsType::Stress(_) => "stress",
         ArticulationsType::Unstress(_) => "unstress",
         ArticulationsType::SoftAccent(_) => "soft-accent",
-        ArticulationsType::OtherArticulation(_) => "other",
+        // "other-articulation", not "other": keyflow-orchestra and
+        // keyflow-musx both emit the long form for this tag, and a
+        // second spelling of the same MusicXML element is drift waiting
+        // to be matched on.
+        ArticulationsType::OtherArticulation(_) => "other-articulation",
     }
 }
 
