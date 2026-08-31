@@ -604,19 +604,10 @@ mod tests {
         );
     }
 
-    #[test]
-    fn six_eight_count_in_labels_sit_under_beamed_notes() {
-        let config = CountInSnippetConfig {
-            beats_per_measure: 6,
-            beat_unit: 8,
-            num_measures: 2,
-            spatium: 5.0,
-            scale: 1.0,
-            measure_numbers: Vec::new(),
-        };
-
-        let result = render_count_in_snippet(&config, Point::new(0.0, 0.0));
-        let labels = result
+    /// The numeric beat labels a rendered snippet emitted, with their
+    /// positions, in command order.
+    fn numeric_labels(result: &CountInSnippetResult) -> Vec<(&str, Point)> {
+        result
             .node
             .commands
             .iter()
@@ -629,7 +620,22 @@ mod tests {
                     None
                 }
             })
-            .collect::<Vec<_>>();
+            .collect()
+    }
+
+    #[test]
+    fn six_eight_count_in_labels_sit_under_beamed_notes() {
+        let config = CountInSnippetConfig {
+            beats_per_measure: 6,
+            beat_unit: 8,
+            num_measures: 2,
+            spatium: 5.0,
+            scale: 1.0,
+            measure_numbers: Vec::new(),
+        };
+
+        let result = render_count_in_snippet(&config, Point::new(0.0, 0.0));
+        let labels = numeric_labels(&result);
 
         for beat in result
             .beat_geometries
@@ -664,20 +670,7 @@ mod tests {
         };
 
         let result = render_count_in_snippet(&config, Point::new(0.0, 0.0));
-        let labels = result
-            .node
-            .commands
-            .iter()
-            .filter_map(|cmd| {
-                if let PaintCommand::Text { text, position, .. } = cmd {
-                    text.parse::<usize>()
-                        .ok()
-                        .map(|_| (text.as_str(), *position))
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
+        let labels = numeric_labels(&result);
 
         let first_bar_one = result
             .beat_geometries

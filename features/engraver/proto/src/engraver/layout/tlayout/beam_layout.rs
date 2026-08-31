@@ -1066,6 +1066,28 @@ fn find_beamlets(notes: &[BeamNote], level: usize) -> Vec<(usize, bool)> {
 
 #[cfg(test)]
 mod tests {
+
+    /// A `BeamNote` sitting entirely on one staff line, with a normal head.
+    ///
+    /// Nearly every beam test wants exactly this and repeated the seven
+    /// fields to say so, which buried the two or three that each case
+    /// actually varied.
+    fn beam_note(
+        x: f64,
+        line: i32,
+        duration: NoteDuration,
+        stem_direction: StemDirection,
+    ) -> BeamNote {
+        BeamNote {
+            x,
+            line,
+            top_line: line,
+            bottom_line: line,
+            duration,
+            stem_direction,
+            head_type: NoteHeadType::Normal,
+        }
+    }
     use super::*;
 
     fn assert_all_beam_stems_attached(notes: &[BeamNote], stem_dir: StemDirection, spatium: f64) {
@@ -1093,15 +1115,7 @@ mod tests {
                 stem_direction: StemDirection::Up,
                 head_type: NoteHeadType::Normal,
             },
-            BeamNote {
-                x: 18.0,
-                line: 6,
-                top_line: 6,
-                bottom_line: 6,
-                duration: NoteDuration::Eighth,
-                stem_direction: StemDirection::Up,
-                head_type: NoteHeadType::Normal,
-            },
+            beam_note(18.0, 6, NoteDuration::Eighth, StemDirection::Up),
         ];
         assert_all_beam_stems_attached(&up_notes, StemDirection::Up, spatium);
 
@@ -1115,15 +1129,7 @@ mod tests {
                 stem_direction: StemDirection::Down,
                 head_type: NoteHeadType::Normal,
             },
-            BeamNote {
-                x: 18.0,
-                line: -5,
-                top_line: -5,
-                bottom_line: -5,
-                duration: NoteDuration::Eighth,
-                stem_direction: StemDirection::Down,
-                head_type: NoteHeadType::Normal,
-            },
+            beam_note(18.0, -5, NoteDuration::Eighth, StemDirection::Down),
         ];
         assert_all_beam_stems_attached(&down_notes, StemDirection::Down, spatium);
     }
@@ -1131,24 +1137,8 @@ mod tests {
     #[test]
     fn test_beam_direction_auto() {
         let notes = vec![
-            BeamNote {
-                x: 0.0,
-                line: -2,
-                top_line: -2,
-                bottom_line: -2,
-                duration: NoteDuration::Eighth,
-                stem_direction: StemDirection::Auto,
-                head_type: NoteHeadType::Normal,
-            },
-            BeamNote {
-                x: 20.0,
-                line: -4,
-                top_line: -4,
-                bottom_line: -4,
-                duration: NoteDuration::Eighth,
-                stem_direction: StemDirection::Auto,
-                head_type: NoteHeadType::Normal,
-            },
+            beam_note(0.0, -2, NoteDuration::Eighth, StemDirection::Auto),
+            beam_note(20.0, -4, NoteDuration::Eighth, StemDirection::Auto),
         ];
 
         let dir = determine_beam_direction(&notes);
@@ -1158,24 +1148,8 @@ mod tests {
     #[test]
     fn test_beam_two_eighths() {
         let notes = vec![
-            BeamNote {
-                x: 0.0,
-                line: 0,
-                top_line: 0,
-                bottom_line: 0,
-                duration: NoteDuration::Eighth,
-                stem_direction: StemDirection::Up,
-                head_type: NoteHeadType::Normal,
-            },
-            BeamNote {
-                x: 25.0,
-                line: -2,
-                top_line: -2,
-                bottom_line: -2,
-                duration: NoteDuration::Eighth,
-                stem_direction: StemDirection::Up,
-                head_type: NoteHeadType::Normal,
-            },
+            beam_note(0.0, 0, NoteDuration::Eighth, StemDirection::Up),
+            beam_note(25.0, -2, NoteDuration::Eighth, StemDirection::Up),
         ];
 
         let config = BeamLayoutConfig::default();
@@ -1188,33 +1162,9 @@ mod tests {
     #[test]
     fn test_beam_with_sixteenths() {
         let notes = vec![
-            BeamNote {
-                x: 0.0,
-                line: 0,
-                top_line: 0,
-                bottom_line: 0,
-                duration: NoteDuration::Sixteenth,
-                stem_direction: StemDirection::Up,
-                head_type: NoteHeadType::Normal,
-            },
-            BeamNote {
-                x: 15.0,
-                line: -1,
-                top_line: -1,
-                bottom_line: -1,
-                duration: NoteDuration::Sixteenth,
-                stem_direction: StemDirection::Up,
-                head_type: NoteHeadType::Normal,
-            },
-            BeamNote {
-                x: 30.0,
-                line: -2,
-                top_line: -2,
-                bottom_line: -2,
-                duration: NoteDuration::Eighth,
-                stem_direction: StemDirection::Up,
-                head_type: NoteHeadType::Normal,
-            },
+            beam_note(0.0, 0, NoteDuration::Sixteenth, StemDirection::Up),
+            beam_note(15.0, -1, NoteDuration::Sixteenth, StemDirection::Up),
+            beam_note(30.0, -2, NoteDuration::Eighth, StemDirection::Up),
         ];
 
         let config = BeamLayoutConfig::default();
@@ -1228,24 +1178,8 @@ mod tests {
     fn test_slope_constraint_same_line_is_flat() {
         // Two notes on the same line should produce a flat beam
         let notes = vec![
-            BeamNote {
-                x: 0.0,
-                line: 0,
-                top_line: 0,
-                bottom_line: 0,
-                duration: NoteDuration::Eighth,
-                stem_direction: StemDirection::Up,
-                head_type: NoteHeadType::Normal,
-            },
-            BeamNote {
-                x: 25.0,
-                line: 0,
-                top_line: 0,
-                bottom_line: 0,
-                duration: NoteDuration::Eighth,
-                stem_direction: StemDirection::Up,
-                head_type: NoteHeadType::Normal,
-            },
+            beam_note(0.0, 0, NoteDuration::Eighth, StemDirection::Up),
+            beam_note(25.0, 0, NoteDuration::Eighth, StemDirection::Up),
         ];
 
         let constraint = get_slope_constraint(&notes, true);
@@ -1256,15 +1190,7 @@ mod tests {
     fn test_slope_constraint_middle_more_extreme_is_flat() {
         // Middle note higher than both endpoints (stem up) should be flat
         let notes = vec![
-            BeamNote {
-                x: 0.0,
-                line: 0,
-                top_line: 0,
-                bottom_line: 0,
-                duration: NoteDuration::Eighth,
-                stem_direction: StemDirection::Up,
-                head_type: NoteHeadType::Normal,
-            },
+            beam_note(0.0, 0, NoteDuration::Eighth, StemDirection::Up),
             BeamNote {
                 x: 15.0,
                 line: 4,
@@ -1274,15 +1200,7 @@ mod tests {
                 stem_direction: StemDirection::Up,
                 head_type: NoteHeadType::Normal,
             },
-            BeamNote {
-                x: 30.0,
-                line: 2,
-                top_line: 2,
-                bottom_line: 2,
-                duration: NoteDuration::Eighth,
-                stem_direction: StemDirection::Up,
-                head_type: NoteHeadType::Normal,
-            },
+            beam_note(30.0, 2, NoteDuration::Eighth, StemDirection::Up),
         ];
 
         let constraint = get_slope_constraint(&notes, true);
@@ -1293,24 +1211,8 @@ mod tests {
     fn test_slope_constraint_two_notes_unconstrained() {
         // Two notes at different lines should be unconstrained
         let notes = vec![
-            BeamNote {
-                x: 0.0,
-                line: 0,
-                top_line: 0,
-                bottom_line: 0,
-                duration: NoteDuration::Eighth,
-                stem_direction: StemDirection::Up,
-                head_type: NoteHeadType::Normal,
-            },
-            BeamNote {
-                x: 25.0,
-                line: -2,
-                top_line: -2,
-                bottom_line: -2,
-                duration: NoteDuration::Eighth,
-                stem_direction: StemDirection::Up,
-                head_type: NoteHeadType::Normal,
-            },
+            beam_note(0.0, 0, NoteDuration::Eighth, StemDirection::Up),
+            beam_note(25.0, -2, NoteDuration::Eighth, StemDirection::Up),
         ];
 
         let constraint = get_slope_constraint(&notes, true);
@@ -1321,24 +1223,8 @@ mod tests {
     fn test_compute_desired_slant_flat() {
         // Same line should produce slant of 0
         let notes = vec![
-            BeamNote {
-                x: 0.0,
-                line: 0,
-                top_line: 0,
-                bottom_line: 0,
-                duration: NoteDuration::Eighth,
-                stem_direction: StemDirection::Up,
-                head_type: NoteHeadType::Normal,
-            },
-            BeamNote {
-                x: 25.0,
-                line: 0,
-                top_line: 0,
-                bottom_line: 0,
-                duration: NoteDuration::Eighth,
-                stem_direction: StemDirection::Up,
-                head_type: NoteHeadType::Normal,
-            },
+            beam_note(0.0, 0, NoteDuration::Eighth, StemDirection::Up),
+            beam_note(25.0, 0, NoteDuration::Eighth, StemDirection::Up),
         ];
 
         let slant = compute_desired_slant(&notes, true, 5.0);
@@ -1349,15 +1235,7 @@ mod tests {
     fn test_compute_desired_slant_interval() {
         // Different lines should produce non-zero slant
         let notes = vec![
-            BeamNote {
-                x: 0.0,
-                line: 0,
-                top_line: 0,
-                bottom_line: 0,
-                duration: NoteDuration::Eighth,
-                stem_direction: StemDirection::Up,
-                head_type: NoteHeadType::Normal,
-            },
+            beam_note(0.0, 0, NoteDuration::Eighth, StemDirection::Up),
             BeamNote {
                 x: 25.0,
                 line: 2,
@@ -1377,33 +1255,9 @@ mod tests {
     #[test]
     fn rising_beam_group_uses_diagonal_beam() {
         let notes = vec![
-            BeamNote {
-                x: 0.0,
-                line: 0,
-                top_line: 0,
-                bottom_line: 0,
-                duration: NoteDuration::Eighth,
-                stem_direction: StemDirection::Up,
-                head_type: NoteHeadType::Normal,
-            },
-            BeamNote {
-                x: 15.0,
-                line: 1,
-                top_line: 1,
-                bottom_line: 1,
-                duration: NoteDuration::Eighth,
-                stem_direction: StemDirection::Up,
-                head_type: NoteHeadType::Normal,
-            },
-            BeamNote {
-                x: 30.0,
-                line: 2,
-                top_line: 2,
-                bottom_line: 2,
-                duration: NoteDuration::Eighth,
-                stem_direction: StemDirection::Up,
-                head_type: NoteHeadType::Normal,
-            },
+            beam_note(0.0, 0, NoteDuration::Eighth, StemDirection::Up),
+            beam_note(15.0, 1, NoteDuration::Eighth, StemDirection::Up),
+            beam_note(30.0, 2, NoteDuration::Eighth, StemDirection::Up),
         ];
 
         let (start_y, end_y) =
@@ -1418,33 +1272,9 @@ mod tests {
     #[test]
     fn rising_down_stem_beam_group_uses_upward_diagonal_beam() {
         let notes = vec![
-            BeamNote {
-                x: 0.0,
-                line: 6,
-                top_line: 6,
-                bottom_line: 6,
-                duration: NoteDuration::Eighth,
-                stem_direction: StemDirection::Down,
-                head_type: NoteHeadType::Normal,
-            },
-            BeamNote {
-                x: 15.0,
-                line: 7,
-                top_line: 7,
-                bottom_line: 7,
-                duration: NoteDuration::Eighth,
-                stem_direction: StemDirection::Down,
-                head_type: NoteHeadType::Normal,
-            },
-            BeamNote {
-                x: 30.0,
-                line: 8,
-                top_line: 8,
-                bottom_line: 8,
-                duration: NoteDuration::Eighth,
-                stem_direction: StemDirection::Down,
-                head_type: NoteHeadType::Normal,
-            },
+            beam_note(0.0, 6, NoteDuration::Eighth, StemDirection::Down),
+            beam_note(15.0, 7, NoteDuration::Eighth, StemDirection::Down),
+            beam_note(30.0, 8, NoteDuration::Eighth, StemDirection::Down),
         ];
 
         let (start_y, end_y) = calculate_beam_position(
