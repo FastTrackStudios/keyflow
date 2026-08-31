@@ -56,9 +56,9 @@ pub fn Home() -> Element {
                         "Charts you can write as fast as you can hear them."
                     }
                     p { class: "kf-lede",
-                        "Keyflow is a text format for the harmonic and rhythmic skeleton of a "
-                        "song. Type it in Nashville numbers, Roman numerals or letter names — "
-                        "it engraves as you go."
+                        "Write chords, sections and repeats the way you'd sketch them — in "
+                        "Nashville numbers, Roman numerals or letter names. Keyflow lays out "
+                        "the page as you type."
                     }
                     div { class: "kf-cta",
                         Link { to: Route::Editor {}, class: "kf-button kf-button-primary",
