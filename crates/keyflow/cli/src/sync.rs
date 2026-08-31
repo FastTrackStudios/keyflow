@@ -11,6 +11,60 @@ use keyflow::Chart;
 use keyflow_sync::karaoke::{VoiceNote, VoiceTrack};
 use keyflow_sync::pipeline::SectionLyrics;
 
+#[cfg(feature = "reaper")]
+/// One entry of a MIDI source expanded to absolute ticks.
+///
+/// The middle field orders events that land on the same tick: lyrics are
+/// pushed as `0` and notes as `1`, so a lyric at a tie precedes the note
+/// it belongs to.
+type AbsEvent = (u64, u8, dawfile_reaper::types::item::MidiEvent);
+
+#[cfg(feature = "reaper")]
+/// Expand a MIDI source's delta-encoded stream to absolute ticks.
+fn absolute_events(src: &dawfile_reaper::types::item::MidiSource) -> Vec<AbsEvent> {
+    use dawfile_reaper::types::item::MidiSourceEvent;
+
+    let mut abs = Vec::new();
+    let mut acc = 0u64;
+    for ev in &src.event_stream {
+        if let MidiSourceEvent::Midi(e) = ev {
+            acc += u64::from(e.delta_ticks);
+            abs.push((acc, 1, e.clone()));
+        }
+    }
+    abs
+}
+
+#[cfg(feature = "reaper")]
+/// A `FF 05` lyric meta-event carrying `text`.
+fn lyric_meta_event(text: &str) -> dawfile_reaper::types::item::MidiEvent {
+    let mut bytes = vec![0xFF, 0x05];
+    bytes.extend_from_slice(text.as_bytes());
+    dawfile_reaper::types::item::MidiEvent {
+        delta_ticks: 0,
+        bytes,
+    }
+}
+
+#[cfg(feature = "reaper")]
+/// Sort absolute events, delta-encode them, and store them back on `src`.
+fn store_delta_encoded(src: &mut dawfile_reaper::types::item::MidiSource, mut abs: Vec<AbsEvent>) {
+    use dawfile_reaper::types::item::MidiSourceEvent;
+
+    abs.sort_by_key(|(t, ord, _)| (*t, *ord));
+    let mut prev = 0u64;
+    let (mut events_out, mut stream) = (Vec::new(), Vec::new());
+    for (t, _, mut e) in abs {
+        e.delta_ticks = (t - prev) as u32;
+        prev = t;
+        stream.push(MidiSourceEvent::Midi(e.clone()));
+        events_out.push(e);
+    }
+    src.events = events_out;
+    src.event_stream = stream;
+    src.has_data = true;
+}
+
 /// Notated duration of a melody note in quarter-note beats.
 fn note_quarters(note: &keyflow::chart::melody::MelodyNote) -> f32 {
     let base = 4.0 / (note.duration.max(1) as f32);
@@ -749,40 +803,13 @@ fn export_reaper_voices(
         else {
             continue;
         };
-        let mut abs: Vec<(u64, u8, MidiEvent)> = Vec::new();
-        let mut acc = 0u64;
-        for ev in &src.event_stream {
-            if let MidiSourceEvent::Midi(e) = ev {
-                acc += e.delta_ticks as u64;
-                abs.push((acc, 1, e.clone()));
-            }
-        }
+        let mut abs = absolute_events(src);
         for n in &v.notes {
             if let Some(l) = &n.lyric {
-                let mut bytes = vec![0xFF, 0x05];
-                bytes.extend_from_slice(l.as_bytes());
-                abs.push((
-                    to_ticks(n.start),
-                    0,
-                    MidiEvent {
-                        delta_ticks: 0,
-                        bytes,
-                    },
-                ));
+                abs.push((to_ticks(n.start), 0, lyric_meta_event(l)));
             }
         }
-        abs.sort_by_key(|(t, ord, _)| (*t, *ord));
-        let mut prev = 0u64;
-        let (mut events_out, mut stream) = (Vec::new(), Vec::new());
-        for (t, _, mut e) in abs {
-            e.delta_ticks = (t - prev) as u32;
-            prev = t;
-            stream.push(MidiSourceEvent::Midi(e.clone()));
-            events_out.push(e);
-        }
-        src.events = events_out;
-        src.event_stream = stream;
-        src.has_data = true;
+        store_delta_encoded(src, abs);
     }
     Ok(project.to_rpp_string())
 }
@@ -847,38 +874,11 @@ fn export_reaper(
         .and_then(|s| s.midi_data.as_mut())
     {
         // Reconstruct absolute ticks from the note stream, then merge in lyrics.
-        let mut abs: Vec<(u64, u8, MidiEvent)> = Vec::new();
-        let mut acc = 0u64;
-        for ev in &src.event_stream {
-            if let MidiSourceEvent::Midi(e) = ev {
-                acc += e.delta_ticks as u64;
-                abs.push((acc, 1, e.clone())); // notes after lyric at a tie
-            }
-        }
+        let mut abs = absolute_events(src);
         for e in events {
-            let mut bytes = vec![0xFF, 0x05];
-            bytes.extend_from_slice(e.word.as_bytes());
-            abs.push((
-                to_ticks(e.start),
-                0,
-                MidiEvent {
-                    delta_ticks: 0,
-                    bytes,
-                },
-            ));
+            abs.push((to_ticks(e.start), 0, lyric_meta_event(&e.word)));
         }
-        abs.sort_by_key(|(t, ord, _)| (*t, *ord));
-        let mut prev = 0u64;
-        let (mut events_out, mut stream) = (Vec::new(), Vec::new());
-        for (t, _, mut e) in abs {
-            e.delta_ticks = (t - prev) as u32;
-            prev = t;
-            stream.push(MidiSourceEvent::Midi(e.clone()));
-            events_out.push(e);
-        }
-        src.events = events_out;
-        src.event_stream = stream;
-        src.has_data = true;
+        store_delta_encoded(src, abs);
     }
 
     // TIME timebase: audio + MIDI lock to seconds, not beats.
