@@ -59,7 +59,16 @@ pub fn Home() -> Element {
                         // restart the gradient on the second line box.
                         span { class: "kf-accel", "Accelerated" }
                     }
-                    p { class: "kf-lede", "Simple Text to Beautiful Chart" }
+                    // Two ways in, one destination. The `or` is a
+                    // connector rather than a third claim, so it is set
+                    // well below the two lines it joins.
+                    div { class: "kf-taglines",
+                        p { class: "kf-lede", "Simple Text to Beautiful Chart" }
+                        p { class: "kf-lede-or", "or" }
+                        // A real path, not an aspiration: `.rpp` in,
+                        // CHORDS track to chart text, engraved out.
+                        p { class: "kf-lede", "DAW session → Beautiful Chart" }
+                    }
                     div { class: "kf-cta",
                         Link { to: Route::Editor {}, class: "kf-button kf-button-primary",
                             "Open the editor"

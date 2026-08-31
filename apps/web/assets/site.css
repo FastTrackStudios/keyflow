@@ -18,6 +18,9 @@
    * as two different brand colours arguing. */
   --accent-far: #7c3aed;
   --code-bg: #f3f2f6;
+  /* The widest the page's content ever runs — the landing hero's top
+   * tier. The header aligns its contents to the same measure. */
+  --shell-max: 138rem;
   --font-sans: "Geist", "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
 }
@@ -65,13 +68,40 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 1.5rem;
-  padding: 0.9rem clamp(1rem, 4vw, 3rem);
+  /* The BAR stays full-bleed — it is sticky and translucent, so its
+   * border and its blur have to run the whole width of the viewport or
+   * the page appears to scroll past a floating card. Only its CONTENTS
+   * are centred, by growing the side padding once the viewport is wider
+   * than --shell-max. Below that width the `max()` picks the clamp and
+   * nothing changes.
+   *
+   * Done with padding rather than an inner wrapper because the wrapper
+   * would have to be added to `Shell`, and every route renders through
+   * it. */
+  padding: 0.9rem max(clamp(1rem, 4vw, 3rem), calc((100% - var(--shell-max)) / 2));
   border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
   z-index: 10;
   background: color-mix(in srgb, var(--bg) 88%, transparent);
   backdrop-filter: blur(10px);
+}
+
+/* Working surfaces are the exception. The editor and the workbench run
+ * the full viewport on purpose — they are tools, not documents — so the
+ * header has to run with them: a bar centred at --shell-max above
+ * full-bleed content reads as two unrelated layouts stacked on each
+ * other. Each matches the padding its own `.kf-main` uses, so the
+ * wordmark lines up with the surface below it.
+ *
+ * `:has()` on the shell rather than a modifier class, matching how
+ * `.kf-main` already detects the workbench. */
+.kf-shell:has(.kf-editor) .kf-header {
+  padding-inline: clamp(1rem, 4vw, 3rem);
+}
+
+.kf-shell:has(.kf-workbench) .kf-header {
+  padding-inline: 1rem;
 }
 
 .kf-wordmark {
@@ -318,21 +348,42 @@ body {
   .kf-accel { animation: none; }
 }
 
+/* The two taglines and the `or` between them scale as ONE unit: the
+ * group carries the size, the lines inherit it, and the connector is
+ * sized in `em` so it stays proportional without needing its own entry
+ * in every width tier. */
+.kf-taglines {
+  font-size: 1.25rem;
+  max-width: 33rem;
+  margin: 1.6rem 0 0;
+}
+
 /* A tagline, not a paragraph. It carries one short line, so it is set
  * closer to the headline's scale than to body copy — at body size a
- * single centred-weight line under a 5rem display reads as a caption
- * that lost its picture. The colour stays soft to keep the hierarchy. */
+ * single line under a 5rem display reads as a caption that lost its
+ * picture. The colour stays soft to keep the hierarchy. */
 .kf-lede {
   color: var(--ink-soft);
-  font-size: 1.25rem;
+  font-size: 1em;
   line-height: 1.45;
   letter-spacing: -0.005em;
   /* `pretty`, not `balance`: the lede is prose under a balanced
    * headline, and balancing both makes the two blocks echo each other's
    * ragged edge. `pretty` only guards the last line against an orphan. */
   text-wrap: pretty;
-  max-width: 33rem;
-  margin: 1.6rem 0 0;
+  margin: 0;
+}
+
+/* A connector, not a third claim. Mono and small to match the site's
+ * other labels, and set well under the taglines' weight so the eye takes
+ * the two routes first and the `or` only when it needs to. */
+.kf-lede-or {
+  font-family: var(--font-mono);
+  font-size: 0.52em;
+  letter-spacing: 0.1em;
+  color: var(--ink-soft);
+  opacity: 0.75;
+  margin: 0.55em 0;
 }
 
 /* The two doors, then the aside. The note is a footnote to the page, not
@@ -492,7 +543,7 @@ body {
   .kf-hero { max-width: 104rem; }
   .kf-hero-copy { max-width: 44rem; }
   .kf-display { font-size: 4rem; }
-  .kf-lede { font-size: 1.5rem; max-width: 38rem; }
+  .kf-taglines { font-size: 1.5rem; max-width: 38rem; }
   .kf-window { --demo-height: 44rem; --source-width: 24rem; --page-width: 30rem; }
 }
 
@@ -503,7 +554,7 @@ body {
    * reading as a pair and starts reading as two things drifting apart. */
   .kf-hero { max-width: 116rem; }
   .kf-display { font-size: 4.5rem; }
-  .kf-lede { font-size: 1.7rem; max-width: 40rem; }
+  .kf-taglines { font-size: 1.7rem; max-width: 40rem; }
   /* Scoped to the hero: `.kf-note` is shared with the editor, the
    * workbench, the guide and the mobile app, where it is a genuine
    * small-print label and must stay that size. */
@@ -527,7 +578,7 @@ body {
   .kf-hero { max-width: 138rem; gap: 6rem; }
   .kf-hero-copy { max-width: 52rem; }
   .kf-display { font-size: 5.25rem; }
-  .kf-lede { font-size: 2rem; max-width: 46rem; }
+  .kf-taglines { font-size: 2rem; max-width: 46rem; }
   .kf-hero-copy .kf-note { font-size: 1.05rem; }
   .kf-window {
     --demo-height: min(68rem, calc(100vh - 20rem));
