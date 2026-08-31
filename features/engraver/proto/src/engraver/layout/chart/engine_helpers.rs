@@ -261,8 +261,19 @@ impl ChartLayoutEngine {
         }
     }
 
-    /// Add page footer with "Created with FastTrackStudio" text. Skipped
-    /// for titleless charts (snippets).
+    /// Add page footer with "Created with FastTrackStudio" text.
+    ///
+    /// Paper only. A snippet has no paper to sign: `layout_snippet` lays
+    /// the chart out on a 10000pt-tall scratch page and then shrinks the
+    /// page to the content it measures, so a footer pinned to the bottom
+    /// of that scratch page IS content — the crop grows to ~10041pt and
+    /// the "snippet" comes out as a strip of blank white a hundred
+    /// screens tall, with the music in the top 80pt.
+    ///
+    /// The guard used to be `metadata.title.is_none()`, standing in for
+    /// "this is a snippet". It held only because the snippets anyone
+    /// looked at were titleless; the site's landing-page hero has a title
+    /// and rendered exactly that way.
     pub(super) fn add_page_footer(
         &self,
         root: &mut SceneNode,
@@ -272,7 +283,7 @@ impl ChartLayoutEngine {
         page_height: f64,
         metadata: &crate::SongMetadata,
     ) {
-        if metadata.title.is_none() {
+        if self.config.snippet_mode || metadata.title.is_none() {
             return;
         }
         page_rendering::add_page_footer(root, page_x, page_y, page_width, page_height);
