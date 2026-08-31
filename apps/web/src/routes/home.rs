@@ -59,15 +59,79 @@ pub fn Home() -> Element {
                         // restart the gradient on the second line box.
                         span { class: "kf-accel", "Accelerated" }
                     }
-                    // Two ways in, one destination. The `or` is a
-                    // connector rather than a third claim, so it is set
-                    // well below the two lines it joins.
-                    div { class: "kf-taglines",
-                        p { class: "kf-lede", "Simple Text to Beautiful Chart" }
-                        p { class: "kf-lede-or", "or" }
-                        // A real path, not an aspiration: `.rpp` in,
-                        // CHORDS track to chart text, engraved out.
-                        p { class: "kf-lede", "DAW session → Beautiful Chart" }
+                    // Three forms of one song, and every edge runs
+                    // both ways — parse and export, import and write.
+                    // The two diagonals are the headline claim (you can
+                    // start from either side); the base says the two
+                    // starting points convert to each other too.
+                    div { class: "kf-flow",
+                        svg {
+                            class: "kf-flow-svg",
+                            "viewBox": "0 0 340 184",
+                            role: "img",
+                            "aria-label": "Simple text and a DAW session each convert to a chart, \
+                                           and to each other. Every arrow points both ways.",
+                            defs {
+                                // Markers cannot inherit the referencing
+                                // line's stroke without `context-stroke`,
+                                // which is not dependable yet — so there
+                                // is one head per colour instead.
+                                marker {
+                                    id: "kf-head-strong",
+                                    "viewBox": "0 0 10 10",
+                                    "refX": "9", "refY": "5",
+                                    "markerWidth": "5", "markerHeight": "5",
+                                    "orient": "auto-start-reverse",
+                                    path { class: "kf-flow-head-strong", d: "M0,0 L10,5 L0,10 Z" }
+                                }
+                                marker {
+                                    id: "kf-head-soft",
+                                    "viewBox": "0 0 10 10",
+                                    "refX": "9", "refY": "5",
+                                    "markerWidth": "5", "markerHeight": "5",
+                                    "orient": "auto-start-reverse",
+                                    path { class: "kf-flow-head-soft", d: "M0,0 L10,5 L0,10 Z" }
+                                }
+                            }
+
+                            // Simple Text ↔ Beautiful Chart
+                            line {
+                                class: "kf-flow-edge kf-flow-edge-strong",
+                                x1: "74.7", y1: "141.5", x2: "157.5", y2: "37.6",
+                                "marker-start": "url(#kf-head-strong)",
+                                "marker-end": "url(#kf-head-strong)",
+                            }
+                            // DAW Session ↔ Beautiful Chart
+                            line {
+                                class: "kf-flow-edge kf-flow-edge-strong",
+                                x1: "265.3", y1: "141.5", x2: "182.5", y2: "37.6",
+                                "marker-start": "url(#kf-head-strong)",
+                                "marker-end": "url(#kf-head-strong)",
+                            }
+                            // Simple Text ↔ DAW Session
+                            line {
+                                class: "kf-flow-edge kf-flow-edge-soft",
+                                x1: "100", y1: "165", x2: "240", y2: "165",
+                                "marker-start": "url(#kf-head-soft)",
+                                "marker-end": "url(#kf-head-soft)",
+                            }
+
+                            text {
+                                class: "kf-flow-node kf-flow-node-out",
+                                x: "170", y: "26", "text-anchor": "middle",
+                                "Beautiful Chart"
+                            }
+                            text {
+                                class: "kf-flow-node",
+                                x: "56", y: "170", "text-anchor": "middle",
+                                "Simple Text"
+                            }
+                            text {
+                                class: "kf-flow-node",
+                                x: "284", y: "170", "text-anchor": "middle",
+                                "DAW Session"
+                            }
+                        }
                     }
                     div { class: "kf-cta",
                         Link { to: Route::Editor {}, class: "kf-button kf-button-primary",
