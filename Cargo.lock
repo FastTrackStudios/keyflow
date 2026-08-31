@@ -1047,7 +1047,7 @@ dependencies = [
 [[package]]
 name = "auth-client"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?branch=feat%2Fstandalone-auth-server#d741510fa0098adeeee2cbb3e544790d66fd9fe4"
+source = "git+https://github.com/FastTrackStudios/architect?tag=v0.6.0#36eef05d166b32d17ef49e38f6d6a59b7a6e7de5"
 dependencies = [
  "serde",
  "serde_json",
@@ -1058,7 +1058,7 @@ dependencies = [
 [[package]]
 name = "auth-http"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?branch=feat%2Fstandalone-auth-server#d741510fa0098adeeee2cbb3e544790d66fd9fe4"
+source = "git+https://github.com/FastTrackStudios/architect?tag=v0.6.0#36eef05d166b32d17ef49e38f6d6a59b7a6e7de5"
 dependencies = [
  "auth-client",
  "reqwest 0.12.28",
