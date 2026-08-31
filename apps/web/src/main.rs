@@ -8,6 +8,8 @@
 //! database, nothing to sign up for. Accounts come later, and when they do
 //! they are for *keeping* charts, not for using the editor.
 
+mod account_menu;
+mod auth;
 mod chart;
 mod chart_preview;
 mod chart_url;
@@ -83,6 +85,10 @@ fn main() {
 
 #[component]
 fn App() -> Element {
+    // Installed above the router so the session survives navigation and
+    // is resolved once, not per screen.
+    auth::use_auth_provider();
+
     rsx! {
         // The UI face and its matching mono. A sans and a mono from the
         // same family is the point rather than a detail: this site is

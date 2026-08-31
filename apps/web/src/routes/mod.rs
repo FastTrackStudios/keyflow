@@ -15,6 +15,7 @@ pub use workbench::Workbench;
 use dioxus::prelude::*;
 
 use crate::Route;
+use crate::account_menu::AccountMenu;
 
 /// Shared chrome: the header every screen sits under.
 #[component]
@@ -31,6 +32,7 @@ pub fn Shell(children: Element) -> Element {
                         rel: "noreferrer",
                         "Source"
                     }
+                    AccountMenu {}
                 }
             }
             main { class: "kf-main", {children} }
