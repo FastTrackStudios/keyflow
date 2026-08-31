@@ -1,44 +1,64 @@
 //! The landing page.
 //!
-//! One job: show, in the first screenful, that Keyflow is text you can read
-//! and a chart you can play from — side by side, both real, neither a
-//! screenshot. The chart on this page is engraved by the same renderer the
-//! editor uses, from the source shown next to it.
+//! One screen, no scrolling. It has exactly one job — show that Keyflow
+//! is text you write and a chart you can play from, then send you to the
+//! editor or the guide — and a page with one job should not make anyone
+//! scroll to find out what it is.
+//!
+//! # The hero is a live demo, not a picture of one
+//!
+//! The claim is "as fast as you can hear them". Asserting that in a
+//! headline over a screenshot is the version of this page anyone could
+//! have made, so instead the source types itself (see
+//! [`crate::typewriter`]) and the page beside it re-engraves as it goes —
+//! same renderer, same layout engine, same fonts as the editor. Source
+//! and page are two halves of one framed window because that is what they
+//! are: the same document, before and after.
+//!
+//! The chart is laid out at true A4, with real page margins and the
+//! system breaks a printed chart would get, rather than cropped to the
+//! music. What someone sees here is what comes out of the PDF export.
 
 use dioxus::prelude::*;
 
 use crate::Route;
-use crate::chart::{Chart, ChartFonts};
+use crate::chart::{Chart, ChartFonts, ChartShape, filename_for};
+use crate::highlight::HighlightedSource;
 use crate::routes::Shell;
-
-/// The chart shown on the landing page.
-///
-/// Deliberately short: it has to read as *obvious* to a musician who has
-/// never seen Keyflow, in about four seconds.
-const HERO_CHART: &str = "\
-Hero - Keyflow
-120bpm 4/4 #G
-
-IN: | 1 4 |
-
-VS 1: | 1 4 | 5 6- |
-
-CH: | 4 1 | 5 1 |
-";
+use crate::typewriter::{ChartTypewriter, DEMO_CHARTS};
 
 #[component]
 pub fn Home() -> Element {
+    // Both panes read this. `ChartTypewriter` seeds it with the first
+    // demo chart before its first tick, so the hero is never blank — not
+    // even for one frame on load.
+    let hero = use_signal(|| DEMO_CHARTS[0].to_string());
+
+    // The window's title bar names the file being typed, and the name
+    // changes with the chart — a small thing that makes the frame read as
+    // an editor someone is working in rather than a picture of one.
+    let filename = use_memo(move || format!("{}.kf", filename_for(&hero())));
+
     rsx! {
         Shell {
             ChartFonts {}
+            // Outside the hero's grid on purpose: it renders an empty
+            // fragment, and an empty fragment still leaves a placeholder
+            // node behind — inside a grid that is a stray grid item.
+            ChartTypewriter {
+                output: hero,
+                charts: DEMO_CHARTS.iter().map(|c| (*c).to_string()).collect::<Vec<_>>(),
+            }
+
             section { class: "kf-hero",
                 div { class: "kf-hero-copy",
-                    h1 { "Charts you can write as fast as you can hear them." }
-                    p {
-                        "Keyflow is a text format for musical charts — the harmonic and "
-                        "rhythmic skeleton of a song, in Nashville numbers, Roman numerals, "
-                        "or letter names. It reads like something you would scribble on a "
-                        "chart, and parses like something a computer can follow in real time."
+                    h1 { class: "kf-display",
+                        "Charts you can write as fast as you can hear them."
+                    }
+                    p { class: "kf-lede",
+                        "Keyflow is a text format for the harmonic and rhythmic skeleton of a "
+                        "song. Type it in Nashville numbers, Roman numerals or letter names — "
+                        "it engraves as you go."
                     }
                     div { class: "kf-cta",
                         Link { to: Route::Editor {}, class: "kf-button kf-button-primary",
@@ -47,48 +67,33 @@ pub fn Home() -> Element {
                         Link { to: Route::GuideIndex {}, class: "kf-button", "Read the guide" }
                     }
                     p { class: "kf-note",
-                        "No account. A chart lives in its own URL — sharing one is sharing a link."
+                        "No account. A chart lives in its own URL, so sharing one is sharing a link."
                     }
                 }
 
-                div { class: "kf-hero-demo",
-                    pre { class: "kf-source", "{HERO_CHART}" }
-                    Chart { source: HERO_CHART.to_string() }
+                div { class: "kf-window",
+                    div { class: "kf-window-bar",
+                        span { class: "kf-window-name", "{filename}" }
+                        span { class: "kf-window-tag", "engraving live" }
+                    }
+                    div { class: "kf-window-body",
+                        HighlightedSource { source: hero() }
+                        // `Page`, not `Inline`: the A4 layout, with real
+                        // page margins and the system breaks a printed
+                        // chart would get.
+                        //
+                        // `hold_last_good`: mid-word the source is half a
+                        // chord symbol and does not parse. Without it the
+                        // chart flashes an error between almost every
+                        // keystroke.
+                        Chart {
+                            source: hero(),
+                            shape: ChartShape::Page,
+                            hold_last_good: true,
+                        }
+                    }
                 }
             }
-
-            section { class: "kf-features",
-                Feature {
-                    title: "Every notation system",
-                    body: "Nashville numbers, Roman numerals, and letter names are the same
-                           chart in three views. Transpose by changing one line.",
-                }
-                Feature {
-                    title: "Lyrics that stay in sync",
-                    body: "ChordPro blocks merge into the chart as lyric tracks, synced by
-                           line or by syllable — so the words and the changes move together.",
-                }
-                Feature {
-                    title: "Engraved, not drawn",
-                    body: "Engraver lays a chart out the way a copyist would: system breaks,
-                           width distribution, symbol placement. Screen, SVG, or PDF.",
-                }
-                Feature {
-                    title: "Made to be embedded",
-                    body: "The same engine runs in this page, in the desktop app, and in a
-                           DAW — the language is a library first and a product second.",
-                }
-            }
-        }
-    }
-}
-
-#[component]
-fn Feature(title: String, body: String) -> Element {
-    rsx! {
-        article { class: "kf-feature",
-            h2 { "{title}" }
-            p { "{body}" }
         }
     }
 }
