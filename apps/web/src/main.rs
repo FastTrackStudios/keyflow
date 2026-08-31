@@ -8,6 +8,8 @@
 //! database, nothing to sign up for. Accounts come later, and when they do
 //! they are for *keeping* charts, not for using the editor.
 
+mod account_menu;
+mod auth;
 mod chart;
 mod chart_preview;
 mod chart_url;
@@ -70,6 +72,10 @@ fn main() {
 
 #[component]
 fn App() -> Element {
+    // Installed above the router so the session survives navigation and
+    // is resolved once, not per screen.
+    auth::use_auth_provider();
+
     rsx! {
         // Order matters: Tailwind first (it carries the architect-ui design
         // tokens the imported components resolve against), then the site's
