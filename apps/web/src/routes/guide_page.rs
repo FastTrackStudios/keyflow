@@ -155,12 +155,32 @@ fn LocalGraph(graph: view_knowledge_graph::model::WikiGraph, current: &'static s
     }
 }
 
-/// The guide's table of contents, in reading order.
+/// The guide's table of contents, in reading order, under its stages.
+///
+/// The chapters are one path from an absolute beginner to the end, and a
+/// flat list of eleven links hides that — it reads as reference material
+/// you dip into. The stage headings say where the path is going and,
+/// more usefully, where someone can stop: "Start here" is the three
+/// chapters that get a complete chart on the page, and everything after
+/// it is a layer on top of a chart that already works.
+///
+/// The stage comes from each note's frontmatter, and a heading is
+/// emitted whenever it changes — so the order of the headings is the
+/// reading order by construction, and a chapter cannot appear under a
+/// stage it does not belong to. The index has no stage and so sits above
+/// the first heading, which is right: it is the front door, not a step.
 #[component]
 fn GuideToc(current: &'static str) -> Element {
+    let mut stage = "";
     rsx! {
         nav { class: "kf-guide-toc",
             for entry in guide::GUIDE_PAGES {
+                if entry.stage != stage {
+                    {
+                        stage = entry.stage;
+                        rsx! { span { class: "kf-toc-stage", "{entry.stage}" } }
+                    }
+                }
                 Link {
                     to: Route::GuidePage { slug: entry.slug.to_string() },
                     class: if entry.slug == current { "kf-toc-current" } else { "" },

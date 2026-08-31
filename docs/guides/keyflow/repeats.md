@@ -3,6 +3,7 @@ title: Repeats & Endings
 kind: concept
 type: concept
 order: 10
+stage: Complete scores
 ---
 
 # Repeats & Endings

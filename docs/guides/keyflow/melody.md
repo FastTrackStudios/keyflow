@@ -3,6 +3,7 @@ title: Melody
 kind: concept
 type: concept
 order: 6
+stage: Melody & lyrics
 ---
 
 # Melody
