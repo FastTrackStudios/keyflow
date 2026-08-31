@@ -284,16 +284,27 @@ body {
   margin: 0;
 }
 
+/* The step down from the headline has to be bigger than the gap between
+ * the headline's own lines, or the two read as one block of text. The
+ * display face is set at line-height 1.04, so anything under ~1.4rem
+ * here lands inside the headline's own leading. */
 .kf-lede {
   color: var(--ink-soft);
-  font-size: 1.0625rem;
-  line-height: 1.55;
+  font-size: 1.125rem;
+  line-height: 1.6;
   letter-spacing: -0.005em;
-  max-width: 34rem;
-  margin: 1.15rem 0 0;
+  /* `pretty`, not `balance`: the lede is prose under a balanced
+   * headline, and balancing both makes the two blocks echo each other's
+   * ragged edge. `pretty` only guards the last line against an orphan. */
+  text-wrap: pretty;
+  max-width: 33rem;
+  margin: 1.6rem 0 0;
 }
 
-.kf-cta { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.75rem 0 0.75rem; }
+/* The two doors, then the aside. The note is a footnote to the page, not
+ * a caption on the buttons, so it sits a clear step away from them
+ * rather than tucked under their baseline. */
+.kf-cta { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 2.25rem 0 0; }
 
 .kf-button {
   display: inline-block;
@@ -320,7 +331,7 @@ body {
 
 .kf-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-.kf-note { font-size: 0.85rem; color: var(--ink-soft); margin: 0; }
+.kf-note { font-size: 0.85rem; color: var(--ink-soft); margin: 1.4rem 0 0; }
 
 /* ── The demo window ──────────────────────────────────────────────
  *
