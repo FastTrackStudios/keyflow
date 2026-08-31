@@ -55,6 +55,26 @@ pub fn first_page() -> &'static GuidePage {
         .expect("build.rs refuses to generate an empty guide")
 }
 
+/// The pages either side of `slug`, in reading order.
+///
+/// The index counts as a step here even though it carries no stage: from
+/// it "next" is chapter one, and from chapter one "previous" is the way
+/// back to the front door. That makes the buttons a complete walk of the
+/// guide rather than a chain that starts mid-air.
+///
+/// Derived from `GUIDE_PAGES`, which is the same order the table of
+/// contents renders, so the buttons cannot disagree with the sidebar.
+#[must_use]
+pub fn neighbours(slug: &str) -> (Option<&'static GuidePage>, Option<&'static GuidePage>) {
+    let Some(i) = GUIDE_PAGES.iter().position(|p| p.slug == slug) else {
+        return (None, None);
+    };
+    (
+        i.checked_sub(1).and_then(|j| GUIDE_PAGES.get(j)),
+        GUIDE_PAGES.get(i + 1),
+    )
+}
+
 /// The guide as the graph builder wants it.
 fn wiki_files() -> Vec<WikiFile> {
     GUIDE_PAGES
@@ -244,6 +264,10 @@ mod tests {
     }
 
     /// The slug a `Previous:`/`Next:` footer line points at.
+    ///
+    /// Read from `source`, not `body`: the site strips the footer before
+    /// rendering — it shows real buttons instead — but the note keeps it,
+    /// because those wikilinks are most of the graph's edges.
     fn footer_link(body: &str, label: &str) -> Option<String> {
         let line = body.lines().find(|l| l.contains(&format!("{label}: [[")))?;
         let after = line.split_once(&format!("{label}: [["))?.1;
@@ -264,7 +288,7 @@ mod tests {
         for (i, p) in chapters.iter().enumerate() {
             match chapters.get(i + 1) {
                 Some(next) => assert_eq!(
-                    footer_link(p.body, "Next").as_deref(),
+                    footer_link(p.source, "Next").as_deref(),
                     Some(next.slug),
                     "`{}` should send the reader to `{}`",
                     p.slug,
@@ -272,14 +296,14 @@ mod tests {
                 ),
                 // The last chapter closes the tour instead of pointing on.
                 None => assert!(
-                    footer_link(p.body, "Next").is_none(),
+                    footer_link(p.source, "Next").is_none(),
                     "`{}` is the last chapter and should not have a Next",
                     p.slug
                 ),
             }
             if i > 0 {
                 assert_eq!(
-                    footer_link(p.body, "Previous").as_deref(),
+                    footer_link(p.source, "Previous").as_deref(),
                     Some(chapters[i - 1].slug),
                     "`{}` should come back from `{}`",
                     p.slug,
@@ -287,7 +311,7 @@ mod tests {
                 );
             }
             assert_eq!(
-                footer_link(p.body, "Up").as_deref(),
+                footer_link(p.source, "Up").as_deref(),
                 Some(first_page().slug),
                 "`{}` should link up to the index, so no chapter is a dead end",
                 p.slug
