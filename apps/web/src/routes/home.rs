@@ -7,8 +7,8 @@
 //!
 //! # The hero is a live demo, not a picture of one
 //!
-//! The claim is "as fast as you can hear them". Asserting that in a
-//! headline over a screenshot is the version of this page anyone could
+//! The claim is that this is chart writing accelerated. Asserting that in
+//! a headline over a screenshot is the version of this page anyone could
 //! have made, so instead the source types itself (see
 //! [`crate::typewriter`]) and the page beside it re-engraves as it goes —
 //! same renderer, same layout engine, same fonts as the editor. Source
@@ -53,22 +53,20 @@ pub fn Home() -> Element {
             section { class: "kf-hero",
                 div { class: "kf-hero-copy",
                     h1 { class: "kf-display",
-                        "Charts you can write as fast as you can hear them."
+                        "Chart Writing, "
+                        // The gradient sweeps across this word alone, so it
+                        // stays one word — a line break inside it would
+                        // restart the gradient on the second line box.
+                        span { class: "kf-accel", "Accelerated" }
                     }
-                    p { class: "kf-lede",
-                        "Write chords, sections and repeats the way you'd sketch them — in "
-                        "Nashville numbers, Roman numerals or letter names. Keyflow lays out "
-                        "the page as you type."
-                    }
+                    p { class: "kf-lede", "Simple Text to Beautiful Chart" }
                     div { class: "kf-cta",
                         Link { to: Route::Editor {}, class: "kf-button kf-button-primary",
                             "Open the editor"
                         }
                         Link { to: Route::GuideIndex {}, class: "kf-button", "Read the guide" }
                     }
-                    p { class: "kf-note",
-                        "No account. A chart lives in its own URL, so sharing one is sharing a link."
-                    }
+                    p { class: "kf-note", "Open Source, No Account Required" }
                 }
 
                 div { class: "kf-window",
