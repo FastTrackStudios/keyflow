@@ -79,4 +79,4 @@ any of the [[notation-systems|three systems]], their
 
 ---
 
-Previous: [[melody|Melody]] · Next: [[key-meter-changes|Key & Meter Changes]] · Up: [[keyflow|Keyflow Guide]]
+Previous: [[melody|Melody]] · Next: [[key-meter-changes|Key & Meter Changes]] · Up: [[keyflow|An Introduction]]

@@ -79,4 +79,4 @@ measure instead of letting it stick.
 
 ---
 
-Previous: [[lyrics|Lyrics]] · Next: [[annotations|Annotations & Expression]] · Up: [[keyflow|Keyflow Guide]]
+Previous: [[lyrics|Lyrics]] · Next: [[annotations|Annotations & Expression]] · Up: [[keyflow|An Introduction]]

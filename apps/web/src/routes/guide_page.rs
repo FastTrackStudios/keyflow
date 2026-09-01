@@ -171,8 +171,13 @@ fn LocalGraph(graph: view_knowledge_graph::model::WikiGraph, current: &'static s
 /// The stage comes from each note's frontmatter, and a heading is
 /// emitted whenever it changes — so the order of the headings is the
 /// reading order by construction, and a chapter cannot appear under a
-/// stage it does not belong to. The index has no stage and so sits above
-/// the first heading, which is right: it is the front door, not a step.
+/// stage it does not belong to.
+///
+/// The introduction shares the first stage rather than sitting above it.
+/// Titled "Keyflow Guide" it read as the section's own name and standing
+/// alone was right; titled "An Introduction" it is a page you read, and
+/// a page called that sitting directly above a heading that says "Start
+/// here" invites the reader to wonder which of the two to believe.
 #[component]
 fn GuideToc(current: &'static str) -> Element {
     let mut stage = "";

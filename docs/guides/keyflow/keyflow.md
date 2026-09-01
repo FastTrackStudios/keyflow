@@ -1,11 +1,12 @@
 ---
-title: Keyflow Guide
+title: An Introduction
 kind: concept
 type: concept
 order: 0
+stage: Start here
 ---
 
-# Keyflow Guide
+# An Introduction
 
 A hands-on tour of the `.kf` format. Each page introduces one concept and builds
 on the last, so by the end you can read and write a complete chart.
