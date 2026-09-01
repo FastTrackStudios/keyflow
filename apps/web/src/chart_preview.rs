@@ -134,6 +134,11 @@ pub fn ChartPreview(
                 },
 
                 onmousedown: move |e| {
+                    // Stops the browser starting its own drag-select on
+                    // the SVG text under the pointer. `user-select: none`
+                    // on the stage covers the visual half; this stops the
+                    // gesture being claimed as a selection at all.
+                    e.prevent_default();
                     dragging.set(true);
                     let c = e.client_coordinates();
                     last.set((c.x, c.y));
