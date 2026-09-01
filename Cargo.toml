@@ -113,7 +113,13 @@ editor-keyflow-lang = { path = "features/editor/editor-keyflow-lang" }
 # there is no duplicate-crate hazard — but a change spanning both repos
 # needs two bumps in sequence. Pinned by rev rather than a branch so a
 # push to task's main cannot change this build under us.
-view-knowledge-graph = { git = "https://github.com/FastTrackStudios/task", rev = "263ec348e7faa7fd7ed7cecd9c15c3f9e398301d" }
+# Repinned off 263ec34: that revision carries a stray
+# `features/editor/mermaid-rs-renderer/Cargo.toml.orig` — a cargo
+# packaging artifact — and cargo refuses to vendor a source containing a
+# reserved file name, so every Nix build of the site died in
+# `vendor-cargo-deps` before it reached a compiler. Only the deploy image
+# hit it; `cargo build` reads the checkout directly and never vendors.
+view-knowledge-graph = { git = "https://github.com/FastTrackStudios/task", rev = "607916d171467df08216529f9dfcf88308c3f636" }
 
 # ── apps ──────────────────────────────────────────────────────────────
 # The site. A workspace member so `cargo check --workspace` covers it on
