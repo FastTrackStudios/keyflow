@@ -193,6 +193,10 @@ impl ChartFontBundle {
             ("ChicagoFLF", self.aux_font_data.clone()),
             ("FreeSans", self.freesans_font_data.clone()),
             ("section-note", self.aux_font_data.clone()),
+            // The note printed under a section card — `SectionComment`
+            // in `scene::paint` emits this name, and nothing declared it,
+            // so every one of them fell back to a system serif.
+            ("section-comment", self.aux_font_data.clone()),
             ("title-bold", self.aux_font_data.clone()),
             ("part-name-bold", self.aux_font_data.clone()),
         ]
@@ -241,7 +245,11 @@ impl ChartFontBundle {
     #[must_use]
     pub fn embeddable_fonts_for_raster(&self) -> Vec<(&'static str, Arc<Vec<u8>>)> {
         let mut fonts = self.embeddable_fonts();
+        // The generic families the scene emits. A browser resolves these
+        // itself; a rasteriser has no idea what they mean and will draw
+        // nothing, so both need a concrete face here.
         fonts.push(("sans-serif", self.aux_font_data.clone()));
+        fonts.push(("serif", self.aux_font_data.clone()));
         fonts
     }
 
@@ -273,6 +281,7 @@ impl ChartFontBundle {
             .with_named_font_arc("Bravura", self.bravura_font_data.clone())
             .with_named_font_arc("FreeSans", self.freesans_font_data.clone())
             .with_named_font_arc("section-note", self.aux_font_data.clone())
+            .with_named_font_arc("section-comment", self.aux_font_data.clone())
             .with_named_font_arc("title-bold", self.aux_font_data.clone())
             .with_named_font_arc("part-name-bold", self.aux_font_data.clone())
     }

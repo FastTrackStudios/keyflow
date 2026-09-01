@@ -497,11 +497,29 @@ mod tests {
         //
         // A missing @font-face does not error; it silently falls back. So
         // the invariant has to be asserted, not eyeballed.
-        let manager = laid_out("VS: | Cmaj7 F#m7b5 | Bbmaj9 G7b9 |\n", ChartShape::Inline).unwrap();
+        // The section label matters: `section-comment` is only emitted
+        // when a section carries one, so a fixture without a label let
+        // that family go undeclared for as long as this test existed —
+        // every label on the site rendered in a system serif.
+        let manager = laid_out(
+            "VS \"Farsi\": | Cmaj7 F#m7b5 | Bbmaj9 G7b9 |\n",
+            ChartShape::Inline,
+        )
+        .unwrap();
         let svg = manager.export_svg_snippet().unwrap();
         let css = manager.font_face_css();
 
-        for family in svg_font_families(&svg) {
+        // The fixture has to actually reach the families being checked.
+        // Without this the test passes by not exercising them, which is
+        // how `section-comment` stayed undeclared.
+        let families = svg_font_families(&svg);
+        assert!(
+            families.iter().any(|f| f == "section-comment"),
+            "the fixture no longer emits `section-comment`, so this test \
+             is not checking the family it was widened to catch: {families:?}"
+        );
+
+        for family in families {
             // Generic CSS families are the browser's job, not ours.
             if matches!(family.as_str(), "sans-serif" | "serif" | "monospace") {
                 continue;
