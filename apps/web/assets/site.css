@@ -1093,7 +1093,16 @@ body {
   background: #26262b;
   cursor: grab;
   touch-action: none;
+  /* The stage is a thing you drag, not a document you read. Without
+   * this a pan sweeps a text selection across the chart — the engraved
+   * pages are SVG, and chord symbols, lyrics and section names are all
+   * real text nodes, so they highlight as the pointer crosses them. */
+  user-select: none;
+  -webkit-user-select: none;
 }
+
+/* The cursor says which of the two is happening. */
+.kf-preview-stage:active { cursor: grabbing; }
 .kf-preview-stage:active { cursor: grabbing; }
 
 /* Absolutely positioned so it takes no part in normal flow — its position
