@@ -26,6 +26,7 @@
 use dioxus::prelude::*;
 
 use crate::chart::{ChartShape, Page, blank_page, engrave, export_pdf, export_svg, filename_for};
+use crate::chart_gpu;
 use crate::chart_url;
 
 /// Zoom bounds, matching keyflow-ui's native chart viewports.
@@ -79,6 +80,72 @@ pub fn ChartPreview(
     let mut last = use_signal(|| (0.0_f64, 0.0_f64));
 
     let src_for_export = source.clone();
+
+    // One live surface, or none. Asked once: if WebGL2 is refused the
+    // preview renders the same SVG pages the rest of the site does, and
+    // nothing below ever touches a canvas.
+    // OFF until hover is affordable.
+    //
+    // The picture is right — pages, staves, barlines, clefs, key
+    // signatures, chord symbols, section cards, and (since the glyph
+    // fallback in `scene_renderer`) the rhythm slashes. Camera, resize,
+    // WebGL2 probing, context release and the SVG fallback all work.
+    //
+    // What is not ready is the cost of a pointer move. Two things happen
+    // per mousemove and both are O(whole chart):
+    //
+    //   - `hit_test_at_point` walks the entire scene graph recursively
+    //     across every page to find the beat under the cursor;
+    //   - a redraw rebuilds the whole scene, because vello_hybrid is
+    //     immediate-mode — there is no "repaint just the highlight".
+    //
+    // Skipping the redraw when the hovered beat is unchanged (see
+    // `chart_gpu::draw`) was not enough on its own: the hit-test alone
+    // still runs per event, and a fast sweep across the stage locks the
+    // tab. The fix is to throttle hover to an animation frame and hold a
+    // spatial index for hit-testing, and neither is a five-minute job.
+    //
+    // Flip to `true` to work on it. Everything else is in place.
+    const USE_GPU_PREVIEW: bool = false;
+
+    let gpu = USE_GPU_PREVIEW && use_hook(chart_gpu::webgl2_available);
+    let surface = use_hook(chart_gpu::surface_cell);
+    let mut hover = use_signal(|| None::<(f64, f64)>);
+    let mut readout = use_signal(|| None::<String>);
+    // Bumped whenever the canvas is laid out or resized. The first draw
+    // would otherwise happen before the element has a size — a canvas
+    // with no width attribute is 300x150, and the browser stretches that
+    // buffer across the pane, which is a 14x magnification and looks
+    // exactly like a bug in the renderer.
+    let mut surface_size = use_signal(|| (0_i32, 0_i32));
+
+    // Redraw whenever the source, the camera or the pointer moves. The
+    // manager only re-lays-out when the source or the width changed, so a
+    // pointer move costs a re-render of the scene and nothing more.
+    {
+        let surface = surface.clone();
+        let src = source.clone();
+        use_effect(move || {
+            if !gpu {
+                return;
+            }
+            // Read so the effect re-runs when the canvas is measured.
+            let _ = surface_size();
+            let text = readout.peek().clone();
+            let next = chart_gpu::draw(&surface, &src, pan(), zoom(), hover());
+            if next != text {
+                readout.set(next);
+            }
+        });
+    }
+
+    // A WebGL context is not reclaimed just because its canvas left the
+    // document, and they are capped per browser — so the surface goes
+    // when the preview does.
+    {
+        let surface = surface.clone();
+        use_drop(move || chart_gpu::release(&surface));
+    }
 
     rsx! {
         div { class: "kf-preview",
@@ -144,24 +211,72 @@ pub fn ChartPreview(
                     last.set((c.x, c.y));
                 },
                 onmousemove: move |e| {
-                    if !dragging() {
+                    let c = e.client_coordinates();
+                    if dragging() {
+                        let (lx, ly) = last();
+                        let (px, py) = pan();
+                        pan.set((px + (c.x - lx), py + (c.y - ly)));
+                        last.set((c.x, c.y));
                         return;
                     }
-                    let c = e.client_coordinates();
-                    let (lx, ly) = last();
-                    let (px, py) = pan();
-                    pan.set((px + (c.x - lx), py + (c.y - ly)));
-                    last.set((c.x, c.y));
+                    // Not dragging: track the beat under the pointer. Only
+                    // meaningful on the canvas — the SVG pages have no
+                    // scene to hit-test against.
+                    if gpu {
+                        hover.set(chart_gpu::scene_point((c.x, c.y), pan(), zoom()));
+                    }
                 },
                 onmouseup: move |_| dragging.set(false),
-                onmouseleave: move |_| dragging.set(false),
+                onmouseleave: move |_| {
+                    dragging.set(false);
+                    hover.set(None);
+                },
 
-                div {
-                    class: "kf-preview-pages",
-                    style: "transform: translate({pan().0}px, {pan().1}px) scale({zoom()}); transform-origin: 0 0;",
-                    for (i, page) in pages.read().iter().enumerate() {
-                        PreviewPage { key: "{i}", page: page.clone() }
+                if gpu {
+                    // The camera is passed to the renderer, not applied
+                    // here: on a canvas there is no element to transform,
+                    // and re-rasterising at the new scale is the point —
+                    // a CSS scale would just magnify pixels.
+                    canvas {
+                        id: chart_gpu::CANVAS_ID,
+                        class: "kf-preview-canvas",
+                        // The first draw happens before the stylesheet
+                        // has given the canvas a size, so it measures the
+                        // intrinsic 300x150 and renders into that. This
+                        // fires once the node is in the document, and one
+                        // more draw is all it takes — `draw` re-measures
+                        // every time and resizes the surface when the
+                        // answer changed.
+                        onmounted: move |_| {
+                            let n = surface_size.peek().0;
+                            surface_size.set((n + 1, 0));
+                        },
+                        // And again on every later change, so a pane
+                        // resize is not a stretched buffer.
+                        onresize: move |e| {
+                            if let Ok(size) = e.get_content_box_size() {
+                                let next = (size.width as i32, size.height as i32);
+                                if surface_size.peek().0 != next.0
+                                    || surface_size.peek().1 != next.1
+                                {
+                                    surface_size.set(next);
+                                }
+                            }
+                        },
                     }
+                } else {
+                    div {
+                        class: "kf-preview-pages",
+                        style: "transform: translate({pan().0}px, {pan().1}px) scale({zoom()}); transform-origin: 0 0;",
+                        for (i, page) in pages.read().iter().enumerate() {
+                            PreviewPage { key: "{i}", page: page.clone() }
+                        }
+                    }
+                }
+
+                // Where the pointer is, in the chart's own terms.
+                if let Some(where_am_i) = readout() {
+                    div { class: "kf-preview-readout", "{where_am_i}" }
                 }
             }
 

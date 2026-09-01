@@ -11,6 +11,7 @@
 mod account_menu;
 mod auth;
 mod chart;
+mod chart_gpu;
 mod chart_preview;
 mod chart_url;
 mod guide;

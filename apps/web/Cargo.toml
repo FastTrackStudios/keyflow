@@ -77,6 +77,10 @@ web-sys = { version = "0.3", features = [
     "Location",
     "Navigator",
     "Clipboard",
+    # The live chart surface: a canvas, and the probe that decides
+    # whether WebGL2 exists before one is mounted.
+    "HtmlCanvasElement",
+    "WebGl2RenderingContext",
 ] }
 # Pinned exactly, and low: `dx build` refuses to run when the crate version
 # and the wasm-bindgen-cli in the dev shell disagree, and the CLI comes from
