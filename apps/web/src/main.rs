@@ -17,6 +17,7 @@ mod chart_url;
 mod guide;
 mod highlight;
 mod keyflow_editor;
+mod prefs;
 mod routes;
 mod typewriter;
 

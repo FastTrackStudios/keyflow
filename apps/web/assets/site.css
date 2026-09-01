@@ -852,6 +852,19 @@ body {
   line-height: 1.35;
 }
 
+/* Pushes whatever follows it to the right of the pane header. */
+.kf-pane-spacer { flex: 1; }
+
+/* A toggle that is currently on. Reads as pressed rather than as a
+ * different button — same shape, filled. */
+.kf-button-on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.kf-button-on:hover { filter: brightness(1.08); border-color: var(--accent); }
+
 .kf-pane-name {
   font-family: var(--font-mono);
   font-size: 0.7rem;

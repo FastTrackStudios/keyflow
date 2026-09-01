@@ -16,6 +16,8 @@
 //! beside a box that cannot show you the syntax.
 
 use dioxus::prelude::*;
+
+use crate::prefs;
 use editor::{Editor, EditorState, editor_view};
 use editor_keyflow_lang::{HighlightTheme, highlight_css, keyflow_decorations, keyflow_hover};
 
@@ -36,7 +38,20 @@ pub fn KeyflowEditor(
     let state = use_signal(|| EditorState::new(initial));
 
     let keymap = editor::standard_markdown_keymap();
-    let vim = use_signal(editor::editor_vim::VimState::new);
+
+    // Off unless someone asked for it, and remembered once they have.
+    //
+    // Vim mode is modal: the editor opens in Normal, where the letter
+    // keys are commands rather than text. To someone who did not choose
+    // it that is not a mode, it is a text box that ignores typing — so
+    // it cannot be the default, and it has to be discoverable enough to
+    // turn back off, hence the toggle in the pane header rather than a
+    // key chord.
+    let mut vim_on = use_signal(|| prefs::bool_or(prefs::VIM_MODE, false));
+    let vim_state = use_signal(editor::editor_vim::VimState::new);
+    // `None` is what actually disables it — the `Editor` takes an
+    // `Option<Signal<VimState>>` and plain editing is the absent case.
+    let vim = vim_on().then_some(vim_state);
     let slash = use_signal(|| None::<editor_view::slash::SlashState>);
 
     // Mirror the text out. `use_effect` and not the editor's transaction
@@ -57,6 +72,21 @@ pub fn KeyflowEditor(
                 if let Some(n) = note {
                     span { class: "kf-note", "{n}" }
                 }
+                span { class: "kf-pane-spacer" }
+                button {
+                    class: if vim_on() { "kf-button kf-button-on" } else { "kf-button" },
+                    // The control says what it toggles, and its state
+                    // says whether it is on — a button labelled "Vim: off"
+                    // reads as a button that turns vim off.
+                    "aria-pressed": if vim_on() { "true" } else { "false" },
+                    title: "Modal editing. Esc for Normal mode, i to insert.",
+                    onclick: move |_| {
+                        let next = !vim_on();
+                        vim_on.set(next);
+                        prefs::set_bool(prefs::VIM_MODE, next);
+                    },
+                    "Vim"
+                }
             }
             div { class: "kf-code-editor-pane",
                 div { class: "kf-code-editor-frame",
@@ -65,7 +95,7 @@ pub fn KeyflowEditor(
                     keymap: keymap.clone(),
                     decorations: editor_view::DecorationSource::ptr(keyflow_decorations),
                     hover: keyflow_hover as editor::HoverSource,
-                    vim: Some(vim),
+                    vim,
                     slash: Some(slash),
                 }
                 editor_view::slash::SlashMenu { state, slash }
