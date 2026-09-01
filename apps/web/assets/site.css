@@ -718,8 +718,9 @@ body {
 
 /* ── Editor ──────────────────────────────────────────────────────── */
 
-.kf-editor { display: flex; flex-direction: column; gap: 0.75rem; height: calc(100vh - 9rem); }
-.kf-editor-bar { display: flex; align-items: center; gap: 1rem; }
+/* No outer toolbar row any more — the editor is the two panes and
+ * nothing else, so it can fill the space the header and padding leave. */
+.kf-editor { display: flex; flex-direction: column; height: calc(100vh - 7rem); }
 
 .kf-editor-split {
   display: grid;
@@ -729,7 +730,148 @@ body {
   min-height: 0;
 }
 
+/* ── Share sheet ─────────────────────────────────────────────────
+ *
+ * Four ways out of a chart — a link, an SVG, a PDF, the source — behind
+ * one button, because they are used rarely and never mid-sentence. As
+ * four permanent controls in the pane header they cost space to be
+ * ignored.
+ *
+ * `position: fixed` on the backdrop, not absolute: the header is sticky
+ * and the panes scroll, and a sheet anchored inside either would scroll
+ * away from the click that opened it. */
+.kf-share-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: color-mix(in srgb, #000 55%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.kf-share-sheet {
+  width: min(34rem, 100%);
+  max-height: 100%;
+  overflow: auto;
+  padding: 1.25rem 1.4rem 1.4rem;
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  background: var(--surface);
+  box-shadow: 0 24px 60px -20px rgb(0 0 0 / 55%);
+}
+
+.kf-share-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.35rem;
+}
+
+.kf-share-head h2 { margin: 0; font-size: 1.05rem; font-weight: 600; }
+
+.kf-share-close {
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 1.35rem;
+  line-height: 1;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.35rem;
+  cursor: pointer;
+}
+
+.kf-share-close:hover { color: var(--ink); }
+.kf-share-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.kf-share-label {
+  margin: 1.1rem 0 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  opacity: 0.7;
+}
+
+.kf-share-link {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.35rem 0.35rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--code-bg);
+}
+
+/* The URL carries the whole chart, so it is long by design. It gets one
+ * line and an ellipsis rather than wrapping the sheet to twice its
+ * height — nobody reads it, they copy it. */
+.kf-share-url {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+
+.kf-share-link .kf-button { flex: 0 0 auto; padding: 0.25rem 0.7rem; font-size: 0.82rem; }
+.kf-share-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.kf-share-error { color: #f87171; }
+
+/* ── Pane headers ────────────────────────────────────────────────
+ *
+ * Source and Chart each carry one, and they are the same element so
+ * they are the same height — the panes used to be a row apart because
+ * each grew its own bar out of whatever it happened to contain.
+ *
+ * A fixed `height`, not `min-height`: the source header holds a word and
+ * the chart header holds buttons, and a button is taller than a word. A
+ * floor alone still let the taller one win and pushed that pane's body
+ * fifteen pixels below its neighbour — the kind of misalignment that
+ * looks like a bug without looking like anything in particular. The
+ * buttons are sized to fit the row rather than the row to fit them. */
+.kf-pane-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+  height: 2rem;
+  padding: 0 0.15rem;
+  margin-bottom: 0.5rem;
+}
+
+.kf-pane-head .kf-button {
+  padding: 0.15rem 0.55rem;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.kf-pane-name {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  opacity: 0.7;
+  margin-right: 0.25rem;
+}
+
 .kf-editor-split .kf-chart { overflow: auto; }
+
+/* An even split stops paying once the screen is wide. Source is code —
+ * it wants a comfortable measure and nothing beyond it, and at half of
+ * a 5K display three quarters of that pane is blank. The chart is the
+ * half that keeps benefiting: every rem it gains is another page it can
+ * lay out beside the last. */
+@media (min-width: 100rem) {
+  .kf-editor-split { grid-template-columns: minmax(0, 44rem) minmax(0, 1fr); }
+}
 
 @media (max-width: 60rem) {
   .kf-editor-split { grid-template-columns: minmax(0, 1fr); }
@@ -925,12 +1067,14 @@ body {
 .kf-preview {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  gap: 0.5rem;
   height: 100%;
   min-height: 0;
 }
 
-.kf-preview-bar { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
+/* `nowrap`: the header is a fixed-height row shared with the source
+ * pane, and a wrapping toolbar would push one pane's body down and not
+ * the other's. */
+.kf-preview-bar { flex-wrap: nowrap; }
 .kf-preview-bar .kf-button { padding: 0.2rem 0.6rem; font-size: 0.85rem; }
 .kf-preview-spacer { flex: 1; }
 
@@ -1189,12 +1333,9 @@ body {
 .kf-code-editor {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  gap: 0.5rem;
   min-height: 0;
   height: 100%;
 }
-.kf-code-editor-bar { display: flex; gap: 0.4rem; }
-.kf-code-editor-bar .kf-button { padding: 0.2rem 0.6rem; font-size: 0.8rem; }
 
 .kf-code-editor-pane {
   min-height: 0;

@@ -165,23 +165,30 @@ fn analyze_decorations(text: &str, len: usize, overlays: bool) -> Vec<DecoratedR
     // `CH {…} #G`), so a single chart-level key would mis-resolve every chord
     // after a change. Gated by `SHOW_OVERLAYS`. `ChordInstance::source_span`
     // is document-absolute, so the badges land right after each symbol.
+    // The section badge is NOT gated on `overlays`. It resolves `VS` to
+    // `Verse 1a` — a number and split letter assigned across the whole
+    // chart, which the writer cannot see anywhere else — and there is one
+    // per section, not one per chord. It was swept up with the chord
+    // badges only because both were written into the same block.
+    for section in &analysis.chart.sections {
+        // The written header is a terse, dynamic marker whose resolved
+        // name carries the chart-wide numbering. Implicit sections (no
+        // header) have no span, so no badge.
+        if let Some(span) = section.source_span {
+            let label = section.section.display_name();
+            let at = span.end().min(len);
+            out.push(Decoration::widget(
+                at,
+                format!(
+                    "<span class=\"kf-inlay kf-section-inlay\">{}</span>",
+                    escape_html(&label)
+                ),
+            ));
+        }
+    }
+
     if overlays {
         for section in &analysis.chart.sections {
-            // Section-name badge — the written header is a terse, dynamic
-            // marker (`VS`, `CH`) whose resolved name carries a number and
-            // split letter assigned across the whole chart (`Verse 1a`).
-            // Implicit sections (no header) have no span, so no badge.
-            if let Some(span) = section.source_span {
-                let label = section.section.display_name();
-                let at = span.end().min(len);
-                out.push(Decoration::widget(
-                    at,
-                    format!(
-                        "<span class=\"kf-inlay kf-section-inlay\">{}</span>",
-                        escape_html(&label)
-                    ),
-                ));
-            }
             for measure in section.measures() {
                 for ci in &measure.chords {
                     let Some(span) = ci.source_span else { continue };
@@ -258,8 +265,13 @@ thread_local! {
     static ANALYZE_CACHE: std::cell::RefCell<Option<AnalyzeCache>> = const { std::cell::RefCell::new(None) };
 }
 
-/// Process-global toggle for the resolved-chord overlays. Default on.
-static SHOW_OVERLAYS: AtomicBool = AtomicBool::new(true);
+/// Process-global toggle for the resolved-chord overlays. Default OFF.
+///
+/// They annotate every chord in the buffer at once, which is a lot of
+/// text laid over text someone is trying to write. Useful on demand,
+/// noisy as a default — so a consumer that wants them turns them on with
+/// [`set_overlays_enabled`].
+static SHOW_OVERLAYS: AtomicBool = AtomicBool::new(false);
 
 /// Whether resolved-chord type overlays are currently shown.
 #[must_use]
