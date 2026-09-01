@@ -282,7 +282,13 @@ mod tests {
         // They did not: `sections` pointed its reader at Lyrics, five
         // chapters ahead, because the footer and the frontmatter are
         // written in different places and nothing compared them.
-        let chapters: Vec<_> = GUIDE_PAGES.iter().filter(|p| !p.stage.is_empty()).collect();
+        // Everything after the introduction. The introduction is the
+        // first page by construction and carries no footer — it opens
+        // the guide rather than continuing it. Identified by position,
+        // not by "has no stage": it shares the first stage now, and a
+        // chapter that simply lost its footer must still fail this test
+        // rather than quietly drop out of it.
+        let chapters: Vec<_> = GUIDE_PAGES.iter().skip(1).collect();
         assert!(chapters.len() > 1, "the guide should have chapters");
 
         for (i, p) in chapters.iter().enumerate() {
@@ -342,9 +348,10 @@ mod tests {
 
     #[test]
     fn every_chapter_belongs_to_a_stage() {
-        // Only the index is stageless; a chapter without one would land
-        // under whichever heading happened to precede it.
-        for p in GUIDE_PAGES.iter().skip(1) {
+        // A page without a stage lands under whichever heading happened
+        // to precede it — including, for the first page, no heading at
+        // all. Every page carries one, the introduction included.
+        for p in GUIDE_PAGES {
             assert!(
                 !p.stage.is_empty(),
                 "chapter `{}` has no `stage:` in its frontmatter",

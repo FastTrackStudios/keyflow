@@ -126,4 +126,4 @@ the key signature updates there.
 
 ---
 
-Previous: [[structure|Structure]] · Next: [[chords|Chords]] · Up: [[keyflow|Keyflow Guide]]
+Previous: [[structure|Structure]] · Next: [[chords|Chords]] · Up: [[keyflow|An Introduction]]

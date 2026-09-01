@@ -169,4 +169,4 @@ names or scale-degree numbers**, the same choice you make for a chord root.
 
 ---
 
-Previous: [[chords|Chords]] · Next: [[rhythm|Rhythm]] · Up: [[keyflow|Keyflow Guide]]
+Previous: [[chords|Chords]] · Next: [[rhythm|Rhythm]] · Up: [[keyflow|An Introduction]]

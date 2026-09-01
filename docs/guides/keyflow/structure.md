@@ -139,4 +139,4 @@ That's the whole header. From here the guide moves into the music:
 
 ---
 
-Next: [[sections|Sections]] · Up: [[keyflow|Keyflow Guide]]
+Next: [[sections|Sections]] · Up: [[keyflow|An Introduction]]

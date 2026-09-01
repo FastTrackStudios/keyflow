@@ -196,4 +196,4 @@ Each fenced bar divides on its own, so you can mix densities freely down a line.
 
 ---
 
-Previous: [[notation-systems|Notation Systems]] · Next: [[melody|Melody]] · Up: [[keyflow|Keyflow Guide]]
+Previous: [[notation-systems|Notation Systems]] · Next: [[melody|Melody]] · Up: [[keyflow|An Introduction]]

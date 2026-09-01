@@ -173,4 +173,4 @@ the whole lane is already melody.
 
 ---
 
-Previous: [[rhythm|Rhythm]] · Next: [[lyrics|Lyrics]] · Up: [[keyflow|Keyflow Guide]]
+Previous: [[rhythm|Rhythm]] · Next: [[lyrics|Lyrics]] · Up: [[keyflow|An Introduction]]

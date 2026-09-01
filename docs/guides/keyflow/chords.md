@@ -240,4 +240,4 @@ waiting when a chart asks for something it cannot say yet.
 
 ---
 
-Previous: [[sections|Sections]] · Next: [[notation-systems|Notation Systems]] · Up: [[keyflow|Keyflow Guide]]
+Previous: [[sections|Sections]] · Next: [[notation-systems|Notation Systems]] · Up: [[keyflow|An Introduction]]
