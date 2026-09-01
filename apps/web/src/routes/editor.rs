@@ -57,48 +57,22 @@ fn EditorScreen(initial: String, from_link: bool) -> Element {
     // `/c/:data` wedged the renderer. The chart belongs to the screen
     // showing it.
     let mut source = use_signal(|| initial);
-    let encoded = use_memo(move || chart_url::encode(&source.read()));
 
     rsx! {
         Shell {
             ChartFonts {}
             div { class: "kf-editor",
-                div { class: "kf-editor-bar",
-                    ShareLink { encoded: encoded() }
-                    if from_link {
-                        span { class: "kf-note", "Opened from a link" }
-                    }
-                }
+                // No toolbar row of its own. Both panes carry their own
+                // header instead, which is where their controls belong
+                // and keeps the two pane tops on one line.
                 div { class: "kf-editor-split",
                     KeyflowEditor {
                         initial: source(),
                         on_change: move |text| source.set(text),
+                        note: from_link.then(|| "Opened from a link".to_string()),
                     }
                     ChartPreview { source: source() }
                 }
-            }
-        }
-    }
-}
-
-/// The share control.
-///
-/// Shows the link when the chart fits in one, and says so plainly when it
-/// does not — rather than handing over a URL that will be truncated
-/// somewhere between here and the recipient.
-#[component]
-fn ShareLink(encoded: String) -> Element {
-    if chart_url::fits_in_url(&encoded) {
-        rsx! {
-            Link { to: Route::Chart { data: encoded.clone() }, class: "kf-button",
-                "Link to this chart"
-            }
-        }
-    } else {
-        rsx! {
-            span { class: "kf-note",
-                "This chart is too long to share as a link "
-                "({encoded.len()} characters). Saving charts needs an account — coming."
             }
         }
     }

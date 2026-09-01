@@ -32,6 +32,15 @@ use flate2::write::DeflateEncoder;
 ///
 /// Not a hard limit of the codec — a limit of the transport. See the module
 /// docs.
+// The encoder currently has no caller. `/c/:data` still decodes — a link
+// someone already holds keeps working — but the control that produced
+// those links was removed from the editor along with its toolbar row, so
+// nothing in the UI mints one any more.
+//
+// Kept, not deleted: encoding a chart into its URL is this site's whole
+// persistence story until accounts exist, and the round-trip is covered
+// by the tests below. It wants a new home, not a rewrite.
+#[allow(dead_code)]
 pub const MAX_URL_CHART_LEN: usize = 1800;
 
 /// Why a chart could not be read back out of a URL.
@@ -74,6 +83,7 @@ const MAX_DECOMPRESSED: u64 = 4 * 1024 * 1024;
 /// mode that is not a bug, so a write error panics rather than propagating a
 /// `Result` every caller would `expect` on.
 #[must_use]
+#[allow(dead_code)]
 pub fn encode(source: &str) -> String {
     let mut encoder = DeflateEncoder::new(Vec::new(), Compression::best());
     encoder
@@ -111,6 +121,7 @@ pub fn decode(encoded: &str) -> Result<String, DecodeError> {
 
 /// Whether an encoded chart is short enough to share as a link.
 #[must_use]
+#[allow(dead_code)]
 pub fn fits_in_url(encoded: &str) -> bool {
     encoded.len() <= MAX_URL_CHART_LEN
 }
