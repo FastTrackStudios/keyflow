@@ -622,6 +622,18 @@ pub struct ChartLayoutManager {
     view_static_stable_frames: u8,
     view_static_renderer: Option<OffscreenRenderer>,
     enable_view_static_cache: bool,
+    /// Whether pages may be rasterised to level-of-detail images.
+    ///
+    /// On by default, and the right default: on the desktop's wgpu
+    /// surface a dense multi-page view is far cheaper as rasters.
+    ///
+    /// The web surface turns it OFF. `vello_hybrid`'s WebGL2 painter
+    /// asserts inside `ImageSource::from_peniko_image_data` on the images
+    /// this produces, which aborts the whole wasm module — and a chart of
+    /// four pages hits the `>= 4 visible` rule immediately, so it is not
+    /// an edge case there. Vector-only costs a little throughput and
+    /// renders.
+    enable_raster_lod: bool,
     enable_pretransformed_fragments: bool,
     last_transform_key: Option<TransformStabilityKey>,
     transform_stable_frames: u8,
@@ -920,6 +932,16 @@ impl ChartLayoutManager {
         self
     }
 
+    /// Turn page level-of-detail rasterisation on or off.
+    ///
+    /// Off is for backends whose image path cannot take what it produces
+    /// — see [`Self::enable_raster_lod`]. Everything still renders; the
+    /// pages are drawn as vectors at every zoom instead of being
+    /// rasterised once they get small on screen.
+    pub const fn set_raster_lod(&mut self, on: bool) {
+        self.enable_raster_lod = on;
+    }
+
     /// Create a new chart layout manager with embedded fonts.
     pub fn new() -> Result<Self, String> {
         // The bundle is shared: building one copies ~2.5 MB of baked-in
@@ -965,6 +987,7 @@ impl ChartLayoutManager {
             last_view_static_key: None,
             view_static_stable_frames: 0,
             view_static_renderer: None,
+            enable_raster_lod: true,
             enable_view_static_cache: std::env::var("KEYFLOW_VIEW_STATIC_CACHE")
                 .ok()
                 .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true")),
@@ -1419,7 +1442,9 @@ impl ChartLayoutManager {
         use_multi_page_lod: bool,
         is_focused: bool,
     ) -> Option<PageLodTier> {
-        if !use_multi_page_lod {
+        // `None` everywhere means every page renders as vector geometry —
+        // see `enable_raster_lod`.
+        if !self.enable_raster_lod || !use_multi_page_lod {
             return None;
         }
 
