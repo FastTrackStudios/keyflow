@@ -70,7 +70,9 @@ the key's own quality**, so you do not write the `m`:
 | Quality               | maj | min | min | maj | maj | min | dim |
 | In C                  | C   | Dm  | Em  | F   | G   | Am  | B°  |
 
-So `2` *is* the minor two — writing `2m` is allowed but says nothing extra.
+So `2` *is* the minor two. Writing `2m` is allowed and means the same thing —
+it is simply more explicit, which is what Keyflow itself writes when it
+converts a chart into numbers.
 
 ```kf+
 Diatonic - Demo
@@ -113,6 +115,28 @@ VS 4
 
 That is Dm, D, D, Dm — the diatonic default, then three ways of departing from
 or restating it.
+
+### What Keyflow writes back
+
+Reading and writing are not the same job. Going in, a bare number is enough and
+you are never made to spell out the obvious. Coming out — when you switch a
+letter chart to numbers — Keyflow says which chord it means, because that chart
+is about to be read at speed:
+
+| Chord in C | Written back as |
+| --- | --- |
+| `Am` | `6m` |
+| `A`  | `6M` |
+| `Bb` | `b7` |
+
+`6m` is the one that could have been left bare; it is spelled out anyway, so a
+player does not have to work out the sixth degree and recall that it is minor.
+
+`6M` is the one that *must* be spelled out. A bare `6` means the diatonic vi, so
+writing an A major triad as `6` would read back as `Am` — the round trip would
+quietly reharmonise the song. The marker is skipped where the quality is already
+unambiguous: a chromatic degree like `b7` has no diatonic quality to contradict,
+and `6maj7` already says major without needing `6Mmaj7`.
 
 ## Roman numerals
 

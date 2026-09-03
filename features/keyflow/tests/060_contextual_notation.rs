@@ -123,3 +123,72 @@ fn nashville_keeps_the_minor_marker() {
         .collect();
     assert_eq!(got, ["1", "4", "5", "6m"]);
 }
+
+/// A bare number carries its degree's diatonic quality on the way IN, so the
+/// writer is never forced to type `6m`. Coming out, the chart specifies:
+/// `Am` in C is `6m`, and — critically — `A` in C is `6M`, because a bare `6`
+/// there would read back as minor and silently reharmonise the song.
+#[test]
+fn a_bare_degree_still_takes_its_diatonic_quality_on_the_way_in() {
+    let letters = |body: &str| in_letters(&chart(body));
+    assert_eq!(letters("1 4 5 6"), ["C", "F", "G", "Am"]);
+    assert_eq!(letters("1 4 5 2"), ["C", "F", "G", "Dm"]);
+    assert_eq!(letters("1 4 5 7"), ["C", "F", "G", "Bdim"]);
+    // …and an explicit major marker overrides it.
+    assert_eq!(letters("1 4 5 6M"), ["C", "F", "G", "A"]);
+    assert_eq!(letters("1 4 5 6maj"), ["C", "F", "G", "A"]);
+}
+
+#[test]
+fn nashville_round_trips_every_quality() {
+    let nashville = |body: &str| {
+        let c = keyflow::parse(&chart(body)).unwrap();
+        let out = keyflow::apply_view(
+            &c,
+            &ChartView {
+                notation: NotationSystem::Nashville,
+                ..Default::default()
+            },
+        );
+        out.sections
+            .iter()
+            .flat_map(|s| s.measures().to_vec())
+            .flat_map(|m| {
+                m.chords
+                    .iter()
+                    .map(|c| c.full_symbol.clone())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>()
+    };
+
+    // (written, expected Nashville) — in C.
+    let cases = [
+        ("C F G Am", "6m"),
+        ("C F G A", "6M"),
+        ("C F G Dm", "2m"),
+        ("C F G D", "2M"),
+        ("C F G Bdim", "7dim"),
+        ("C F G B", "7M"),
+        ("C F G Fm", "4m"),
+        ("C F G Am7", "6m7"),
+        ("C F G A7", "6M7"),
+        ("C F G Amaj7", "6maj7"),
+        // A chromatic degree has no diatonic quality to contradict, so it
+        // takes no marker — `bVII` is conventionally major anyway.
+        ("C F G Bb", "b7"),
+        ("C F G Eb", "b3"),
+    ];
+
+    for (written, expected) in cases {
+        let numbers = nashville(written);
+        assert_eq!(numbers[3], expected, "{written} should render {expected}");
+
+        // And the numbers must spell the original chords again.
+        assert_eq!(
+            in_letters(&chart(&numbers.join(" "))),
+            in_letters(&chart(written)),
+            "{written} → {numbers:?} did not round trip"
+        );
+    }
+}

@@ -254,17 +254,50 @@ fn renotate_chord(parsed_in: &Chord, ctx: &Ctx) -> Option<(Chord, String)> {
             parsed.root = new_root;
             parsed.bass = new_bass;
 
-            // The quality marker is kept, including when it is the degree's
-            // diatonic one: `Em` in G is `6m`, not `6`.
+            // Specify the quality wherever it can be specified.
             //
-            // This used to drop it, on the reasoning that a bare Nashville
-            // number already implies its diatonic triad — which is true of
-            // the system as written, but not of how the charts are read.
-            // A player scanning `6` has to know the key, work out the sixth
-            // degree, and recall that it is minor; `6m` says it. Both spell
-            // the same chord on the way back in, so keeping the marker costs
-            // nothing and the round trip is unchanged.
+            // A bare number carries its degree's diatonic quality on the way
+            // IN — `6` in a major key is vi, and the writer is never forced
+            // to type `6m`. Coming OUT is a different job: the chart is
+            // being read at speed, so it says which chord it means. `Em` in
+            // G renders `6m` rather than `6`.
+            //
+            // A major triad on a degree that is diatonically minor or
+            // diminished MUST say so, because a bare number there would read
+            // back as the diatonic quality and change the chord. `A` in C
+            // rendered `6` and came back `Am` — the round trip silently
+            // reharmonised the song. `M` is the marker `6M`, `6maj` and
+            // `6△` all already parse as.
+            // Only a NATURAL degree has a diatonic quality to contradict.
+            // A chromatic one (`b7` in C = B♭) is not in the scale at all, so
+            // there is nothing for a bare number to be mistaken for — and
+            // `bVII` is conventionally major anyway. Marking it `b7M` would
+            // be noise on the most common borrowed chord there is.
+            let (degree, accidental) = degree_of(ctx.song_key, &root_note);
             let symbol = parsed.to_string();
+            let root_str = parsed.root.to_string();
+            let tail = symbol.strip_prefix(&root_str);
+
+            // A tail that already names a major quality says it for us —
+            // `6maj7` is unambiguous, and `6Mmaj7` says "major" twice. A
+            // plain `7` does not count: `6:7` is read as the diatonic
+            // minor seventh, so a dominant on 6 really does need `6M7`.
+            let tail_states_major = tail.is_some_and(|t| {
+                t.starts_with("maj") || t.starts_with('M') || t.starts_with('△') || t.starts_with('^')
+            });
+
+            let needs_major_marker = accidental.is_none()
+                && matches!(parsed.quality, ChordQuality::Major)
+                && !tail_states_major
+                && ctx
+                    .song_key
+                    .diatonic_quality(degree)
+                    .is_some_and(|d| d != ChordQuality::Major);
+
+            let symbol = match (needs_major_marker, tail) {
+                (true, Some(tail)) => format!("{root_str}M{tail}"),
+                _ => symbol,
+            };
             Some((parsed, symbol))
         }
         NotationSystem::Roman => {
