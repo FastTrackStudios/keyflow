@@ -7194,8 +7194,6 @@ version = "0.1.0"
 dependencies = [
  "color-eyre",
  "colored",
- "daw-module",
- "daw-proto",
  "dawfile-reaper",
  "derive_more 1.0.0",
  "engraver",
@@ -7346,11 +7344,9 @@ dependencies = [
 [[package]]
 name = "keyflow-proto"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.7#8c14b86b3fa9eddb869ae64c164d648e07ac02cf"
 dependencies = [
  "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.0.2)",
  "color-palette",
- "daw-proto",
  "facet",
  "helgoboss-midi",
  "keyflow-syntax",
@@ -7359,6 +7355,7 @@ dependencies = [
  "thiserror 2.0.20",
  "tracing",
  "uuid",
+ "vox",
 ]
 
 [[package]]
@@ -7387,7 +7384,6 @@ dependencies = [
 [[package]]
 name = "keyflow-syntax"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/daw?tag=v0.0.7#8c14b86b3fa9eddb869ae64c164d648e07ac02cf"
 dependencies = [
  "facet",
  "serde",

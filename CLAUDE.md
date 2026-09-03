@@ -7,7 +7,7 @@ the `architect` / `daw` / `vendor` splits before it.
 | repo | holds | consumed as |
 |---|---|---|
 | **keyflow** (here) | the chart language, its formats, the LSP + grammar, Engraver, and the keyflow site | — |
-| [daw](https://github.com/FastTrackStudios/daw) | the DAW platform and shared substrate — including `keyflow-proto` and `keyflow-syntax` | git dep, tag `v0.0.2` |
+| [daw](https://github.com/FastTrackStudios/daw) | the DAW platform and shared substrate | git dep, tag `v0.0.2` |
 | [architect](https://github.com/FastTrackStudios/architect) | the framework (entity/RPC, atom, form, auth, permissions, crdt), `architect-ui` | git dep, tag `v0.0.2` |
 | [session](https://github.com/FastTrackStudios/session) | the musical/production vocabulary and the Session app | consumes this repo |
 | [editor](https://github.com/FastTrackStudios/editor) | the embeddable text/markdown editor — sits BELOW this repo | git dep, tag `v0.1.0` |
@@ -36,6 +36,9 @@ names keep their `keyflow-` prefix; directory names drop it.
 
 ```
 features/keyflow/     the facade — the public API surface
+features/proto/       the domain model and the musical primitives —
+                      chords, keys, sections, and the time types
+features/syntax/      spans, tokens, the syntax AST, highlighting
 features/text/        the parser and the chart model
 features/chordpro/    ) the formats: import and export
 features/midi/        )
@@ -76,10 +79,19 @@ docs/spec/            tracey-tracked spec (score-engraving)
   playback signals and the dock. Panels that wire a chart to *app* state
   belong in the app. If you find yourself wanting `session::` in this
   repo, the component is in the wrong repo.
-- **`keyflow-proto` and `keyflow-syntax` live in `daw`, not here.**
-  `expression-editor-core` (which `daw-reaper` hard-depends on) needs
-  them, so they are foundation-layer. Do not try to move them back
-  without also breaking `daw-reaper → expression-editor-*`.
+- **Keyflow owns the musical primitives; nothing here depends on `daw`
+  to say what a bar is.** `keyflow-proto` and `keyflow-syntax` live in
+  `features/proto` and `features/syntax`. `TimeSignature`,
+  `TimePosition`, `MusicalPosition`, `Tempo`, `Position` and `TimeRange`
+  are defined in `features/proto/src/time/primitives/` — they used to be
+  re-exported from `daw-proto`, which meant the notation domain asked the
+  DAW platform what 4/4 meant. Keyflow is the authority on understanding
+  a piece of music; the DAW reads these from us.
+  `daw` still carries its own copies of both crates, and
+  `expression-editor-core` still builds against those. That duplication
+  is deliberate and temporary — daw's copies come out once its consumers
+  are repointed here. Until then, **a change to `features/proto` is not
+  live for `daw` until it is made there too.**
 - **`default-features = false` cannot be applied to a workspace-inherited
   dep.** Put it on the `[workspace.dependencies]` entry, not the consumer.
 - **`include_str!` across a repo boundary does not work.** A git dep has

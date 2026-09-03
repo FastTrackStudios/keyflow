@@ -2889,6 +2889,14 @@ impl<'a> ChartParser<'a> {
                 continue;
             }
 
+            // Check for an inline cue (e.g., "@Build", "@Hit:3")
+            if token_str.len() > 1 && token_str.starts_with('@') {
+                if let Ok(dynamic) = DynamicMarking::parse(token_str) {
+                    pending_dynamic = Some(dynamic);
+                }
+                continue;
+            }
+
             // Check for inline dynamic marking (e.g., "<Build>", "<Down>", "<Hit>:3")
             if token_str.starts_with('<') && token_str.contains('>') {
                 if let Ok(dynamic) = DynamicMarking::parse(token_str) {

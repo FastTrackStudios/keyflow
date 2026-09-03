@@ -15,7 +15,6 @@ pub use keyflow_proto::*;
 #[cfg(feature = "text")]
 pub use keyflow_text as text;
 
-pub mod daw_module;
 pub mod summary;
 
 #[derive(Debug, Clone)]
