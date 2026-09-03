@@ -385,3 +385,34 @@ Cmaj7 Cm7 C Cm
     // Cm (basic minor) recalls Cm7 from minor family
     assert_eq!(verse_section.measures()[3].chords[0].full_symbol, "Cm7");
 }
+
+/// Test 11: Suspensions are not remembered
+/// A suspension names what a chord is *doing on its way somewhere*, not what
+/// it is. `D Dsus D` is the oldest figure in popular music and the third bar
+/// has to come back as `D` — memory that answered `Dsus` there would be
+/// telling the band never to resolve.
+#[test]
+fn test_suspensions_are_not_remembered() {
+    let symbols = |src: &str| -> Vec<String> {
+        keyflow::parse(src)
+            .unwrap()
+            .sections
+            .iter()
+            .flat_map(|s| s.measures().to_vec())
+            .map(|m| m.chords[0].full_symbol.clone())
+            .collect()
+    };
+    let chart = |body: &str| format!("Suspensions - Demo\n120bpm 4/4 #C\n\nvs 4\n{body}\n");
+
+    assert_eq!(symbols(&chart("D Dsus D D")), ["D", "Dsus4", "D", "D"]);
+    assert_eq!(symbols(&chart("D Dsus4 D D")), ["D", "Dsus4", "D", "D"]);
+    assert_eq!(symbols(&chart("D Dsus2 D D")), ["D", "Dsus2", "D", "D"]);
+    assert_eq!(symbols(&chart("1 1sus 1 1")), ["1", "1sus4", "1", "1"]);
+
+    // Every other quality is still remembered — this is a carve-out for
+    // suspensions, not a retreat from chord memory.
+    assert_eq!(symbols(&chart("D D7 D D")), ["D", "D7", "D7", "D7"]);
+
+    // And a suspension passing through does not erase what was remembered.
+    assert_eq!(symbols(&chart("D7 Dsus D D")), ["D7", "Dsus4", "D7", "D7"]);
+}

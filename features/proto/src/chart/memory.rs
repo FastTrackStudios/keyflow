@@ -282,8 +282,14 @@ impl ChordMemory {
                 parsed_symbol.to_string()
             };
 
-            // Store to section-local memory (and global if in first section)
-            self.store_to_family_memory(&family_key, &output_symbol);
+            // A suspension is not an identity, so it is not remembered.
+            // `D Dsus D` is the oldest figure in popular music and it has to
+            // come back as `D` — a chart that answered `Dsus` there would be
+            // telling the band never to resolve.
+            if !Self::is_suspension(&output_symbol, root) {
+                // Store to section-local memory (and global if in first section)
+                self.store_to_family_memory(&family_key, &output_symbol);
+            }
             self.seen_roots.insert(root.to_lowercase());
             output_symbol
         } else {
@@ -342,6 +348,25 @@ impl ChordMemory {
         }
 
         false
+    }
+
+    /// Is this chord a suspension?
+    ///
+    /// Suspensions are deliberately excluded from chord memory. Every other
+    /// quality names what a chord *is* — `Cmaj7` is the colour of that C for
+    /// as long as the section runs, so a later bare `C` should come back as
+    /// `Cmaj7`. A suspension names what a chord is *doing on its way
+    /// somewhere*: the whole point of `sus4` is the fourth falling to the
+    /// third. Remembering it inverts the figure.
+    ///
+    /// `D7sus4` is not remembered either. The `7` in it would be worth
+    /// keeping, but the token as written is still a suspension, and
+    /// storing `D7sus4` to answer a later bare `D` has the same fault.
+    fn is_suspension(parsed_symbol: &str, root: &str) -> bool {
+        parsed_symbol
+            .strip_prefix(root)
+            .unwrap_or(parsed_symbol)
+            .contains("sus")
     }
 
     /// Determine the chord family (major or minor) from the parsed symbol.
