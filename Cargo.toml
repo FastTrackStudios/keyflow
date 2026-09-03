@@ -134,18 +134,18 @@ keyflow-mobile = { path = "apps/mobile" }
 # Defaults OFF at the root so lean consumers (probe-only scanners, the
 # iOS-clean session-guide) don't drag the pack engine in; each consumer
 # names the features it needs ("load" / "write" / "engine").
-fts-sample = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.2", default-features = false }
+fts-sample = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.7", default-features = false }
 
 # ── daw domain (wave 2) ───────────────────────────────────────────────
 # Facade crate — the only public API surface for the daw domain.
 # daw-proto, daw-control, daw-standalone, dawfile-* are INTERNAL to the
 # domain; consumers outside it go through the `daw` facade.
-daw = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.2" }
-daw-proto = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.2" }
-daw-module = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.2" }
-dawfile-reaper = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.2" }
-keyflow-proto = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.2" }
-keyflow-syntax = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.2" }
+daw = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.7" }
+daw-proto = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.7" }
+daw-module = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.7" }
+dawfile-reaper = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.7" }
+keyflow-proto = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.7" }
+keyflow-syntax = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.7" }
 
 # ── Facet reflection + vox RPC — the rc.5 fleet pins ──────────────────
 facet = { version = "0.50.0-rc.5", features = ["reflect", "chrono", "uuid"] }
