@@ -24,6 +24,7 @@
 //!   system breaks yet.
 
 mod convert;
+pub mod raw;
 
 use std::path::Path;
 

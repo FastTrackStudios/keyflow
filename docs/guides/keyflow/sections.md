@@ -3,6 +3,7 @@ title: Sections
 kind: concept
 type: concept
 order: 2
+stage: Start here
 ---
 
 # Sections
@@ -78,6 +79,10 @@ CH            ; replays the chorus
 So a full song is mostly its section list: lay out `VS`, `CH`, `BR` once, then
 order the repeats however the song goes.
 
+That is repetition at the scale of a whole part. For the smaller kinds — one
+bar again, a line played twice, a span with first and second endings — see
+[[repeats|Repeats & Endings]].
+
 ## Labels
 
 Add a note to a section in quotes — a dynamic, an instruction, a cue:
@@ -116,8 +121,9 @@ the key signature updates there.
 
 ## What's next
 
-- **Lyrics** — writing words under the chords, lined up with the music.
+- **Chords** — what goes inside a section: the root, the quality, the seventh
+  family, extensions and alterations, and a slash bass.
 
 ---
 
-Previous: [[structure|Structure]] · Next: [[chords|Chords]] · Up: [[keyflow|Keyflow Guide]]
+Previous: [[structure|Structure]] · Next: [[chords|Chords]] · Up: [[keyflow|An Introduction]]

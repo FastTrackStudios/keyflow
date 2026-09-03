@@ -39,6 +39,7 @@
 //! the embedding ones.
 
 use dioxus::prelude::*;
+use keyflow::engraver::api::pipeline::Paper;
 use keyflow_ui::ChartLayoutManager;
 
 /// Points → CSS pixels. Screen DPI over the typographic 72.
@@ -118,6 +119,20 @@ pub fn Chart(
     /// How to lay it out and frame it.
     #[props(default = ChartShape::Inline)]
     shape: ChartShape,
+    /// Keep the last chart that engraved when the source stops parsing,
+    /// instead of reporting the error.
+    ///
+    /// For a source that is *being written* — the hero's typewriter, a
+    /// live editor — where most intermediate states are half a chord and
+    /// do not parse. Reporting each one turns the pane into a strobe of
+    /// error text; holding the last good engraving reads as the chart
+    /// keeping up.
+    ///
+    /// Off by default, and it should stay off anywhere the source is
+    /// finished: a chart that silently shows the previous chart's music
+    /// is worse than one that says what is wrong with it.
+    #[props(default = false)]
+    hold_last_good: bool,
 ) -> Element {
     // `use_memo` and not `use_effect`: engraving is a pure function of the
     // source, so it belongs in the render path. The earlier effect-based
@@ -131,7 +146,31 @@ pub fn Chart(
     // The chart then freezes on whatever it was seeded with while the
     // editor happily updates, which is exactly how this shipped the first
     // time.
-    let rendered = use_memo(use_reactive!(|(source, shape)| engrave(&source, shape)));
+
+    // The last engraving that succeeded, for `hold_last_good`. Written
+    // from inside the memo and read only through `peek`, so nothing
+    // subscribes to it — which is what keeps a write during render from
+    // re-entering the pass that made it.
+    let mut last_good = use_signal(Vec::<Page>::new);
+
+    let rendered = use_memo(use_reactive!(|(source, shape, hold_last_good)| {
+        match engrave(&source, shape) {
+            Ok(pages) => {
+                if hold_last_good {
+                    last_good.set(pages.clone());
+                }
+                Ok(pages)
+            }
+            Err(message) => {
+                let held = last_good.peek();
+                if hold_last_good && !held.is_empty() {
+                    Ok(held.clone())
+                } else {
+                    Err(message)
+                }
+            }
+        }
+    }));
 
     match &*rendered.read() {
         // Output of our own serialiser over our own parser, not user HTML.
@@ -141,11 +180,19 @@ pub fn Chart(
                     div {
                         key: "{i}",
                         class: "kf-chart-page",
+                        // The page's *proportions*, not its pixel size.
+                        // A4 is 793x1123 CSS px, which is taller than
+                        // most places a chart appears; pinning those
+                        // numbers means every container has to be that
+                        // big or clip. `aspect-ratio` says the same
+                        // thing — this is paper, in paper's shape — and
+                        // lets the container pick the scale, so the same
+                        // markup is a full-size working page in one
+                        // place and a thumbnail in another.
                         style: match shape {
-                            ChartShape::Page => format!(
-                                "width: {}px; height: {}px;",
-                                page.width_px, page.height_px,
-                            ),
+                            ChartShape::Page => {
+                                format!("aspect-ratio: {} / {};", page.width_px, page.height_px)
+                            }
                             ChartShape::Inline => String::new(),
                         },
                         dangerous_inner_html: "{page.svg}",
@@ -195,11 +242,17 @@ pub fn engrave(source: &str, shape: ChartShape) -> Result<Vec<Page>, String> {
 
 /// A manager holding a laid-out chart — the single place the site builds
 /// one, so every caller gets the same layout for the same source.
+///
+/// A4, explicitly. The on-screen preset defaults to Letter, and this site
+/// does not: [`blank_page`] is 595x842 and [`export_svg`]/[`export_pdf`]
+/// hand out A4, so a Letter layout on screen meant the page someone was
+/// looking at broke its systems in different places from the page they
+/// downloaded.
 fn laid_out(source: &str, shape: ChartShape) -> Result<ChartLayoutManager, String> {
     if source.trim().is_empty() {
         return Err("Nothing to engrave yet.".to_string());
     }
-    let mut manager = ChartLayoutManager::new()?;
+    let mut manager = ChartLayoutManager::new()?.with_paper(Paper::A4);
     manager.parse_and_layout(source, LAYOUT_WIDTH_PT, shape == ChartShape::Inline)?;
     Ok(manager)
 }
@@ -300,13 +353,18 @@ mod tests {
     fn engraves_pages_at_true_paper_size() {
         let pages = engrave(keyflow_ui::examples::EXAMPLE_THRILLER, ChartShape::Page).unwrap();
         assert!(!pages.is_empty());
-        // A4 portrait at 96 DPI is ~793x1122 CSS px. The point of the
-        // sized export is that this is paper, not a stretched thumbnail.
+
+        // A4 portrait — 595x842pt, so 793x1122 CSS px at 96 DPI — and not
+        // merely "some portrait page". The engraver's on-screen preset
+        // defaults to US Letter, which is also portrait and also wider
+        // than 500px, so the loose assertion this replaces passed while
+        // the site laid out on Letter and exported A4. Paper decides
+        // system breaks; the two are different charts.
+        let (w, h) = (pages[0].width_px, pages[0].height_px);
         assert!(
-            pages[0].width_px > 500.0 && pages[0].height_px > pages[0].width_px,
-            "expected a portrait page, got {}x{}",
-            pages[0].width_px,
-            pages[0].height_px
+            (w - 595.0 * DPI_SCALE).abs() < 1.0 && (h - 842.0 * DPI_SCALE).abs() < 1.0,
+            "expected an A4 page (793x1122 px), got {w:.0}x{h:.0} \
+             — Letter is 816x1056",
         );
     }
 
@@ -439,11 +497,29 @@ mod tests {
         //
         // A missing @font-face does not error; it silently falls back. So
         // the invariant has to be asserted, not eyeballed.
-        let manager = laid_out("VS: | Cmaj7 F#m7b5 | Bbmaj9 G7b9 |\n", ChartShape::Inline).unwrap();
+        // The section label matters: `section-comment` is only emitted
+        // when a section carries one, so a fixture without a label let
+        // that family go undeclared for as long as this test existed —
+        // every label on the site rendered in a system serif.
+        let manager = laid_out(
+            "VS \"Farsi\": | Cmaj7 F#m7b5 | Bbmaj9 G7b9 |\n",
+            ChartShape::Inline,
+        )
+        .unwrap();
         let svg = manager.export_svg_snippet().unwrap();
         let css = manager.font_face_css();
 
-        for family in svg_font_families(&svg) {
+        // The fixture has to actually reach the families being checked.
+        // Without this the test passes by not exercising them, which is
+        // how `section-comment` stayed undeclared.
+        let families = svg_font_families(&svg);
+        assert!(
+            families.iter().any(|f| f == "section-comment"),
+            "the fixture no longer emits `section-comment`, so this test \
+             is not checking the family it was widened to catch: {families:?}"
+        );
+
+        for family in families {
             // Generic CSS families are the browser's job, not ours.
             if matches!(family.as_str(), "sans-serif" | "serif" | "monospace") {
                 continue;

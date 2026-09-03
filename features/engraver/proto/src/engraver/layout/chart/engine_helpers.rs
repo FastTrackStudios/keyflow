@@ -22,6 +22,44 @@ use crate::sections::SectionType;
 use super::{ChartLayoutEngine, count_in_renderer, page_rendering, section_layout};
 
 impl ChartLayoutEngine {
+    /// Lay out one repeat-pass label in the margin.
+    ///
+    /// Drawing the labels and reserving the dynamic slots beneath them
+    /// have to agree on where each one sits, so both ask here rather
+    /// than each building its own `MarginLabelParams`.
+    #[allow(clippy::too_many_arguments)]
+    fn layout_pass_label(
+        &self,
+        pass_label: &str,
+        section: &crate::sections::Section,
+        page_x: f64,
+        margin_width: f64,
+        staff_y: f64,
+        staff_height: f64,
+        ctx: &LayoutContext<'_>,
+    ) -> (crate::layout::tlayout::RehearsalMarkLayoutData, SceneNode) {
+        let section_type =
+            section_type_for_pass_label(pass_label).unwrap_or_else(|| section.section_type.clone());
+        let (section_type_name, abbreviation) = self.section_type_to_strings(&section_type);
+        layout_margin_label(
+            &MarginLabelParams {
+                section_type: section_type_name,
+                abbreviation,
+                number: None,
+                letter: None,
+                comment: None,
+                label_override: Some(pass_label.to_string()),
+                page_x,
+                margin_width,
+                staff_y,
+                staff_height,
+                style: self.get_section_theme(&section_type),
+                ..Default::default()
+            },
+            ctx,
+        )
+    }
+
     /// Create a section label scene node.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn create_section_label(
@@ -43,24 +81,13 @@ impl ChartLayoutEngine {
             let mut y = staff_y;
             let pass_gap = repeat_pass_label_gap(staff_height);
             for pass_label in repeat_pass_label_parts(label_text) {
-                let section_type = section_type_for_pass_label(pass_label)
-                    .unwrap_or_else(|| section.section_type.clone());
-                let (section_type_name, abbreviation) = self.section_type_to_strings(&section_type);
-                let (layout, label_node) = layout_margin_label(
-                    &MarginLabelParams {
-                        section_type: section_type_name,
-                        abbreviation,
-                        number: None,
-                        letter: None,
-                        comment: None,
-                        label_override: Some(pass_label.to_string()),
-                        page_x,
-                        margin_width,
-                        staff_y: y,
-                        staff_height,
-                        style: self.get_section_theme(&section_type),
-                        ..Default::default()
-                    },
+                let (layout, label_node) = self.layout_pass_label(
+                    pass_label,
+                    section,
+                    page_x,
+                    margin_width,
+                    y,
+                    staff_height,
                     ctx,
                 );
                 container.add_child(label_node);
@@ -117,24 +144,13 @@ impl ChartLayoutEngine {
         let pass_gap = repeat_pass_label_gap(staff_height);
         let mut slots = Vec::new();
         for pass_label in repeat_pass_label_parts(label_text) {
-            let section_type = section_type_for_pass_label(pass_label)
-                .unwrap_or_else(|| section.section_type.clone());
-            let (section_type_name, abbreviation) = self.section_type_to_strings(&section_type);
-            let (layout, _) = layout_margin_label(
-                &MarginLabelParams {
-                    section_type: section_type_name,
-                    abbreviation,
-                    number: None,
-                    letter: None,
-                    comment: None,
-                    label_override: Some(pass_label.to_string()),
-                    page_x,
-                    margin_width,
-                    staff_y: y,
-                    staff_height,
-                    style: self.get_section_theme(&section_type),
-                    ..Default::default()
-                },
+            let (layout, _) = self.layout_pass_label(
+                pass_label,
+                section,
+                page_x,
+                margin_width,
+                y,
+                staff_height,
                 ctx,
             );
             slots.push(y + layout.height + pass_gap * 0.72);
@@ -205,6 +221,30 @@ impl ChartLayoutEngine {
         chart.initial_clef.unwrap_or(crate::chart::ChartClef::Bass)
     }
 
+    /// A section's melodies, expanded across measure boundaries and
+    /// stamped with the chart-level clef.
+    ///
+    /// The clef stamp matters: `pitch → staff line` mapping reads it to
+    /// pick the middle-line pitch, so a melody expanded without it maps
+    /// against the wrong clef. Both layout passes need the pair done
+    /// together, which is why they take it from here rather than calling
+    /// `expand_melodies_across_measures` and remembering the second step.
+    pub(super) fn expanded_melody_data(
+        &self,
+        chart: &Chart,
+        measures: &[crate::chart::types::Measure],
+        beats_per_measure: f64,
+    ) -> std::collections::HashMap<usize, super::types::MeasureMelodyData> {
+        let key_signature = super::key_signature_fifths(chart);
+        let mut melody_data_map =
+            super::expand_melodies_across_measures(measures, beats_per_measure, key_signature);
+        let chart_proto_clef = self.chart_proto_clef_for(chart);
+        for md in melody_data_map.values_mut() {
+            md.clef = chart_proto_clef;
+        }
+        melody_data_map
+    }
+
     pub(super) fn section_type_to_strings(&self, section_type: &SectionType) -> (String, String) {
         (section_type.full_name(), section_type.abbreviation())
     }
@@ -261,8 +301,19 @@ impl ChartLayoutEngine {
         }
     }
 
-    /// Add page footer with "Created with FastTrackStudio" text. Skipped
-    /// for titleless charts (snippets).
+    /// Add page footer with "Created with FastTrackStudio" text.
+    ///
+    /// Paper only. A snippet has no paper to sign: `layout_snippet` lays
+    /// the chart out on a 10000pt-tall scratch page and then shrinks the
+    /// page to the content it measures, so a footer pinned to the bottom
+    /// of that scratch page IS content — the crop grows to ~10041pt and
+    /// the "snippet" comes out as a strip of blank white a hundred
+    /// screens tall, with the music in the top 80pt.
+    ///
+    /// The guard used to be `metadata.title.is_none()`, standing in for
+    /// "this is a snippet". It held only because the snippets anyone
+    /// looked at were titleless; the site's landing-page hero has a title
+    /// and rendered exactly that way.
     pub(super) fn add_page_footer(
         &self,
         root: &mut SceneNode,
@@ -272,7 +323,7 @@ impl ChartLayoutEngine {
         page_height: f64,
         metadata: &crate::SongMetadata,
     ) {
-        if metadata.title.is_none() {
+        if self.config.snippet_mode || metadata.title.is_none() {
             return;
         }
         page_rendering::add_page_footer(root, page_x, page_y, page_width, page_height);

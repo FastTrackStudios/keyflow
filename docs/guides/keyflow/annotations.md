@@ -3,6 +3,7 @@ title: Annotations & Expression
 kind: concept
 type: concept
 order: 9
+stage: Complete scores
 ---
 
 # Annotations & Expression
@@ -94,4 +95,4 @@ Like dynamics, hairpins default below the staff; add `above` to move them up.
 
 ---
 
-Previous: [[key-meter-changes|Key & Meter Changes]] · Next: [[repeats|Repeats & Endings]] · Up: [[keyflow|Keyflow Guide]]
+Previous: [[key-meter-changes|Key & Meter Changes]] · Next: [[repeats|Repeats & Endings]] · Up: [[keyflow|An Introduction]]

@@ -49,6 +49,16 @@ editor-keyflow = { workspace = true }
 # of C). This is what makes the workbench a Keyflow editor rather than a
 # textarea that happens to hold Keyflow.
 editor-keyflow-lang = { workspace = true }
+# The workspace dep carries no platform features (`default-features =
+# false, features = ["lib"]` at the root); this crate's `default =
+# ["web"]` turns on `dioxus/web` + `dioxus/launch`. That is
+# dioxus-flake's packages/web pattern, and the same shape task uses.
+#
+# `dx serve` was getting away without it by injecting the platform
+# itself, but a sandboxed `dx build` resolves offline and fell back to a
+# feature set that wants `dioxus-fullstack` — a package the vendored
+# dioxus git source does not carry, so the Nix image build died in
+# resolution before reaching a compiler.
 dioxus = { workspace = true, features = ["router"] }
 
 # Chart-in-URL codec: deflate then base64url, so a whole chart fits in a
@@ -72,6 +82,17 @@ web-sys = { version = "0.3", features = [
     "Url",
     "HtmlAnchorElement",
     "HtmlElement",
+    "MediaQueryList",
+    # Share dialog: the chart's own URL, and the clipboard to put it on.
+    "Location",
+    "Navigator",
+    "Clipboard",
+    # The live chart surface: a canvas, and the probe that decides
+    # whether WebGL2 exists before one is mounted.
+    "HtmlCanvasElement",
+    "WebGl2RenderingContext",
+    # Remembering what someone chose — see `prefs`.
+    "Storage",
 ] }
 # Pinned exactly, and low: `dx build` refuses to run when the crate version
 # and the wasm-bindgen-cli in the dev shell disagree, and the CLI comes from
@@ -102,3 +123,7 @@ console_error_panic_hook = "0.1"
 
 [lints]
 workspace = true
+
+[features]
+default = ["web"]
+web = ["dioxus/web", "dioxus/launch"]

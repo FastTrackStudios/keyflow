@@ -9,6 +9,10 @@ description = "MusicXML import — translate score files to keyflow Chart"
 keyflow-proto.workspace = true
 keyflow-syntax.workspace = true
 musicxml = { workspace = true }
+# `raw::extract_mxl` unpacks .mxl containers itself — the musicxml
+# crate's own zip reader fails on multi-file archives and on inner
+# names that don't end in .musicxml (MuseScore writes score.xml).
+zip = { version = "2", default-features = false, features = ["deflate"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 

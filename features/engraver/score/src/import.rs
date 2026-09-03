@@ -8,8 +8,12 @@
 
 use musicxml::datatypes::{StartStop, StartStopContinue, YesNo};
 use musicxml::elements::{
-    ArticulationsType, AudibleType, GraceType, MeasureElement, NotationContentTypes,
-    Note as XmlNote, NoteType, PartElement, PartListElement, ScorePartwise,
+    AudibleType, GraceType, MeasureElement, NotationContentTypes, Note as XmlNote, NoteType,
+    PartElement, PartListElement, ScorePartwise,
+};
+
+use keyflow_musicxml::raw::{
+    articulation_tag, decode_entities, dynamics_tag, extract_mxl, tie_flags,
 };
 
 use crate::model::{
@@ -36,84 +40,12 @@ pub fn import_file(path: impl AsRef<std::path::Path>) -> Result<Score, ImportErr
 /// Parse in-memory MusicXML (raw XML or a compressed `.mxl` zip).
 pub fn import_bytes(data: Vec<u8>) -> Result<Score, ImportError> {
     let xml = if data.starts_with(b"PK") {
-        extract_mxl(data)?
+        extract_mxl(data).map_err(|e| ImportError::Mxl(e.to_string()))?
     } else {
         data
     };
     let score = musicxml::read_score_data_partwise(xml).map_err(ImportError::Parse)?;
     Ok(score_from_partwise(&score))
-}
-
-/// Pull the score XML out of a compressed `.mxl` (container.xml rootfile,
-/// falling back to the first plausible XML entry) — same recovery as
-/// keyflow-orchestra; the musicxml crate's own zip path fails on multi-file
-/// archives and inner names like `score.xml`.
-fn extract_mxl(data: Vec<u8>) -> Result<Vec<u8>, ImportError> {
-    use std::io::Read;
-    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(data))
-        .map_err(|e| ImportError::Mxl(e.to_string()))?;
-
-    let mut root_path: Option<String> = None;
-    if let Ok(mut container) = archive.by_name("META-INF/container.xml") {
-        let mut text = String::new();
-        if container.read_to_string(&mut text).is_ok()
-            && let Some(idx) = text.find("full-path=\"")
-        {
-            let rest = &text[idx + "full-path=\"".len()..];
-            if let Some(end) = rest.find('"') {
-                root_path = Some(rest[..end].to_string());
-            }
-        }
-    }
-    let root_path = match root_path {
-        Some(p) => p,
-        None => {
-            let mut found = None;
-            for i in 0..archive.len() {
-                let name = archive
-                    .by_index(i)
-                    .map_err(|e| ImportError::Mxl(e.to_string()))?
-                    .name()
-                    .to_string();
-                let lower = name.to_lowercase();
-                if !name.starts_with("META-INF")
-                    && (lower.ends_with(".musicxml") || lower.ends_with(".xml"))
-                {
-                    found = Some(name);
-                    break;
-                }
-            }
-            found.ok_or_else(|| ImportError::Mxl("no score XML in archive".into()))?
-        }
-    };
-    let mut file = archive
-        .by_name(&root_path)
-        .map_err(|e| ImportError::Mxl(format!("missing rootfile {root_path}: {e}")))?;
-    let mut xml = Vec::new();
-    file.read_to_end(&mut xml)
-        .map_err(|e| ImportError::Mxl(format!("decompress failed: {e}")))?;
-    Ok(xml)
-}
-
-/// Decode XML entities (iteratively, so double-encoded `&amp;amp;` resolves).
-fn decode_entities(s: &str) -> String {
-    let mut cur = s.to_string();
-    for _ in 0..3 {
-        if !cur.contains('&') {
-            break;
-        }
-        let next = cur
-            .replace("&amp;", "&")
-            .replace("&lt;", "<")
-            .replace("&gt;", ">")
-            .replace("&quot;", "\"")
-            .replace("&apos;", "'");
-        if next == cur {
-            break;
-        }
-        cur = next;
-    }
-    cur
 }
 
 pub fn score_from_partwise(score: &ScorePartwise) -> Score {
@@ -570,33 +502,6 @@ fn import_direction_type(
     }
 }
 
-/// Conventional name for a `<dynamics>` child (same mapping as
-/// keyflow-orchestra's parse).
-fn dynamics_tag(d: &musicxml::elements::DynamicsType) -> Option<&'static str> {
-    use musicxml::elements::DynamicsType as D;
-    Some(match d {
-        D::P(_) => "p",
-        D::Pp(_) => "pp",
-        D::Ppp(_) => "ppp",
-        D::Pppp(_) => "pppp",
-        D::F(_) => "f",
-        D::Ff(_) => "ff",
-        D::Fff(_) => "fff",
-        D::Ffff(_) => "ffff",
-        D::Mp(_) => "mp",
-        D::Mf(_) => "mf",
-        D::Sf(_) => "sf",
-        D::Sfz(_) => "sfz",
-        D::Sffz(_) => "sffz",
-        D::Fp(_) => "fp",
-        D::Fz(_) => "fz",
-        D::Rf(_) => "rf",
-        D::Rfz(_) => "rfz",
-        D::Sfp(_) => "sfp",
-        _ => return None,
-    })
-}
-
 /// Collect articulation tags + slur flags from `<notations>`.
 fn read_notations(note: &XmlNote, cue: bool) -> (std::collections::BTreeSet<String>, bool, bool) {
     let mut art = std::collections::BTreeSet::new();
@@ -638,40 +543,6 @@ fn read_notations(note: &XmlNote, cue: bool) -> (std::collections::BTreeSet<Stri
         }
     }
     (art, slur_start, slur_stop)
-}
-
-fn articulation_tag(a: &ArticulationsType) -> &'static str {
-    match a {
-        ArticulationsType::Accent(_) => "accent",
-        ArticulationsType::StrongAccent(_) => "strong-accent",
-        ArticulationsType::Staccato(_) => "staccato",
-        ArticulationsType::Tenuto(_) => "tenuto",
-        ArticulationsType::DetachedLegato(_) => "detached-legato",
-        ArticulationsType::Staccatissimo(_) => "staccatissimo",
-        ArticulationsType::Spiccato(_) => "spiccato",
-        ArticulationsType::Scoop(_) => "scoop",
-        ArticulationsType::Plop(_) => "plop",
-        ArticulationsType::Doit(_) => "doit",
-        ArticulationsType::Falloff(_) => "falloff",
-        ArticulationsType::BreathMark(_) => "breath-mark",
-        ArticulationsType::Caesura(_) => "caesura",
-        ArticulationsType::Stress(_) => "stress",
-        ArticulationsType::Unstress(_) => "unstress",
-        ArticulationsType::SoftAccent(_) => "soft-accent",
-        ArticulationsType::OtherArticulation(_) => "other",
-    }
-}
-
-fn tie_flags(ties: &[musicxml::elements::Tie]) -> (bool, bool) {
-    let mut start = false;
-    let mut stop = false;
-    for t in ties {
-        match t.attributes.r#type {
-            StartStop::Start => start = true,
-            StartStop::Stop => stop = true,
-        }
-    }
-    (start, stop)
 }
 
 fn convert_clef(clef: &musicxml::elements::Clef) -> Clef {

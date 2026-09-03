@@ -27,6 +27,10 @@ pub struct GuidePage {
     pub title: &'static str,
     /// Sort key, from the frontmatter. Pages without one sort last.
     pub order: u32,
+    /// The stage of the progression this chapter belongs to, from the
+    /// frontmatter — the heading it sits under in the table of contents.
+    /// Empty for the index, which is the front door rather than a step.
+    pub stage: &'static str,
     /// The note verbatim, frontmatter included. What the graph reads.
     pub source: &'static str,
     /// The note without its frontmatter. What the editor renders — the
@@ -49,6 +53,26 @@ pub fn first_page() -> &'static GuidePage {
     GUIDE_PAGES
         .first()
         .expect("build.rs refuses to generate an empty guide")
+}
+
+/// The pages either side of `slug`, in reading order.
+///
+/// The index counts as a step here even though it carries no stage: from
+/// it "next" is chapter one, and from chapter one "previous" is the way
+/// back to the front door. That makes the buttons a complete walk of the
+/// guide rather than a chain that starts mid-air.
+///
+/// Derived from `GUIDE_PAGES`, which is the same order the table of
+/// contents renders, so the buttons cannot disagree with the sidebar.
+#[must_use]
+pub fn neighbours(slug: &str) -> (Option<&'static GuidePage>, Option<&'static GuidePage>) {
+    let Some(i) = GUIDE_PAGES.iter().position(|p| p.slug == slug) else {
+        return (None, None);
+    };
+    (
+        i.checked_sub(1).and_then(|j| GUIDE_PAGES.get(j)),
+        GUIDE_PAGES.get(i + 1),
+    )
 }
 
 /// The guide as the graph builder wants it.
@@ -236,6 +260,103 @@ mod tests {
                     p.slug
                 );
             }
+        }
+    }
+
+    /// The slug a `Previous:`/`Next:` footer line points at.
+    ///
+    /// Read from `source`, not `body`: the site strips the footer before
+    /// rendering — it shows real buttons instead — but the note keeps it,
+    /// because those wikilinks are most of the graph's edges.
+    fn footer_link(body: &str, label: &str) -> Option<String> {
+        let line = body.lines().find(|l| l.contains(&format!("{label}: [[")))?;
+        let after = line.split_once(&format!("{label}: [["))?.1;
+        let target = after.split_once("]]")?.0;
+        Some(target.split('|').next().unwrap_or(target).to_string())
+    }
+
+    #[test]
+    fn the_chapters_form_one_unbroken_chain() {
+        // Every chapter ends with `Previous: … Next: … Up: …`, and those
+        // have to agree with the `order:` the table of contents sorts by.
+        // They did not: `sections` pointed its reader at Lyrics, five
+        // chapters ahead, because the footer and the frontmatter are
+        // written in different places and nothing compared them.
+        // Everything after the introduction. The introduction is the
+        // first page by construction and carries no footer — it opens
+        // the guide rather than continuing it. Identified by position,
+        // not by "has no stage": it shares the first stage now, and a
+        // chapter that simply lost its footer must still fail this test
+        // rather than quietly drop out of it.
+        let chapters: Vec<_> = GUIDE_PAGES.iter().skip(1).collect();
+        assert!(chapters.len() > 1, "the guide should have chapters");
+
+        for (i, p) in chapters.iter().enumerate() {
+            match chapters.get(i + 1) {
+                Some(next) => assert_eq!(
+                    footer_link(p.source, "Next").as_deref(),
+                    Some(next.slug),
+                    "`{}` should send the reader to `{}`",
+                    p.slug,
+                    next.slug
+                ),
+                // The last chapter closes the tour instead of pointing on.
+                None => assert!(
+                    footer_link(p.source, "Next").is_none(),
+                    "`{}` is the last chapter and should not have a Next",
+                    p.slug
+                ),
+            }
+            if i > 0 {
+                assert_eq!(
+                    footer_link(p.source, "Previous").as_deref(),
+                    Some(chapters[i - 1].slug),
+                    "`{}` should come back from `{}`",
+                    p.slug,
+                    chapters[i - 1].slug
+                );
+            }
+            assert_eq!(
+                footer_link(p.source, "Up").as_deref(),
+                Some(first_page().slug),
+                "`{}` should link up to the index, so no chapter is a dead end",
+                p.slug
+            );
+        }
+    }
+
+    #[test]
+    fn the_stages_run_in_reading_order() {
+        // The table of contents emits a heading whenever the stage
+        // changes, so a stage whose chapters are not contiguous would
+        // print its heading twice and split the run under it.
+        let mut seen: Vec<&str> = Vec::new();
+        let mut current = "";
+        for p in GUIDE_PAGES {
+            if p.stage != current {
+                assert!(
+                    !seen.contains(&p.stage),
+                    "stage `{}` appears twice — `{}` is out of order",
+                    p.stage,
+                    p.slug
+                );
+                seen.push(p.stage);
+                current = p.stage;
+            }
+        }
+    }
+
+    #[test]
+    fn every_chapter_belongs_to_a_stage() {
+        // A page without a stage lands under whichever heading happened
+        // to precede it — including, for the first page, no heading at
+        // all. Every page carries one, the introduction included.
+        for p in GUIDE_PAGES {
+            assert!(
+                !p.stage.is_empty(),
+                "chapter `{}` has no `stage:` in its frontmatter",
+                p.slug
+            );
         }
     }
 

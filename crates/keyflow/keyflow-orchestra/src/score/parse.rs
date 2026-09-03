@@ -6,9 +6,12 @@
 
 use musicxml::datatypes::StartStop;
 use musicxml::elements::{
-    ArticulationsType, AudibleType, DirectionType, DirectionTypeContents, DynamicsType,
-    MeasureElement, NotationContentTypes, Note, NoteType, OrnamentType, PartElement, ScorePartwise,
-    TechnicalContents,
+    AudibleType, DirectionType, DirectionTypeContents, MeasureElement, NotationContentTypes, Note,
+    NoteType, OrnamentType, PartElement, ScorePartwise, TechnicalContents,
+};
+
+use keyflow_musicxml::raw::{
+    articulation_tag, decode_entities, dynamics_tag, extract_mxl, tie_flags,
 };
 
 use super::{
@@ -17,91 +20,17 @@ use super::{
 };
 use crate::Error;
 
-/// Decode XML entities (iteratively, so double-encoded `&amp;amp;` from lazy
-/// exporters resolves all the way to `&`).
-fn decode_entities(s: &str) -> String {
-    let mut cur = s.to_string();
-    for _ in 0..3 {
-        if !cur.contains('&') {
-            break;
-        }
-        let next = cur
-            .replace("&amp;", "&")
-            .replace("&lt;", "<")
-            .replace("&gt;", ">")
-            .replace("&quot;", "\"")
-            .replace("&apos;", "'");
-        if next == cur {
-            break;
-        }
-        cur = next;
-    }
-    cur
-}
-
 /// Parse a `.musicxml` or `.mxl` file into a [`Score`] (all parts eagerly).
 pub fn load(path: impl AsRef<std::path::Path>) -> Result<Score, Error> {
     let data =
         std::fs::read(path.as_ref()).map_err(|e| Error::Parse(format!("read failed: {e}")))?;
     let xml = if data.starts_with(b"PK") {
-        extract_mxl(data)?
+        extract_mxl(data).map_err(|e| Error::Parse(e.to_string()))?
     } else {
         data
     };
     let score = musicxml::read_score_data_partwise(xml).map_err(Error::Parse)?;
     Ok(score_from_partwise(&score))
-}
-
-/// Pull the score XML out of a compressed `.mxl`: follow the
-/// `META-INF/container.xml` rootfile, falling back to the first plausible
-/// XML entry. (The musicxml crate's own zip path fails on multi-file
-/// archives and on inner names like `score.xml`.)
-fn extract_mxl(data: Vec<u8>) -> Result<Vec<u8>, Error> {
-    use std::io::Read;
-    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(data))
-        .map_err(|e| Error::Parse(format!("bad .mxl zip: {e}")))?;
-
-    let mut root_path: Option<String> = None;
-    if let Ok(mut container) = archive.by_name("META-INF/container.xml") {
-        let mut text = String::new();
-        if container.read_to_string(&mut text).is_ok() {
-            if let Some(idx) = text.find("full-path=\"") {
-                let rest = &text[idx + "full-path=\"".len()..];
-                if let Some(end) = rest.find('"') {
-                    root_path = Some(rest[..end].to_string());
-                }
-            }
-        }
-    }
-    let root_path = match root_path {
-        Some(p) => p,
-        None => {
-            // fallback: first top-level XML entry outside META-INF
-            let mut found = None;
-            for i in 0..archive.len() {
-                let name = archive
-                    .by_index(i)
-                    .map_err(|e| Error::Parse(e.to_string()))?
-                    .name()
-                    .to_string();
-                let lower = name.to_lowercase();
-                if !name.starts_with("META-INF")
-                    && (lower.ends_with(".musicxml") || lower.ends_with(".xml"))
-                {
-                    found = Some(name);
-                    break;
-                }
-            }
-            found.ok_or_else(|| Error::Parse("no score XML in .mxl archive".into()))?
-        }
-    };
-    let mut file = archive
-        .by_name(&root_path)
-        .map_err(|e| Error::Parse(format!("missing rootfile {root_path}: {e}")))?;
-    let mut xml = Vec::new();
-    file.read_to_end(&mut xml)
-        .map_err(|e| Error::Parse(format!("decompress failed: {e}")))?;
-    Ok(xml)
 }
 
 pub fn score_from_partwise(score: &ScorePartwise) -> Score {
@@ -483,18 +412,6 @@ fn note_shape(note: &Note) -> (bool, bool, Option<&AudibleType>, f64, (bool, boo
     }
 }
 
-fn tie_flags(ties: &[musicxml::elements::Tie]) -> (bool, bool) {
-    let mut start = false;
-    let mut stop = false;
-    for t in ties {
-        match t.attributes.r#type {
-            StartStop::Start => start = true,
-            StartStop::Stop => stop = true,
-        }
-    }
-    (start, stop)
-}
-
 fn note_voice(note: &Note) -> u32 {
     note.content
         .voice
@@ -600,28 +517,6 @@ fn read_articulations(note: &Note) -> (ArtSet, bool, bool) {
         }
     }
     (art, slur_start, slur_stop)
-}
-
-fn articulation_tag(a: &ArticulationsType) -> &'static str {
-    match a {
-        ArticulationsType::Accent(_) => "accent",
-        ArticulationsType::StrongAccent(_) => "strong-accent",
-        ArticulationsType::Staccato(_) => "staccato",
-        ArticulationsType::Tenuto(_) => "tenuto",
-        ArticulationsType::DetachedLegato(_) => "detached-legato",
-        ArticulationsType::Staccatissimo(_) => "staccatissimo",
-        ArticulationsType::Spiccato(_) => "spiccato",
-        ArticulationsType::Scoop(_) => "scoop",
-        ArticulationsType::Plop(_) => "plop",
-        ArticulationsType::Doit(_) => "doit",
-        ArticulationsType::Falloff(_) => "falloff",
-        ArticulationsType::BreathMark(_) => "breath-mark",
-        ArticulationsType::Caesura(_) => "caesura",
-        ArticulationsType::Stress(_) => "stress",
-        ArticulationsType::Unstress(_) => "unstress",
-        ArticulationsType::SoftAccent(_) => "soft-accent",
-        ArticulationsType::OtherArticulation(_) => "other-articulation",
-    }
 }
 
 fn technical_tag(t: &TechnicalContents) -> &'static str {
@@ -734,31 +629,6 @@ fn direction_type_events(
         }
         _ => {}
     }
-}
-
-fn dynamics_tag(d: &DynamicsType) -> Option<&'static str> {
-    use DynamicsType as D;
-    Some(match d {
-        D::P(_) => "p",
-        D::Pp(_) => "pp",
-        D::Ppp(_) => "ppp",
-        D::Pppp(_) => "pppp",
-        D::F(_) => "f",
-        D::Ff(_) => "ff",
-        D::Fff(_) => "fff",
-        D::Ffff(_) => "ffff",
-        D::Mp(_) => "mp",
-        D::Mf(_) => "mf",
-        D::Sf(_) => "sf",
-        D::Sfz(_) => "sfz",
-        D::Sffz(_) => "sffz",
-        D::Fp(_) => "fp",
-        D::Fz(_) => "fz",
-        D::Rf(_) => "rf",
-        D::Rfz(_) => "rfz",
-        D::Sfp(_) => "sfp",
-        _ => return None,
-    })
 }
 
 fn harmony_point(h: &musicxml::elements::Harmony, qn: f64) -> Option<HarmonyPoint> {

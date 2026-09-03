@@ -78,6 +78,8 @@ pub fn GuidePage(slug: String) -> Element {
                 GuideToc { current: page.slug }
 
                 article { class: "kf-guide-page",
+                    ChapterNav { slug: page.slug, compact: true }
+
                     div { class: "kf-page-actions",
                         Link {
                             to: Route::Workbench { slug: page.slug.to_string() },
@@ -101,6 +103,8 @@ pub fn GuidePage(slug: String) -> Element {
                             }
                         },
                     }
+
+                    ChapterNav { slug: page.slug, compact: false }
 
                     Backlinks { pages: backlinks() }
                 }
@@ -155,12 +159,37 @@ fn LocalGraph(graph: view_knowledge_graph::model::WikiGraph, current: &'static s
     }
 }
 
-/// The guide's table of contents, in reading order.
+/// The guide's table of contents, in reading order, under its stages.
+///
+/// The chapters are one path from an absolute beginner to the end, and a
+/// flat list of eleven links hides that — it reads as reference material
+/// you dip into. The stage headings say where the path is going and,
+/// more usefully, where someone can stop: "Start here" is the three
+/// chapters that get a complete chart on the page, and everything after
+/// it is a layer on top of a chart that already works.
+///
+/// The stage comes from each note's frontmatter, and a heading is
+/// emitted whenever it changes — so the order of the headings is the
+/// reading order by construction, and a chapter cannot appear under a
+/// stage it does not belong to.
+///
+/// The introduction shares the first stage rather than sitting above it.
+/// Titled "Keyflow Guide" it read as the section's own name and standing
+/// alone was right; titled "An Introduction" it is a page you read, and
+/// a page called that sitting directly above a heading that says "Start
+/// here" invites the reader to wonder which of the two to believe.
 #[component]
 fn GuideToc(current: &'static str) -> Element {
+    let mut stage = "";
     rsx! {
         nav { class: "kf-guide-toc",
             for entry in guide::GUIDE_PAGES {
+                if entry.stage != stage {
+                    {
+                        stage = entry.stage;
+                        rsx! { span { class: "kf-toc-stage", "{entry.stage}" } }
+                    }
+                }
                 Link {
                     to: Route::GuidePage { slug: entry.slug.to_string() },
                     class: if entry.slug == current { "kf-toc-current" } else { "" },
@@ -168,6 +197,51 @@ fn GuideToc(current: &'static str) -> Element {
                 }
             }
             Link { to: Route::GuideGraph {}, class: "kf-toc-graph", "Graph" }
+        }
+    }
+}
+
+/// Previous and next, above and below the page.
+///
+/// The chapters are one path, and until now the only way to walk it was
+/// a line of prose at the very bottom of the note — you had to reach the
+/// end to find out where to go, and there was nothing at the top at all.
+///
+/// Both copies read from [`guide::neighbours`], which reads
+/// `GUIDE_PAGES`, which is what the table of contents renders — so the
+/// buttons, the sidebar and the reading order are one fact with one
+/// source. The prose footer these replace still lives in each note's
+/// `source` for the graph; `build.rs` strips it from the rendered body.
+///
+/// `compact` is the top copy: the same two links with the labels and the
+/// boxes dropped, because a full pair of cards above the title competes
+/// with the title.
+#[component]
+fn ChapterNav(slug: &'static str, compact: bool) -> Element {
+    let (prev, next) = guide::neighbours(slug);
+    if prev.is_none() && next.is_none() {
+        return rsx! {};
+    }
+    rsx! {
+        nav {
+            class: if compact { "kf-chapter-nav kf-chapter-nav-top" } else { "kf-chapter-nav" },
+            "aria-label": "Chapters",
+            if let Some(p) = prev {
+                Link {
+                    to: Route::GuidePage { slug: p.slug.to_string() },
+                    class: "kf-chapter-link kf-chapter-prev",
+                    span { class: "kf-chapter-dir", "Previous" }
+                    span { class: "kf-chapter-title", "{p.title}" }
+                }
+            }
+            if let Some(n) = next {
+                Link {
+                    to: Route::GuidePage { slug: n.slug.to_string() },
+                    class: "kf-chapter-link kf-chapter-next",
+                    span { class: "kf-chapter-dir", "Next" }
+                    span { class: "kf-chapter-title", "{n.title}" }
+                }
+            }
         }
     }
 }

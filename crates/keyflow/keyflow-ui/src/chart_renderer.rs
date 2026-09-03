@@ -20,7 +20,7 @@ fn new_offscreen_renderer(width: u32, height: u32) -> OffscreenRenderer {
 fn new_offscreen_renderer(_width: u32, _height: u32) -> OffscreenRenderer {
     anyrender::NullImageRenderer::new()
 }
-use keyflow::engraver::api::pipeline::{ChartPipeline, Preset, PresetOptions};
+use keyflow::engraver::api::pipeline::{ChartPipeline, Paper, Preset, PresetOptions};
 use keyflow::engraver::layout::chart::cursor::{ChartCursor, CursorState, HighlightCommand, Rgba};
 use keyflow::engraver::layout::chart::{
     BeatPosition, Breakpoint, ChartLayoutConfig, ChartLayoutResult, LayoutMode,
@@ -88,13 +88,20 @@ pub fn layout_mode_for_preview(
     preview_mode: PreviewMode,
     viewport_width: f64,
     zoom: f64,
+    paper: Paper,
 ) -> (LayoutMode, ChartLayoutConfig) {
     // The table lives on `ChartPipeline`; this was one of three copies of
-    // it, and the copies disagreed. Screen defaults — Letter paper, page
-    // offsets on — because a preview stacks its pages in one scrollable
-    // scene, where an export serialises each page on its own.
+    // it, and the copies disagreed. Screen defaults — page offsets on —
+    // because a preview stacks its pages in one scrollable scene, where
+    // an export serialises each page on its own.
+    //
+    // `paper` is the caller's, though. `for_screen` picks Letter, which
+    // is right for a US-facing preview and wrong for a site whose export
+    // and blank-page placeholder are both A4 — the two disagreed, and the
+    // shape of the paper on screen was not the shape of the paper that
+    // came out.
     let viewport_points = viewport_width / DPI_SCALE;
-    let options = PresetOptions::for_screen(viewport_points, zoom);
+    let options = PresetOptions::for_screen(viewport_points, zoom).with_paper(paper);
     let preset = match preview_mode {
         PreviewMode::Snippet => Preset::Snippet,
         PreviewMode::Page => Preset::Page,
@@ -398,26 +405,14 @@ fn replay_recorded_scene(
                 RenderCommand::Stroke(cmd) => target.stroke(
                     &cmd.style,
                     cmd.transform,
-                    match cmd.brush {
-                        Paint::Solid(alpha_color) => Paint::Solid(alpha_color),
-                        Paint::Gradient(ref gradient) => Paint::Gradient(gradient),
-                        Paint::Image(ref image) => Paint::Image(image.as_ref()),
-                        Paint::Resource(id) => Paint::Resource(id),
-                        Paint::Custom(ref custom) => Paint::Custom(custom.as_ref()),
-                    },
+                    borrow_paint(&cmd.brush),
                     cmd.brush_transform,
                     &cmd.shape,
                 ),
                 RenderCommand::Fill(cmd) => target.fill(
                     cmd.fill,
                     cmd.transform,
-                    match cmd.brush {
-                        Paint::Solid(alpha_color) => Paint::Solid(alpha_color),
-                        Paint::Gradient(ref gradient) => Paint::Gradient(gradient),
-                        Paint::Image(ref image) => Paint::Image(image.as_ref()),
-                        Paint::Resource(id) => Paint::Resource(id),
-                        Paint::Custom(ref custom) => Paint::Custom(custom.as_ref()),
-                    },
+                    borrow_paint(&cmd.brush),
                     cmd.brush_transform,
                     &cmd.shape,
                 ),
@@ -428,13 +423,7 @@ fn replay_recorded_scene(
                     &cmd.normalized_coords,
                     cmd.embolden,
                     &cmd.style,
-                    match cmd.brush {
-                        Paint::Solid(alpha_color) => Paint::Solid(alpha_color),
-                        Paint::Gradient(ref gradient) => Paint::Gradient(gradient),
-                        Paint::Image(ref image) => Paint::Image(image.as_ref()),
-                        Paint::Resource(id) => Paint::Resource(id),
-                        Paint::Custom(ref custom) => Paint::Custom(custom.as_ref()),
-                    },
+                    borrow_paint(&cmd.brush),
                     cmd.brush_alpha,
                     cmd.transform,
                     cmd.glyph_transform,
@@ -469,26 +458,14 @@ fn replay_recorded_scene(
             RenderCommand::Stroke(cmd) => target.stroke(
                 &cmd.style,
                 scene_transform * cmd.transform,
-                match cmd.brush {
-                    Paint::Solid(alpha_color) => Paint::Solid(alpha_color),
-                    Paint::Gradient(ref gradient) => Paint::Gradient(gradient),
-                    Paint::Image(ref image) => Paint::Image(image.as_ref()),
-                    Paint::Resource(id) => Paint::Resource(id),
-                    Paint::Custom(ref custom) => Paint::Custom(custom.as_ref()),
-                },
+                borrow_paint(&cmd.brush),
                 cmd.brush_transform,
                 &cmd.shape,
             ),
             RenderCommand::Fill(cmd) => target.fill(
                 cmd.fill,
                 scene_transform * cmd.transform,
-                match cmd.brush {
-                    Paint::Solid(alpha_color) => Paint::Solid(alpha_color),
-                    Paint::Gradient(ref gradient) => Paint::Gradient(gradient),
-                    Paint::Image(ref image) => Paint::Image(image.as_ref()),
-                    Paint::Resource(id) => Paint::Resource(id),
-                    Paint::Custom(ref custom) => Paint::Custom(custom.as_ref()),
-                },
+                borrow_paint(&cmd.brush),
                 cmd.brush_transform,
                 &cmd.shape,
             ),
@@ -499,13 +476,7 @@ fn replay_recorded_scene(
                 &cmd.normalized_coords,
                 cmd.embolden,
                 &cmd.style,
-                match cmd.brush {
-                    Paint::Solid(alpha_color) => Paint::Solid(alpha_color),
-                    Paint::Gradient(ref gradient) => Paint::Gradient(gradient),
-                    Paint::Image(ref image) => Paint::Image(image.as_ref()),
-                    Paint::Resource(id) => Paint::Resource(id),
-                    Paint::Custom(ref custom) => Paint::Custom(custom.as_ref()),
-                },
+                borrow_paint(&cmd.brush),
                 cmd.brush_alpha,
                 scene_transform * cmd.transform,
                 cmd.glyph_transform,
@@ -519,6 +490,55 @@ fn replay_recorded_scene(
                 cmd.std_dev,
             ),
         }
+    }
+}
+
+/// The beat nearest a scene point, with its weighted distance.
+///
+/// Y distance counts triple so a click lands on the staff line it was
+/// aimed at rather than a horizontally-closer beat on the line above.
+/// Hit-testing and tick lookup both need the same answer — a click that
+/// selected one beat and scrubbed to another would be its own bug.
+///
+/// `beats` must not be empty.
+fn nearest_beat<'a>(
+    beats: &[&'a BeatPosition],
+    scene_x: f64,
+    scene_y: f64,
+) -> (&'a BeatPosition, f64) {
+    let mut best = beats[0];
+    let mut best_dist = f64::INFINITY;
+    for beat in beats {
+        let y_dist = if scene_y < beat.staff_y {
+            beat.staff_y - scene_y
+        } else if scene_y > beat.staff_y + beat.staff_height {
+            scene_y - (beat.staff_y + beat.staff_height)
+        } else {
+            0.0
+        };
+        let x_center = beat.x + beat.width / 2.0;
+        let x_dist = (scene_x - x_center).abs();
+        let combined = x_dist + y_dist * 3.0;
+        if combined < best_dist {
+            best_dist = combined;
+            best = beat;
+        }
+    }
+    (best, best_dist)
+}
+
+/// Reborrow a recorded `Paint` as one that borrows its payload.
+///
+/// A `RenderCommand` owns its brush, but `PaintScene` wants a `Paint`
+/// whose image and custom payloads are references. The conversion is
+/// mechanical and was written out at all six replay sites.
+fn borrow_paint(brush: &Paint) -> anyrender::PaintRef<'_> {
+    match brush {
+        Paint::Solid(alpha_color) => Paint::Solid(*alpha_color),
+        Paint::Gradient(gradient) => Paint::Gradient(gradient),
+        Paint::Image(image) => Paint::Image(image.as_ref()),
+        Paint::Resource(id) => Paint::Resource(*id),
+        Paint::Custom(custom) => Paint::Custom(custom.as_ref()),
     }
 }
 
@@ -566,6 +586,10 @@ pub struct ChartLayoutManager {
     last_source_hash: u64,
     /// Last preview mode (affects fit-to-width calculation).
     last_preview_mode: PreviewMode,
+    /// Paper for [`PreviewMode::Page`]. Letter by default, matching the
+    /// on-screen preset; set it once, at construction, with
+    /// [`ChartLayoutManager::with_paper`].
+    paper: Paper,
     /// Renderer-agnostic cursor for computing highlight commands.
     cursor: ChartCursor,
     /// Last computed cursor state (cached to avoid recomputing every frame when tick hasn't changed).
@@ -598,6 +622,18 @@ pub struct ChartLayoutManager {
     view_static_stable_frames: u8,
     view_static_renderer: Option<OffscreenRenderer>,
     enable_view_static_cache: bool,
+    /// Whether pages may be rasterised to level-of-detail images.
+    ///
+    /// On by default, and the right default: on the desktop's wgpu
+    /// surface a dense multi-page view is far cheaper as rasters.
+    ///
+    /// The web surface turns it OFF. `vello_hybrid`'s WebGL2 painter
+    /// asserts inside `ImageSource::from_peniko_image_data` on the images
+    /// this produces, which aborts the whole wasm module — and a chart of
+    /// four pages hits the `>= 4 visible` rule immediately, so it is not
+    /// an edge case there. Vector-only costs a little throughput and
+    /// renders.
+    enable_raster_lod: bool,
     enable_pretransformed_fragments: bool,
     last_transform_key: Option<TransformStabilityKey>,
     transform_stable_frames: u8,
@@ -883,6 +919,29 @@ impl ChartLayoutManager {
         scene.pop_layer();
     }
 
+    /// Lay [`PreviewMode::Page`] out on `paper` instead of the on-screen
+    /// default of Letter.
+    ///
+    /// Paper is not a rendering detail — it changes the system breaks and
+    /// the width distribution, so a chart laid out on Letter and printed
+    /// on A4 is not the same chart. Set it to whatever this surface
+    /// actually claims to be showing.
+    #[must_use]
+    pub fn with_paper(mut self, paper: Paper) -> Self {
+        self.paper = paper;
+        self
+    }
+
+    /// Turn page level-of-detail rasterisation on or off.
+    ///
+    /// Off is for backends whose image path cannot take what it produces
+    /// — see [`Self::enable_raster_lod`]. Everything still renders; the
+    /// pages are drawn as vectors at every zoom instead of being
+    /// rasterised once they get small on screen.
+    pub const fn set_raster_lod(&mut self, on: bool) {
+        self.enable_raster_lod = on;
+    }
+
     /// Create a new chart layout manager with embedded fonts.
     pub fn new() -> Result<Self, String> {
         // The bundle is shared: building one copies ~2.5 MB of baked-in
@@ -906,6 +965,7 @@ impl ChartLayoutManager {
             last_layout_chart: None,
             last_source_hash: 0,
             last_preview_mode: PreviewMode::Page,
+            paper: Paper::Letter,
             cursor: ChartCursor::default(),
             cached_cursor_state: None,
             cached_cursor_tick: i64::MIN,
@@ -927,6 +987,7 @@ impl ChartLayoutManager {
             last_view_static_key: None,
             view_static_stable_frames: 0,
             view_static_renderer: None,
+            enable_raster_lod: true,
             enable_view_static_cache: std::env::var("KEYFLOW_VIEW_STATIC_CACHE")
                 .ok()
                 .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true")),
@@ -1001,7 +1062,8 @@ impl ChartLayoutManager {
 
         // Layout using the cached chart
         let chart = self.cached_chart.as_ref().unwrap();
-        let (mode, config) = layout_mode_for_preview(preview_mode, viewport_width, zoom);
+        let (mode, config) =
+            layout_mode_for_preview(preview_mode, viewport_width, zoom, self.paper);
 
         let result = self
             .pipeline
@@ -1012,27 +1074,7 @@ impl ChartLayoutManager {
         self.last_layout_chart = self.cached_chart.clone();
         self.last_chart_hash = chart_hash;
         self.last_preview_mode = preview_mode;
-        self.cached_cursor_state = None; // Invalidate cursor cache
-        self.cached_cursor_tick = i64::MIN;
-        self.cached_page_fragments.clear();
-        self.cached_page_base_fragments.clear();
-        self.cached_page_detail_fragments.clear();
-        self.cached_page_coarse_fragments.clear();
-        self.cached_transformed_fragments.clear();
-        self.transformed_fragment_order.clear();
-        self.cached_page_lod_images.clear();
-        self.page_lod_renderer = None;
-        self.cached_view_static_image = None;
-        self.cached_view_static_key = None;
-        self.last_view_static_key = None;
-        self.view_static_stable_frames = 0;
-        self.view_static_renderer = None;
-        self.last_transform_key = None;
-        self.transform_stable_frames = 0;
-        self.last_cull_key = None;
-        self.cached_visible_pages.clear();
-        self.cached_focus_page = None;
-        self.rebuild_page_geometry_cache();
+        self.invalidate_derived_caches();
 
         Ok(true)
     }
@@ -1081,7 +1123,8 @@ impl ChartLayoutManager {
             return;
         }
 
-        let (mode, config) = layout_mode_for_preview(preview_mode, viewport_width, zoom);
+        let (mode, config) =
+            layout_mode_for_preview(preview_mode, viewport_width, zoom, self.paper);
 
         let result = self
             .pipeline
@@ -1092,27 +1135,7 @@ impl ChartLayoutManager {
         self.last_layout_chart = Some(chart.clone());
         self.last_chart_hash = chart_hash;
         self.last_preview_mode = preview_mode;
-        self.cached_cursor_state = None; // Invalidate cursor cache
-        self.cached_cursor_tick = i64::MIN;
-        self.cached_page_fragments.clear();
-        self.cached_page_base_fragments.clear();
-        self.cached_page_detail_fragments.clear();
-        self.cached_page_coarse_fragments.clear();
-        self.cached_transformed_fragments.clear();
-        self.transformed_fragment_order.clear();
-        self.cached_page_lod_images.clear();
-        self.page_lod_renderer = None;
-        self.cached_view_static_image = None;
-        self.cached_view_static_key = None;
-        self.last_view_static_key = None;
-        self.view_static_stable_frames = 0;
-        self.view_static_renderer = None;
-        self.last_transform_key = None;
-        self.transform_stable_frames = 0;
-        self.last_cull_key = None;
-        self.cached_visible_pages.clear();
-        self.cached_focus_page = None;
-        self.rebuild_page_geometry_cache();
+        self.invalidate_derived_caches();
     }
 
     fn visible_pages_for_viewport(&self, width: f64, height: f64, transform: Affine) -> Vec<u32> {
@@ -1161,6 +1184,36 @@ impl ChartLayoutManager {
             pages.push(layout.pages[0].number);
         }
         pages
+    }
+
+    /// Drop everything derived from the previous layout.
+    ///
+    /// Every path that installs a new `layout_result` must call this.
+    /// It was open-coded at each of the three, so a cache field added to
+    /// one site and missed at another would quietly survive a relayout
+    /// and be drawn against the new scene.
+    fn invalidate_derived_caches(&mut self) {
+        self.cached_cursor_state = None;
+        self.cached_cursor_tick = i64::MIN;
+        self.cached_page_fragments.clear();
+        self.cached_page_base_fragments.clear();
+        self.cached_page_detail_fragments.clear();
+        self.cached_page_coarse_fragments.clear();
+        self.cached_transformed_fragments.clear();
+        self.transformed_fragment_order.clear();
+        self.cached_page_lod_images.clear();
+        self.page_lod_renderer = None;
+        self.cached_view_static_image = None;
+        self.cached_view_static_key = None;
+        self.last_view_static_key = None;
+        self.view_static_stable_frames = 0;
+        self.view_static_renderer = None;
+        self.last_transform_key = None;
+        self.transform_stable_frames = 0;
+        self.last_cull_key = None;
+        self.cached_visible_pages.clear();
+        self.cached_focus_page = None;
+        self.rebuild_page_geometry_cache();
     }
 
     fn rebuild_page_geometry_cache(&mut self) {
@@ -1389,7 +1442,9 @@ impl ChartLayoutManager {
         use_multi_page_lod: bool,
         is_focused: bool,
     ) -> Option<PageLodTier> {
-        if !use_multi_page_lod {
+        // `None` everywhere means every page renders as vector geometry —
+        // see `enable_raster_lod`.
+        if !self.enable_raster_lod || !use_multi_page_lod {
             return None;
         }
 
@@ -1896,24 +1951,7 @@ impl ChartLayoutManager {
             return;
         }
 
-        let mut best = &page_beats[0];
-        let mut best_dist = f64::INFINITY;
-        for beat in &page_beats {
-            let y_dist = if scene_y < beat.staff_y {
-                beat.staff_y - scene_y
-            } else if scene_y > beat.staff_y + beat.staff_height {
-                scene_y - (beat.staff_y + beat.staff_height)
-            } else {
-                0.0
-            };
-            let x_center = beat.x + beat.width / 2.0;
-            let x_dist = (scene_x - x_center).abs();
-            let combined = x_dist + y_dist * 3.0;
-            if combined < best_dist {
-                best_dist = combined;
-                best = beat;
-            }
-        }
+        let (best, best_dist) = nearest_beat(&page_beats, scene_x, scene_y);
 
         if best_dist > 80.0 {
             return;
@@ -2217,28 +2255,7 @@ impl ChartLayoutManager {
             return None;
         }
 
-        // Find the beat whose x range is closest to scene_x
-        let mut best = &page_beats[0];
-        let mut best_dist = f64::INFINITY;
-        for beat in &page_beats {
-            let y_dist = if scene_y < beat.staff_y {
-                beat.staff_y - scene_y
-            } else if scene_y > beat.staff_y + beat.staff_height {
-                scene_y - (beat.staff_y + beat.staff_height)
-            } else {
-                0.0
-            };
-
-            let x_center = beat.x + beat.width / 2.0;
-            let x_dist = (scene_x - x_center).abs();
-
-            // Weight Y distance more heavily to prefer beats on the correct staff line
-            let combined = x_dist + y_dist * 3.0;
-            if combined < best_dist {
-                best_dist = combined;
-                best = beat;
-            }
-        }
+        let (best, _) = nearest_beat(&page_beats, scene_x, scene_y);
 
         Some(best.absolute_tick)
     }
@@ -2267,6 +2284,10 @@ impl ChartLayoutManager {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         source.hash(&mut hasher);
         preview_mode.hash(&mut hasher);
+        // Paper decides the page box, so it decides system breaks. Left
+        // out of the hash, a manager re-pointed at different paper would
+        // hand back the layout it already had.
+        (self.paper as u8).hash(&mut hasher);
         match preview_mode {
             PreviewMode::Snippet => {
                 ((viewport_width / 16.0).round() as i64).hash(&mut hasher);
@@ -2362,27 +2383,7 @@ impl ChartLayoutManager {
         self.layout_result = Some(result);
         self.last_chart_hash = self.compute_chart_hash(source, preview_mode, viewport_width, zoom);
         self.last_preview_mode = preview_mode;
-        self.cached_cursor_state = None;
-        self.cached_cursor_tick = i64::MIN;
-        self.cached_page_fragments.clear();
-        self.cached_page_base_fragments.clear();
-        self.cached_page_detail_fragments.clear();
-        self.cached_page_coarse_fragments.clear();
-        self.cached_transformed_fragments.clear();
-        self.transformed_fragment_order.clear();
-        self.cached_page_lod_images.clear();
-        self.page_lod_renderer = None;
-        self.cached_view_static_image = None;
-        self.cached_view_static_key = None;
-        self.last_view_static_key = None;
-        self.view_static_stable_frames = 0;
-        self.view_static_renderer = None;
-        self.last_transform_key = None;
-        self.transform_stable_frames = 0;
-        self.last_cull_key = None;
-        self.cached_visible_pages.clear();
-        self.cached_focus_page = None;
-        self.rebuild_page_geometry_cache();
+        self.invalidate_derived_caches();
     }
 }
 

@@ -526,21 +526,46 @@ impl<'a> VelloSceneRenderer<'a> {
         // SMuFL: 1 em = 4 staff spaces, so font_size = spatium * 4
         let font_size = size * 4.0;
 
-        // Try to render actual glyph outline from font
+        // Font outlines are Y-up, screen coordinates are Y-down.
+        let glyph_transform = transform
+            * Affine::translate(position.to_vec2())
+            * Affine::scale_non_uniform(1.0, -1.0);
+
+        // The primary SMuFL face first.
         if let Some(font) = self.font
             && let Some(path) = self.get_glyph_path(font, codepoint, font_size)
         {
-            // Font outlines are Y-up, but screen coordinates are Y-down
-            // Apply position and flip Y axis
-            let glyph_transform = transform
-                * Affine::translate(position.to_vec2())
-                * Affine::scale_non_uniform(1.0, -1.0);
-
             scene.fill(Fill::NonZero, glyph_transform, color, None, &path);
             return;
         }
 
-        // Fallback: draw placeholder rectangle (visual size matches glyph)
+        // Then the music font from the registry.
+        //
+        // Not belt-and-braces — the primary face genuinely lacks glyphs
+        // the engraver asks for. It carries `noteheadBlack` (U+E0A4) but
+        // none of the slash noteheads (U+E100..E102), which is every bar
+        // of a rhythm chart. Without this they fell through to the
+        // placeholder below and a chart rendered as rows of black
+        // rectangles.
+        //
+        // SVG export never showed it: it emits the codepoint as text and
+        // the browser falls back across the `@font-face` set on its own.
+        // This is that fallback, for the paths that draw outlines
+        // themselves.
+        if let Some(path) =
+            self.registry_glyph_path(&self.config.music_font_family, codepoint, font_size)
+        {
+            scene.fill(Fill::NonZero, glyph_transform, color, None, &path);
+            return;
+        }
+
+        // Placeholder: a filled rectangle the size of the missing glyph.
+        // Visible on purpose — a silently absent notehead is worse.
+        tracing::warn!(
+            "no outline for U+{:04X} in the SMuFL font or `{}`; drawing a placeholder",
+            codepoint as u32,
+            self.config.music_font_family,
+        );
         let placeholder = Rect::new(
             position.x,
             position.y - font_size,
@@ -548,6 +573,17 @@ impl<'a> VelloSceneRenderer<'a> {
             position.y,
         );
         scene.fill(Fill::NonZero, transform, color, None, &placeholder);
+    }
+
+    /// Outline `codepoint` from a font registered under `family`.
+    fn registry_glyph_path(&self, family: &str, codepoint: char, size: f64) -> Option<BezPath> {
+        let font_ref = to_font_ref(self.font_registry.get(family)?)?;
+        let glyph_id = font_ref.charmap().map(codepoint)?;
+        let outline = font_ref.outline_glyphs().get(glyph_id)?;
+        let settings = DrawSettings::unhinted(Size::new(size as f32), LocationRef::default());
+        let mut pen = VelloPen::new();
+        outline.draw(settings, &mut pen).ok()?;
+        Some(pen.build())
     }
 
     /// Get the BezPath for a glyph from the font.

@@ -1,11 +1,12 @@
 ---
-title: Keyflow Guide
+title: An Introduction
 kind: concept
 type: concept
 order: 0
+stage: Start here
 ---
 
-# Keyflow Guide
+# An Introduction
 
 A hands-on tour of the `.kf` format. Each page introduces one concept and builds
 on the last, so by the end you can read and write a complete chart.
@@ -35,16 +36,38 @@ chord just fills its bar.
 
 ## The guide
 
+The chapters are one path, not a menu — each builds on the last, and they are
+grouped by how far along that path they sit.
+
+**Start here** — after these three you can write a complete chart, and
+everything later is a layer on top of one that already works.
+
 1. [[structure|Structure]] — the document: title, artist, time signature, tempo, key.
 2. [[sections|Sections]] — organizing the song: section names, lengths in bars, repeating a part, labels, and custom sections.
 3. [[chords|Chords]] — writing a single chord: root, quality, seventh family, extensions, alterations, slash bass.
+
+**Naming & timing** — the same chords, written the way the chart wants them,
+and arranged in time.
+
 4. [[notation-systems|Notation Systems]] — the three interchangeable ways to name roots: letter names, Nashville numbers, Roman numerals.
 5. [[rhythm|Rhythm]] — how long each chord lasts: the one-chord-per-bar default, slashes, `()` groups, and note-value durations.
+
+**Melody & lyrics** — the two lines that sit with the chords rather than
+inside them.
+
 6. [[melody|Melody]] — writing the tune line: notes as letters or numbers, octaves, durations, stacked notes, and pairing it with the chords.
 7. [[lyrics|Lyrics]] — words under the chords: a `[lyrics]` line, `{Chord}` markers on syllables, and hyphen splits for melisma.
+
+**Complete scores** — what a real chart needs once the music stops being four
+bars of one key.
+
 8. [[key-meter-changes|Key & Meter Changes]] — moving to a new key or time signature mid-song, and the `!T` one-bar meter change.
 9. [[annotations|Annotations & Expression]] — staff text, instrument cues, dynamics, and crescendo/decrescendo hairpins.
 10. [[repeats|Repeats & Endings]] — repeat a bar, a line, or a span, and write first/second endings.
+
+Every chapter ends with a link to the next one, so you can also just start at
+[[structure|Structure]] and keep going. If you would rather see how the
+concepts connect than read them in order, the graph view maps the whole set.
 
 ## Two things to know up front
 

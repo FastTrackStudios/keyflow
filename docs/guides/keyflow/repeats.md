@@ -3,6 +3,7 @@ title: Repeats & Endings
 kind: concept
 type: concept
 order: 10
+stage: Complete scores
 ---
 
 # Repeats & Endings
@@ -69,4 +70,4 @@ teacher from here.
 
 ---
 
-Previous: [[annotations|Annotations & Expression]] · Up: [[keyflow|Keyflow Guide]]
+Previous: [[annotations|Annotations & Expression]] · Up: [[keyflow|An Introduction]]

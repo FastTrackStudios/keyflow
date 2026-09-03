@@ -3,6 +3,7 @@ title: Melody
 kind: concept
 type: concept
 order: 6
+stage: Melody & lyrics
 ---
 
 # Melody
@@ -172,4 +173,4 @@ the whole lane is already melody.
 
 ---
 
-Previous: [[rhythm|Rhythm]] · Next: [[lyrics|Lyrics]] · Up: [[keyflow|Keyflow Guide]]
+Previous: [[rhythm|Rhythm]] · Next: [[lyrics|Lyrics]] · Up: [[keyflow|An Introduction]]

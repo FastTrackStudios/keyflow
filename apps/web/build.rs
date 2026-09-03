@@ -12,8 +12,9 @@
 //! this file lost its markdown renderer and its fence splitter — both
 //! were reimplementing, less well, something the editor already does.)
 //!
-//! So this build script does very little: read the notes, pull `title` and
-//! `order` out of the frontmatter for the table of contents, and emit the
+//! So this build script does very little: read the notes, pull `title`,
+//! `order` and `stage` out of the frontmatter for the table of contents,
+//! and emit the
 //! bodies as `&'static str`. That same text feeds the knowledge graph,
 //! which is built in the browser.
 //!
@@ -58,6 +59,9 @@ fn main() {
         let order: u32 = fm_scalar(front, "order")
             .and_then(|o| o.parse().ok())
             .unwrap_or(u32::MAX);
+        // The stage this chapter belongs to, for the table of contents.
+        // The index page has none — it is the front door, not a step.
+        let stage = fm_scalar(front, "stage").unwrap_or_default();
 
         // Two forms of the same note, and they are not interchangeable:
         //
@@ -68,12 +72,20 @@ fn main() {
         // editor treats frontmatter as an editable property table — right
         // for a vault app, wrong for a published guide, where it shows up
         // as a "+ Add property" button above the first heading.
-        let body = strip_frontmatter(&raw);
+        // The nav footer goes the same way as the frontmatter, and for
+        // the same reason: `source` keeps it so the graph still sees the
+        // Previous/Next/Up wikilinks — all ten of the index's inbound
+        // edges come from `Up:` alone — while the site renders real
+        // buttons above and below the page instead, from the same order
+        // the table of contents uses. Leaving it in `body` would print
+        // the chain twice on every chapter.
+        let body = strip_nav_footer(strip_frontmatter(&raw));
         let mut lit = String::new();
         let _ = write!(
             lit,
             "    GuidePage {{\n        slug: {slug:?},\n        title: {title:?},\n        \
-             order: {order},\n        source: {raw:?},\n        body: {body:?},\n    }},\n"
+             order: {order},\n        stage: {stage:?},\n        source: {raw:?},\n        \
+             body: {body:?},\n    }},\n"
         );
         pages.insert((order, slug), lit);
     }
@@ -119,6 +131,30 @@ fn strip_frontmatter(raw: &str) -> &str {
         Some(end) => rest[end + 4..].trim_start_matches(['\r', '\n']),
         None => raw,
     }
+}
+
+/// The note without its trailing `Previous: … · Next: … · Up: …` line.
+///
+/// Recognised by the `Up: [[` that every chapter's footer carries, then
+/// walked back over the blank lines and the `---` rule above it. A note
+/// without one — the index — comes back untouched.
+fn strip_nav_footer(body: &str) -> &str {
+    let Some(start) = body.rfind("\nUp: [[").or_else(|| {
+        body.rfind("\nPrevious: [[")
+            .or_else(|| body.rfind("\nNext: [["))
+    }) else {
+        return body;
+    };
+    // Only the footer qualifies: it is the last thing in the note.
+    if body[start + 1..].lines().count() != 1 {
+        return body;
+    }
+    let mut cut = &body[..start];
+    cut = cut.trim_end();
+    if let Some(rest) = cut.strip_suffix("---") {
+        cut = rest.trim_end();
+    }
+    cut
 }
 
 /// The `---`-delimited frontmatter block, without its fences.

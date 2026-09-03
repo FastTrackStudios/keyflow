@@ -10,36 +10,45 @@
   --surface: #ffffff;
   --ink: #17161a;
   --ink-soft: #5c5a63;
-  --line: #e2dfd9;
-  --accent: #7a4bd6;
+  --line: #e4e2e8;
+  --accent: #2563eb;
   --accent-ink: #ffffff;
-  --code-bg: #f4f2ee;
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  /* The far end of the headline's gradient sweep. Sits a short hop round
+   * the wheel from --accent so the travel reads as movement rather than
+   * as two different brand colours arguing. */
+  --accent-far: #7c3aed;
+  --code-bg: #f3f2f6;
+  /* The widest the page's content ever runs — the landing hero's top
+   * tier. The header aligns its contents to the same measure. */
+  --shell-max: 138rem;
+  --font-sans: "Geist", "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #121114;
-    --surface: #1a181d;
-    --ink: #f2f0f5;
-    --ink-soft: #a09daa;
-    --line: #2e2b34;
-    --accent: #b494f5;
-    --accent-ink: #17161a;
-    --code-bg: #201d25;
+    --bg: #0d0d11;
+    --surface: #15151b;
+    --ink: #f2f2f7;
+    --ink-soft: #9997a6;
+    --line: #26262f;
+    --accent: #6ea8fe;
+    --accent-ink: #0b1220;
+    --accent-far: #a78bfa;
+    --code-bg: #131319;
   }
 }
 
 :root[data-theme="dark"] {
-  --bg: #121114;
-  --surface: #1a181d;
-  --ink: #f2f0f5;
-  --ink-soft: #a09daa;
-  --line: #2e2b34;
-  --accent: #b494f5;
-  --accent-ink: #17161a;
-  --code-bg: #201d25;
+  --bg: #0d0d11;
+  --surface: #15151b;
+  --ink: #f2f2f7;
+  --ink-soft: #9997a6;
+  --line: #26262f;
+  --accent: #6ea8fe;
+  --accent-ink: #0b1220;
+  --accent-far: #a78bfa;
+  --code-bg: #131319;
 }
 
 * { box-sizing: border-box; }
@@ -59,21 +68,63 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 1.5rem;
-  padding: 1rem clamp(1rem, 4vw, 3rem);
+  /* The BAR stays full-bleed — it is sticky and translucent, so its
+   * border and its blur have to run the whole width of the viewport or
+   * the page appears to scroll past a floating card. Only its CONTENTS
+   * are centred, by growing the side padding once the viewport is wider
+   * than --shell-max. Below that width the `max()` picks the clamp and
+   * nothing changes.
+   *
+   * Done with padding rather than an inner wrapper because the wrapper
+   * would have to be added to `Shell`, and every route renders through
+   * it. */
+  padding: 0.9rem max(clamp(1rem, 4vw, 3rem), calc((100% - var(--shell-max)) / 2));
   border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+/* Working surfaces are the exception. The editor and the workbench run
+ * the full viewport on purpose — they are tools, not documents — so the
+ * header has to run with them: a bar centred at --shell-max above
+ * full-bleed content reads as two unrelated layouts stacked on each
+ * other. Each matches the padding its own `.kf-main` uses, so the
+ * wordmark lines up with the surface below it.
+ *
+ * `:has()` on the shell rather than a modifier class, matching how
+ * `.kf-main` already detects the workbench. */
+.kf-shell:has(.kf-editor) .kf-header {
+  padding-inline: clamp(1rem, 4vw, 3rem);
+}
+
+.kf-shell:has(.kf-workbench) .kf-header {
+  padding-inline: 1rem;
 }
 
 .kf-wordmark {
-  font-weight: 650;
-  font-size: 1.1rem;
-  letter-spacing: -0.02em;
+  font-weight: 600;
+  font-size: 1.05rem;
+  letter-spacing: -0.03em;
   color: var(--ink);
   text-decoration: none;
 }
 
-.kf-nav { display: flex; gap: 1.25rem; }
-.kf-nav a { color: var(--ink-soft); text-decoration: none; }
+.kf-nav { display: flex; gap: 1.75rem; }
+
+.kf-nav a {
+  color: var(--ink-soft);
+  text-decoration: none;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  transition: color 120ms ease;
+}
+
 .kf-nav a:hover { color: var(--ink); }
+.kf-nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 /* ── Account ──────────────────────────────────────────────────────
  *
@@ -210,44 +261,162 @@ body {
  * viewport rather than the page's reading gutters. */
 .kf-main:has(> .kf-workbench) { padding: 1rem; }
 
-/* ── Landing ─────────────────────────────────────────────────────── */
+/* ── Landing ──────────────────────────────────────────────────────
+ *
+ * One screen. The page states its case, shows it happening, and offers
+ * two doors — so it is sized to the viewport rather than to its content,
+ * and nothing below the fold is asked to carry meaning. */
 
 .kf-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: clamp(1.5rem, 4vw, 3rem);
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: clamp(1.5rem, 4vw, 4rem);
   align-items: center;
-  max-width: 78rem;
-  margin: 0 auto clamp(2rem, 6vw, 5rem);
+  max-width: 74rem;
+  margin: 0 auto;
+  /* The shell's header and the main padding are already spent; this
+   * fills what is left so the hero sits centred in the viewport instead
+   * of hugging the top of a page with nothing under it. */
+  min-height: calc(100vh - 16rem);
 }
 
-@media (max-width: 60rem) {
-  .kf-hero { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 68rem) {
+  .kf-hero { grid-template-columns: minmax(0, 1fr); min-height: 0; }
 }
 
-.kf-hero-copy h1 {
-  font-size: clamp(2rem, 4.5vw, 3.2rem);
-  line-height: 1.1;
-  letter-spacing: -0.03em;
-  margin: 0 0 1rem;
+.kf-hero-copy { max-width: 36rem; }
+
+.kf-display {
+  font-family: var(--font-sans);
+  font-weight: 620;
+  font-size: clamp(2.2rem, 4.4vw, 3.4rem);
+  letter-spacing: -0.035em;
+  line-height: 1.04;
+  text-wrap: balance;
+  margin: 0;
 }
 
-.kf-hero-copy p { color: var(--ink-soft); font-size: 1.05rem; max-width: 34rem; }
+/* The step down from the headline has to be bigger than the gap between
+ * the headline's own lines, or the two read as one block of text. The
+ * display face is set at line-height 1.04, so anything under ~1.4rem
+ * here lands inside the headline's own leading. */
+/* "Accelerated" — the one word on the page that is allowed to move.
+ *
+ * A three-stop gradient whose first and last stops are both --accent,
+ * laid out at 200% width and scrolled a full tile per cycle: because the
+ * tile's two edges are the same colour, the loop is seamless and needs
+ * no alternate direction.
+ *
+ * `background-clip: text` paints the gradient through the glyphs, which
+ * means the text colour has to be transparent — so if the clip is not
+ * supported the word would vanish. `@supports` guards it: without
+ * support the word simply stays --accent, which is a perfectly good
+ * second-best rather than an invisible headline.
+ *
+ * `display: inline-block` would break the headline's wrapping; the span
+ * stays inline and the RSX keeps it to a single unbreakable word, so the
+ * gradient never restarts mid-phrase across two line boxes. */
+.kf-accel {
+  color: var(--accent);
+}
 
-.kf-cta { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.5rem 0 0.75rem; }
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .kf-accel {
+    background-image: linear-gradient(
+      100deg,
+      var(--accent) 0%,
+      var(--accent-far) 50%,
+      var(--accent) 100%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: kf-accel-sweep 5s linear infinite;
+  }
+}
+
+@keyframes kf-accel-sweep {
+  from { background-position: 0 0; }
+  to { background-position: 200% 0; }
+}
+
+/* The hero already animates — the source types itself. Someone who has
+ * asked for less motion should not get a second thing moving forever in
+ * their peripheral vision; the gradient stays, it just stops travelling. */
+@media (prefers-reduced-motion: reduce) {
+  .kf-accel { animation: none; }
+}
+
+/* ── The flow triangle ────────────────────────────────────────────
+ *
+ * Three forms of one song with every edge running both ways: text
+ * parses to a chart and a chart exports back to text; a DAW session
+ * imports to a chart and a chart writes back out as one. Each arrow is
+ * a real code path, not a diagram of an intention.
+ *
+ * The two diagonals carry the claim — you can start from either side —
+ * so they take the accent. The base is the quieter fact that the two
+ * starting points also convert to each other, so it stays soft; three
+ * accent edges would have read as decoration rather than as structure.
+ *
+ * Sized in `em` off this container so the whole figure scales with one
+ * value per width tier, the way the taglines it replaced did. */
+.kf-flow {
+  margin: 1.9rem 0 0;
+  max-width: 24rem;
+}
+
+.kf-flow-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* Arrowheads are drawn outside the line's own endpoints, so they sit
+   * past the viewBox edge on the widest strokes. */
+  overflow: visible;
+}
+
+.kf-flow-node {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  fill: var(--ink-soft);
+}
+
+/* The destination, not a third input — it carries the page's ink. */
+.kf-flow-node-out {
+  font-weight: 640;
+  fill: var(--ink);
+}
+
+.kf-flow-edge {
+  fill: none;
+  stroke-width: 1.3;
+  stroke-linecap: round;
+}
+
+.kf-flow-edge-strong { stroke: var(--accent); }
+.kf-flow-edge-soft { stroke: var(--ink-soft); opacity: 0.55; }
+.kf-flow-head-strong { fill: var(--accent); }
+.kf-flow-head-soft { fill: var(--ink-soft); opacity: 0.55; }
+
+.kf-cta { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 2.25rem 0 0; }
 
 .kf-button {
   display: inline-block;
-  padding: 0.5rem 1rem;
+  padding: 0.6rem 1.1rem;
   border: 1px solid var(--line);
   border-radius: 0.5rem;
-  background: var(--surface);
+  background: transparent;
   color: var(--ink);
-  font-size: 0.925rem;
+  font-size: 0.95rem;
+  font-weight: 550;
   text-decoration: none;
+  transition: border-color 120ms ease, background 120ms ease;
 }
 
-.kf-button:hover { border-color: var(--accent); }
+.kf-button:hover { border-color: var(--ink-soft); }
 
 .kf-button-primary {
   background: var(--accent);
@@ -255,20 +424,251 @@ body {
   color: var(--accent-ink);
 }
 
-.kf-note { font-size: 0.85rem; color: var(--ink-soft); }
+.kf-button-primary:hover { filter: brightness(1.08); }
 
-.kf-hero-demo { display: grid; gap: 1rem; min-width: 0; }
+.kf-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-.kf-features {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-  gap: 1.5rem;
-  max-width: 78rem;
-  margin: 0 auto;
+.kf-note { font-size: 0.85rem; color: var(--ink-soft); margin: 1.4rem 0 0; }
+
+/* ── The demo window ──────────────────────────────────────────────
+ *
+ * Source and page are halves of one window, because that is what they
+ * are — the same document, before and after. Two separately bordered
+ * boxes floating side by side read as two unrelated screenshots.
+ *
+ * The height is FIXED. The hero types itself, so anything sized by its
+ * content moves on every keystroke: the source pane gains and loses
+ * lines, and the headline beside it shifts in sympathy. Pin the height
+ * and the animation happens inside a frame that never moves. */
+.kf-window {
+  --demo-height: 32rem;
+  /* Wide enough for the longest line in the demo charts and no wider.
+   * An `fr` here would collapse: the window sits in an `auto` grid track,
+   * so its own columns have to be definite. */
+  --source-width: 16rem;
+  --page-width: 22rem;
+
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  background: var(--surface);
+  overflow: hidden;
 }
 
-.kf-feature h2 { font-size: 1.05rem; margin: 0 0 0.4rem; letter-spacing: -0.01em; }
-.kf-feature p { margin: 0; color: var(--ink-soft); font-size: 0.95rem; }
+.kf-window-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--code-bg);
+}
+
+.kf-window-name {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+.kf-window-tag {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #34d399;
+}
+
+.kf-window-body {
+  display: grid;
+  grid-template-columns: var(--source-width) var(--page-width);
+  height: var(--demo-height);
+}
+
+/* Grid items refuse to shrink below their content unless told to;
+ * without this a long chart pushes the row taller than the height set
+ * above. */
+.kf-window-body > * { min-height: 0; }
+
+.kf-window-body .kf-source {
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: auto;
+  font-size: 0.82rem;
+}
+
+/* No padding and no border on the page's own frame: the column is
+ * exactly as wide as a page of this height, so any padding makes the
+ * frame narrower than the sheet it is framing and clips a strip off the
+ * side. */
+.kf-window-body .kf-chart {
+  height: 100%;
+  border: 0;
+  border-left: 1px solid var(--line);
+  border-radius: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Width-driven, top-anchored: `aspect-ratio` on the page gives it the
+ * height A4 demands, the frame clips whatever runs past its bottom. */
+.kf-window-body .kf-chart-page { width: 100%; height: auto; }
+
+@media (max-width: 68rem) {
+  .kf-window { --demo-height: 28rem; }
+  .kf-window-body { grid-template-columns: minmax(0, 1fr) var(--page-width); }
+}
+
+@media (max-width: 40rem) {
+  .kf-window { --demo-height: 26rem; }
+  .kf-window-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 8rem minmax(0, 1fr);
+  }
+  .kf-window-body .kf-chart { border-left: 0; border-top: 1px solid var(--line); }
+}
+
+/* ── Landing, by width ────────────────────────────────────────────
+ *
+ * Every rule that grows the hero lives HERE, below the base declarations
+ * for `.kf-hero`, `.kf-hero-copy`, `.kf-display`, `.kf-flow` and
+ * `.kf-window`, because all of them are single-class selectors. These
+ * used to sit up in the landing section, above `.kf-window`'s base rule
+ * — same specificity, earlier in the file, so the base won and every
+ * value here was discarded. The demo sat at its 16rem/22rem starting
+ * size on a 5K display, which is what "the elements look small" was.
+ *
+ * A media query does not raise specificity. If a scale-up rule is not
+ * below the thing it scales, it does nothing, and it does it silently.
+ *
+ * The measure, the page and the source gutter step up together: growing
+ * only the container leaves the demo marooned in the middle of a wide
+ * screen, and growing only the page crushes the copy. */
+@media (min-width: 100rem) {
+  .kf-hero { max-width: 88rem; gap: 5rem; }
+  .kf-display { font-size: 3.6rem; }
+  .kf-window { --demo-height: 38rem; --source-width: 20rem; --page-width: 26rem; }
+}
+
+@media (min-width: 128rem) {
+  .kf-hero { max-width: 104rem; }
+  .kf-hero-copy { max-width: 44rem; }
+  .kf-display { font-size: 4rem; }
+  .kf-flow { max-width: 27rem; }
+  .kf-window { --demo-height: 44rem; --source-width: 24rem; --page-width: 30rem; }
+}
+
+@media (min-width: 170rem) {
+  /* Sized to the content, not to the screen: the copy column is the
+   * grid's `1fr` track, so every rem the container has beyond
+   * copy + gap + window opens as a void between the two — the hero stops
+   * reading as a pair and starts reading as two things drifting apart. */
+  .kf-hero { max-width: 116rem; }
+  .kf-display { font-size: 4.5rem; }
+  .kf-flow { max-width: 30rem; }
+  /* Scoped to the hero: `.kf-note` is shared with the editor, the
+   * workbench, the guide and the mobile app, where it is a genuine
+   * small-print label and must stay that size. */
+  .kf-hero-copy .kf-note { font-size: 0.95rem; }
+  .kf-window { --demo-height: 52rem; --source-width: 28rem; --page-width: 36rem; }
+}
+
+/* 5K ultrawide. Below this the caps above fill the screen; at this width
+ * they leave the hero as a small island in the middle of it.
+ *
+ * `--demo-height` is bounded by the viewport as well as by this tier:
+ * these displays are wide but SHORT (5120x1440 is 1356px of viewport
+ * once the header and padding are spent), and a fixed 62rem window would
+ * run off the bottom of a 1080p ultrawide at the same width.
+ *
+ * `--page-width` is bounded by that height, not chosen freely: the page
+ * is A4, laid out width-first with the frame clipping the overflow, so
+ * anything wider than height/1.414 crops the bottom off the chart rather
+ * than showing more of it. */
+@media (min-width: 200rem) {
+  .kf-hero { max-width: 138rem; gap: 6rem; }
+  .kf-hero-copy { max-width: 52rem; }
+  .kf-display { font-size: 5.25rem; }
+  .kf-flow { max-width: 34rem; }
+  .kf-hero-copy .kf-note { font-size: 1.05rem; }
+  .kf-window {
+    --demo-height: min(68rem, calc(100vh - 20rem));
+    --source-width: 34rem;
+    --page-width: min(46rem, calc((100vh - 20rem) / 1.414));
+  }
+}
+
+/* ── Guide: chart source blocks ───────────────────────────────────
+ *
+ * The editor sets `line-height: 1.6` on a `kf` fence's source, which is
+ * right for prose and wrong for a chart. A chart's source is a grid —
+ * bars line up under each other and a section is a block of lines — and
+ * document leading pulls that grid apart until it reads as a list of
+ * unrelated strings. The engraved chart underneath is tight; the source
+ * above it should match.
+ *
+ * Overridden here rather than in `editor`: the editor sits BELOW this
+ * repo and knows nothing about keyflow, so how a chart wants to be set
+ * is this side's business. Specificity has to beat
+ * `.editor-root .md-keyflow-source`, hence the `.kf-shell` prefix. */
+.kf-shell .editor-root .md-keyflow-source,
+.kf-shell .editor-root .md-keyflow-source .kf-code { line-height: 1.35; }
+
+/* The same fence when it renders as bare source — one `.cm-line` per
+ * line, at the document's own leading, which is looser still. */
+.kf-shell .editor-root .cm-line.md-keyflow-bare { line-height: 1.4; }
+
+/* ── Keyflow syntax colours ───────────────────────────────────────
+ *
+ * Class names come from `HighlightKind::css_class` in `keyflow-syntax`,
+ * so the site, the editor, the LSP and the CLI are all naming the same
+ * token kinds. Colours are the site's own — classes rather than the
+ * highlighter's inline styles is what lets them follow the theme instead
+ * of baking one palette into the markup.
+ *
+ * The grouping is the point: a chart is roots and everything hanging off
+ * them, so roots take full-strength ink and every modifier sits a step
+ * back. Reading down a column of chords, the thing that should catch the
+ * eye is where the harmony moves. */
+.kf-source .kf-title { color: var(--ink); font-weight: 600; }
+.kf-source .kf-artist { color: var(--ink-soft); }
+
+.kf-source .kf-tempo,
+.kf-source .kf-time-sig,
+.kf-source .kf-key,
+.kf-source .kf-tempo-arrow { color: #7dd3fc; }
+
+/* Section labels take the colour the engraver paints their capsule, so
+ * the source and the chart beside it agree about what a chorus is. */
+.kf-source .kf-section { color: #34d399; font-weight: 600; }
+.kf-source .kf-measure-count,
+.kf-source .kf-section-comment,
+.kf-source .kf-section-bracket { color: var(--ink-soft); }
+
+.kf-source .kf-root,
+.kf-source .kf-degree,
+.kf-source .kf-roman { color: var(--ink); }
+.kf-source .kf-accidental { color: var(--ink); }
+
+.kf-source .kf-quality,
+.kf-source .kf-extension,
+.kf-source .kf-modifier { color: #fbbf24; }
+
+.kf-source .kf-bass,
+.kf-source .kf-bass-slash { color: #a78bfa; }
+
+.kf-source .kf-slash-rhythm,
+.kf-source .kf-duration,
+.kf-source .kf-dot,
+.kf-source .kf-triplet { color: #9ca3af; }
+
+.kf-source .kf-push,
+.kf-source .kf-pull { color: #fb923c; }
+
+.kf-source .kf-rest { color: var(--ink-soft); font-style: italic; }
+.kf-source .kf-measure-sep { color: #4b5563; }
+.kf-source .kf-command { color: #f472b6; }
 
 /* ── Chart surface ───────────────────────────────────────────────── */
 
@@ -288,6 +688,11 @@ body {
 
 /* The SVG carries its own aspect ratio; let it scale to the column. */
 .kf-chart svg { display: block; width: 100%; height: auto; }
+
+/* A page, though, is a box of a known shape — the wrapper already carries
+ * `aspect-ratio`, so the SVG fills it exactly rather than deriving a
+ * second, almost-equal height of its own and leaving a hairline gap. */
+.kf-chart-page > svg { width: 100%; height: 100%; }
 
 .kf-chart-failed { background: var(--code-bg); padding: 0.85rem 1rem; }
 
@@ -313,8 +718,9 @@ body {
 
 /* ── Editor ──────────────────────────────────────────────────────── */
 
-.kf-editor { display: flex; flex-direction: column; gap: 0.75rem; height: calc(100vh - 9rem); }
-.kf-editor-bar { display: flex; align-items: center; gap: 1rem; }
+/* No outer toolbar row any more — the editor is the two panes and
+ * nothing else, so it can fill the space the header and padding leave. */
+.kf-editor { display: flex; flex-direction: column; height: calc(100vh - 7rem); }
 
 .kf-editor-split {
   display: grid;
@@ -324,7 +730,161 @@ body {
   min-height: 0;
 }
 
+/* ── Share sheet ─────────────────────────────────────────────────
+ *
+ * Four ways out of a chart — a link, an SVG, a PDF, the source — behind
+ * one button, because they are used rarely and never mid-sentence. As
+ * four permanent controls in the pane header they cost space to be
+ * ignored.
+ *
+ * `position: fixed` on the backdrop, not absolute: the header is sticky
+ * and the panes scroll, and a sheet anchored inside either would scroll
+ * away from the click that opened it. */
+.kf-share-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: color-mix(in srgb, #000 55%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.kf-share-sheet {
+  width: min(34rem, 100%);
+  max-height: 100%;
+  overflow: auto;
+  padding: 1.25rem 1.4rem 1.4rem;
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  background: var(--surface);
+  box-shadow: 0 24px 60px -20px rgb(0 0 0 / 55%);
+}
+
+.kf-share-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.35rem;
+}
+
+.kf-share-head h2 { margin: 0; font-size: 1.05rem; font-weight: 600; }
+
+.kf-share-close {
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 1.35rem;
+  line-height: 1;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.35rem;
+  cursor: pointer;
+}
+
+.kf-share-close:hover { color: var(--ink); }
+.kf-share-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.kf-share-label {
+  margin: 1.1rem 0 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  opacity: 0.7;
+}
+
+.kf-share-link {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.35rem 0.35rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--code-bg);
+}
+
+/* The URL carries the whole chart, so it is long by design. It gets one
+ * line and an ellipsis rather than wrapping the sheet to twice its
+ * height — nobody reads it, they copy it. */
+.kf-share-url {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+
+.kf-share-link .kf-button { flex: 0 0 auto; padding: 0.25rem 0.7rem; font-size: 0.82rem; }
+.kf-share-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.kf-share-error { color: #f87171; }
+
+/* ── Pane headers ────────────────────────────────────────────────
+ *
+ * Source and Chart each carry one, and they are the same element so
+ * they are the same height — the panes used to be a row apart because
+ * each grew its own bar out of whatever it happened to contain.
+ *
+ * A fixed `height`, not `min-height`: the source header holds a word and
+ * the chart header holds buttons, and a button is taller than a word. A
+ * floor alone still let the taller one win and pushed that pane's body
+ * fifteen pixels below its neighbour — the kind of misalignment that
+ * looks like a bug without looking like anything in particular. The
+ * buttons are sized to fit the row rather than the row to fit them. */
+.kf-pane-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+  height: 2rem;
+  padding: 0 0.15rem;
+  margin-bottom: 0.5rem;
+}
+
+.kf-pane-head .kf-button {
+  padding: 0.15rem 0.55rem;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+/* Pushes whatever follows it to the right of the pane header. */
+.kf-pane-spacer { flex: 1; }
+
+/* A toggle that is currently on. Reads as pressed rather than as a
+ * different button — same shape, filled. */
+.kf-button-on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.kf-button-on:hover { filter: brightness(1.08); border-color: var(--accent); }
+
+.kf-pane-name {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  opacity: 0.7;
+  margin-right: 0.25rem;
+}
+
 .kf-editor-split .kf-chart { overflow: auto; }
+
+/* An even split stops paying once the screen is wide. Source is code —
+ * it wants a comfortable measure and nothing beyond it, and at half of
+ * a 5K display three quarters of that pane is blank. The chart is the
+ * half that keeps benefiting: every rem it gains is another page it can
+ * lay out beside the last. */
+@media (min-width: 100rem) {
+  .kf-editor-split { grid-template-columns: minmax(0, 44rem) minmax(0, 1fr); }
+}
 
 @media (max-width: 60rem) {
   .kf-editor-split { grid-template-columns: minmax(0, 1fr); }
@@ -520,12 +1080,14 @@ body {
 .kf-preview {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  gap: 0.5rem;
   height: 100%;
   min-height: 0;
 }
 
-.kf-preview-bar { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
+/* `nowrap`: the header is a fixed-height row shared with the source
+ * pane, and a wrapping toolbar would push one pane's body down and not
+ * the other's. */
+.kf-preview-bar { flex-wrap: nowrap; }
 .kf-preview-bar .kf-button { padding: 0.2rem 0.6rem; font-size: 0.85rem; }
 .kf-preview-spacer { flex: 1; }
 
@@ -544,15 +1106,59 @@ body {
   background: #26262b;
   cursor: grab;
   touch-action: none;
+  /* The stage is a thing you drag, not a document you read. Without
+   * this a pan sweeps a text selection across the chart — the engraved
+   * pages are SVG, and chord symbols, lyrics and section names are all
+   * real text nodes, so they highlight as the pointer crosses them. */
+  user-select: none;
+  -webkit-user-select: none;
 }
+
+/* The cursor says which of the two is happening. */
+.kf-preview-stage:active { cursor: grabbing; }
 .kf-preview-stage:active { cursor: grabbing; }
 
 /* Absolutely positioned so it takes no part in normal flow — its position
  * comes entirely from the inline transform. */
+/* Pages run left to right, the way sheets sit on a stand or a desk —
+ * not stacked into a vertical scroll. It is also what the layout engine
+ * already believes: `ChartLayoutManager::current_page_for_scroll` reads
+ * `scroll_x` and finds the page whose X range holds the viewport centre,
+ * which only makes sense for a spread. Stacking them downwards meant
+ * that lookup could never agree with what was on screen. */
+/* The canvas fills the stage and is sized in device pixels by the
+ * renderer; CSS only says how big it looks. `display: block` because an
+ * inline canvas sits on the text baseline and leaves a gap under it. */
+.kf-preview-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Where the pointer is, in the chart's own terms — section, bar, beat.
+ * Bottom-left, out of the way of the music, and `pointer-events: none`
+ * so it can never eat the drag it is describing. */
+.kf-preview-readout {
+  position: absolute;
+  left: 0.6rem;
+  bottom: 0.6rem;
+  z-index: 2;
+  padding: 0.2rem 0.55rem;
+  border-radius: 0.4rem;
+  background: color-mix(in srgb, #000 62%, transparent);
+  color: #f2f2f7;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+}
+
 .kf-preview-pages {
   position: absolute;
   top: 0;
   left: 0;
+  display: flex;
+  align-items: flex-start;
   will-change: transform;
 }
 
@@ -615,6 +1221,101 @@ body {
 .kf-guide-toc a { color: var(--ink-soft); text-decoration: none; font-size: 0.925rem; }
 .kf-guide-toc a:hover { color: var(--ink); }
 .kf-toc-current { color: var(--accent) !important; font-weight: 600; }
+
+/* The stage a run of chapters belongs to. Mono and small-caps to match
+ * the site's other labels, and deliberately NOT a link — it names a
+ * phase of the path, and there is no page behind it to open.
+ *
+ * The first one needs no top margin: it sits directly under the index
+ * link, which is the front door rather than a chapter, and the extra
+ * space there reads as a gap rather than as a division. */
+.kf-toc-stage {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  opacity: 0.65;
+  margin-top: 1rem;
+}
+
+.kf-toc-stage:first-of-type { margin-top: 0.6rem; }
+
+/* ── Chapter navigation ───────────────────────────────────────────
+ *
+ * The same pair of links twice: cards under the page, and a bare line
+ * above it. `justify-content: space-between` puts Previous left and Next
+ * right; `margin-left: auto` on the next link is what keeps Next on the
+ * right when there is no Previous, without an empty spacer element. */
+.kf-chapter-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: stretch;
+  gap: 1rem;
+  margin: 2.5rem 0 0;
+}
+
+.kf-chapter-link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  padding: 0.7rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  color: var(--ink);
+  text-decoration: none;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.kf-chapter-link:hover { border-color: var(--ink-soft); }
+.kf-chapter-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.kf-chapter-next { margin-left: auto; text-align: right; }
+
+.kf-chapter-dir {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.kf-chapter-prev .kf-chapter-dir::before { content: "\2190\A0"; }
+.kf-chapter-next .kf-chapter-dir::after { content: "\A0\2192"; }
+.kf-chapter-title { font-weight: 550; font-size: 0.95rem; }
+
+/* The top copy. Same links, no chrome: a pair of bordered cards above
+ * the chapter title would read as the start of the page rather than as
+ * a way out of it. */
+.kf-chapter-nav-top { margin: 0 0 1.5rem; }
+
+.kf-chapter-nav-top .kf-chapter-link {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.35rem;
+  padding: 0;
+  border: 0;
+}
+
+.kf-chapter-nav-top .kf-chapter-dir { display: none; }
+
+.kf-chapter-nav-top .kf-chapter-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+
+.kf-chapter-nav-top .kf-chapter-link:hover .kf-chapter-title { color: var(--ink); }
+.kf-chapter-nav-top .kf-chapter-prev .kf-chapter-title::before { content: "\2190\A0"; }
+.kf-chapter-nav-top .kf-chapter-next .kf-chapter-title::after { content: "\A0\2192"; }
+
+/* Stacked on a narrow screen — two cards side by side leave room for
+ * about one word each. */
+@media (max-width: 40rem) {
+  .kf-chapter-nav { flex-direction: column; }
+  .kf-chapter-next { margin-left: 0; text-align: left; }
+  .kf-chapter-nav-top { flex-direction: row; }
+}
 
 /* Tailwind's preflight zeroes the browser's default margins on p / ul /
  * ol / li. The guide is prose rendered from markdown, so those defaults
@@ -681,12 +1382,9 @@ body {
 .kf-code-editor {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  gap: 0.5rem;
   min-height: 0;
   height: 100%;
 }
-.kf-code-editor-bar { display: flex; gap: 0.4rem; }
-.kf-code-editor-bar .kf-button { padding: 0.2rem 0.6rem; font-size: 0.8rem; }
 
 .kf-code-editor-pane {
   min-height: 0;

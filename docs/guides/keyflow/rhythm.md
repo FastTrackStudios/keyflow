@@ -3,6 +3,7 @@ title: Rhythm
 kind: concept
 type: concept
 order: 5
+stage: Naming & timing
 ---
 
 # Rhythm
@@ -161,6 +162,9 @@ C  %  %  %           ; four bars of C
 Am F C G  %          ; the four-bar phrase, then a copy of its last bar
 ```
 
+`%` is the smallest of the repeat marks; [[repeats|Repeats & Endings]] covers
+the rest — repeating a whole line, a span, and first/second endings.
+
 ## Bar lines, when you want them
 
 You rarely *need* `|` — the measure-fill default and the rhythms above already
@@ -192,4 +196,4 @@ Each fenced bar divides on its own, so you can mix densities freely down a line.
 
 ---
 
-Previous: [[notation-systems|Notation Systems]] · Next: [[melody|Melody]] · Up: [[keyflow|Keyflow Guide]]
+Previous: [[notation-systems|Notation Systems]] · Next: [[melody|Melody]] · Up: [[keyflow|An Introduction]]
