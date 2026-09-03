@@ -2,182 +2,100 @@
 title: Structure
 kind: concept
 type: concept
-order: 1
+order: 2
 stage: Start here
 ---
 
 # Structure
 
-Every Keyflow file has the same two-part shape:
+A section is a named part of the song and a number of bars. Write those and you
+have the form — the frame everything else hangs on.
 
 ```kf+
-Vienna (Live) - Billy Joel    ← header: what the song is
-4/4 140bpm #Gm
+Sunday Morning - The Wandering
+4/4 120bpm #E
 
-VS                            ← sections: the music
-Gm Bb F Ab
+IN 2
+VS 8
+CH 4
 ```
 
-Engraved, a small chart with a header and one section looks like this:
+The number is how many bars that section runs. It is not decoration: Keyflow
+holds you to it. Write chords that do not fill the section and the parse fails
+with what it counted, rather than engraving a form you did not mean.
+
+## Naming a section
+
+Use the common short name — most are what you would guess.
+
+| Section     | Short | Section      | Short |
+| ----------- | ----- | ------------ | ----- |
+| Intro       | `IN`  | Instrumental | `INST`|
+| Verse       | `VS`  | Interlude    | `INT` |
+| Chorus      | `CH`  | Solo         | `SOLO`|
+| Bridge      | `BR`  | Outro        | `OUT` |
+
+Case does not matter — `vs 8` and `VS 8` are the same.
+
+## Replaying a section
+
+Write a section's music once, then name it again with nothing under it to play
+it back:
 
 ```kf+
-Vienna - Billy Joel
-4/4 140bpm #Gm
+Sunday Morning - The Wandering
+4/4 120bpm #E
+
+VS 4
+1 4 5 1
+
+CH 4
+4 1 5 1
 
 VS
-Gm  Bb  F  Ab
+CH
 ```
 
-1. A **header** at the top describing the song — its title, who wrote it, and
-   the musical defaults (time signature, tempo, key).
-2. One or more **sections** of music below it.
+So a whole song is mostly its section list: lay out `VS`, `CH`, `BR` once, then
+order the repeats however the song goes. Notice the numbering — the replays come
+back as *Verse 2* and *Chorus 2*, counted across the chart for you.
 
-This page covers the header. Sections and the music itself come in later pages.
+## A note on a section
 
-## The title line
-
-The first line of text is the title. Type it and you already have a chart —
-every example on this page is the *whole* file, and the engraving beside it is
-what Keyflow makes of it.
+Anything in quotes on the header rides along with the section and prints under
+its card:
 
 ```kf+
-Vienna
+Sunday Morning - The Wandering
+4/4 120bpm #E
+
+CH 4 "big finish"
+4 1 5 1
 ```
 
-Bare words are read as a title rather than as music, because nothing else in
-Keyflow looks like that: a chord, a meter, a tempo and a key each have a shape,
-and a line of ordinary words has none of them.
+A cue, an instruction, a reminder — whatever the band needs to see at that
+moment.
 
-A line that *opens* with a dash credits somebody and names nothing:
+## Changing key at a section
+
+A key written on the header takes effect from that section on, and the key
+signature changes with it. See [[key-meter-changes|Key & Meter Changes]].
 
 ```kf+
-- Billy Joel
+Sunday Morning - The Wandering
+4/4 120bpm #E
+
+VS 4
+1 4 5 1
+
+CH 4 #G
+1 4 5 1
 ```
 
-Put both on one line and the dash separates them:
-
-```kf+
-Vienna - Billy Joel
-```
-
-Text in `(parentheses)` becomes the subtitle:
-
-```kf+
-Vienna (Live) - Billy Joel
-```
-
-- Text before ` - ` is the **title**; text after it is the **artist**.
-- A leading `- ` means the whole line is the **artist**.
-- Text in `(parentheses)` becomes the **subtitle**.
-
-So `Vienna (Live) - Billy Joel` reads as title *Vienna*, subtitle *Live*, artist
-*Billy Joel*.
-
-The title line is **optional** — a chart can start straight at the metadata line
-or even at the first section. But naming your songs is a good habit, and the
-title is what shows up at the top of the rendered chart.
-
-## The metadata line
-
-The next line sets the song's musical defaults. It holds up to three tokens,
-**space-separated, in any order**:
-
-```kf+
-4/4 140bpm #Gm
-```
-
-| Token        | Means              | Examples                       |
-| ------------ | ------------------ | ------------------------------ |
-| `N/D`        | Time signature     | `4/4`, `6/8`, `3/4`, `12/8`    |
-| `Nbpm`       | Tempo, in BPM      | `120bpm`, `68bpm`              |
-| `#Key`       | Key                | `#C`, `#Gm`, `#Eb`, `#F#`      |
-
-Order does not matter — `68bpm 4/4 #G` and `4/4 #G 68bpm` are the same line.
-
-### One token is a chart
-
-Every token is optional, and each one draws something on its own. A meter opens
-the first measure and puts its time signature in it:
-
-```kf+
-4/4
-```
-
-A tempo marks the tempo:
-
-```kf+
-120bpm
-```
-
-A key opens the first measure with its key signature, in `4/4` until you say
-otherwise:
-
-```kf+
-#E
-```
-
-Anything you leave out falls back to a default — `4/4`, no fixed tempo, and the
-key of C. That is why `#E` above already has a time signature and `4/4` already
-has a staff: the defaults were always there, and the chart simply draws what it
-knows so far.
-
-### Reading the key
-
-The key token starts with a `#` (or `b`) **marker** — its only job is to tell the
-parser "this token is the key," so it isn't mistaken for a chord. The marker does
-*not* mean the key is sharp or flat. The key's own accidental and quality are
-written into the name itself:
-
-| Written | Key             |
-| ------- | --------------- |
-| `#C`    | C major         |
-| `#Gm`   | G minor         |
-| `#Eb`   | E♭ major        |
-| `#F#`   | F♯ major        |
-| `#Am`   | A minor         |
-
-A trailing `m` makes it minor; no `m` means major. (`#Eb` and `bEb` mean the same
-thing — pick whichever marker reads better to you.)
-
-The key matters beyond display: it's what lets you write chords and melody as
-**Nashville numbers** (`1 4 5`) or **Roman numerals** (`I IV V`) instead of letter
-names, since those are relative to the key. More on that in the Chords pages.
-
-## Comments
-
-A semicolon starts a comment. Everything after it on the line is ignored:
-
-```kf-
-4/4 120bpm #C    ; mid-tempo, straight feel
-```
-
-## Putting it together
-
-A complete header, with the music that follows it:
-
-```kf+
-Build My Life - Housefires
-68bpm 4/4 #G
-
-Intro
-1 4 1/3 4
-
-VS
-1 4 1/3 4
-```
-
-Here the header names the song and sets G major at 68 BPM in 4/4. Because the key
-is set, the section can be written in Nashville numbers (`1 4 1/3 4`) — four bars,
-one chord per bar.
-
-## What's next
-
-That's the whole header. From here the guide moves into the music:
-
-- **Sections** — naming and ordering the parts of a song (`VS`, `CH`, `BR`…).
-- **Chords** — letter names, Nashville numbers, and Roman numerals.
-- **Rhythm** — how a bar holds more than one chord, and why you rarely need `|`.
+Because the chords are Nashville numbers, the same `1 4 5 1` means something
+different in the new key — which is usually exactly what you want when a song
+lifts.
 
 ---
 
-Next: [[sections|Sections]] · Up: [[keyflow|An Introduction]]
+Previous: [[header|Header]] · Next: [[chords|Chords]] · Up: [[lifecycle|The Life of a Chart]]

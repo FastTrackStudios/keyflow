@@ -3,170 +3,189 @@ title: Notation Systems
 kind: concept
 type: concept
 order: 4
-stage: Naming & timing
+stage: The music
 ---
 
 # Notation Systems
 
-A core idea in Keyflow: the same music can be written three ways, and they're
-**fully interchangeable**. Everything after the root — quality, sevenths,
-extensions, alterations, slash bass (see [[chords|Chords]]) — works
-identically in all three. You only choose how to spell the *root*.
+The same music can be written three ways, and they are interchangeable.
+Everything *after* the root — quality, sevenths, extensions, slash bass — is
+identical in all three. The only thing you are choosing is how to spell the
+root.
 
-| System | Same four bars | Reads as |
-| ------ | -------------- | -------- |
-| **Letter names** | `C  F  Am  G` | absolute pitches |
-| **Nashville numbers** | `1  4  6m  5` | scale degrees in the key |
-| **Roman numerals** | `I  IV  vi  V` | scale degrees in the key |
+| System           | Four bars     | The root means            |
+| ---------------- | ------------- | ------------------------- |
+| Letter names     | `C  F  Am  G` | an absolute pitch         |
+| Nashville numbers| `1  4  6  5`  | a scale degree in the key |
+| Roman numerals   | `I  IV  vi  V`| a scale degree in the key |
 
-Use whichever fits the chart — letter names for a fixed-key lead sheet, numbers
-for a transposable worship/Nashville chart, Roman numerals for analysis or
-classical feel.
-
-Those same four bars, engraved straight from a ` ```kf ` block:
+All three engrave the same chart:
 
 ```kf+
-C  F  Am  G
+Four Bars - Letter Names
+4/4 #C
+
+VS 4
+C F Am G
 ```
 
-Write it in numbers instead and it's the same music as scale degrees:
+```kf+
+Four Bars - Nashville
+4/4 #C
+
+VS 4
+1 4 6 5
+```
 
 ```kf+
+Four Bars - Roman
 4/4 #C
-1  4  6m  5
+
+VS 4
+I IV vi V
 ```
 
 ## Letter names
 
-Absolute pitch. The root is a note `A`–`G` with an optional accidental, and the
-quality is written out explicitly:
+Absolute pitch. `C` is C in every key, and the quality is written out.
 
 ```kf+
-C    ; F#    Bb    Am    Cmaj7    F#m7b5
+Letters - Demo
+4/4 #C
+
+VS 4
+Cmaj7 F#m7b5 Bb Am
 ```
 
-Letter names don't depend on the key — `C` is always C.
+Use them when the chart is for one key and always will be — a lead sheet, a
+transcription, anything you would hand to a reader who is not transposing.
 
 ## Nashville numbers
 
-The root is a **scale degree** `1`–`7`, relative to the song's key. A bare
-number automatically takes the key's **diatonic quality** — you don't write the
-`m`. In a major key `1 2 3 4 5 6 7` gives:
+The root is a scale degree, `1`–`7`, relative to the key. **A bare number takes
+the key's own quality**, so you do not write the `m`:
 
-| Degree | `1` | `2` | `3` | `4` | `5` | `6` | `7` |
-| ------ | --- | --- | --- | --- | --- | --- | --- |
-| Quality | major | minor | minor | major | major | minor | dim |
-| In C | C | Dm | Em | F | G | Am | B° |
+| Degree in a major key | `1` | `2` | `3` | `4` | `5` | `6` | `7` |
+| --------------------- | --- | --- | --- | --- | --- | --- | --- |
+| Quality               | maj | min | min | maj | maj | min | dim |
+| In C                  | C   | Dm  | Em  | F   | G   | Am  | B°  |
 
-So `2` *is* the ii chord (minor) — no need to write `2m`. Minor keys get their
-own diatonic qualities (in A minor, `1` is Am, `2` is B°). Sevenths and
-extensions stack on the implied triad: `2:7` is ii m7 (Dm7), `5:7` is V7 (G7).
+So `2` *is* the minor two — writing `2m` is allowed but says nothing extra.
 
-And because the chart stores degrees, the same `1 4 5` is C–F–G in C and G–C–D
-in G — that's the point of the number system: the progression, independent of
-key.
+```kf+
+Diatonic - Demo
+4/4 #C
+
+VS 8
+1 2 3 4
+5 6 7 1
+```
+
+The point of numbers is that the chart is about the *progression*, not the
+pitches. Change the key in the [[header|header]] and every chord follows — this
+is the same file as above with one token changed:
+
+```kf+
+Diatonic - Demo
+4/4 #G
+
+VS 8
+1 2 3 4
+5 6 7 1
+```
 
 ### Overriding the quality
 
-- **`!`** before a number is *literal* — it drops the key association, so a
-  bare `!2` is a plain major triad (D in C).
-- An **explicit quality** overrides the diatonic one: `2M` / `2Major` /
-  `2:maj` for major, `2m` for minor, plus `2dim`, `2aug`, `2sus4`, …
+Two ways to say "not the diatonic one":
 
-So `2` = Dm (diatonic), `2M` = D (forced major), `!2` = D (literal), `2m` = Dm
-(explicit).
+- `!` before the number makes it **literal** — a plain major triad, ignoring the
+  key. In C, `!2` is D.
+- An **explicit quality** wins: `2M` for major, `2m` for minor, and the rest —
+  `2dim`, `2aug`, `2sus4`.
+
+```kf+
+Overrides - Demo
+4/4 #C
+
+VS 4
+2 !2 2M 2m
+```
+
+That is Dm, D, D, Dm — the diatonic default, then three ways of departing from
+or restating it.
 
 ## Roman numerals
 
-Also a scale degree relative to the key, but **case carries the quality** —
-**uppercase is major, lowercase is minor**:
-
-```kf-
-I  ii  iii  IV  V  vi  vii      →  I, iim, iiim, IV, V, vim, viim
-```
-
-You can still add explicit descriptors on top: `Imaj7`, `V7`, `iim7`.
-
-Roman numerals also unlock two analyst's tools, both covered on the
-[[chords|Chords]] page: **secondary chords** with `/` (`V/V` is "five of
-five"), and **inversions** with `^` (`V^65` is a first-inversion dominant 7th).
-
-## Readability: the `:` separator
-
-When a number or numeral is followed by a quality that *starts with a digit*,
-the two runs of digits can be hard to read — is `17` "degree 1, seventh" or the
-number seventeen? Optionally put a colon between the root and the quality:
+Also a scale degree, but **case carries the quality**: uppercase is major,
+lowercase is minor.
 
 ```kf+
-1:7      4:maj9      2:m7      5:9
+Roman - Demo
+4/4 #C
+
+VS 8
+I ii iii IV
+V vi vii I
 ```
 
-It's purely for readability and carries no meaning — `1:7` and `17` parse
-identically, as do `4:maj9` and `4maj9`. The colon works on **all three
-systems** — numbers (`4:maj9`), Roman numerals (`V:7`, `i:m7`), and letter
-names (`C:7`) — though it matters most for numbers.
+Descriptors stack on top as usual — `Imaj7`, `V7`, `iim7`.
 
-**Good practice: write the `:`.** `1:7` reads cleanly; `17` is correct but
-easy to misread. (A future editor will insert the `:` for you automatically.)
+Roman numerals suit analysis and anything with a classical accent. Numbers suit
+a chart a band will transpose on the stand. They resolve identically; pick the
+dialect your reader speaks.
 
-## Relative to the key
+## The `:` separator
 
-Both number-based systems resolve against the key set in the
-[[structure|header]] (`#C`, `#Gm`, …). Because the chart stores *degrees*
-rather than fixed pitches, transposing a Nashville or Roman chart is just
-changing the key in the header — every chord follows.
-
-Letter names are the opposite: fixed pitches that ignore the key.
-
-## Accidentals and borrowed chords
-
-Put `#` (sharp) or `b` (flat) before a degree or numeral to raise or lower it —
-exactly how you write a borrowed or chromatic chord:
+When a quality begins with a digit, two runs of digits collide — is `17` degree
+one with a seventh, or the number seventeen? A colon separates them:
 
 ```kf+
-1  b3  4  b7        ; (numbers)   ♭3 and ♭7 borrowed
-I  bIII  IV  bVII   ; (Roman)     ♭III and ♭VII borrowed
-1  #4  5            ; sharpened 4th
+Colon - Demo
+4/4 #C
+
+VS 4
+1:7 4:maj9 2:m7 5:9
 ```
 
-Since almost no one can type a real ♭ glyph, Keyflow treats the plain letter
-**`b` as a flat** in these positions.
+The colon is **purely for reading**. `1:7` and `17` parse identically, and the
+chart engraves the same either way. It works in all three systems — `V:7`,
+`C:7` — though numbers are where it earns its keep.
 
-### The `b7` question
+Write it. `1:7` reads at a glance; `17` is correct and easy to misread.
 
-That creates one genuine ambiguity: **`b7`** could mean the *note* B with a
-7th (`B7`), or the *flat-7 degree* (`♭7`). Keyflow resolves it from the
-surrounding notation system:
+## Sharpened degrees
 
-| Context | `b7` means |
-| ------- | ---------- |
-| Letter-name chart (`C  F  b7  G`) | the chord **B7** |
-| Number chart (`1  4  b7  5`) | the **♭7** degree |
-| Roman chart (`I  IV  b7  V`) | the **♭7** degree |
-| No surrounding context | the chord **B7** |
+A `#` before a degree or numeral raises it, which is how you write a chromatic
+chord:
 
-The current line decides first; if it can't tell, the rest of the chart does;
-failing that it's read as the note B. Only `b5`/`b6`/`b7` are ever ambiguous —
-`b9` and up can only be the note B (degrees stop at 7), and any `#`-prefixed
-number is always a degree.
+```kf+
+Sharps - Demo
+4/4 #C
+
+VS 4
+1 #4 5 1
+```
+
+In C that is C, F♯, G, C.
+
+> **Flats before a degree do not work yet.** `b3`, `b7`, `bIII` and `bVII` are
+> currently read as the *note* B — `b7` engraves as B7, not as the flat-seven
+> degree. Until that is fixed, write the borrowed chord by its letter name
+> (`Bb` rather than `b7`), which is unambiguous in any chart.
 
 ## Mixing systems
 
-You can borrow a Roman or number chord inside a letter chart — `bVII` and `#IV`
-are unambiguous, so `Bb  bVII  Eb` reads the `bVII` as the flat-7 degree while
-the rest stay letter names.
+A chart may mix them. Nothing stops a letter-name chart borrowing a numeral, or
+a number chart naming one chord outright:
 
-## The same for melody
+```kf+
+Mixed - Demo
+4/4 #C
 
-The naming carries over to melody too — melody notes are written as **letter
-names or scale-degree numbers**, the same choice you make for a chord root.
-(Roman numerals name chords, not single notes.) See the
-[[melody|Melody]] page.
-
-## What's next
-
-- **Rhythm** — how long each chord lasts, and why a bare chord fills a whole bar.
+VS 4
+1 4 Bb 1
+```
 
 ---
 
-Previous: [[chords|Chords]] · Next: [[rhythm|Rhythm]] · Up: [[keyflow|An Introduction]]
+Previous: [[chords|Chords]] · Next: [[rhythm|Rhythm]] · Up: [[lifecycle|The Life of a Chart]]

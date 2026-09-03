@@ -2,81 +2,91 @@
 title: Key & Meter Changes
 kind: concept
 type: concept
-order: 8
-stage: Complete scores
+order: 6
+stage: The music
 ---
 
 # Key & Meter Changes
 
-The [[structure|header]] sets the song's starting key and time signature.
-When the music moves to a new key or meter partway through, you mark the change
-right where it happens on a chord line — the same tokens you used in the header,
-dropped inline.
+Most songs pick a key and a meter in the [[header|header]] and never move. When
+one does move, Keyflow's rule is the same as everywhere else: say it once, where
+it happens, and everything downstream follows.
 
 ## Changing key
 
-Put a key token — the same `#Key` from the header — on the chord line at the
-point the key changes:
+A key on a section header takes effect from that section on:
 
 ```kf+
-4/4 #C
+Sunday Morning - The Wandering
+4/4 120bpm #E
 
-VS 8
-1  4  5  1   ; #G   1  4  5  1
+VS 4
+1 4 5 1
+
+CH 4 #G
+1 4 5 1
 ```
 
-A key change mid-chart (to G at bar 3), engraved:
+The key signature on the staff changes, and — because those chords are
+[[notation-systems|Nashville numbers]] — the same `1 4 5 1` now means something
+different. That is the point. A song that lifts a whole step is one edit, not a
+rewrite of every chord after it.
+
+Write the chorus in letter names instead and you would have to retype all four
+bars, then retype them again the next time the key moved. Numbers are what keeps
+the key in one place.
+
+## Changing meter
+
+Meter changes go on the music line, not the section header, and they take a `T`
+prefix:
 
 ```kf+
-4/4 #C
-1  5  #G 1  5
+Sunday Morning - The Wandering
+4/4 120bpm #E
+
+VS 4
+G D T6/8 Am
 ```
 
-From `#G` onward the chart is in G, so the `1 4 5` after it are G–C–D, not
-C–F–G. The token isn't a chord; it just moves the key — and the key signature —
-from that spot on. It works in a letter-name chart too: the change still updates
-the key signature, even though letter chords don't lean on the key.
+From that bar on, the chart is in 6/8.
 
-A whole section can also *start* in a new key by putting the token on its header
-(`BR 8 #Ab`) — see [[sections|Sections]].
+### Why the `T`
 
-## Changing time signature
+Because `6/8` on its own is already a chord — a `6` chord over a `8` bass. The
+parser cannot tell a meter from a slash chord by shape alone, so it does not
+guess. Without the prefix the token is read as music and your meter change
+silently does not happen:
 
-A meter change is written with a **`T`** in front of the new signature:
+```kf
+VS 4
+G D 6/8 Am
+```
+
+That chart stays in 4/4. `T` is what makes it a meter.
+
+### One bar only
+
+A `!` in front means *this bar only*, then back to what it was:
 
 ```kf+
-VS
-G  D/F#  Em  C   ; T6/8 Am   T4/4   G  D
+Sunday Morning - The Wandering
+4/4 120bpm #E
+
+VS 4
+G D !T2/4 Am
 ```
 
-`T6/8` switches to 6/8 from that point; `T4/4` switches back. A change holds until
-the next `T`.
+Bar three is 2/4; bar four is 4/4 again. This is the common case — a single
+clipped bar going into a chorus — and it is worth reaching for before you write
+two meter changes to fake it.
 
-The `T` is required. A bare `6/8` on a chord line would read as a *chord* — a 6
-over an 8 — so the `T` tells Keyflow "this is the meter." (It's the meter's
-version of the `#` that marks a key.)
-
-## One bar, then back: `!T`
-
-Often a meter only wobbles for a single bar — one bar of 2/4 in a stream of 4/4.
-Prefix the change with `!` and it lasts exactly **one measure**, then snaps back
-to the prevailing meter on its own, with no closing `T` needed:
-
-```kf+
-VS
-G  D/F#  Em  G   !T2/4 Am   ; G  D
-```
-
-`Am` is that one bar of 2/4; the `G D` after it are already back in 4/4. The `!`
-is the same "just this once" mark you can put on a
-[[rhythm|chord duration]] — here it scopes the meter change to a single
-measure instead of letting it stick.
-
-## What's next
-
-- **Annotations & Expression** — the markings that sit on top of the notes:
-  staff text, instrument cues, dynamics, and hairpins.
+| Write | Meaning |
+| --- | --- |
+| `T6/8` | 6/8 from here on |
+| `!T2/4` | one bar of 2/4, then back |
+| `6/8` | a chord, not a meter |
 
 ---
 
-Previous: [[lyrics|Lyrics]] · Next: [[annotations|Annotations & Expression]] · Up: [[keyflow|An Introduction]]
+Previous: [[rhythm|Rhythm]] · Next: [[dynamics|Dynamics]] · Up: [[lifecycle|The Life of a Chart]]

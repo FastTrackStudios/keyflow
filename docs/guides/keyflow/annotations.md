@@ -1,98 +1,94 @@
 ---
-title: Annotations & Expression
+title: Annotations
 kind: concept
 type: concept
-order: 9
-stage: Complete scores
+order: 8
+stage: For the band
 ---
 
-# Annotations & Expression
+# Annotations
 
-Beyond the notes themselves, a chart carries **markings** — a word of direction,
-a dynamic, a swell. In Keyflow these go on their own lines inside a section,
-mixed in with the chord and melody lines.
+Everything left over: the words on the page that are not chords, not lyrics and
+not [[dynamics|dynamics]]. Notes to a player, a groove description, a repeat, an
+ending.
 
-## Staff text
+## A note on a section
 
-A quoted string is **free text** placed on the staff. By default it sits below;
-`^` puts it above, `_` keeps it below:
-
-```kf-
-"straight feel"        below the staff (the default)
-^"BIG"                 above the staff
-_"rit. ...."           below the staff
-```
-
-Staff text and a dynamic alongside the chords, engraved:
+Quotes on a [[structure|section header]] ride along with the section and print
+under its card:
 
 ```kf+
-^"Swell"
-dyn mf
-1  4  5  1
+Sunday Morning - The Wandering
+4/4 120bpm #E
+
+CH 4 "big finish"
+1 4 5 1
 ```
 
-Put the line wherever the text belongs in the music — before the bar it
-describes, between two chord lines, and so on. (To pin text to a *single chord*
-instead of a whole spot, attach it to the chord: `Cmaj7"as written"` — see
-[[chords|Chords]].)
+This is the right place for something that describes the whole section — *half
+time*, *no drums*, *acoustic only*.
 
-## Instrument cues
+## Text on a bar
 
-A cue aimed at one player starts with `@` and the instrument name, then the
-text:
+Quotes on a music line attach to the bar they sit in front of:
 
-```kf-
-@Drums "full groove now"
-@Bass "walk it down"
-@Keys "pad only"
+```kf+
+Sunday Morning - The Wandering
+4/4 120bpm #E
+
+VS 4
+"Ac. Gtr. groove" 1 4 5 1
 ```
 
-It reads like staff text but is tagged for that instrument, so a part can show
-just its own cues.
+By default it prints below the staff. `^` puts it above, `_` puts it below —
+useful when a bar carries two notes meant for two different people:
 
-## Dynamics
+```kf+
+Sunday Morning - The Wandering
+4/4 120bpm #E
 
-Classical dynamics use the `dyn` keyword, so a lone `f` or `p` is never mistaken
-for a chord:
-
-```kf-
-dyn mp
-dyn ff
-dyn fp
+VS 4
+^"lift" 1 _"pad" 4 5 1
 ```
 
-The levels run `ppp pp p mp mf f ff fff`, plus the accents `sf`, `sfz`, and `fp`.
+Above the staff reads as an instruction to the whole band; below reads as detail
+about the part. That is convention, not enforcement — but following it means a
+player can scan one side of the staff and find what is theirs.
 
-A dynamic sits **below** the staff by default; add `above` to lift it:
+## Repeats and endings
 
-```kf-
-dyn mf above
+Repeat barlines are `|:` and `:|`:
+
+```kf+
+Sunday Morning - The Wandering
+4/4 120bpm #E
+
+VS 4
+|: 1 | 4 | 5 | 1 :|
 ```
 
-To place it on a particular beat of the bar rather than the downbeat, add `@`
-and the beat number:
+Alternate endings are numbered in brackets:
 
-```kf-
-dyn fff@4        forte-fortissimo on beat 4
+```kf+
+Sunday Morning - The Wandering
+4/4 120bpm #E
+
+VS 4
+|: 1 | 4 | [1] 5 :| [2] 1 |
 ```
 
-## Hairpins
+A repeat is worth reaching for when the music is genuinely identical. When it is
+not — when the second time round changes one chord — write the bars out. A chart
+whose repeats need a paragraph of explanation is slower to read than one that
+just says what happens.
 
-A hairpin is a crescendo or decrescendo wedge, written with `hairpin` and a
-direction — `<` to swell, `>` to fade — over a **beat range** `start..end`:
+## What this is for
 
-```kf-
-hairpin < 1..4        crescendo across the bar
-hairpin > 2..4        decrescendo from beat 2 to 4
-```
-
-Like dynamics, hairpins default below the staff; add `above` to move them up.
-
-## What's next
-
-- **Repeats & Endings** — the last piece: saying a part once and looping it,
-  with first and second endings.
+None of this changes a note. That is exactly the point: a chart is read by a
+person under stage light with one pass to get it right, and the annotations are
+what make the difference between a chart that is *correct* and a chart that is
+*playable*.
 
 ---
 
-Previous: [[key-meter-changes|Key & Meter Changes]] · Next: [[repeats|Repeats & Endings]] · Up: [[keyflow|An Introduction]]
+Previous: [[dynamics|Dynamics]] · Up: [[lifecycle|The Life of a Chart]]
