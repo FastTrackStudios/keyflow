@@ -3270,18 +3270,17 @@ impl<'a> ChartParser<'a> {
             // `3` as a suspension figure and left `b` — engraving `C b3 F G`
             // as `C B F G`. Uppercase `B` is the note; lowercase `b` before
             // a digit is a flat.
-            let (chord_token, figured_bass_rows, suspension_figure) = if Self::is_leading_flat_degree(
-                effective_token,
-            )
-                || (chord_system == NotationSystem::Degree
-                    && Self::is_merged_degree(effective_token))
-            {
-                (Self::split_merged_degree(effective_token), caret_rows, None)
-            } else {
-                let (fb_token, fb_rows) = Self::extract_figured_bass_suffix(effective_token);
-                let (ct, susp) = Self::extract_suspension_suffix(&fb_token);
-                (ct, caret_rows.or(fb_rows), susp)
-            };
+            let (chord_token, figured_bass_rows, suspension_figure) =
+                if Self::is_leading_flat_degree(effective_token)
+                    || (chord_system == NotationSystem::Degree
+                        && Self::is_merged_degree(effective_token))
+                {
+                    (Self::split_merged_degree(effective_token), caret_rows, None)
+                } else {
+                    let (fb_token, fb_rows) = Self::extract_figured_bass_suffix(effective_token);
+                    let (ct, susp) = Self::extract_suspension_suffix(&fb_token);
+                    (ct, caret_rows.or(fb_rows), susp)
+                };
             match self.parse_chord_token(
                 &chord_token,
                 section_type,

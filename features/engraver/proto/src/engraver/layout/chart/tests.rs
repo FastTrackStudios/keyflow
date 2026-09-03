@@ -97,7 +97,9 @@ fn create_test_chart() -> Chart {
 
 fn lord_of_the_fight_fixture() -> PathBuf {
     let mut fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    fixture.push("../../../features/examples/png-project-charts/02 LORD OF THE FIGHT Master RS.musicxml");
+    fixture.push(
+        "../../../features/examples/png-project-charts/02 LORD OF THE FIGHT Master RS.musicxml",
+    );
     fixture
 }
 

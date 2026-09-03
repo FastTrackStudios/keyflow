@@ -283,7 +283,10 @@ fn renotate_chord(parsed_in: &Chord, ctx: &Ctx) -> Option<(Chord, String)> {
             // plain `7` does not count: `6:7` is read as the diatonic
             // minor seventh, so a dominant on 6 really does need `6M7`.
             let tail_states_major = tail.is_some_and(|t| {
-                t.starts_with("maj") || t.starts_with('M') || t.starts_with('△') || t.starts_with('^')
+                t.starts_with("maj")
+                    || t.starts_with('M')
+                    || t.starts_with('△')
+                    || t.starts_with('^')
             });
 
             let needs_major_marker = accidental.is_none()
@@ -324,7 +327,6 @@ fn renotate_chord(parsed_in: &Chord, ctx: &Ctx) -> Option<(Chord, String)> {
         }
     }
 }
-
 
 /// Parse a single chord SYMBOL (e.g. `"F#m"`, `"Bm7/A"`) and re-spell it under
 /// `view`, treating `from_key` as the song's own functional key. Returns the
@@ -821,8 +823,7 @@ mod tests {
         assert_eq!(
             symbols(&out),
             vec![
-                "1", "4", "5", "6m", "2m", "3m", "2m7", "6m7", "1sus4", "1maj7", "1/3",
-                "2m7/1",
+                "1", "4", "5", "6m", "2m", "3m", "2m7", "6m7", "1sus4", "1maj7", "1/3", "2m7/1",
             ]
         );
 
