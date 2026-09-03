@@ -569,6 +569,25 @@ impl ChartLayoutEngine {
 
     /// Layout a chart in the specified mode.
     pub fn layout_chart(&self, chart: &Chart, mode: &LayoutMode) -> ChartLayoutResult {
+        // A chart with a header and no music still engraves. Everything
+        // downstream — the title header included — hangs off a system,
+        // and a chart with no sections produces no systems, so it used
+        // to lay out to zero pages and every export answered "No chart
+        // layout available to export". On screen that reads as an
+        // editor that ignores you until you have typed enough.
+        //
+        // Giving it one empty measure is the whole fix: the header, the
+        // clef, the key signature and the meter all render through the
+        // paths they already use, and the measure is the one the next
+        // chord typed will land in.
+        let synthesized;
+        let chart = if chart.sections.is_empty() {
+            synthesized = Self::with_opening_measure(chart);
+            &synthesized
+        } else {
+            chart
+        };
+
         // Apply chart settings to a temporary config
         let config_with_settings = self.config.clone().with_chart_settings(&chart.settings);
         let temp_engine = ChartLayoutEngine {
@@ -716,6 +735,28 @@ impl ChartLayoutEngine {
             symbol_font_data: self.symbol_font_data.clone(),
         };
         temp_engine.layout_chart(chart, mode)
+    }
+
+    /// The chart with one empty measure, for a chart that has none.
+    ///
+    /// The section is IMPLICIT — the writer typed no section header, so it
+    /// must not draw a section card. `as_implicit` is what suppresses it;
+    /// without that a bare `#E` would engrave a "Verse 1" label nobody
+    /// asked for.
+    ///
+    /// `SectionType::Verse` is arbitrary and unused: an implicit section
+    /// renders no name, and the type only matters once something labels it.
+    fn with_opening_measure(chart: &Chart) -> Chart {
+        use crate::chart::types::{ChartSection, Measure};
+        use crate::sections::Section;
+
+        let mut out = chart.clone();
+        out.sections = vec![
+            ChartSection::new(Section::new(SectionType::Verse))
+                .as_implicit()
+                .with_measures(vec![Measure::new()]),
+        ];
+        out
     }
 
     /// Layout chart in paginated mode with page breaks.

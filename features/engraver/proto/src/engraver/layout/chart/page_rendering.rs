@@ -368,8 +368,22 @@ pub fn add_title_header_with_count_in(
         tempo,
         count_in,
     } = params;
-    // If there's no title, skip the entire header (no part name, version, subtitle, etc.)
-    if metadata.title.is_none() {
+    // Skip the header when there is nothing authored to put in it — NOT
+    // merely when there is no title. A chart that names only its tempo
+    // or only its writer has a header worth drawing, and gating on the
+    // title threw both away: `120bpm` on its own engraved a bare measure
+    // with no tempo mark anywhere.
+    //
+    // `part_name` is deliberately not part of this test. It defaults to
+    // "Master Rhythm", so counting it would make the header unskippable
+    // and stamp MASTER RHYTHM / V1 across a chart whose author has typed
+    // nothing but a time signature.
+    let has_header_content = metadata.title.is_some()
+        || metadata.artist.is_some()
+        || metadata.composer.is_some()
+        || metadata.subtitle.is_some()
+        || tempo.is_some();
+    if !has_header_content {
         return (0.0, Vec::new());
     }
 

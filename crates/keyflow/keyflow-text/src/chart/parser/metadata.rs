@@ -69,6 +69,25 @@ impl<'a> ChartParser<'a> {
             return Ok(idx);
         }
 
+        // A line that OPENS with a dash is the writer, not the song:
+        // `- Cody Wright` credits somebody and names nothing. The
+        // general splitter looks for " - " as a separator between two
+        // halves, so with nothing on its left it kept the whole line —
+        // dash included — as the title.
+        //
+        // Handled here rather than in `parse_title_artist_subtitle`,
+        // which lives in keyflow-proto over in the `daw` repo; this is a
+        // keyflow-text reading of a keyflow line, and it does not need a
+        // cross-repo tag bump to say so.
+        if let Some(rest) = first_line.strip_prefix('-') {
+            let credited = rest.trim();
+            if !credited.is_empty() {
+                self.metadata.artist = Some(credited.to_string());
+                idx += 1;
+                return self.continue_metadata_parsing(lines, idx);
+            }
+        }
+
         // First non-empty line is typically "Title - Artist" or "Title (Subtitle) - Artist"
         let (title, artist, subtitle) = SongMetadata::parse_title_artist_subtitle(first_line);
         self.metadata.title = title;
