@@ -36,19 +36,38 @@ This page covers the header. Sections and the music itself come in later pages.
 
 ## The title line
 
-The first line of text is the title. It may also carry an artist and a subtitle:
+The first line of text is the title. Type it and you already have a chart —
+every example on this page is the *whole* file, and the engraving beside it is
+what Keyflow makes of it.
 
-```kf-
+```kf+
 Vienna
 ```
-```kf-
+
+Bare words are read as a title rather than as music, because nothing else in
+Keyflow looks like that: a chord, a meter, a tempo and a key each have a shape,
+and a line of ordinary words has none of them.
+
+A line that *opens* with a dash credits somebody and names nothing:
+
+```kf+
+- Billy Joel
+```
+
+Put both on one line and the dash separates them:
+
+```kf+
 Vienna - Billy Joel
 ```
-```kf-
+
+Text in `(parentheses)` becomes the subtitle:
+
+```kf+
 Vienna (Live) - Billy Joel
 ```
 
 - Text before ` - ` is the **title**; text after it is the **artist**.
+- A leading `- ` means the whole line is the **artist**.
 - Text in `(parentheses)` becomes the **subtitle**.
 
 So `Vienna (Live) - Billy Joel` reads as title *Vienna*, subtitle *Live*, artist
@@ -63,11 +82,8 @@ title is what shows up at the top of the rendered chart.
 The next line sets the song's musical defaults. It holds up to three tokens,
 **space-separated, in any order**:
 
-```kf-
+```kf+
 4/4 140bpm #Gm
-```
-```kf-
-68bpm 4/4 #G
 ```
 
 | Token        | Means              | Examples                       |
@@ -76,9 +92,34 @@ The next line sets the song's musical defaults. It holds up to three tokens,
 | `Nbpm`       | Tempo, in BPM      | `120bpm`, `68bpm`              |
 | `#Key`       | Key                | `#C`, `#Gm`, `#Eb`, `#F#`      |
 
-Every token is optional. `4/4 #C` (no tempo) and `120bpm` (just a tempo) are both
-valid. Anything you omit falls back to a default — `4/4`, no fixed tempo, and key
-of C.
+Order does not matter — `68bpm 4/4 #G` and `4/4 #G 68bpm` are the same line.
+
+### One token is a chart
+
+Every token is optional, and each one draws something on its own. A meter opens
+the first measure and puts its time signature in it:
+
+```kf+
+4/4
+```
+
+A tempo marks the tempo:
+
+```kf+
+120bpm
+```
+
+A key opens the first measure with its key signature, in `4/4` until you say
+otherwise:
+
+```kf+
+#E
+```
+
+Anything you leave out falls back to a default — `4/4`, no fixed tempo, and the
+key of C. That is why `#E` above already has a time signature and `4/4` already
+has a staff: the defaults were always there, and the chart simply draws what it
+knows so far.
 
 ### Reading the key
 
