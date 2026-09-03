@@ -17,39 +17,40 @@ people for different reasons.
 
 ## Cues — what the band is told
 
-A cue starts with `@` and takes the rest of the line. It attaches to the bar
-that follows:
+Text in quotes is a cue for the whole band. It attaches to the bar it sits in
+front of:
 
 ```kf+
 Sunday Morning - The Wandering
 4/4 120bpm #E
 
 VS 4
-@Build
-1 4 5 1
+"Build" 1 4 5 1
 ```
 
-Anything you would shout across a rehearsal room goes here — `@Build`,
-`@Drop out`, `@Guitar only`, `@Go Crazy`. There is no vocabulary to learn
-because there is no vocabulary: it prints what you wrote.
+Anything you would shout across a rehearsal room goes here — `"Build"`,
+`"Drop out"`, `"Go crazy"`. There is no vocabulary to learn because there is no
+vocabulary: it prints what you wrote. Put it on its own line if that reads
+better; it attaches to the next bar either way.
 
-Pin one to a beat by ending the line with `:` and the beat number:
+Quotes are what make it text. An unquoted word is music — `Build` is read as a
+B chord, not as an instruction.
+
+By default a cue prints below the staff. `^` puts it above, `_` below, which is
+worth using when a bar carries two notes meant for two different people:
 
 ```kf+
 Sunday Morning - The Wandering
 4/4 120bpm #E
 
 VS 4
-@Hit:3
-1 4 5 1
+^"lift" 1 _"pad" 4 5 1
 ```
-
-A colon anywhere else is just text, so `@Gtr: clean` says what it looks like.
 
 ### Cueing one player
 
-Name a group and quote the text, and the cue belongs to them — it prints in
-that group's colour instead of the whole band's:
+Put `@` and a group in front and the cue belongs to them — it prints in that
+group's colour instead of the whole band's:
 
 ```kf+
 Sunday Morning - The Wandering
@@ -60,11 +61,24 @@ VS 4
 1 4 5 1
 ```
 
-`keys`, `drums`, `bass`, `guitar` and `vocals` are known, with the obvious
-short forms — `gtr`, `perc`, `vox`. Anything else you name is kept as written.
+`keys`, `drums`, `bass`, `guitar` and `vocals` are known, with the obvious short
+forms — `gtr`, `perc`, `vox`. Anything else you name is kept as written, so
+`@horns` and `@FOH` work too.
 
-Use this when a cue would be noise for everyone else. `@Build` is for the room;
-`@drums:3 "crash"` is for one person.
+Add `:beat` to the group to pin it inside the bar:
+
+```kf+
+Sunday Morning - The Wandering
+4/4 120bpm #E
+
+VS 4
+@drums:3 "crash"
+1 4 5 1
+```
+
+Use a group when a cue would be noise for everyone else. `"Build"` is for the
+room; `@drums:3 "crash"` is for one person. `@all "Build"` says the same thing
+as `"Build"` when you want it said explicitly.
 
 ## Dynamics — what the page says
 
@@ -117,7 +131,7 @@ They stack — a bar can carry both — but they are not interchangeable.
 
 | | Cue | Dynamic |
 | --- | --- | --- |
-| `@Build` | ✅ | |
+| `"Build"` | ✅ | |
 | `dyn mf` | | ✅ |
 | Read by | the band, in rehearsal | the reader, on the page |
 | Vocabulary | anything you type | the standard levels |

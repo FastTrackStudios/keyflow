@@ -30,30 +30,11 @@ time*, *no drums*, *acoustic only*.
 
 ## Text on a bar
 
-Quotes on a music line attach to the bar they sit in front of:
-
-```kf+
-Sunday Morning - The Wandering
-4/4 120bpm #E
-
-VS 4
-"Ac. Gtr. groove" 1 4 5 1
-```
-
-By default it prints below the staff. `^` puts it above, `_` puts it below —
-useful when a bar carries two notes meant for two different people:
-
-```kf+
-Sunday Morning - The Wandering
-4/4 120bpm #E
-
-VS 4
-^"lift" 1 _"pad" 4 5 1
-```
-
-Above the staff reads as an instruction to the whole band; below reads as detail
-about the part. That is convention, not enforcement — but following it means a
-player can scan one side of the staff and find what is theirs.
+Quotes on a music line are a cue, and they belong to
+[[dynamics|Dynamics]] — that page covers the whole-band form, the `^` and
+`_` placements, and `@keys "…"` for one player. The section note above is
+the annotation that has no equivalent there: it describes a whole section
+rather than a bar.
 
 ## Repeats and endings
 
