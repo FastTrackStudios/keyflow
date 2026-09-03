@@ -83,6 +83,7 @@ fn check_invariants(path: &Path) {
 }
 
 #[test]
+#[ignore = "the reference chart corpus is not in the repo: `features/examples/png-project-charts`. Drop a local copy in and run `cargo test -- --ignored`."]
 fn lord_of_the_fight_inventory_round_trips() {
     let path = in_repo_fixture();
     check_invariants(&path);

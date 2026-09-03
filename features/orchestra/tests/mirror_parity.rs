@@ -120,21 +120,25 @@ fn check_mirror_parity(part_name: &str, profile: ProfileKind) {
 }
 
 #[test]
+#[ignore = "the orchestral .mxl corpus is not in the repo: `features/examples/mxl` holds transcriptions of commercial scores, which this public repo cannot redistribute. Point it at a local copy and run `cargo test -- --ignored`."]
 fn mirror_matches_full_engine_woodwinds() {
     check_mirror_parity("Flute 1", ProfileKind::Woodwinds);
 }
 
 #[test]
+#[ignore = "the orchestral .mxl corpus is not in the repo: `features/examples/mxl` holds transcriptions of commercial scores, which this public repo cannot redistribute. Point it at a local copy and run `cargo test -- --ignored`."]
 fn mirror_matches_full_engine_brass() {
     check_mirror_parity("Trombone 1", ProfileKind::Brass);
 }
 
 #[test]
+#[ignore = "the orchestral .mxl corpus is not in the repo: `features/examples/mxl` holds transcriptions of commercial scores, which this public repo cannot redistribute. Point it at a local copy and run `cargo test -- --ignored`."]
 fn mirror_matches_full_engine_strings_divisi() {
     check_mirror_parity("Violon 1", ProfileKind::Strings);
 }
 
 #[test]
+#[ignore = "the orchestral .mxl corpus is not in the repo: `features/examples/mxl` holds transcriptions of commercial scores, which this public repo cannot redistribute. Point it at a local copy and run `cargo test -- --ignored`."]
 fn mirror_matches_full_engine_strings_celli() {
     check_mirror_parity("Violoncelles", ProfileKind::Strings);
 }
@@ -142,6 +146,7 @@ fn mirror_matches_full_engine_strings_celli() {
 /// The whole corpus: every part of every score, strings profile forced where
 /// detection says strings, otherwise detected profile — mirror must match.
 #[test]
+#[ignore = "the orchestral .mxl corpus is not in the repo: `features/examples/mxl` holds transcriptions of commercial scores, which this public repo cannot redistribute. Point it at a local copy and run `cargo test -- --ignored`."]
 fn mirror_matches_full_engine_across_corpus() {
     let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../examples/mxl");
     let mut files: Vec<_> = std::fs::read_dir(&dir)

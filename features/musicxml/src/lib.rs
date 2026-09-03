@@ -61,6 +61,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "the reference chart corpus is not in the repo: `features/examples/png-project-charts`. Drop a local copy in and run `cargo test -- --ignored`."]
     fn imports_lord_of_the_fight_metadata() {
         let chart = import_file(fixture("02 LORD OF THE FIGHT Master RS.musicxml"))
             .expect("musicxml import should succeed");
@@ -88,6 +89,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "the reference chart corpus is not in the repo: `features/examples/png-project-charts`. Drop a local copy in and run `cargo test -- --ignored`."]
     fn imports_lord_of_the_fight_measures() {
         use keyflow_proto::chart::notations::RepeatMark;
         use keyflow_proto::chart::types::Measure;
@@ -199,6 +201,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "the reference chart corpus is not in the repo: `features/examples/png-project-charts`. Drop a local copy in and run `cargo test -- --ignored`."]
     fn lord_of_the_fight_keyflow_roundtrip_preserves_semantics_without_annotations() {
         use keyflow_proto::chart::types::Measure;
 
@@ -250,6 +253,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "the reference chart corpus is not in the repo: `features/examples/png-project-charts`. Drop a local copy in and run `cargo test -- --ignored`."]
     fn presence_keyflow_export_expands_cross_section_repeat() {
         let direct = import_file(fixture("04 PRESENCE Master RS.musicxml"))
             .expect("musicxml import should succeed");
@@ -305,6 +309,7 @@ mod tests {
     /// `source_measure_number` so the test stays meaningful no matter how
     /// the importer slices sections.
     #[test]
+    #[ignore = "the reference chart corpus is not in the repo: `features/examples/png-project-charts`. Drop a local copy in and run `cargo test -- --ignored`."]
     fn lord_of_the_fight_structure() {
         use keyflow_proto::chart::types::Measure;
         use keyflow_proto::sections::SectionType;

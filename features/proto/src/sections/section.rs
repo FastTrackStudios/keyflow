@@ -256,7 +256,14 @@ impl Section {
             match (self.number, self.split_letter) {
                 (Some(n), Some(l)) => format!("{}{} {}{}", prefix, base, n, l),
                 (Some(n), None) => format!("{}{} {}", prefix, base, n),
-                (None, _) => format!("{}{}", prefix, base),
+                // A split letter survives on its own. `SectionNumberer` drops
+                // the number when a type has only one generation, on the
+                // grounds that "Verse", "Verse a", "Verse b" reads better
+                // than "Verse 1", "Verse 1a", "Verse 1b" — but this arm then
+                // dropped the letter too, so two consecutive verses both came
+                // back as plain "Verse" and nothing could tell them apart.
+                (None, Some(l)) => format!("{}{} {}", prefix, base, l),
+                (None, None) => format!("{}{}", prefix, base),
             }
         }
     }

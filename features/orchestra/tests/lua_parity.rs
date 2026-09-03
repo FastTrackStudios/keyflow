@@ -52,6 +52,7 @@ fn assert_first_notes(out: &PartOutput, expected: &[NoteRow]) {
 }
 
 #[test]
+#[ignore = "the orchestral .mxl corpus is not in the repo: `features/examples/mxl` holds transcriptions of commercial scores, which this public repo cannot redistribute. Point it at a local copy and run `cargo test -- --ignored`."]
 fn flute1_woodwinds_matches_lua() {
     let out = run("Flute 1", ProfileKind::Woodwinds);
     assert_eq!(out.notes.len(), 215);
@@ -72,6 +73,7 @@ fn flute1_woodwinds_matches_lua() {
 }
 
 #[test]
+#[ignore = "the orchestral .mxl corpus is not in the repo: `features/examples/mxl` holds transcriptions of commercial scores, which this public repo cannot redistribute. Point it at a local copy and run `cargo test -- --ignored`."]
 fn trombone1_brass_matches_lua() {
     let out = run("Trombone 1", ProfileKind::Brass);
     assert_eq!(out.notes.len(), 69);
@@ -93,6 +95,7 @@ fn trombone1_brass_matches_lua() {
 }
 
 #[test]
+#[ignore = "the orchestral .mxl corpus is not in the repo: `features/examples/mxl` holds transcriptions of commercial scores, which this public repo cannot redistribute. Point it at a local copy and run `cargo test -- --ignored`."]
 fn violin1_strings_divisi_matches_lua() {
     let out = run("Violon 1", ProfileKind::Strings);
     assert_eq!(out.notes.len(), 143);
@@ -110,6 +113,7 @@ fn violin1_strings_divisi_matches_lua() {
 }
 
 #[test]
+#[ignore = "the orchestral .mxl corpus is not in the repo: `features/examples/mxl` holds transcriptions of commercial scores, which this public repo cannot redistribute. Point it at a local copy and run `cargo test -- --ignored`."]
 fn harp_gliss_and_velocity_dynamics_match_lua() {
     let out = run("Harpe", ProfileKind::Harp);
     assert_eq!(out.notes.len(), 89);

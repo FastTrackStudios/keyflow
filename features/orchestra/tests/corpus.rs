@@ -18,6 +18,7 @@ fn corpus_files() -> Vec<PathBuf> {
 }
 
 #[test]
+#[ignore = "the orchestral .mxl corpus is not in the repo: `features/examples/mxl` holds transcriptions of commercial scores, which this public repo cannot redistribute. Point it at a local copy and run `cargo test -- --ignored`."]
 fn all_corpus_files_parse() {
     let files = corpus_files();
     assert!(
@@ -50,6 +51,7 @@ fn all_corpus_files_parse() {
 }
 
 #[test]
+#[ignore = "the orchestral .mxl corpus is not in the repo: `features/examples/mxl` holds transcriptions of commercial scores, which this public repo cannot redistribute. Point it at a local copy and run `cargo test -- --ignored`."]
 fn engine_runs_on_all_corpus_parts_and_invariants_hold() {
     use keyflow_orchestra::{detect_profile, process_part, Config};
     for f in corpus_files() {
@@ -160,6 +162,7 @@ fn engine_runs_on_all_corpus_parts_and_invariants_hold() {
 }
 
 #[test]
+#[ignore = "the orchestral .mxl corpus is not in the repo: `features/examples/mxl` holds transcriptions of commercial scores, which this public repo cannot redistribute. Point it at a local copy and run `cargo test -- --ignored`."]
 fn analysis_reports_instrumentation() {
     // Jurassic Park: a full orchestral score — should detect several families.
     let f = corpus_dir().join("theme-from-jurassic-park.mxl");

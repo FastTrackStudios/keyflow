@@ -169,15 +169,26 @@ just ci              # what CI runs, in CI's order
 just grammar         # regenerate the tree-sitter C parser (gitignored)
 ```
 
-### Known-failing tests on a clean clone
+### The corpus tests are `#[ignore]`d
 
-~31 tests fail on a fresh checkout. Thirty read reference corpora
-(`lord_of_the_fight`, the orchestra corpus) that are not in the repo and
-failed identically in `session` before the split; the thirty-first,
-`editor-keyflow-lang … section_headers_get_resolved_name_badges`, fails
-identically in `task` at the commit those crates moved from. None is
-split damage. Fix them by moving the corpus in or marking them
-`#[ignore]`; do not "fix" them by weakening assertions.
+`just test` is green on a clean clone. Twenty-nine tests that read
+reference corpora are marked `#[ignore]`, because the corpora are not in
+the repo and cannot be:
+
+- `features/examples/mxl` — the orchestral corpus the `keyflow-orchestra`
+  tests read, which is transcriptions of commercial scores. This repo is
+  public; they are not ours to redistribute.
+- `features/examples/png-project-charts` — the reference charts the
+  MusicXML importer and the engraver layout tests measure against.
+
+Put a local copy at those paths and run `cargo test -- --ignored` to run
+them. Each `#[ignore]` says which corpus it wants.
+
+They used to just fail, all thirty-one of them, and CI had been red on
+every commit for long enough that the job carried no signal — a real
+regression could not be told from the standing noise. If you add a test
+that needs data the repo does not ship, `#[ignore]` it with a reason.
+Never weaken an assertion to make it pass, and never leave it failing.
 
 ## Logging & tracing — wide events, ALWAYS
 
