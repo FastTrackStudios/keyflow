@@ -121,11 +121,21 @@ impl TextCue {
 
     /// Parse a text cue from a line starting with @
     ///
-    /// Format: @`<group>` "`<text>`" or @`<group>`:`<beat>` "`<text>`"
-    /// Examples:
-    /// - @keys "synth here"
-    /// - @keys:2 "hit on beat 2"
-    /// - @drums:3 "crash"
+    /// Addressed to one group:
+    /// - `@keys "synth here"`
+    /// - `@keys:2 "hit on beat 2"`
+    /// - `@drums:3 "crash"`
+    ///
+    /// Addressed to everyone — no group, no quotes, the rest of the line
+    /// is the cue:
+    /// - `@Build`
+    /// - `@Go Crazy`
+    /// - `@Hit:3`
+    ///
+    /// The bare form is what most charts want. Naming a group is for when
+    /// the cue is genuinely for one player and would be noise for the
+    /// rest of the band; asking for quotes and a group to write "Build"
+    /// is a tax on the common case.
     pub fn parse(line: &str) -> Result<Self, String> {
         let line = line.trim();
 
@@ -166,7 +176,24 @@ impl TextCue {
                 Err("Missing closing quote for text cue".to_string())
             }
         } else {
-            Err("Text cue must have quoted text".to_string())
+            // No quotes: the whole line is a cue for the whole band. A
+            // trailing `:<number>` pins it to a beat; a colon anywhere
+            // else is just part of what you wrote.
+            let (text, beat) = match content.rsplit_once(':') {
+                Some((head, tail)) => match tail.trim().parse::<u8>() {
+                    Ok(beat) => (head.trim(), Some(beat)),
+                    Err(_) => (content, None),
+                },
+                None => (content, None),
+            };
+
+            if text.is_empty() {
+                return Err("Cue text cannot be empty".to_string());
+            }
+
+            let mut cue = TextCue::new(InstrumentGroup::All, text.to_string());
+            cue.beat = beat;
+            Ok(cue)
         }
     }
 }
@@ -238,9 +265,34 @@ mod tests {
     #[test]
     fn test_text_cue_errors() {
         assert!(TextCue::parse("keys \"synth here\"").is_err());
-        assert!(TextCue::parse("@keys synth here").is_err());
         assert!(TextCue::parse("@keys \"missing quote").is_err());
         assert!(TextCue::parse("@keys:abc \"invalid beat\"").is_err());
+        assert!(TextCue::parse("@").is_err());
+    }
+
+    #[test]
+    fn an_unquoted_cue_is_addressed_to_the_whole_band() {
+        // This used to be an error — quotes and a group were mandatory.
+        // Requiring both to write "Build" taxed the common case, so an
+        // unquoted line is now a cue for everyone. The cost is that a
+        // grouped cue written without quotes no longer complains; it
+        // becomes a band cue whose text starts with the group name,
+        // which is visible on the page rather than silent.
+        let cue = TextCue::parse("@keys synth here").unwrap();
+        assert_eq!(cue.group, InstrumentGroup::All);
+        assert_eq!(cue.text, "keys synth here");
+
+        let build = TextCue::parse("@Build").unwrap();
+        assert_eq!(build.group, InstrumentGroup::All);
+        assert_eq!(build.text, "Build");
+        assert_eq!(build.beat, None);
+
+        let hit = TextCue::parse("@Hit:3").unwrap();
+        assert_eq!(hit.text, "Hit");
+        assert_eq!(hit.beat, Some(3));
+
+        // A colon that is not a beat stays in the text.
+        assert_eq!(TextCue::parse("@Gtr: clean").unwrap().text, "Gtr: clean");
     }
 
     #[test]
