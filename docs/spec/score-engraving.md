@@ -14,7 +14,7 @@ PDFs for 16 songs, including tacet sheets and multirest-heavy layouts).
 | Source | What it is |
 | --- | --- |
 | `~/.fts-scratch/aplp-sample/games.musicxml` | Games People Play, real 23-part orchestral score (winds, brass, perc, strings, rhythm/vox) |
-| `crates/keyflow/examples/png-project-charts/*.musicxml` | Tom Brooks Finale exports (lead-sheet-grade, harmony + melody + directions) |
+| `features/examples/png-project-charts/*.musicxml` | Tom Brooks Finale exports (lead-sheet-grade, harmony + melody + directions) |
 | Columbus PDFs | Reference renderings only (visual ground truth, not input) |
 
 `keyflow_orchestra::score::load` already parses games.musicxml (23 parts,

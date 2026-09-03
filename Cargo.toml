@@ -17,21 +17,21 @@
 resolver = "3"
 
 members = [
-    "crates/keyflow/cli",
-    "crates/keyflow/keyflow",
-    "crates/keyflow/keyflow-annotate",
-    "crates/keyflow/keyflow-chordpro",
-    "crates/keyflow/keyflow-daw-analysis",
-    "crates/keyflow/keyflow-live",
-    "crates/keyflow/keyflow-lsp",
-    "crates/keyflow/keyflow-midi",
-    "crates/keyflow/keyflow-musicxml",
-    "crates/keyflow/keyflow-musx",
-    "crates/keyflow/keyflow-orchestra",
-    "crates/keyflow/keyflow-sync",
-    "crates/keyflow/keyflow-text",
-    "crates/keyflow/keyflow-ui",
-    "crates/keyflow/tree-sitter-keyflow",
+    "apps/cli",
+    "features/keyflow",
+    "features/annotate",
+    "features/chordpro",
+    "features/daw-analysis",
+    "features/live",
+    "features/lsp",
+    "features/midi",
+    "features/musicxml",
+    "features/musx",
+    "features/orchestra",
+    "features/sync",
+    "features/text",
+    "features/ui",
+    "features/tree-sitter",
     "features/engraver/engraver",
     "features/engraver/proto",
     "features/engraver/score",
@@ -58,26 +58,26 @@ repository = "https://github.com/FastTrackStudios/keyflow"
 # vello), which the wasm site does not want (it renders through
 # vello_hybrid) and the iOS build cannot take (printpdf's azul dep does not
 # build for iOS). Every consumer names the features it needs.
-keyflow = { path = "crates/keyflow/keyflow", default-features = false }
-keyflow-text = { path = "crates/keyflow/keyflow-text" }
-keyflow-chordpro = { path = "crates/keyflow/keyflow-chordpro" }
-keyflow-midi = { path = "crates/keyflow/keyflow-midi" }
-keyflow-live = { path = "crates/keyflow/keyflow-live" }
-keyflow-musicxml = { path = "crates/keyflow/keyflow-musicxml" }
-keyflow-musx = { path = "crates/keyflow/keyflow-musx" }
-keyflow-annotate = { path = "crates/keyflow/keyflow-annotate" }
-keyflow-orchestra = { path = "crates/keyflow/keyflow-orchestra" }
-keyflow-sync = { path = "crates/keyflow/keyflow-sync" }
-keyflow-daw-analysis = { path = "crates/keyflow/keyflow-daw-analysis" }
+keyflow = { path = "features/keyflow", default-features = false }
+keyflow-text = { path = "features/text" }
+keyflow-chordpro = { path = "features/chordpro" }
+keyflow-midi = { path = "features/midi" }
+keyflow-live = { path = "features/live" }
+keyflow-musicxml = { path = "features/musicxml" }
+keyflow-musx = { path = "features/musx" }
+keyflow-annotate = { path = "features/annotate" }
+keyflow-orchestra = { path = "features/orchestra" }
+keyflow-sync = { path = "features/sync" }
+keyflow-daw-analysis = { path = "features/daw-analysis" }
 # Defaults OFF at the root: keyflow-ui's default is `web`, which enables
 # `dioxus/desktop` — and that drags dioxus-desktop -> tungstenite ->
 # native-tls -> openssl-sys into a wasm32 build, where openssl does not
 # compile. Consumers name the surface they want (`web` / `native` /
 # `wasm-graphics`).
-keyflow-ui = { path = "crates/keyflow/keyflow-ui", default-features = false }
-keyflow-cli = { path = "crates/keyflow/cli" }
-keyflow-lsp = { path = "crates/keyflow/keyflow-lsp" }
-tree-sitter-keyflow = { path = "crates/keyflow/tree-sitter-keyflow" }
+keyflow-ui = { path = "features/ui", default-features = false }
+keyflow-cli = { path = "apps/cli" }
+keyflow-lsp = { path = "features/lsp" }
+tree-sitter-keyflow = { path = "features/tree-sitter" }
 engraver = { path = "features/engraver/engraver", default-features = false }
 engraver-proto = { path = "features/engraver/proto", default-features = false }
 engraver-score = { path = "features/engraver/score" }

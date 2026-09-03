@@ -30,15 +30,31 @@ Never commit those overrides — the paths are machine-specific.
 
 ## Layout
 
+One directory per feature under `features/`, named for the feature, not
+for the crate: `keyflow-musicxml` lives in `features/musicxml`. Crate
+names keep their `keyflow-` prefix; directory names drop it.
+
 ```
-crates/keyflow/       the language: facade + text/chordpro/midi/musicxml/
-                      musx/live/sync/annotate/orchestra/daw-analysis/ui,
-                      the LSP, the CLI, the tree-sitter grammar
+features/keyflow/     the facade — the public API surface
+features/text/        the parser and the chart model
+features/chordpro/    ) the formats: import and export
+features/midi/        )
+features/musicxml/    )
+features/musx/        )
+features/live/        ) the rest of the language: live performance,
+features/sync/        ) synced lyrics, annotation, orchestral parts,
+features/annotate/    ) and DAW-session analysis
+features/orchestra/   )
+features/daw-analysis/)
+features/ui/          the Dioxus chart components
+features/lsp/         the language server
+features/tree-sitter/ the grammar
 features/engraver/    the layout + render engine: facade, proto (the
                       layout model and engine), score (import/export)
 features/editor/      this repo's half of the editor integration:
                       editor-keyflow (the fence renderer) and
                       editor-keyflow-lang (decorations, hover, highlight)
+apps/cli/             the `keyflow` command line tool
 apps/web/             keyflow.fasttrackstudio.app — landing page, editor,
                       guide. Wasm; charts render as SVG.
 apps/mobile/          Keyflow for iOS — chart library + the Keyflow

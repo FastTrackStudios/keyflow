@@ -46,10 +46,10 @@ css_ab*.tsv
 # every run, and nothing reads them back — they are for a human to look
 # at, not fixtures. Tracked, they made every test run dirty the tree, and
 # the churn rode along in eight unrelated commits.
-crates/keyflow/keyflow/tests/output/
+features/keyflow/tests/output/
 
 # tree-sitter's generated C parser — regenerate with `just grammar`.
-crates/keyflow/tree-sitter-keyflow/src/parser.c
+features/tree-sitter/src/parser.c
 
 # Tailwind: the compiled sheet is build output (`just tailwind`), and
 # .tailwind-src/ is symlinks to resolved git-dep checkouts — both are

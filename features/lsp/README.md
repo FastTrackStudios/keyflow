@@ -58,7 +58,7 @@ vim.lsp.start({
 Use the bundled extension scaffold in `editors/vscode-keyflow/`:
 
 ```bash
-cd crates/keyflow-lsp/editors/vscode-keyflow
+cd features-lsp/editors/vscode-keyflow
 npm install
 npm run package          # produces a .vsix
 code --install-extension keyflow-vscode-*.vsix

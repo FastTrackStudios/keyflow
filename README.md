@@ -31,7 +31,7 @@ or PDF.
 ## Layout
 
 ```
-crates/keyflow/
+features/
   keyflow            the facade — the only public API surface
   keyflow-text       the .kf parser and exporter
   keyflow-chordpro   ChordPro parsing, merged into charts as lyric tracks

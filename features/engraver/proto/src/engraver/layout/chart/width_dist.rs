@@ -949,7 +949,7 @@ mod tests {
     #[test]
     fn written_rest_weight_is_sparser_than_visible_chord_content() {
         let mut fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        fixture.push("../../../crates/keyflow");
+        fixture.push("../../../features");
         fixture.push("examples/png-project-charts/02 LORD OF THE FIGHT Master RS.musicxml");
         let chart = keyflow_musicxml::import_file(fixture).expect("LotF should import");
         let measures: Vec<&crate::chart::types::Measure> = chart
@@ -1023,7 +1023,7 @@ mod tests {
     #[test]
     fn lotf_default_measures_do_not_shrink_without_same_line_expansion_pressure() {
         let mut fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        fixture.push("../../../crates/keyflow");
+        fixture.push("../../../features");
         fixture.push("examples/png-project-charts/02 LORD OF THE FIGHT Master RS.musicxml");
         let chart = keyflow_musicxml::import_file(fixture).expect("LotF should import");
         let engine = test_engine();
@@ -1059,7 +1059,7 @@ mod tests {
     #[test]
     fn lotf_opening_dense_measures_are_capped_against_written_rests() {
         let mut fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        fixture.push("../../../crates/keyflow");
+        fixture.push("../../../features");
         fixture.push("examples/png-project-charts/02 LORD OF THE FIGHT Master RS.musicxml");
         let chart = keyflow_musicxml::import_file(fixture).expect("LotF should import");
         let engine = test_engine();

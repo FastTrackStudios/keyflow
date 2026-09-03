@@ -61,7 +61,7 @@ Each `.mid` in this folder also has a deterministic chart-text snapshot
 written next to it as `<basename>.kf`. The snapshot is the output of
 `generate_chart_text(&midi, &MidiChartConfig)` — i.e. the full
 import-and-format pipeline. The tests live in
-`crates/keyflow-midi/tests/snapshot_harness.rs` and are gated with
+`features-midi/tests/snapshot_harness.rs` and are gated with
 `#[ignore]` because the corpus may not be present in every clone.
 
 ```bash

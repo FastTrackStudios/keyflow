@@ -110,7 +110,7 @@ lsp *ARGS:
 # src/parser.c is gitignored, so a fresh clone compiles a NULL stub and
 # warns until this has been run once.
 grammar:
-    cd crates/keyflow/tree-sitter-keyflow && tree-sitter generate
+    cd features/tree-sitter && tree-sitter generate
 
 # ── Disk / build-time hygiene ────────────────────────────────────────────
 # Cargo never garbage-collects target/: every rebuild with a changed

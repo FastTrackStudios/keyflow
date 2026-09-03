@@ -75,7 +75,7 @@ Run this to find raw HTML elements that should become `architect-ui` components:
 
 ```bash
 grep -rn 'rsx! *{ *button\|class: "card"\|<input\|<select' \
-  crates/keyflow-ui/src --include='*.rs'
+  features-ui/src --include='*.rs'
 ```
 
 ### Per-file checklist

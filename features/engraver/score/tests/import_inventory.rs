@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 fn in_repo_fixture() -> PathBuf {
     let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    p.push("../../../crates/keyflow/examples/png-project-charts");
+    p.push("../../../features/examples/png-project-charts");
     p.push("02 LORD OF THE FIGHT Master RS.musicxml");
     p
 }

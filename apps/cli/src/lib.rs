@@ -4,7 +4,7 @@
 
 //! keyflow-cli — the `kf` command-line surface as a library.
 //!
-//! Former `apps/keyflow-cli` binary crate, kept as a crates/keyflow/cli
+//! Former `apps/keyflow-cli` binary crate, kept as a apps/cli
 //! subcrate (its clap tree + render pipeline are too large to inline into
 //! the `keyflow` facade cleanly). Embedders call [`cli_main`] with
 //! pre-split argv: the thin `kf` binary (src/main.rs) and the unified
