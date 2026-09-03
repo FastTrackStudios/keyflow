@@ -3263,10 +3263,18 @@ impl<'a> ChartParser<'a> {
                 };
             let (caret_token, caret_rows) = Self::extract_caret_figure(effective_token);
             let effective_token = caret_token.as_str();
-            let (chord_token, figured_bass_rows, suspension_figure) = if chord_system
-                == NotationSystem::Degree
-                && (Self::is_leading_flat_degree(effective_token)
-                    || Self::is_merged_degree(effective_token))
+            // A leading flat degree is a flat degree whatever the rest of
+            // the line is written in. This used to be gated on the scope
+            // already being `Degree`, so in a letters-majority chart `b3`
+            // fell through to the suffix extractors below, which read the
+            // `3` as a suspension figure and left `b` — engraving `C b3 F G`
+            // as `C B F G`. Uppercase `B` is the note; lowercase `b` before
+            // a digit is a flat.
+            let (chord_token, figured_bass_rows, suspension_figure) = if Self::is_leading_flat_degree(
+                effective_token,
+            )
+                || (chord_system == NotationSystem::Degree
+                    && Self::is_merged_degree(effective_token))
             {
                 (Self::split_merged_degree(effective_token), caret_rows, None)
             } else {
@@ -4104,8 +4112,12 @@ impl<'a> ChartParser<'a> {
                 _ => None,
             },
             'b' => match c1 {
-                Some(c) if is_roman(c) => Some(true), // bIII (flat Roman)
-                _ => None,                            // b+digit is the ambiguous case
+                // Symmetric with `#`: `bIII` and `b3` are both flats, and
+                // neither has a reading as a note letter — lowercase `b` is
+                // absent from the note-letter arms above for exactly this
+                // reason.
+                Some(c) if is_degree_digit(c) || is_roman(c) => Some(true),
+                _ => None,
             },
             _ => None,
         }
@@ -4295,13 +4307,20 @@ impl<'a> ChartParser<'a> {
         // Normalize case for chord parsing - capitalize first letter if it's a
         // note name. This allows "cmaj7" to be parsed as "Cmaj7". A leading
         // ASCII `b` is a flat, though: keep it lowercase when it precedes a
-        // Roman numeral (`bIII` — always unambiguous) or a digit in a
-        // degree-based context (`b7` = ♭7), instead of turning it into note B.
+        // Roman numeral (`bIII`) or a digit (`b7` = ♭7), instead of turning
+        // it into note B.
+        //
+        // This does not depend on the surrounding notation system. It used
+        // to, and `C b3 F G` engraved as `C B F G` — a letters-majority
+        // chart resolved to `Letter`, and `b3` was normalized into the note
+        // B, silently. Lowercase `b` is not a note letter anywhere in this
+        // parser (`classify_token_system` lists `a c d e f g` and pointedly
+        // omits it), so `b` before a digit has only one reading. A B chord
+        // is written `B`.
         let second = chord_part.as_bytes().get(1).copied();
         let next_is_roman = matches!(second, Some(b'I' | b'V' | b'i' | b'v'));
         let next_is_digit = second.is_some_and(|c| c.is_ascii_digit());
-        let keep_lowercase_flat = chord_part.starts_with('b')
-            && (next_is_roman || (next_is_digit && system == NotationSystem::Degree));
+        let keep_lowercase_flat = chord_part.starts_with('b') && (next_is_roman || next_is_digit);
         let normalized_token = if keep_lowercase_flat {
             chord_part.to_string()
         } else {
@@ -4312,15 +4331,40 @@ impl<'a> ChartParser<'a> {
         let mut lexer = Lexer::new(normalized_token.clone());
         let tokens = lexer.tokenize();
 
-        let mut chord = Chord::parse_with_system(&tokens, system)
+        // `b3` is a flatted degree even in a chart that is otherwise all
+        // letters, so the token is parsed as a degree regardless of the
+        // scope's resolved system. Keeping the lowercase `b` is not enough
+        // on its own — the chord parser re-reads it as note B when handed
+        // `Letter`.
+        let token_system = if keep_lowercase_flat && next_is_digit {
+            NotationSystem::Degree
+        } else {
+            system
+        };
+
+        let mut chord = Chord::parse_with_system(&tokens, token_system)
             .map_err(|e| format!("Failed to parse chord '{}': {:?}", chord_part, e))?;
+
+        // The `/target` of a secondary chord, kept so the rendered symbol
+        // still reads `V/V` after the target is folded into the root.
+        let mut applied_suffix: Option<String> = None;
 
         // Add bass note if this is a slash chord
         if let Some(bass_str) = bass_part {
             let bass_normalized = Self::normalize_chord_case(bass_str);
             let bass_notation = RootNotation::from_string(&bass_normalized)
                 .ok_or_else(|| format!("Invalid bass note: {}", bass_str))?;
-            chord.bass = Some(bass_notation);
+            // A Roman numeral over a Roman numeral is a secondary chord
+            // (`V/V` = "five of five"), not a slash bass — the same rule
+            // `Chord::parse` applies. This path split the slash itself
+            // before ever reaching that logic, so `V/V` arrived here as a
+            // `V` triad with a `V` in the bass and resolved to `G/V`.
+            if chord.root.is_roman() && bass_notation.is_roman() {
+                applied_suffix = Some(bass_notation.to_string());
+                chord.root = chord.root.clone().with_applied_target(bass_notation);
+            } else {
+                chord.bass = Some(bass_notation);
+            }
         }
 
         // Extract the root from the ORIGINAL token (before normalization, but after apostrophes)
@@ -4357,6 +4401,8 @@ impl<'a> ChartParser<'a> {
         // Append bass note to full_symbol for slash chords (e.g., "F" + "/C" -> "F/C")
         if let Some(bass) = &chord.bass {
             full_symbol = format!("{}/{}", full_symbol, bass);
+        } else if let Some(target) = &applied_suffix {
+            full_symbol = format!("{}/{}", full_symbol, target);
         }
 
         // Give a bare number-system chord its key-implied (diatonic) quality:
@@ -4753,8 +4799,14 @@ mod tests {
     }
 
     #[test]
-    fn contextual_b7_letter_line_is_note_b() {
-        assert_eq!(chord_symbols("C F b7 G"), ["C", "F", "B7", "G"]);
+    fn a_lowercase_flat_degree_is_a_flat_even_on_a_letter_line() {
+        // This used to assert `["C", "F", "B7", "G"]` — a letters-majority
+        // line resolved to `Letter`, and `b7` was read as the note B.
+        // Lowercase `b` before a digit is a flat in every context; the note
+        // is written `B`, and `B7` still parses as B dominant seven.
+        assert_eq!(chord_symbols("C F b7 G"), ["C", "F", "b7", "G"]);
+        assert_eq!(chord_symbols("C F b3 G"), ["C", "F", "b3", "G"]);
+        assert_eq!(chord_symbols("C F B7 G"), ["C", "F", "B7", "G"]);
     }
 
     #[test]
@@ -4768,8 +4820,11 @@ mod tests {
     }
 
     #[test]
-    fn contextual_b7_no_context_defaults_to_note_b() {
-        assert_eq!(chord_symbols("b7"), ["B7"]);
+    fn a_lone_flat_degree_is_a_flat_degree() {
+        // Previously `["B7"]`: with no line context to vote on, the parser
+        // fell back to reading the leading `b` as the note.
+        assert_eq!(chord_symbols("b7"), ["b7"]);
+        assert_eq!(chord_symbols("B7"), ["B7"]);
     }
 
     #[test]

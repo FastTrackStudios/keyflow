@@ -254,22 +254,16 @@ fn renotate_chord(parsed_in: &Chord, ctx: &Ctx) -> Option<(Chord, String)> {
             parsed.root = new_root;
             parsed.bass = new_bass;
 
-            // A bare Nashville number already carries its degree's diatonic
-            // triad quality (`2` = ii minor in a major key). So for a PLAIN
-            // major/minor triad whose quality is the diatonic one, drop the
-            // explicit quality marker (`F#m` → `6`, `Bm` → `2`). Any seventh /
-            // extension / addition / alteration / suspension keeps the full
-            // quality string (`Bm7` → `2m7`), a deviant quality keeps its marker
-            // (`Am` in C → `1m`), and diminished / augmented triads always keep
-            // their `°` / `+`.
-            let (deg, _acc) = degree_of(ctx.song_key, &root_note);
-            let is_diatonic_triad = is_plain_triad(parsed_in)
-                && matches!(parsed_in.quality, ChordQuality::Major | ChordQuality::Minor)
-                && ctx.song_key.diatonic_quality(deg) == Some(parsed_in.quality);
-            if is_diatonic_triad {
-                parsed.quality = ChordQuality::Major;
-            }
-
+            // The quality marker is kept, including when it is the degree's
+            // diatonic one: `Em` in G is `6m`, not `6`.
+            //
+            // This used to drop it, on the reasoning that a bare Nashville
+            // number already implies its diatonic triad — which is true of
+            // the system as written, but not of how the charts are read.
+            // A player scanning `6` has to know the key, work out the sixth
+            // degree, and recall that it is minor; `6m` says it. Both spell
+            // the same chord on the way back in, so keeping the marker costs
+            // nothing and the round trip is unchanged.
             let symbol = parsed.to_string();
             Some((parsed, symbol))
         }
@@ -298,16 +292,6 @@ fn renotate_chord(parsed_in: &Chord, ctx: &Ctx) -> Option<(Chord, String)> {
     }
 }
 
-/// True when `chord` is a plain triad — no seventh family, extension, addition,
-/// alteration, or omission. Only plain triads are eligible to drop their
-/// Nashville quality marker.
-fn is_plain_triad(chord: &Chord) -> bool {
-    chord.family.is_none()
-        && !chord.extensions.has_any()
-        && chord.alterations.is_empty()
-        && chord.additions.is_empty()
-        && chord.omissions.is_empty()
-}
 
 /// Parse a single chord SYMBOL (e.g. `"F#m"`, `"Bm7/A"`) and re-spell it under
 /// `view`, treating `from_key` as the song's own functional key. Returns the
@@ -781,14 +765,14 @@ mod tests {
             capo: 0,
         };
         let out = apply_view(&c, &view);
-        // A bare diatonic minor triad (vi = Em) drops its `m` → `6`.
-        assert_eq!(symbols(&out), vec!["1", "4", "5", "6"]);
+        // A diatonic minor triad keeps its marker: vi = Em → `6m`.
+        assert_eq!(symbols(&out), vec!["1", "4", "5", "6m"]);
     }
 
     #[test]
-    fn nashville_diatonic_triads_drop_marker() {
-        // In A: plain diatonic minor triads drop the `m`; sevenths/extensions
-        // keep it; a non-diatonic minor triad keeps it; slash bass unaffected.
+    fn nashville_triads_keep_their_quality_marker() {
+        // In A: every minor triad keeps its `m`, diatonic or not, plain or
+        // extended. Slash bass unaffected.
         let c = chart_in(
             key("A"),
             &[
@@ -804,7 +788,8 @@ mod tests {
         assert_eq!(
             symbols(&out),
             vec![
-                "1", "4", "5", "6", "2", "3", "2m7", "6m7", "1sus4", "1maj7", "1/3", "2m7/1",
+                "1", "4", "5", "6m", "2m", "3m", "2m7", "6m7", "1sus4", "1maj7", "1/3",
+                "2m7/1",
             ]
         );
 
@@ -980,13 +965,12 @@ G Am7/G Bm/G C/G x2\n";
         assert!(out.contains("#A 127bpm 4/4"));
         assert!(out.contains("VS 8"));
         assert!(out.contains("Interlude \"Breakdown\" 8"));
-        // A D E → 1 4 5, F#m → 6 (diatonic minor triad drops `m`); rhythm + x2 preserved.
+        // A D E → 1 4 5, F#m → 6m; rhythm + x2 preserved.
         assert!(out.contains("1 //// 1 // 4 // 1 // 1 1"));
         assert!(out.contains("5 4 1 1"));
-        assert!(out.contains("6 4 1 5 x2"));
-        // A Bm7/A C#m/A D/A → in A: B=2 (kept m7), C#=3 (plain minor → drop m),
-        // D=4, bass A=1.
-        assert!(out.contains("1 2m7/1 3/1 4/1 x2"));
+        assert!(out.contains("6m 4 1 5 x2"));
+        // A Bm7/A C#m/A D/A → in A: B=2m7, C#=3m, D=4, bass A=1.
+        assert!(out.contains("1 2m7/1 3m/1 4/1 x2"));
     }
 
     #[test]

@@ -153,25 +153,70 @@ chart engraves the same either way. It works in all three systems — `V:7`,
 
 Write it. `1:7` reads at a glance; `17` is correct and easy to misread.
 
-## Sharpened degrees
+## Raised and lowered degrees
 
-A `#` before a degree or numeral raises it, which is how you write a chromatic
-chord:
+A `#` or a `b` before a degree or numeral raises or lowers it, which is how you
+write a chromatic chord:
 
 ```kf+
-Sharps - Demo
+Accidentals - Demo
 4/4 #C
 
 VS 4
-1 #4 5 1
+1 #4 b7 1
 ```
 
-In C that is C, F♯, G, C.
+In C that is C, F♯, B♭, C — `b7` is the flat seventh degree, the borrowed chord
+that makes a mixolydian turnaround.
 
-> **Flats before a degree do not work yet.** `b3`, `b7`, `bIII` and `bVII` are
-> currently read as the *note* B — `b7` engraves as B7, not as the flat-seven
-> degree. Until that is fixed, write the borrowed chord by its letter name
-> (`Bb` rather than `b7`), which is unambiguous in any chart.
+Lowercase `b` before a digit is always a flat, even in a chart that is
+otherwise all letter names:
+
+```kf+
+Accidentals - Demo
+4/4 #C
+
+VS 4
+C b3 F G
+```
+
+The note B is written `B`, uppercase — that is what leaves the lowercase form
+free to mean "flat". `B`, `B7` and `Bb` are all still the note.
+
+## Slashes mean different things
+
+A `/` is a slash bass in letter names and in numbers — the chord on top, the
+bass note underneath:
+
+```kf+
+Slashes - Demo
+4/4 #C
+
+VS 4
+C G/B Am F
+```
+
+In Roman numerals it is not. There, `/` writes a **secondary chord** — `V/V` is
+"five of five", the dominant of the dominant:
+
+```kf+
+Slashes - Demo
+4/4 #C
+
+VS 4
+I V/V IV V
+```
+
+In C, `V/V` is D: take the fifth degree (G), treat it as a temporary tonic, and
+play *its* fifth. `V/vi` is E, `V/ii` is A. Add a seventh and it behaves as you
+would expect — `V7/V` is D7.
+
+This is not an inconsistency to work around; it is what the two systems already
+mean to the people reading them. Roman numerals describe *function*, so a slash
+between two of them describes a function applied to a degree. Letters and
+numbers name *chords*, so a slash between them names a chord over a bass. If
+you want an inversion in Roman numerals, write the figure after a `^` — `V^6`
+for the first inversion — rather than a slash.
 
 ## Mixing systems
 
