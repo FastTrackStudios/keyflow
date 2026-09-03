@@ -2,10 +2,48 @@
  *
  * Deliberately small and hand-written: the site is four screens, and a
  * utility framework would cost more in build machinery than it saves.
- * Tokens follow the same light/dark split the artifacts and the desktop
- * app use — a system-preference default, overridable per element. */
+ *
+ * Dark is the default, and it is the default even where the system asks
+ * for light — a chart is white paper on a dark ground, and the app it
+ * belongs to is dark, so a light shell around a dark chart reads as a
+ * different product. Light is still fully supported; it is opt-in via
+ * `data-theme="light"` on the root rather than something the OS picks
+ * for you. `color-scheme` follows so scrollbars and form controls agree
+ * with the page instead of staying light over a dark ground. */
 
 :root {
+  color-scheme: dark;
+  --bg: #0d0d11;
+  --surface: #15151b;
+  --ink: #f2f2f7;
+  --ink-soft: #9997a6;
+  --line: #26262f;
+  --accent: #6ea8fe;
+  --accent-ink: #0b1220;
+  /* The far end of the headline's gradient sweep. Sits a short hop round
+   * the wheel from --accent so the travel reads as movement rather than
+   * as two different brand colours arguing. */
+  --accent-far: #a78bfa;
+  --code-bg: #131319;
+  /* The widest the page's content ever runs — the landing hero's top
+   * tier. The header aligns its contents to the same measure. */
+  --shell-max: 138rem;
+  --font-sans: "Geist", "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  /* Source-highlight palette. Roots and titles take --ink; these are the
+   * things hanging off them, so each is a hue rather than a weight. */
+  --syn-meta: #7dd3fc;
+  --syn-section: #34d399;
+  --syn-quality: #fbbf24;
+  --syn-bass: #a78bfa;
+  --syn-rhythm: #9ca3af;
+  --syn-push: #fb923c;
+  --syn-sep: #4b5563;
+  --syn-command: #f472b6;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
   --bg: #fbfaf8;
   --surface: #ffffff;
   --ink: #17161a;
@@ -13,33 +51,26 @@
   --line: #e4e2e8;
   --accent: #2563eb;
   --accent-ink: #ffffff;
-  /* The far end of the headline's gradient sweep. Sits a short hop round
-   * the wheel from --accent so the travel reads as movement rather than
-   * as two different brand colours arguing. */
   --accent-far: #7c3aed;
   --code-bg: #f3f2f6;
-  /* The widest the page's content ever runs — the landing hero's top
-   * tier. The header aligns its contents to the same measure. */
-  --shell-max: 138rem;
-  --font-sans: "Geist", "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  /* The same hues, darkened to hold contrast on a paper-coloured code
+   * block. The dark palette is bright-on-near-black; used unchanged over
+   * #f3f2f6 it washes out to nearly nothing. */
+  --syn-meta: #0369a1;
+  --syn-section: #047857;
+  --syn-quality: #b45309;
+  --syn-bass: #6d28d9;
+  --syn-rhythm: #6b7280;
+  --syn-push: #c2410c;
+  --syn-sep: #b6b4be;
+  --syn-command: #be185d;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0d0d11;
-    --surface: #15151b;
-    --ink: #f2f2f7;
-    --ink-soft: #9997a6;
-    --line: #26262f;
-    --accent: #6ea8fe;
-    --accent-ink: #0b1220;
-    --accent-far: #a78bfa;
-    --code-bg: #131319;
-  }
-}
-
+/* An explicit dark choice is the same as the default, but it has to be
+ * spelled out so a toggle can set `data-theme="dark"` and win against a
+ * `light` that is already on the root. */
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --bg: #0d0d11;
   --surface: #15151b;
   --ink: #f2f2f7;
@@ -49,6 +80,16 @@
   --accent-ink: #0b1220;
   --accent-far: #a78bfa;
   --code-bg: #131319;
+  /* Source-highlight palette. Roots and titles take --ink; these are the
+   * things hanging off them, so each is a hue rather than a weight. */
+  --syn-meta: #7dd3fc;
+  --syn-section: #34d399;
+  --syn-quality: #fbbf24;
+  --syn-bass: #a78bfa;
+  --syn-rhythm: #9ca3af;
+  --syn-push: #fb923c;
+  --syn-sep: #4b5563;
+  --syn-command: #f472b6;
 }
 
 * { box-sizing: border-box; }
@@ -637,11 +678,11 @@ body {
 .kf-source .kf-tempo,
 .kf-source .kf-time-sig,
 .kf-source .kf-key,
-.kf-source .kf-tempo-arrow { color: #7dd3fc; }
+.kf-source .kf-tempo-arrow { color: var(--syn-meta); }
 
 /* Section labels take the colour the engraver paints their capsule, so
  * the source and the chart beside it agree about what a chorus is. */
-.kf-source .kf-section { color: #34d399; font-weight: 600; }
+.kf-source .kf-section { color: var(--syn-section); font-weight: 600; }
 .kf-source .kf-measure-count,
 .kf-source .kf-section-comment,
 .kf-source .kf-section-bracket { color: var(--ink-soft); }
@@ -653,22 +694,22 @@ body {
 
 .kf-source .kf-quality,
 .kf-source .kf-extension,
-.kf-source .kf-modifier { color: #fbbf24; }
+.kf-source .kf-modifier { color: var(--syn-quality); }
 
 .kf-source .kf-bass,
-.kf-source .kf-bass-slash { color: #a78bfa; }
+.kf-source .kf-bass-slash { color: var(--syn-bass); }
 
 .kf-source .kf-slash-rhythm,
 .kf-source .kf-duration,
 .kf-source .kf-dot,
-.kf-source .kf-triplet { color: #9ca3af; }
+.kf-source .kf-triplet { color: var(--syn-rhythm); }
 
 .kf-source .kf-push,
-.kf-source .kf-pull { color: #fb923c; }
+.kf-source .kf-pull { color: var(--syn-push); }
 
 .kf-source .kf-rest { color: var(--ink-soft); font-style: italic; }
-.kf-source .kf-measure-sep { color: #4b5563; }
-.kf-source .kf-command { color: #f472b6; }
+.kf-source .kf-measure-sep { color: var(--syn-sep); }
+.kf-source .kf-command { color: var(--syn-command); }
 
 /* ── Chart surface ───────────────────────────────────────────────── */
 
