@@ -3,6 +3,7 @@
 //! Represents a musical key as a root note + scale mode
 
 use super::scale::{ScaleMode, ScaleType};
+use super::spelling::{KeySpelling, SpellingMode};
 use crate::primitives::{Interval, MusicalNote, Note};
 use facet::Facet;
 use std::fmt;
@@ -84,8 +85,18 @@ impl Key {
         let pattern = self.mode.interval_pattern();
         let semitones = pattern.get((degree - 1) as usize)?;
         let note_semitone = (self.root.semitone() + semitones) % 12;
-        let prefer_sharp = self.root.name().contains('#');
-        Some(MusicalNote::from_semitone(note_semitone, prefer_sharp))
+
+        // Sharps or flats is a property of where the key sits on the circle
+        // of fifths, not of whether its own root happens to be spelled with
+        // a `#`. That was the old rule, and it spelled every sharp key in
+        // flats: E major came out `E Gb Ab A B Db Eb`. `KeySpelling` already
+        // works this out correctly and is what the transposer uses.
+        let spelling = KeySpelling::new(&self.root, self.mode == ScaleMode::ionian());
+        Some(
+            spelling
+                .spell(note_semitone, SpellingMode::Relaxed)
+                .to_note(),
+        )
     }
 
     /// Get the scale degree of a given note (returns 1-7, or None if not in scale)
@@ -190,6 +201,46 @@ impl Key {
 impl fmt::Display for Key {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name())
+    }
+}
+
+#[cfg(test)]
+mod spelling_tests {
+    use super::*;
+
+    /// Sharps or flats is decided by the circle of fifths, not by whether
+    /// the key's own root is spelled with a `#`. Under the old rule every
+    /// sharp key came out in flats — E major as `E Gb Ab A B Db Eb` — so
+    /// forcing a number chart in E into letter names engraved `Dbm` where
+    /// the key signature says `C#m`.
+    #[test]
+    fn sharp_keys_spell_with_sharps() {
+        let names = |k: &str| -> Vec<String> {
+            let key = Key::parse(k).unwrap();
+            (1..=7)
+                .map(|d| key.get_scale_degree(d).map(|n| n.name).unwrap_or_default())
+                .collect()
+        };
+
+        assert_eq!(names("E"), ["E", "F#", "G#", "A", "B", "C#", "D#"]);
+        assert_eq!(names("A"), ["A", "B", "C#", "D", "E", "F#", "G#"]);
+        assert_eq!(names("G"), ["G", "A", "B", "C", "D", "E", "F#"]);
+        assert_eq!(names("D"), ["D", "E", "F#", "G", "A", "B", "C#"]);
+    }
+
+    #[test]
+    fn flat_keys_still_spell_with_flats() {
+        let names = |k: &str| -> Vec<String> {
+            let key = Key::parse(k).unwrap();
+            (1..=7)
+                .map(|d| key.get_scale_degree(d).map(|n| n.name).unwrap_or_default())
+                .collect()
+        };
+
+        assert_eq!(names("F"), ["F", "G", "A", "Bb", "C", "D", "E"]);
+        assert_eq!(names("Bb"), ["Bb", "C", "D", "Eb", "F", "G", "A"]);
+        assert_eq!(names("Eb"), ["Eb", "F", "G", "Ab", "Bb", "C", "D"]);
+        assert_eq!(names("C"), ["C", "D", "E", "F", "G", "A", "B"]);
     }
 }
 
