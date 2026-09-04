@@ -35,14 +35,31 @@ auth-client = { workspace = true }
 # built in the browser from the same markdown the pages are rendered from.
 view-knowledge-graph = { workspace = true }
 
-# The guide is a vault, and it renders through the real editor in
-# read-only mode rather than a bespoke markdown pass. That is what gives
-# it `[[wikilink]]` navigation, folds and the ```kf fence family for free
-# — the editor already understands all of it.
+# The guide is a vault, published as a static site: `ssg-build` renders
+# the notes to HTML at build time — engraving their ```kf fences to
+# inline SVG with the host engraver — and `ssg`/`ssg-ui` are the page
+# model and the components that lay them out.
+#
+# This replaced rendering each note through the *editor* in read-only
+# mode. That gave the guide wikilinks and engraved fences for free, and
+# charged every reader the editor, its state machine, its decoration
+# pipeline and a WebGL2 surface before a paragraph appeared.
+#
+# WITHOUT ssg-ui's `graph` feature — the local-graph rail is drawn with
+# THIS repo's `view-knowledge-graph` (above) instead. Same crate, but
+# task@main's copy reaches architect v0.7.1 where this repo is on
+# v0.0.2, and taking both puts two reqwest majors in one wasm binary.
+# See the note on the workspace entry.
+ssg = { workspace = true }
+ssg-ui = { workspace = true }
+
+# Still here for the workbench (`/learn/:slug`), which is a real editor
+# with a live chart — the interactive half of the guide, and the reason
+# the editor is worth loading when someone actually asks for it.
 editor = { workspace = true }
 editor-state = { workspace = true }
 # Registers the chart renderer into editor-state's fence registry, so
-# ```kf+ fences in the guide engrave instead of showing source.
+# ```kf+ fences in the workbench engrave instead of showing source.
 editor-keyflow = { workspace = true }
 # Keyflow *as a language* inside the editor: syntax decorations, IDE
 # diagnostics, hover, and the resolved-chord overlays (1 -> C in the key
@@ -59,7 +76,20 @@ editor-keyflow-lang = { workspace = true }
 # feature set that wants `dioxus-fullstack` — a package the vendored
 # dioxus git source does not carry, so the Nix image build died in
 # resolution before reaching a compiler.
-dioxus = { workspace = true, features = ["router"] }
+#
+# `launch` sits here rather than on `web` because both halves of the
+# build go through `LaunchBuilder` — the browser one to mount, the
+# server one to render for `dx build --ssg`.
+#
+# `fullstack` is deliberately NOT here; it belongs to the `server`
+# feature alone. See the note there.
+dioxus = { workspace = true, features = ["router", "launch"] }
+
+# Direct, only so the `web` feature can turn on `hydrate` — the client
+# half of static generation, which adopts the pre-rendered DOM instead
+# of throwing it away and re-rendering. `dioxus/fullstack` would enable
+# it too, and cannot be used here; see the `server` feature.
+dioxus-web = { workspace = true, optional = true }
 
 # Chart-in-URL codec: deflate then base64url, so a whole chart fits in a
 # link with no account and no server.
@@ -124,6 +154,31 @@ console_error_panic_hook = "0.1"
 [lints]
 workspace = true
 
+[build-dependencies]
+# Reads docs/guides/keyflow and codegens the page table.
+ssg-build = { workspace = true }
+# The engraver, on the host. `svg` is the no-GPU export path — the build
+# script engraves every ```kf fence in the guide to inline SVG, which is
+# why the site ships charts without shipping a chart renderer.
+# `highlighting` for the chart source shown beside them.
+keyflow = { workspace = true, features = ["text", "svg", "highlighting"] }
+
 [features]
 default = ["web"]
-web = ["dioxus/web", "dioxus/launch"]
+# `dioxus-web/hydrate` rather than `dioxus/fullstack`, which is the
+# usual way to turn it on and cannot be used here.
+#
+# `dioxus/fullstack` carries the server-function *client* transport,
+# which is reqwest 0.12. This tree already has reqwest 0.13, through
+# iroh, through architect, through the knowledge graph — and two reqwest
+# majors in one wasm binary is a hundred `duplicate symbol:
+# intounderlyingsource_*` errors out of rust-lld, because each compiles
+# its own copy of the wasm-streams glue. The site calls no server
+# functions from the browser, so it needs none of that: what it needs is
+# `hydrate`, and that only pulls `dioxus-fullstack-core`.
+web = ["dioxus/web", "dep:dioxus-web", "dioxus-web/hydrate"]
+# The server half, which exists only for the length of
+# `dx build --ssg` — dx enables it for the server target by name, and
+# never for the wasm one. reqwest 0.12 arriving here is harmless: this
+# half is a host binary, and nothing links it against the browser's.
+server = ["dioxus/server", "dioxus/fullstack"]

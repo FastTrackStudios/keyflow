@@ -82,9 +82,37 @@ tailwind-check: tailwind
 web: tailwind
     cd apps/web && dx serve --platform web
 
-# Build the shipping web bundle into target/dx/keyflow-web/release/web/public.
+# Build the shipping web bundle into target/dx/keyflow-web/release/web/public,
+# with the guide pre-rendered into it.
+#
+# Three flags, none of them optional:
+#
+# `--ssg` builds the app's server as well as its client, runs it, asks it
+# for `static_routes`, and requests each — which writes it to disk as
+# HTML. The guide's chapters ship engraved and readable; the bundle then
+# hydrates them into the ordinary app.
+#
+# `--fullstack` because dx works out whether to build a server from the
+# CLIENT's features, and this crate keeps `dioxus/fullstack` on its
+# `server` feature alone (its reqwest is a second major in the wasm
+# binary — see apps/web/Cargo.toml). Without this there is no server
+# target, and `--ssg` silently does nothing.
+#
+# `--force-sequential` because the pre-render borrows `public/index.html`
+# as its page shell and the CLIENT build writes that file. In parallel
+# the server can render first, and every page comes out in Dioxus's bare
+# fallback shell — no title, no charset, no hydration — with the build
+# still reporting success. (dioxus#3518.)
+#
+# The `rm` is not tidiness either. The renderer's cache is configured
+# `clear_cache(false)`, which it must be — the cache directory is the
+# bundle — but that also means a page already in it is served rather
+# than re-rendered, so a rebuild after a code change silently ships the
+# OLD html. Deleting the directory is what makes a build a build.
 web-build: tailwind
-    cd apps/web && dx build --platform web --release
+    rm -rf target/dx/keyflow-web/release/web/public
+    cd apps/web && dx build --platform web --release \
+        --ssg --fullstack --force-sequential
 
 # Check the site compiles for the browser. `cargo check --workspace` builds
 # it for the host, which does NOT catch wasm-only breakage — the WebGL

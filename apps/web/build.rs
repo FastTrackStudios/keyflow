@@ -1,177 +1,239 @@
-//! Compile `docs/guides/keyflow/*.md` into the site.
+//! Compile `docs/guides/keyflow/*.md` into the site — charts and all.
 //!
-//! The guide is a **vault**: the files under `docs/guides/keyflow/` are
-//! wiki notes with frontmatter, `[[wikilink]]` cross-references, and
-//! Keyflow fences. The site does not pre-render them — it ships the
-//! markdown and renders it through the real editor in read-only mode, so
-//! the guide gets wikilink navigation, folds and the ```kf fence family
-//! for free rather than through a bespoke markdown pass that would drift
-//! from the editor's.
+//! The guide is a **vault**: notes with frontmatter, `[[wikilink]]`
+//! cross-references, and ```kf fences carrying real charts. `ssg-build`
+//! turns the markdown into HTML; the fence renderer below turns the
+//! charts into **inline SVG** and their source into highlighted markup,
+//! here, on the host.
 //!
-//! (It did have such a pass, briefly. Replacing it with the editor is why
-//! this file lost its markdown renderer and its fence splitter — both
-//! were reimplementing, less well, something the editor already does.)
+//! That is what this file is for. The site used to hand each note to the
+//! editor in read-only mode, which is how it got wikilinks and engraved
+//! fences — at the cost of putting the editor, its state machine, its
+//! decoration pipeline and a WebGL2 chart surface in front of anyone
+//! trying to read a paragraph. None of it could change after the build,
+//! so it happens *at* the build: the engraver exports SVG with no GPU
+//! (see `kf docs`, and `features/keyflow/examples/svg_smoke.rs`), and
+//! the highlighter is the same one the editor runs.
 //!
-//! So this build script does very little: read the notes, pull `title`,
-//! `order` and `stage` out of the frontmatter for the table of contents,
-//! and emit the
-//! bodies as `&'static str`. That same text feeds the knowledge graph,
-//! which is built in the browser.
+//! Two fence spellings, matching what the guide is written in:
 //!
-//! It reads *outside the crate*, which the repo otherwise forbids (see
-//! CLAUDE.md). The rule exists because `include_str!` across a boundary is
-//! invisible to cargo and fails at compile time rather than resolution
-//! time. A build script is the sanctioned way: the dependency is explicit,
-//! and `cargo:rerun-if-changed` makes cargo aware of it, so editing a
-//! guide page rebuilds the site.
+//! - ```` ```kf+ ```` — source *and* chart. What the guide uses almost
+//!   everywhere: it is teaching the notation, so the text that produced
+//!   the picture is part of the lesson.
+//! - ```` ```kf ```` — the chart, with its source behind a `<details>`.
+//!   A disclosure triangle rather than a scripted toggle, because the
+//!   page should not need JavaScript to open it.
+//!
+//! A fence that fails to parse renders as an ordinary code block: a typo
+//! in one chart shows that chart's source rather than failing a build or
+//! blanking a page.
 
-use std::collections::BTreeMap;
+#![expect(
+    clippy::expect_used,
+    clippy::panic,
+    reason = "a build script reports failure by panicking; there is no other channel"
+)]
+
+use std::cell::RefCell;
+use std::collections::BTreeSet;
 use std::fmt::Write as _;
-use std::path::{Path, PathBuf};
+
+use keyflow::engraver::api::pipeline::ChartPipeline;
+use keyflow::engraver::layout::chart::{ChartLayoutConfig, LayoutMode};
+use keyflow::text::highlighting::{HighlightSpan, Highlighter, Renderer};
+
+/// Layout width in points. The guide's prose column, near enough — a
+/// chart engraved much wider than the text it sits in reads as a
+/// different document.
+const CHART_WIDTH: f64 = 720.0;
+
+/// Padding around the shrink-wrapped content box, in points.
+const PAD: f64 = 6.0;
 
 fn main() {
-    let guides = guides_dir();
-    println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed={}", guides.display());
+    let engraver = Engraver::new();
 
-    let mut pages: BTreeMap<(u32, String), String> = BTreeMap::new();
+    ssg_build::Vault::at("../../docs/guides/keyflow")
+        .link_base("/guide")
+        .fence(|info, body| engraver.fence(info, body))
+        .emit();
 
-    let entries = std::fs::read_dir(&guides)
-        .unwrap_or_else(|e| panic!("cannot read the guide directory {}: {e}", guides.display()));
+    // After `emit`, because it is only now known which typefaces the
+    // guide's charts actually reference.
+    //
+    // Into `assets/`, not `OUT_DIR`, because this has to be a *linked*
+    // stylesheet: it is megabytes of embedded typeface, and inlining it
+    // into every page would send the same megabytes nine times over.
+    // Linked, `asset!` gives it a content-hashed URL and the browser
+    // fetches it once for the whole guide. The file is generated and
+    // gitignored; `asset!` resolves it because a build script always
+    // runs before the crate that reads it compiles.
+    let generated = std::path::Path::new("assets/chart-fonts.css");
+    let css = engraver.font_css();
+    // Only when it actually changed: `asset!` hashes the file, and
+    // rewriting identical bytes still bumps the mtime, which makes dx
+    // re-copy the asset on every build.
+    if std::fs::read_to_string(generated).is_ok_and(|old| old == css) {
+        return;
+    }
+    std::fs::write(generated, css).expect("cannot write the chart font stylesheet");
+}
 
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().is_none_or(|e| e != "md") {
-            continue;
+/// The engraver, set up once for the whole build.
+///
+/// `ChartPipeline::shared()` rather than a hand-wired bundle and engine:
+/// the repo has one pipeline on purpose. Three places used to assemble
+/// their own and drifted — one of them declared `MuseJazzText` where the
+/// scene emits `MuseJazz Text`, so every chart it exported fell back to
+/// a system sans and the `maj7` triangles came out blank. A
+/// `font-family` that nothing declares does not error; it substitutes.
+struct Engraver {
+    pipeline: &'static ChartPipeline,
+    /// Every `font-family` the rendered charts referenced.
+    used_families: RefCell<BTreeSet<String>>,
+}
+
+impl Engraver {
+    fn new() -> Self {
+        Self {
+            pipeline: ChartPipeline::shared().expect("the engraving fonts are compiled in"),
+            used_families: RefCell::new(BTreeSet::new()),
         }
-        println!("cargo:rerun-if-changed={}", path.display());
+    }
 
-        let slug = path
-            .file_stem()
-            .expect("a .md path has a stem")
-            .to_string_lossy()
-            .into_owned();
-        let raw = std::fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+    /// `@font-face` rules for the typefaces the guide actually uses.
+    ///
+    /// The charts are exported *linked* — naming their typefaces rather
+    /// than embedding them, which the repo rule requires: the embedding
+    /// variants cost a few hundred kilobytes of font data per chart, and
+    /// this guide has sixty-one of them. So the document declares the
+    /// faces once and every chart on it resolves against one download.
+    ///
+    /// Narrower than `ChartPipeline::font_face_css`, which emits the
+    /// bundle's whole list: fourteen entries, several of them aliases
+    /// for the same bytes and one a 1.6 MB fallback that exists for
+    /// *rasterisers*, which have to be told what `sans-serif` means. A
+    /// browser already knows. Filtering to the families that actually
+    /// appeared took 4.3 MB of base64 down to 3.3 MB.
+    ///
+    /// Still too much. Subsetting each face to the glyphs actually drawn
+    /// is the real fix — dodeca does exactly this — and is the obvious
+    /// next move.
+    fn font_css(&self) -> String {
+        let used = self.used_families.borrow();
+        self.pipeline
+            .fonts()
+            .embeddable_fonts()
+            .into_iter()
+            .filter(|(family, _)| used.contains(*family))
+            .fold(
+                keyflow::engraver::export::svg::SvgExportConfig::default(),
+                |config, (family, bytes)| config.with_embedded_font(family, bytes.as_ref().clone()),
+            )
+            .font_face_css()
+    }
 
-        let front = frontmatter(&raw);
-        let title = fm_scalar(front, "title").unwrap_or_else(|| slug.replace('-', " "));
-        let order: u32 = fm_scalar(front, "order")
-            .and_then(|o| o.parse().ok())
-            .unwrap_or(u32::MAX);
-        // The stage this chapter belongs to, for the table of contents.
-        // The index page has none — it is the front door, not a step.
-        let stage = fm_scalar(front, "stage").unwrap_or_default();
+    /// Render one fence, or decline it.
+    fn fence(&self, info: &str, body: &str) -> Option<String> {
+        // The info string may carry more than the language; only the
+        // first word selects the renderer.
+        let lang = info.split_whitespace().next().unwrap_or(info);
+        let fold_source = match lang {
+            "kf+" => false,
+            "kf" => true,
+            _ => return None,
+        };
 
-        // Two forms of the same note, and they are not interchangeable:
-        //
-        // `source` keeps the frontmatter, because the graph builder reads
-        // `type:` out of it to classify nodes.
-        //
-        // `body` drops it, because that is what the editor renders. The
-        // editor treats frontmatter as an editable property table — right
-        // for a vault app, wrong for a published guide, where it shows up
-        // as a "+ Add property" button above the first heading.
-        // The nav footer goes the same way as the frontmatter, and for
-        // the same reason: `source` keeps it so the graph still sees the
-        // Previous/Next/Up wikilinks — all ten of the index's inbound
-        // edges come from `Up:` alone — while the site renders real
-        // buttons above and below the page instead, from the same order
-        // the table of contents uses. Leaving it in `body` would print
-        // the chain twice on every chapter.
-        let body = strip_nav_footer(strip_frontmatter(&raw));
-        let mut lit = String::new();
-        let _ = write!(
-            lit,
-            "    GuidePage {{\n        slug: {slug:?},\n        title: {title:?},\n        \
-             order: {order},\n        stage: {stage:?},\n        source: {raw:?},\n        \
-             body: {body:?},\n    }},\n"
+        let svg = self.svg(body)?;
+        let source = highlight(body.trim_end());
+
+        let mut out = String::from("<figure class=\"kf-chart\">");
+        if fold_source {
+            // `<details>` rather than a button: it opens with no script,
+            // which is the point of a page finished at build time.
+            let _ = write!(
+                out,
+                "<details class=\"kf-chart-source\"><summary>Source</summary>\
+                 <pre class=\"kf-source\"><code>{source}</code></pre></details>"
+            );
+        } else {
+            let _ = write!(
+                out,
+                "<pre class=\"kf-source kf-chart-source\"><code>{source}</code></pre>"
+            );
+        }
+        out.push_str(&svg);
+        out.push_str("</figure>");
+        Some(out)
+    }
+
+    /// Chart text to font-less, content-cropped SVG.
+    ///
+    /// `ContinuousScroll` and a viewBox shrink-wrapped to what was
+    /// actually drawn: a two-bar example laid out on a page would sit in
+    /// a tall white rectangle, most of it empty. `None` when the text
+    /// does not parse or draws nothing — the caller then leaves the
+    /// fence as source.
+    fn svg(&self, source: &str) -> Option<String> {
+        let chart = keyflow::parse(source).ok()?;
+        let result = self.pipeline.layout_with_config(
+            &chart,
+            &LayoutMode::ContinuousScroll { width: CHART_WIDTH },
+            &ChartLayoutConfig::master_rhythm().with_page_offsets(true),
         );
-        pages.insert((order, slug), lit);
+        // Nothing drawn — an empty fence. Decline it, and the caller
+        // leaves the source as a code block.
+        result.content_bounds()?;
+
+        // The *linked* export: fonts named, not embedded. The document
+        // declares them once — see `font_css`. Its white background is
+        // right, and deliberate: the site's own comment is that a chart
+        // is white paper on a dark ground, and it has a light theme too.
+        let svg = self.pipeline.export_svg_snippet(&result, PAD);
+        self.record_families(&svg);
+        Some(svg)
     }
 
-    assert!(
-        !pages.is_empty(),
-        "no guide pages found in {} — the site would ship an empty guide",
-        guides.display()
-    );
-
-    let mut out = String::from(
-        "// @generated by build.rs from docs/guides/keyflow/*.md — do not edit.\n\
-         pub static GUIDE_PAGES: &[GuidePage] = &[\n",
-    );
-    for page in pages.values() {
-        out.push_str(page);
-    }
-    out.push_str("];\n");
-
-    let dest = PathBuf::from(std::env::var_os("OUT_DIR").expect("cargo sets OUT_DIR"))
-        .join("guide_generated.rs");
-    std::fs::write(&dest, out).unwrap_or_else(|e| panic!("cannot write {}: {e}", dest.display()));
-}
-
-/// `<repo>/docs/guides/keyflow`, resolved from this crate's manifest dir so
-/// it does not depend on the working directory cargo was invoked from.
-fn guides_dir() -> PathBuf {
-    let manifest = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").expect("cargo sets this"));
-    let repo = manifest
-        .parent()
-        .and_then(Path::parent)
-        .expect("apps/web is two levels below the repo root");
-    repo.join("docs").join("guides").join("keyflow")
-}
-
-/// The note with its frontmatter block removed.
-fn strip_frontmatter(raw: &str) -> &str {
-    let Some(rest) = raw.strip_prefix("---\n") else {
-        return raw;
-    };
-    match rest.find("\n---") {
-        // +4 for the closing "\n---", then past its line ending.
-        Some(end) => rest[end + 4..].trim_start_matches(['\r', '\n']),
-        None => raw,
+    /// Note every `font-family="…"` this chart named.
+    fn record_families(&self, svg: &str) {
+        let mut used = self.used_families.borrow_mut();
+        let mut rest = svg;
+        while let Some(at) = rest.find("font-family=\"") {
+            rest = &rest[at + "font-family=\"".len()..];
+            let Some(end) = rest.find('"') else { break };
+            used.insert(rest[..end].to_owned());
+            rest = &rest[end..];
+        }
     }
 }
 
-/// The note without its trailing `Previous: … · Next: … · Up: …` line.
+/// Chart source to highlighted HTML, with CSS classes and no inline
+/// colours.
 ///
-/// Recognised by the `Up: [[` that every chapter's footer carries, then
-/// walked back over the blank lines and the `---` rule above it. A note
-/// without one — the index — comes back untouched.
-fn strip_nav_footer(body: &str) -> &str {
-    let Some(start) = body.rfind("\nUp: [[").or_else(|| {
-        body.rfind("\nPrevious: [[")
-            .or_else(|| body.rfind("\nNext: [["))
-    }) else {
-        return body;
-    };
-    // Only the footer qualifies: it is the last thing in the note.
-    if body[start + 1..].lines().count() != 1 {
-        return body;
-    }
-    let mut cut = &body[..start];
-    cut = cut.trim_end();
-    if let Some(rest) = cut.strip_suffix("---") {
-        cut = rest.trim_end();
-    }
-    cut
-}
-
-/// The `---`-delimited frontmatter block, without its fences.
-fn frontmatter(raw: &str) -> &str {
-    let Some(rest) = raw.strip_prefix("---\n") else {
-        return "";
-    };
-    rest.find("\n---").map_or("", |end| &rest[..end])
-}
-
-/// Read a flat `key: value` line out of a frontmatter block.
+/// Classes rather than baked-in styles because the site already has a
+/// palette for them (`.kf-source .kf-root` and friends, from
+/// `HighlightKind::css_class`) and it follows the light/dark theme.
+/// Inline colours would pin one theme into the markup.
 ///
-/// Deliberately not a YAML parser: the guides use flat scalars, and a
-/// dependency to read two of them would not earn its place.
-fn fm_scalar(front: &str, key: &str) -> Option<String> {
-    front.lines().find_map(|line| {
-        let (k, v) = line.split_once(':')?;
-        (k.trim() == key).then(|| v.trim().trim_matches(['"', '\'']).to_owned())
-    })
+/// The highlighter is line-oriented, so each line's spans are shifted to
+/// absolute offsets — the same pass `editor-keyflow` makes.
+fn highlight(source: &str) -> String {
+    let mut spans: Vec<HighlightSpan> = Vec::new();
+    let mut line_start = 0usize;
+    for line in source.split_inclusive('\n') {
+        let content = line
+            .strip_suffix('\n')
+            .unwrap_or(line)
+            .strip_suffix('\r')
+            .unwrap_or_else(|| line.strip_suffix('\n').unwrap_or(line));
+        for span in Highlighter::highlight_line(content) {
+            spans.push(HighlightSpan::from_range(
+                line_start + span.span.start,
+                span.span.len,
+                span.kind,
+            ));
+        }
+        line_start += line.len();
+    }
+    Renderer::to_html_classes(source, &spans)
 }

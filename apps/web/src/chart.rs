@@ -549,7 +549,7 @@ mod tests {
         // A ```kf+ fence is the guide asserting "this is a real chart".
         // The editor renders these now, but the claim is the same, and
         // this is what notices when a guide example stops being valid.
-        for page in crate::guide::GUIDE_PAGES {
+        for page in crate::guide::VAULT.pages {
             for source in engraved_fences(page.source) {
                 assert!(
                     engrave(&source, ChartShape::Inline).is_ok(),
