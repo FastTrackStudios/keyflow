@@ -157,6 +157,20 @@ workspace = true
 [build-dependencies]
 # Reads docs/guides/keyflow and codegens the page table.
 ssg-build = { workspace = true }
+# Font subsetting for the guide's charts, so the page carries the glyphs
+# it draws rather than every glyph the faces contain.
+#
+# `allsorts` rather than the obvious `subsetter`: that one REMOVES the
+# cmap table (it targets PDF CID embedding, where the PDF supplies its
+# own), and the engraved SVG addresses glyphs by character, so a browser
+# needs a cmap to look them up in. allsorts generates one, and takes a
+# `CmapTarget::Unicode` for exactly this case.
+#
+# `ttf-parser` maps the characters to glyph ids through the face's own
+# cmap first. Both are already in this tree's lock.
+allsorts = "0.16"
+ttf-parser = "0.25"
+
 # The engraver, on the host. `svg` is the no-GPU export path — the build
 # script engraves every ```kf fence in the guide to inline SVG, which is
 # why the site ships charts without shipping a chart renderer.

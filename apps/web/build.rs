@@ -35,7 +35,7 @@
 )]
 
 use std::cell::RefCell;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 use keyflow::engraver::api::pipeline::ChartPipeline;
@@ -89,48 +89,68 @@ fn main() {
 /// `font-family` that nothing declares does not error; it substitutes.
 struct Engraver {
     pipeline: &'static ChartPipeline,
-    /// Every `font-family` the rendered charts referenced.
-    used_families: RefCell<BTreeSet<String>>,
+    /// Every `font-family` the rendered charts referenced, and every
+    /// character they set in it.
+    used: RefCell<BTreeMap<String, BTreeSet<char>>>,
 }
 
 impl Engraver {
     fn new() -> Self {
         Self {
             pipeline: ChartPipeline::shared().expect("the engraving fonts are compiled in"),
-            used_families: RefCell::new(BTreeSet::new()),
+            used: RefCell::new(BTreeMap::new()),
         }
     }
 
-    /// `@font-face` rules for the typefaces the guide actually uses.
+    /// `@font-face` rules for the guide's typefaces, subset to the
+    /// glyphs it actually draws.
     ///
     /// The charts are exported *linked* — naming their typefaces rather
     /// than embedding them, which the repo rule requires: the embedding
-    /// variants cost a few hundred kilobytes of font data per chart, and
-    /// this guide has sixty-one of them. So the document declares the
-    /// faces once and every chart on it resolves against one download.
+    /// variants cost a few hundred kilobytes per chart, and this guide
+    /// has sixty-one of them. So the document declares the faces once
+    /// and every chart on it resolves against one download.
     ///
-    /// Narrower than `ChartPipeline::font_face_css`, which emits the
-    /// bundle's whole list: fourteen entries, several of them aliases
-    /// for the same bytes and one a 1.6 MB fallback that exists for
-    /// *rasterisers*, which have to be told what `sans-serif` means. A
-    /// browser already knows. Filtering to the families that actually
-    /// appeared took 4.3 MB of base64 down to 3.3 MB.
+    /// Then that download is cut to size. Two passes:
     ///
-    /// Still too much. Subsetting each face to the glyphs actually drawn
-    /// is the real fix — dodeca does exactly this — and is the obvious
-    /// next move.
+    /// 1. Only the families a chart actually named. The bundle lists
+    ///    fourteen, several of them aliases for the same bytes and one a
+    ///    1.6 MB fallback that exists to tell a *rasteriser* what
+    ///    `sans-serif` means — a browser already knows. (4.3 MB → 3.3 MB
+    ///    of base64.)
+    /// 2. Only the glyphs actually set. A guide's charts use chord
+    ///    letters, digits, accidentals and a few dozen SMuFL symbols;
+    ///    Bravura alone ships thousands. Every character that reached a
+    ///    `<text>` element was recorded while rendering, mapped through
+    ///    the font's own cmap, and everything else dropped.
+    ///
+    /// `CmapTarget::Unicode` because the subset has to keep a cmap the
+    /// browser can use — the SVG addresses glyphs by *character*, not by
+    /// id. (This is why `subsetter`, the obvious crate, is the wrong
+    /// tool: it strips cmap for PDF CID embedding.)
+    ///
+    /// A face that fails to subset is embedded whole rather than
+    /// dropped: a chart missing its noteheads is a worse outcome than a
+    /// chart that costs more to load.
     fn font_css(&self) -> String {
-        let used = self.used_families.borrow();
-        self.pipeline
-            .fonts()
-            .embeddable_fonts()
-            .into_iter()
-            .filter(|(family, _)| used.contains(*family))
-            .fold(
-                keyflow::engraver::export::svg::SvgExportConfig::default(),
-                |config, (family, bytes)| config.with_embedded_font(family, bytes.as_ref().clone()),
-            )
-            .font_face_css()
+        let used = self.used.borrow();
+        let mut out = String::new();
+
+        for (family, bytes) in self.pipeline.fonts().embeddable_fonts() {
+            let Some(chars) = used.get(family) else {
+                continue;
+            };
+            let data = subset(bytes.as_ref(), chars).unwrap_or_else(|| bytes.as_ref().clone());
+            let _ = write!(
+                out,
+                "@font-face {{\n  font-family: '{family}';\n  \
+                 src: url('data:font/otf;base64,{}') format('opentype');\n  \
+                 font-display: block;\n}}\n",
+                base64(&data)
+            );
+        }
+
+        out
     }
 
     /// Render one fence, or decline it.
@@ -194,15 +214,39 @@ impl Engraver {
         Some(svg)
     }
 
-    /// Note every `font-family="…"` this chart named.
+    /// Note every `font-family` this chart named, and the characters it
+    /// set in each.
+    ///
+    /// Read back out of the finished SVG rather than tracked through the
+    /// scene: the serializer is what decides which family a run of text
+    /// ends up in, and second-guessing it is how the three pipelines
+    /// drifted before. What the file says is the truth.
     fn record_families(&self, svg: &str) {
-        let mut used = self.used_families.borrow_mut();
+        let mut used = self.used.borrow_mut();
         let mut rest = svg;
-        while let Some(at) = rest.find("font-family=\"") {
-            rest = &rest[at + "font-family=\"".len()..];
-            let Some(end) = rest.find('"') else { break };
-            used.insert(rest[..end].to_owned());
-            rest = &rest[end..];
+
+        while let Some(at) = rest.find("<text ") {
+            rest = &rest[at..];
+            let Some(tag_end) = rest.find('>') else { break };
+            let (tag, after) = rest.split_at(tag_end + 1);
+
+            let family = tag
+                .split_once("font-family=\"")
+                .and_then(|(_, r)| r.split_once('"'))
+                .map(|(name, _)| name.to_owned());
+            let content = after.split_once("</text>").map(|(text, _)| text);
+
+            if let (Some(family), Some(content)) = (family, content) {
+                let entry = used.entry(family).or_default();
+                // The serializer escapes its text, so `&amp;` arrives as
+                // five characters. Unescaping the three it emits keeps
+                // the recorded set honest about what will be drawn.
+                for ch in unescape(content).chars() {
+                    entry.insert(ch);
+                }
+            }
+
+            rest = after;
         }
     }
 }
@@ -236,4 +280,84 @@ fn highlight(source: &str) -> String {
         line_start += line.len();
     }
     Renderer::to_html_classes(source, &spans)
+}
+
+/// A font cut down to `chars`, or `None` if it cannot be.
+///
+/// The glyph ids come from the font's own cmap, so a character the face
+/// does not have is simply skipped — it was going to render as
+/// `.notdef` either way. Glyph 0 is always kept, because `.notdef` is
+/// what a subset renders for anything that slips through, and allsorts
+/// requires it.
+fn subset(data: &[u8], chars: &BTreeSet<char>) -> Option<Vec<u8>> {
+    use allsorts::binary::read::ReadScope;
+    use allsorts::font_data::FontData;
+    use allsorts::subset::{CmapTarget, SubsetProfile};
+
+    let face = ttf_parser::Face::parse(data, 0).ok()?;
+
+    let mut glyphs: Vec<u16> = vec![0];
+    for ch in chars {
+        if let Some(id) = face.glyph_index(*ch) {
+            if !glyphs.contains(&id.0) {
+                glyphs.push(id.0);
+            }
+        }
+    }
+    // Nothing but `.notdef` means nothing in this face was drawn; the
+    // caller should not have asked, and a one-glyph font helps no one.
+    if glyphs.len() == 1 {
+        return None;
+    }
+
+    let font_data = ReadScope::new(data).read::<FontData<'_>>().ok()?;
+    let provider = font_data.table_provider(0).ok()?;
+    allsorts::subset::subset(
+        &provider,
+        &glyphs,
+        // `Minimal` rather than `Pdf`: the browser needs a valid
+        // OpenType font, not the reduced table set a PDF embeds.
+        &SubsetProfile::Minimal,
+        // The SVG addresses glyphs by CHARACTER, so the subset must keep
+        // a cmap the browser can look them up in — and a Unicode one,
+        // because browsers reject a font carrying only Mac Roman.
+        CmapTarget::Unicode,
+    )
+    .ok()
+}
+
+/// Standard base64, for a `data:` URI.
+///
+/// Written out rather than taken as a dependency: it is fifteen lines,
+/// and this is a build script that four other crates wait on.
+fn base64(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let b = [
+            chunk[0],
+            chunk.get(1).copied().unwrap_or(0),
+            chunk.get(2).copied().unwrap_or(0),
+        ];
+        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+        for i in 0..4 {
+            // A short final chunk pads with `=` rather than encoding the
+            // zero bytes it was padded with.
+            if i <= chunk.len() {
+                out.push(char::from(ALPHABET[(n >> (18 - i * 6)) as usize & 0x3F]));
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
+}
+
+/// The three entities the SVG serializer emits, put back.
+fn unescape(text: &str) -> String {
+    text.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&")
 }

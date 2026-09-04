@@ -4788,6 +4788,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e634e2e0ebac1ee034020da1ca582e17ffe4e0f5e985823721e168928136dcb"
 dependencies = [
  "crc32fast",
+ "libz-sys",
  "miniz_oxide 0.9.1",
  "zlib-rs",
 ]
@@ -7600,6 +7601,7 @@ dependencies = [
 name = "keyflow-web"
 version = "0.1.0"
 dependencies = [
+ "allsorts",
  "architect-ui 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.0.2)",
  "auth-client",
  "auth-http",
@@ -7624,6 +7626,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tracing-wasm",
+ "ttf-parser 0.25.1",
  "view-knowledge-graph",
  "wasm-bindgen",
  "web-sys",
@@ -7834,6 +7837,17 @@ checksum = "db23b9e7e2b7831bbd8aac0bbeeeb7b68cbebc162b227e7052e8e55829a09212"
 dependencies = [
  "libc",
  "x11",
+]
+
+[[package]]
+name = "libz-sys"
+version = "1.1.29"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85bc9657773828b90eeb625adff10eeac83cc21bbfd8e23a03eaa8a33c9e28d9"
+dependencies = [
+ "cc",
+ "pkg-config",
+ "vcpkg",
 ]
 
 [[package]]
