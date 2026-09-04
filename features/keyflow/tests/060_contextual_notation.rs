@@ -192,3 +192,30 @@ fn nashville_round_trips_every_quality() {
         );
     }
 }
+
+/// A Roman numeral carries its quality in its CASE, so the marker is never
+/// written as well: `vi` is the minor six, not `vim`.
+///
+/// The parser used to append it anyway — `i iv v` came back `im ivm vm`,
+/// and `vi°` came back `vidim`, losing the symbol the convention actually
+/// uses. Only the spelling changed here; the chord underneath is still
+/// minor, which the last assertion holds it to.
+#[test]
+fn a_roman_numeral_does_not_repeat_its_quality() {
+    let syms = |body: &str| symbols(&chart(body));
+
+    assert_eq!(syms("I IV vi V"), ["I", "IV", "vi", "V"]);
+    assert_eq!(syms("i iv v i"), ["i", "iv", "v", "i"]);
+    assert_eq!(syms("I IV vi° V"), ["I", "IV", "vi°", "V"]);
+    assert_eq!(syms("I IV vi7 V"), ["I", "IV", "vi7", "V"]);
+    assert_eq!(syms("I IV iv6 V"), ["I", "IV", "iv6", "V"]);
+
+    // Upper case is untouched, and letter chords still spell their quality.
+    assert_eq!(syms("I IV VI V"), ["I", "IV", "VI", "V"]);
+    assert_eq!(syms("C F Am G"), ["C", "F", "Am", "G"]);
+
+    // The quality is hidden from the SPELLING, not dropped from the chord:
+    // `vi` in C still resolves to A minor.
+    assert_eq!(in_letters(&chart("I IV vi V")), ["C", "F", "Am", "G"]);
+    assert_eq!(in_letters(&chart("I IV vi° V")), ["C", "F", "Adim", "G"]);
+}

@@ -179,7 +179,7 @@ I/// IV/ vi////
 
     let chord10 = &chorus_measure2.chords[0]; // vi////
     assert_eq!(format!("{}", chord10.root), "vi");
-    assert_eq!(chord10.full_symbol, "vim"); // lowercase vi = minor
+    assert_eq!(chord10.full_symbol, "vi"); // lowercase vi = minor
     match &chord10.rhythm {
         ChordRhythm::Slashes { count, .. } => {
             assert_eq!(*count, 4);
@@ -278,7 +278,7 @@ I_2 IV_2 vi_2 V_2
     assert_eq!(chord9.duration.to_beats(chart.time_signature.unwrap()), 2.0);
 
     let chord10 = &chorus.measures()[1].chords[0];
-    assert_eq!(chord10.full_symbol, "vim"); // lowercase vi = minor
+    assert_eq!(chord10.full_symbol, "vi"); // lowercase vi = minor
     assert_eq!(
         chord10.duration.to_beats(chart.time_signature.unwrap()),
         2.0
