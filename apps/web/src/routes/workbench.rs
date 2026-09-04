@@ -172,7 +172,8 @@ mod tests {
     fn most_chapters_open_on_a_real_example() {
         // The workbench is much less useful if it starts blank, so this
         // checks the guide actually carries examples to seed it with.
-        let with = guide::VAULT.pages
+        let with = guide::VAULT
+            .pages
             .iter()
             .filter(|p| !engraved_fences(p.source).is_empty())
             .count();

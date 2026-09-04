@@ -331,8 +331,7 @@ fn subset(data: &[u8], chars: &BTreeSet<char>) -> Option<Vec<u8>> {
 /// Written out rather than taken as a dependency: it is fifteen lines,
 /// and this is a build script that four other crates wait on.
 fn base64(bytes: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {
