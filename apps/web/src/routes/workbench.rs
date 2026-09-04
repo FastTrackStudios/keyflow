@@ -39,7 +39,7 @@ const STARTER: &str = "VS 1: | 1 4 | 5 6- |\n";
 pub fn Workbench(slug: String) -> Element {
     let nav = navigator();
 
-    let Some(page) = guide::page(&slug) else {
+    let Some(page) = guide::VAULT.page(&slug) else {
         return rsx! {
             Shell {
                 section { class: "kf-prose",
@@ -50,7 +50,7 @@ pub fn Workbench(slug: String) -> Element {
         };
     };
 
-    let examples = engraved_fences(page.body);
+    let examples = engraved_fences(page.source);
     let mut source = use_signal(|| {
         examples
             .first()
@@ -123,7 +123,7 @@ pub fn Workbench(slug: String) -> Element {
                                 // Follow a wikilink WITHOUT leaving the
                                 // workbench — the whole point is to keep
                                 // reading while the editor stays put.
-                                if guide::page(&target).is_some() {
+                                if guide::VAULT.page(&target).is_some() {
                                     nav.push(Route::Workbench { slug: target });
                                 }
                             },
@@ -172,14 +172,15 @@ mod tests {
     fn most_chapters_open_on_a_real_example() {
         // The workbench is much less useful if it starts blank, so this
         // checks the guide actually carries examples to seed it with.
-        let with = guide::GUIDE_PAGES
+        let with = guide::VAULT
+            .pages
             .iter()
-            .filter(|p| !engraved_fences(p.body).is_empty())
+            .filter(|p| !engraved_fences(p.source).is_empty())
             .count();
         assert!(
-            with >= guide::GUIDE_PAGES.len() - 2,
+            with >= guide::VAULT.pages.len() - 2,
             "only {with} of {} chapters have an engraved example to open on",
-            guide::GUIDE_PAGES.len()
+            guide::VAULT.pages.len()
         );
     }
 
@@ -187,8 +188,8 @@ mod tests {
     fn every_seeded_example_parses() {
         // The editor seeds from these, so a broken one greets the reader
         // with an error the moment they click "try it".
-        for p in guide::GUIDE_PAGES {
-            for ex in engraved_fences(p.body) {
+        for p in guide::VAULT.pages {
+            for ex in engraved_fences(p.source) {
                 assert!(
                     keyflow::parse(&ex).is_ok(),
                     "guide page `{}` would seed the workbench with a chart that does not parse:\n{ex}",

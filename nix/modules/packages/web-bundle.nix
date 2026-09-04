@@ -93,7 +93,29 @@
             cd apps/web
             # --debug-symbols false: drops DWARF for a smaller bundle and
             # sidesteps DWARF-version mismatches in wasm-opt.
-            dx build --release --platform web --debug-symbols false
+            #
+            # --ssg pre-renders the guide: dx builds the app's server too,
+            # runs it, asks it for `static_routes` (the router's static
+            # ones plus every chapter of the guide vault) and requests
+            # each, which writes it into this same `public` directory as
+            # finished HTML. Nothing deploys that server; what ships is
+            # still a directory of static files.
+            #
+            # --fullstack because dx decides whether to build a server
+            # from the CLIENT's features, and this crate keeps
+            # `dioxus/fullstack` on its `server` feature alone (see
+            # apps/web/Cargo.toml — its reqwest would be a second major
+            # in the wasm binary). Without the flag there is no server
+            # target and --ssg silently does nothing.
+            #
+            # --force-sequential because the pre-render borrows
+            # `public/index.html` for its page shell, and the client
+            # build writes that file. In parallel the pre-render can win
+            # the race and every page comes out in Dioxus's bare fallback
+            # shell — no title, no charset, no hydration — with the build
+            # still reporting success. (dioxus#3518.)
+            dx build --release --platform web --debug-symbols false \
+              --ssg --fullstack --force-sequential
           '';
 
           # The build phase ends inside apps/web, but dx writes to the
