@@ -1,13 +1,16 @@
 //! Built-in example charts for the chart editor.
 
-/// Empty chart template.
-pub const EMPTY_CHART: &str = r#"New Song
-120bpm 4/4 #A
-
-VS
-A D F#m // E // D
-
-
+/// The blank slate the editor opens on.
+///
+/// A header and nothing else. It engraves — title, artist, tempo and key,
+/// with an opening measure carrying the time and key signature — so the
+/// first thing you see is a real chart rather than an empty page, and the
+/// first thing you type replaces a placeholder rather than filling a void.
+/// It used to open on a four-bar progression in A, which is a demo rather
+/// than a starting point: you had to delete someone else's song before
+/// writing your own.
+pub const EMPTY_CHART: &str = r#"Song Title - Artist Name
+4/4 #C 120bpm
 "#;
 
 /// Thriller - Dirty Loops, Cory Wong cover arrangement.
@@ -199,8 +202,14 @@ B A /// A/F# /// B A /// A/F# ///
 B
 "#;
 
-/// Default chart content for the editor.
-pub const DEFAULT_CHART: &str = EXAMPLE_MESSAGES_OF_HOPE;
+/// What the editor opens on: the blank slate, not a finished song.
+///
+/// It used to be `EXAMPLE_MESSAGES_OF_HOPE`, a complete arrangement. That
+/// shows off the language but it is the wrong first impression for a demo
+/// — someone arriving to try Keyflow had to clear a stranger's chart out
+/// of the way before they could type anything of their own. The finished
+/// examples are still one pick away in the examples menu.
+pub const DEFAULT_CHART: &str = EMPTY_CHART;
 
 /// Named example chart entry for the dropdown.
 pub struct ExampleChart {

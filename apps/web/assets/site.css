@@ -459,6 +459,26 @@ body {
 
 .kf-button:hover { border-color: var(--ink-soft); }
 
+/* The notation picker in the chart header. Shaped like a `.kf-button`
+ * because it sits in a row of them, but it is a real `<select>`: four
+ * mutually exclusive views is what a select is for, and it stays
+ * keyboard- and screen-reader-navigable for free. `color-scheme` on the
+ * root is what keeps its popup dark with the rest of the page. */
+.kf-select {
+  padding: 0.6rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 550;
+  transition: border-color 120ms ease;
+}
+
+.kf-select:hover { border-color: var(--ink-soft); }
+.kf-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
 .kf-button-primary {
   background: var(--accent);
   border-color: var(--accent);
