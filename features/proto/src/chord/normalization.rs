@@ -29,6 +29,26 @@ impl Chord {
     pub fn normalize(&mut self) {
         let mut desc = String::new();
 
+        // A Roman numeral carries its quality in its CASE: `vi` is the minor
+        // six and `VI` is the major one. Writing the marker as well says it
+        // twice — `vi` came out `vim`, `i iv v` as `im ivm vm`, and `vi°` as
+        // `vidim`, which loses the symbol the convention actually uses.
+        //
+        // So for a Roman root the triad quality is spelled the way figured
+        // notation spells it: minor and major are the case and print
+        // nothing, diminished is `°`, augmented is `+`. Everything else —
+        // sevenths, extensions, additions, suspensions — is unchanged,
+        // because the case says nothing about those.
+        let roman_root = self.root.is_roman();
+        let roman_quality = |q: ChordQuality| -> String {
+            match q {
+                ChordQuality::Major | ChordQuality::Minor => String::new(),
+                ChordQuality::Diminished => "°".to_string(),
+                ChordQuality::Augmented => "+".to_string(),
+                other => other.to_string(),
+            }
+        };
+
         let is_sixth_chord = self.additions.contains(&ChordDegree::Sixth) && self.family.is_none();
         let is_suspended = matches!(self.quality, ChordQuality::Suspended(_));
         let is_suspended_with_seventh = is_suspended && self.family.is_some();
@@ -61,9 +81,13 @@ impl Chord {
             // - Others: output the quality
             match self.quality {
                 ChordQuality::Major | ChordQuality::Power => {}
+                ChordQuality::Minor if roman_root => {}
                 ChordQuality::Minor => desc.push('m'),
+                _ if roman_root => desc.push_str(&roman_quality(self.quality)),
                 _ => desc.push_str(&self.quality.to_string()),
             }
+        } else if roman_root {
+            desc.push_str(&roman_quality(self.quality));
         } else {
             desc.push_str(&self.quality.to_string());
         }

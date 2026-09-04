@@ -152,7 +152,21 @@ I ii iii IV
 V vi vii I
 ```
 
-Descriptors stack on top as usual — `Imaj7`, `V7`, `iim7`.
+Descriptors stack on top as usual — `Imaj7`, `V7`, `ii7`.
+
+Note what is *not* there: no `m`. The case has already said minor, so `vi` is
+the minor six and writing `vim` would say it twice. Keyflow accepts an explicit
+`m` — `i:m7` parses — but it writes the chord back the way the convention
+spells it, as `i7`. The qualities the case cannot carry still appear: `vii°` for
+diminished, `III+` for augmented.
+
+```kf+
+Roman - Demo
+4/4 #C
+
+VS 4
+I vi ii7 vii°
+```
 
 Roman numerals suit analysis and anything with a classical accent. Numbers suit
 a chart a band will transpose on the stand. They resolve identically; pick the

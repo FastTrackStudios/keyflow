@@ -323,12 +323,17 @@ I IV vi V
     assert_eq!(verse_section.measures()[2].chords[0].full_symbol, "6");
     assert_eq!(verse_section.measures()[3].chords[0].full_symbol, "5");
 
-    // Chorus: Roman numerals (lowercase vi gets 'm' for minor)
+    // Chorus: Roman numerals. The case IS the quality, so `vi` stays `vi`.
     let chorus_section = &chart.sections[2];
     assert_eq!(chorus_section.measures()[0].chords[0].full_symbol, "I");
     assert_eq!(chorus_section.measures()[1].chords[0].full_symbol, "IV");
-    assert_eq!(chorus_section.measures()[2].chords[0].full_symbol, "vim"); // lowercase = minor
+    assert_eq!(chorus_section.measures()[2].chords[0].full_symbol, "vi");
     assert_eq!(chorus_section.measures()[3].chords[0].full_symbol, "V");
+    // …and it is still a minor chord underneath, not just a lowercase word.
+    assert_eq!(
+        chorus_section.measures()[2].chords[0].parsed.quality,
+        keyflow_proto::chord::ChordQuality::Minor
+    );
 }
 
 /// Test 9: Section-local memory within a section

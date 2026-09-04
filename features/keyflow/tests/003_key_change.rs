@@ -136,7 +136,7 @@ I IV vi V
     let pre_measures = &chart.sections[2].measures();
     assert_eq!(pre_measures[0].chords[0].full_symbol, "I"); // I -> I (quality implied by key)
     assert_eq!(pre_measures[1].chords[0].full_symbol, "IV"); // IV -> IV (quality implied by key)
-    assert_eq!(pre_measures[2].chords[0].full_symbol, "vim"); // vi -> vim (lowercase = minor)
+    assert_eq!(pre_measures[2].chords[0].full_symbol, "vi"); // vi -> vim (lowercase = minor)
     assert_eq!(pre_measures[3].chords[0].full_symbol, "V"); // V -> V (quality implied by key)
 
     // === C# Major Section Tests ===
@@ -159,7 +159,7 @@ I IV vi V
     let bridge_measures = &chart.sections[5].measures();
     assert_eq!(bridge_measures[0].chords[0].full_symbol, "I"); // I -> I (quality implied by key)
     assert_eq!(bridge_measures[1].chords[0].full_symbol, "IV"); // IV -> IV (quality implied by key)
-    assert_eq!(bridge_measures[2].chords[0].full_symbol, "vim"); // vi -> vim (lowercase = minor)
+    assert_eq!(bridge_measures[2].chords[0].full_symbol, "vi"); // vi -> vim (lowercase = minor)
     assert_eq!(bridge_measures[3].chords[0].full_symbol, "V"); // V -> V (quality implied by key)
 
     // Display the chart

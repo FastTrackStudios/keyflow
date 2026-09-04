@@ -4778,9 +4778,12 @@ mod tests {
     fn colon_and_quality_work_on_roman_numerals() {
         assert_eq!(chord_symbols("I:7 IV:maj7"), ["I7", "IVmaj7"]);
         // Lowercase Roman keeps its case (minor), with or without the colon.
-        assert_eq!(chord_symbols("v:7"), ["vm7"]);
-        assert_eq!(chord_symbols("v7"), ["vm7"]);
-        assert_eq!(chord_symbols("i:m7"), ["im7"]);
+        assert_eq!(chord_symbols("v:7"), ["v7"]);
+        assert_eq!(chord_symbols("v7"), ["v7"]);
+        // An explicit `m` is accepted and understood, but not echoed back:
+        // the case already says minor, and `i7` is how the convention
+        // spells a minor seventh on the tonic.
+        assert_eq!(chord_symbols("i:m7"), ["i7"]);
     }
 
     #[test]
@@ -4794,7 +4797,7 @@ mod tests {
     fn flat_roman_roots_parse_in_a_chart_line() {
         // `normalize_chord_case` must not uppercase the leading flat into note B.
         assert_eq!(chord_symbols("I bIII IV"), ["I", "bIII", "IV"]);
-        assert_eq!(chord_symbols("i bvi V"), ["im", "bvim", "V"]);
+        assert_eq!(chord_symbols("i bvi V"), ["i", "bvi", "V"]);
     }
 
     #[test]
