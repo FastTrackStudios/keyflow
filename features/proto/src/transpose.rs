@@ -36,8 +36,19 @@ use keyflow_syntax::parsing::Lexer;
 /// How chord roots are spelled for display.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum NotationSystem {
-    /// Letter chords spelled for the effective key (`G C D Em`).
+    /// Leave every chord in the notation it was typed in. A chart written
+    /// `1 4 5` stays numbers and one written `G C D` stays letters, and a
+    /// chart that mixes them keeps the mix. Transposition still re-spells
+    /// the letters, because a letter names a pitch; degrees and numerals
+    /// are key-relative and do not move.
+    ///
+    /// This is the default, and it is what separates "no opinion about
+    /// notation" from "render this as letters" — which used to be the same
+    /// value, so asking for letters was indistinguishable from asking for
+    /// nothing and a number chart could never be forced into letters.
     #[default]
+    AsWritten,
+    /// Letter chords spelled for the effective key (`G C D Em`).
     Letters,
     /// Nashville numbers — scale degree in the effective key (`1 4 5 6m`).
     Nashville,
@@ -138,8 +149,8 @@ fn display_key_for(song_key: &Key, view: &ChartView) -> Key {
 /// chart is never mutated. The returned chart's declared key metadata reflects
 /// the **displayed** (shape) key.
 pub fn apply_view(chart: &Chart, view: &ChartView) -> Chart {
-    // Fast path: the pure default view is the identity.
-    if view.target_key.is_none() && view.capo == 0 && view.notation == NotationSystem::Letters {
+    // Fast path: nothing to say and nothing to move.
+    if view.target_key.is_none() && view.capo == 0 && view.notation == NotationSystem::AsWritten {
         return chart.clone();
     }
 
@@ -235,6 +246,33 @@ fn renotate_chord(parsed_in: &Chord, ctx: &Ctx) -> Option<(Chord, String)> {
         .and_then(|b| b.resolve(Some(ctx.song_key)));
 
     match ctx.notation {
+        NotationSystem::AsWritten => {
+            // A key-relative root says the same thing in every key, so it is
+            // left exactly as authored. Only note names have to move.
+            if parsed_in.root.is_key_relative() {
+                // A Roman numeral carries its quality in its case, so it
+                // takes the same tail the Roman branch builds — otherwise
+                // `vi` renders as `vim`, saying minor twice.
+                let symbol = if parsed_in.root.is_roman() {
+                    let mut sym = parsed_in.root.to_string();
+                    sym.push_str(&roman_tail(parsed_in));
+                    if let Some(b) = &parsed_in.bass {
+                        sym.push('/');
+                        sym.push_str(&b.to_string());
+                    }
+                    sym
+                } else {
+                    parsed_in.to_string()
+                };
+                return Some((parsed_in.clone(), symbol));
+            }
+
+            let mut parsed = parsed_in.clone();
+            parsed.root = notate_root(&root_note, ctx);
+            parsed.bass = bass_note.as_ref().map(|b| notate_root(b, ctx));
+            let symbol = parsed.to_string();
+            Some((parsed, symbol))
+        }
         NotationSystem::Letters => {
             let new_root = notate_root(&root_note, ctx);
             let new_bass = bass_note.as_ref().map(|b| notate_root(b, ctx));
@@ -335,9 +373,25 @@ fn renotate_chord(parsed_in: &Chord, ctx: &Ctx) -> Option<(Chord, String)> {
 /// [`rewrite_chord`]; both flow through [`renotate_chord`].
 fn transpose_chord_symbol(symbol: &str, from_key: &Key, view: &ChartView) -> Option<String> {
     let mut lexer = Lexer::new(symbol.to_string());
-    let parsed = Chord::parse(&lexer.tokenize()).ok()?;
+    let mut parsed = Chord::parse(&lexer.tokenize()).ok()?;
     // Require a resolvable root so bare rhythm / non-chord words are rejected.
     parsed.root.resolve(Some(from_key))?;
+
+    // A bare degree carries its key's diatonic quality — `6` in E is C#
+    // MINOR. `Chord::parse` has no key, so it hands back a plain major
+    // triad and the chart parser applies the quality afterwards. This path
+    // has to do the same or it disagrees with `apply_view` about the same
+    // chart: forcing letters on `1 4 6 5` in E gave `E A C# B`.
+    if parsed.quality == ChordQuality::Major
+        && parsed.root.is_key_relative()
+        && !parsed.root.is_roman()
+        && symbol_is_bare_degree(symbol)
+        && let Some(degree) = parsed.root.diatonic_scale_degree()
+        && let Some(diatonic) = from_key.diatonic_quality(degree)
+        && diatonic != ChordQuality::Major
+    {
+        parsed.set_triad_quality(diatonic);
+    }
 
     let display_key = display_key_for(from_key, view);
     let letters_delta = (display_key.root.semitone + 12 - from_key.root.semitone) % 12;
@@ -350,10 +404,22 @@ fn transpose_chord_symbol(symbol: &str, from_key: &Key, view: &ChartView) -> Opt
     renotate_chord(&parsed, &ctx).map(|(_, symbol)| symbol)
 }
 
+/// Whether a chord token is a degree with no quality written on it — `6`,
+/// `b3`, `4`. Anything longer says its own quality (`6m`, `6M`, `6sus4`)
+/// and must not have the key's imposed on it.
+fn symbol_is_bare_degree(symbol: &str) -> bool {
+    let body = symbol.split(['/', '_', '\'']).next().unwrap_or(symbol);
+    let digits = body.trim_start_matches(['#', 'b']);
+    digits.len() == 1 && digits.chars().all(|c| c.is_ascii_digit())
+}
+
 /// Build the root notation for a resolved note under Letters or Nashville.
 fn notate_root(note: &MusicalNote, ctx: &Ctx) -> RootNotation {
     match ctx.notation {
-        NotationSystem::Letters => {
+        // Reached only for a root that was written as a note name; a
+        // key-relative one returns before this. So it follows the letters
+        // rule: keep the authored spelling, or re-spell for the new key.
+        NotationSystem::AsWritten | NotationSystem::Letters => {
             if ctx.letters_delta == 0 {
                 // No transposition — keep the note's authored spelling so a
                 // non-diatonic `Bb` stays `Bb` rather than being re-spelled to
@@ -387,8 +453,8 @@ fn notate_root(note: &MusicalNote, ctx: &Ctx) -> RootNotation {
 /// EVERYTHING else byte-for-byte: the title, tempo/meter, section headers,
 /// rhythm marks, repeat markers, comments, blank lines and original spacing.
 ///
-/// The input is never mutated. The identity view (`target_key` `None`, Letters,
-/// capo `0`) returns the source unchanged.
+/// The input is never mutated. The identity view (`target_key` `None`,
+/// `AsWritten`, capo `0`) returns the source unchanged.
 ///
 /// Only chord tokens on chord lines change. A line is treated as a header (and
 /// passed through untouched) when it is blank, is the `#<key>` metadata line, or
@@ -400,8 +466,8 @@ fn notate_root(note: &MusicalNote, ctx: &Ctx) -> RootNotation {
 /// pass through. Chord tokens are transposed via [`transpose_chord_symbol`], the
 /// same code path [`apply_view`] uses.
 pub fn transpose_source(source: &str, view: &ChartView) -> String {
-    // Fast path: the pure default view is the identity — byte-for-byte input.
-    if view.target_key.is_none() && view.capo == 0 && view.notation == NotationSystem::Letters {
+    // Fast path: nothing to say and nothing to move — byte-for-byte input.
+    if view.target_key.is_none() && view.capo == 0 && view.notation == NotationSystem::AsWritten {
         return source.to_string();
     }
 
@@ -432,10 +498,30 @@ pub fn transpose_source(source: &str, view: &ChartView) -> String {
 
 /// The song key declared on the first `#<key>` metadata line, if any.
 fn find_meta_key(source: &str) -> Option<Key> {
+    // The key is a token on the header line, not necessarily the first
+    // thing on it: `4/4 #E 120bpm` is as valid as `#E 4/4 120bpm`, and the
+    // parser accepts every ordering. This used to require the line to
+    // *start* with `#`, so a header that led with its time signature was
+    // read as key-less and every degree resolved against C major — a chart
+    // in E rendered its numbers as C, F, A, G.
+    //
+    // Only the header block is searched (up to the first blank line), which
+    // is where metadata lives. That keeps a `#4` on a chord line from being
+    // mistaken for a key signature.
     for line in source.lines() {
-        if let Some(rest) = line.trim_start().strip_prefix('#') {
-            let token = rest.split_whitespace().next().unwrap_or("");
-            return Key::parse(token).ok();
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            break;
+        }
+        for token in trimmed.split_whitespace() {
+            if token.starts_with("##") {
+                continue;
+            }
+            if let Some(rest) = token.strip_prefix('#')
+                && let Ok(key) = Key::parse(rest)
+            {
+                return Some(key);
+            }
         }
     }
     None
