@@ -28,6 +28,7 @@ use dioxus::prelude::*;
 use crate::chart::{ChartShape, Page, blank_page, engrave, export_pdf, export_svg, filename_for};
 use crate::chart_gpu;
 use crate::chart_url;
+use crate::notation::{CHOICES, Notation};
 
 /// Zoom bounds, matching keyflow-ui's native chart viewports.
 const ZOOM_MIN: f64 = 0.1;
@@ -49,6 +50,10 @@ pub fn ChartPreview(
 ) -> Element {
     let mut pages = use_signal(|| vec![blank_page()]);
     let mut generation = use_signal(|| 0_u64);
+    // Which notation the chart is DRAWN in. The source is never touched;
+    // this re-notates on the way to the engraver, so the editor keeps
+    // showing what was typed while the chart shows what you asked for.
+    let mut notation = use_signal(Notation::remembered);
     let exporting = use_signal(|| false);
     let status = use_signal(|| Option::<String>::None);
 
@@ -57,7 +62,9 @@ pub fn ChartPreview(
     // newest drops itself on wake instead of overwriting a fresher one.
     // (This is why the preview does not use `use_memo` the way `Chart`
     // does — the point is *not* to engrave on every pass.)
-    use_effect(use_reactive!(|(source)| {
+    let shown_now = notation();
+    let src_for_render = source.clone();
+    use_effect(use_reactive!(|(src_for_render, shown_now)| {
         let mine = generation.peek().wrapping_add(1);
         generation.set(mine);
         spawn(async move {
@@ -66,7 +73,8 @@ pub fn ChartPreview(
             if *generation.peek() != mine {
                 return;
             }
-            let rendered = engrave(&source, ChartShape::Page).unwrap_or_else(|e| {
+            let shown = shown_now.apply(&src_for_render);
+            let rendered = engrave(&shown, ChartShape::Page).unwrap_or_else(|e| {
                 tracing::debug!("chart preview render failed: {e}");
                 vec![blank_page()]
             });
@@ -80,6 +88,8 @@ pub fn ChartPreview(
     let mut last = use_signal(|| (0.0_f64, 0.0_f64));
 
     let src_for_export = source.clone();
+    // What is on screen, for the exports that should match it.
+    let shown_for_export = shown_now.apply(&source);
 
     // One live surface, or none. Asked once: if WebGL2 is refused the
     // preview renders the same SVG pages the rest of the site does, and
@@ -173,8 +183,26 @@ pub fn ChartPreview(
 
                 span { class: "kf-preview-spacer" }
 
+                // Notation is a property of the VIEW, so it sits on the
+                // chart's header rather than the source's: it changes what
+                // is engraved, never what is typed.
+                select {
+                    class: "kf-select",
+                    title: "Engrave the chart in this notation, whatever the source is written in",
+                    value: notation().key(),
+                    onchange: move |e| {
+                        let next = Notation::from_key(&e.value());
+                        notation.set(next);
+                        next.remember();
+                    },
+                    for (choice, label, hint) in CHOICES.iter() {
+                        option { value: choice.key(), title: "{hint}", "{label}" }
+                    }
+                }
+
                 ShareButton {
                     source: src_for_export,
+                    shown: shown_for_export,
                     exporting,
                     status,
                 }
@@ -306,7 +334,14 @@ fn PreviewPage(page: Page) -> Element {
 /// cost permanent space to be mostly ignored; behind one they cost a
 /// click when you actually want them.
 #[component]
-fn ShareButton(source: String, exporting: Signal<bool>, status: Signal<Option<String>>) -> Element {
+fn ShareButton(
+    source: String,
+    /// The chart as it is currently drawn — the source re-notated by the
+    /// view. Equal to `source` unless a notation is being forced.
+    shown: String,
+    exporting: Signal<bool>,
+    status: Signal<Option<String>>,
+) -> Element {
     let mut open = use_signal(|| false);
 
     rsx! {
@@ -316,7 +351,7 @@ fn ShareButton(source: String, exporting: Signal<bool>, status: Signal<Option<St
             "Share"
         }
         if open() {
-            ShareDialog { source: source.clone(), exporting, status, open }
+            ShareDialog { source: source.clone(), shown: shown.clone(), exporting, status, open }
         }
     }
 }
@@ -325,6 +360,7 @@ fn ShareButton(source: String, exporting: Signal<bool>, status: Signal<Option<St
 #[component]
 fn ShareDialog(
     source: String,
+    shown: String,
     exporting: Signal<bool>,
     status: Signal<Option<String>>,
     open: Signal<bool>,
@@ -374,7 +410,12 @@ fn ShareDialog(
         });
     };
 
-    let (svg_src, pdf_src, kf_src) = (source.clone(), source.clone(), source.clone());
+    // The pictures are of the chart you are looking at, so they take the
+    // re-notated source; the `.kf` file and the share link are the
+    // document itself and must stay exactly what was typed. Forcing Roman
+    // numerals to read a chart must not hand someone a link that rewrites
+    // their song into Roman numerals.
+    let (svg_src, pdf_src, kf_src) = (shown.clone(), shown.clone(), source.clone());
 
     rsx! {
         // The backdrop closes on click; the sheet stops the click from
