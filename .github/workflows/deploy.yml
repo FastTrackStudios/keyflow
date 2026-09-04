@@ -41,7 +41,7 @@ env:
 
 jobs:
   deploy:
-    runs-on: [self-hosted, nix-host]
+    runs-on: [self-hosted, keyflow]
     environment:
       name: keyflow-production
       url: https://keyflow.fasttrackstudio.app
