@@ -283,7 +283,10 @@ fn GuideToc(current: &'static str) -> Element {
                     }
                 }
             }
+            // Below the chapters, with the graph: neither is a chapter,
+            // both are somewhere you go from here.
             Link { to: Route::GuideGraph {}, class: "kf-toc-graph", "Graph" }
+            Link { to: Route::AppendixIndex {}, class: "kf-toc-graph", "Appendix" }
         }
     }
 }

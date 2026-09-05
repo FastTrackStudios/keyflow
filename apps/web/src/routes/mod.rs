@@ -47,7 +47,6 @@ pub fn Shell(children: Element) -> Element {
                 nav { class: "kf-nav",
                     Link { to: Route::Editor {}, "Editor" }
                     Link { to: Route::GuideIndex {}, "Guide" }
-                    Link { to: Route::AppendixIndex {}, "Appendix" }
                     a {
                         href: "https://github.com/FastTrackStudios/keyflow",
                         rel: "noreferrer",
