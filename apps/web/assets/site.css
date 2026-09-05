@@ -1489,7 +1489,7 @@ body {
  * that holds it (deliberately — see the reading-measure note on the
  * workbench grid), so without this it hugs the left edge of a wide column
  * with a gulf of empty space beside it. */
-.kf-prose { min-width: 0; max-width: 44rem; margin-inline: auto; }
+.kf-prose { min-width: 0; max-width: 52rem; margin-inline: auto; }
 .kf-prose p { margin: 0 0 1rem; }
 .kf-prose ul, .kf-prose ol { margin: 0 0 1rem; padding-left: 1.5rem; }
 .kf-prose ul { list-style: disc; }
@@ -1574,9 +1574,22 @@ body {
  *
  * Line numbers. `editor.css` numbers every line with a counter, which is
  * right for a buffer you are editing and noise beside a paragraph you
- * are reading. */
+ * are reading.
+ *
+ * The GUTTER goes with them. `editor.css` reserves 60px on the left for
+ * the numbers to paint into; with the numbers gone that was 60px of
+ * nothing, and it came out of the text — prose and charts wrapped at
+ * 644px inside a 784px column while the space sat empty beside them. */
 .kf-prose.editor-root .cm-line::before { content: none; }
 .kf-prose.editor-root .cm-line { padding-left: 0; }
+.kf-prose.editor-root { padding-left: 0; }
+
+/* Reading size. The editor sets 14px, which suits a source buffer beside
+ * a chart and is small for a page of prose. */
+.kf-prose.editor-root {
+  font-size: 1rem;
+  line-height: 1.65;
+}
 
 /* And the active-line highlight, which tracks a caret that does not
  * exist on a published page. */
