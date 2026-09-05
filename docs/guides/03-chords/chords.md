@@ -17,16 +17,16 @@ G C Em D
 
 ## The four parts
 
-Built in this order, every part after the root optional.
+Built in this order. Everything after the root is optional.
 
-| Part | In `Cm7b5` | What it says |
-| --- | --- | --- |
-| **Root** | `C` | the note it is built on |
-| **Quality** | `m` | major, minor, diminished… |
-| **Extension** | `7` | how far up the stack |
-| **Alteration** | `b5` | a note moved out of the scale |
-
-One page each: [[chord-root|Root]] · [[chord-quality|Quality]] · [[chord-extension|Extension]] · [[chord-alteration|Alteration]]
+```kf
+;+----- Root         the note it is built on
+;|+---- Quality      major, minor, diminished
+;||+--- Extension    how far up the stack
+;|||+-- Alteration   a note moved out of the scale
+;||||
+ Cm7b5
+```
 
 `C`, `Cm`, `Cm7`, `Cm7b5` are all chords. The same four bars with more of the harmony written down:
 
@@ -34,7 +34,7 @@ One page each: [[chord-root|Root]] · [[chord-quality|Quality]] · [[chord-exten
 Gmaj7 C Em7 D7
 ```
 
-See also: [[rhythm|Rhythm]] for how long each one lasts.
+See also: [[chord-root|Root]], [[chord-quality|Quality]], [[chord-extension|Extension]], [[chord-alteration|Alteration]] · [[rhythm|Rhythm]] for how long each one lasts.
 
 ---
 
