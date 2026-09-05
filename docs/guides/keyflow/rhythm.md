@@ -19,17 +19,36 @@ G C Em D
 Four chords, four bars.
 
 When a bar holds more than one chord you have to say how long each lasts,
-and Keyflow gives you two ways to say it. They do the same job from
-opposite ends, they can be mixed in one chart, and neither is the
-"proper" one.
+and Keyflow gives you two ways to say it. Most of the time you want the
+first one.
 
-[[slash-notation|Rhythmic Slash Notation]] counts **beats** — one slash
-per beat, which is what a player counts on a stand. It is the one you
-will reach for most.
+## Slashes, in one line
 
-[[lilypond-rhythm|LilyPond Rhythm Notation]] names **durations** — `_2`
-for a half, `_4` for a quarter — which is what a score calls them. Reach
-for it when the figure is easier to name than to count.
+One slash per beat, written after the chord:
+
+```kf+
+G // C // D // Em //
+```
+
+Two beats each, so two chords fill a bar. That is the whole idea, and it
+covers nearly every chart — [[slash-notation|Rhythmic Slash Notation]]
+has the rest: uneven bars, mixed lengths, and what happens when the
+count does not add up.
+
+## Note values, in one line
+
+The other way names the duration instead of counting beats — `_2` for a
+half, `_4` for a quarter:
+
+```kf+
+VS 4
+G_2 C_2 D_2 Em_2
+```
+
+Reach for it when the figure is easier to name than to count. See
+[[lilypond-rhythm|LilyPond Rhythm Notation]].
+
+## Which to use
 
 | | Counts | Reads as |
 |---|---|---|
