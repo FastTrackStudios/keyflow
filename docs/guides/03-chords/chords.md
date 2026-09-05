@@ -20,7 +20,7 @@ Read left to right, the columns spell the chord. Everything after the root is op
 One bar each, adding a part at a time:
 
 ```kf+
-C# C#m C#m7 C#m7b5
+A Bm C#m7 G#m7b5
 ```
 
 See also: [[chord-root|Root]], [[chord-quality|Quality]], [[chord-extension|Extension]], [[chord-alteration|Alteration]] · [[rhythm|Rhythm]] for how long each one lasts.
