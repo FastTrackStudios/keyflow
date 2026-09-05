@@ -17,18 +17,14 @@ G C Em D
 
 ## The four parts
 
-Built in this order. Everything after the root is optional.
+Read left to right, the columns spell the chord. Everything after the root is optional.
 
-```kf-
-;+----- Root         the note it is built on
-;|+---- Quality      major, minor, diminished
-;||+--- Extension    how far up the stack
-;|||+-- Alteration   a note moved out of the scale
-;||||
- Cm7b5
-```
+| Root | Quality | Extension | Alteration |
+| --- | --- | --- | --- |
+| `C#` | `m` | `7` | `b5` |
+| the note it is built on | major, minor, diminished | how far up the stack | a note moved out of the scale |
 
-`C`, `Cm`, `Cm7`, `Cm7b5` are all chords. The same four bars with more of the harmony written down:
+So `C#`, `C#m`, `C#m7` and `C#m7b5` are all chords. The same four bars as above, with more of the harmony written down:
 
 ```kf+
 Gmaj7 C Em7 D7
