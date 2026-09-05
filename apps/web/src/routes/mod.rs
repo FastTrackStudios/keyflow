@@ -22,6 +22,17 @@ use crate::account_menu::AccountMenu;
 pub fn Shell(children: Element) -> Element {
     rsx! {
         div { class: "kf-shell",
+            // Above the header, not inside it: the state of the project
+            // is not navigation, and someone arriving mid-page should
+            // still meet it before they meet a syntax they might build
+            // on.
+            div { class: "kf-alpha-banner", role: "status",
+                // The release tag, from `build.rs` — the workspace
+                // version lags the tags, so compiling that in would show
+                // a number nobody bumped.
+                strong { "Keyflow {env!(\"KEYFLOW_VERSION\")} — early alpha." }
+                " The syntax will change and things may be broken."
+            }
             header { class: "kf-header",
                 Link { to: Route::Home {}, class: "kf-wordmark", "Keyflow" }
                 nav { class: "kf-nav",

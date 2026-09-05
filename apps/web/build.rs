@@ -48,7 +48,46 @@ const CHART_WIDTH: f64 = 720.0;
 /// Padding around the shrink-wrapped content box, in points.
 const PAD: f64 = 6.0;
 
+/// Publish the release version as `KEYFLOW_VERSION`.
+///
+/// The tag, not `CARGO_PKG_VERSION`. Releases here are cut as git tags
+/// and the workspace version lags them — it says 0.1.0 while the tags
+/// are past v0.2 — so compiling in the manifest number would put a
+/// figure on the site that nobody bumped.
+///
+/// `git describe` also says how far past the tag a build is, which is
+/// exactly what a banner announcing an alpha should admit: `v0.2.1` on a
+/// release, `v0.2.1-4-gabc1234` four commits later.
+///
+/// Falls back to the manifest when git is unavailable — a build from a
+/// source tarball, or a container that copied the tree without `.git`.
+fn emit_version() {
+    // A new commit or tag changes the version, and neither touches a
+    // source file, so the build script has to be told to look again.
+    for path in [".git/HEAD", ".git/refs/tags", ".git/packed-refs"] {
+        let p = std::path::Path::new("../..").join(path);
+        if p.exists() {
+            println!("cargo:rerun-if-changed={}", p.display());
+        }
+    }
+
+    let described = std::process::Command::new("git")
+        .args(["describe", "--tags", "--always", "--dirty"])
+        .current_dir("../..")
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_owned())
+        .filter(|s| !s.is_empty());
+
+    let version = described.unwrap_or_else(|| format!("v{}", env!("CARGO_PKG_VERSION")));
+    println!("cargo:rustc-env=KEYFLOW_VERSION={version}");
+}
+
 fn main() {
+    emit_version();
+
     let engraver = std::sync::Arc::new(Engraver::new());
 
     // The editor renders the guide's body, so a `kf` fence is engraved by

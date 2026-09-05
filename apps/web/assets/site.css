@@ -1540,3 +1540,20 @@ body {
  * Kept, not removed: the gap between blocks IS what the blank line is
  * for. Just not a whole line of it. */
 .kf-prose.editor-root .cm-line:empty { height: 0.45rem; }
+
+/* ── Alpha banner ─────────────────────────────────────────────────
+ *
+ * Sits above the header on every page. Amber rather than red: this is
+ * "expect movement", not "something is wrong". Muted enough to read
+ * past on the tenth page and present enough to catch on the first.
+ */
+.kf-alpha-banner {
+  padding: 0.45rem 1rem;
+  text-align: center;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--signal-warn, #d4a957);
+  background: color-mix(in oklab, var(--signal-warn, #d4a957) 12%, transparent);
+  border-bottom: 1px solid color-mix(in oklab, var(--signal-warn, #d4a957) 30%, transparent);
+}
+.kf-alpha-banner strong { font-weight: 600; }

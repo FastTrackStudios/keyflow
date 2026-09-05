@@ -2,8 +2,8 @@
 title: Header
 kind: concept
 type: concept
-order: 1
-stage: Start here
+order: 2
+stage: Chart
 ---
 
 # Header
@@ -43,4 +43,4 @@ See also: [[chords|Chords]]
 
 ---
 
-Previous: [[introduction|An Introduction]] · Next: [[structure|Structure]] · Up: [[introduction|An Introduction]]
+Previous: [[alternatives|Alternatives]] · Next: [[structure|Structure]] · Up: [[introduction|An Introduction]]

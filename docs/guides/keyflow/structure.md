@@ -2,8 +2,8 @@
 title: Structure
 kind: concept
 type: concept
-order: 2
-stage: Start here
+order: 3
+stage: Chart
 ---
 
 # Structure

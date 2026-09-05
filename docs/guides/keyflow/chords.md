@@ -2,7 +2,7 @@
 title: Chords
 kind: concept
 type: concept
-order: 3
+order: 4
 stage: Chords
 summary: Four parts, in order. Only the root is required.
 ---
