@@ -60,31 +60,41 @@ The same input always engraves the same way, so you never make a layout decision
 
 ## Letters, numbers, or numerals
 
-A chord root can be written three ways, and they mean the same thing:
+A chord root can be written three ways. Same four chords, same engraving —
+only the way you typed them differs:
 
+````tabs
+=== Letters
 ```kf+
-Three Ways - Demo
 4/4 #C 120bpm
 
 VS 4
 C F Am G
 ```
 
+Names the pitches themselves. What most people say out loud, and what a
+chart handed to a dep should probably use.
+=== Numbers
 ```kf+
-Three Ways - Demo
 4/4 #C 120bpm
 
 VS 4
 1 4 6m 5
 ```
 
+Names positions in the key. Change `#C` in the header and every chord
+follows.
+=== Roman numerals
 ```kf+
-Three Ways - Demo
 4/4 #C 120bpm
 
 VS 4
 I IV vi V
 ```
+
+Positions again, with the case carrying the quality — `vi` is minor
+because it is lowercase.
+````
 
 Letters name pitches. Numbers and numerals name *positions in the key*, so they survive a transposition — change the key in the header and the chart follows. Pick the one your reader speaks; you can also switch the display afterwards without touching the file.
 

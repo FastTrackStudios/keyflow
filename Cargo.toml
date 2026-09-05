@@ -93,8 +93,8 @@ engraver-score = { path = "features/engraver/score" }
 # understands the ```kf fence family natively. `editor-keyflow` (here)
 # implements its `fence_renderer` seam so charts engrave; editor-state
 # knows nothing about keyflow, which is what keeps the graph acyclic.
-editor = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.10" }
-editor-state = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.10" }
+editor = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.11" }
+editor-state = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.11" }
 
 # ── features/editor — this repo's half of the editor integration ──────
 # Both need `editor-state` from below and `keyflow-text`/`engraver` from
