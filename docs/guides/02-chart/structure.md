@@ -8,7 +8,7 @@ stage: Chart
 
 # Structure
 
-A section is a name and a bar count.
+A section is a name and how many bars it lasts.
 
 ```kf+
 IN 2
@@ -16,7 +16,64 @@ VS 8
 CH 4
 ```
 
-## Naming a section
+Chords go on the line underneath.
+
+```kf+
+VS 4
+G C Em D
+```
+
+## Auto Numbering Sections
+
+You write `VS` every time. Keyflow numbers them for you, under this rule:
+
+> A section can't increment in number unless there is another section
+> between it.
+
+This avoids the classic VS 3 confusion, where VS 3 sits right after CH 1
+and someone has to ask which verse we're on.
+
+```kf+
+VS 4
+G C Em D
+
+CH 4
+C G D D
+
+VS 4
+G C Em D
+
+CH 4
+C G D D
+```
+
+Two verses back to back are the same verse continuing, so they don't
+increment.
+
+```kf+
+VS 8
+G C Em D
+
+VS 8
+G C Em D
+```
+
+A section that only happens once gets no number at all.
+
+Repeating a whole section is the same idea with nothing underneath it.
+
+```kf+
+VS 4
+G C Em D
+
+CH 4
+C G D D
+
+VS
+CH
+```
+
+## Section names
 
 | Section | Short | Section      | Short  |
 | ------- | ----- | ------------ | ------ |
@@ -25,60 +82,22 @@ CH 4
 | Chorus  | `CH`  | Solo         | `SOLO` |
 | Bridge  | `BR`  | Outro        | `OUT`  |
 
-Case does not matter. Full list: [Sections](/appendix/sections).
+Case doesn't matter. The full list is in [Sections](/appendix/sections).
 
-## Music under a section
+## The bar count is checked
 
-Chords go on the line below.
-
-```kf+
-VS 4
-G C Em D
-```
-
-> [!warning] A section header holds no music
-> `VS 4 G C Em D` fails. The header names the section and counts bars; music goes underneath.
-
-## The bar count is enforced
-
-It is not decoration. Three chords cannot fill four bars, and Keyflow will not guess which one you meant to hold:
+Three chords can't fill four bars, and Keyflow won't guess which one you
+meant to hold. It tells you what it counted instead of engraving a form
+you didn't write.
 
 ```kf-
 VS 4
 G C Em
 ```
 
-Rather than engrave a form you did not write, it fails and tells you what it counted. This is the first thing most people hit. It is also why a chart that parses is a chart whose form is right.
-
-## Replaying a section
-
-Name a section again with nothing under it.
-
-```kf+
-VS 4
-1 4 5 1
-
-CH 4
-4 1 5 1
-
-VS
-CH
-```
-
-Lay out each section once, then order the repeats. Replays are numbered for you — *Verse 2*, *Chorus 2*.
-
-## A note on the section
-
-A quoted string after the count is a direction, engraved with the section name.
-
-```kf+
-VS 4 "Half-time"
-G C Em D
-```
-
 ## Changing key
 
-A key on a section header changes it from there on.
+A key on the section header applies from there on.
 
 ```kf+
 #G
@@ -89,7 +108,12 @@ BR 4 #Bb
 1 4 5 1
 ```
 
-The degrees are unchanged; what they mean is not.
+## A direction on the section
+
+```kf+
+VS 4 "Half-time"
+G C Em D
+```
 
 See also: [Sections](/appendix/sections), [[rhythm|Rhythm]]
 

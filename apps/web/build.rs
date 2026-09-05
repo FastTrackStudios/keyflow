@@ -50,10 +50,14 @@ const PAD: f64 = 6.0;
 
 /// Publish the release version as `KEYFLOW_VERSION`.
 ///
-/// The tag, not `CARGO_PKG_VERSION`. Releases here are cut as git tags
-/// and the workspace version lags them — it says 0.1.0 while the tags
-/// are past v0.2 — so compiling in the manifest number would put a
-/// figure on the site that nobody bumped.
+/// `git describe` when there is a git to ask, and the manifest version
+/// otherwise. The fallback is not the unusual case: the deploy builds
+/// through Nix, which filters `.git` out of its source, so a SHIPPED
+/// binary always takes the manifest path. `[workspace.package] version`
+/// is therefore the number that reaches a reader, and it tracks the tag.
+///
+/// The git path still earns its place locally, where it distinguishes a
+/// working tree from the tag it sits on.
 ///
 
 /// Falls back to the manifest when git is unavailable — a build from a

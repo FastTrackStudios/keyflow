@@ -44,7 +44,11 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+# Tracks the release tag. The deploy builds through Nix, which filters
+# `.git` out of its source (nix/modules/crane.nix), so `git describe`
+# cannot answer inside it — the manifest is the only version a shipped
+# binary can read. Bump this with the tag.
+version = "0.0.1-alpha"
 edition = "2024"
 rust-version = "1.87"
 authors = ["FastTrack Studio"]

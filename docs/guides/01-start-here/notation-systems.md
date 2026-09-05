@@ -9,7 +9,10 @@ summary: Three ways to write a root. The chords come out the same.
 
 # Letters, Numbers, or Numerals
 
-Three ways to write a root. The chords come out the same.
+Musicians have developed many different ways of communciating the same
+information, each with their own stregnths and weaknesses. Keyflow allows three
+main ways of notating pitch or root notes of chords, and is open to more styles
+if they are requested.
 
 ````tabs
 === Letters
@@ -40,12 +43,9 @@ Positions again. The case carries the quality: `vi` is minor because it
 is lowercase.
 ````
 
-Numbers and numerals name positions rather than pitches, so transposing is editing one word in the [[header|header]].
-
-Which to reach for is a question about your reader, not about the music. A dep sight-reading wants letters. A band that rehearses in three keys wants numbers.
-
 See also: [[chord-root|Root]], [[header|Header]]
 
 ---
 
-Previous: [[goals|Goals]] · Next: [[header|Header]] · Up: [[introduction|An Introduction]]
+Previous: [[goals|Goals]] · Next: [[header|Header]] · Up: [[introduction|An
+Introduction]]

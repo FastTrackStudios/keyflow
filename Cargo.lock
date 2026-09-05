@@ -4138,7 +4138,7 @@ dependencies = [
 
 [[package]]
 name = "editor-keyflow"
-version = "0.1.0"
+version = "0.0.1-alpha"
 dependencies = [
  "allsorts",
  "editor-state",
@@ -4151,7 +4151,7 @@ dependencies = [
 
 [[package]]
 name = "editor-keyflow-lang"
-version = "0.1.0"
+version = "0.0.1-alpha"
 dependencies = [
  "editor-state",
  "keyflow-text",
@@ -4272,7 +4272,7 @@ dependencies = [
 
 [[package]]
 name = "engraver-proto"
-version = "0.1.0"
+version = "0.0.1-alpha"
 dependencies = [
  "anyrender",
  "bitflags 2.13.1",
@@ -4318,7 +4318,7 @@ dependencies = [
 
 [[package]]
 name = "engraver-score"
-version = "0.1.0"
+version = "0.0.1-alpha"
 dependencies = [
  "engraver-proto",
  "keyflow-musicxml",
@@ -7393,7 +7393,7 @@ dependencies = [
 
 [[package]]
 name = "keyflow"
-version = "0.1.0"
+version = "0.0.1-alpha"
 dependencies = [
  "color-eyre",
  "colored",
@@ -7415,11 +7415,11 @@ dependencies = [
 
 [[package]]
 name = "keyflow-annotate"
-version = "0.1.0"
+version = "0.0.1-alpha"
 
 [[package]]
 name = "keyflow-chordpro"
-version = "0.1.0"
+version = "0.0.1-alpha"
 dependencies = [
  "serde",
  "serde_json",
@@ -7427,7 +7427,7 @@ dependencies = [
 
 [[package]]
 name = "keyflow-cli"
-version = "0.1.0"
+version = "0.0.1-alpha"
 dependencies = [
  "clap",
  "dawfile-reaper",
@@ -7445,7 +7445,7 @@ dependencies = [
 
 [[package]]
 name = "keyflow-daw-analysis"
-version = "0.1.0"
+version = "0.0.1-alpha"
 dependencies = [
  "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.0.2)",
  "daw",
@@ -7458,7 +7458,7 @@ dependencies = [
 
 [[package]]
 name = "keyflow-live"
-version = "0.1.0"
+version = "0.0.1-alpha"
 dependencies = [
  "keyflow-midi",
  "keyflow-proto",
@@ -7467,7 +7467,7 @@ dependencies = [
 
 [[package]]
 name = "keyflow-lsp"
-version = "0.1.0"
+version = "0.0.1-alpha"
 dependencies = [
  "dashmap 6.2.1",
  "keyflow-syntax",
@@ -7482,7 +7482,7 @@ dependencies = [
 
 [[package]]
 name = "keyflow-midi"
-version = "0.1.0"
+version = "0.0.1-alpha"
 dependencies = [
  "keyflow-proto",
  "keyflow-text",
@@ -7492,7 +7492,7 @@ dependencies = [
 
 [[package]]
 name = "keyflow-mobile"
-version = "0.1.0"
+version = "0.0.1-alpha"
 dependencies = [
  "architect-telemetry",
  "architect-ui 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.0.2)",
@@ -7507,7 +7507,7 @@ dependencies = [
 
 [[package]]
 name = "keyflow-musicxml"
-version = "0.1.0"
+version = "0.0.1-alpha"
 dependencies = [
  "keyflow-proto",
  "keyflow-syntax",
@@ -7520,7 +7520,7 @@ dependencies = [
 
 [[package]]
 name = "keyflow-musx"
-version = "0.1.0"
+version = "0.0.1-alpha"
 dependencies = [
  "flate2",
  "keyflow-musicxml",
@@ -7536,7 +7536,7 @@ dependencies = [
 
 [[package]]
 name = "keyflow-orchestra"
-version = "0.1.0"
+version = "0.0.1-alpha"
 dependencies = [
  "keyflow-annotate",
  "keyflow-musicxml",
@@ -7563,7 +7563,7 @@ dependencies = [
 
 [[package]]
 name = "keyflow-sync"
-version = "0.1.0"
+version = "0.0.1-alpha"
 dependencies = [
  "candle-core",
  "candle-nn",
@@ -7586,7 +7586,7 @@ dependencies = [
 
 [[package]]
 name = "keyflow-syntax"
-version = "0.1.0"
+version = "0.0.1-alpha"
 dependencies = [
  "facet",
  "serde",
@@ -7595,7 +7595,7 @@ dependencies = [
 
 [[package]]
 name = "keyflow-text"
-version = "0.1.0"
+version = "0.0.1-alpha"
 dependencies = [
  "keyflow-chordpro",
  "keyflow-proto",
@@ -7631,7 +7631,7 @@ dependencies = [
 
 [[package]]
 name = "keyflow-web"
-version = "0.1.0"
+version = "0.0.1-alpha"
 dependencies = [
  "architect-ui 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.0.2)",
  "auth-client",
@@ -14461,7 +14461,7 @@ dependencies = [
 
 [[package]]
 name = "tree-sitter-keyflow"
-version = "0.1.0"
+version = "0.0.1-alpha"
 dependencies = [
  "cc",
  "tree-sitter-language",

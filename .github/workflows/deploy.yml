@@ -4,17 +4,22 @@
 #
 #   keyflow-web -> registry.starcommand.live:30050/keyflow-web
 #
-# The in-cluster registry is NOT reachable from GitHub-hosted runners, so
-# this runs on the org's SELF-HOSTED runner labelled `nix-host`
-# (github-fts). That runner is registered on the FastTrackStudios org, so
-# it reaches this repo; it does not reach personal-account repos, which
-# is why starcommand's own deploy sits pending.
+# Two jobs. The in-cluster registry is NOT reachable from GitHub-hosted
+# runners, so `push` runs on the org's SELF-HOSTED runner (github-fts).
+# That runner is registered on the FastTrackStudios org, so it reaches
+# this repo; it does not reach personal-account repos, which is why
+# starcommand's own deploy sits pending.
+#
+# `verify` polls a public URL for up to fifteen minutes, which needs
+# nothing but curl — so it runs GitHub-hosted. There is one self-hosted
+# runner for the whole org, and holding it to watch a website blocks
+# every other repo's deploy behind the wait.
 #
 # GitHub Deployments: the `environment:` block registers a real
 # Deployment, so runs appear under the repo's Environments tab with a
-# link to the live site. It only goes green after "Verify live" passes —
-# so "Active" means the cluster is SERVING this sha, not merely that an
-# image was pushed.
+# link to the live site. It sits on `verify`, not on `push`, so "Active"
+# means the cluster is SERVING this sha rather than that an image reached
+# the registry.
 #
 # No path filtering. Every crate in this workspace can change what the
 # site renders — the engraver draws it, keyflow-ui lays it out — so a
@@ -40,20 +45,12 @@ env:
   CONTAINERS_REGISTRIES_CONF: /dev/null
 
 jobs:
-  deploy:
+  # The image build needs the self-hosted runner: the registry is
+  # in-cluster and unreachable from GitHub-hosted ones.
+  push:
     runs-on: [self-hosted, keyflow]
-    environment:
-      name: keyflow-production
-      url: https://keyflow.fasttrackstudio.app
     steps:
-      # Tags, and enough history to reach one. `actions/checkout` clones
-      # a single commit with no tags by default, so `git describe` in
-      # apps/web/build.rs found nothing and the site shipped with the
-      # manifest version — "Keyflow v0.1.0" against a v0.0.1-alpha tag.
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true
 
       - name: Compute tags
         id: tags
@@ -82,6 +79,21 @@ jobs:
               "docker://${REGISTRY}/${img}:${tag}"
           done
 
+  # Polling a public URL for fifteen minutes needs nothing but curl, and
+  # holding the org's ONE self-hosted runner to do it blocks every other
+  # repo's deploy behind a wait. It runs on a GitHub-hosted runner, where
+  # the queue is somebody else's problem.
+  #
+  # The `environment:` lives here rather than on `push`, because a green
+  # Deployment should mean the cluster is SERVING this sha — not that an
+  # image reached the registry.
+  verify:
+    needs: push
+    runs-on: ubuntu-latest
+    environment:
+      name: keyflow-production
+      url: https://keyflow.fasttrackstudio.app
+    steps:
       # A green run must mean the cluster serves THIS commit. The bundle
       # reports the rev it was built from in version.json (written by
       # mkStaticSite), so this is the site answering, not the registry.
