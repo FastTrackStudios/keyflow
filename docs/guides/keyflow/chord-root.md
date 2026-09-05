@@ -23,7 +23,7 @@ C F Am G
 | Numbers | `1` `4` `6` | position in the key |
 | Roman | `I` `IV` `vi` | position, case carries quality |
 
-See [[introduction|Letters, numbers, or numerals]].
+See [[introduction#Letters, numbers, or numerals|Letters, numbers, or numerals]].
 
 ## Accidentals
 

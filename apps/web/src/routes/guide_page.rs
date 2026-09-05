@@ -65,6 +65,13 @@ pub fn GuidePage(slug: String) -> Element {
         };
     };
 
+    // A `#fragment` scrolls the browser on a full page load, and does
+    // nothing on a client-side route change — the router swaps the
+    // content without the browser ever seeing a navigation. So a link to
+    // a section landed at the top of the right page, which reads as a
+    // broken link rather than a working one.
+    scroll_to_hash();
+
     rsx! {
         Shell {
             // The engraving fonts, declared once for every chart on the
@@ -114,6 +121,58 @@ pub fn GuidePage(slug: String) -> Element {
             }
         }
     }
+}
+
+/// Scroll to `location.hash` once the page has rendered.
+///
+/// Runs after every render of a guide page rather than once on mount:
+/// the content a fragment points at may arrive after the first paint —
+/// under `dev-guide` the live vault replaces it a moment later — and a
+/// scroll to an element that does not exist yet is a scroll to nothing.
+fn scroll_to_hash() {
+    #[cfg(target_arch = "wasm32")]
+    use_effect(move || {
+        let Some(window) = web_sys::window() else {
+            return;
+        };
+        let Ok(hash) = window.location().hash() else {
+            return;
+        };
+        let Some(id) = hash.strip_prefix('#').filter(|s| !s.is_empty()) else {
+            return;
+        };
+        let Some(target) = window
+            .document()
+            .and_then(|d| d.get_element_by_id(&urlencoding_decode(id)))
+        else {
+            return;
+        };
+        target.scroll_into_view();
+    });
+}
+
+/// Percent-decode a fragment.
+///
+/// A heading id is slugged from its text, so an id is plain ASCII — but
+/// the browser percent-encodes what it puts in `location.hash`, and
+/// `%2D` never matches `-` in `getElementById`.
+#[cfg(target_arch = "wasm32")]
+fn urlencoding_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let Ok(byte) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
+                out.push(byte);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8(out).unwrap_or_else(|_| s.to_owned())
 }
 
 /// The engraving typefaces for this page's charts.
