@@ -4128,7 +4128,7 @@ dependencies = [
 [[package]]
 name = "editor"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.4#b34afe390102dc27f7f6de048f3e6521b7d73c13"
+source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.6#8e64bf12ab79d86aa185bd4146a5881dd09aa3f6"
 dependencies = [
  "dioxus",
  "editor-state",
@@ -4158,7 +4158,7 @@ dependencies = [
 [[package]]
 name = "editor-mermaid"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.4#b34afe390102dc27f7f6de048f3e6521b7d73c13"
+source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.6#8e64bf12ab79d86aa185bd4146a5881dd09aa3f6"
 dependencies = [
  "mermaid-rs-renderer",
  "thiserror 2.0.20",
@@ -4168,7 +4168,7 @@ dependencies = [
 [[package]]
 name = "editor-state"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.4#b34afe390102dc27f7f6de048f3e6521b7d73c13"
+source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.6#8e64bf12ab79d86aa185bd4146a5881dd09aa3f6"
 dependencies = [
  "editor-mermaid",
  "editor-syntax",
@@ -4183,7 +4183,7 @@ dependencies = [
 [[package]]
 name = "editor-syntax"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.4#b34afe390102dc27f7f6de048f3e6521b7d73c13"
+source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.6#8e64bf12ab79d86aa185bd4146a5881dd09aa3f6"
 dependencies = [
  "arborium",
  "arborium-theme",
@@ -4193,7 +4193,7 @@ dependencies = [
 [[package]]
 name = "editor-typst"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.4#b34afe390102dc27f7f6de048f3e6521b7d73c13"
+source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.6#8e64bf12ab79d86aa185bd4146a5881dd09aa3f6"
 dependencies = [
  "chrono",
  "comemo",
@@ -4211,7 +4211,7 @@ dependencies = [
 [[package]]
 name = "editor-view"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.4#b34afe390102dc27f7f6de048f3e6521b7d73c13"
+source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.6#8e64bf12ab79d86aa185bd4146a5881dd09aa3f6"
 dependencies = [
  "dioxus",
  "editor-state",
@@ -4227,7 +4227,7 @@ dependencies = [
 [[package]]
 name = "editor-vim"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.4#b34afe390102dc27f7f6de048f3e6521b7d73c13"
+source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.6#8e64bf12ab79d86aa185bd4146a5881dd09aa3f6"
 dependencies = [
  "editor-state",
  "tracing",
@@ -12804,7 +12804,7 @@ dependencies = [
 [[package]]
 name = "ssg"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/task?branch=main#9e1c643622e35b8f90744cbf6e3b4c9a6c8adaa7"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#6025aab6b248983f219265f2700c368bcfacd26f"
 dependencies = [
  "ssg-ui",
  "ssg-vault",
@@ -12813,7 +12813,7 @@ dependencies = [
 [[package]]
 name = "ssg-build"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/task?branch=main#9e1c643622e35b8f90744cbf6e3b4c9a6c8adaa7"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#6025aab6b248983f219265f2700c368bcfacd26f"
 dependencies = [
  "ssg-vault",
 ]
@@ -12821,7 +12821,7 @@ dependencies = [
 [[package]]
 name = "ssg-ui"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/task?branch=main#9e1c643622e35b8f90744cbf6e3b4c9a6c8adaa7"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#6025aab6b248983f219265f2700c368bcfacd26f"
 dependencies = [
  "dioxus",
  "ssg-vault",
@@ -12832,7 +12832,7 @@ dependencies = [
 [[package]]
 name = "ssg-vault"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/task?branch=main#9e1c643622e35b8f90744cbf6e3b4c9a6c8adaa7"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#6025aab6b248983f219265f2700c368bcfacd26f"
 dependencies = [
  "pulldown-cmark",
 ]

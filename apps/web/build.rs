@@ -77,6 +77,13 @@ fn main() {
         .link_base("/guide")
         .fence(|info, body| engraver.fence(info, body))
         .body_renderer(|markdown| editor_state::html::render_markdown_html(markdown))
+        // A broken cross-reference is a printed warning here, not a hard
+        // error, because `rendering-test.md` deliberately contains one:
+        // "unresolved wikilinks render red" is one of the behaviours that
+        // page exists to show, and the check is all-or-nothing per vault.
+        // The warning still names every broken target at build time, so a
+        // real typo in a chapter is still visible — just not fatal.
+        .allow_broken_links()
         .emit();
 
     // After `emit`, because it is only now known which typefaces the
