@@ -46,7 +46,14 @@ jobs:
       name: keyflow-production
       url: https://keyflow.fasttrackstudio.app
     steps:
+      # Tags, and enough history to reach one. `actions/checkout` clones
+      # a single commit with no tags by default, so `git describe` in
+      # apps/web/build.rs found nothing and the site shipped with the
+      # manifest version — "Keyflow v0.1.0" against a v0.0.1-alpha tag.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Compute tags
         id: tags
