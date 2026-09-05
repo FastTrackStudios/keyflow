@@ -9,9 +9,7 @@ summary: Every section abbreviation Keyflow knows, and what it engraves as.
 
 # All Section Names
 
-Every section abbreviation the parser knows. Written on its own line, an
-abbreviation opens a section — see [[structure|Structure]] for how they
-carry a bar count, a comment and a key change.
+Every abbreviation the parser knows. On its own line, one opens a section — see [[structure|Structure]].
 
 | Written | Engraves as |
 |---|---|
@@ -34,7 +32,7 @@ carry a bar count, a comment and a key change.
 
 ## Pre and Post
 
-Any section can be qualified, and the abbreviation composes:
+Any section composes.
 
 | Written | Engraves as |
 |---|---|
@@ -43,9 +41,7 @@ Any section can be qualified, and the abbreviation composes:
 
 ## Anything else
 
-A name Keyflow does not recognise is kept verbatim rather than rejected,
-so a chart can carry a section your band calls something nobody else
-does.
+An unrecognised name is kept verbatim, not rejected.
 
 See also: [[chords|Chords]], [[rhythm|Rhythm]]
 

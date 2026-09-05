@@ -8,7 +8,7 @@ stage: Start here
 
 # An Introduction
 
-Keyflow is a plain-text format for writing charts. You type what the song does, and it engraves.
+Keyflow is a plain-text format for charts. You type what the song does; it engraves.
 
 ```kf+
 Sunday Morning - The Wandering
@@ -18,50 +18,36 @@ VS 4
 G C Em D
 ```
 
-That is a complete file. Nothing was left out for the sake of the example.
+A complete file. Nothing omitted for the example.
 
 ## What it is for
 
-The everyday job is a **master rhythm chart** — the one a band reads on a stand: form, chords, the hits that matter, and little else. Keyflow is built so that chart takes about as long to type as it takes to say out loud.
+**Master rhythm charts** — form, chords, the hits that matter. Typing one should take about as long as saying it out loud.
 
-It is not an engraving program. If you need to move a slur three points to the left, you want [MuseScore](https://musescore.org) or [LilyPond](https://lilypond.org) — both wonderful, and neither of which Keyflow is trying to replace. Keyflow exports SVG, so the door out to a graphics editor is always open.
+It is not an engraving program. For manual control use [MuseScore](https://musescore.org) or [LilyPond](https://lilypond.org). Keyflow exports SVG, so the door to a graphics editor is open.
 
-> [!note] Where it is going
-> The aim is eventually to format whole orchestral parts. Precise manual control over engraving stays out of scope even then: that is a different job, and two projects already do it well.
+> [!note]- Where it is going
+> Whole orchestral parts, eventually. Precise manual engraving stays out of scope — that is a different job, and two projects already do it well.
 
 ## Two goals
 
-Everything else in the format follows from these.
-
-### Complexity only when the music asks for it
-
-`G C Em D` is a valid chart. It needs no header, no section, and no declaration of anything, because the song has not asked for any of that yet.
-
-When the song does ask — a key change, a horn section, synced lyrics — the syntax is there. What it must never do is make the simple chart pay for the complicated one's features.
+**Complexity only when the music asks for it.** `G C Em D` is a valid chart — no header, no section, no declarations. When the song asks for a key change or a horn section, the syntax is there.
 
 > [!tip] The test for any new syntax
-> Does the simplest chart get longer? If it does, it is the wrong design.
+> Does the simplest chart get longer? Then it is wrong.
 
-### Everything derives from the plain text
-
-The file is the source of truth. There is no project format, no sidecar, no database row that the text is a view of.
-
-That is what lets an entire chart live in a URL, and lets the text be recovered from the PDF it produced. It is also why other tools can generate and edit charts knowing nothing about Keyflow beyond how to write a text file — including, increasingly, tools that write the text for you.
+**Everything derives from the plain text.** No project format, no sidecar, no database. That is why a chart fits in a URL, why the text survives the PDF, and why any tool that can write text can write a chart.
 
 ## Why plain text
 
-- It survives. A `.kf` file will open in thirty years, in anything.
-- It diffs, merges and lives in version control like code.
-- Anything can script it — a shell one-liner transposes a folder.
-
-## What being opinionated buys
-
-The same input always engraves the same way, so you never make a layout decision. Change the house style later and every chart you have written re-engraves to match.
+- Survives — a `.kf` file opens in thirty years, in anything.
+- Diffs, merges, version-controls like code.
+- Scripts — a shell one-liner transposes a folder.
+- Same input, same engraving. Change the house style and every chart follows.
 
 ## Letters, numbers, or numerals
 
-A chord root can be written three ways. Same four chords, same engraving —
-only the way you typed them differs:
+Three ways to write a root. Same chords, same engraving.
 
 ````tabs
 === Letters
@@ -96,7 +82,7 @@ Positions again, with the case carrying the quality — `vi` is minor
 because it is lowercase.
 ````
 
-Letters name pitches. Numbers and numerals name *positions in the key*, so they survive a transposition — change the key in the header and the chart follows. Pick the one your reader speaks; you can also switch the display afterwards without touching the file.
+Letters name pitches. Numbers and numerals name *positions in the key* — change the key and the chart follows.
 
 ---
 

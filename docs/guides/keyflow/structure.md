@@ -8,7 +8,7 @@ stage: Start here
 
 # Structure
 
-A section is a name and a number of bars. Write those and you have the form.
+A section is a name and a bar count.
 
 ```kf+
 IN 2
@@ -16,11 +16,9 @@ VS 8
 CH 4
 ```
 
-The number is how many bars the section runs, and it is not decoration: Keyflow holds you to it. Chords that do not fill the section fail the parse with what it counted, rather than quietly engraving a form you did not mean.
+The count is enforced. Chords that do not fill the section fail the parse, with what Keyflow counted.
 
 ## Naming a section
-
-Use the short name. Most are what you would guess.
 
 | Section | Short | Section      | Short  |
 | ------- | ----- | ------------ | ------ |
@@ -29,11 +27,11 @@ Use the short name. Most are what you would guess.
 | Chorus  | `CH`  | Solo         | `SOLO` |
 | Bridge  | `BR`  | Outro        | `OUT`  |
 
-Case does not matter — `vs 8` and `VS 8` are the same.
+Case does not matter. Full list: [[appendix-sections|All Section Names]].
 
 ## Music under a section
 
-Put the chords on the line below:
+Chords go on the line below.
 
 ```kf+
 VS 4
@@ -41,11 +39,11 @@ G C Em D
 ```
 
 > [!warning] A section header holds no music
-> `VS 4 G C Em D` will not work. The header line names the section and counts its bars; the music goes on its own line underneath.
+> `VS 4 G C Em D` fails. The header names the section and counts bars; music goes underneath.
 
 ## Replaying a section
 
-Write a section once, then name it again with nothing under it to play it back:
+Name a section again with nothing under it.
 
 ```kf+
 VS 4
@@ -58,7 +56,7 @@ VS
 CH
 ```
 
-So a whole song is mostly its section list: lay out `VS`, `CH`, `BR` once, then order the repeats however the song goes. The replays come back numbered — *Verse 2*, *Chorus 2* — counted across the chart for you.
+Lay out each section once, then order the repeats. Replays are numbered for you — *Verse 2*, *Chorus 2*.
 
 See also: [[appendix-sections|All Section Names]], [[rhythm|Rhythm]]
 
