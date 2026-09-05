@@ -7,7 +7,7 @@
 //!
 //! It also means editing one word of prose costs a full rebuild of this
 //! crate — four to five minutes. This module is the dev-only escape: the
-//! server keeps a *live* vault rendered from `docs/guides/keyflow` at
+//! server keeps a *live* vault rendered from `docs/guides` at
 //! runtime, a filesystem watcher re-renders it on save, and the browser
 //! polls for changes and swaps the new pages in. Editing a chapter
 //! becomes a save and a second.
@@ -150,7 +150,7 @@ mod server {
     /// The same path `build.rs` reads. A dev server that rendered a
     /// different directory from the build would be previewing something
     /// that never ships.
-    const VAULT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/guides/keyflow");
+    const VAULT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/guides");
 
     /// The last render, and a counter the browser can compare against.
     ///

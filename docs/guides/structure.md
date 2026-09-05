@@ -2,7 +2,7 @@
 title: Structure
 kind: concept
 type: concept
-order: 3
+order: 5
 stage: Chart
 ---
 
@@ -27,7 +27,7 @@ The count is enforced. Chords that do not fill the section fail the parse, with 
 | Chorus  | `CH`  | Solo         | `SOLO` |
 | Bridge  | `BR`  | Outro        | `OUT`  |
 
-Case does not matter. Full list: [[appendix-sections|All Section Names]].
+Case does not matter. Full list: [All Section Names](/appendix/sections).
 
 ## Music under a section
 
@@ -58,7 +58,7 @@ CH
 
 Lay out each section once, then order the repeats. Replays are numbered for you — *Verse 2*, *Chorus 2*.
 
-See also: [[appendix-sections|All Section Names]], [[rhythm|Rhythm]]
+See also: [All Section Names](/appendix/sections), [[rhythm|Rhythm]]
 
 ---
 

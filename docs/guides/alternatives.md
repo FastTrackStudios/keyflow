@@ -2,7 +2,7 @@
 title: Alternatives
 kind: reference
 type: reference
-order: 1
+order: 3
 stage: Start here
 summary: What Keyflow is not, and what to reach for instead.
 ---
@@ -15,4 +15,4 @@ See also: [[introduction|An Introduction]]
 
 ---
 
-Previous: [[introduction|An Introduction]] · Next: [[header|Header]] · Up: [[introduction|An Introduction]]
+Previous: [[notation-systems|Letters, Numbers, or Numerals]] · Next: [[header|Header]] · Up: [[introduction|An Introduction]]

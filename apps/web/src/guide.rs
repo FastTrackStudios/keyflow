@@ -1,6 +1,6 @@
 //! The guide, as a vault.
 //!
-//! `docs/guides/keyflow/*.md` are wiki notes: frontmatter, `[[wikilink]]`
+//! `docs/guides/*.md` are wiki notes: frontmatter, `[[wikilink]]`
 //! cross-references, and ```kf fences carrying real charts. `build.rs`
 //! renders them — prose to HTML, charts to inline SVG through the host
 //! engraver — and codegens the page table this module includes.
@@ -23,6 +23,8 @@ use view_knowledge_graph::parse::WikiFile;
 
 // `pub static VAULT: ssg::StaticVault`, from `build.rs`.
 ssg::include_vault!();
+// `pub static APPENDIX: ssg::StaticVault`, from `build.rs`.
+ssg::include_vault!("ssg_appendix.rs");
 
 /// The guide, as the site should read it.
 ///
@@ -30,7 +32,7 @@ ssg::include_vault!();
 /// what makes a published chapter arrive as finished HTML.
 ///
 /// Under `dev-guide` it is whatever the dev server last rendered from
-/// `docs/guides/keyflow`, so editing a chapter is a save rather than a
+/// `docs/guides`, so editing a chapter is a save rather than a
 /// rebuild. See [`crate::guide_live`]. The baked table is still the
 /// fallback, and still what the first paint uses.
 ///
@@ -67,6 +69,20 @@ pub const CHART_FONTS: Asset = asset!("/assets/chart-fonts.css");
 /// they are checked by the pages resolving at all.
 #[cfg(feature = "server")]
 pub const BASE: &str = "/guide";
+
+/// Where the appendix is published.
+#[cfg(feature = "server")]
+pub const APPENDIX_BASE: &str = "/appendix";
+
+/// The appendix, as the site should read it.
+///
+/// A separate vault from [`vault`]: reference material rather than
+/// reading order, at its own URL. Not live-reloaded — the dev server
+/// watches the guide, and the appendix changes when the parser does.
+#[must_use]
+pub fn appendix() -> &'static ssg::StaticVault {
+    &APPENDIX
+}
 
 /// The whole guide as a link graph.
 ///

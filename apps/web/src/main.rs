@@ -47,6 +47,12 @@ pub enum Route {
     GuideGraph {},
     #[route("/guide/:slug")]
     GuidePage { slug: String },
+    // The appendix: its own vault, its own URL. Reference rather than
+    // reading order, so it is not a stage of the guide.
+    #[route("/appendix")]
+    AppendixIndex {},
+    #[route("/appendix/:slug")]
+    AppendixPage { slug: String },
     // The workbench: the same chapter, with an editor and a live chart.
     #[route("/learn/:slug")]
     Workbench { slug: String },
@@ -54,7 +60,10 @@ pub enum Route {
     NotFound { segments: Vec<String> },
 }
 
-use routes::{Chart, Editor, GuideGraph, GuideIndex, GuidePage, Home, NotFound, Workbench};
+use routes::{
+    AppendixIndex, AppendixPage, Chart, Editor, GuideGraph, GuideIndex, GuidePage, Home, NotFound,
+    Workbench,
+};
 
 fn main() {
     #[cfg(target_arch = "wasm32")]
@@ -136,6 +145,11 @@ async fn static_routes() -> ServerFnResult<Vec<String>> {
         .collect();
 
     for route in guide::vault().routes(guide::BASE) {
+        if !routes.contains(&route) {
+            routes.push(route);
+        }
+    }
+    for route in guide::appendix().routes(guide::APPENDIX_BASE) {
         if !routes.contains(&route) {
             routes.push(route);
         }

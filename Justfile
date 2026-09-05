@@ -111,7 +111,7 @@ web: tailwind
 # and serves the previous build forever. Nothing errors. You just read
 # stale pages. Turning it off gets an ordinary full rebuild.
 #
-# `apps/web/Dioxus.toml` already lists `../../docs/guides/keyflow` in
+# `apps/web/Dioxus.toml` already lists `../../docs/guides` in
 # `[web.watcher] watch_path`, which is what makes the change visible to
 # the watcher in the first place.
 
@@ -139,7 +139,7 @@ guide-preview port="8095": tailwind
     echo
     cd apps/web
     # `dev-guide` is what makes editing a chapter a save rather than a
-    # rebuild: the server renders `docs/guides/keyflow` at runtime, a
+    # rebuild: the server renders `docs/guides` at runtime, a
     # watcher re-renders it on write, and the page polls for the change.
     # See `apps/web/src/guide_live.rs`.
     exec dx serve --platform web --fullstack --hot-patch false \
@@ -310,11 +310,11 @@ guide-preview-stop:
 guide-watch port="8095":
     #!/usr/bin/env bash
     set -uo pipefail
-    echo "watching docs/guides/keyflow — ctrl-c to stop"
-    prev="$(find docs/guides/keyflow -name '*.md' -printf '%T@ %p\n' 2>/dev/null | sort)"
+    echo "watching docs/guides — ctrl-c to stop"
+    prev="$(find docs/guides -name '*.md' -printf '%T@ %p\n' 2>/dev/null | sort)"
     while true; do
         sleep 2
-        now="$(find docs/guides/keyflow -name '*.md' -printf '%T@ %p\n' 2>/dev/null | sort)"
+        now="$(find docs/guides -name '*.md' -printf '%T@ %p\n' 2>/dev/null | sort)"
         [ "$now" = "$prev" ] && continue
         prev="$now"
         echo "  $(date +%T) guide changed — restarting preview"

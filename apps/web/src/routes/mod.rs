@@ -1,11 +1,13 @@
 //! The site's screens.
 
+mod appendix_page;
 mod editor;
 mod graph;
 mod guide_page;
 mod home;
 mod workbench;
 
+pub use appendix_page::{AppendixIndex, AppendixPage};
 pub use editor::{Chart, Editor};
 pub use graph::GuideGraph;
 pub use guide_page::{GuideIndex, GuidePage};
@@ -45,6 +47,7 @@ pub fn Shell(children: Element) -> Element {
                 nav { class: "kf-nav",
                     Link { to: Route::Editor {}, "Editor" }
                     Link { to: Route::GuideIndex {}, "Guide" }
+                    Link { to: Route::AppendixIndex {}, "Appendix" }
                     a {
                         href: "https://github.com/FastTrackStudios/keyflow",
                         rel: "noreferrer",

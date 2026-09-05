@@ -62,7 +62,7 @@ apps/web/             keyflow.fasttrackstudio.app — landing page, editor,
                       guide. Wasm; charts render as SVG.
 apps/mobile/          Keyflow for iOS — chart library + the Keyflow
                       keyboard extension
-docs/guides/keyflow/  the language guide — also the source content for
+docs/guides/  the language guide — also the source content for
                       the site's embedded tutorial
 docs/spec/            tracey-tracked spec (score-engraving)
 ```

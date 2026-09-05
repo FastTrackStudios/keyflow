@@ -1,15 +1,15 @@
 ---
-title: All Section Names
+title: Sections
 kind: reference
 type: reference
-order: 20
-stage: Appendix
+order: 4
+stage: Form
 summary: Every section abbreviation Keyflow knows, and what it engraves as.
 ---
 
-# All Section Names
+# Sections
 
-Every abbreviation the parser knows. On its own line, one opens a section — see [[structure|Structure]].
+Every abbreviation the parser knows. On its own line, one opens a section — see [Structure](/guide/structure).
 
 | Written | Engraves as |
 |---|---|
@@ -43,8 +43,8 @@ Any section composes.
 
 An unrecognised name is kept verbatim, not rejected.
 
-See also: [[chords|Chords]], [[rhythm|Rhythm]]
+See also: [Chords](/guide/chords), [Rhythm](/guide/rhythm)
 
 ---
 
-Up: [[structure|Structure]]
+Up: [Structure](/guide/structure)

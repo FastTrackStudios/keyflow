@@ -172,7 +172,7 @@ console_error_panic_hook = "0.1"
 workspace = true
 
 [build-dependencies]
-# Reads docs/guides/keyflow and codegens the page table.
+# Reads docs/guides and codegens the page table.
 ssg-build = { workspace = true }
 # The guide's markdown is rendered by the EDITOR, not by ssg's own pass,
 # so a chapter looks the same published as it does being written —
@@ -213,7 +213,7 @@ web = ["dioxus/web", "dep:dioxus-web", "dioxus-web/hydrate"]
 # never for the wasm one. reqwest 0.12 arriving here is harmless: this
 # half is a host binary, and nothing links it against the browser's.
 server = ["dioxus/server", "dioxus/fullstack"]
-# Re-render the guide from `docs/guides/keyflow` on save instead of on
+# Re-render the guide from `docs/guides` on save instead of on
 # rebuild. Development only: it adds a filesystem watcher and a poll, and
 # the published site wants the baked vault. See `guide_live`.
 dev-guide = [

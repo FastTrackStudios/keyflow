@@ -2,7 +2,7 @@
 title: Alteration
 kind: concept
 type: concept
-order: 8
+order: 10
 stage: Chords
 summary: A note moved out of the scale.
 ---

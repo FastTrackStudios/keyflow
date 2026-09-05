@@ -2,7 +2,7 @@
 title: Quality
 kind: concept
 type: concept
-order: 6
+order: 8
 stage: Chords
 summary: Major, minor, diminished, augmented, suspended.
 ---

@@ -1,4 +1,4 @@
-//! Compile `docs/guides/keyflow/*.md` into the site — charts and all.
+//! Compile `docs/guides/*.md` into the site — charts and all.
 //!
 //! The guide is a **vault**: notes with frontmatter, `[[wikilink]]`
 //! cross-references, and ```kf fences carrying real charts. `ssg-build`
@@ -111,7 +111,7 @@ fn main() {
     // before this sees the text (so what arrives is ordinary markdown
     // with real links), parses the headings for the table of contents
     // and the search index, and reports broken links.
-    ssg_build::Vault::at("../../docs/guides/keyflow")
+    ssg_build::Vault::at("../../docs/guides")
         .link_base("/guide")
         .fence(|info, body| engraver.fence(info, body))
         .body_renderer(|markdown| editor_state::html::render_markdown_html(markdown))
@@ -121,6 +121,23 @@ fn main() {
         // page exists to show, and the check is all-or-nothing per vault.
         // The warning still names every broken target at build time, so a
         // real typo in a chapter is still visible — just not fatal.
+        .allow_broken_links()
+        .emit();
+
+    // The appendix is its own vault, not a stage of the guide. It is
+    // reference rather than reading order — nobody reads Roots after
+    // Alterations — and it lives at its own URL, so a link into it is a
+    // link out of the guide rather than a jump within it.
+    //
+    // Same renderer, so a chart in the appendix engraves exactly as one
+    // in a chapter. Cross-vault references are ordinary links: a
+    // wikilink resolves within a vault, and these two do not share one.
+    ssg_build::Vault::at("../../docs/appendix")
+        .link_base("/appendix")
+        .static_name("APPENDIX")
+        .out_file("ssg_appendix.rs")
+        .fence(|info, body| engraver.fence(info, body))
+        .body_renderer(|markdown| editor_state::html::render_markdown_html(markdown))
         .allow_broken_links()
         .emit();
 

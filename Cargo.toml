@@ -103,7 +103,7 @@ editor-keyflow = { path = "features/editor/editor-keyflow" }
 editor-keyflow-lang = { path = "features/editor/editor-keyflow-lang" }
 
 # ── task — the vault / knowledge-graph layer ──────────────────────────
-# The guide is a vault: `docs/guides/keyflow/*.md` are wiki notes that
+# The guide is a vault: `docs/guides/*.md` are wiki notes that
 # cross-link as `[[slug]]`, and the site renders that web as a real
 # knowledge graph. `view-knowledge-graph` is the port of llm_wiki's
 # graph view — deliberately FS-free and pure, so the same code that

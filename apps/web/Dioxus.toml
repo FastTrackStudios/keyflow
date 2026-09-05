@@ -8,7 +8,7 @@ title = "Keyflow"
 base_path = "/"
 
 [web.watcher]
-# Deliberately NOT `../../docs/guides/keyflow`.
+# Deliberately NOT `../../docs/guides`.
 #
 # The guide is baked in by build.rs, so a published build does have to
 # rebuild when a note changes — and it does: build.rs emits a

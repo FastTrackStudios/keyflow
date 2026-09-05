@@ -2,7 +2,7 @@
 title: Rhythmic Slash Notation
 kind: concept
 type: concept
-order: 11
+order: 13
 stage: Rhythm
 summary: One slash per beat, written after the chord.
 ---

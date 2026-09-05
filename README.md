@@ -105,7 +105,7 @@ full song fits: the "Messengers of Hope" example encodes to about 700
 characters. Past `MAX_URL_CHART_LEN` the share control says so instead of
 handing over a URL that will be truncated in transit.
 
-The guide is `docs/guides/keyflow/*.md`, rendered to HTML at build time by
+The guide is `docs/guides/*.md`, rendered to HTML at build time by
 `apps/web/build.rs` — no markdown parser reaches the browser. The guides'
 own fence convention is honoured: ` ```kf- ` is a syntax illustration shown
 as source, ` ```kf+ ` is a real chart, engraved on the page with a link

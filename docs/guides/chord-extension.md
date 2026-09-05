@@ -2,7 +2,7 @@
 title: Extension
 kind: concept
 type: concept
-order: 7
+order: 9
 stage: Chords
 summary: How far up the stack the chord goes.
 ---
