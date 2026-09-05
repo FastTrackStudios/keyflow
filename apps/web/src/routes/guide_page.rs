@@ -92,14 +92,6 @@ pub fn GuidePage(slug: String) -> Element {
                 article { class: "kf-guide-page",
                     ChapterNav { slug: page.slug, compact: true }
 
-                    div { class: "kf-page-actions",
-                        Link {
-                            to: Route::Workbench { slug: page.slug.to_string() },
-                            class: "kf-button kf-button-primary",
-                            "Try this chapter"
-                        }
-                    }
-
                     // The note: HTML and SVG produced by build.rs, which
                     // renders it through the EDITOR's markdown pass. That
                     // emits the editor's own classes — `cm-line`, `md-h1`,

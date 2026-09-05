@@ -1318,7 +1318,35 @@ body {
 
 .kf-toc-graph { margin-top: 0.6rem; color: var(--accent) !important; }
 
-.kf-guide-toc { display: flex; flex-direction: column; gap: 0.35rem; align-self: start; }
+/* The contents stay put while the chapter scrolls. A chapter is longer
+ * than a viewport, and a list of chapters you can only reach by scrolling
+ * back to the top is a list you stop using.
+ *
+ * `sticky` rather than `fixed`: the rail is a grid column and should keep
+ * its place in the layout. `max-height` plus its own `overflow-y` is what
+ * stops a long contents list from being clipped by the viewport — it
+ * scrolls itself once it outgrows the space. */
+.kf-guide-toc {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  align-self: start;
+  position: sticky;
+  /* Clears the sticky header, which is ~3.5rem tall and pinned at 0 —
+     at 1.5rem the first category label slid underneath it. */
+  top: 4.75rem;
+  max-height: calc(100vh - 6.25rem);
+  overflow-y: auto;
+  /* Room for the scrollbar so entries do not sit under it. */
+  padding-right: 0.35rem;
+  scrollbar-width: thin;
+}
+
+/* Stacked under the chapter on a narrow viewport, where sticky would
+ * pin a full-width block over the text. */
+@media (max-width: 55rem) {
+  .kf-guide-toc { position: static; max-height: none; overflow-y: visible; }
+}
 .kf-guide-toc a { color: var(--ink-soft); text-decoration: none; font-size: 0.925rem; }
 .kf-guide-toc a:hover { color: var(--ink); }
 .kf-toc-current { color: var(--accent) !important; font-weight: 600; }
@@ -1342,15 +1370,39 @@ body {
 
 .kf-toc-stage:first-of-type { margin-top: 0.6rem; }
 
-/* A category heading that is also a page — Chords, Rhythm — links, so
- * the category and its overview are one entry instead of the same word
- * twice. It keeps the heading's type and gains a link's affordances. */
+/* A category heading that is also a page — Chords, Rhythm — links, and
+ * has to LOOK unlike one that is only a grouping. A label and a link
+ * rendered identically means a reader learns which is which by trying.
+ *
+ * So it sheds the label's costume: the document face instead of mono,
+ * sentence case instead of small-caps, full contrast instead of muted.
+ * It reads as a chapter that happens to have chapters under it, which is
+ * what it is. The children stay muted and regular-weight beneath it, so
+ * the hierarchy survives. */
 .kf-toc-stage-link {
   display: block;
   text-decoration: none;
+  font-family: inherit;
+  font-size: 0.925rem;
+  letter-spacing: normal;
+  text-transform: none;
+  font-weight: 600;
+  opacity: 1;
+  color: var(--ink);
 }
-.kf-toc-stage-link:hover { opacity: 1; color: var(--ink); }
-.kf-toc-stage-link.kf-toc-current { opacity: 1; color: var(--accent); }
+.kf-toc-stage-link:hover { color: var(--accent); }
+.kf-toc-stage-link.kf-toc-current { color: var(--accent); }
+
+/* Children of a clickable category are indented under it. Nothing marks
+ * the grouping otherwise once the heading stops looking like a label. */
+.kf-toc-stage-link ~ a:not(.kf-toc-stage-link) { padding-left: 0.75rem; }
+
+/* The graph rail is orientation, so it stays visible for the same reason
+ * the contents do. */
+.kf-local-graph { position: sticky; top: 4.75rem; align-self: start; }
+@media (max-width: 55rem) {
+  .kf-local-graph { position: static; }
+}
 
 /* ── Chapter navigation ───────────────────────────────────────────
  *
@@ -1478,7 +1530,6 @@ body {
 .kf-example { margin: 1.5rem 0; display: grid; gap: 0.75rem; }
 .kf-example figcaption { display: grid; gap: 0.6rem; justify-items: start; }
 
-.kf-page-actions { display: flex; justify-content: flex-end; margin-bottom: 0.5rem; }
 
 /* ── Keyflow editor pane ─────────────────────────────────────────── */
 /* Structural styles come from `editor::EDITOR_STYLE`; token colours and
@@ -1557,3 +1608,18 @@ body {
   border-bottom: 1px solid color-mix(in oklab, var(--signal-warn, #d4a957) 30%, transparent);
 }
 .kf-alpha-banner strong { font-weight: 600; }
+
+/* The mark beside the wordmark. Sized to the cap height of the word next
+ * to it rather than to the bar, so the pair reads as one lockup. The
+ * radius matches the plate the icon is drawn on. */
+.kf-wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.kf-wordmark-icon {
+  width: 1.5em;
+  height: 1.5em;
+  border-radius: 0.34em;
+  display: block;
+}

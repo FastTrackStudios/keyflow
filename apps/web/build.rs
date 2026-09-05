@@ -55,10 +55,7 @@ const PAD: f64 = 6.0;
 /// are past v0.2 — so compiling in the manifest number would put a
 /// figure on the site that nobody bumped.
 ///
-/// `git describe` also says how far past the tag a build is, which is
-/// exactly what a banner announcing an alpha should admit: `v0.2.1` on a
-/// release, `v0.2.1-4-gabc1234` four commits later.
-///
+
 /// Falls back to the manifest when git is unavailable — a build from a
 /// source tarball, or a container that copied the tree without `.git`.
 fn emit_version() {
@@ -71,8 +68,12 @@ fn emit_version() {
         }
     }
 
+    // `--abbrev=0` gives the nearest tag and nothing else. The commit
+    // distance and dirty flag that `describe` adds by default are noise
+    // in a banner on every page: a reader cannot act on a hash, and the
+    // version is there to say which release they are looking at.
     let described = std::process::Command::new("git")
-        .args(["describe", "--tags", "--always", "--dirty"])
+        .args(["describe", "--tags", "--abbrev=0"])
         .current_dir("../..")
         .output()
         .ok()
