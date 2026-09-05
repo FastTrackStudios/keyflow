@@ -491,7 +491,17 @@ impl<'a> ChartParser<'a> {
             }
         }
 
-        false
+        // Roman numerals are the one chord shape that collides with English.
+        // The other two systems can decide on the first token alone — no title
+        // opens with a digit, and `Am`/`Cmaj7` carry a modifier no word does —
+        // but `I` begins a valid chord line AND "I Will Always Love You". So a
+        // numeral line only claims the line when EVERY token on it is a
+        // numeral chord; one English word and it is a title again.
+        //
+        // Without this a chart written in numerals had to open with a section
+        // marker to be read at all: `I ii iii IV` on its own became the title,
+        // and the chart engraved with no chords in it.
+        looks_like_roman_numeral_line(line)
     }
 
     /// Continue parsing metadata after a pure metadata line was found
@@ -524,3 +534,48 @@ impl<'a> ChartParser<'a> {
 }
 
 // endregion: --- Metadata Parsing
+
+/// Every token on the line is a Roman-numeral chord. Strict on purpose — see
+/// `looks_like_chord_content`, which is the only reason it has to be.
+pub(super) fn looks_like_roman_numeral_line(line: &str) -> bool {
+    let mut saw_chord = false;
+    for token in line.split_whitespace() {
+        // Bar lines are punctuation between chords, not chords.
+        if token.chars().all(|c| c == '|') {
+            continue;
+        }
+        if !is_roman_numeral_chord(token) {
+            return false;
+        }
+        saw_chord = true;
+    }
+    saw_chord
+}
+/// A single token that reads as a Roman-numeral chord: an optional accidental,
+/// a degree in 1–7 spelled in one consistent case, then whatever quality or
+/// extension the chord parser will make of the rest.
+pub(super) fn is_roman_numeral_chord(token: &str) -> bool {
+    let chars: Vec<char> = token.chars().collect();
+    let mut i = 0;
+    if matches!(chars.first(), Some('#' | 'b' | '\u{266f}' | '\u{266d}'))
+        && chars
+            .get(1)
+            .is_some_and(|c| matches!(c.to_ascii_uppercase(), 'I' | 'V'))
+    {
+        i = 1;
+    }
+    let start = i;
+    let Some(upper) = chars.get(i).map(char::is_ascii_uppercase) else {
+        return false;
+    };
+    while chars.get(i).is_some_and(|c| {
+        matches!(c.to_ascii_uppercase(), 'I' | 'V') && c.is_ascii_uppercase() == upper
+    }) {
+        i += 1;
+    }
+    let numeral: String = chars[start..i].iter().collect();
+    matches!(
+        numeral.to_ascii_uppercase().as_str(),
+        "I" | "II" | "III" | "IV" | "V" | "VI" | "VII"
+    )
+}

@@ -36,6 +36,16 @@ fn looks_like_chord_content(line: &str) -> bool {
         return true;
     }
 
+    // A line written entirely in Roman numerals is chord content. It has to be
+    // judged on the whole line rather than its first token — `I` opens a chord
+    // line and a song title equally well — so see the note on
+    // `looks_like_roman_numeral_line`. This sits ahead of the metadata guard
+    // below because that rejects anything starting with `b`, which would throw
+    // out a flat degree like `bVII`.
+    if super::metadata::looks_like_roman_numeral_line(trimmed) {
+        return true;
+    }
+
     // Get first token to analyze
     let first_token = trimmed.split_whitespace().next().unwrap_or("");
     if first_token.is_empty() {
