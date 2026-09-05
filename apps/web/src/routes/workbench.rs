@@ -169,18 +169,44 @@ mod tests {
     }
 
     #[test]
-    fn most_chapters_open_on_a_real_example() {
-        // The workbench is much less useful if it starts blank, so this
-        // checks the guide actually carries examples to seed it with.
-        let with = guide::vault()
+    fn every_chapter_but_the_prose_ones_opens_on_a_real_example() {
+        // The workbench is much less useful if it starts blank, so a
+        // chapter should carry an example to seed it with.
+        //
+        // Three pages carry none, and should not: two are about things
+        // other than notation, and one is a rendering fixture. Naming
+        // them beats a "how many may be missing" threshold, which erodes
+        // by one every time somebody adds a prose page — which is
+        // exactly how this test came to be passing with a count.
+        const PROSE_ONLY: [&str; 3] = ["alternatives", "writing-a-chart", "rendering-test"];
+
+        let missing: Vec<&str> = guide::vault()
             .pages
             .iter()
-            .filter(|p| !engraved_fences(p.source).is_empty())
-            .count();
+            .filter(|p| !PROSE_ONLY.contains(&p.slug))
+            .filter(|p| engraved_fences(p.source).is_empty())
+            .map(|p| p.slug)
+            .collect();
         assert!(
-            with >= guide::vault().pages.len() - 2,
-            "only {with} of {} chapters have an engraved example to open on",
-            guide::vault().pages.len()
+            missing.is_empty(),
+            "these chapters have no engraved example to open on: {missing:?}. \
+             Add one, or add the page to PROSE_ONLY if it is deliberately not about notation."
+        );
+
+        // And the exemptions stay honest: a page that gains an example
+        // should come off the list rather than sit on it forever.
+        let stale: Vec<&str> = PROSE_ONLY
+            .iter()
+            .filter(|slug| {
+                guide::vault()
+                    .page(slug)
+                    .is_some_and(|p| !engraved_fences(p.source).is_empty())
+            })
+            .copied()
+            .collect();
+        assert!(
+            stale.is_empty(),
+            "these now have examples; drop them from PROSE_ONLY: {stale:?}"
         );
     }
 
