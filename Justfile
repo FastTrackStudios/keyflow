@@ -82,6 +82,65 @@ tailwind-check: tailwind
 web: tailwind
     cd apps/web && dx serve --platform web
 
+# Same server as `just web`, with three differences that all matter:
+#
+# `--addr` is the Tailscale IP specifically, NOT `0.0.0.0`. Binding every
+# interface would put an unauthenticated dev server on whatever café wifi
+# the laptop is on; binding the tailnet address means only your own devices
+# can reach it, enforced by the network rather than by remembering.
+#
+# It runs in the FOREGROUND, as a normal `dx serve` with its TUI. That is
+# deliberate: `--interactive false` looks like the right flag for an
+# unattended server and quietly costs you the file watcher, so a guide
+# edit never rebuilds and the preview silently shows stale pages. Run it
+# under `just guide-preview-bg` (tmux) if you need it to outlive a shell.
+#
+# `--fullstack` is NOT optional, even though nothing here calls a server
+# function. The `web` feature turns on `dioxus-web/hydrate`, so the client
+# always expects a hydration payload to be embedded in the page — without
+# a server half to render one, hydration fails in `atob` and the app
+# renders a blank white page with one console exception and no other clue.
+#
+# `--hot-patch false` is the one that makes guide edits show up at all.
+# dx 0.8 turns Rust hot-patching (Subsecond) on by default, and the docs
+# are explicit that it "only tracks the tip crate… if you edit code in any
+# of your dependencies — which might be your crate in a workspace — DX
+# does not register that change". The guide is compiled in by `build.rs`,
+# so editing a chapter is a `build.rs` rerun, not a tip-crate Rust edit:
+# with hot-patching on, dx sees the file change, has nothing it can patch,
+# and serves the previous build forever. Nothing errors. You just read
+# stale pages. Turning it off gets an ordinary full rebuild.
+#
+# `apps/web/Dioxus.toml` already lists `../../docs/guides/keyflow` in
+# `[web.watcher] watch_path`, which is what makes the change visible to
+# the watcher in the first place.
+
+# Serve the site on this machine's Tailscale address, to workshop the guide from elsewhere.
+guide-preview port="8095": tailwind
+    #!/usr/bin/env bash
+    set -euo pipefail
+    addr="$(tailscale ip -4 2>/dev/null | head -1)"
+    if [ -z "$addr" ]; then
+        echo "no Tailscale address — is tailscaled running?" >&2
+        exit 1
+    fi
+    name="$(tailscale status --json 2>/dev/null \
+        | python3 -c 'import sys,json;print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))' \
+        2>/dev/null || true)"
+    # `dx serve` writes into this directory and does not prune it, so a
+    # route that has since been renamed leaves its old `index.html`
+    # behind — and the server keeps serving it, or redirects a live route
+    # to the dead one. That is how `/guide/rhythm` started 307ing to
+    # `/rhythm/` while production served both correctly. `web-build` has
+    # cleared it for release builds for the same reason.
+    rm -rf target/dx/keyflow-web/debug/web/public
+    echo "  guide preview → http://${addr}:{{port}}/guide"
+    [ -n "$name" ] && echo "                  http://${name}:{{port}}/guide"
+    echo
+    cd apps/web
+    exec dx serve --platform web --fullstack --hot-patch false \
+        --addr "$addr" --port {{port}}
+
 # Build the shipping web bundle into target/dx/keyflow-web/release/web/public,
 # with the guide pre-rendered into it.
 #
@@ -203,3 +262,23 @@ graph:
 # Serve the knowledge graph over MCP (stdio) — used by .mcp.json
 graph-serve:
     graphify-mcp --transport stdio --graph graphify-out/graph.json
+
+# `just guide-preview-log` follows it; `tmux attach -t keyflow-guide` gives
+# you the TUI; `just guide-preview-stop` ends it.
+
+# Same preview, detached in tmux so it outlives the shell that started it.
+guide-preview-bg port="8095":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    tmux kill-session -t keyflow-guide 2>/dev/null || true
+    tmux new-session -d -s keyflow-guide -c "$(pwd)" \
+        "nix develop --accept-flake-config -c just guide-preview {{port}} 2>&1 | tee /tmp/kfguide.log"
+    echo "started in tmux session 'keyflow-guide' — just guide-preview-log to follow"
+
+# Follow the detached preview's output.
+guide-preview-log:
+    @tail -f /tmp/kfguide.log
+
+# Stop the detached preview.
+guide-preview-stop:
+    @tmux kill-session -t keyflow-guide 2>/dev/null && echo stopped || echo "not running"

@@ -559,6 +559,7 @@ body {
   font-size: 0.82rem;
 }
 
+
 /* No padding and no border on the page's own frame: the column is
  * exactly as wide as a page of this height, so any padding makes the
  * frame narrower than the sheet it is framing and clips a strip off the
@@ -757,6 +758,7 @@ body {
 
 .kf-chart-failed { background: var(--code-bg); padding: 0.85rem 1rem; }
 
+
 .kf-chart-error {
   margin: 0;
   font-family: var(--font-mono);
@@ -775,6 +777,44 @@ body {
   line-height: 1.5;
   overflow-x: auto;
   white-space: pre;
+}
+
+/* These come AFTER `.kf-source` deliberately. `.kf-chart-source` and
+ * `.kf-source` have the same specificity, so the later rule wins — and
+ * with this block above it, `.kf-source`'s own radius and border came
+ * back and put white flecks in the corners again. Order is the whole
+ * mechanism here; do not move this up. */
+/* A guide example is ONE object: the source you type, and the chart it
+ * makes, in that order. `.kf-chart` is the chart's paper, so a `<pre>`
+ * dropped inside it sat in a white gutter — a dark rounded block framed
+ * in white on three sides, which reads as two mismatched things rather
+ * than as a pairing.
+ *
+ * Where the figure carries a source it stops being paper and becomes a
+ * frame. The source is flush to the top edge and shares the frame's
+ * corners, a hairline divides it from the engraving, and the paper is
+ * what shows through as padding around the SVG below. */
+/* `overflow: hidden` rather than a matching radius on the source. The
+ * frame's INNER curve is its radius minus its border width, and a
+ * `calc()` that tries to match it is still off by a fraction of a pixel
+ * at most zoom levels — which shows up as two white flecks in the top
+ * corners. Clipping the children to the frame is exact at every zoom.
+ * The `<pre>` keeps its own `overflow-x: auto`, so a long line still
+ * scrolls inside a clipped parent. */
+.kf-chart:has(.kf-chart-source) {
+  padding: 0;
+  overflow: hidden;
+}
+
+.kf-chart-source {
+  border: 0;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.kf-chart:has(.kf-chart-source) > svg {
+  padding: 0.75rem;
+  box-sizing: border-box;
 }
 
 /* ── Editor ──────────────────────────────────────────────────────── */
