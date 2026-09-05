@@ -2,104 +2,81 @@
 title: Rhythm
 kind: concept
 type: concept
-order: 5
-stage: The music
+order: 4
+stage: Start here
 ---
 
 # Rhythm
 
-A bare chord fills its bar. That is the whole default, and it is why most charts
-need nothing on this page.
+A chord with nothing after it lasts one bar. That covers most of a chart, and
+it is why the simple examples so far said nothing about rhythm at all.
 
 ```kf+
-One Per Bar - Demo
-4/4 #C
+Sunday Morning - The Wandering
+4/4 #G 120bpm
 
 VS 4
-C F G C
+G C Em D
 ```
 
-Four chords, four bars. You reach for the rest of this page only when a bar
-holds more than one chord, or when the band has to catch something together.
+Four chords, four bars.
 
-## Splitting a bar
+## Rhythmic slash notation
 
-A `/` is one beat of the chord before it. So `C // F //` is two beats of C and
-two of F, in one bar:
+When a bar holds more than one chord, say how long each lasts with slashes —
+one slash per beat:
 
 ```kf+
-Split - Demo
-4/4 #C
+Sunday Morning - The Wandering
+4/4 #G 120bpm
 
 VS 2
-C // F //
-G / Am / F / G /
+G // C // D // Em //
 ```
 
-The slashes are how the chart *looks* on the stand, too — they are the rhythm
-marks a player reads.
+Two beats each, so two chords fill a bar and four chords fill the section's
+two bars.
 
-## Grouping with ( )
+> [!warning] Slashes are a duration, not a separator
+> `G // C //` is two chords of two beats — one bar. It is easy to read them
+> as "play G, then C" and be surprised by a half-empty section. If the bar
+> count does not add up, Keyflow will tell you what it counted.
 
-Parentheses hold several chords inside one bar, sharing it evenly:
+Mix them freely. A chord can hold a bar while its neighbours split one:
 
 ```kf+
-Grouped - Demo
-4/4 #C
+Sunday Morning - The Wandering
+4/4 #G 120bpm
 
 VS 2
-(C F) (G Am)
+G /// C / Em
 ```
 
-Two chords to a bar, two beats each. Grouping says "these belong to one bar"
-without counting slashes.
+## Durations by note value
 
-## Exact note values
-
-An underscore gives a chord an explicit duration — `_2` is a half note, `_1` a
-whole, `_4` a quarter, `_8` an eighth:
+The other way is to name the note value, LilyPond-style: `_2` is a half note,
+`_4` a quarter, `_1` a whole bar.
 
 ```kf+
-Durations - Demo
-4/4 #C
+Sunday Morning - The Wandering
+4/4 #G 120bpm
 
 VS 2
-C_2 F_2 | G_1
+G_2 C_2 D_2 Em_2
 ```
 
-A duration sticks until something changes it, so a run of eighths does not need
-marking on every chord.
-
-## Hits and stops
-
-The reason a chart beats a chord sheet: the punches everyone has to land
-together.
-
-A `>` marks an accent — the chord is hit, not strummed through:
+The two systems do the same job from opposite ends — slashes count beats,
+underscores name values. Use whichever matches how you are thinking, and
+mix them if you like:
 
 ```kf+
-Hits - Demo
-4/4 #C
+Sunday Morning - The Wandering
+4/4 #G 120bpm
 
 VS 2
->C // >F //
+G_2 C // D_1
 ```
-
-An `s` and a duration is a stop: `s1` holds a whole bar of silence after the
-hit, so the band lands and leaves it.
-
-```kf+
-Stops - Demo
-4/4 #C
-
-VS 2
->C // s1
-```
-
-Hits and stops are step four of the [[lifecycle|life of a chart]] — the first
-thing you add once the harmony is right, and often the last thing a working
-chart needs.
 
 ---
 
-Previous: [[notation-systems|Notation Systems]] · Next: [[key-meter-changes|Key & Meter Changes]] · Up: [[lifecycle|The Life of a Chart]]
+Previous: [[chords|Chords]] · Up: [[introduction|An Introduction]]

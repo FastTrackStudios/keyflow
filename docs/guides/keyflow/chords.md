@@ -3,98 +3,91 @@ title: Chords
 kind: concept
 type: concept
 order: 3
-stage: The music
+stage: Start here
 ---
 
 # Chords
 
-Chords go under the section that owns them, one per bar unless you say
-otherwise.
+Write the root, and add to it only what the chord actually has.
 
 ```kf+
 Sunday Morning - The Wandering
-4/4 120bpm #E
+4/4 #C 120bpm
 
 VS 4
-E A B E
+C F Am G
 ```
 
-## Three ways to name a chord
+## The four parts
 
-The same progression, three ways. Pick whichever fits the chart — they are
-interchangeable, and a chart can mix them.
+A chord symbol is built in this order, and every part after the root is
+optional:
 
-Letter names say the chord outright:
+| Part            | Example in `Cmaj7#11`  | What it says                    |
+| --------------- | ---------------------- | ------------------------------- |
+| **Root**        | `C`                    | which note the chord is built on |
+| **Quality**     | `maj`                  | major, minor, diminished…        |
+| **Extension**   | `7`                    | how far up the stack it goes     |
+| **Alteration**  | `#11`                  | a note moved out of the scale    |
+
+The root is the only part you must write. `C` is a chord; so is `Cm`; so is
+`Cm7`; so is `Cm7b5`.
+
+## Sevenths and colour
 
 ```kf+
 Sunday Morning - The Wandering
-4/4 120bpm #E
+4/4 #C 120bpm
 
 VS 4
-E A B E
+Cmaj7 Dm7 G7 Cmaj7
 ```
 
-Nashville numbers say the chord's place in the key, so the chart transposes by
-changing one token in the header:
+## Slash chords
+
+A `/` puts a different note in the bass:
 
 ```kf+
 Sunday Morning - The Wandering
-4/4 120bpm #E
+4/4 #C 120bpm
 
 VS 4
-1 4 5 1
+C G/B Am F
 ```
 
-Roman numerals say the same thing in the analyst's dialect:
+> [!important] `/` means something else in Roman numerals
+> In letters and numbers a slash is a bass note. In Roman numerals it writes
+> a **secondary chord** — `V/V` is "five of five", the dominant of the
+> dominant, which in C is D. That is what the notation already means to the
+> people who read it, so Keyflow does not fight it.
 
 ```kf+
-Sunday Morning - The Wandering
-4/4 120bpm #E
+Secondary - Demo
+4/4 #C 120bpm
 
 VS 4
-I IV V I
+I V/V IV V
 ```
 
-Numbers and numerals are **relative to the key**, which is what makes the key
-token in the [[header|header]] more than a signature: change `#E` to `#G` and
-every number moves with it.
+## Numbers and the colon
 
-## Quality and colour
-
-Everything you would write on a chord chart works on the root, in any of the
-three systems:
+When a chord is written with numbers, the root and the quality can run
+together and get hard to read — `57` could be a fifty-seven. A colon
+separates them:
 
 ```kf+
-Sunday Morning - The Wandering
-4/4 120bpm #E
-
-VS 8
-Emaj7 C#m7 F#m9 B7
-Amaj9 G#m7b5 C#7#9 Bsus4
-```
-
-The same in numbers:
-
-```kf+
-Sunday Morning - The Wandering
-4/4 120bpm #E
+Colon - Demo
+4/4 #C 120bpm
 
 VS 4
-1maj7 6m7 2m9 5
+1:maj7 2m 3m 5:7
 ```
 
-## Slash bass
-
-A `/` names the note in the bass:
-
-```kf+
-Sunday Morning - The Wandering
-4/4 120bpm #E
-
-VS 4
-E B/D# C#m A
-```
+The colon is purely for reading, and it does not survive into the chart:
+`1:maj7` and `1maj7` parse identically and both engrave as `1maj7`. Use it
+where it earns its keep and skip it where it does not — `2m` and `6m9` read
+fine without one.
 
 ---
 
-Previous: [[structure|Structure]] · Next: [[notation-systems|Notation Systems]] · Up: [[lifecycle|The Life of a Chart]]
+Previous: [[structure|Structure]] · Next: [[rhythm|Rhythm]] · Up: [[introduction|An Introduction]]
