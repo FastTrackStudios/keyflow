@@ -11,9 +11,6 @@ stage: Start here
 A section is a name and a number of bars. Write those and you have the form.
 
 ```kf+
-Sunday Morning - The Wandering
-4/4 #G 120bpm
-
 IN 2
 VS 8
 CH 4
@@ -39,9 +36,6 @@ Case does not matter — `vs 8` and `VS 8` are the same.
 Put the chords on the line below:
 
 ```kf+
-Sunday Morning - The Wandering
-4/4 #G 120bpm
-
 VS 4
 G C Em D
 ```
@@ -54,9 +48,6 @@ G C Em D
 Write a section once, then name it again with nothing under it to play it back:
 
 ```kf+
-Sunday Morning - The Wandering
-4/4 #G 120bpm
-
 VS 4
 1 4 5 1
 

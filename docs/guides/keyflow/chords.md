@@ -11,10 +11,6 @@ stage: Start here
 Write the root, and add to it only what the chord actually has.
 
 ```kf+
-Sunday Morning - The Wandering
-4/4 #C 120bpm
-
-VS 4
 C F Am G
 ```
 
@@ -34,10 +30,6 @@ The root is the only part you must write. `C` is a chord; so is `Cm`; so is `Cm7
 ## Sevenths and colour
 
 ```kf+
-Sunday Morning - The Wandering
-4/4 #C 120bpm
-
-VS 4
 Cmaj7 Dm7 G7 Cmaj7
 ```
 
@@ -46,10 +38,6 @@ Cmaj7 Dm7 G7 Cmaj7
 A `/` puts a different note in the bass:
 
 ```kf+
-Sunday Morning - The Wandering
-4/4 #C 120bpm
-
-VS 4
 C G/B Am F
 ```
 
@@ -57,7 +45,6 @@ C G/B Am F
 > In letters and numbers a slash is a bass note. In Roman numerals it writes a **secondary chord** — `V/V` is "five of five", the dominant of the dominant, which in C is D. That is what the notation already means to the people who read it, so Keyflow does not fight it.
 
 ```kf+
-Secondary - Demo
 4/4 #C 120bpm
 
 VS 4
@@ -69,10 +56,8 @@ I V/V IV V
 When a chord is written with numbers, the root and the quality can run together and get hard to read — `57` could be a fifty-seven. A colon separates them:
 
 ```kf+
-Colon - Demo
 4/4 #C 120bpm
 
-VS 4
 1:maj7 2m 3m 5:7
 ```
 

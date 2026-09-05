@@ -8,69 +8,52 @@ stage: Start here
 
 # Header
 
-The first lines say what the song is. Everything on them is optional.
+The first two lines say what the song is. Everything on them is optional.
 
 ```kf+
-Sunday Morning - The Wandering
-4/4 #G 120bpm
-
-VS 4
-G C Em D
+Song Title (Subtitle) - Artist Name, Second Artist Name
+#C 120bpm 4/4
 ```
 
-Two lines: the title and artist, then the musical defaults.
+That is the whole header: a title line and a defaults line. Every chart in
+the rest of this guide leaves them out, because once you have seen them
+once they are noise.
 
-## Title and artist
+## The title line
 
-The first line is the title. A dash separates the artist:
+Everything before the dash is the title, everything after it is the
+artist. Parentheses make a subtitle, and a comma separates artists.
 
-```kf+
-Sunday Morning - The Wandering
-```
+| Written | Means |
+|---|---|
+| `Song Title` | a title, no artist |
+| `- Artist Name` | an artist, no title |
+| `Song Title (Subtitle)` | a title with a subtitle |
+| `Song Title - A, B` | two artists |
 
-That is a whole file, and it engraves — a title page with nothing under it yet, which is what you have when you have only decided what you are writing.
+Either half can stand alone. A line that opens with a dash is an artist,
+which is how you write one without inventing a title for it yet.
 
-Either half can stand alone. A leading dash means the line is an artist:
+## The defaults line
 
-```kf+
-- The Wandering
-```
+`#C` is the key, `120bpm` the tempo, `4/4` the time signature. Order does
+not matter — `4/4 #C 120bpm` is the same line, so write them in whatever
+order you think of them.
 
-## Meter, key and tempo
-
-The second line carries the defaults. Order does not matter:
-
-```kf+
-Sunday Morning
-4/4 #G 120bpm
-```
-
-`4/4` is the time signature, `#G` the key, `120bpm` the tempo. Write them in whatever order you think of them — `#G 4/4 120bpm` is the same line.
-
-Each is independent, and each engraves on its own:
-
-```kf+
-120bpm
-```
-
-```kf+
-#E
-```
+Each is independent of the others. A line carrying only a tempo is a
+valid header, and so is a line carrying only a key.
 
 > [!info] Why a bare key engraves a bar
-> A key signature has to sit on a staff, so declaring one implies an opening measure in 4/4. The alternative — refusing to draw anything until you have typed enough — makes the format feel like it is waiting for you.
+> A key signature has to sit on a staff, so declaring one implies an
+> opening measure in 4/4. The alternative — refusing to draw anything
+> until you have typed enough — makes the format feel like it is waiting
+> for you.
 
 ## The `#` is not a sharp
 
-`#G` is *the key of G*, not G-sharp. The `#` marks the token as a key signature. A sharp key is written the way you would say it:
-
-```kf+
-Sharp Key - Demo
-4/4 #F# 120bpm
-
-VS 4
-F# B C#m F#
-```
+`#C` is *the key of C*, not C-sharp. The `#` marks the token as a key
+signature. A sharp key is written the way you would say it — `#F#` is the
+key of F-sharp.
 
 ---
 
