@@ -22,7 +22,6 @@ Read left to right, the columns spell the chord. Everything after the root is op
 | Root | Quality | Extension | Alteration |
 | --- | --- | --- | --- |
 | `C#` | `m` | `7` | `b5` |
-| the note it is built on | major, minor, diminished | how far up the stack | a note moved out of the scale |
 
 So `C#`, `C#m`, `C#m7` and `C#m7b5` are all chords. The same four bars as above, with more of the harmony written down:
 
