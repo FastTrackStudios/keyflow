@@ -19,7 +19,7 @@ G C Em D
 
 Built in this order. Everything after the root is optional.
 
-```kf
+```kf-
 ;+----- Root         the note it is built on
 ;|+---- Quality      major, minor, diminished
 ;||+--- Extension    how far up the stack
