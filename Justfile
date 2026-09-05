@@ -271,8 +271,14 @@ guide-preview-bg port="8095":
     #!/usr/bin/env bash
     set -euo pipefail
     tmux kill-session -t keyflow-guide 2>/dev/null || true
+    # NOT piped into `tee`. A pipe means dx's stdout is not a TTY, and dx
+    # treats that exactly like `--interactive false`: it serves happily
+    # and silently stops watching for changes, so nothing ever rebuilds.
+    # `pipe-pane` copies the output to a log without taking the terminal
+    # away from it.
     tmux new-session -d -s keyflow-guide -c "$(pwd)" \
-        "nix develop --accept-flake-config -c just guide-preview {{port}} 2>&1 | tee /tmp/kfguide.log"
+        "nix develop --accept-flake-config -c just guide-preview {{port}}"
+    tmux pipe-pane -o -t keyflow-guide "cat >> /tmp/kfguide.log"
     echo "started in tmux session 'keyflow-guide' — just guide-preview-log to follow"
 
 # Follow the detached preview's output.
@@ -282,3 +288,30 @@ guide-preview-log:
 # Stop the detached preview.
 guide-preview-stop:
     @tmux kill-session -t keyflow-guide 2>/dev/null && echo stopped || echo "not running"
+
+# Restart the preview whenever a guide chapter changes.
+#
+# dx cannot do this itself, and its own dashboard says so: `Hotreload:
+# rsx and asset`. A guide chapter is neither — it is an input to
+# `build.rs`, which compiles the vault into the binary — so dx sees the
+# edit, has no category for it, and serves the previous build for ever
+# without a word. Restarting is the only thing that reliably picks a
+# chapter edit up, so this does that.
+#
+# It costs an incremental rebuild per edit rather than a hot reload. That
+# is the honest price of the guide being compiled in; the alternative is
+# reading the markdown at runtime, which is a real change to how the
+# guide loads.
+guide-watch port="8095":
+    #!/usr/bin/env bash
+    set -uo pipefail
+    echo "watching docs/guides/keyflow — ctrl-c to stop"
+    prev="$(find docs/guides/keyflow -name '*.md' -printf '%T@ %p\n' 2>/dev/null | sort)"
+    while true; do
+        sleep 2
+        now="$(find docs/guides/keyflow -name '*.md' -printf '%T@ %p\n' 2>/dev/null | sort)"
+        [ "$now" = "$prev" ] && continue
+        prev="$now"
+        echo "  $(date +%T) guide changed — restarting preview"
+        just guide-preview-bg {{port}} >/dev/null
+    done
