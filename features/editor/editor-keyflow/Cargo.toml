@@ -23,8 +23,23 @@ keyflow-text = { workspace = true, features = ["highlighting"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 
+# Font subsetting for `font_subset`, optional.
+#
+# `allsorts` rather than the obvious `subsetter`: that one REMOVES the
+# cmap table (it targets PDF CID embedding, where the PDF supplies its
+# own), and an engraved SVG addresses glyphs by character, so a browser
+# needs a cmap to look them up in. allsorts generates one, and takes a
+# `CmapTarget::Unicode` for exactly this case. `ttf-parser` maps the
+# characters to glyph ids through the face's own cmap first.
+allsorts = { version = "0.16", optional = true }
+ttf-parser = { version = "0.25", optional = true }
+
 [features]
 default = []
+# Subset `@font-face` rules for a page of charts — see `font_subset`.
+# `allsorts` is a large dependency and nothing in a browser needs it, so
+# only the site's build script and its dev server turn this on.
+subset = ["dep:allsorts", "dep:ttf-parser"]
 
 [lints]
 workspace = true

@@ -4140,11 +4140,13 @@ dependencies = [
 name = "editor-keyflow"
 version = "0.1.0"
 dependencies = [
+ "allsorts",
  "editor-state",
  "engraver",
  "keyflow-text",
  "thiserror 2.0.20",
  "tracing",
+ "ttf-parser 0.25.1",
 ]
 
 [[package]]
@@ -7631,7 +7633,6 @@ dependencies = [
 name = "keyflow-web"
 version = "0.1.0"
 dependencies = [
- "allsorts",
  "architect-ui 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.0.2)",
  "auth-client",
  "auth-http",
@@ -7658,7 +7659,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tracing-wasm",
- "ttf-parser 0.25.1",
  "view-knowledge-graph",
  "wasm-bindgen",
  "wasm-bindgen-futures",

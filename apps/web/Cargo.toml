@@ -180,20 +180,13 @@ ssg-build = { workspace = true }
 editor-state = { workspace = true }
 # Registers the chart renderer into the editor's fence registry, so `kf`
 # fences engrave during the build the same way they do while typing.
-editor-keyflow = { workspace = true }
-# Font subsetting for the guide's charts, so the page carries the glyphs
-# it draws rather than every glyph the faces contain.
 #
-# `allsorts` rather than the obvious `subsetter`: that one REMOVES the
-# cmap table (it targets PDF CID embedding, where the PDF supplies its
-# own), and the engraved SVG addresses glyphs by character, so a browser
-# needs a cmap to look them up in. allsorts generates one, and takes a
-# `CmapTarget::Unicode` for exactly this case.
-#
-# `ttf-parser` maps the characters to glyph ids through the face's own
-# cmap first. Both are already in this tree's lock.
-allsorts = "0.16"
-ttf-parser = "0.25"
+# `subset` cuts the guide's typefaces down to the glyphs its charts
+# actually draw. It used to be done here, with allsorts and ttf-parser as
+# direct build-dependencies; it moved into `editor_keyflow::font_subset`
+# so the dev server can subset the charts it just re-rendered instead of
+# reusing whatever the last build produced.
+editor-keyflow = { workspace = true, features = ["subset"] }
 
 # The engraver, on the host. `svg` is the no-GPU export path — the build
 # script engraves every ```kf fence in the guide to inline SVG, which is
@@ -223,4 +216,14 @@ server = ["dioxus/server", "dioxus/fullstack"]
 # Re-render the guide from `docs/guides/keyflow` on save instead of on
 # rebuild. Development only: it adds a filesystem watcher and a poll, and
 # the published site wants the baked vault. See `guide_live`.
-dev-guide = ["dep:ssg-build", "dep:serde", "dep:serde_json", "ssg-build?/watch"]
+dev-guide = [
+    "dep:ssg-build",
+    "dep:serde",
+    "dep:serde_json",
+    "ssg-build?/watch",
+    # Subset the typefaces for the charts the dev server just drew, so a
+    # new symbol renders in the preview instead of silently missing. Only
+    # here: the browser never subsets anything, and `allsorts` has no
+    # business in the wasm bundle.
+    "editor-keyflow/subset",
+]

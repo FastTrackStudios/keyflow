@@ -22,6 +22,14 @@
 //! themselves are `include_bytes!`-baked into `engraver`, so no
 //! filesystem access is needed at runtime.
 
+/// Subset `@font-face` rules for the charts a page actually draws.
+///
+/// Behind the `subset` feature: `allsorts` is large and nothing in a
+/// browser needs it. Turned on by the site's build script and by its
+/// dev server.
+#[cfg(feature = "subset")]
+pub mod font_subset;
+
 use engraver::api::pipeline::ChartPipeline;
 use engraver::layout::chart::LayoutMode;
 use thiserror::Error;

@@ -64,6 +64,16 @@ pub struct LiveHeading {
 pub struct LiveVault {
     pub revision: u64,
     pub pages: Vec<LivePage>,
+    /// `@font-face` rules for the typefaces these charts draw, subset to
+    /// the glyphs they use.
+    ///
+    /// Carried with the pages rather than fetched separately because it
+    /// belongs to *this* render: a chapter that gains a chart using a
+    /// symbol no other chart uses needs a face the last build never
+    /// subsetted for. The baked stylesheet cannot know about it, and a
+    /// glyph that silently fails to draw is exactly the kind of
+    /// difference a preview is supposed to catch.
+    pub font_css: String,
 }
 
 /// Turn a wire vault into the `&'static StaticVault` the whole site is
@@ -166,11 +176,19 @@ mod server {
     /// hundred megabytes of HTML for six chapters — 485 KB of typeface
     /// per chart, exactly the trap the repo instructions warn about. This
     /// is the linked variant, which is also what ships.
-    struct LinkedCharts;
+    struct LinkedCharts {
+        /// What the charts drew, for subsetting afterwards.
+        used: std::sync::Arc<editor_keyflow::font_subset::FontUsage>,
+    }
 
     impl editor_state::fence_renderer::FenceRenderer for LinkedCharts {
         fn render_svg(&self, source: &str) -> Option<String> {
-            editor_keyflow::render_svg_live(source).ok()
+            let svg = editor_keyflow::render_svg_live(source).ok()?;
+            // Read the families back out of the finished SVG, the same
+            // way `build.rs` does — the serializer decides which family
+            // a run of text lands in, and it is the authority.
+            self.used.record(&svg);
+            Some(svg)
         }
 
         fn highlight_html(&self, source: &str) -> String {
@@ -190,45 +208,52 @@ mod server {
         // will draw its charts against the guide's font stylesheet
         // instead of its own copies. In a dev build that is a cosmetic
         // difference; the hundred megabytes was not.
+        let used = std::sync::Arc::new(editor_keyflow::font_subset::FontUsage::new());
         editor_state::fence_renderer::register_fence_renderer(
             "kf",
-            std::sync::Arc::new(LinkedCharts),
+            std::sync::Arc::new(LinkedCharts {
+                used: std::sync::Arc::clone(&used),
+            }),
         );
         let vault = ssg_build::Vault::at(VAULT_DIR)
             .link_base(crate::guide::BASE)
             .body_renderer(|markdown| editor_state::html::render_markdown_html(markdown))
             .allow_broken_links()
             .render();
+        let pages = vault
+            .pages
+            .into_iter()
+            .map(|p| LivePage {
+                slug: p.slug,
+                title: p.title,
+                summary: p.summary,
+                order: p.order,
+                stage: p.stage,
+                kind: p.kind,
+                source: p.source,
+                body: p.body,
+                html: p.html,
+                links: p.links,
+                headings: p
+                    .headings
+                    .into_iter()
+                    .map(|h| LiveHeading {
+                        level: h.level,
+                        text: h.text,
+                        id: h.id,
+                    })
+                    .collect(),
+                tags: p.tags,
+                words: p.words,
+                updated: p.updated,
+            })
+            .collect();
+        // After the render, so it covers every chart on every page.
+        let font_css = used.font_face_css().unwrap_or_default();
         LiveVault {
             revision: REVISION.load(Ordering::Relaxed),
-            pages: vault
-                .pages
-                .into_iter()
-                .map(|p| LivePage {
-                    slug: p.slug,
-                    title: p.title,
-                    summary: p.summary,
-                    order: p.order,
-                    stage: p.stage,
-                    kind: p.kind,
-                    source: p.source,
-                    body: p.body,
-                    html: p.html,
-                    links: p.links,
-                    headings: p
-                        .headings
-                        .into_iter()
-                        .map(|h| LiveHeading {
-                            level: h.level,
-                            text: h.text,
-                            id: h.id,
-                        })
-                        .collect(),
-                    tags: p.tags,
-                    words: p.words,
-                    updated: p.updated,
-                })
-                .collect(),
+            pages,
+            font_css,
         }
     }
 
@@ -314,6 +339,14 @@ pub async fn guide_snapshot() -> ServerFnResult<LiveVault> {
 pub static LIVE_VAULT: dioxus::prelude::GlobalSignal<Option<&'static StaticVault>> =
     dioxus::prelude::Signal::global(|| None);
 
+/// The `@font-face` rules for the live render, once one has arrived.
+///
+/// Read by the guide page, which links the baked stylesheet until this
+/// is populated and then declares these instead.
+#[cfg(feature = "dev-guide")]
+pub static LIVE_FONT_CSS: dioxus::prelude::GlobalSignal<Option<String>> =
+    dioxus::prelude::Signal::global(|| None);
+
 /// How often the browser asks whether the guide changed.
 ///
 /// Fast enough that a save feels immediate, slow enough that the request
@@ -346,6 +379,12 @@ pub fn start_polling() {
             };
             seen = revision;
             tracing::info!(revision, "guide updated");
+            // Fonts before pages: the charts in the new pages reference
+            // families by name, and a face that arrives second is a
+            // frame of blank glyphs.
+            if !vault.font_css.is_empty() {
+                *LIVE_FONT_CSS.write() = Some(vault.font_css.clone());
+            }
             *LIVE_VAULT.write() = Some(leak(vault));
         }
     });

@@ -70,7 +70,13 @@ pub fn GuidePage(slug: String) -> Element {
             // The engraving fonts, declared once for every chart on the
             // page — the SVGs reference families by name rather than
             // each embedding a copy.
-            document::Stylesheet { href: guide::CHART_FONTS }
+            //
+            // Under `dev-guide` the dev server subsets the faces for the
+            // charts it just re-rendered and sends them with the pages,
+            // so a chart that starts using a symbol no other chart uses
+            // draws it immediately. The baked stylesheet is what the
+            // published site uses, and what the first paint uses here.
+            GuideFonts {}
 
             document::Link { rel: "stylesheet", href: editor::EDITOR_STYLE }
             div { class: "kf-guide",
@@ -108,6 +114,19 @@ pub fn GuidePage(slug: String) -> Element {
             }
         }
     }
+}
+
+/// The engraving typefaces for this page's charts.
+///
+/// The baked, subsetted stylesheet — except in a dev build once the live
+/// render has sent its own, which covers glyphs the last build never saw.
+#[component]
+fn GuideFonts() -> Element {
+    #[cfg(feature = "dev-guide")]
+    if let Some(css) = crate::guide_live::LIVE_FONT_CSS.read().clone() {
+        return rsx! { document::Style { {css} } };
+    }
+    rsx! { document::Stylesheet { href: guide::CHART_FONTS } }
 }
 
 /// This page and everything one hop from it.
