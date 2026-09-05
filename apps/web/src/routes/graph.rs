@@ -67,7 +67,7 @@ pub fn GuideGraph() -> Element {
                         color_mode: ColorMode::Community,
                         highlighted: highlighted(),
                         on_node_click: move |id: String| {
-                            if guide::VAULT.page(&id).is_some() {
+                            if guide::vault().page(&id).is_some() {
                                 nav.push(Route::GuidePage { slug: id });
                             }
                         },

@@ -123,6 +123,12 @@ web-sys = { version = "0.3", features = [
     "WebGl2RenderingContext",
     # Remembering what someone chose — see `prefs`.
     "Storage",
+    # The dev-guide poll, which calls the server functions by URL rather
+    # than through a generated client — see `guide_live`.
+    "Request",
+    "RequestInit",
+    "Response",
+    "Headers",
 ] }
 # Pinned exactly, and low: `dx build` refuses to run when the crate version
 # and the wasm-bindgen-cli in the dev shell disagree, and the CLI comes from
@@ -135,11 +141,22 @@ kurbo = { workspace = true }
 
 tracing = { workspace = true }
 
+# ── dev-guide only ────────────────────────────────────────────────────
+# Re-rendering the guide at runtime needs the same builder `build.rs`
+# uses; `serde`/`serde_json` carry a rendered vault to the browser, which
+# parses it by hand because this crate has no server-function client in
+# wasm. All optional: the published build has none of them.
+ssg-build = { workspace = true, optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tracing-wasm = "0.2"
+# Awaiting `fetch` in the dev-guide poll.
+wasm-bindgen-futures = "0.4"
 # Not called directly. getrandom 0.3 needs BOTH the `wasm_js` cfg (set for
 # the whole target in .cargo/config.toml) and this feature before it will
 # build for wasm32; the cfg alone is a compile_error. It arrives here
@@ -203,3 +220,7 @@ web = ["dioxus/web", "dep:dioxus-web", "dioxus-web/hydrate"]
 # never for the wasm one. reqwest 0.12 arriving here is harmless: this
 # half is a host binary, and nothing links it against the browser's.
 server = ["dioxus/server", "dioxus/fullstack"]
+# Re-render the guide from `docs/guides/keyflow` on save instead of on
+# rebuild. Development only: it adds a filesystem watcher and a poll, and
+# the published site wants the baked vault. See `guide_live`.
+dev-guide = ["dep:ssg-build", "dep:serde", "dep:serde_json", "ssg-build?/watch"]

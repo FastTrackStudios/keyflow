@@ -34,9 +34,9 @@
     reason = "a build script reports failure by panicking; there is no other channel"
 )]
 
-use std::sync::Mutex;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
+use std::sync::Mutex;
 
 use keyflow::engraver::api::pipeline::ChartPipeline;
 use keyflow::engraver::layout::chart::{ChartLayoutConfig, LayoutMode};

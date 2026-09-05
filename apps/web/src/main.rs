@@ -15,6 +15,8 @@ mod chart_gpu;
 mod chart_preview;
 mod chart_url;
 mod guide;
+#[cfg(feature = "dev-guide")]
+mod guide_live;
 mod highlight;
 mod keyflow_editor;
 mod notation;
@@ -133,7 +135,7 @@ async fn static_routes() -> ServerFnResult<Vec<String>> {
         .map(ToString::to_string)
         .collect();
 
-    for route in guide::VAULT.routes(guide::BASE) {
+    for route in guide::vault().routes(guide::BASE) {
         if !routes.contains(&route) {
             routes.push(route);
         }
@@ -147,6 +149,11 @@ fn App() -> Element {
     // Installed above the router so the session survives navigation and
     // is resolved once, not per screen.
     auth::use_auth_provider();
+
+    // Watch the guide's source for edits. Development only: it makes a
+    // saved chapter appear in about a second instead of after a rebuild.
+    #[cfg(all(feature = "dev-guide", target_arch = "wasm32"))]
+    use_hook(guide_live::start_polling);
 
     rsx! {
         // The UI face and its matching mono. A sans and a mono from the

@@ -24,6 +24,27 @@ use view_knowledge_graph::parse::WikiFile;
 // `pub static VAULT: ssg::StaticVault`, from `build.rs`.
 ssg::include_vault!();
 
+/// The guide, as the site should read it.
+///
+/// Ordinarily this is [`VAULT`] — the table `build.rs` baked in, which is
+/// what makes a published chapter arrive as finished HTML.
+///
+/// Under `dev-guide` it is whatever the dev server last rendered from
+/// `docs/guides/keyflow`, so editing a chapter is a save rather than a
+/// rebuild. See [`crate::guide_live`]. The baked table is still the
+/// fallback, and still what the first paint uses.
+///
+/// Everything reads the guide through here rather than through the static
+/// directly, so the two paths cannot drift.
+#[must_use]
+pub fn vault() -> &'static ssg::StaticVault {
+    #[cfg(feature = "dev-guide")]
+    if let Some(live) = *crate::guide_live::LIVE_VAULT.read() {
+        return live;
+    }
+    &VAULT
+}
+
 /// The `@font-face` rules for the engraving typefaces.
 ///
 /// A chart SVG names its typefaces rather than embedding them — sixty
@@ -60,7 +81,7 @@ pub const BASE: &str = "/guide";
 /// alongside this repo's. See `apps/web/Cargo.toml`.
 #[must_use]
 pub fn graph() -> WikiGraph {
-    let files: Vec<WikiFile> = VAULT
+    let files: Vec<WikiFile> = vault()
         .pages
         .iter()
         .map(|page| WikiFile {

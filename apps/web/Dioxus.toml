@@ -8,9 +8,20 @@ title = "Keyflow"
 base_path = "/"
 
 [web.watcher]
-# The guide is compiled in by build.rs, so editing a guide page must
-# trigger a rebuild, not just an asset reload.
-watch_path = ["src", "assets", "../../docs/guides/keyflow"]
+# Deliberately NOT `../../docs/guides/keyflow`.
+#
+# The guide is baked in by build.rs, so a published build does have to
+# rebuild when a note changes — and it does: build.rs emits a
+# `cargo:rerun-if-changed` per note, so any `cargo build` picks the edit
+# up. What dx's watcher adds is triggering that rebuild automatically,
+# and for the guide that is the wrong trade: a one-word fix costs four to
+# five minutes.
+#
+# `just guide-preview` runs with `--features dev-guide` instead, where
+# the server renders the vault at runtime and a watcher re-renders it on
+# save. Listing the path here as well would fire the slow rebuild
+# alongside the fast path, which is the whole thing we are avoiding.
+watch_path = ["src", "assets"]
 
 [bundle]
 identifier = "app.fasttrackstudio.keyflow"

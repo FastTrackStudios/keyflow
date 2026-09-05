@@ -39,7 +39,7 @@ const STARTER: &str = "VS 1: | 1 4 | 5 6- |\n";
 pub fn Workbench(slug: String) -> Element {
     let nav = navigator();
 
-    let Some(page) = guide::VAULT.page(&slug) else {
+    let Some(page) = guide::vault().page(&slug) else {
         return rsx! {
             Shell {
                 section { class: "kf-prose",
@@ -123,7 +123,7 @@ pub fn Workbench(slug: String) -> Element {
                                 // Follow a wikilink WITHOUT leaving the
                                 // workbench — the whole point is to keep
                                 // reading while the editor stays put.
-                                if guide::VAULT.page(&target).is_some() {
+                                if guide::vault().page(&target).is_some() {
                                     nav.push(Route::Workbench { slug: target });
                                 }
                             },
@@ -172,15 +172,15 @@ mod tests {
     fn most_chapters_open_on_a_real_example() {
         // The workbench is much less useful if it starts blank, so this
         // checks the guide actually carries examples to seed it with.
-        let with = guide::VAULT
+        let with = guide::vault()
             .pages
             .iter()
             .filter(|p| !engraved_fences(p.source).is_empty())
             .count();
         assert!(
-            with >= guide::VAULT.pages.len() - 2,
+            with >= guide::vault().pages.len() - 2,
             "only {with} of {} chapters have an engraved example to open on",
-            guide::VAULT.pages.len()
+            guide::vault().pages.len()
         );
     }
 
@@ -188,7 +188,7 @@ mod tests {
     fn every_seeded_example_parses() {
         // The editor seeds from these, so a broken one greets the reader
         // with an error the moment they click "try it".
-        for p in guide::VAULT.pages {
+        for p in guide::vault().pages {
             for ex in engraved_fences(p.source) {
                 assert!(
                     keyflow::parse(&ex).is_ok(),

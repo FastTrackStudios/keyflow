@@ -138,7 +138,12 @@ guide-preview port="8095": tailwind
     [ -n "$name" ] && echo "                  http://${name}:{{port}}/guide"
     echo
     cd apps/web
+    # `dev-guide` is what makes editing a chapter a save rather than a
+    # rebuild: the server renders `docs/guides/keyflow` at runtime, a
+    # watcher re-renders it on write, and the page polls for the change.
+    # See `apps/web/src/guide_live.rs`.
     exec dx serve --platform web --fullstack --hot-patch false \
+        --features dev-guide \
         --addr "$addr" --port {{port}}
 
 # Build the shipping web bundle into target/dx/keyflow-web/release/web/public,

@@ -33,13 +33,13 @@ use view_knowledge_graph::model::ColorMode;
 use view_knowledge_graph::{KnowledgeGraphView, model::WikiGraph};
 
 use crate::Route;
-use crate::guide::{self, VAULT};
+use crate::guide::{self, vault};
 use crate::routes::Shell;
 
 /// `/guide` — opens at the first page.
 #[component]
 pub fn GuideIndex() -> Element {
-    let Some(first) = VAULT.first() else {
+    let Some(first) = vault().first() else {
         return rsx! {
             Shell {
                 section { class: "kf-prose", h1 { "The guide is empty" } }
@@ -54,7 +54,7 @@ pub fn GuideIndex() -> Element {
 /// `/guide/:slug` — one note, with its contents, backlinks and graph.
 #[component]
 pub fn GuidePage(slug: String) -> Element {
-    let Some(page) = VAULT.page(&slug) else {
+    let Some(page) = vault().page(&slug) else {
         return rsx! {
             Shell {
                 section { class: "kf-prose",
@@ -153,7 +153,7 @@ fn LocalGraph(current: &'static str) -> Element {
                     spacing: 0.45,
                     node_scale: 0.8,
                     on_node_click: move |id: String| {
-                        if VAULT.page(&id).is_some() {
+                        if vault().page(&id).is_some() {
                             nav.push(Route::GuidePage { slug: id });
                         }
                     },
@@ -179,7 +179,7 @@ fn LocalGraph(current: &'static str) -> Element {
 fn GuideToc(current: &'static str) -> Element {
     rsx! {
         nav { class: "kf-guide-toc", "aria-label": "Contents",
-            for (stage , pages) in VAULT.stages() {
+            for (stage , pages) in vault().stages() {
                 if !stage.is_empty() {
                     span { class: "kf-toc-stage", "{stage}" }
                 }
@@ -208,8 +208,8 @@ fn GuideToc(current: &'static str) -> Element {
 /// with the title.
 #[component]
 fn ChapterNav(slug: &'static str, compact: bool) -> Element {
-    let prev = VAULT.previous(slug);
-    let next = VAULT.next(slug);
+    let prev = vault().previous(slug);
+    let next = vault().next(slug);
     if prev.is_none() && next.is_none() {
         return rsx! {};
     }
@@ -243,7 +243,7 @@ fn ChapterNav(slug: &'static str, compact: bool) -> Element {
 /// by" heading is worse than none.
 #[component]
 fn Backlinks(current: &'static str) -> Element {
-    let pages = VAULT.backlinks(current);
+    let pages = vault().backlinks(current);
     if pages.is_empty() {
         return rsx! {};
     }
