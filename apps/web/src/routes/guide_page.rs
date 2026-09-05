@@ -199,15 +199,36 @@ fn GuideToc(current: &'static str) -> Element {
     rsx! {
         nav { class: "kf-guide-toc", "aria-label": "Contents",
             for (stage , pages) in vault().stages() {
-                if !stage.is_empty() {
-                    span { class: "kf-toc-stage", "{stage}" }
-                }
-                for entry in pages {
-                    Link {
-                        key: "{entry.slug}",
-                        to: Route::GuidePage { slug: entry.slug.to_string() },
-                        class: if entry.slug == current { "kf-toc-current" } else { "" },
-                        "{entry.title}"
+                // A category whose name is one of its own pages — Chords
+                // above a page called Chords — listed the word twice, a
+                // label and then a link under it. The heading IS that
+                // page: it links, and the page drops out of the list
+                // below rather than being repeated.
+                {
+                    let overview = pages.iter().copied().find(|p| p.title == stage);
+                    rsx! {
+                        if let Some(page) = overview {
+                            Link {
+                                key: "{page.slug}",
+                                to: Route::GuidePage { slug: page.slug.to_string() },
+                                class: if page.slug == current {
+                                    "kf-toc-stage kf-toc-stage-link kf-toc-current"
+                                } else {
+                                    "kf-toc-stage kf-toc-stage-link"
+                                },
+                                "{stage}"
+                            }
+                        } else if !stage.is_empty() {
+                            span { class: "kf-toc-stage", "{stage}" }
+                        }
+                        for entry in pages.iter().copied().filter(|p| p.title != stage) {
+                            Link {
+                                key: "{entry.slug}",
+                                to: Route::GuidePage { slug: entry.slug.to_string() },
+                                class: if entry.slug == current { "kf-toc-current" } else { "" },
+                                "{entry.title}"
+                            }
+                        }
                     }
                 }
             }

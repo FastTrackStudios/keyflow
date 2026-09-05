@@ -19,12 +19,14 @@ C F Am G
 
 Built in this order, every part after the root optional.
 
-| Part | In `Cm7b5` | What it says | |
-| --- | --- | --- | --- |
-| **Root** | `C` | the note it is built on | [[chord-root\|→]] |
-| **Quality** | `m` | major, minor, diminished… | [[chord-quality\|→]] |
-| **Extension** | `7` | how far up the stack | [[chord-extension\|→]] |
-| **Alteration** | `b5` | a note moved out of the scale | [[chord-alteration\|→]] |
+| Part | In `Cm7b5` | What it says |
+| --- | --- | --- |
+| **Root** | `C` | the note it is built on |
+| **Quality** | `m` | major, minor, diminished… |
+| **Extension** | `7` | how far up the stack |
+| **Alteration** | `b5` | a note moved out of the scale |
+
+One page each: [[chord-root|Root]] · [[chord-quality|Quality]] · [[chord-extension|Extension]] · [[chord-alteration|Alteration]]
 
 `C`, `Cm`, `Cm7`, `Cm7b5` are all chords.
 

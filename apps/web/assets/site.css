@@ -1342,6 +1342,16 @@ body {
 
 .kf-toc-stage:first-of-type { margin-top: 0.6rem; }
 
+/* A category heading that is also a page — Chords, Rhythm — links, so
+ * the category and its overview are one entry instead of the same word
+ * twice. It keeps the heading's type and gains a link's affordances. */
+.kf-toc-stage-link {
+  display: block;
+  text-decoration: none;
+}
+.kf-toc-stage-link:hover { opacity: 1; color: var(--ink); }
+.kf-toc-stage-link.kf-toc-current { opacity: 1; color: var(--accent); }
+
 /* ── Chapter navigation ───────────────────────────────────────────
  *
  * The same pair of links twice: cards under the page, and a bare line
