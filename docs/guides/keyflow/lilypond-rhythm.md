@@ -2,7 +2,7 @@
 title: LilyPond Rhythm Notation
 kind: concept
 type: concept
-order: 7
+order: 12
 stage: Rhythm
 summary: Name the note value instead of counting beats.
 ---

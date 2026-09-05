@@ -2,7 +2,7 @@
 title: Rhythm
 kind: concept
 type: concept
-order: 5
+order: 10
 stage: Rhythm
 summary: A chord lasts one bar unless you say otherwise.
 ---
