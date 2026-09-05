@@ -3,7 +3,7 @@ title: Chords
 kind: concept
 type: concept
 order: 3
-stage: Start here
+stage: Chords
 ---
 
 # Chords
@@ -62,6 +62,8 @@ When a chord is written with numbers, the root and the quality can run together 
 ```
 
 The colon is purely for reading, and it does not survive into the chart: `1:maj7` and `1maj7` parse identically and both engrave as `1maj7`. Use it where it earns its keep and skip it where it does not — `2m` and `6m9` read fine without one.
+
+See also: [[rhythm|Rhythm]] for how long each chord lasts, and [[appendix-sections|All Section Names]] for what they sit under.
 
 ---
 

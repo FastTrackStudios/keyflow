@@ -60,6 +60,8 @@ CH
 
 So a whole song is mostly its section list: lay out `VS`, `CH`, `BR` once, then order the repeats however the song goes. The replays come back numbered — *Verse 2*, *Chorus 2* — counted across the chart for you.
 
+See also: [[appendix-sections|All Section Names]], [[rhythm|Rhythm]]
+
 ---
 
 Previous: [[header|Header]] · Next: [[chords|Chords]] · Up: [[introduction|An Introduction]]

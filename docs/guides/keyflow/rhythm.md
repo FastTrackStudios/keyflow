@@ -2,13 +2,15 @@
 title: Rhythm
 kind: concept
 type: concept
-order: 4
-stage: Start here
+order: 5
+stage: Rhythm
+summary: A chord lasts one bar unless you say otherwise.
 ---
 
 # Rhythm
 
-A chord with nothing after it lasts one bar. That covers most of a chart, and it is why the simple examples so far said nothing about rhythm at all.
+A chord with nothing after it lasts one bar. That covers most of a chart,
+and it is why the examples so far have said nothing about rhythm at all.
 
 ```kf+
 G C Em D
@@ -16,41 +18,27 @@ G C Em D
 
 Four chords, four bars.
 
-## Rhythmic slash notation
+When a bar holds more than one chord you have to say how long each lasts,
+and Keyflow gives you two ways to say it. They do the same job from
+opposite ends, they can be mixed in one chart, and neither is the
+"proper" one.
 
-When a bar holds more than one chord, say how long each lasts with slashes — one slash per beat:
+[[slash-notation|Rhythmic Slash Notation]] counts **beats** — one slash
+per beat, which is what a player counts on a stand. It is the one you
+will reach for most.
 
-```kf+
-G // C // D // Em //
-```
+[[lilypond-rhythm|LilyPond Rhythm Notation]] names **durations** — `_2`
+for a half, `_4` for a quarter — which is what a score calls them. Reach
+for it when the figure is easier to name than to count.
 
-Two beats each, so two chords fill a bar and four chords fill the section's two bars.
+| | Counts | Reads as |
+|---|---|---|
+| Slashes | beats | what a player counts |
+| Note values | durations | what a score names |
 
-> [!warning] Slashes are a duration, not a separator
-> `G // C //` is two chords of two beats — one bar. It is easy to read them as "play G, then C" and be surprised by a half-empty section. If the bar count does not add up, Keyflow will tell you what it counted.
-
-Mix them freely. A chord can hold a bar while its neighbours split one:
-
-```kf+
-G /// C / Em
-```
-
-## Durations by note value
-
-The other way is to name the note value, LilyPond-style: `_2` is a half note, `_4` a quarter, `_1` a whole bar.
-
-```kf+
-VS 4
-G_2 C_2 D_2 Em_2
-```
-
-The two systems do the same job from opposite ends — slashes count beats, underscores name values. Use whichever matches how you are thinking, and mix them if you like:
-
-```kf+
-VS 4
-G_2 C // D_1
-```
+Use whichever matches how you are thinking about the bar. They mix
+freely inside one chart.
 
 ---
 
-Previous: [[chords|Chords]] · Up: [[introduction|An Introduction]]
+Previous: [[chords|Chords]] · Next: [[slash-notation|Rhythmic Slash Notation]] · Up: [[introduction|An Introduction]]

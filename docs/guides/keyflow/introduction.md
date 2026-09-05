@@ -91,3 +91,5 @@ Letters name pitches. Numbers and numerals name *positions in the key*, so they 
 ---
 
 Next: [[header|Header]] · Up: [[introduction|An Introduction]]
+
+See also: [[header|Header]], [[structure|Structure]], [[chords|Chords]], [[rhythm|Rhythm]]

@@ -55,6 +55,8 @@ valid header, and so is a line carrying only a key.
 signature. A sharp key is written the way you would say it — `#F#` is the
 key of F-sharp.
 
+See also: [[chords|Chords]]
+
 ---
 
 Previous: [[introduction|An Introduction]] · Next: [[structure|Structure]] · Up: [[introduction|An Introduction]]
