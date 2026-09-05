@@ -34,7 +34,7 @@
     reason = "a build script reports failure by panicking; there is no other channel"
 )]
 
-use std::cell::RefCell;
+use std::sync::Mutex;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
@@ -51,11 +51,32 @@ const CHART_WIDTH: f64 = 720.0;
 const PAD: f64 = 6.0;
 
 fn main() {
-    let engraver = Engraver::new();
+    let engraver = std::sync::Arc::new(Engraver::new());
 
+    // The editor renders the guide's body, so a `kf` fence is engraved by
+    // whatever its registry holds for "kf". Register the engraver above,
+    // which is also the thing that tracks glyph usage for the font
+    // subsetting — see the `FenceRenderer` impl.
+    editor_state::fence_renderer::register_fence_renderer("kf", engraver.clone());
+
+    // The body is rendered by the EDITOR, not by ssg's markdown pass.
+    //
+    // These notes are written in the editor, and it knows things ssg's
+    // pass does not: twelve callout types, task lists, block references,
+    // and every fence language a plugin has been registered for. Two
+    // renderers over the same syntax drift — a chapter drafted with
+    // `> [!question]` rendered as a plain quote until ssg learned
+    // callouts, silently, because a blockquote is a perfectly good
+    // blockquote. One renderer cannot drift from itself.
+    //
+    // ssg still owns everything around the body: it resolves wikilinks
+    // before this sees the text (so what arrives is ordinary markdown
+    // with real links), parses the headings for the table of contents
+    // and the search index, and reports broken links.
     ssg_build::Vault::at("../../docs/guides/keyflow")
         .link_base("/guide")
         .fence(|info, body| engraver.fence(info, body))
+        .body_renderer(|markdown| editor_state::html::render_markdown_html(markdown))
         .emit();
 
     // After `emit`, because it is only now known which typefaces the
@@ -91,14 +112,16 @@ struct Engraver {
     pipeline: &'static ChartPipeline,
     /// Every `font-family` the rendered charts referenced, and every
     /// character they set in it.
-    used: RefCell<BTreeMap<String, BTreeSet<char>>>,
+    // `Mutex`, not `RefCell`: this is registered as the editor's fence
+    // renderer, and that trait is `Send + Sync`.
+    used: Mutex<BTreeMap<String, BTreeSet<char>>>,
 }
 
 impl Engraver {
     fn new() -> Self {
         Self {
             pipeline: ChartPipeline::shared().expect("the engraving fonts are compiled in"),
-            used: RefCell::new(BTreeMap::new()),
+            used: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -133,7 +156,7 @@ impl Engraver {
     /// dropped: a chart missing its noteheads is a worse outcome than a
     /// chart that costs more to load.
     fn font_css(&self) -> String {
-        let used = self.used.borrow();
+        let used = self.used.lock().expect("font usage map");
         let mut out = String::new();
 
         for (family, bytes) in self.pipeline.fonts().embeddable_fonts() {
@@ -222,7 +245,7 @@ impl Engraver {
     /// ends up in, and second-guessing it is how the three pipelines
     /// drifted before. What the file says is the truth.
     fn record_families(&self, svg: &str) {
-        let mut used = self.used.borrow_mut();
+        let mut used = self.used.lock().expect("font usage map");
         let mut rest = svg;
 
         while let Some(at) = rest.find("<text ") {
@@ -261,6 +284,25 @@ impl Engraver {
 ///
 /// The highlighter is line-oriented, so each line's spans are shifted to
 /// absolute offsets — the same pass `editor-keyflow` makes.
+/// The engraver, as the editor's `kf` fence renderer.
+///
+/// The guide's body is rendered by the editor now, which means fences go
+/// through the editor's plugin registry rather than ssg's `.fence()`
+/// hook. Registering THIS engraver rather than `editor_keyflow::Fences`
+/// is deliberate: it is the one that records which glyphs each chart
+/// draws, and `font_css` subsets the faces down to those. Register the
+/// other and every chart still engraves, silently, while the page grows
+/// back the 3 MB of typeface the subsetting removed.
+impl editor_state::fence_renderer::FenceRenderer for Engraver {
+    fn render_svg(&self, source: &str) -> Option<String> {
+        self.svg(source)
+    }
+
+    fn highlight_html(&self, source: &str) -> String {
+        highlight(source.trim_end())
+    }
+}
+
 fn highlight(source: &str) -> String {
     let mut spans: Vec<HighlightSpan> = Vec::new();
     let mut line_start = 0usize;

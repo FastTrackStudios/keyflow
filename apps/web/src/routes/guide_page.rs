@@ -72,6 +72,7 @@ pub fn GuidePage(slug: String) -> Element {
             // each embedding a copy.
             document::Stylesheet { href: guide::CHART_FONTS }
 
+            document::Link { rel: "stylesheet", href: editor::EDITOR_STYLE }
             div { class: "kf-guide",
                 GuideToc { current: page.slug }
 
@@ -86,10 +87,17 @@ pub fn GuidePage(slug: String) -> Element {
                         }
                     }
 
-                    // The note: HTML and SVG produced by build.rs. `kf-prose` is
-                    // the site's own document style — headings, lists, rules —
-                    // which the editor used to supply and now does not.
-                    VaultArticle { page, class: "kf-prose" }
+                    // The note: HTML and SVG produced by build.rs, which
+                    // renders it through the EDITOR's markdown pass. That
+                    // emits the editor's own classes — `cm-line`, `md-h1`,
+                    // `md-callout` — and the editor's stylesheet scopes
+                    // nearly all of them under `.editor-root`, so the
+                    // article has to carry that class or the whole chapter
+                    // arrives as unstyled divs.
+                    //
+                    // `kf-prose` stays alongside it for the site's own
+                    // document rhythm.
+                    VaultArticle { page, class: "kf-prose editor-root" }
 
                     ChapterNav { slug: page.slug, compact: false }
 

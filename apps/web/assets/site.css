@@ -693,44 +693,44 @@ body {
  * them, so roots take full-strength ink and every modifier sits a step
  * back. Reading down a column of chords, the thing that should catch the
  * eye is where the harmony moves. */
-.kf-source .kf-title { color: var(--ink); font-weight: 600; }
-.kf-source .kf-artist { color: var(--ink-soft); }
+:is(.kf-source, .md-keyflow-source) .kf-title { color: var(--ink); font-weight: 600; }
+:is(.kf-source, .md-keyflow-source) .kf-artist { color: var(--ink-soft); }
 
-.kf-source .kf-tempo,
-.kf-source .kf-time-sig,
-.kf-source .kf-key,
-.kf-source .kf-tempo-arrow { color: var(--syn-meta); }
+:is(.kf-source, .md-keyflow-source) .kf-tempo,
+:is(.kf-source, .md-keyflow-source) .kf-time-sig,
+:is(.kf-source, .md-keyflow-source) .kf-key,
+:is(.kf-source, .md-keyflow-source) .kf-tempo-arrow { color: var(--syn-meta); }
 
 /* Section labels take the colour the engraver paints their capsule, so
  * the source and the chart beside it agree about what a chorus is. */
-.kf-source .kf-section { color: var(--syn-section); font-weight: 600; }
-.kf-source .kf-measure-count,
-.kf-source .kf-section-comment,
-.kf-source .kf-section-bracket { color: var(--ink-soft); }
+:is(.kf-source, .md-keyflow-source) .kf-section { color: var(--syn-section); font-weight: 600; }
+:is(.kf-source, .md-keyflow-source) .kf-measure-count,
+:is(.kf-source, .md-keyflow-source) .kf-section-comment,
+:is(.kf-source, .md-keyflow-source) .kf-section-bracket { color: var(--ink-soft); }
 
-.kf-source .kf-root,
-.kf-source .kf-degree,
-.kf-source .kf-roman { color: var(--ink); }
-.kf-source .kf-accidental { color: var(--ink); }
+:is(.kf-source, .md-keyflow-source) .kf-root,
+:is(.kf-source, .md-keyflow-source) .kf-degree,
+:is(.kf-source, .md-keyflow-source) .kf-roman { color: var(--ink); }
+:is(.kf-source, .md-keyflow-source) .kf-accidental { color: var(--ink); }
 
-.kf-source .kf-quality,
-.kf-source .kf-extension,
-.kf-source .kf-modifier { color: var(--syn-quality); }
+:is(.kf-source, .md-keyflow-source) .kf-quality,
+:is(.kf-source, .md-keyflow-source) .kf-extension,
+:is(.kf-source, .md-keyflow-source) .kf-modifier { color: var(--syn-quality); }
 
-.kf-source .kf-bass,
-.kf-source .kf-bass-slash { color: var(--syn-bass); }
+:is(.kf-source, .md-keyflow-source) .kf-bass,
+:is(.kf-source, .md-keyflow-source) .kf-bass-slash { color: var(--syn-bass); }
 
-.kf-source .kf-slash-rhythm,
-.kf-source .kf-duration,
-.kf-source .kf-dot,
-.kf-source .kf-triplet { color: var(--syn-rhythm); }
+:is(.kf-source, .md-keyflow-source) .kf-slash-rhythm,
+:is(.kf-source, .md-keyflow-source) .kf-duration,
+:is(.kf-source, .md-keyflow-source) .kf-dot,
+:is(.kf-source, .md-keyflow-source) .kf-triplet { color: var(--syn-rhythm); }
 
-.kf-source .kf-push,
-.kf-source .kf-pull { color: var(--syn-push); }
+:is(.kf-source, .md-keyflow-source) .kf-push,
+:is(.kf-source, .md-keyflow-source) .kf-pull { color: var(--syn-push); }
 
-.kf-source .kf-rest { color: var(--ink-soft); font-style: italic; }
-.kf-source .kf-measure-sep { color: var(--syn-sep); }
-.kf-source .kf-command { color: var(--syn-command); }
+:is(.kf-source, .md-keyflow-source) .kf-rest { color: var(--ink-soft); font-style: italic; }
+:is(.kf-source, .md-keyflow-source) .kf-measure-sep { color: var(--syn-sep); }
+:is(.kf-source, .md-keyflow-source) .kf-command { color: var(--syn-command); }
 
 /* ── Chart surface ───────────────────────────────────────────────── */
 
@@ -1504,3 +1504,29 @@ body {
   font-size: 14px;
   line-height: 21px;
 }
+
+/* ── The guide, rendered by the editor ────────────────────────────
+ *
+ * The chapter is rendered through the editor's markdown pass, so it
+ * arrives as the editor's own markup and takes the editor's stylesheet.
+ * Two things a reader does not want from an editor come with it.
+ *
+ * Line numbers. `editor.css` numbers every line with a counter, which is
+ * right for a buffer you are editing and noise beside a paragraph you
+ * are reading. */
+.kf-prose.editor-root .cm-line::before { content: none; }
+.kf-prose.editor-root .cm-line { padding-left: 0; }
+
+/* And the active-line highlight, which tracks a caret that does not
+ * exist on a published page. */
+.kf-prose.editor-root .cm-line.cm-activeLine { background: transparent; }
+
+/* A blank line in the markdown is a real line to the editor, and it
+ * renders as a full-height empty div. Markdown puts one between every
+ * block, so a chapter is nearly half blank lines — 32 of 69 on the
+ * introduction — and at full line height the page reads as though
+ * everything is double-spaced.
+ *
+ * Kept, not removed: the gap between blocks IS what the blank line is
+ * for. Just not a whole line of it. */
+.kf-prose.editor-root .cm-line:empty { height: 0.45rem; }

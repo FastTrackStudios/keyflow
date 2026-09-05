@@ -20,8 +20,7 @@ C F Am G
 
 ## The four parts
 
-A chord symbol is built in this order, and every part after the root is
-optional:
+A chord symbol is built in this order, and every part after the root is optional:
 
 | Part            | Example in `Cmaj7#11`  | What it says                    |
 | --------------- | ---------------------- | ------------------------------- |
@@ -30,8 +29,7 @@ optional:
 | **Extension**   | `7`                    | how far up the stack it goes     |
 | **Alteration**  | `#11`                  | a note moved out of the scale    |
 
-The root is the only part you must write. `C` is a chord; so is `Cm`; so is
-`Cm7`; so is `Cm7b5`.
+The root is the only part you must write. `C` is a chord; so is `Cm`; so is `Cm7`; so is `Cm7b5`.
 
 ## Sevenths and colour
 
@@ -56,10 +54,7 @@ C G/B Am F
 ```
 
 > [!important] `/` means something else in Roman numerals
-> In letters and numbers a slash is a bass note. In Roman numerals it writes
-> a **secondary chord** — `V/V` is "five of five", the dominant of the
-> dominant, which in C is D. That is what the notation already means to the
-> people who read it, so Keyflow does not fight it.
+> In letters and numbers a slash is a bass note. In Roman numerals it writes a **secondary chord** — `V/V` is "five of five", the dominant of the dominant, which in C is D. That is what the notation already means to the people who read it, so Keyflow does not fight it.
 
 ```kf+
 Secondary - Demo
@@ -71,9 +66,7 @@ I V/V IV V
 
 ## Numbers and the colon
 
-When a chord is written with numbers, the root and the quality can run
-together and get hard to read — `57` could be a fifty-seven. A colon
-separates them:
+When a chord is written with numbers, the root and the quality can run together and get hard to read — `57` could be a fifty-seven. A colon separates them:
 
 ```kf+
 Colon - Demo
@@ -83,10 +76,7 @@ VS 4
 1:maj7 2m 3m 5:7
 ```
 
-The colon is purely for reading, and it does not survive into the chart:
-`1:maj7` and `1maj7` parse identically and both engrave as `1maj7`. Use it
-where it earns its keep and skip it where it does not — `2m` and `6m9` read
-fine without one.
+The colon is purely for reading, and it does not survive into the chart: `1:maj7` and `1maj7` parse identically and both engrave as `1maj7`. Use it where it earns its keep and skip it where it does not — `2m` and `6m9` read fine without one.
 
 ---
 

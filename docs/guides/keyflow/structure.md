@@ -19,9 +19,7 @@ VS 8
 CH 4
 ```
 
-The number is how many bars the section runs, and it is not decoration:
-Keyflow holds you to it. Chords that do not fill the section fail the parse
-with what it counted, rather than quietly engraving a form you did not mean.
+The number is how many bars the section runs, and it is not decoration: Keyflow holds you to it. Chords that do not fill the section fail the parse with what it counted, rather than quietly engraving a form you did not mean.
 
 ## Naming a section
 
@@ -49,13 +47,11 @@ G C Em D
 ```
 
 > [!warning] A section header holds no music
-> `VS 4 G C Em D` will not work. The header line names the section and
-> counts its bars; the music goes on its own line underneath.
+> `VS 4 G C Em D` will not work. The header line names the section and counts its bars; the music goes on its own line underneath.
 
 ## Replaying a section
 
-Write a section once, then name it again with nothing under it to play it
-back:
+Write a section once, then name it again with nothing under it to play it back:
 
 ```kf+
 Sunday Morning - The Wandering
@@ -71,9 +67,7 @@ VS
 CH
 ```
 
-So a whole song is mostly its section list: lay out `VS`, `CH`, `BR` once,
-then order the repeats however the song goes. The replays come back numbered
-— *Verse 2*, *Chorus 2* — counted across the chart for you.
+So a whole song is mostly its section list: lay out `VS`, `CH`, `BR` once, then order the repeats however the song goes. The replays come back numbered — *Verse 2*, *Chorus 2* — counted across the chart for you.
 
 ---
 

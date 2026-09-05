@@ -157,6 +157,13 @@ workspace = true
 [build-dependencies]
 # Reads docs/guides/keyflow and codegens the page table.
 ssg-build = { workspace = true }
+# The guide's markdown is rendered by the EDITOR, not by ssg's own pass,
+# so a chapter looks the same published as it does being written —
+# callouts, task lists and every fence the editor knows. See `build.rs`.
+editor-state = { workspace = true }
+# Registers the chart renderer into the editor's fence registry, so `kf`
+# fences engrave during the build the same way they do while typing.
+editor-keyflow = { workspace = true }
 # Font subsetting for the guide's charts, so the page carries the glyphs
 # it draws rather than every glyph the faces contain.
 #

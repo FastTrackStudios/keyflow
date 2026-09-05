@@ -60,7 +60,7 @@ pub fn Workbench(slug: String) -> Element {
 
     // The chapter, read-only, in the lower pane.
     let guide_state = use_signal(|| EditorState {
-        doc: Doc::from_str(page.body),
+        doc: Doc::new(page.body),
         selection: Selection::caret(0),
         folds: Vec::new(),
         reading_mode: true,
