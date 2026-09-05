@@ -17,5 +17,4 @@ See also: [[chords|Chords]]
 
 ---
 
-Previous: [[notation-systems|Letters, Numbers, or Numerals]] · Next:
-[[structure|Structure]] · Up: [[introduction|An Introduction]]
+Previous: [[notation-systems|Letters, Numbers, or Numerals]] · Next: [[structure|Structure]] · Up: [[introduction|An Introduction]]

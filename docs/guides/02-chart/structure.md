@@ -22,11 +22,9 @@ You write `VS` every time. Keyflow numbers them for you, under this rule:
 > A section can't increment in number unless there is another section
 > between it.
 
-This avoids the classic VS 3 confusion, where VS 3 sits right after CH 1
-and someone has to ask which verse we're on.
+This avoids the classic VS 3 confusion, where VS 3 sits right after CH 1 and someone has to ask which verse we're on.
 
-A quoted note after the count marks a variant, and rides along with the
-numbering.
+A quoted note after the count marks a variant, and rides along with the numbering.
 
 ```kf+
 VS 4
@@ -42,8 +40,7 @@ CH 4 "Down"
 C G D D
 ```
 
-Two sections back to back are the same section continuing, so they don't
-increment. A section that only happens once gets no number at all.
+Two sections back to back are the same section continuing, so they don't increment. A section that only happens once gets no number at all.
 
 ## Section names
 
