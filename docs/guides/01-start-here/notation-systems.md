@@ -9,10 +9,7 @@ summary: Three ways to write a root. The chords come out the same.
 
 # Letters, Numbers, or Numerals
 
-Musicians have developed many different ways of communciating the same
-information, each with their own stregnths and weaknesses. Keyflow allows three
-main ways of notating pitch or root notes of chords, and is open to more styles
-if they are requested.
+Musicians have developed many different ways of communciating the same information, each with their own stregnths and weaknesses. Keyflow allows three main ways of notating pitch or root notes of chords, and is open to more styles if they are requested.
 
 ````tabs
 === Letters
@@ -47,5 +44,4 @@ See also: [[chord-root|Root]], [[header|Header]]
 
 ---
 
-Previous: [[goals|Goals]] · Next: [[header|Header]] · Up: [[introduction|An
-Introduction]]
+Previous: [[goals|Goals]] · Next: [[header|Header]] · Up: [[introduction|An Introduction]]
