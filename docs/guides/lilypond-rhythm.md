@@ -9,12 +9,7 @@ summary: Name the note value instead of counting beats.
 
 # LilyPond Rhythm Notation
 
-An underscore and a number names the duration.
-
-```kf+
-VS 4
-G_2 C_2 D_2 Em_2
-```
+An underscore and a number names the duration. [[rhythm|Rhythm]] has the one-line version.
 
 | Written | Note value |
 |---|---|
@@ -24,16 +19,27 @@ G_2 C_2 D_2 Em_2
 | `_8` | eighth |
 | `_2.` | dotted half |
 
-Reach for it when the figure is easier to name than to count.
-
-## Mixing with slashes
+## Quarters and halves
 
 ```kf+
 VS 4
-G_2 C // D_1
+G_4 C_4 Em_2 D_1
 ```
 
-See also: [[slash-notation|Rhythmic Slash Notation]], the other way to write a duration · [[chords|Chords]]
+A quarter each for G and C, a half for Em, then D holds a whole bar.
+
+## Dotted values
+
+A `.` adds half again.
+
+```kf+
+VS 2
+G_2. C_4 Em_1
+```
+
+Reach for note values when the figure is easier to name than to count — a dotted rhythm, or anything off the beat. Otherwise [[slash-notation|slashes]] read faster.
+
+See also: [[slash-notation|Rhythmic Slash Notation]] · [[chords|Chords]]
 
 ---
 

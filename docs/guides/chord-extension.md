@@ -12,7 +12,9 @@ summary: How far up the stack the chord goes.
 How far up the stack the chord goes.
 
 ```kf+
-C7 Cmaj7 C9 C13
+#C
+VS 5
+C7 Cmaj7 C9 C11 C13
 ```
 
 | Written | Adds |

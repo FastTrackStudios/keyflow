@@ -14,27 +14,24 @@ Three ways to write a root. The chords come out the same.
 ````tabs
 === Letters
 ```kf+
-4/4 #C 120bpm
-
+#G
 VS 4
-C F Am G
+G C Em D
 ```
 
 The pitches themselves. What people say out loud, and what a dep wants
 to see.
 === Numbers
 ```kf+
-4/4 #C 120bpm
-
+#G
 VS 4
 1 4 6m 5
 ```
 
-Positions in the key. Change `#C` and every chord moves with it.
+Positions in the key. Change `#G` and every chord moves with it.
 === Roman numerals
 ```kf+
-4/4 #C 120bpm
-
+#G
 VS 4
 I IV vi V
 ```
@@ -51,4 +48,4 @@ See also: [[chord-root|Root]], [[header|Header]]
 
 ---
 
-Previous: [[goals|Goals]] · Next: [[alternatives|Alternatives]] · Up: [[introduction|An Introduction]]
+Previous: [[goals|Goals]] · Next: [[header|Header]] · Up: [[introduction|An Introduction]]

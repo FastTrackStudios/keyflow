@@ -15,15 +15,7 @@ The note the chord is built on. The only required part.
 C F Am G
 ```
 
-## Three ways to write it
-
-| | Written | Names |
-|---|---|---|
-| Letters | `C` `F#` `Bb` | the pitch |
-| Numbers | `1` `4` `6` | position in the key |
-| Roman | `I` `IV` `vi` | position, case carries quality |
-
-See [[introduction#Letters, numbers, or numerals|Letters, numbers, or numerals]].
+Letters, numbers or Roman numerals — [[notation-systems|three ways to write one]].
 
 ## Accidentals
 

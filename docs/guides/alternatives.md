@@ -2,8 +2,8 @@
 title: Alternatives
 kind: reference
 type: reference
-order: 3
-stage: Start here
+order: 16
+stage: Writing
 summary: What Keyflow is not, and what to reach for instead.
 ---
 
@@ -15,4 +15,4 @@ See also: [[introduction|An Introduction]]
 
 ---
 
-Previous: [[notation-systems|Letters, Numbers, or Numerals]] · Next: [[header|Header]] · Up: [[introduction|An Introduction]]
+Previous: [[writing-a-chart|Writing a Chart]] · Up: [[introduction|An Introduction]]

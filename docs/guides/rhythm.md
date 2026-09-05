@@ -15,11 +15,9 @@ A chord with nothing after it lasts one bar. Most of a chart needs no rhythm not
 G C Em D
 ```
 
-Four chords, four bars.
+Four chords, four bars. Two ways to say something shorter, and they mix freely.
 
-Two ways to say something shorter. They mix freely.
-
-## Slashes, in one line
+## Slashes count beats
 
 One slash per beat.
 
@@ -27,9 +25,9 @@ One slash per beat.
 G // C // D // Em //
 ```
 
-Two beats each. The rest — uneven bars, mixed lengths, what happens when the count is wrong — is in [[slash-notation|Rhythmic Slash Notation]].
+Two beats each. [[slash-notation|Rhythmic Slash Notation]] has uneven bars, mixed lengths, and what happens when the count is wrong.
 
-## Note values, in one line
+## Note values name durations
 
 `_2` is a half, `_4` a quarter.
 
@@ -38,14 +36,9 @@ VS 4
 G_2 C_2 D_2 Em_2
 ```
 
-See [[lilypond-rhythm|LilyPond Rhythm Notation]].
+[[lilypond-rhythm|LilyPond Rhythm Notation]] has the rest of the values.
 
-## Which to use
-
-| | Counts | Reads as |
-|---|---|---|
-| Slashes | beats | what a player counts |
-| Note values | durations | what a score names |
+Slashes are what a player counts; note values are what a score names. Reach for whichever matches how you are thinking about the bar.
 
 ---
 

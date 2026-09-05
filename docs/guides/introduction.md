@@ -13,7 +13,7 @@ Keyflow is a plain-text format for charts. You write what the song does and it e
 
 ```kf+
 Song Title - Artist Name
-4/4 #G 120bpm
+#G 120bpm 4/4
 
 VS 4
 G C Em D
@@ -21,7 +21,9 @@ G C Em D
 
 That is the whole file.
 
-It is for the chart a band reads on a stand: form, chords, the hits that matter. Writing one should take about as long as saying it out loud. Not an engraving program; see [[alternatives|Alternatives]].
+It is for the **master rhythm chart** — the one-page sheet a band reads on a stand, carrying form, chords and the hits that matter, and nothing else. Writing one should take about as long as saying it out loud. Not an engraving program; see [[alternatives|Alternatives]].
+
+The chart above is the running example. It grows a section at a time through [[header|Header]], [[structure|Structure]], [[chords|Chords]] and [[rhythm|Rhythm]], and by the end it is a chart you could hand to a band.
 
 Two things shape everything else — see [[goals|Goals]]. A root can be written three ways; see [[notation-systems|Letters, Numbers, or Numerals]].
 

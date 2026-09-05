@@ -16,8 +16,6 @@ VS 8
 CH 4
 ```
 
-The count is enforced. Chords that do not fill the section fail the parse, with what Keyflow counted.
-
 ## Naming a section
 
 | Section | Short | Section      | Short  |
@@ -27,7 +25,7 @@ The count is enforced. Chords that do not fill the section fail the parse, with 
 | Chorus  | `CH`  | Solo         | `SOLO` |
 | Bridge  | `BR`  | Outro        | `OUT`  |
 
-Case does not matter. Full list: [All Section Names](/appendix/sections).
+Case does not matter. Full list: [Sections](/appendix/sections).
 
 ## Music under a section
 
@@ -40,6 +38,17 @@ G C Em D
 
 > [!warning] A section header holds no music
 > `VS 4 G C Em D` fails. The header names the section and counts bars; music goes underneath.
+
+## The bar count is enforced
+
+It is not decoration. Three chords cannot fill four bars, and Keyflow will not guess which one you meant to hold:
+
+```kf-
+VS 4
+G C Em
+```
+
+Rather than engrave a form you did not write, it fails and tells you what it counted. This is the first thing most people hit. It is also why a chart that parses is a chart whose form is right.
 
 ## Replaying a section
 
@@ -58,7 +67,31 @@ CH
 
 Lay out each section once, then order the repeats. Replays are numbered for you — *Verse 2*, *Chorus 2*.
 
-See also: [All Section Names](/appendix/sections), [[rhythm|Rhythm]]
+## A note on the section
+
+A quoted string after the count is a direction, engraved with the section name.
+
+```kf+
+VS 4 "Half-time"
+G C Em D
+```
+
+## Changing key
+
+A key on a section header changes it from there on.
+
+```kf+
+#G
+VS 4
+1 4 5 1
+
+BR 4 #Bb
+1 4 5 1
+```
+
+The degrees are unchanged; what they mean is not.
+
+See also: [Sections](/appendix/sections), [[rhythm|Rhythm]]
 
 ---
 

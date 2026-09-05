@@ -34,14 +34,21 @@ Csus4 C Csus2 C
 
 ## In numbers and numerals
 
-Numbers spell the quality out. Roman numerals carry it in the case — lowercase is minor.
+Numbers spell the quality out; Roman numerals carry it in the case.
 
 ```kf+
-4/4 #C 120bpm
-
+#C
 VS 4
 1 2m 3m 4
 ```
+
+```kf+
+#C
+VS 4
+I ii iii IV
+```
+
+`ii` and `2m` are the same chord.
 
 See also: [[chord-extension|Extension]], [[chord-root|Root]], [[chords|Chords]]
 
