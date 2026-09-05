@@ -8,7 +8,7 @@ stage: Start here
 
 # An Introduction
 
-A plain-text format for charts. You type what the song does; it engraves.
+Keyflow is a plain-text format for charts. You write what the song does and it engraves.
 
 ```kf+
 Song Title - Artist Name
@@ -18,22 +18,22 @@ VS 4
 G C Em D
 ```
 
-A complete file.
+That is the whole file.
 
-The job is **master rhythm charts** — form, chords, the hits that matter. Not an engraving program: see [[alternatives|Alternatives]].
+It is for the chart a band reads on a stand: form, chords, the hits that matter. Writing one should take about as long as saying it out loud. Not an engraving program; see [[alternatives|Alternatives]].
 
 ## Two goals
 
-**Complexity only when the music asks for it.** `G C Em D` is a valid chart. The syntax for a key change is there when the song needs one.
+Simple charts stay simple. `G C Em D` is a chart — no header, no sections, nothing declared. The syntax for a key change exists; you meet it when the song has one.
 
 > [!tip] The test for any new syntax
 > Does the simplest chart get longer? Then it is wrong.
 
-**Everything derives from the plain text.** No project format, no sidecar, no database — so a chart fits in a URL, survives the PDF it made, and anything that writes text can write one. It also diffs, merges, and opens in thirty years.
+No project file, no sidecar, no database. A chart fits in a URL; a PDF carries its own source; anything that writes text can write a chart. Text diffs, merges, and still opens in thirty years.
 
 ## Letters, numbers, or numerals
 
-Three ways to write a root. Same chords, same engraving.
+Three ways to write a root. The chords come out the same.
 
 ````tabs
 === Letters
@@ -44,8 +44,8 @@ VS 4
 C F Am G
 ```
 
-Names the pitches themselves. What most people say out loud, and what a
-chart handed to a dep should probably use.
+The pitches themselves. What people say out loud, and what a dep wants
+to see.
 === Numbers
 ```kf+
 4/4 #C 120bpm
@@ -54,8 +54,7 @@ VS 4
 1 4 6m 5
 ```
 
-Names positions in the key. Change `#C` in the header and every chord
-follows.
+Positions in the key. Change `#C` and every chord moves with it.
 === Roman numerals
 ```kf+
 4/4 #C 120bpm
@@ -64,11 +63,11 @@ VS 4
 I IV vi V
 ```
 
-Positions again, with the case carrying the quality — `vi` is minor
-because it is lowercase.
+Positions again. The case carries the quality: `vi` is minor because it
+is lowercase.
 ````
 
-Numbers and numerals name *positions in the key* — change the key and the chart follows.
+Numbers and numerals name positions rather than pitches, so transposing is editing one word.
 
 ---
 
