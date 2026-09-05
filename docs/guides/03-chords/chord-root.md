@@ -15,47 +15,13 @@ The note the chord is built on. The only required part.
 C F Am G
 ```
 
-Letters, numbers or Roman numerals — [[notation-systems|three ways to write one]].
-
-## Accidentals
-
 `#` sharp, `b` flat, after the letter.
 
 ```kf+
 F# Bb C# Eb
 ```
 
-## The colon
-
-`57` could be a fifty-seven. A colon separates root from quality.
-
-```kf+
-4/4 #C 120bpm
-
-1:maj7 2m 3m 5:7
-```
-
-Reading only — `1:maj7` and `1maj7` parse identically. Skip it where it earns nothing: `2m`, `6m9`.
-
-## Slash chords
-
-`/` puts a different note in the bass.
-
-```kf+
-C G/B Am F
-```
-
-> [!important] `/` differs in Roman numerals
-> There it writes a **secondary chord**. `V/V` is "five of five" — the dominant of the dominant, D in C.
-
-```kf+
-4/4 #C 120bpm
-
-VS 4
-I V/V IV V
-```
-
-See also: [[chord-quality|Quality]], [[chords|Chords]]
+See also: [[notation-systems|Letters, Numbers, or Numerals]], [[chord-quality|Quality]], [[chords|Chords]] · every root in the [appendix](/appendix/roots).
 
 ---
 
