@@ -9,12 +9,6 @@ summary: Four parts, in order. Only the root is required.
 
 # Chords
 
-Write the root. Add only what the chord has — the running example is four bare triads:
-
-```kf+
-G C Em D
-```
-
 ## The four parts
 
 Read left to right, the columns spell the chord. Everything after the root is optional.
@@ -23,10 +17,10 @@ Read left to right, the columns spell the chord. Everything after the root is op
 | --- | --- | --- | --- |
 | `C#` | `m` | `7` | `b5` |
 
-So `C#`, `C#m`, `C#m7` and `C#m7b5` are all chords. The same four bars as above, with more of the harmony written down:
+One bar each, adding a part at a time:
 
 ```kf+
-Gmaj7 C Em7 D7
+C# C#m C#m7 C#m7b5
 ```
 
 See also: [[chord-root|Root]], [[chord-quality|Quality]], [[chord-extension|Extension]], [[chord-alteration|Alteration]] · [[rhythm|Rhythm]] for how long each one lasts.
