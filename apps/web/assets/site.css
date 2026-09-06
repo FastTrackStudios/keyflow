@@ -40,6 +40,7 @@
   --syn-push: #fb923c;
   --syn-sep: #4b5563;
   --syn-command: #f472b6;
+  --danger: #f87171;
 }
 
 :root[data-theme="light"] {
@@ -64,6 +65,7 @@
   --syn-push: #c2410c;
   --syn-sep: #b6b4be;
   --syn-command: #be185d;
+  --danger: #c0392b;
 }
 
 /* An explicit dark choice is the same as the default, but it has to be
@@ -90,6 +92,71 @@
   --syn-push: #fb923c;
   --syn-sep: #4b5563;
   --syn-command: #f472b6;
+  --danger: #f87171;
+}
+
+/* The architect-ui / shadcn token layer, pinned to the palette above.
+ *
+ * `tailwind.css` ships that token set with a
+ * `@media (prefers-color-scheme: dark)` block, so those names follow the
+ * OS. The palette above does not — dark is the default whatever the system
+ * asks for. In OS light mode the two disagreed and everything drawing on a
+ * shadcn name went light while the page stayed dark:
+ *
+ *   - the editor's own tokens are defined as `var(--background)`,
+ *     `var(--foreground)`, `var(--muted)`, `var(--border)`,
+ *     `var(--muted-foreground)` and `var(--primary)`, so rendered markdown
+ *     lost its headings — near-black ink on a near-black page — and grew
+ *     white code chips, white table rules and white callouts;
+ *   - `--ed-accent` is the CARET. It flipped to near-black on the editor's
+ *     near-black ground, so the cursor simply disappeared.
+ *
+ * Fixing it here rather than in each component works because site.css loads
+ * after tailwind.css and neither `:root` is inside an `@layer`, so these win
+ * in both schemes. Each is written as a `var()` of the palette rather than a
+ * literal, so `data-theme` carries the whole set with it and there is no
+ * second list to keep in sync.
+ *
+ * `--primary` maps to `--ink` rather than to `--accent` on purpose: it is
+ * what paints the primary buttons and the caret, and near-white is what they
+ * already were in dark. Pointing it at the brand blue is a one-line change
+ * if that is wanted.
+ *
+ * `--accent` is deliberately NOT here. It is our brand blue and shadcn's
+ * hover surface, and ours already won in both schemes, so it never flipped.
+ * Only its foreground needed pinning. */
+:root {
+  --background: var(--bg);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface);
+  --popover-foreground: var(--ink);
+  --primary: var(--ink);
+  --primary-foreground: var(--bg);
+  --secondary: var(--surface);
+  --secondary-foreground: var(--ink);
+  --muted: var(--surface);
+  --muted-foreground: var(--ink-soft);
+  --accent-foreground: var(--accent-ink);
+  --border: var(--line);
+  --input: var(--line);
+  /* The focus ring is the one place the brand colour earns its keep: it
+   * only ever shows on keyboard focus, and a neutral grey ring on a near
+   * black ground was hard to find. */
+  --ring: var(--accent);
+  --destructive: var(--danger);
+  /* Not --ink: this paints text ON the red, and in the light palette --ink
+   * is near-black, which does not read on #c0392b. White works on both. */
+  --destructive-foreground: #ffffff;
+  --sidebar: var(--surface);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--accent);
+  --sidebar-primary-foreground: var(--accent-ink);
+  --sidebar-accent: var(--surface);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--line);
+  --sidebar-ring: var(--accent);
 }
 
 * { box-sizing: border-box; }
