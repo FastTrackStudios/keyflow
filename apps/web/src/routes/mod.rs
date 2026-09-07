@@ -1,6 +1,7 @@
 //! The site's screens.
 
 mod appendix_page;
+mod auth_callback;
 mod editor;
 mod graph;
 mod guide_page;
@@ -8,6 +9,7 @@ mod home;
 mod workbench;
 
 pub use appendix_page::{AppendixIndex, AppendixPage};
+pub use auth_callback::AuthCallback;
 pub use editor::{Chart, Editor};
 pub use graph::GuideGraph;
 pub use guide_page::{GuideIndex, GuidePage};

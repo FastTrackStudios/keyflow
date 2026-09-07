@@ -28,9 +28,10 @@
 //! in one chart shows that chart's source rather than failing a build or
 //! blanking a page.
 
+// `expect_used` only: there is no bare `panic!` left in this file, and
+// `expect` on an unfulfilled expectation is itself a lint.
 #![expect(
     clippy::expect_used,
-    clippy::panic,
     reason = "a build script reports failure by panicking; there is no other channel"
 )]
 
@@ -57,11 +58,9 @@ const PAD: f64 = 6.0;
 /// is therefore the number that reaches a reader, and it tracks the tag.
 ///
 /// The git path still earns its place locally, where it distinguishes a
-/// working tree from the tag it sits on.
-///
-
-/// Falls back to the manifest when git is unavailable — a build from a
-/// source tarball, or a container that copied the tree without `.git`.
+/// working tree from the tag it sits on. Falls back to the manifest when
+/// git is unavailable — a build from a source tarball, or a container
+/// that copied the tree without `.git`.
 fn emit_version() {
     // A new commit or tag changes the version, and neither touches a
     // source file, so the build script has to be told to look again.

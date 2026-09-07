@@ -28,8 +28,16 @@ architect-ui = { workspace = true }
 # Sign-in. Deliberately additive: the editor stays usable signed out
 # (see the module docs in src/main.rs), and an account is for *keeping*
 # charts, not for using the thing.
-auth-http = { workspace = true }
-auth-client = { workspace = true }
+#
+# No auth client crate: the flow is an OIDC redirect (src/auth.rs), which
+# is two form posts and a GET over `window.fetch`. `auth-http` used to be
+# here for the password API and brought reqwest 0.12 with it — a second
+# reqwest major in the wasm bundle, which is the link-time hazard the
+# `web` feature note below describes at length.
+#
+# `sha2` is the `S256` PKCE challenge; the base64url beside it below is
+# the other half, already here for the chart-in-URL codec.
+sha2 = { workspace = true }
 
 # The guide's knowledge graph. Pure and FS-free by design, so the graph is
 # built in the browser from the same markdown the pages are rendered from.
@@ -121,8 +129,14 @@ web-sys = { version = "0.3", features = [
     # whether WebGL2 exists before one is mounted.
     "HtmlCanvasElement",
     "WebGl2RenderingContext",
-    # Remembering what someone chose — see `prefs`.
+    # Remembering what someone chose — see `prefs` — and, under the same
+    # API, the session and the PKCE verifier that outlive a redirect to
+    # the issuer (`auth`, `return_to`).
     "Storage",
+    # PKCE needs unguessable bytes. `crypto.getRandomValues`, never
+    # `Math.random`: a guessable verifier is not a weaker PKCE, it is
+    # none at all.
+    "Crypto",
     # The dev-guide poll, which calls the server functions by URL rather
     # than through a generated client — see `guide_live`.
     "Request",
@@ -141,14 +155,20 @@ kurbo = { workspace = true }
 
 tracing = { workspace = true }
 
+# The issuer answers in JSON — the token response, `/oauth2/userinfo` —
+# and the session is stored as JSON under one localStorage key, so a
+# half-written session is not a representable state. Not optional any
+# more: it used to be `dev-guide` only, and sign-in needs it in every
+# build. `dev-guide` also carries a rendered vault to the browser with
+# it, which this crate parses by hand because it has no server-function
+# client in wasm.
+serde = { workspace = true }
+serde_json = { workspace = true }
+
 # ── dev-guide only ────────────────────────────────────────────────────
 # Re-rendering the guide at runtime needs the same builder `build.rs`
-# uses; `serde`/`serde_json` carry a rendered vault to the browser, which
-# parses it by hand because this crate has no server-function client in
-# wasm. All optional: the published build has none of them.
+# uses. Optional: the published build does not carry it.
 ssg-build = { workspace = true, optional = true }
-serde = { version = "1", features = ["derive"], optional = true }
-serde_json = { version = "1", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -218,8 +238,6 @@ server = ["dioxus/server", "dioxus/fullstack"]
 # the published site wants the baked vault. See `guide_live`.
 dev-guide = [
     "dep:ssg-build",
-    "dep:serde",
-    "dep:serde_json",
     "ssg-build?/watch",
     # Subset the typefaces for the charts the dev server just drew, so a
     # new symbol renders in the preview instead of silently missing. Only
