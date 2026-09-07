@@ -8,7 +8,7 @@ the `architect` / `daw` / `vendor` splits before it.
 |---|---|---|
 | **keyflow** (here) | the chart language, its formats, the LSP + grammar, Engraver, and the keyflow site | — |
 | [daw](https://github.com/FastTrackStudios/daw) | the DAW platform and shared substrate | git dep, tag `v0.0.2` |
-| [architect](https://github.com/FastTrackStudios/architect) | the framework (entity/RPC, atom, form, auth, permissions, crdt), `architect-ui` | git dep, tag `v0.0.2` |
+| [architect](https://github.com/FastTrackStudios/architect) | the framework (entity/RPC, atom, form, auth, permissions, crdt), `architect-ui` | git dep, tag `v0.8.2` (same tag task pins) |
 | [session](https://github.com/FastTrackStudios/session) | the musical/production vocabulary and the Session app | consumes this repo |
 | [editor](https://github.com/FastTrackStudios/editor) | the embeddable text/markdown editor — sits BELOW this repo | git dep, tag `v0.1.0` |
 | [task](https://github.com/FastTrackStudios/task) | the Task product and the vault/wiki layer | git dep (`view-knowledge-graph`, site only) |

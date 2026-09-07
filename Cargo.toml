@@ -117,31 +117,39 @@ editor-keyflow-lang = { path = "features/editor/editor-keyflow-lang" }
 # `keyflow` (via editor-keyflow). Cargo stays acyclic — different
 # packages, and nothing in this dependency's tree touches keyflow, so
 # there is no duplicate-crate hazard — but a change spanning both repos
-# needs two bumps in sequence. Pinned by rev rather than a branch so a
-# push to task's main cannot change this build under us.
-# Repinned off 263ec34: that revision carries a stray
+# needs two bumps in sequence.
+#
+# Tracks `main`, like the three `ssg` entries below. It used to be frozen
+# at rev 607916d for a reason that no longer holds: task@main's crates
+# reach architect-ui, this repo was on architect v0.0.2, and taking both
+# put two copies of the architect crates in one wasm binary. Both repos
+# pin architect v0.8.2 now, so there is one copy and the rev pin has
+# nothing left to protect. See the architect block below.
+#
+# The other reason it was a rev, once: 263ec34 carried a stray
 # `features/editor/mermaid-rs-renderer/Cargo.toml.orig` — a cargo
 # packaging artifact — and cargo refuses to vendor a source containing a
 # reserved file name, so every Nix build of the site died in
-# `vendor-cargo-deps` before it reached a compiler. Only the deploy image
-# hit it; `cargo build` reads the checkout directly and never vendors.
-# Pinned to a rev, NOT `main`, and `ssg-ui` is taken without its `graph`
-# feature so it does not pull a second copy. task@main's crates depend on
-# architect v0.7.1; this repo is on v0.0.2, and taking both puts two
-# reqwest majors in one wasm binary — 0.12 via auth-http, 0.13 via
-# iroh — whose wasm-bindgen glue collides at link time with a hundred
-# `duplicate symbol: intounderlyingsource_*` errors. Repointing this at
-# `main` needs keyflow's architect bump first.
-view-knowledge-graph = { git = "https://github.com/FastTrackStudios/task", rev = "607916d171467df08216529f9dfcf88308c3f636" }
+# `vendor-cargo-deps` before it reached a compiler. That file is long
+# gone from task; if it ever comes back, the symptom is a deploy-only
+# failure (`cargo build` reads the checkout directly and never vendors)
+# and the fix is to pin a rev again, here and on all three ssg entries.
+view-knowledge-graph = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
 
 # features/ssg — a vault (a directory of markdown notes) published as a
 # static site. apps/web's guide is one: `ssg-build` renders it to HTML in
 # build.rs, `ssg`/`ssg-ui` are the page model and the components, and
 # `dx build --ssg` pre-renders the routes the vault names.
-# `default-features = false` on ssg-ui: its `graph` feature would pull
-# task@main's view-knowledge-graph — see the note above.
+#
+# `graph` on ssg-ui is what makes `ssg_ui::{vault_graph, local_graph}`
+# available — the vault→graph build and the one-hop subgraph the guide's
+# rail draws. It was off while this repo's architect tag differed from
+# task's, because the feature reaches view-knowledge-graph and pulled a
+# second copy of the architect crates through it. One tag now, so it is
+# simply on, and apps/web reads those two functions from here instead of
+# keeping its own copies.
 ssg = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
-ssg-ui = { git = "https://github.com/FastTrackStudios/task", branch = "main", default-features = false }
+ssg-ui = { git = "https://github.com/FastTrackStudios/task", branch = "main", features = ["graph"] }
 ssg-build = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
 
 # ── apps ──────────────────────────────────────────────────────────────
@@ -178,15 +186,38 @@ vox = { version = "0.10.0-rc.5", default-features = false, features = ["runtime"
 # ── Architect framework — its own repo since the 2026-08 three-way split
 # (FastTrackStudios/architect: the entity/RPC framework, the auth/crdt/
 # permissions stack, architect-ui + architect-story, architect-telemetry).
-# One tag pin shared by every entry so the whole framework moves together.
-architect = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.0.2" }
+#
+# ONE tag pin shared by EVERY entry below — `architect`, `architect-ui`,
+# `auth-http`, `auth-client`, `architect-telemetry`. They are one repo:
+# a split tag checks that repo out twice, and cargo treats the two
+# checkouts as different crates whose traits then refuse to unify.
+#
+# v0.8.2 specifically, because that is the tag `task` pins across its
+# workspace. This repo takes `ssg`, `ssg-ui`, `ssg-build` and
+# `view-knowledge-graph` from task@main, and every one of those reaches
+# architect-ui. Pin a different tag here and the site ends up holding two
+# architect-uis: `ssg_ui::VaultArticle` and a local component would be
+# rendering against different `ThemeProvider`s, different story
+# registries, different everything — types that share a name and do not
+# unify. So: bump this together with task's pin, in that order (task
+# first, since this tracks task@main).
+#
+# Historically this pin also blamed reqwest: v0.0.2 here against v0.7.1
+# there was reported as ~100 `duplicate symbol: intounderlyingsource_*`
+# errors out of rust-lld, attributed to two reqwest majors compiling
+# their own wasm-streams glue. That is not what the toolchain does today.
+# With the tags unified, the wasm binary carries reqwest 0.12 (auth-http)
+# AND 0.13 (iroh, via architect), wasm-streams 0.4 (dioxus-web) AND 0.5
+# (reqwest 0.13), and links clean. Two majors of a crate are fine; two
+# copies of the SAME crate at different sources are what breaks.
+architect = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.8.2" }
 
 # The shared musical vocabulary — section colours and the canonical
 # palettes `keyflow-proto` engraves section cards with.
 music-catalog = { git = "https://github.com/FastTrackStudios/music-convention", tag = "v0.1.0" }
 color-palette = { git = "https://github.com/FastTrackStudios/music-convention", tag = "v0.1.0" }
 # The Dioxus primitive library (was libs/ui/fts-ui, renamed on the split).
-architect-ui = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.0.2" }
+architect-ui = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.8.2" }
 
 # The FastTrackStudio account. One identity across Task, Session, Signal,
 # Keyflow and Ignition, served by auth.fasttrackstudio.app.
@@ -195,19 +226,18 @@ architect-ui = { git = "https://github.com/FastTrackStudios/architect", tag = "v
 # the site's email-and-password sign-in. The site signs in by OIDC
 # redirect now — see `apps/web/src/auth.rs` for why — and that is two
 # form posts and a GET, which leaves neither crate anything to do.
-# Architect's own `auth_client::oidc` would be the right home for the
-# PKCE half, but it arrived in v0.7.1 and this repo is pinned to v0.0.2;
-# taking both tags would put two copies of the architect crates in one
-# workspace. So it is a documented port in `apps/web/src/oidc.rs`, to be
-# deleted in favour of the crate when the pin moves.
 #
-# Dropping `auth-http` also took reqwest 0.12 out of the site's wasm
-# bundle — one of the two majors whose wasm-bindgen glue collides at link
-# time. See the note on `view-knowledge-graph`.
+# Architect's own `auth_client::oidc` is the right home for the PKCE
+# half. It arrived in v0.7.1, which this repo could not take while it was
+# pinned to v0.0.2 — so the flow was written as a documented port in
+# `apps/web/src/oidc.rs`. **That pin is gone as of this commit**, so the
+# port is now redundant; replacing it with the crate is a follow-up, kept
+# out of a dependency bump so the two stay reviewable apart.
 #
-# Telemetry. `otel` is inert unless the build bakes
+# Telemetry. Same tag as everything above — see the note there for why
+# that is not optional. `otel` is inert unless the build bakes
 # TASK_OTLP_ENDPOINT, so dev builds stay telemetry-free.
-architect-telemetry = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.0.2", features = ["otel"] }
+architect-telemetry = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.8.2", features = ["otel"] }
 
 # ── MusicXML parsing (keyflow) ─────────────────────────────────────────
 musicxml = "1.1"
