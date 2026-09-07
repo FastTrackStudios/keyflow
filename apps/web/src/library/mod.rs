@@ -84,14 +84,16 @@
 //! [`crate::oidc`] keeps PKCE testable on a target with no browser in
 //! it. The browser half is then thin enough to read in one screen.
 //!
-//! # Degrading when the tools are not there
+//! # Degrading when a tool is not there
 //!
-//! The four chart tools are new. A Task deployment that predates them
-//! answers `tools/call` with `unknown tool`, and a person's library is
-//! then simply not available yet — which is a sentence on a page, not a
+//! `list_charts`, `read_chart` and `write_chart` are live. `delete_chart`
+//! is not yet, and an older deployment has none of them: either answers
+//! `tools/call` with `unknown tool`, and that part of the library is
+//! then simply not available — which is a sentence on a page, not a
 //! panic and not a blank screen. [`LibraryError::Unsupported`] is that
 //! case, kept separate from every other failure precisely so the UI can
-//! say the true thing about it.
+//! say the true thing about it. It is a fallback rather than the normal
+//! path, and Remove is the one control that routinely takes it today.
 
 // The transport half is browser-only, and the host build of the site
 // (`cargo check --workspace`, which is not `just web-check`) compiles
@@ -198,6 +200,10 @@ pub struct ChartEntry {
     pub title: String,
     pub key: Option<String>,
     pub notation: Option<String>,
+    /// The shape of the song — `["IN", "VS 1", "CH"]`. Enough to tell
+    /// two charts with similar titles apart at a glance, which is what
+    /// a shelf is for.
+    pub sections: Vec<String>,
     /// As the server spelled it. Not parsed into a date type: it is
     /// shown, not computed with, and inventing a chrono dependency to
     /// reformat a string nobody sorts by is not worth it.
@@ -215,6 +221,7 @@ pub struct StoredChart {
     pub source: String,
     pub key: Option<String>,
     pub notation: Option<String>,
+    pub sections: Vec<String>,
 }
 
 /// What a save answers with.
@@ -254,13 +261,27 @@ pub struct Draft {
 /// half-written would be exactly backwards — a draft is when you most
 /// want it saved.
 ///
-/// `notation` is deliberately never sent. The field exists on the
-/// server, but Keyflow source has no single notation: "as written" is
-/// the honest answer for nearly every chart, and one that mixes letters
-/// and numbers keeps the mix. The editor's notation picker is a *view*
-/// setting ([`crate::notation`]) and stamping it onto the stored chart
-/// would file someone's number chart as a letter chart because they
-/// once looked at it in letters.
+/// # `notation` is never sent, and `sections` always is
+///
+/// **`notation` is deliberately omitted.** On the server the field
+/// names the *dialect* the source is written in — `keyflow`
+/// (the default), `chordpro`, `nashville` — and everything this editor
+/// saves is Keyflow, so the server's own default is already the right
+/// answer. What it emphatically does not mean is the chord notation a
+/// chart is written in. That has no single value: "as written" is the
+/// truth for nearly every chart, one that mixes letters and numbers
+/// keeps the mix, and the editor's notation picker is a *view* setting
+/// ([`crate::notation`]). Stamping that here would file someone's
+/// number chart as a letter chart because they once looked at it in
+/// letters.
+///
+/// **`sections` must be declared, and only this side can.** The server
+/// does not parse chart source — by design; the notation domain lives
+/// here. A section it was not told about is not addressable as
+/// `chart:<slug>#<section>`, so the anchors a collection or a link can
+/// point at are exactly the ones sent from here. They go up
+/// anchor-shaped (`VS 1` → `vs-1`) because that is what they are for,
+/// and deduplicated, because two choruses are one anchor.
 #[must_use]
 pub fn draft_from_source(source: &str) -> Draft {
     let summary = keyflow::summary::ChartSummary::parse(source).ok();
@@ -272,11 +293,42 @@ pub fn draft_from_source(source: &str) -> Draft {
             .filter(|t| !t.is_empty())
             .unwrap_or_else(|| "Untitled chart".to_owned()),
         key: summary.as_ref().and_then(|s| s.key.clone()),
-        sections: summary.map(|s| s.sections).unwrap_or_default(),
+        sections: summary.map(|s| anchors(&s.sections)).unwrap_or_default(),
         source: source.to_owned(),
         slug: None,
         org: None,
     }
+}
+
+/// Section labels as addressable anchors, in order, without repeats.
+///
+/// `["IN", "VS 1", "CH", "VS 2", "CH"]` becomes
+/// `["in", "vs-1", "ch", "vs-2"]`. The order is the shape of the song
+/// and is kept; the repeat is dropped because an anchor names a place,
+/// and the second chorus is the same place by that name.
+#[must_use]
+fn anchors(labels: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for label in labels {
+        let anchor: String = label
+            .trim()
+            .to_lowercase()
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+            .collect();
+        let anchor = anchor.trim_matches('-').to_owned();
+        // Runs of punctuation collapse: "VS  1" is one anchor, not one
+        // with a hole in it.
+        let anchor = anchor
+            .split('-')
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join("-");
+        if !anchor.is_empty() && !out.contains(&anchor) {
+            out.push(anchor);
+        }
+    }
+    out
 }
 
 // ── The operations ───────────────────────────────────────────────────
@@ -309,6 +361,11 @@ pub async fn read_chart(slug: &str, org: Option<&str>) -> Result<StoredChart, Li
 }
 
 /// Keep a chart: a new one, or a new version of one already there.
+///
+/// Named for what a person is doing. The lane it lands on is called
+/// `write_chart` — see [`mcp`] — and the difference is the seam doing
+/// its job: "save" is the word on the button, `write_*` is the pattern
+/// every ADR-0003 asset lane follows.
 ///
 /// # Errors
 ///
@@ -378,6 +435,33 @@ mod tests {
             org,
         } = draft_from_source(keyflow_ui::examples::EXAMPLE_THRILLER);
         assert!(slug.is_none() && org.is_none());
+    }
+
+    /// Sections go up as anchors, in order, once each. They are what
+    /// `chart:<slug>#<section>` addresses, and the server cannot derive
+    /// them — it does not parse chart source.
+    #[test]
+    fn sections_become_anchors_in_order_without_repeats() {
+        let labels: Vec<String> = ["IN", "VS 1", "CH", "VS  2", "CH", "  "]
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect();
+        assert_eq!(anchors(&labels), ["in", "vs-1", "ch", "vs-2"]);
+        assert!(anchors(&[]).is_empty());
+    }
+
+    #[test]
+    fn a_real_chart_declares_the_sections_it_has() {
+        let draft = draft_from_source(keyflow_ui::examples::EXAMPLE_THRILLER);
+        assert!(!draft.sections.is_empty());
+        assert!(
+            draft
+                .sections
+                .iter()
+                .all(|s| s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')),
+            "an anchor with a space in it does not address anything: {:?}",
+            draft.sections
+        );
     }
 
     #[test]

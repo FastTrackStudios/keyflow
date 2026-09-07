@@ -34,14 +34,36 @@
 //! All of that is why the parsing here is one tested function rather
 //! than a chain of `?` at four call sites.
 //!
-//! # Tolerance about the payload shape
+//! # The four tools, as the server actually defines them
 //!
-//! The chart tools are new and this client was written against their
-//! contract rather than against a running server. Where the contract is
-//! ambiguous — a listing as a bare array or as `{"charts": [...]}`,
-//! matching Task's other listing tools — both are accepted. The failure
-//! this avoids is the quiet one: an empty library shown to someone whose
-//! charts are plainly there.
+//! Reconciled against Task's own dispatch rather than guessed at, which
+//! is why the parsing below is exact and not tolerant of shapes nobody
+//! sends:
+//!
+//! * `list_charts` `{org?}` → `{"count", "charts": [{slug, title, key,
+//!   notation, sections, rel_path, updated_at, node}], "note"}` — the
+//!   wrapped form, and the only one.
+//! * `read_chart` `{slug, org?}` → the chart object **directly**, not
+//!   wrapped: `{slug, title, source, key, notation, sections,
+//!   updated_at}`. An unknown slug is `isError` with a message naming
+//!   `list_charts`.
+//! * `write_chart` `{title, source, slug?, key?, sections?, org?}` →
+//!   `{slug, rel_path, created, node}`. **`write_chart`, not
+//!   `save_chart`** — every ADR-0003 asset lane is `write_*`
+//!   (`write_chart` / `write_patch` / `write_sample` /
+//!   `write_lighting`), and Task has a test whose whole job is catching
+//!   one lane drifting off that pattern. Omit `slug` to create (derived
+//!   from the title, collisions suffixed); pass it to replace.
+//!   `updated_at` is stamped server-side and is *not* an accepted
+//!   argument.
+//! * `delete_chart` `{slug, org?}` → `{slug, deleted, note}`, and
+//!   idempotent: deleting twice answers `deleted: false` rather than an
+//!   error. It is the one tool not live yet, which is exactly what
+//!   [`super::LibraryError::Unsupported`] is for.
+//!
+//! `org` is optional on every account-lane tool and resolved
+//! server-side — explicit `org`, then the caller's home org, then their
+//! first reachable one, then `-32600`.
 
 use serde_json::{Value, json};
 
@@ -120,7 +142,7 @@ pub fn save_chart_body(draft: &Draft) -> String {
     if let Some(slug) = draft.slug.as_ref().filter(|s| !s.trim().is_empty()) {
         map.insert("slug".to_owned(), Value::String(slug.clone()));
     }
-    call_body("save_chart", with_org(args, draft.org.as_deref()))
+    call_body("write_chart", with_org(args, draft.org.as_deref()))
 }
 
 // ── Reading answers ──────────────────────────────────────────────────
@@ -207,26 +229,23 @@ fn looks_like_no_org(message: &str) -> bool {
     lower.contains("no reachable org") || lower.contains("not hosted")
 }
 
-/// Pull an array out of a payload that may or may not be wrapped.
-/// Anything with exactly one array in it is that array; see the module
-/// docs on tolerance.
-fn array_in(payload: &Value, name: &str) -> Option<Vec<Value>> {
-    if let Some(list) = payload.as_array() {
-        return Some(list.clone());
-    }
-    let object = payload.as_object()?;
-    if let Some(list) = object.get(name).and_then(Value::as_array) {
-        return Some(list.clone());
-    }
-    let mut arrays = object.values().filter_map(Value::as_array);
-    let only = arrays.next()?;
-    arrays.next().is_none().then(|| only.clone())
-}
-
-/// Pull an object out of a payload that may or may not be wrapped in a
-/// named field. Same tolerance, same reason as [`array_in`].
-fn object_in<'a>(payload: &'a Value, name: &str) -> &'a Value {
-    payload.get(name).unwrap_or(payload)
+/// A list of strings, or nothing. `sections` is the shape of the song
+/// — `["IN", "VS 1", "CH"]` — and a listing that shows it is showing
+/// what the chart *is* rather than only what it is called.
+fn string_list(value: &Value, key: &str) -> Vec<String> {
+    value
+        .get(key)
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(ToOwned::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn text_field(value: &Value, key: &str) -> Option<String> {
@@ -246,7 +265,12 @@ fn text_field(value: &Value, key: &str) -> Option<String> {
 /// the payload holds no recognisable list.
 pub fn charts_from(body: &str) -> Result<Vec<ChartEntry>, LibraryError> {
     let payload = tool_payload(body)?;
-    let rows = array_in(&payload, "charts")
+    // `{"count", "charts": [...], "note"}` — exactly. `count` and
+    // `note` are for a model reading the answer as text and are of no
+    // use here; the list is the answer.
+    let rows = payload
+        .get("charts")
+        .and_then(Value::as_array)
         .ok_or_else(|| LibraryError::Malformed("no chart list in the answer".to_owned()))?;
     Ok(rows
         .iter()
@@ -259,6 +283,7 @@ pub fn charts_from(body: &str) -> Result<Vec<ChartEntry>, LibraryError> {
                 key: text_field(row, "key"),
                 notation: text_field(row, "notation"),
                 updated_at: text_field(row, "updated_at"),
+                sections: string_list(row, "sections"),
                 slug,
             })
         })
@@ -274,8 +299,7 @@ pub fn charts_from(body: &str) -> Result<Vec<ChartEntry>, LibraryError> {
 /// opening the editor on an empty buffer would look like the save had
 /// silently lost it.
 pub fn chart_from(body: &str) -> Result<StoredChart, LibraryError> {
-    let payload = tool_payload(body)?;
-    let chart = object_in(&payload, "chart");
+    let chart = tool_payload(body)?;
     let source = chart
         .get("source")
         .and_then(Value::as_str)
@@ -283,11 +307,12 @@ pub fn chart_from(body: &str) -> Result<StoredChart, LibraryError> {
         // Not trimmed. The contract is byte-identical: leading blank
         // lines are the writer's, and so is the trailing newline.
         .to_owned();
-    let slug = text_field(chart, "slug").unwrap_or_default();
+    let slug = text_field(&chart, "slug").unwrap_or_default();
     Ok(StoredChart {
-        title: text_field(chart, "title").unwrap_or_else(|| slug.clone()),
-        key: text_field(chart, "key"),
-        notation: text_field(chart, "notation"),
+        title: text_field(&chart, "title").unwrap_or_else(|| slug.clone()),
+        key: text_field(&chart, "key"),
+        notation: text_field(&chart, "notation"),
+        sections: string_list(&chart, "sections"),
         slug,
         source,
     })
@@ -301,12 +326,11 @@ pub fn chart_from(body: &str) -> Result<StoredChart, LibraryError> {
 /// the server did not name the slug it wrote — without one there is
 /// nothing to link to and no way to save over it next time.
 pub fn save_outcome_from(body: &str) -> Result<SaveOutcome, LibraryError> {
-    let payload = tool_payload(body)?;
-    let saved = object_in(&payload, "chart");
+    let saved = tool_payload(body)?;
     Ok(SaveOutcome {
-        slug: text_field(saved, "slug")
+        slug: text_field(&saved, "slug")
             .ok_or_else(|| LibraryError::Malformed("the save named no chart".to_owned()))?,
-        rel_path: text_field(saved, "rel_path"),
+        rel_path: text_field(&saved, "rel_path"),
         created: saved
             .get("created")
             .and_then(Value::as_bool)
@@ -314,8 +338,13 @@ pub fn save_outcome_from(body: &str) -> Result<SaveOutcome, LibraryError> {
     })
 }
 
-/// Read the answer to a delete. There is nothing to read — this is
-/// [`tool_payload`]'s error handling and no payload.
+/// Read the answer to a delete.
+///
+/// `{slug, deleted, note}`, and there is nothing here worth keeping:
+/// the lane is idempotent, so a second delete answers `deleted: false`
+/// rather than failing, and "it was already gone" and "it is gone" are
+/// the same outcome to a person who asked for it to be gone. What this
+/// is really doing is [`tool_payload`]'s error handling.
 ///
 /// # Errors
 ///
@@ -435,6 +464,11 @@ mod tests {
         assert_eq!(name(&list_charts_body(None)), "list_charts");
         assert_eq!(name(&read_chart_body("s", None)), "read_chart");
         assert_eq!(name(&delete_chart_body("s", None)), "delete_chart");
+        // `write_chart`, NOT `save_chart`. The lane follows the
+        // `write_*` pattern every ADR-0003 asset shares, and calling
+        // the wrong name is a feature that silently does not exist —
+        // it answers `unknown tool`, which this client faithfully
+        // reports as "not available on this server yet".
         assert_eq!(
             name(&save_chart_body(&Draft {
                 title: "T".to_owned(),
@@ -444,7 +478,7 @@ mod tests {
                 slug: None,
                 org: None,
             })),
-            "save_chart"
+            "write_chart"
         );
     }
 
@@ -471,6 +505,30 @@ mod tests {
     /// particular would stop the server deriving one from the title,
     /// which is what makes a re-save a new version instead of a second
     /// chart.
+    /// `updated_at` is stamped server-side and is not an accepted
+    /// argument — sending it is a `-32602`.
+    #[test]
+    fn a_write_never_claims_to_know_when_it_was_updated() {
+        let draft = Draft {
+            title: "T".to_owned(),
+            source: "T\n".to_owned(),
+            key: None,
+            sections: vec!["VS 1".to_owned()],
+            slug: Some("t".to_owned()),
+            org: Some("acme".to_owned()),
+        };
+        let sent: Value = serde_json::from_str(&save_chart_body(&draft)).unwrap();
+        let args = sent["params"]["arguments"].as_object().unwrap().clone();
+        assert!(!args.contains_key("updated_at"));
+        // Alphabetical: serde_json's map is a BTreeMap here. The
+        // point is the *set* of arguments, not their order — JSON
+        // objects have none.
+        assert_eq!(
+            args.keys().map(String::as_str).collect::<Vec<_>>(),
+            ["org", "sections", "slug", "source", "title"],
+        );
+    }
+
     #[test]
     fn empty_optionals_are_left_out_rather_than_sent_blank() {
         let draft = Draft {
@@ -548,45 +606,67 @@ mod tests {
         ));
     }
 
-    /// Whether the listing comes back bare or wrapped is not worth a
-    /// version skew that shows an empty library to someone whose charts
-    /// are plainly there.
+    /// The listing shape, as the server sends it: `count`, `charts`,
+    /// `note`. The two informational fields are for a model reading the
+    /// answer as text; the list is the answer.
     #[test]
-    fn a_listing_reads_wrapped_or_bare() {
-        let row = json!({
-            "slug": "build-my-life",
-            "title": "Build My Life",
-            "key": "G",
-            "notation": "numbers",
-            "updated_at": "2026-09-06T12:00:00Z",
-        });
-        let expected = vec![ChartEntry {
-            slug: "build-my-life".to_owned(),
-            title: "Build My Life".to_owned(),
-            key: Some("G".to_owned()),
-            notation: Some("numbers".to_owned()),
-            updated_at: Some("2026-09-06T12:00:00Z".to_owned()),
-        }];
+    fn a_listing_is_read_out_of_the_wrapper() {
+        let body = tool_response(json!({
+            "count": 1,
+            "charts": [{
+                "slug": "build-my-life",
+                "title": "Build My Life",
+                "key": "G",
+                "notation": "numbers",
+                "sections": ["IN", "VS 1", "CH"],
+                "rel_path": "Charts/build-my-life.kf",
+                "updated_at": "2026-09-06T12:00:00Z",
+                "node": "chart:build-my-life",
+            }],
+            "note": "Charts live in the vault.",
+        }));
+        assert_eq!(
+            charts_from(&body).unwrap(),
+            vec![ChartEntry {
+                slug: "build-my-life".to_owned(),
+                title: "Build My Life".to_owned(),
+                key: Some("G".to_owned()),
+                notation: Some("numbers".to_owned()),
+                sections: vec!["IN".to_owned(), "VS 1".to_owned(), "CH".to_owned()],
+                updated_at: Some("2026-09-06T12:00:00Z".to_owned()),
+            }]
+        );
+    }
+
+    /// A listing that is not the wrapped shape is malformed rather
+    /// than silently empty. An empty library shown to someone whose
+    /// charts are plainly there is the worst failure this client has.
+    #[test]
+    fn a_listing_in_any_other_shape_is_malformed() {
         for payload in [
-            json!([row.clone()]),
-            json!({ "charts": [row.clone()] }),
-            json!({ "count": 1, "charts": [row] }),
+            json!([{ "slug": "s" }]),
+            json!({ "items": [] }),
+            json!("nope"),
         ] {
-            assert_eq!(charts_from(&tool_response(payload)).unwrap(), expected);
+            assert!(matches!(
+                charts_from(&tool_response(payload)),
+                Err(LibraryError::Malformed(_))
+            ));
         }
     }
 
     /// A chart with no title is listed by its slug, not as a blank row.
     #[test]
     fn an_untitled_row_still_shows_something() {
-        let body = tool_response(json!({ "charts": [{ "slug": "untitled-chart" }] }));
+        let body = tool_response(json!({ "count": 1, "charts": [{ "slug": "untitled-chart" }] }));
         let charts = charts_from(&body).unwrap();
         assert_eq!(charts[0].title, "untitled-chart");
         assert_eq!(charts[0].key, None);
     }
 
     /// The whole promise of the library: what comes back is what went
-    /// in.
+    /// in. `read_chart` answers with the chart object directly — not
+    /// wrapped in a named field the way the listing is.
     #[test]
     fn a_chart_reads_back_byte_identical() {
         let source = "Build My Life - Housefires\n4/4 #G\n\nVS 1: | 1 4 | 5 6m |\n";
@@ -594,10 +674,31 @@ mod tests {
             "slug": "build-my-life",
             "title": "Build My Life",
             "source": source,
+            "key": "G",
+            "sections": ["VS 1"],
+            "updated_at": "2026-09-06T12:00:00Z",
         }));
         let chart = chart_from(&body).unwrap();
         assert_eq!(chart.source, source);
         assert_eq!(chart.slug, "build-my-life");
+        assert_eq!(chart.sections, ["VS 1"]);
+    }
+
+    /// An unknown slug comes back as a tool-level failure whose text is
+    /// a plain sentence, not JSON. It must reach the screen as that
+    /// sentence rather than as "the answer could not be read".
+    #[test]
+    fn an_unknown_slug_is_a_refusal_in_words() {
+        let body = tool_failure(
+            "no chart matching `nope`. Call list_charts and use a slug from its result.",
+        );
+        assert_eq!(
+            chart_from(&body),
+            Err(LibraryError::Refused(
+                "no chart matching `nope`. Call list_charts and use a slug from its result."
+                    .to_owned()
+            ))
+        );
     }
 
     /// A chart with no text is not a chart. Opening the editor on an
@@ -615,6 +716,7 @@ mod tests {
             "slug": "build-my-life",
             "rel_path": "Charts/build-my-life.kf",
             "created": true,
+            "node": "chart:build-my-life",
         }));
         assert_eq!(
             save_outcome_from(&body).unwrap(),
@@ -626,16 +728,24 @@ mod tests {
         );
     }
 
-    /// A delete has nothing to say, and an empty content block is
-    /// success rather than an unreadable answer.
+    /// Delete is idempotent: a second one answers `deleted: false`
+    /// rather than failing, and "it was already gone" is the outcome
+    /// the person asked for. An empty content block is success too.
     #[test]
-    fn a_delete_with_no_payload_is_still_a_success() {
-        let body = json!({
+    fn a_delete_succeeds_whether_or_not_it_removed_anything() {
+        for payload in [
+            json!({ "slug": "s", "deleted": true, "note": "gone" }),
+            json!({ "slug": "s", "deleted": false, "note": "already gone" }),
+        ] {
+            assert_eq!(delete_ack_from(&tool_response(payload)), Ok(()));
+        }
+
+        let empty = json!({
             "jsonrpc": "2.0",
             "id": 1,
             "result": { "content": [{ "type": "text", "text": "" }], "isError": false },
         })
         .to_string();
-        assert_eq!(delete_ack_from(&body), Ok(()));
+        assert_eq!(delete_ack_from(&empty), Ok(()));
     }
 }
