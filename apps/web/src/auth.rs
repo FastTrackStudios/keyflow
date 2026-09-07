@@ -248,7 +248,22 @@ impl Auth {
     /// Returns only on failure: on success the page is already
     /// navigating away.
     pub fn begin_sign_in(&mut self) {
-        self.leave_for_issuer(oidc::authorize_url);
+        self.leave_for_issuer(oidc::authorize_url, None);
+    }
+
+    /// Sign in and come back to `destination` rather than to wherever
+    /// the browser happens to be.
+    ///
+    /// This exists for one caller and one hazard. The editor's URL does
+    /// not track what is being typed — `/editor` stays `/editor` while a
+    /// chart is written into it — so parking the *current* path from
+    /// there parks an empty editor, and someone who signed in to save
+    /// their chart would come back to have lost it. The save control
+    /// encodes the chart into a `/c/:data` path first
+    /// ([`crate::chart_url`]) and hands that here, so the round trip
+    /// returns the document rather than the screen it was on.
+    pub fn begin_sign_in_returning_to(&mut self, destination: String) {
+        self.leave_for_issuer(oidc::authorize_url, Some(destination));
     }
 
     /// Send the browser to the issuer's hosted sign-up form.
@@ -258,14 +273,18 @@ impl Auth {
     /// providers are on offer this month, and a second form here would
     /// be a second password policy to keep in step with the first.
     pub fn begin_sign_up(&mut self) {
-        self.leave_for_issuer(oidc::sign_up_url);
+        self.leave_for_issuer(oidc::sign_up_url, None);
     }
 
-    /// The shared half of both: park the attempt, then leave.
-    fn leave_for_issuer(&mut self, url_for: fn(&str, &str, &oidc::Pkce) -> String) {
+    /// The shared half of all three: park the attempt, then leave.
+    fn leave_for_issuer(
+        &mut self,
+        url_for: fn(&str, &str, &oidc::Pkce) -> String,
+        destination: Option<String>,
+    ) {
         self.error.set(None);
         self.pending.set(true);
-        if let Err(error) = start_redirect(url_for) {
+        if let Err(error) = start_redirect(url_for, destination.as_deref()) {
             self.pending.set(false);
             self.error.set(Some(error.to_string()));
         }
@@ -356,7 +375,10 @@ pub fn use_auth() -> Auth {
 /// never complete, while a chart that did not reach storage first is a
 /// chart that is simply gone.
 #[cfg(target_arch = "wasm32")]
-fn start_redirect(url_for: fn(&str, &str, &oidc::Pkce) -> String) -> Result<(), AuthError> {
+fn start_redirect(
+    url_for: fn(&str, &str, &oidc::Pkce) -> String,
+    destination: Option<&str>,
+) -> Result<(), AuthError> {
     let redirect_uri = redirect_uri().ok_or(AuthError::NoBrowser)?;
     let pkce = oidc::Pkce::from_entropy(random_bytes::<32>()?, random_bytes::<16>()?);
 
@@ -367,7 +389,10 @@ fn start_redirect(url_for: fn(&str, &str, &oidc::Pkce) -> String) -> Result<(), 
     storage
         .set_item(STATE_KEY, pkce.state())
         .map_err(|_| AuthError::NoBrowser)?;
-    return_to::stash_current();
+    match destination {
+        Some(path) => return_to::stash(path),
+        None => return_to::stash_current(),
+    }
 
     let url = url_for(&auth_base_url(), &redirect_uri, &pkce);
     web_sys::window()
@@ -378,7 +403,10 @@ fn start_redirect(url_for: fn(&str, &str, &oidc::Pkce) -> String) -> Result<(), 
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn start_redirect(_url_for: fn(&str, &str, &oidc::Pkce) -> String) -> Result<(), AuthError> {
+fn start_redirect(
+    _url_for: fn(&str, &str, &oidc::Pkce) -> String,
+    _destination: Option<&str>,
+) -> Result<(), AuthError> {
     Err(AuthError::NoBrowser)
 }
 
@@ -510,6 +538,41 @@ async fn refresh(session: &StoredSession) -> Result<StoredSession, AuthError> {
         session.account.clone(),
         Some(refresh_token),
     ))
+}
+
+/// A live access token, for calling a FastTrackStudio service as the
+/// signed-in person.
+///
+/// This is the ONE way anything else on the site gets a token, and the
+/// reason it is a function rather than a field on [`Auth`] is that a
+/// token read out of a signal is a token that may already be dead.
+/// [`resolve`] runs once on mount; someone who leaves a tab open over
+/// lunch and then saves a chart is presenting an hour-old access token.
+/// So this refreshes on the way past — the same trade [`resolve`] makes,
+/// and the same storage write, so the fresh token is the one the next
+/// caller finds too.
+///
+/// `None` means signed out, which includes "the refresh was refused" —
+/// a caller's job is then to invite a sign-in, not to report an error.
+/// The session is deliberately *not* cleared here: [`AuthState`] is
+/// owned by the context, and a network blip during one save should not
+/// sign someone out of the header while their chart is still on screen.
+#[cfg(target_arch = "wasm32")]
+pub async fn access_token() -> Option<String> {
+    let stored = load()?;
+    if !stored.access_expired() {
+        return Some(stored.access_token);
+    }
+    let refreshed = refresh(&stored).await.ok()?;
+    remember(&refreshed);
+    Some(refreshed.access_token)
+}
+
+/// The host build has no storage and no session. See the module docs.
+#[cfg(not(target_arch = "wasm32"))]
+#[allow(clippy::unused_async)]
+pub async fn access_token() -> Option<String> {
+    None
 }
 
 /// Fold a token response into a session, keeping what it did not

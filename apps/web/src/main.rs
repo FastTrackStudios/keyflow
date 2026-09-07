@@ -19,6 +19,12 @@ mod guide;
 mod guide_live;
 mod highlight;
 mod keyflow_editor;
+// Charts kept in a FastTrackStudio account — the client for Task's
+// vault, and the reason the header has a Library link. Pure request
+// builders and response parsers, so `just test` exercises the wire
+// format on the host; see the module docs for why the transport is MCP
+// over `fetch` rather than vox.
+mod library;
 mod notation;
 // PKCE, the two request shapes and the issuer's answers. Its own module
 // rather than a corner of `auth` because it is pure — no browser, no
@@ -47,6 +53,12 @@ pub enum Route {
     Editor {},
     #[route("/c/:data")]
     Chart { data: String },
+    // Charts kept in an account. Not a chart route: `/c/:data`
+    // still carries a document, and this is only the shelf it can be
+    // taken off. Signed out it explains itself rather than redirecting
+    // — the editor is never gated behind an account.
+    #[route("/library")]
+    Library {},
     #[route("/guide")]
     GuideIndex {},
     // Before `/guide/:slug`, or "graph" would match as a page slug.
@@ -77,7 +89,7 @@ pub enum Route {
 
 use routes::{
     AppendixIndex, AppendixPage, AuthCallback, Chart, Editor, GuideGraph, GuideIndex, GuidePage,
-    Home, NotFound, Workbench,
+    Home, Library, NotFound, Workbench,
 };
 
 fn main() {

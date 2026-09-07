@@ -34,6 +34,15 @@ pub fn KeyflowEditor(
     /// Optional aside for the pane header — "Opened from a link", say.
     #[props(default)]
     note: Option<String>,
+    /// Controls for the pane header, to the left of the Vim toggle.
+    ///
+    /// A slot rather than a `save: bool`, because what belongs to a
+    /// buffer is different in each screen that shows one: the editor
+    /// saves to the library, the workbench is a scratchpad in a guide
+    /// chapter and saves nothing. The editor pane should not know which
+    /// of those it is inside.
+    #[props(default)]
+    actions: Option<Element>,
 ) -> Element {
     let state = use_signal(|| EditorState::new(initial));
 
@@ -73,6 +82,9 @@ pub fn KeyflowEditor(
                     span { class: "kf-note", "{n}" }
                 }
                 span { class: "kf-pane-spacer" }
+                if let Some(actions) = actions {
+                    {actions}
+                }
                 button {
                     class: if vim_on() { "kf-button kf-button-on" } else { "kf-button" },
                     // The control says what it toggles, and its state
