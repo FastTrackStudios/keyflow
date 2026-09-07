@@ -447,9 +447,18 @@ fn LibraryRow(
     let mut deleting = use_signal(|| false);
     let mut failed = use_signal(|| None::<String>);
 
+    // Key, then the shape of the song, then when it last changed. The
+    // sections are what tell two charts with similar titles apart
+    // without opening either.
+    //
+    // `notation` is the stored *dialect*, and every chart this editor
+    // writes is `keyflow` — a column reading "keyflow" on every row
+    // says nothing, so it appears only when it is something else (a
+    // chart imported as ChordPro, say).
     let meta: Vec<String> = [
         chart.key.clone(),
-        chart.notation.clone(),
+        (!chart.sections.is_empty()).then(|| chart.sections.join(" ")),
+        chart.notation.clone().filter(|n| n != "keyflow"),
         chart.updated_at.clone(),
     ]
     .into_iter()
