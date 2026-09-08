@@ -14,7 +14,7 @@ use crate::chart::ChartFonts;
 use crate::chart_preview::ChartPreview;
 use crate::chart_url;
 use crate::keyflow_editor::KeyflowEditor;
-use crate::routes::Shell;
+use crate::routes::{SaveToLibrary, Shell};
 
 /// `/editor` — the editor seeded with the default example.
 #[component]
@@ -70,6 +70,11 @@ fn EditorScreen(initial: String, from_link: bool) -> Element {
                         initial: source(),
                         on_change: move |text| source.set(text),
                         note: from_link.then(|| "Opened from a link".to_string()),
+                        // Keeping a chart is the one thing the URL
+                        // cannot do. Signed out this is an invitation
+                        // and nothing more — the editor is never gated
+                        // behind an account.
+                        actions: rsx! { SaveToLibrary { source: source() } },
                     }
                     ChartPreview { source: source() }
                 }

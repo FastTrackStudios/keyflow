@@ -1703,3 +1703,53 @@ body {
   border-radius: 0.34em;
   display: block;
 }
+
+/* ── The chart library ────────────────────────────────────────────────
+ *
+ * Two surfaces, no new visual language. The save control borrows the
+ * account panel's shape wholesale — it is the same kind of thing (a
+ * small panel dropping out of a header control, saying one thing about
+ * an account), and a second dialogue vocabulary for it would be a second
+ * thing to keep in step. The shelf borrows `.kf-prose` and the ordinary
+ * `.kf-button`. */
+
+/* Anchors the panel to the Save button rather than to the pane. */
+.kf-save { position: relative; display: inline-flex; }
+
+.kf-save-panel {
+  position: absolute;
+  top: calc(100% + 0.6rem);
+  /* Left-anchored: the control sits mid-header, not at the right edge
+   * like the account menu, and a right-anchored panel would hang off
+   * the pane. */
+  left: 0;
+  z-index: 20;
+  width: min(22rem, calc(100vw - 2rem));
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--bg);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.18);
+}
+
+/* One workspace per line: an org name is a phrase, not a word, and
+ * wrapping them into a row makes the longest one unreadable. */
+.kf-save-orgs { display: flex; flex-direction: column; gap: 0.4rem; align-items: stretch; }
+
+.kf-library-where { display: flex; align-items: center; gap: 0.6rem; margin: 0 0 1.25rem; }
+.kf-library-where label { font-size: 0.85rem; color: var(--ink-soft); }
+
+.kf-library-list { list-style: none; margin: 0; padding: 0; }
+
+.kf-library-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.kf-library-what { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; flex: 1; }
+.kf-library-title { font-weight: 550; color: var(--ink); }
+.kf-library-meta { font-size: 0.8rem; color: var(--ink-soft); }
+.kf-library-actions { display: flex; gap: 0.4rem; flex: 0 0 auto; }
