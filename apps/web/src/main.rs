@@ -20,7 +20,14 @@ mod guide_live;
 mod highlight;
 mod keyflow_editor;
 mod notation;
+// PKCE, the two request shapes and the issuer's answers. Its own module
+// rather than a corner of `auth` because it is pure — no browser, no
+// HTTP — which is what lets `just test` exercise it on the host.
+mod oidc;
 mod prefs;
+// Not losing the chart across the sign-in redirect. Keyflow-specific:
+// the document lives in the URL, so leaving the tab is leaving the work.
+mod return_to;
 mod routes;
 mod typewriter;
 
@@ -56,13 +63,21 @@ pub enum Route {
     // The workbench: the same chapter, with an editor and a live chart.
     #[route("/learn/:slug")]
     Workbench { slug: String },
+    // Where auth.fasttrackstudio.app returns from a sign-in. Registered
+    // at the issuer for the `keyflow` client, so the path is a contract
+    // and not a choice: see `auth::redirect_uri`. The whole query comes
+    // in as one string because a refusal arrives as `error=` with no
+    // `code`, and that case has to reach the screen rather than the
+    // router's 404.
+    #[route("/auth/callback?:..query")]
+    AuthCallback { query: String },
     #[route("/:..segments")]
     NotFound { segments: Vec<String> },
 }
 
 use routes::{
-    AppendixIndex, AppendixPage, Chart, Editor, GuideGraph, GuideIndex, GuidePage, Home, NotFound,
-    Workbench,
+    AppendixIndex, AppendixPage, AuthCallback, Chart, Editor, GuideGraph, GuideIndex, GuidePage,
+    Home, NotFound, Workbench,
 };
 
 fn main() {
