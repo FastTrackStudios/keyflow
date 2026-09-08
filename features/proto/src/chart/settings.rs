@@ -37,6 +37,103 @@ pub enum ChartSetting {
     Swing,
 }
 
+/// One writable directive, described once so everything downstream can read
+/// it from here instead of keeping its own copy.
+///
+/// The palette in the web editor builds its command list from
+/// [`DIRECTIVES`], so a setting added below turns up in the menu with no
+/// second edit — the drift this removes is a real one: the parser rejects
+/// an unknown `/setting` outright, so a menu that offered one the parser
+/// had dropped would hand the user a line that breaks their chart.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DirectiveSpec {
+    /// The directive keyword, without its leading slash.
+    pub key: &'static str,
+    /// What to call it in a menu.
+    pub label: &'static str,
+    /// A complete, working line — what a menu should insert.
+    pub example: &'static str,
+    /// One line on what it does.
+    pub summary: &'static str,
+}
+
+/// Every directive a chart may carry, in the order a menu should show them.
+///
+/// Includes the two that are not [`ChartSetting`]s: `/duration`, which the
+/// text parser reads before settings get a look, and `/alias`, which is a
+/// naming form rather than a setting.
+pub const DIRECTIVES: &[DirectiveSpec] = &[
+    DirectiveSpec {
+        key: "duration",
+        label: "Default duration",
+        example: "/duration 4",
+        summary: "the length every chord takes unless it says otherwise",
+    },
+    DirectiveSpec {
+        key: "push",
+        label: "Push feel",
+        example: "/push standard",
+        summary: "how a pushed chord divides the beat",
+    },
+    DirectiveSpec {
+        key: "swing",
+        label: "Swing",
+        example: "/swing straight",
+        summary: "straight, triplet, or a ratio",
+    },
+    DirectiveSpec {
+        key: "smart_repeats",
+        label: "Smart repeats",
+        example: "/smart_repeats = true",
+        summary: "group repeated phrases under repeat signs",
+    },
+    DirectiveSpec {
+        key: "auto_rhythm_slashes",
+        label: "Auto rhythm slashes",
+        example: "/auto_rhythm_slashes = true",
+        summary: "fill long chords with quarter-note slashes",
+    },
+    DirectiveSpec {
+        key: "push_alters_rhythm",
+        label: "Push alters rhythm",
+        example: "/push_alters_rhythm = true",
+        summary: "a push changes the notation, not just the symbol",
+    },
+    DirectiveSpec {
+        key: "alias",
+        label: "Alias",
+        example: "/alias name value",
+        summary: "give a name to a run of chart text",
+    },
+];
+
+impl ChartSetting {
+    /// The directive that writes this setting.
+    ///
+    /// Exhaustive on purpose: adding a variant to [`ChartSetting`] fails to
+    /// compile until it is described here, which is what keeps [`DIRECTIVES`]
+    /// — and so the editor's command menu — from falling behind the parser.
+    #[must_use]
+    pub const fn directive_key(self) -> &'static str {
+        match self {
+            Self::SmartRepeats => "smart_repeats",
+            Self::PushMode => "push",
+            Self::AutoRhythmSlashes => "auto_rhythm_slashes",
+            Self::PushAltersRhythm => "push_alters_rhythm",
+            Self::Swing => "swing",
+        }
+    }
+
+    /// Every setting, for tests and for anything enumerating them.
+    pub const ALL: &'static [Self] = &[
+        Self::SmartRepeats,
+        Self::PushMode,
+        Self::AutoRhythmSlashes,
+        Self::PushAltersRhythm,
+        Self::Swing,
+    ];
+}
+
 /// Setting value types
 #[derive(Debug, Clone, PartialEq, Facet)]
 #[repr(u8)]
@@ -328,6 +425,58 @@ impl ChartSetting {
 
 #[cfg(test)]
 mod tests {
+
+    /// Every directive in the table is one the parser actually accepts.
+    ///
+    /// The menu inserts these verbatim, and an unknown `/setting` is a hard
+    /// error rather than something ignored — so a stale entry here would
+    /// hand someone a line that breaks their chart.
+    #[test]
+    fn every_directive_example_parses() {
+        for spec in DIRECTIVES {
+            // `/duration` and `/alias` are read by the text parser before
+            // settings see the line; the rest must round-trip through here.
+            if matches!(spec.key, "duration" | "alias") {
+                continue;
+            }
+            let mut settings = ChartSettings::new();
+            assert!(
+                settings.parse_setting_line(spec.example).is_ok(),
+                "{} offers {:?}, which parse_setting_line rejects",
+                spec.label,
+                spec.example,
+            );
+        }
+    }
+
+    /// Every setting the parser knows is described in the table.
+    ///
+    /// `directive_key` is exhaustive, so a new `ChartSetting` variant will
+    /// not compile until it is named; this is the other half — it has to
+    /// reach the table too, or the menu never offers it.
+    #[test]
+    fn every_setting_has_a_directive() {
+        for setting in ChartSetting::ALL {
+            let key = setting.directive_key();
+            assert!(
+                DIRECTIVES.iter().any(|d| d.key == key),
+                "{setting:?} writes /{key}, which no DirectiveSpec describes"
+            );
+        }
+    }
+
+    /// Each example actually starts with the directive it claims to be.
+    #[test]
+    fn every_example_matches_its_key() {
+        for spec in DIRECTIVES {
+            assert!(
+                spec.example.starts_with(&format!("/{}", spec.key)),
+                "{:?} is not an example of /{}",
+                spec.example,
+                spec.key,
+            );
+        }
+    }
     use super::*;
 
     #[test]
