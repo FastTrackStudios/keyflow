@@ -234,6 +234,16 @@ body {
 .kf-nav a:hover { color: var(--ink); }
 .kf-nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
+/* On a phone the 1.75rem gaps ran the nav into the wordmark, and "Sign
+ * in" broke across two lines and grew the header. Tighter gaps, and the
+ * links keep their words on one line. */
+@media (max-width: 40rem) {
+  .kf-nav { gap: 0.9rem; }
+  .kf-nav a { white-space: nowrap; font-size: 0.7rem; }
+  .kf-header { gap: 0.75rem; }
+  .kf-wordmark span { font-size: 0.95rem; }
+}
+
 /* ── Account ──────────────────────────────────────────────────────
  *
  * A side door, not a front gate. The editor works signed out, so this
@@ -1051,12 +1061,147 @@ body {
  * half that keeps benefiting: every rem it gains is another page it can
  * lay out beside the last. */
 @media (min-width: 100rem) {
-  .kf-editor-split { grid-template-columns: minmax(0, 44rem) minmax(0, 1fr); }
+  /* The chart is the first column now, so it is the one that grows and the
+   * source that is capped. Same split as before, mirrored. */
+  .kf-editor-split { grid-template-columns: minmax(0, 1fr) minmax(0, 44rem); }
 }
 
+/* Both panes are grid children, and a grid child's default `min-width:
+ * auto` refuses to shrink below its own content. The chart header is
+ * wider than a phone, so without this the pane simply overflowed the
+ * screen no matter what the column was told to be. Belongs outside the
+ * media query — it is a containment rule, not a phone rule. */
+.kf-code-editor,
+.kf-preview {
+  min-width: 0;
+}
+
+/* Nothing on this screen may push the document sideways. The chart pans
+ * inside its own stage, which clips; anything else that overflows is a
+ * bug, and a horizontally scrolling page hides controls off the edge
+ * instead of showing it. */
+.kf-shell:has(.kf-editor) { overflow-x: hidden; }
+
+/* ── Device preview (/devices) ───────────────────────────────────── */
+
+.kf-devices { padding: 1.5rem clamp(1rem, 4vw, 3rem) 3rem; }
+
+.kf-devices-head { max-width: 46rem; }
+.kf-devices-head h1 { margin: 0 0 0.4rem; font-size: 1.5rem; }
+
+.kf-devices-picker { display: flex; gap: 0.5rem; margin: 1rem 0 1.5rem; }
+
+/* A row that scrolls sideways. The frames are real viewports at real
+ * widths, so they cannot be shrunk to fit the page — the whole point is
+ * that a 430px frame is 430px. */
+.kf-devices-strip {
+  display: flex;
+  gap: 1.5rem;
+  overflow-x: auto;
+  padding-bottom: 1rem;
+  align-items: flex-start;
+}
+
+.kf-device { flex: 0 0 auto; display: grid; gap: 0.5rem; }
+
+.kf-device-label { font-size: 0.85rem; }
+
+/* The frame is the device. A border and a radius so it reads as a screen
+ * rather than as part of this page, and `color-scheme: dark` so the
+ * frame's own backdrop matches the site inside it. */
+.kf-device-frame {
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  background: var(--bg);
+  color-scheme: dark;
+}
+
+/* Tabs. Hidden by default — the desktop split shows both panes, so
+ * there is nothing to switch between.
+ *
+ * Every rule in the narrow-screen block below is written as
+ * `.kf-editor <thing>` rather than `<thing>`. A media query carries no
+ * extra weight in the cascade, so a plain `.kf-preview-bar` inside one
+ * loses to the plain `.kf-preview-bar` declared later in this file — which
+ * is exactly what happened: the bar kept `flex-wrap: nowrap`, its
+ * min-content width stayed 373px, and the chart pane overflowed a 325px
+ * column on a phone. The extra class makes those rules win on specificity
+ * instead of on position. */
+.kf-pane-tabs {
+  display: none;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+}
+
+.kf-tab {
+  flex: 1;
+  min-height: 2.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.kf-tab-on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.kf-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ── The editor on a narrow screen ────────────────────────────────
+ *
+ * Two panes do not fit a phone. Side by side they get ~160px each and
+ * neither is usable; stacked, each gets half a screen and the chart
+ * starts below the fold. So they become tabs (`.kf-pane-tabs`, hidden
+ * above this width) and the chosen one takes the whole viewport.
+ *
+ * `100dvh`, not `100vh`: mobile browsers measure `vh` against the
+ * viewport with the URL bar HIDDEN, so a `100vh` pane is taller than the
+ * screen until you scroll, which is exactly the sideways-and-downwards
+ * drift that made this feel broken. `dvh` tracks the bar. */
 @media (max-width: 60rem) {
   .kf-editor-split { grid-template-columns: minmax(0, 1fr); }
-  .kf-editor { height: auto; }
+  .kf-editor {
+    height: calc(100dvh - 8.5rem);
+    min-height: 24rem;
+  }
+
+  .kf-editor .kf-pane-tabs { display: flex; }
+
+  /* One pane at a time. `display: none` rather than visually hiding it,
+   * so the hidden pane costs no layout and cannot contribute a
+   * min-content width to the grid. */
+  .kf-editor[data-pane="source"] .kf-preview,
+  .kf-editor[data-pane="chart"] .kf-code-editor {
+    display: none;
+  }
+
+  /* The pane name is the tab now — saying "Source" twice, once as the
+   * selected tab and again under it, is just a row of lost height. */
+  .kf-editor .kf-pane-name { display: none; }
+
+  /* The chart header is four controls, a readout, a picker and Share.
+   * At 388px that row is 417px wide, and because it was `nowrap` it set
+   * the pane's min-content width — which is what pushed the whole
+   * document 53px sideways and put Share off the edge of the screen
+   * where it could not be reached at all. It wraps here. */
+  .kf-editor .kf-preview-bar { flex-wrap: wrap; height: auto; row-gap: 0.4rem; }
+
+  /* Thumbs, not cursors. 2.75rem ≈ 44px, the smallest target that is
+   * reliably hittable, and the one iOS asks for. */
+  .kf-editor .kf-button,
+  .kf-editor .kf-select {
+    min-height: 2.75rem;
+    padding-inline: 0.85rem;
+    font-size: 0.9rem;
+  }
 }
 
 .kf-editor-source {

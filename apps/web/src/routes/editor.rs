@@ -48,6 +48,28 @@ pub fn Chart(data: String) -> Element {
     }
 }
 
+/// Which pane a narrow screen is showing.
+///
+/// Only meaningful below the breakpoint where the two panes stop fitting
+/// side by side. Above it both are on screen and this rides along unused —
+/// the value stays valid, so rotating a phone back to landscape restores
+/// the split without losing which tab was picked.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Pane {
+    Source,
+    Chart,
+}
+
+impl Pane {
+    /// The value of the `data-pane` attribute the stylesheet switches on.
+    fn key(self) -> &'static str {
+        match self {
+            Self::Source => "source",
+            Self::Chart => "chart",
+        }
+    }
+}
+
 #[component]
 fn EditorScreen(initial: String, from_link: bool) -> Element {
     // Component-local, deliberately. `keyflow_ui::signals::CHART_SOURCE` is
@@ -57,15 +79,49 @@ fn EditorScreen(initial: String, from_link: bool) -> Element {
     // `/c/:data` wedged the renderer. The chart belongs to the screen
     // showing it.
     let mut source = use_signal(|| initial);
+    // Chart first on a phone too. Reading a chart is the common errand —
+    // certainly so arriving from a shared link — and writing one is a
+    // deliberate act with its tab right there.
+    let mut pane = use_signal(|| Pane::Chart);
 
     rsx! {
         Shell {
             ChartFonts {}
-            div { class: "kf-editor",
+            div { class: "kf-editor", "data-pane": pane().key(),
+                // A phone cannot show two panes at once and be useful at
+                // either — side by side gives each about 160px, stacked
+                // gives each half a screen and puts the chart below the
+                // fold. So below the breakpoint they become tabs and the
+                // chosen one takes the whole viewport. Above it this row
+                // is `display: none` and both panes are on screen, so the
+                // desktop layout is untouched.
+                div { class: "kf-pane-tabs", role: "tablist",
+                    button {
+                        class: if pane() == Pane::Chart { "kf-tab kf-tab-on" } else { "kf-tab" },
+                        role: "tab",
+                        "aria-selected": if pane() == Pane::Chart { "true" } else { "false" },
+                        onclick: move |_| pane.set(Pane::Chart),
+                        "Chart"
+                    }
+                    button {
+                        class: if pane() == Pane::Source { "kf-tab kf-tab-on" } else { "kf-tab" },
+                        role: "tab",
+                        "aria-selected": if pane() == Pane::Source { "true" } else { "false" },
+                        onclick: move |_| pane.set(Pane::Source),
+                        "Source"
+                    }
+                }
                 // No toolbar row of its own. Both panes carry their own
                 // header instead, which is where their controls belong
                 // and keeps the two pane tops on one line.
+                //
+                // Chart first, in the markup and so on the left. It is the
+                // thing being made, and the thing anyone opening a shared
+                // link came for; the source is how you change it. DOM order
+                // rather than `order:` on the grid, so the tab order and a
+                // screen reader agree with the eye.
                 div { class: "kf-editor-split",
+                    ChartPreview { source: source() }
                     KeyflowEditor {
                         initial: source(),
                         on_change: move |text| source.set(text),
@@ -76,7 +132,6 @@ fn EditorScreen(initial: String, from_link: bool) -> Element {
                         // behind an account.
                         actions: rsx! { SaveToLibrary { source: source() } },
                     }
-                    ChartPreview { source: source() }
                 }
             }
         }
