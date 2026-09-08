@@ -17,9 +17,7 @@
 //!   concepts connect.
 
 use dioxus::prelude::*;
-use view_knowledge_graph::build::build_wiki_graph;
 use view_knowledge_graph::model::WikiGraph;
-use view_knowledge_graph::parse::WikiFile;
 
 // `pub static VAULT: ssg::StaticVault`, from `build.rs`.
 ssg::include_vault!();
@@ -91,22 +89,14 @@ pub fn appendix() -> &'static ssg::StaticVault {
 /// `[[wikilinks]]` — including the ones in a nav footer that the
 /// rendered prose drops — are the edges.
 ///
-/// Uses this repo's `view-knowledge-graph` rather than the equivalent
-/// helper in `ssg-ui`. They are the same crate; the difference is which
-/// copy, and taking `ssg-ui`'s would pull task's architect pin
-/// alongside this repo's. See `apps/web/Cargo.toml`.
+/// `ssg-ui` builds it. This used to be a hand-copy of that function,
+/// because `ssg-ui`'s `graph` feature reaches `view-knowledge-graph` and
+/// — while this repo's architect tag differed from task's — taking it
+/// pulled a second copy of the architect crates. One tag now, so there is
+/// one implementation again.
 #[must_use]
 pub fn graph() -> WikiGraph {
-    let files: Vec<WikiFile> = vault()
-        .pages
-        .iter()
-        .map(|page| WikiFile {
-            name: format!("{}.md", page.slug),
-            path: format!("{}.md", page.slug),
-            content: page.source.to_owned(),
-        })
-        .collect();
-    build_wiki_graph(&files)
+    ssg_ui::vault_graph(*vault())
 }
 
 /// The subgraph within one hop of `slug`.
@@ -114,34 +104,10 @@ pub fn graph() -> WikiGraph {
 /// This is the view that belongs beside a note: the concept you are
 /// reading and everything it touches. The whole graph beside a single
 /// page is a picture of the vault, not of the page.
+///
+/// Also `ssg-ui`'s, and formerly copied here for the same reason as
+/// [`graph`].
 #[must_use]
 pub fn local_graph(graph: &WikiGraph, slug: &str) -> WikiGraph {
-    let mut keep: Vec<String> = vec![slug.to_owned()];
-    for edge in &graph.edges {
-        if edge.source == slug && !keep.contains(&edge.target) {
-            keep.push(edge.target.clone());
-        }
-        if edge.target == slug && !keep.contains(&edge.source) {
-            keep.push(edge.source.clone());
-        }
-    }
-
-    WikiGraph {
-        nodes: graph
-            .nodes
-            .iter()
-            .filter(|n| keep.contains(&n.id))
-            .cloned()
-            .collect(),
-        // Every edge between kept nodes, not just those touching `slug`:
-        // an edge between two neighbours is exactly the "these two are
-        // also related" fact that makes a local graph worth drawing.
-        edges: graph
-            .edges
-            .iter()
-            .filter(|e| keep.contains(&e.source) && keep.contains(&e.target))
-            .cloned()
-            .collect(),
-        communities: graph.communities.clone(),
-    }
+    ssg_ui::local_graph(graph, slug)
 }

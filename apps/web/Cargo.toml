@@ -53,11 +53,21 @@ view-knowledge-graph = { workspace = true }
 # charged every reader the editor, its state machine, its decoration
 # pipeline and a WebGL2 surface before a paragraph appeared.
 #
-# WITHOUT ssg-ui's `graph` feature — the local-graph rail is drawn with
-# THIS repo's `view-knowledge-graph` (above) instead. Same crate, but
-# task@main's copy reaches architect v0.7.1 where this repo is on
-# v0.0.2, and taking both puts two reqwest majors in one wasm binary.
-# See the note on the workspace entry.
+# WITH ssg-ui's `graph` feature (turned on at the workspace entry): it
+# is where `vault_graph` and `local_graph` come from, and `guide.rs`
+# calls them rather than keeping its own copies. That feature was off
+# while this repo's architect tag differed from task's, because it
+# reaches `view-knowledge-graph` and so pulled a second copy of the
+# architect crates — two reqwest majors in one wasm binary, ~100
+# `duplicate symbol: intounderlyingsource_*` errors at link time. Both
+# repos pin architect v0.8.2 now, so there is one copy.
+#
+# What ssg-ui's `graph` does NOT supply is the rail itself. Its
+# `VaultGraph` is static SVG with `<a>` nodes, deliberately: it has to
+# survive hydration, so it cannot pan, zoom or hover. The guide's rail is
+# `view_knowledge_graph::KnowledgeGraphView` — pre-rendered and then
+# hydrated into an interactive map. Same layout, different renderer, so
+# the two are not interchangeable and both stay.
 ssg = { workspace = true }
 ssg-ui = { workspace = true }
 
@@ -219,19 +229,25 @@ default = ["web"]
 # `dioxus-web/hydrate` rather than `dioxus/fullstack`, which is the
 # usual way to turn it on and cannot be used here.
 #
-# `dioxus/fullstack` carries the server-function *client* transport,
-# which is reqwest 0.12. This tree already has reqwest 0.13, through
-# iroh, through architect, through the knowledge graph — and two reqwest
-# majors in one wasm binary is a hundred `duplicate symbol:
-# intounderlyingsource_*` errors out of rust-lld, because each compiles
-# its own copy of the wasm-streams glue. The site calls no server
-# functions from the browser, so it needs none of that: what it needs is
-# `hydrate`, and that only pulls `dioxus-fullstack-core`.
+# `dioxus/fullstack` carries the server-function *client* transport, and
+# with it a whole HTTP stack the browser build would link and never call:
+# the site invokes no server functions from the page — the vault is baked
+# into the binary at build time. What it actually needs is `hydrate`, to
+# adopt the pre-rendered DOM, and that only pulls
+# `dioxus-fullstack-core`. So the lean route is taken deliberately, not
+# out of necessity.
+#
+# (This note used to say `fullstack` was impossible here, because its
+# reqwest 0.12 against the tree's reqwest 0.13 meant a hundred
+# `duplicate symbol: intounderlyingsource_*` errors out of rust-lld.
+# That is not what the toolchain does: the wasm binary carries both
+# reqwest majors, and both wasm-streams majors, and links clean. The
+# real hazard was two copies of the *same* crate from different git
+# tags — see the architect block in the root manifest.)
 web = ["dioxus/web", "dep:dioxus-web", "dioxus-web/hydrate"]
 # The server half, which exists only for the length of
 # `dx build --ssg` — dx enables it for the server target by name, and
-# never for the wasm one. reqwest 0.12 arriving here is harmless: this
-# half is a host binary, and nothing links it against the browser's.
+# never for the wasm one.
 server = ["dioxus/server", "dioxus/fullstack"]
 # Re-render the guide from `docs/guides` on save instead of on
 # rebuild. Development only: it adds a filesystem watcher and a poll, and
