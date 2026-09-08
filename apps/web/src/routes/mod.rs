@@ -2,6 +2,7 @@
 
 mod appendix_page;
 mod auth_callback;
+mod devices;
 mod editor;
 mod graph;
 mod guide_page;
@@ -11,6 +12,7 @@ mod workbench;
 
 pub use appendix_page::{AppendixIndex, AppendixPage};
 pub use auth_callback::AuthCallback;
+pub use devices::Devices;
 pub use editor::{Chart, Editor};
 pub use graph::GuideGraph;
 pub use guide_page::{GuideIndex, GuidePage};

@@ -19,6 +19,7 @@ mod guide;
 mod guide_live;
 mod highlight;
 mod keyflow_editor;
+mod keyflow_palette;
 // Charts kept in a FastTrackStudio account — the client for Task's
 // vault, and the reason the header has a Library link. Pure request
 // builders and response parsers, so `just test` exercises the wire
@@ -83,13 +84,18 @@ pub enum Route {
     // router's 404.
     #[route("/auth/callback?:..query")]
     AuthCallback { query: String },
+    // A development view: the site at phone and tablet viewports. Not
+    // linked from the navigation — a URL you type while working on a
+    // responsive layout. Above the catch-all, like every real route.
+    #[route("/devices")]
+    Devices {},
     #[route("/:..segments")]
     NotFound { segments: Vec<String> },
 }
 
 use routes::{
-    AppendixIndex, AppendixPage, AuthCallback, Chart, Editor, GuideGraph, GuideIndex, GuidePage,
-    Home, Library, NotFound, Workbench,
+    AppendixIndex, AppendixPage, AuthCallback, Chart, Devices, Editor, GuideGraph, GuideIndex,
+    GuidePage, Home, Library, NotFound, Workbench,
 };
 
 fn main() {
@@ -120,6 +126,11 @@ fn main() {
         "kf",
         std::sync::Arc::new(editor_keyflow::Fences),
     );
+
+    // The palette ships markdown's catalog, which is the wrong language for
+    // a buffer holding a chart. Same reasoning as the fence registry above:
+    // the editor cannot know what Keyflow is, so Keyflow tells it.
+    editor::editor_view::palette::register_catalog(keyflow_palette::commands());
 
     dioxus::LaunchBuilder::new()
         .with_cfg(server_only! {

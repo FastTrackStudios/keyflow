@@ -61,7 +61,7 @@ pub fn KeyflowEditor(
     // `None` is what actually disables it — the `Editor` takes an
     // `Option<Signal<VimState>>` and plain editing is the absent case.
     let vim = vim_on().then_some(vim_state);
-    let slash = use_signal(|| None::<editor_view::slash::SlashState>);
+    let palette = use_signal(|| None::<editor_view::palette::PaletteState>);
 
     // Mirror the text out. `use_effect` and not the editor's transaction
     // sink, because the caller wants the resulting *text*, not the edits.
@@ -108,9 +108,9 @@ pub fn KeyflowEditor(
                     decorations: editor_view::DecorationSource::ptr(keyflow_decorations),
                     hover: keyflow_hover as editor::HoverSource,
                     vim,
-                    slash: Some(slash),
+                    palette: Some(palette),
                 }
-                editor_view::slash::SlashMenu { state, slash }
+                editor_view::palette::CommandPalette { state, palette }
                 }
             }
         }

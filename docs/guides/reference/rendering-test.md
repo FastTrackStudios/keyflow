@@ -50,7 +50,7 @@ Links: standard [Anthropic](https://anthropic.com), an autolink <https://obsidia
 > Callouts share the blockquote syntax.
 
 > [!tip] Tip
-> Press `/` anywhere to open the slash-command menu.
+> Press `\` anywhere to open the command palette.
 
 > [!warning]+ Collapsible warning
 > The `+`/`-` on the type marker controls folded default.
@@ -118,7 +118,7 @@ E --> F
 - **Mod-T** — toggle task on current line
 - **Mod-1**..**Mod-6** — heading levels; **Mod-0** strips
 - **Mod-E** — toggle reading mode
-- **`/`** — open the slash-command palette
+- **`\`** — open the command palette
 
 ### Embeds
 
