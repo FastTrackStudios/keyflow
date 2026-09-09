@@ -23,12 +23,45 @@ use crate::oidc;
 use crate::return_to;
 use crate::routes::Shell;
 
+/// The query as the BROWSER has it, not as the router remembers it.
+///
+/// This site ships as `dx build --ssg`: every route is rendered once at
+/// build time and hydrated in the browser. Hydration restores a
+/// component's props from a payload baked into that page — and for this
+/// route the baked prop is the build-time URL, `/auth/callback?`, whose
+/// query is necessarily empty. Nothing about the issuer's redirect
+/// changes it, because it was serialized months before the redirect
+/// happened.
+///
+/// The symptom was a sign-in that always failed with "no code in the
+/// issuer's response" while the address bar plainly showed `?code=…`.
+/// The prop was empty; the URL was not.
+///
+/// A full page load is exactly what an OAuth redirect is, so this path
+/// is the normal one rather than an edge case. `window.location.search`
+/// is the only source that is true at the moment it is read. `None` on a
+/// non-browser target (the build-time render itself), where the router's
+/// prop is all there is and is correct.
+fn live_query() -> Option<String> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let search = web_sys::window()?.location().search().ok()?;
+        (!search.is_empty()).then_some(search)
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        None
+    }
+}
+
 /// `/auth/callback?code=…&state=…`.
 ///
 /// The whole query arrives as one string rather than as named
 /// parameters, because the issuer answers a refusal with `error=` and no
 /// `code` at all — a signature demanding both would make the router
 /// reject exactly the case this screen exists to explain.
+///
+/// The `query` prop is the fallback, not the source: see [`live_query`].
 #[component]
 pub fn AuthCallback(query: String) -> Element {
     let mut auth = use_auth();
@@ -38,7 +71,7 @@ pub fn AuthCallback(query: String) -> Element {
     // present a spent authorization code and turn a successful sign-in
     // into a refusal.
     use_future(move || {
-        let query = query.clone();
+        let query = live_query().unwrap_or_else(|| query.clone());
         async move {
             match oidc::parse_callback_query(&query) {
                 Ok((code, state)) => {

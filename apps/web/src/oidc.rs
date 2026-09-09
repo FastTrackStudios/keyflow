@@ -12,11 +12,14 @@
 //! So the parts that are easy to get wrong and impossible to debug live
 //! here, in one module, with tests. It is a port of
 //! `auth_client::oidc` in architect — the same shape Task's
-//! `central_login` builds on. It is a *copy* rather than a dependency
-//! because the site is pinned to architect v0.6.0, which predates that
-//! module, and the pin cannot move on its own: bumping it drags a second
-//! reqwest major into the wasm binary. When the site's architect pin
-//! reaches v0.7.1, delete this file and use the crate.
+//! `central_login` builds on. It began as a *copy* rather than a
+//! dependency because the site was pinned to an architect that predated
+//! that module, and the pin could not move on its own.
+//!
+//! **That pin has moved**: the site and Task are both on v0.8.2, so the
+//! crate is now reachable and this file is redundant. Replacing it is a
+//! deliberate follow-up rather than a drive-by — the tests below are the
+//! contract to keep passing when it happens.
 //!
 //! # What this module does not do
 //!
@@ -208,13 +211,26 @@ pub fn authorize_url(issuer: &str, redirect_uri: &str, pkce: &Pkce) -> String {
 /// account* asked for the sign-up form, and landing them on a page
 /// asking for a password they do not have yet is a worse answer than
 /// the one they asked for.
+///
+/// Two things about the parameter, both learned the hard way:
+///
+/// * It is **`return_to`**. The issuer reads that name and no other, so
+///   a `redirect_to` is not a redirect that goes to the wrong place —
+///   it is silently ignored, and someone who finishes signing up lands
+///   on the issuer's own page having never been given a code.
+/// * Its value is a **same-origin path**, not a full URL. The issuer
+///   refuses anything that does not begin with a single `/`, which is
+///   what stops an open redirect, and falls back to its default page.
+///   So this passes `/oauth2/authorize?…` rather than
+///   `https://issuer/oauth2/authorize?…`.
 #[must_use]
 pub fn sign_up_url(issuer: &str, redirect_uri: &str, pkce: &Pkce) -> String {
-    format!(
-        "{}/sign-up?redirect_to={}",
-        issuer.trim_end_matches('/'),
-        encode(&authorize_url(issuer, redirect_uri, pkce)),
-    )
+    let issuer = issuer.trim_end_matches('/');
+    let authorize = authorize_url(issuer, redirect_uri, pkce);
+    // The path-and-query half of the authorize URL, which is the only
+    // form the issuer's `return_to` accepts.
+    let path = authorize.strip_prefix(issuer).unwrap_or(&authorize);
+    format!("{issuer}/sign-up?return_to={}", encode(path))
 }
 
 /// The form-encoded body that redeems a code.
@@ -531,6 +547,12 @@ mod tests {
 
     /// Sign-up lands on the hosted form and comes back through the same
     /// authorize URL, so creating an account signs you in.
+    ///
+    /// This test used to assert `redirect_to=<absolute URL>`, and so
+    /// pinned a sign-up that could never come back: the issuer reads
+    /// `return_to`, and accepts only a same-origin path. It is asserted
+    /// here in the shape the issuer actually honours — see
+    /// [`super::sign_up_url`].
     #[test]
     fn sign_up_returns_through_authorize() {
         let url = sign_up_url(ISSUER, REDIRECT, &pkce());
@@ -538,10 +560,7 @@ mod tests {
             url.starts_with("https://auth.fasttrackstudio.app/sign-up?"),
             "{url}"
         );
-        assert!(
-            url.contains("redirect_to=https%3A%2F%2Fauth.fasttrackstudio.app%2Foauth2%2Fauthorize"),
-            "{url}"
-        );
+        assert!(url.contains("return_to=%2Foauth2%2Fauthorize"), "{url}");
     }
 
     #[test]
@@ -661,5 +680,62 @@ mod tests {
             Err(OidcError::Missing("code"))
         );
         assert_eq!(parse_callback_query(""), Err(OidcError::Missing("code")));
+    }
+}
+
+#[cfg(test)]
+mod sign_up_return_to_tests {
+    use super::{Pkce, sign_up_url};
+
+    const ISSUER: &str = "https://auth.fasttrackstudio.app";
+    const REDIRECT: &str = "https://keyflow.fasttrackstudio.app/auth/callback";
+
+    fn pkce() -> Pkce {
+        Pkce::from_entropy([7u8; 32], [9u8; 16])
+    }
+
+    /// The issuer reads `return_to` and nothing else.
+    ///
+    /// `redirect_to` was not a redirect to the wrong place — it was a
+    /// parameter the issuer never looks at, so signing up succeeded and
+    /// then dropped the person on the issuer's own page with no code
+    /// and no way back.
+    #[test]
+    fn the_parameter_is_return_to() {
+        let url = sign_up_url(ISSUER, REDIRECT, &pkce());
+        assert!(url.contains("return_to="), "{url}");
+        assert!(!url.contains("redirect_to="), "{url}");
+    }
+
+    /// And its value is a same-origin PATH. The issuer refuses anything
+    /// that does not start with a single `/` — that refusal is what
+    /// stops an open redirect — and silently falls back to its own
+    /// default page, which is the same failure by a different route.
+    #[test]
+    fn the_destination_is_a_path_not_an_absolute_url() {
+        let url = sign_up_url(ISSUER, REDIRECT, &pkce());
+        let value = url
+            .split_once("return_to=")
+            .expect("a return_to parameter")
+            .1;
+        // Encoded, a path begins `%2Foauth2` and an absolute URL would
+        // begin `https%3A%2F%2F`.
+        assert!(value.starts_with("%2Foauth2%2Fauthorize"), "{value}");
+        assert!(!value.contains("https%3A"), "absolute URL in {value}");
+    }
+
+    /// The authorize request still has to survive the round trip whole:
+    /// a sign-up that comes back without PKCE or state cannot complete.
+    #[test]
+    fn the_authorize_request_survives_the_detour() {
+        let url = sign_up_url(ISSUER, REDIRECT, &pkce());
+        for part in [
+            "client_id%3Dkeyflow",
+            "code_challenge_method%3DS256",
+            "state%3D",
+            "response_type%3Dcode",
+        ] {
+            assert!(url.contains(part), "{part} missing from {url}");
+        }
     }
 }
