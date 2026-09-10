@@ -792,7 +792,7 @@ impl ChartLayoutEngine {
     /// bars a line than at four bars a line three-quarters the size.
     ///
     /// [`layout_chart_compact`]: Self::layout_chart_compact
-    pub const COMPACT_LADDER: [(usize, f64); 10] = [
+    pub const COMPACT_LADDER: [(usize, f64); 13] = [
         (4, 1.0),
         (5, 1.0),
         (6, 1.0),
@@ -803,6 +803,9 @@ impl ChartLayoutEngine {
         (10, 0.8),
         (10, 0.7),
         (12, 0.7),
+        (12, 0.65),
+        (14, 0.6),
+        (16, 0.55),
     ];
 
     pub fn layout_chart_with_config(
@@ -3207,22 +3210,49 @@ impl ChartLayoutEngine {
     ///
     /// Always uses count-based grouping to maintain consistent layout.
     /// Rhythm compression handles fitting content within the allocated width.
+    /// Break the section's measures into systems.
+    ///
+    /// `max_measures_per_system` is a cap, not a target: a system also stops
+    /// when the next bar's chord symbols would not fit beside the ones already
+    /// on the line. Without that, raising the cap — which is exactly what the
+    /// folded and compact modes do — packs bars in until the symbols run into
+    /// each other, and a bar of six chords at eight bars a line prints as one
+    /// smear.
     fn group_measures_into_systems(
         &self,
         measures: &[crate::chart::types::Measure],
-        _content_width: f64,
+        content_width: f64,
     ) -> Vec<Vec<usize>> {
         let mut systems = Vec::new();
-        let mut current_system = Vec::new();
+        let mut current_system: Vec<usize> = Vec::new();
+        let mut current_width = 0.0f64;
+
+        let text_metrics = TextFontMetrics::new(self.text_font_data.clone());
+        let widths: Vec<f64> = measures
+            .iter()
+            .map(|m| self.chord_symbol_width_needed(m, &text_metrics))
+            .collect();
+        // A system always holds at least one measure, however wide it is —
+        // better one cramped bar than an empty line and the same cramped bar.
+        let usable = content_width.max(1.0);
 
         for (idx, measure) in measures.iter().enumerate() {
             if starts_long_volta(measure) && !current_system.is_empty() {
                 systems.push(std::mem::take(&mut current_system));
+                current_width = 0.0;
+            }
+
+            let wanted = widths[idx];
+            if !current_system.is_empty() && current_width + wanted > usable {
+                systems.push(std::mem::take(&mut current_system));
+                current_width = 0.0;
             }
 
             current_system.push(idx);
+            current_width += wanted;
             if current_system.len() >= self.config.max_measures_per_system {
                 systems.push(std::mem::take(&mut current_system));
+                current_width = 0.0;
             }
         }
 
@@ -3231,6 +3261,28 @@ impl ChartLayoutEngine {
         }
 
         systems
+    }
+
+    /// The width this measure's chord symbols need, laid end to end.
+    ///
+    /// An estimate, and deliberately a cheap one: this runs before the real
+    /// measurement pass, and only has to be good enough to stop a line taking
+    /// more bars than it can print. A bar with no symbols still asks for the
+    /// configured minimum, so an empty line is never chosen over a full one.
+    fn chord_symbol_width_needed(
+        &self,
+        measure: &crate::chart::types::Measure,
+        text_metrics: &TextFontMetrics,
+    ) -> f64 {
+        let font_size = self.config.harmony_style.root_size;
+        let gap = self.config.min_chord_symbol_gap.max(1.0);
+        let symbols: f64 = measure
+            .chords
+            .iter()
+            .filter(|c| !c.full_symbol.is_empty() && c.full_symbol != "s")
+            .map(|c| text_metrics.horizontal_advance(&c.full_symbol, font_size) + gap)
+            .sum();
+        symbols.max(self.config.min_measure_width)
     }
 }
 

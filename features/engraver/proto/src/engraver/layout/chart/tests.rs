@@ -2547,4 +2547,60 @@ fn a_simile_bar_wants_less_width_than_the_bar_it_repeats() {
     );
 }
 
+/// A system stops when the next bar's chord symbols would not fit beside the
+/// ones already on the line, whatever the cap says. Raising the cap is exactly
+/// what the folded and compact modes do, and without this a bar of six chords
+/// at eight bars a line prints as one smear.
+#[test]
+fn a_system_stops_when_the_chord_symbols_run_out_of_room() {
+    let mut config = ChartLayoutConfig::master_rhythm();
+    config.max_measures_per_system = 16;
+    let engine = ChartLayoutEngine::with_config(
+        config,
+        test_style(),
+        Arc::new(Vec::new()),
+        Arc::new(Vec::new()),
+    );
+
+    // Bars carrying six chords each, at a cap that would otherwise put
+    // sixteen of them on one line.
+    let mut chart = Chart::new();
+    chart.time_signature = Some(TimeSignature::new(4, 4));
+    let measures: Vec<Measure> = (0..16)
+        .map(|_| {
+            let mut m = Measure::new();
+            for symbol in ["Bbm7", "G#maj7", "F#13", "Ebm9", "C#7", "A#dim7"] {
+                m.chords.push(ChordInstance::new(
+                    root("C"),
+                    symbol.to_string(),
+                    Chord::new(root("C"), ChordQuality::Major),
+                    ChordRhythm::Default,
+                    symbol.to_string(),
+                    MusicalDuration::new(0, 4, 0),
+                    AbsolutePosition::at_beginning(),
+                ));
+            }
+            m
+        })
+        .collect();
+    chart
+        .sections
+        .push(ChartSection::new(Section::new(SectionType::Verse)).with_measures(measures));
+
+    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0);
+    assert!(
+        systems.len() > 1,
+        "sixteen six-chord bars should not share one 500pt line"
+    );
+    assert!(
+        systems.iter().all(|s| !s.is_empty()),
+        "a system always holds at least one measure"
+    );
+    assert_eq!(
+        systems.iter().map(Vec::len).sum::<usize>(),
+        16,
+        "every measure lands on exactly one system"
+    );
+}
+
 // endregion: --- Chart modes
