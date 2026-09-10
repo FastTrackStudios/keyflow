@@ -633,6 +633,7 @@ impl<'a> ChartParser<'a> {
     /// a cue that was written once.
     fn simile_copy(measure: &Measure) -> Measure {
         let mut copy = measure.clone();
+        copy.simile = true;
         copy.staff_text.clear();
         copy.text_cues.clear();
         copy.dynamics.clear();

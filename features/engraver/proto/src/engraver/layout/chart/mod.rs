@@ -377,6 +377,9 @@ pub struct ChartLayoutConfig {
     /// Duration-to-space power law slope (default 1.2).
     /// Controls how aggressively longer notes get more space.
     pub spacing_slope: f64,
+    /// Draw a simile bar as the `repeat1Bar` mark rather than as its chords.
+    /// See [`BehavioralFlags::draw_similes`](super::chart::config::BehavioralFlags).
+    pub draw_similes: bool,
     /// Spacing density (default 1.0). Higher values = tighter spacing.
     pub spacing_density: f64,
     /// Fill limit for last system justification (default 0.3).
@@ -1606,13 +1609,26 @@ impl ChartLayoutEngine {
                             note_line_stacks: &measure_result.note_line_stacks,
                         };
 
-                        let chord_result = chord_renderer::render_chord_symbols(
-                            &chord_ctx,
-                            measure,
-                            previous_chord_symbol.as_deref(),
-                            id_counter,
-                            &ctx,
-                        );
+                        // A simile bar prints no chord symbol. The mark says
+                        // "that bar again", and the bar it repeats is right
+                        // there with the symbol over it — printing it twice is
+                        // the clutter the mark was reached for to avoid.
+                        // `previous_chord_symbol` is deliberately left alone,
+                        // so `hide_repeated_chords` still sees the run.
+                        let chord_result = if measure.simile && self.config.draw_similes {
+                            chord_renderer::ChordRenderResult::empty(
+                                id_counter,
+                                previous_chord_symbol.clone(),
+                            )
+                        } else {
+                            chord_renderer::render_chord_symbols(
+                                &chord_ctx,
+                                measure,
+                                previous_chord_symbol.as_deref(),
+                                id_counter,
+                                &ctx,
+                            )
+                        };
                         let chord_obstacles = chord_result.chord_bounds;
                         // Kept for anchoring suspension figures to their chords;
                         // `chord_obstacles` itself is consumed as obstacles below.

@@ -391,6 +391,18 @@ pub struct Measure {
     /// Repeat count (1 = no repeat, 2+ = repeat this measure n times)
     pub repeat_count: usize,
 
+    /// This measure is a simile repeat of the one before it — written `%`.
+    ///
+    /// The chords are still here, so playback, transposition and analysis see
+    /// a normal measure; what changes is the drawing. A simile bar engraves as
+    /// the single `repeat1Bar` glyph filling the measure, with no slashes and
+    /// no chord symbol, because that is what the mark means: *that bar again*.
+    ///
+    /// Set by `%` in the text parser and by the folding pass. A measure that
+    /// merely happens to match its neighbour is not a simile — someone has to
+    /// have said so.
+    pub simile: bool,
+
     /// Text cues for instrument directions
     pub text_cues: Vec<TextCue>,
 
@@ -451,6 +463,7 @@ impl Measure {
             rhythm_slashes: Vec::new(),
             time_signature: (4, 4), // Default to 4/4
             repeat_count: 1,        // Default to no repeat
+            simile: false,
             text_cues: Vec::new(),
             dynamics: Vec::new(),
             classical_dynamics: Vec::new(),

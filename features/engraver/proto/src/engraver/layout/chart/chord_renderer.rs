@@ -122,6 +122,21 @@ pub struct ChordRenderResult {
     pub next_id: u64,
 }
 
+impl ChordRenderResult {
+    /// Nothing drawn, and the run of repeated symbols left as it was.
+    ///
+    /// For a bar that carries chords but prints none of them — a simile.
+    #[must_use]
+    pub fn empty(next_id: u64, last_chord_symbol: Option<String>) -> Self {
+        Self {
+            nodes: Vec::new(),
+            chord_bounds: Vec::new(),
+            last_chord_symbol,
+            next_id,
+        }
+    }
+}
+
 // ============================================================================
 // Collision Detection
 // ============================================================================

@@ -63,6 +63,15 @@ pub struct BehavioralFlags {
     ///
     /// Can be configured via `/PUSH_ALTERS_RHYTHM=false` in the chart.
     pub push_alters_rhythm: bool,
+
+    /// Draw a simile bar as the `repeat1Bar` mark rather than as its chords.
+    ///
+    /// On by default: a measure only carries `simile` because someone wrote
+    /// `%` or asked for a folded chart, and the point of writing `%` is to see
+    /// the mark. Turning this off engraves the bar out in full, which is what
+    /// you want when the chart is being read by a player who wants every bar
+    /// spelled, or when comparing a folded chart against its source.
+    pub draw_similes: bool,
 }
 
 /// Default minimum gap between chord symbols (in points).
@@ -80,6 +89,7 @@ impl Default for BehavioralFlags {
             auto_rhythm_slashes: true, // ON by default for master rhythm charts
             min_chord_symbol_gap: DEFAULT_MIN_CHORD_SYMBOL_GAP,
             push_alters_rhythm: true, // ON by default for accurate rhythm notation
+            draw_similes: true,
         }
     }
 }
@@ -102,6 +112,7 @@ impl BehavioralFlags {
             auto_rhythm_slashes: true,
             min_chord_symbol_gap: DEFAULT_MIN_CHORD_SYMBOL_GAP,
             push_alters_rhythm: true,
+            draw_similes: true,
         }
     }
 
@@ -116,6 +127,7 @@ impl BehavioralFlags {
             auto_rhythm_slashes: true,
             min_chord_symbol_gap: DEFAULT_MIN_CHORD_SYMBOL_GAP,
             push_alters_rhythm: true,
+            draw_similes: true,
         }
     }
 
@@ -128,6 +140,7 @@ impl BehavioralFlags {
             auto_rhythm_slashes: true,
             min_chord_symbol_gap: DEFAULT_MIN_CHORD_SYMBOL_GAP,
             push_alters_rhythm: true,
+            draw_similes: true,
         }
     }
 

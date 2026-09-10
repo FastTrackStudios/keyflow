@@ -1476,6 +1476,22 @@ G D Em
         }
     }
 
+    /// A simile bar keeps its chords — playback and analysis see a normal
+    /// measure — and is flagged so the engraver draws the mark instead.
+    #[test]
+    fn a_simile_measure_carries_its_chords_and_says_it_is_one() {
+        let chart = parse_chart("T - A\n4/4\n\nvs 4\nG % % %\n").expect("parse");
+        let measures = chart.sections[0].measures();
+        assert!(!measures[0].simile, "the written bar is not a simile");
+        for measure in &measures[1..] {
+            assert!(measure.simile);
+            assert_eq!(
+                measure.chords[0].full_symbol, "G",
+                "the chords are still there — only the drawing changes"
+            );
+        }
+    }
+
     /// `%3` is three simile marks, so `%` is `%1`.
     #[test]
     fn a_counted_simile_is_that_many_marks() {
