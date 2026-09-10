@@ -152,10 +152,10 @@ fn expand_measures_without_repeat_symbols(
         if matches!(measure.end_repeat, RepeatMark::Backward) {
             let repeat_end = first_ending_start(measures, repeat_start, idx).unwrap_or(idx + 1);
             if let Some(repeat_prefix) = repeat_prefix {
-                expanded.extend(repeat_prefix.iter().map(clear_repeat_symbols));
+                expanded.extend(repeat_prefix.iter().map(repeat_pass_copy));
             }
             for repeated in &measures[repeat_start..repeat_end] {
-                expanded.push(clear_repeat_symbols(repeated));
+                expanded.push(repeat_pass_copy(repeated));
             }
             repeat_start = idx + 1;
         }
@@ -192,11 +192,31 @@ fn first_ending_start(
         .map(|offset| repeat_start + offset)
 }
 
+/// A measure with its repeat decoration removed.
+///
+/// The bars are being written out, so a repeat sign over them would send the
+/// reader round a second time.
 fn clear_repeat_symbols(measure: &Measure) -> Measure {
     let mut measure = measure.clone();
     measure.start_repeat = RepeatMark::None;
     measure.end_repeat = RepeatMark::None;
     measure.volta_start = None;
+    measure
+}
+
+/// A measure as it should appear on the *second* time through.
+///
+/// Everything [`clear_repeat_symbols`] drops, and anything written on the bar
+/// as well. A cue is an instruction given once: re-emitting it on the repeat
+/// pass printed `"The song starts on the & of 3"` over two different bars of
+/// Highway to Hell's intro, which is one more time than the song starts.
+fn repeat_pass_copy(measure: &Measure) -> Measure {
+    let mut measure = clear_repeat_symbols(measure);
+    measure.staff_text.clear();
+    measure.text_cues.clear();
+    measure.dynamics.clear();
+    measure.classical_dynamics.clear();
+    measure.hairpins.clear();
     measure
 }
 
