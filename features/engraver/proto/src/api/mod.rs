@@ -482,9 +482,11 @@ pub mod pipeline {
                     self.layout_with_config(&expanded(chart), &layout_mode, &config)
                 }
                 ChartMode::Folded => {
+                    // Same grid as Default. A folded chart still has to look
+                    // like a chart — four bars to a line, so the eye can count
+                    // them without reading them. Packing more in is Compact's
+                    // job, and it is the thing Compact trades readability for.
                     let mut config = config;
-                    config.max_measures_per_system =
-                        ChartLayoutEngine::FOLDED_MAX_MEASURES_PER_SYSTEM;
                     config.fold_sections = true;
                     config.draw_similes = true;
                     self.layout_with_config(&folded(chart), &layout_mode, &config)

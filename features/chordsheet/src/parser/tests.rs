@@ -209,6 +209,45 @@ fn simile_and_reprint() {
     );
 }
 
+/// The site writes endings with no space anywhere: `1.G#,,,2.G7,,,`. A comma
+/// holds a bar open, so the marker has to end one — otherwise the `2.` reads
+/// as another chord in the first ending's bar.
+#[test]
+fn an_ending_runs_straight_into_the_bar_it_opens() {
+    let items = bars("(G#,,, Bb,,, Gm,,, 1.G#,,,2.G7,,,)x2");
+    let shape: Vec<String> = items
+        .iter()
+        .map(|i| match i {
+            Item::Bar(b) => format!(
+                "bar:{}",
+                b.cells
+                    .iter()
+                    .filter_map(|c| c.symbol.as_deref())
+                    .collect::<Vec<_>>()
+                    .join("+")
+            ),
+            Item::Ending { numbers, .. } => format!("end:{numbers:?}"),
+            Item::RepeatOpen { .. } => "(".to_string(),
+            Item::RepeatClose { times, .. } => format!("):{times:?}"),
+            other => format!("{other:?}"),
+        })
+        .collect();
+    assert_eq!(
+        shape,
+        [
+            "(",
+            "bar:G#",
+            "bar:Bb",
+            "bar:Gm",
+            "end:[1]",
+            "bar:G#",
+            "end:[2]",
+            "bar:G7",
+            "):Some(2)",
+        ]
+    );
+}
+
 #[test]
 fn endings_expand_ranges() {
     let items = bars("1.-3.+5. A");

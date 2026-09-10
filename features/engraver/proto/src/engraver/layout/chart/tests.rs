@@ -2603,4 +2603,43 @@ fn a_system_stops_when_the_chord_symbols_run_out_of_room() {
     );
 }
 
+/// An ending stays with the phrase it ends. Four bars to a line, five when the
+/// fifth is a second ending — which is what a chart with a first and second
+/// ending looks like everywhere.
+#[test]
+fn a_second_ending_stays_on_the_line_with_its_phrase() {
+    use keyflow_proto::chart::notations::Volta;
+
+    let engine = ChartLayoutEngine::new(test_style(), Arc::new(Vec::new()), Arc::new(Vec::new()));
+    let mut chart = long_chart(1, 5, "G");
+    {
+        let section = &mut chart.sections[0];
+        let measures = section.chord_track_mut().expect("chord track");
+        for (idx, number) in [(3usize, 1u8), (4, 2)] {
+            measures.measures[idx].volta_start = Some(Volta {
+                numbers: vec![number],
+                label: String::new(),
+                length_measures: 1,
+            });
+        }
+    }
+
+    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0);
+    assert_eq!(
+        systems.len(),
+        1,
+        "five bars ending in a second ending are one line, got {systems:?}"
+    );
+}
+
+/// Without an ending the cap still holds at four.
+#[test]
+fn five_ordinary_bars_are_two_lines() {
+    let engine = ChartLayoutEngine::new(test_style(), Arc::new(Vec::new()), Arc::new(Vec::new()));
+    let chart = long_chart(1, 5, "G");
+    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0);
+    assert_eq!(systems.len(), 2);
+    assert_eq!(systems[0].len(), 4);
+}
+
 // endregion: --- Chart modes

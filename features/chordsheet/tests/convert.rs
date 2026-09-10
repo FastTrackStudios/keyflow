@@ -332,7 +332,11 @@ fn a_repeat_survives_the_export_as_a_repeat() {
 fn back_to_back_repeats_share_a_barline() {
     let chart = import_str("=VS\n(A B) (C D)\n", &ImportOptions::default());
     let text = to_kf(&chart);
-    assert!(text.contains(":|:"), "{text}");
+    assert!(
+        !text.contains(":| |"),
+        "the two repeats share a barline rather than fencing an empty bar:\n{text}"
+    );
+    assert!(text.contains(":|x2:"), "{text}");
 
     let reparsed = assert_round_trips(&chart);
     assert_eq!(

@@ -843,7 +843,6 @@ impl LayoutPipeline {
             ChartModeArg::Default => self.engine.layout_chart_with_config(chart, &mode, &config),
             ChartModeArg::Folded => {
                 let mut config = config;
-                config.max_measures_per_system = ChartLayoutEngine::FOLDED_MAX_MEASURES_PER_SYSTEM;
                 config.fold_sections = true;
                 config.draw_similes = true;
                 self.engine.layout_chart_with_config(chart, &mode, &config)

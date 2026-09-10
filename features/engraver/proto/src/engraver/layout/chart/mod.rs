@@ -776,15 +776,6 @@ impl ChartLayoutEngine {
         best.unwrap_or_else(|| self.layout_chart_with_config(chart, mode, config))
     }
 
-    /// Bars a line for a folded chart.
-    ///
-    /// A simile bar asks for a fraction of the width a written one does, so a
-    /// line of them holds more; capping a folded chart at the usual four
-    /// leaves most of the staff empty. Eight is an upper bound rather than a
-    /// target — the width distribution still decides how many actually fit, so
-    /// a section that folded nothing keeps its four.
-    pub const FOLDED_MAX_MEASURES_PER_SYSTEM: usize = 8;
-
     /// `(measures per system, scale)` pairs for [`layout_chart_compact`],
     /// ordered most readable first.
     ///
@@ -2020,16 +2011,17 @@ impl ChartLayoutEngine {
                         root.add_child(barline);
 
                         // How many times the repeat plays, over its closing
-                        // barline. `|: … :|` on its own reads as twice, so a
-                        // phrase played four times has to say so — otherwise
-                        // the chart is half as long as the song.
+                        // barline — including the `x2` a bare repeat implies.
+                        // Strictly, engraving leaves that one off. But the
+                        // count is the thing a player is scanning for, and it
+                        // is easier to find in the same place every time than
+                        // to notice an absence and know what it means.
                         if matches!(
                             measure.end_repeat,
                             crate::chart::notations::RepeatMark::Backward
-                        ) && measure.repeat_count > 2
-                        {
+                        ) {
                             let label = self.create_repeat_count_label(
-                                measure.repeat_count,
+                                measure.repeat_count.max(2),
                                 measure_x,
                                 staff_y,
                                 id_counter,
@@ -3242,15 +3234,39 @@ impl ChartLayoutEngine {
                 current_width = 0.0;
             }
 
+            // An ending stays with the phrase it ends. A four-bar line whose
+            // next bar is a second ending runs to five rather than stranding
+            // `[2]` on a line of its own — which is what a chart with a first
+            // and second ending looks like everywhere. It overrides the width
+            // check as well as the cap, since one more bar on an otherwise
+            // full line is exactly the case, and it is bounded so a run of
+            // endings cannot walk off the page.
+            let keeps_an_ending_with_its_phrase = measure.volta_start.is_some()
+                && !starts_long_volta(measure)
+                && !current_system.is_empty()
+                && current_system.len() < self.config.max_measures_per_system + VOLTA_SYSTEM_SLACK;
+
             let wanted = widths[idx];
-            if !current_system.is_empty() && current_width + wanted > usable {
+            if !keeps_an_ending_with_its_phrase
+                && !current_system.is_empty()
+                && current_width + wanted > usable
+            {
                 systems.push(std::mem::take(&mut current_system));
                 current_width = 0.0;
             }
 
             current_system.push(idx);
             current_width += wanted;
-            if current_system.len() >= self.config.max_measures_per_system {
+
+            let next_keeps_its_ending = measures
+                .get(idx + 1)
+                .is_some_and(|m| m.volta_start.is_some() && !starts_long_volta(m));
+            let slack = if next_keeps_its_ending {
+                VOLTA_SYSTEM_SLACK
+            } else {
+                0
+            };
+            if current_system.len() >= self.config.max_measures_per_system + slack {
                 systems.push(std::mem::take(&mut current_system));
                 current_width = 0.0;
             }
@@ -3285,6 +3301,10 @@ impl ChartLayoutEngine {
         symbols.max(self.config.min_measure_width)
     }
 }
+
+/// How far past the bars-per-line cap a system may run to keep an ending with
+/// its phrase. Two, so a first and second ending both fit.
+const VOLTA_SYSTEM_SLACK: usize = 2;
 
 fn starts_long_volta(measure: &crate::chart::types::Measure) -> bool {
     measure

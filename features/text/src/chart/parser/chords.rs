@@ -2932,10 +2932,14 @@ impl<'a> ChartParser<'a> {
             }
 
             if let Some(passes) = token_str.strip_prefix("@repeat-end") {
-                let passes: Option<usize> = passes
+                // A repeat with no count on it plays twice — that is what the
+                // sign means — so the count is always known and can always be
+                // printed.
+                let passes: usize = passes
                     .strip_prefix(':')
                     .and_then(|n| n.parse().ok())
-                    .filter(|n| *n > 1);
+                    .filter(|n| *n > 1)
+                    .unwrap_or(2);
                 if current_measure.chords.is_empty()
                     && current_measure.rhythm_elements.is_empty()
                     && current_measure.figured_bass.is_empty()
@@ -2943,15 +2947,11 @@ impl<'a> ChartParser<'a> {
                 {
                     if let Some(measure) = measures.last_mut() {
                         measure.end_repeat = RepeatMark::Backward;
-                        if let Some(passes) = passes {
-                            measure.repeat_count = passes;
-                        }
+                        measure.repeat_count = passes;
                     }
                 } else {
                     current_measure.end_repeat = RepeatMark::Backward;
-                    if let Some(passes) = passes {
-                        current_measure.repeat_count = passes;
-                    }
+                    current_measure.repeat_count = passes;
                     Self::finalize_measure_for_separator(
                         &mut measures,
                         &current_measure,

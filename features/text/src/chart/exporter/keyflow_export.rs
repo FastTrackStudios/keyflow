@@ -99,8 +99,12 @@ pub fn chart_to_keyflow(chart: &Chart) -> String {
                 out.push_str(&measure_to_keyflow(measure, section_chord_length.as_ref()));
                 out.push(' ');
                 pending_close = matches!(measure.end_repeat, RepeatMark::Backward);
-                pending_passes = if pending_close && measure.repeat_count > 2 {
-                    Some(measure.repeat_count)
+                // Always written, even the `x2` a bare repeat implies: a
+                // reader scanning for how many times should find the same
+                // thing in the same place every time, rather than having to
+                // notice an absence and know what it means.
+                pending_passes = if pending_close {
+                    Some(measure.repeat_count.max(2))
                 } else {
                     None
                 };
@@ -305,6 +309,22 @@ fn measure_notation_to_keyflow(
     default_chord_length: Option<&ChordRhythm>,
 ) -> String {
     let mut parts = Vec::new();
+
+    // The ending bracket this bar opens — `[1]`, `[2]`, `[1, 3]`. It has to
+    // come before the chords, which is where the parser looks for it, and
+    // before the simile shortcut below: a first ending that happens to repeat
+    // the bar before it is still a first ending.
+    if let Some(volta) = &measure.volta_start {
+        if !volta.numbers.is_empty() {
+            let numbers = volta
+                .numbers
+                .iter()
+                .map(u8::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            parts.push(format!("[{numbers}]"));
+        }
+    }
 
     for text in &measure.staff_text {
         parts.push(staff_text_to_syntax(text));

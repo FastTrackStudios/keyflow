@@ -483,7 +483,12 @@ fn scan_ending(s: &mut Scanner<'_>) -> Option<Vec<u8>> {
             _ => break,
         }
     }
-    if numbers.is_empty() || !is_word_boundary(s, 0) {
+    // An ending marker runs straight into the bar it opens — `1.G#,,,2.G7,,,`
+    // is how the site writes first and second endings, with no space anywhere.
+    // Nothing else in the language is digits followed by a dot, so the shape
+    // is enough on its own; requiring whitespace after it lost every ending
+    // written that way, which is all of them.
+    if numbers.is_empty() {
         s.pos = save;
         return None;
     }
@@ -587,7 +592,10 @@ fn scan_bar(s: &mut Scanner<'_>) -> Bar {
         // *next bar*: `C#C#/CF#` is three bars of one chord, not one bar of
         // three, and `A,A,A,A,A,G#,C#C#` is a seven-slot bar followed by a bar
         // of C# — which is exactly what the site's own PDFs draw.
-        if cells.last().is_some_and(|c: &Cell| c.stroke) && starts_cell(s.peek()) {
+        if cells.last().is_some_and(|c: &Cell| c.stroke)
+            && starts_cell(s.peek())
+            && !looks_like_ending(s)
+        {
             continue;
         }
         break;
@@ -600,6 +608,19 @@ fn scan_bar(s: &mut Scanner<'_>) -> Bar {
         show_diagram,
         span: s.span_from(start),
     }
+}
+
+/// Whether the scanner is sitting on an ending marker — `1.`, `2.`, `1.-3.+5.`
+///
+/// A comma holds a bar open, and an ending written straight onto the end of
+/// one (`1.G#,,,2.G7,,,`) would otherwise be read as another chord in it. No
+/// chord in this language is digits followed by a dot.
+fn looks_like_ending(s: &Scanner<'_>) -> bool {
+    let mut i = 0usize;
+    while s.peek_at(i).is_some_and(|b| b.is_ascii_digit()) {
+        i += 1;
+    }
+    i > 0 && s.peek_at(i) == Some(b'.')
 }
 
 fn starts_cell(b: Option<u8>) -> bool {
