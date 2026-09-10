@@ -28,6 +28,24 @@ use keyflow::engraver::layout::chart::{
 use keyflow::engraver::style::MStyle;
 use keyflow::Chart;
 
+/// How much folding and fitting to do — see `engraver`'s `ChartMode`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum)]
+enum ChartModeArg {
+    /// Every bar as written.
+    #[default]
+    Default,
+    /// Fold repeated bars into simile marks.
+    Folded,
+    /// Fold, then widen and shrink until the chart fits one page.
+    Compact,
+}
+
+impl ChartModeArg {
+    fn folds(self) -> bool {
+        !matches!(self, Self::Default)
+    }
+}
+
 /// Layout preset choice for the `png` / `svg` subcommands.
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum PresetMode {
@@ -94,6 +112,10 @@ enum Commands {
         /// Output PDF path
         #[arg(short, long, default_value = "chart.pdf")]
         output: PathBuf,
+        /// How much of the chart's repetition to fold away, and how hard to
+        /// try to fit one page.
+        #[arg(long, value_enum, default_value_t = ChartModeArg::Default)]
+        chart_mode: ChartModeArg,
     },
     /// Import MIDI and render the generated chart to PDF
     MidiPdf {
@@ -232,6 +254,10 @@ enum Commands {
         /// 2.0 gives a Retina-resolution PNG.
         #[arg(long, default_value_t = 2.0)]
         scale: f32,
+        /// How much of the chart's repetition to fold away, and how hard to
+        /// try to fit one page.
+        #[arg(long, value_enum, default_value_t = ChartModeArg::Default)]
+        chart_mode: ChartModeArg,
     },
     /// Preprocess a markdown docs tree: render ```` ```kf ```` blocks to inline
     /// SVG, writing a generated mirror tree a stock dodeca (`ddc`) build serves.
@@ -785,6 +811,7 @@ impl LayoutPipeline {
         preset: PresetMode,
         breakpoint: BreakpointArg,
         width_pt: f64,
+        chart_mode: ChartModeArg,
     ) -> ChartLayoutResult {
         let options = PresetOptions::for_export().with_viewport_pt(width_pt);
         let (mode, config) = match preset {
@@ -797,7 +824,29 @@ impl LayoutPipeline {
                 ChartLayoutConfig::responsive_for(breakpoint.to_engraver()),
             ),
         };
-        self.engine.layout_chart_with_config(chart, &mode, &config)
+
+        // Folding is a change to the chart, not to the layout, so it happens
+        // here rather than inside the engine. The chords stay on every bar —
+        // what folds is the ink.
+        let folded;
+        let chart = if chart_mode.folds() {
+            let mut copy = chart.clone();
+            keyflow::chart::fold_similes(&mut copy);
+            folded = copy;
+            &folded
+        } else {
+            chart
+        };
+
+        match chart_mode {
+            ChartModeArg::Default => self.engine.layout_chart_with_config(chart, &mode, &config),
+            ChartModeArg::Folded => {
+                let mut config = config;
+                config.max_measures_per_system = ChartLayoutEngine::FOLDED_MAX_MEASURES_PER_SYSTEM;
+                self.engine.layout_chart_with_config(chart, &mode, &config)
+            }
+            ChartModeArg::Compact => self.engine.layout_chart_compact(chart, &mode, &config),
+        }
     }
 
     /// Attach every embeddable font to an SVG export config.
@@ -987,7 +1036,7 @@ fn render_variant_pngs(
     scale: f32,
     output_base: &std::path::Path,
 ) -> Result<Vec<PathBuf>, String> {
-    let layout = pipeline.layout_preset(chart, preset, breakpoint, width_pt);
+    let layout = pipeline.layout_preset(chart, preset, breakpoint, width_pt, ChartModeArg::Default);
     let svgs: Vec<String> = if layout.pages.is_empty() {
         vec![pipeline
             .export_svg_continuous(&layout)
@@ -1177,7 +1226,11 @@ fn run(cli: Cli) -> Result<(), String> {
             Ok(())
         }
 
-        Commands::Pdf { input, output } => {
+        Commands::Pdf {
+            input,
+            output,
+            chart_mode,
+        } => {
             let source = read_source(&input)?;
             let chart = parse_chart(&source)?;
             let pipeline = LayoutPipeline::new()?;
@@ -1190,6 +1243,7 @@ fn run(cli: Cli) -> Result<(), String> {
                 PresetMode::Page,
                 BreakpointArg::Desktop,
                 BreakpointArg::Desktop.default_width_pt(),
+                chart_mode,
             );
 
             println!(
@@ -1655,13 +1709,14 @@ fn run(cli: Cli) -> Result<(), String> {
             breakpoint,
             width,
             scale,
+            chart_mode,
         } => {
             let source = read_source(&input)?;
             let chart = parse_chart(&source)?;
             let pipeline = LayoutPipeline::new()?;
 
             let viewport_pt = width.unwrap_or_else(|| breakpoint.default_width_pt());
-            let layout = pipeline.layout_preset(&chart, mode, breakpoint, viewport_pt);
+            let layout = pipeline.layout_preset(&chart, mode, breakpoint, viewport_pt, chart_mode);
 
             // ContinuousScroll has no `pages`; render the whole scene as one image.
             let svgs: Vec<String> = if layout.pages.is_empty() {

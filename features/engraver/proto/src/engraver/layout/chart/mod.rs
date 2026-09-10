@@ -724,6 +724,84 @@ impl ChartLayoutEngine {
     /// This temporarily applies the given config for layout, then restores
     /// the engine's default config. Useful for charts with rhythmic complexity
     /// that need stemmed notation.
+    /// Lay out as few pages as this chart can be persuaded into.
+    ///
+    /// Tries a ladder of settings, most readable first: the ordinary four bars
+    /// a line, then wider systems, then wider systems at a smaller scale. It
+    /// stops at the first one that reaches a single page, so a chart that
+    /// already fits is never shrunk, and one that needs six bars a line is not
+    /// also scaled down.
+    ///
+    /// Nothing fits on one page for every chart, and this does not pretend to:
+    /// when no rung gets there, the one that produced the fewest pages wins,
+    /// ties going to the more readable. Bounded at [`COMPACT_LADDER`]'s length
+    /// of layout passes, which is the cost of asking.
+    ///
+    /// Only paginated modes have pages to count. Under a continuous or snippet
+    /// mode this lays out once at `config` and returns that.
+    ///
+    /// [`COMPACT_LADDER`]: Self::COMPACT_LADDER
+    #[must_use]
+    pub fn layout_chart_compact(
+        &self,
+        chart: &Chart,
+        mode: &LayoutMode,
+        config: &ChartLayoutConfig,
+    ) -> ChartLayoutResult {
+        if !matches!(mode, LayoutMode::Paginated { .. }) {
+            return self.layout_chart_with_config(chart, mode, config);
+        }
+
+        let mut best: Option<ChartLayoutResult> = None;
+        for (measures, scale) in Self::COMPACT_LADDER {
+            let mut rung = config.clone();
+            rung.max_measures_per_system = measures;
+            if scale < 1.0 {
+                rung = rung.with_scale(scale);
+            }
+            let result = self.layout_chart_with_config(chart, mode, &rung);
+            if result.pages.len() <= 1 {
+                return result;
+            }
+            if best
+                .as_ref()
+                .is_none_or(|current| result.pages.len() < current.pages.len())
+            {
+                best = Some(result);
+            }
+        }
+        best.unwrap_or_else(|| self.layout_chart_with_config(chart, mode, config))
+    }
+
+    /// Bars a line for a folded chart.
+    ///
+    /// A simile bar asks for a fraction of the width a written one does, so a
+    /// line of them holds more; capping a folded chart at the usual four
+    /// leaves most of the staff empty. Eight is an upper bound rather than a
+    /// target — the width distribution still decides how many actually fit, so
+    /// a section that folded nothing keeps its four.
+    pub const FOLDED_MAX_MEASURES_PER_SYSTEM: usize = 8;
+
+    /// `(measures per system, scale)` pairs for [`layout_chart_compact`],
+    /// ordered most readable first.
+    ///
+    /// Wider systems come before smaller type: a chart reads better at eight
+    /// bars a line than at four bars a line three-quarters the size.
+    ///
+    /// [`layout_chart_compact`]: Self::layout_chart_compact
+    pub const COMPACT_LADDER: [(usize, f64); 10] = [
+        (4, 1.0),
+        (5, 1.0),
+        (6, 1.0),
+        (8, 1.0),
+        (6, 0.9),
+        (8, 0.9),
+        (8, 0.8),
+        (10, 0.8),
+        (10, 0.7),
+        (12, 0.7),
+    ];
+
     pub fn layout_chart_with_config(
         &self,
         chart: &Chart,

@@ -2437,3 +2437,105 @@ mod slash_continuation_guard {
         );
     }
 }
+
+// region: --- Chart modes
+
+/// A chart long enough to run past one page at four bars a line.
+fn long_chart(sections: usize, bars_per_section: usize, symbol: &str) -> Chart {
+    let mut chart = Chart::new();
+    chart.time_signature = Some(TimeSignature::new(4, 4));
+    for _ in 0..sections {
+        let measures: Vec<Measure> = (0..bars_per_section)
+            .map(|_| {
+                let mut m = Measure::new();
+                m.chords.push(ChordInstance::new(
+                    root(symbol),
+                    symbol.to_string(),
+                    Chord::new(root(symbol), ChordQuality::Major),
+                    ChordRhythm::Default,
+                    symbol.to_string(),
+                    MusicalDuration::new(0, 4, 0),
+                    AbsolutePosition::at_beginning(),
+                ));
+                m
+            })
+            .collect();
+        chart
+            .sections
+            .push(ChartSection::new(Section::new(SectionType::Verse)).with_measures(measures));
+    }
+    chart
+}
+
+fn page_count(engine: &ChartLayoutEngine, chart: &Chart, config: &ChartLayoutConfig) -> usize {
+    engine
+        .layout_chart_with_config(chart, &LayoutMode::paginated_a4(), config)
+        .pages
+        .len()
+}
+
+/// Compact keeps pushing — wider systems, then smaller ones — until the chart
+/// lands on one page.
+#[test]
+fn compact_fits_a_chart_that_paginates_at_four_bars_a_line() {
+    let engine = ChartLayoutEngine::new(test_style(), Arc::new(Vec::new()), Arc::new(Vec::new()));
+    let config = ChartLayoutConfig::master_rhythm();
+    let chart = long_chart(14, 8, "G");
+
+    let plain = page_count(&engine, &chart, &config);
+    assert!(
+        plain > 1,
+        "the fixture has to paginate for this to mean anything"
+    );
+
+    let compact = engine
+        .layout_chart_compact(&chart, &LayoutMode::paginated_a4(), &config)
+        .pages
+        .len();
+    assert!(
+        compact < plain,
+        "compact should shrink {plain} pages, got {compact}"
+    );
+}
+
+/// A chart that already fits is left alone rather than shrunk for the sake of
+/// it — the first rung of the ladder is the ordinary layout.
+#[test]
+fn compact_does_not_shrink_a_chart_that_already_fits() {
+    let engine = ChartLayoutEngine::new(test_style(), Arc::new(Vec::new()), Arc::new(Vec::new()));
+    let config = ChartLayoutConfig::master_rhythm();
+    let chart = long_chart(2, 4, "G");
+
+    let plain = engine.layout_chart_with_config(&chart, &LayoutMode::paginated_a4(), &config);
+    let compact = engine.layout_chart_compact(&chart, &LayoutMode::paginated_a4(), &config);
+    assert_eq!(plain.pages.len(), 1);
+    assert_eq!(compact.pages.len(), 1);
+    assert_eq!(
+        compact.total_width, plain.total_width,
+        "same layout, not a scaled-down one"
+    );
+}
+
+/// A simile bar asks for a fraction of the width a written bar does, because
+/// none of its chords are drawn.
+#[test]
+fn a_simile_bar_wants_less_width_than_the_bar_it_repeats() {
+    use keyflow_proto::chart::fold_similes;
+
+    let engine = ChartLayoutEngine::new(test_style(), Arc::new(Vec::new()), Arc::new(Vec::new()));
+    let mut chart = long_chart(1, 2, "G");
+    fold_similes(&mut chart);
+
+    let measures = chart.sections[0].measures();
+    assert!(measures[1].simile, "the fixture's second bar should fold");
+
+    let metrics = TextFontMetrics::new(Arc::new(Vec::new()));
+    let written = engine.estimate_measure_content_weight(&measures[0], &metrics);
+    let folded = engine.estimate_measure_content_weight(&measures[1], &metrics);
+    assert!(
+        folded < written,
+        "a simile bar ({folded}) should want less than a written one ({written})"
+    );
+}
+
+// endregion: --- Chart modes
