@@ -349,7 +349,7 @@ impl<'a> ChartParser<'a> {
         // lane join, so fall back to section parsing. Doing this before
         // `section_plan_from_toc` avoids surfacing a confusing TOC error for a
         // section that merely contains an inline parallel (e.g. after
-        // `/Duration`).
+        // `\Duration`).
         let mut resolved_branches = Vec::with_capacity(branches.len());
         for (_, branch) in &branches {
             let branch = branch.trim();
@@ -420,6 +420,7 @@ impl<'a> ChartParser<'a> {
         parser.aliases = self.aliases.clone();
         parser.melody_octave_memory = self.melody_octave_memory;
         parser.default_duration = self.default_duration.clone();
+        parser.default_progression = self.default_progression.clone();
         parser.parse_sections(&lines, 0)?;
         parser.post_process();
 
@@ -529,7 +530,7 @@ impl<'a> ChartParser<'a> {
             .map(|line| {
                 let trimmed = line.trim();
                 if trimmed.is_empty()
-                    || trimmed.starts_with('/')
+                    || trimmed.starts_with('\\')
                     || trimmed.starts_with("dyn ")
                     || trimmed.starts_with("dynamic ")
                     || trimmed.starts_with("hairpin ")
@@ -1190,7 +1191,7 @@ F/C .
         let input = r#"
 Dot Push Test
 120bpm 4/4 #C
-/push = triplet
+\push = triplet
 
 VS
 'F/C .
@@ -1598,6 +1599,107 @@ G D Em
     }
 
     // endregion: --- Simile and direct repeat
+
+    // region: --- Reusing a progression
+
+    fn symbols(chart: &crate::chart::Chart, section: usize) -> Vec<String> {
+        chart.sections[section]
+            .measures()
+            .iter()
+            .map(|m| {
+                m.chords
+                    .first()
+                    .map_or_else(|| "-".to_string(), |c| c.full_symbol.clone())
+            })
+            .collect()
+    }
+
+    /// A header with nothing under it is the last section of its kind.
+    #[test]
+    fn an_empty_section_repeats_its_own_kind() {
+        let chart = parse_chart("T - A\n4/4\n\nVS 4\nG B C Cm\n\nCH 4\nCm C G B\n\nVS 4\n\nCH 4\n")
+            .expect("parse");
+        assert_eq!(
+            symbols(&chart, 2),
+            symbols(&chart, 0),
+            "verse two is verse one"
+        );
+        assert_eq!(symbols(&chart, 3), symbols(&chart, 1));
+    }
+
+    /// Intro, Outro, Pre and Post are the sections a song usually has one of,
+    /// so an empty one is left empty rather than silently copying an earlier.
+    #[test]
+    fn an_empty_intro_does_not_copy_the_first_one() {
+        let chart =
+            parse_chart("T - A\n4/4\n\nIN 4\nG B C Cm\n\nVS 4\nF F E E\n\nIN 4\n").expect("parse");
+        assert_eq!(symbols(&chart, 2), vec!["-", "-", "-", "-"]);
+    }
+
+    /// `IN 4 = VS` — the intro is the verse, which is how most songs are built.
+    #[test]
+    fn a_section_can_borrow_another_sections_chords() {
+        let chart = parse_chart(
+            "T - A\n4/4\n\nVS 4\nG B C Cm\n\nIN 4 = VS\n\nBR 4\nAm F C G\n\nINST 4 = BR\n",
+        )
+        .expect("parse");
+        assert_eq!(
+            symbols(&chart, 1),
+            symbols(&chart, 0),
+            "intro borrows the verse"
+        );
+        assert_eq!(
+            symbols(&chart, 3),
+            symbols(&chart, 2),
+            "instrumental borrows the bridge"
+        );
+    }
+
+    /// Explicit beats the exclusion list: `IN 8 = IN` is how you say the
+    /// second intro really is the first one again.
+    #[test]
+    fn borrowing_reaches_the_types_an_empty_header_will_not() {
+        let chart = parse_chart("T - A\n4/4\n\nIN 4\nG B C Cm\n\nVS 4\nF F E E\n\nIN 4 = IN\n")
+            .expect("parse");
+        assert_eq!(symbols(&chart, 2), symbols(&chart, 0));
+    }
+
+    /// *Creep* is four chords and a form. One `\progression` and the chart is
+    /// the form.
+    #[test]
+    fn a_default_progression_fills_every_section_that_names_none() {
+        let chart = parse_chart(
+            "Creep - Radiohead\n4/4 #G\n\n\\progression G B C Cm\n\nIN 4\nVS 8\nCH 4\n",
+        )
+        .expect("parse");
+        assert_eq!(symbols(&chart, 0), ["G", "B", "C", "Cm"]);
+        assert_eq!(
+            symbols(&chart, 1),
+            ["G", "B", "C", "Cm", "G", "B", "C", "Cm"],
+            "it repeats to fill the section"
+        );
+        assert_eq!(symbols(&chart, 2), ["G", "B", "C", "Cm"]);
+    }
+
+    /// The three ways are tried in order, and anything written wins over all
+    /// of them.
+    #[test]
+    fn written_chords_beat_recall_and_recall_beats_the_default() {
+        let chart = parse_chart(
+            "T - A\n4/4\n\n\\progression G G G G\n\nVS 4\nA A A A\n\nCH 4\n\nBR 4 = VS\nOUT 4\n",
+        )
+        .expect("parse");
+        assert_eq!(symbols(&chart, 0), ["A", "A", "A", "A"], "written wins");
+        assert_eq!(
+            symbols(&chart, 1),
+            ["G", "G", "G", "G"],
+            "no chorus to recall"
+        );
+        assert_eq!(symbols(&chart, 2), ["A", "A", "A", "A"], "`= VS` wins");
+        assert_eq!(symbols(&chart, 3), ["G", "G", "G", "G"], "outro falls back");
+    }
+
+    // endregion: --- Reusing a progression
 }
 
 // endregion: --- Tests

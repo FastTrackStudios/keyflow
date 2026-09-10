@@ -2,7 +2,7 @@
 title: Chords
 kind: concept
 type: concept
-order: 6
+order: 7
 stage: Chords
 summary: Four parts, in order. Only the root is required.
 ---
@@ -27,4 +27,4 @@ See also: [[chord-root|Root]], [[chord-quality|Quality]], [[chord-extension|Exte
 
 ---
 
-Previous: [[structure|Structure]] · Next: [[chord-root|Root]] · Up: [[introduction|An Introduction]]
+Previous: [[reuse|Reusing a Progression]] · Next: [[chord-root|Root]] · Up: [[introduction|An Introduction]]

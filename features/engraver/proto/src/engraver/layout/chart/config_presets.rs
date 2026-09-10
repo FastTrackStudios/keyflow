@@ -206,8 +206,8 @@ impl ChartLayoutConfig {
         }
     }
 
-    /// Apply settings from a parsed chart (`/AUTO_RHYTHM_SLASHES=…`,
-    /// `/PUSH_ALTERS_RHYTHM=…`, …).
+    /// Apply settings from a parsed chart (`\AUTO_RHYTHM_SLASHES=…`,
+    /// `\PUSH_ALTERS_RHYTHM=…`, …).
     #[must_use]
     pub fn with_chart_settings(mut self, settings: &crate::chart::ChartSettings) -> Self {
         self.auto_rhythm_slashes = settings.auto_rhythm_slashes();

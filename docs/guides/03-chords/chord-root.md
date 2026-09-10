@@ -2,7 +2,7 @@
 title: Root
 kind: concept
 type: concept
-order: 7
+order: 8
 stage: Chords
 summary: The note the chord is built on.
 ---

@@ -42,6 +42,8 @@ Rosalita (Come Out Tonight) - Bruce Springsteen
 | `" "` | a variant note, which rides along with the numbering | `CH 4 "Down"` |
 | `[ ]` | a name that isn't one of the built-ins | `[Guitar Solo] 8` |
 | `#` | a key change from here | `BR 8 #A` |
+| *nothing under it* | the last section of this kind, again | `CH 4` |
+| `= OTHER` | the chords from another section | `IN 4 = VS` |
 
 ```kf+
 VS 4
@@ -152,20 +154,21 @@ Em D"hit"
 
 ## Directives
 
-A line starting with `/` sets something for the chart. The editor's command menu offers these, and the parser rejects one it doesn't know — so the list here is the list.
+A line starting with `\` sets something for the chart. Backslash, not slash: a line starting with `/` is a bar of rhythm slashes, and the two would be impossible to tell apart. The editor's command menu offers these, and the parser rejects one it doesn't know — so the list here is the list.
 
 | Directive | Means |
 | --- | --- |
-| `/duration 4` | the length every chord takes unless it says otherwise |
-| `/push standard` | how a pushed chord divides the beat |
-| `/swing straight` | straight, triplet, or a ratio |
-| `/smart_repeats = true` | group repeated phrases under repeat signs |
-| `/auto_rhythm_slashes = true` | fill long chords with quarter-note slashes |
-| `/push_alters_rhythm = true` | a push changes the notation, not just the symbol |
-| `/alias name value` | give a name to a run of chart text |
+| `\duration 4` | the length every chord takes unless it says otherwise |
+| `\push standard` | how a pushed chord divides the beat |
+| `\swing straight` | straight, triplet, or a ratio |
+| `\smart_repeats = true` | group repeated phrases under repeat signs |
+| `\auto_rhythm_slashes = true` | fill long chords with quarter-note slashes |
+| `\push_alters_rhythm = true` | a push changes the notation, not just the symbol |
+| `\progression G B C Cm` | the chords a section falls back to when it names none |
+| `\alias name value` | give a name to a run of chart text |
 
 ```kf+
-/duration 2
+\duration 2
 
 VS 2
 G C D Em

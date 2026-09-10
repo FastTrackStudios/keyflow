@@ -16,7 +16,7 @@ pub static THRILLER: Pattern = Pattern::new(
     r#"Thriller
 Dirty Loops, Cory Wong
 120bpm 4/4 #Ab
-/push = triplet
+\push = triplet
 
 COUNT 2
 

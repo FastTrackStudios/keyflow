@@ -8,10 +8,17 @@ pub struct ChartParser<'a> {
     chart: &'a mut Chart,
     aliases: HashMap<String, String>,
     melody_octave_memory: Option<u8>,
-    /// Chart-wide default duration set by a top-level `/Duration` directive
+    /// Chart-wide default duration set by a top-level `\Duration` directive
     /// (before any section). Each section starts from this default unless it
-    /// overrides with its own `/Duration`. `None` means no global default.
+    /// overrides with its own `\Duration`. `None` means no global default.
     default_duration: Option<String>,
+    /// Chart-wide chord progression set by a top-level `\progression` line.
+    ///
+    /// The fallback for a section that names no chords and has nothing to
+    /// recall. Kept as the source text rather than as measures: the key in
+    /// force at the section decides how scale-degree chords resolve, so it is
+    /// parsed where it is used, not where it is written.
+    default_progression: Option<String>,
     /// Running tally of the chart's notation system, accumulated from chord
     /// lines as they're parsed. Used as the fallback scope (after the current
     /// line) when resolving an ambiguous `b<digit>` root — see
@@ -32,6 +39,7 @@ impl<'a> ChartParser<'a> {
             aliases: HashMap::new(),
             melody_octave_memory: None,
             default_duration: None,
+            default_progression: None,
             chart_letter_votes: 0,
             chart_degree_votes: 0,
             section_beats_offset: 0.0,

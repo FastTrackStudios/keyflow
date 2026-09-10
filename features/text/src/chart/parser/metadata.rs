@@ -33,7 +33,7 @@ impl<'a> ChartParser<'a> {
             }
 
             // Check for settings (lines starting with /)
-            if lines[idx].starts_with('/') {
+            if lines[idx].starts_with('\\') {
                 self.parse_setting(lines[idx])?;
                 idx += 1;
                 continue;
@@ -109,7 +109,7 @@ impl<'a> ChartParser<'a> {
             }
 
             // Check for settings (lines starting with /)
-            if lines[idx].starts_with('/') {
+            if lines[idx].starts_with('\\') {
                 self.parse_setting(lines[idx])?;
                 idx += 1;
                 continue;
@@ -176,7 +176,7 @@ impl<'a> ChartParser<'a> {
             }
 
             // Check for settings (lines starting with /)
-            if lines[idx].starts_with('/') {
+            if lines[idx].starts_with('\\') {
                 self.parse_setting(lines[idx])?;
                 idx += 1;
                 continue;
@@ -355,21 +355,35 @@ impl<'a> ChartParser<'a> {
         Tempo::try_from_bpm(bpm).ok()
     }
 
-    /// Parse a setting line (e.g., "/SMART_REPEATS=true")
+    /// Parse a directive line (e.g. `\SMART_REPEATS=true`).
     pub(super) fn parse_setting(&mut self, line: &str) -> Result<(), String> {
         if let Some((name, value)) = Self::parse_alias_declaration(line) {
             self.aliases.insert(name, value);
             return Ok(());
         }
 
-        // A top-level `/Duration` (before any section) sets a chart-wide default
+        // A top-level `\Duration` (before any section) sets a chart-wide default
         // duration applied to every section unless that section overrides it.
         let trimmed = line.trim();
         if let Some(value) = trimmed
-            .strip_prefix("/duration ")
-            .or_else(|| trimmed.strip_prefix("/Duration "))
+            .strip_prefix("\\duration ")
+            .or_else(|| trimmed.strip_prefix("\\Duration "))
         {
             self.default_duration = Some(value.trim().to_string());
+            return Ok(());
+        }
+
+        // `\progression G B C Cm` — the chords a section falls back to when it
+        // names none and has nothing to recall. A song like *Creep* is four
+        // chords and a form; this lets the chart be the form.
+        if let Some(value) = trimmed
+            .strip_prefix("\\progression ")
+            .or_else(|| trimmed.strip_prefix("\\Progression "))
+        {
+            let value = value.trim();
+            if !value.is_empty() {
+                self.default_progression = Some(value.to_string());
+            }
             return Ok(());
         }
 
@@ -407,8 +421,8 @@ impl<'a> ChartParser<'a> {
             return None;
         }
 
-        // Make sure this isn't a setting line (those start with /)
-        if basic.starts_with('/') {
+        // Make sure this isn't a directive line (those start with a backslash)
+        if basic.starts_with('\\') {
             return None;
         }
 
@@ -520,7 +534,7 @@ impl<'a> ChartParser<'a> {
             }
 
             // Check for settings (lines starting with /)
-            if lines[idx].starts_with('/') {
+            if lines[idx].starts_with('\\') {
                 self.parse_setting(lines[idx])?;
                 idx += 1;
                 continue;

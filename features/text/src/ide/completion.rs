@@ -58,7 +58,7 @@ pub enum CompletionKind {
     Quality,
     /// Section header (`VS`, `CH`, `IN`, `Bridge`).
     Section,
-    /// Slash command (`/fermata`, `/accent`).
+    /// Slash command (`\fermata`, `\accent`).
     Command,
     /// Melody-variable recall (`$mainRiff`).
     MelodyVar,

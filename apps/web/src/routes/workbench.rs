@@ -246,27 +246,25 @@ mod tests {
         for spec in DIRECTIVES {
             assert!(
                 page.source.contains(spec.example),
-                "the cheatsheet is missing `{}` — add the row `| `{}` | {} |`",
+                "the cheatsheet is missing `{}` — add the row for `{}`: {}",
                 spec.key,
                 spec.example,
                 spec.summary
             );
         }
 
-        // And nothing invented: every `/word` in the table is a real one.
-        // A bare `` `/` `` is the time-signature and slash rows in the other
-        // tables, not a directive, so a key has to start with a letter.
+        // And nothing invented: every `\word` in the table is a real one.
         let listed: Vec<&str> = page
             .source
             .lines()
-            .filter_map(|line| line.trim().strip_prefix("| `/"))
+            .filter_map(|line| line.trim().strip_prefix("| `\\\\"))
             .filter_map(|rest| rest.split([' ', '`', '=']).next())
             .filter(|key| key.starts_with(|c: char| c.is_ascii_alphabetic()))
             .collect();
         for key in listed {
             assert!(
                 DIRECTIVES.iter().any(|d| d.key == key),
-                "the cheatsheet offers `/{key}`, which the parser would reject"
+                "the cheatsheet offers `\\{key}`, which the parser would reject"
             );
         }
     }

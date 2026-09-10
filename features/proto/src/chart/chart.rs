@@ -322,7 +322,7 @@ impl Chart {
 
         // 3. Settings
         if self.settings.smart_repeats() {
-            output.push_str("/SMART_REPEATS=true\n");
+            output.push_str("\\SMART_REPEATS=true\n");
         }
 
         // 4. Sections (melody variables are output at the start of the first section)
@@ -707,7 +707,7 @@ impl Chart {
         for command in &chord.commands {
             match command {
                 super::commands::Command::Fermata => {
-                    output.push_str(" /fermata");
+                    output.push_str(" \\fermata");
                 }
                 super::commands::Command::Accent | super::commands::Command::AccentOnPush => {
                     // Both accent types output the same inline syntax

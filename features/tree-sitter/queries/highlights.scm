@@ -54,7 +54,7 @@
 (time_signature_token) @number
 (key_signature) @attribute
 
-;; ---- Config / `/push = triplet` -------------------------------------------
+;; ---- Config / `\push = triplet` -------------------------------------------
 (config_directive
   name: (config_name) @keyword.control)
 (config_directive

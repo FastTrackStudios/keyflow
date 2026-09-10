@@ -193,6 +193,7 @@ impl<'a> ChartParser<'a> {
                 let section_type = parsed.section_type;
                 let measure_expr = parsed.measure_expr;
                 let section_comment = parsed.comment;
+                let same_as = parsed.same_as;
 
                 // A key change written on the header line (`BR 8 #G`) takes
                 // effect at the start of this section, before its chords parse,
@@ -238,9 +239,12 @@ impl<'a> ChartParser<'a> {
                         if let Some(count) = measure_count {
                             vec![self.empty_measure_with_active_time_signature(); count]
                         } else {
-                            self.templates
-                                .recall_transposed(&section_type, self.current_key.as_ref())
-                                .unwrap_or_default()
+                            self.recall_section_measures(
+                                &section_type,
+                                same_as.as_ref(),
+                                measure_count,
+                            )
+                            .unwrap_or_default()
                         }
                     } else {
                         // Has inline content - enter section (clears section memory for non-first sections)
@@ -258,21 +262,9 @@ impl<'a> ChartParser<'a> {
                             }
                         }
 
-                        // Save as template if not Intro/Outro/Pre/Post
-                        if !matches!(
-                            section_type,
-                            SectionType::Intro
-                                | SectionType::Outro
-                                | SectionType::Pre(_)
-                                | SectionType::Post(_)
-                        ) {
-                            let current_key = self.current_key.clone();
-                            self.templates.store(
-                                &section_type,
-                                &parsed_measures,
-                                current_key.as_ref(),
-                            );
-                        }
+                        let current_key = self.current_key.clone();
+                        self.templates
+                            .store(&section_type, &parsed_measures, current_key.as_ref());
 
                         // Complete first section if this was the first section
                         if was_first_section {
@@ -294,6 +286,7 @@ impl<'a> ChartParser<'a> {
                         measure_count,
                         is_subsection,
                         section_comment,
+                        same_as,
                     )?;
                 }
             } else if looks_like_chord_content(line) {
@@ -427,6 +420,69 @@ impl<'a> ChartParser<'a> {
     }
 
     /// Parse a section and its content
+    /// The measures an empty section header stands for.
+    ///
+    /// `same_as` is the explicit `= OTHER` on the header, and it wins outright
+    /// — the writer named the section they meant, so there is nothing to
+    /// second-guess.
+    ///
+    /// Without one, a bare header recalls a section of its *own* type: a `CH`
+    /// with nothing under it is the chorus again. Intro, Outro and the
+    /// Pre/Post pair are left out of that. They are the sections a song tends
+    /// to have exactly one of, and where a second one exists it is usually a
+    /// variation rather than a repeat — silently copying the first is a
+    /// surprise, and `IN 4 = IN` says it out loud for the cases that want it.
+    fn recall_section_measures(
+        &mut self,
+        section_type: &SectionType,
+        same_as: Option<&SectionType>,
+        measure_count: Option<usize>,
+    ) -> Option<Vec<Measure>> {
+        if let Some(source) = same_as {
+            return self
+                .templates
+                .recall_transposed(source, self.current_key.as_ref());
+        }
+
+        let own_type_recall = !matches!(
+            section_type,
+            SectionType::Intro | SectionType::Outro | SectionType::Pre(_) | SectionType::Post(_)
+        );
+        if own_type_recall {
+            if let Some(measures) = self
+                .templates
+                .recall_transposed(section_type, self.current_key.as_ref())
+            {
+                return Some(measures);
+            }
+        }
+
+        self.default_progression_measures(section_type, measure_count)
+    }
+
+    /// The chart-wide `\progression`, laid out to fill this section.
+    ///
+    /// Parsed here rather than where it was written, so scale-degree chords
+    /// resolve against the key in force at *this* section. Shorter than the
+    /// section, it repeats — four chords under an eight-bar verse is two times
+    /// round, which is what writing one progression for a whole song means.
+    fn default_progression_measures(
+        &mut self,
+        section_type: &SectionType,
+        measure_count: Option<usize>,
+    ) -> Option<Vec<Measure>> {
+        let line = self.default_progression.clone()?;
+        let pattern = self
+            .parse_section_measures(&[&line], section_type, None)
+            .ok()
+            .filter(|m| !m.is_empty())?;
+
+        let Some(count) = measure_count else {
+            return Some(pattern);
+        };
+        Some(pattern.iter().cloned().cycle().take(count).collect())
+    }
+
     pub(super) fn parse_section_content(
         &mut self,
         lines: &[&str],
@@ -435,6 +491,7 @@ impl<'a> ChartParser<'a> {
         measure_count: Option<usize>,
         is_subsection: bool,
         comment: Option<String>,
+        same_as: Option<SectionType>,
     ) -> Result<usize, String> {
         use crate::chord::{ChordRhythm, LilySyntax};
 
@@ -493,16 +550,16 @@ impl<'a> ChartParser<'a> {
 
         for line in &content_lines {
             let trimmed = line.trim();
-            // Check if this looks like a settings line:
-            // - Starts with '/' and contains '=' (e.g., "/PUSH=8t")
-            // - Starts with '/push ' (space-separated syntax, e.g., "/push 4")
-            let is_setting_line = trimmed.starts_with('/')
+            // Check if this looks like a directive line:
+            // - Starts with '\\' and contains '=' (e.g., "\\PUSH=8t")
+            // - Starts with '\\push ' (space-separated syntax, e.g., "\\push 4")
+            let is_setting_line = trimmed.starts_with('\\')
                 && (trimmed.contains('=')
-                    || trimmed.to_lowercase().starts_with("/push ")
-                    || trimmed.to_lowercase().starts_with("/chordlength "));
+                    || trimmed.to_lowercase().starts_with("\\push ")
+                    || trimmed.to_lowercase().starts_with("\\chordlength "));
 
             if is_setting_line {
-                if !trimmed.to_lowercase().starts_with("/chordlength ") {
+                if !trimmed.to_lowercase().starts_with("\\chordlength ") {
                     // This is a settings line - apply it temporarily
                     if let Err(e) = self.settings.parse_setting_line(line) {
                         tracing::warn!("Failed to parse section setting '{}': {}", line, e);
@@ -524,9 +581,8 @@ impl<'a> ChartParser<'a> {
 
         if track_groups.is_empty() {
             // No explicit content - prefer template recall over empty measures
-            let template_measures = self
-                .templates
-                .recall_transposed(&section_type, self.current_key.as_ref());
+            let template_measures =
+                self.recall_section_measures(&section_type, same_as.as_ref(), measure_count);
 
             let measures = if let Some(mut template) = template_measures {
                 // Have a template - optionally adjust to measure_count
@@ -614,21 +670,17 @@ impl<'a> ChartParser<'a> {
                                 }
                             }
 
-                            // Save as template if not Intro/Outro/Pre/Post
-                            if !matches!(
-                                section_type,
-                                SectionType::Intro
-                                    | SectionType::Outro
-                                    | SectionType::Pre(_)
-                                    | SectionType::Post(_)
-                            ) {
-                                let current_key = self.current_key.clone();
-                                self.templates.store(
-                                    &section_type,
-                                    &parsed_measures,
-                                    current_key.as_ref(),
-                                );
-                            }
+                            // Every section is stored. Which ones an *empty*
+                            // header may recall on its own is decided at
+                            // recall time (see `recall_section_measures`);
+                            // storing them all is what lets `INST 8 = IN`
+                            // name one explicitly.
+                            let current_key = self.current_key.clone();
+                            self.templates.store(
+                                &section_type,
+                                &parsed_measures,
+                                current_key.as_ref(),
+                            );
                         }
 
                         let mut track = if track_type == TrackType::Chords {
@@ -693,7 +745,7 @@ impl<'a> ChartParser<'a> {
         self.sections.push(chart_section);
 
         // Restore settings to pre-section state if any section settings were applied
-        // This ensures settings like /push=4 inside a section don't leak to subsequent sections
+        // This ensures settings like \push=4 inside a section don't leak to subsequent sections
         if has_section_settings {
             self.settings.restore(settings_checkpoint);
         }
@@ -714,7 +766,15 @@ impl<'a> ChartParser<'a> {
         let section_type = SectionType::Pre(Box::new(SectionType::Chorus));
         let measure_count = self.pre_post_measure_count(&section_type, parts.get(1).copied());
 
-        self.parse_section_content(lines, start_idx, section_type, measure_count, false, None)
+        self.parse_section_content(
+            lines,
+            start_idx,
+            section_type,
+            measure_count,
+            false,
+            None,
+            None,
+        )
     }
 
     /// Resolve the bar count for a bare `pre`/`post` line, threading the
@@ -750,7 +810,15 @@ impl<'a> ChartParser<'a> {
         let section_type = SectionType::Post(Box::new(SectionType::Chorus));
         let measure_count = self.pre_post_measure_count(&section_type, parts.get(1).copied());
 
-        self.parse_section_content(lines, start_idx, section_type, measure_count, false, None)
+        self.parse_section_content(
+            lines,
+            start_idx,
+            section_type,
+            measure_count,
+            false,
+            None,
+            None,
+        )
     }
 }
 

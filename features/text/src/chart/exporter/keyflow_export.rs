@@ -61,7 +61,7 @@ pub fn chart_to_keyflow(chart: &Chart) -> String {
         out.push_str(&section_header(section, measures.len()));
         out.push('\n');
         if let Some(rhythm) = &section_chord_length {
-            out.push_str("/ChordLength ");
+            out.push_str("\\ChordLength ");
             out.push_str(&chord_length_to_syntax(
                 rhythm,
                 measures

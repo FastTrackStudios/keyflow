@@ -3,7 +3,7 @@
 //! Tests the extended push/pull syntax including:
 //! - 't triplet shortcut: 'tC = triplet eighth push
 //! - ':N tuplet syntax: ':5C = quintuplet push
-//! - /push setting for default push mode
+//! - \push setting for default push mode
 
 use keyflow::chord::{PushPullAmount, PushPullBase};
 
@@ -202,7 +202,7 @@ fn test_push_setting_triplet() {
     let input = r#"
 Default Triplet Push Test - Artist
 120bpm 4/4 #C
-/push = triplet
+\push = triplet
 
 VS 4
 'C D 'Em F
@@ -220,7 +220,7 @@ VS 4
         .find(|c| c.full_symbol == "C")
         .expect("Should find C chord in measure 0");
 
-    // With /push = triplet, 'C should be triplet eighth push (not standard)
+    // With \push = triplet, 'C should be triplet eighth push (not standard)
     if let Some((is_push, amount)) = &chord_c.push_pull {
         assert!(*is_push, "Expected push notation");
         assert_eq!(amount.level, 1);
@@ -230,7 +230,7 @@ VS 4
             "Expected triplet base from setting"
         );
     } else {
-        panic!("Expected push_pull for 'C with /push=triplet, got None");
+        panic!("Expected push_pull for 'C with \\push=triplet, got None");
     }
 }
 
@@ -239,7 +239,7 @@ fn test_push_setting_quintuplet() {
     let input = r#"
 Default Quintuplet Push Test - Artist
 120bpm 4/4 #C
-/push = 5
+\push = 5
 
 VS 4
 'C D ''Em F
@@ -257,7 +257,7 @@ VS 4
         .find(|c| c.full_symbol == "C")
         .expect("Should find C chord in measure 0");
 
-    // With /push = 5, 'C should be quintuplet eighth push
+    // With \push = 5, 'C should be quintuplet eighth push
     if let Some((is_push, amount)) = &chord_c.push_pull {
         assert!(*is_push, "Expected push notation");
         assert_eq!(amount.level, 1);
@@ -267,7 +267,7 @@ VS 4
             "Expected quintuplet base from setting"
         );
     } else {
-        panic!("Expected push_pull for 'C with /push=5, got None");
+        panic!("Expected push_pull for 'C with \\push=5, got None");
     }
 
     // ''Em should be quintuplet sixteenth push
@@ -282,7 +282,7 @@ VS 4
             "Expected quintuplet base from setting"
         );
     } else {
-        panic!("Expected push_pull for ''Em with /push=5, got None");
+        panic!("Expected push_pull for ''Em with \\push=5, got None");
     }
 }
 

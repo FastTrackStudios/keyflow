@@ -162,12 +162,14 @@ module.exports = grammar({
     time_signature_token: ($) => /[0-9]+\/[0-9]+/,
     key_signature: ($) => /[#b][A-G][b#]?m?(?:in)?/,
 
-    // -------------------------------------------------- `/push = triplet`
+    // -------------------------------------------------- `\push = triplet`
+    // Backslash, not slash: a line opening with `/` is a bar of rhythm
+    // slashes, and the two would be impossible to tell apart.
     config_directive: ($) =>
       seq(
-        "/",
+        "\\",
         field("name", $.config_name),
-        optional(seq("=", field("value", $.config_value))),
+        optional(seq(choice("=", /[ \t]+/), field("value", $.config_value))),
         $._eol,
       ),
     config_name: ($) => /[a-zA-Z_][a-zA-Z0-9_]*/,

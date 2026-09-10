@@ -18,7 +18,7 @@ pub const EMPTY_CHART: &str = r#"Song Title - Artist Name
 pub const EXAMPLE_THRILLER: &str = r#"Thriller - Dirty Loops, Cory Wong
 Transcribed By: Cody Wright
 120bpm 4/4 #Ab
-/push = triplet
+\push = triplet
 
 COUNT 2
 
@@ -69,7 +69,7 @@ Interlude 8
 Cm . . . . . . .
 
 Interlude 8 "HORNS"
-/push 4
+\push 4
 'Cm . 'Cm7b5 . 'Cm Cm/maj7  'B/C .
 
 Interlude 8 "WINDS"

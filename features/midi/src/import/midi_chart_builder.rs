@@ -85,7 +85,7 @@ pub fn generate_chart_text(midi: &MidiFile, config: &MidiChartConfig) -> String 
     // Detect chords from MIDI notes (dequantized if swing is known)
     let detected = detect_chords_from_notes(midi, config, swing);
 
-    // Determine if we should use /push = triplet
+    // Determine if we should use \push = triplet
     // If swing is triplet (~0.667), we know it's a triplet feel — skip heuristic
     let use_triplet_setting = if swing.is_some_and(|s| (s - 0.6667).abs() < 0.05) {
         true
@@ -111,14 +111,14 @@ pub fn generate_chart_text(midi: &MidiFile, config: &MidiChartConfig) -> String 
         key_str,
     ));
     if use_triplet_setting {
-        output.push_str("/push = triplet\n");
+        output.push_str("\\push = triplet\n");
     }
     // Emit swing setting if known
     if let Some(s) = swing {
         if (s - 0.6667).abs() < 0.05 {
-            output.push_str("/swing = triplet\n");
+            output.push_str("\\swing = triplet\n");
         } else if (s - 0.5).abs() > 0.01 {
-            output.push_str(&format!("/swing = {:.4}\n", s));
+            output.push_str(&format!("\\swing = {:.4}\n", s));
         }
     }
     output.push('\n');
@@ -181,7 +181,7 @@ pub fn generate_chart_text(midi: &MidiFile, config: &MidiChartConfig) -> String 
             && use_triplet_setting
             && push_type == "4"
         {
-            output.push_str("/push 4\n");
+            output.push_str("\\push 4\n");
         }
 
         // Handle COUNT section specially - just shows silence
@@ -1126,7 +1126,7 @@ fn detect_section_push_type(
         }
     }
 
-    // Require a minimum number of quarter pushes to declare /push 4,
+    // Require a minimum number of quarter pushes to declare \push 4,
     // and no triplet pushes in the section
     if quarter_pushes >= 2 && triplet_pushes == 0 {
         Some("4".to_string())

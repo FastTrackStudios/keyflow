@@ -38,8 +38,8 @@ impl Highlighter {
             return Self::highlight_comment_line(line);
         }
 
-        // Check for config directive lines (e.g., /push = triplet)
-        if line_trimmed.starts_with('/') {
+        // Check for config directive lines (e.g., \push = triplet)
+        if line_trimmed.starts_with('\\') {
             return Self::highlight_config_directive(line);
         }
 
@@ -89,7 +89,7 @@ impl Highlighter {
         spans
     }
 
-    /// Highlight a config directive line (e.g., /push = triplet).
+    /// Highlight a config directive line (e.g., \push = triplet).
     ///
     /// These are parser configuration lines that set rendering options.
     /// We highlight the entire line as a command/comment style.

@@ -344,7 +344,7 @@ pub struct ChartLayoutConfig {
     /// - A half note chord (2 beats) becomes 2 quarter slashes
     ///
     /// This is standard notation for master rhythm charts.
-    /// Can be disabled with `/AUTO_RHYTHM_SLASHES=false` in the chart.
+    /// Can be disabled with `\AUTO_RHYTHM_SLASHES=false` in the chart.
     pub auto_rhythm_slashes: bool,
     /// Show measure numbers above the first measure of each system.
     /// When true, displays the measure number (accounting for offset) above bars.

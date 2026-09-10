@@ -32,7 +32,7 @@ pub struct BehavioralFlags {
     /// - A half note chord (2 beats) becomes 2 quarter slashes
     ///
     /// This is the standard notation for master rhythm charts, making them
-    /// easier to read. Can be disabled via `/AUTO_RHYTHM_SLASHES=false` for
+    /// easier to read. Can be disabled via `\AUTO_RHYTHM_SLASHES=false` for
     /// specific sections where sustained chords (diamonds) are desired.
     pub auto_rhythm_slashes: bool,
 
@@ -61,7 +61,7 @@ pub struct BehavioralFlags {
     /// The apostrophe is rendered in a contrasting color (red) for visibility.
     /// This mode is simpler to read but less rhythmically precise.
     ///
-    /// Can be configured via `/PUSH_ALTERS_RHYTHM=false` in the chart.
+    /// Can be configured via `\PUSH_ALTERS_RHYTHM=false` in the chart.
     pub push_alters_rhythm: bool,
 
     /// Draw a simile bar as the `repeat1Bar` mark rather than as its chords.

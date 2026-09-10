@@ -1,7 +1,7 @@
 //! Chart Commands
 //!
 //! Special commands that can be applied to chords, melodies, or rhythms
-//! Commands can be specified with slash syntax (/fermata) or shorthand (->)
+//! Commands can be specified with slash syntax (\fermata) or shorthand (->)
 
 use facet::Facet;
 use std::fmt;
@@ -47,9 +47,12 @@ pub enum Command {
 }
 
 impl Command {
-    /// Parse a command from a slash notation (e.g., "/fermata", "/accent")
+    /// Parse a command written as a keyword — `\fermata`, `\accent`.
+    ///
+    /// Backslash, not slash: inside a chord line a leading `/` is rhythm, and
+    /// `/ fermata` would have to be told apart from a bar of slashes.
     pub fn parse_slash(text: &str) -> Option<Self> {
-        let text = text.trim().trim_start_matches('/').trim().to_lowercase();
+        let text = text.trim().trim_start_matches('\\').trim().to_lowercase();
 
         match text.as_str() {
             "fermata" => Some(Command::Fermata),
@@ -148,20 +151,23 @@ mod tests {
 
     #[test]
     fn test_parse_fermata() {
-        assert_eq!(Command::parse_slash("/fermata"), Some(Command::Fermata));
-        assert_eq!(Command::parse_slash("/FERMATA"), Some(Command::Fermata));
-        assert_eq!(Command::parse_slash("  /fermata  "), Some(Command::Fermata));
+        assert_eq!(Command::parse_slash("\\fermata"), Some(Command::Fermata));
+        assert_eq!(Command::parse_slash("\\FERMATA"), Some(Command::Fermata));
+        assert_eq!(
+            Command::parse_slash("  \\fermata  "),
+            Some(Command::Fermata)
+        );
     }
 
     #[test]
     fn test_parse_accent() {
-        assert_eq!(Command::parse_slash("/accent"), Some(Command::Accent));
-        assert_eq!(Command::parse_slash("/ACCENT"), Some(Command::Accent));
+        assert_eq!(Command::parse_slash("\\accent"), Some(Command::Accent));
+        assert_eq!(Command::parse_slash("\\ACCENT"), Some(Command::Accent));
     }
 
     #[test]
     fn test_parse_invalid() {
-        assert_eq!(Command::parse_slash("/unknown"), None);
+        assert_eq!(Command::parse_slash("\\unknown"), None);
         assert_eq!(Command::parse_slash("not_a_command"), None);
     }
 
@@ -201,9 +207,9 @@ mod tests {
     #[test]
     fn test_parse_slash_stop() {
         // Slash commands apply to previous chord, so they produce "after" variants
-        assert_eq!(Command::parse_slash("/stop"), Some(Command::StopAfter));
+        assert_eq!(Command::parse_slash("\\stop"), Some(Command::StopAfter));
         assert_eq!(
-            Command::parse_slash("/stopgroove"),
+            Command::parse_slash("\\stopgroove"),
             Some(Command::StopGrooveAfter)
         );
     }

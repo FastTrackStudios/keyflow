@@ -41,7 +41,7 @@ impl<'a> ChartParser<'a> {
     }
 
     pub(super) fn parse_alias_declaration(line: &str) -> Option<(String, String)> {
-        let (name, value) = if let Some(rest) = line.strip_prefix("/alias ") {
+        let (name, value) = if let Some(rest) = line.strip_prefix("\\alias ") {
             let mut parts = rest.splitn(2, char::is_whitespace);
             (parts.next()?.trim(), parts.next()?.trim())
         } else {
@@ -147,8 +147,8 @@ impl<'a> ChartParser<'a> {
 
     fn parse_classical_dynamic_line(line: &str) -> Option<Dynamic> {
         let value = line
-            .strip_prefix("/dyn ")
-            .or_else(|| line.strip_prefix("/dynamic "))
+            .strip_prefix("\\dyn ")
+            .or_else(|| line.strip_prefix("\\dynamic "))
             .or_else(|| line.strip_prefix("dyn "))
             .or_else(|| line.strip_prefix("dynamic "))?
             .trim();
@@ -172,7 +172,7 @@ impl<'a> ChartParser<'a> {
 
     fn parse_hairpin_line(line: &str) -> Option<Hairpin> {
         let value = line
-            .strip_prefix("/hairpin ")
+            .strip_prefix("\\hairpin ")
             .or_else(|| line.strip_prefix("hairpin "))?
             .trim();
         let mut parts = value.split_whitespace();
@@ -240,7 +240,7 @@ impl<'a> ChartParser<'a> {
     /// verbatim. Returns the bass-note text (without the slash).
     ///
     /// Deliberately rejects rhythm slashes (`//`, `/.`), durations (`/4`),
-    /// commands (`/fermata`), and slash-family notation (`/maj7`).
+    /// commands (`\fermata`), and slash-family notation (`/maj7`).
     fn parse_floating_slash_bass(token: &str) -> Option<&str> {
         let bass = token.strip_prefix('/')?;
         if bass.is_empty() || bass.contains('/') {
@@ -1141,7 +1141,7 @@ impl<'a> ChartParser<'a> {
                 .any(|t| t.chars().all(|c| c == '/') && !t.is_empty());
             let has_chord_length_directive = tokens
                 .iter()
-                .any(|t| *t == "/ChordLength" || *t == "/duration" || *t == "/Duration");
+                .any(|t| *t == "\\ChordLength" || *t == "\\duration" || *t == "\\Duration");
 
             let chord_count = tokens
                 .iter()
@@ -1155,7 +1155,8 @@ impl<'a> ChartParser<'a> {
                     // Dot repeats ARE counted - they occupy time in the measure.
                     // `$name` melody-variable recall is NOT a chord — it shouldn't
                     // shrink the chord-duration share for the real chords in the bar.
-                    !t.starts_with('/')
+                    !t.starts_with('\\')
+                        && !t.starts_with('/')
                         && !t.starts_with('@')
                         && !t.starts_with('"')
                         && !t.starts_with('$')
@@ -1182,7 +1183,8 @@ impl<'a> ChartParser<'a> {
                             if melody_mask[*i] || annotation_mask[*i] {
                                 return false;
                             }
-                            !t.starts_with('/')
+                            !t.starts_with('\\')
+                            && !t.starts_with('/')
                             && !t.starts_with('@')
                             && !t.starts_with('"')
                             && !t.starts_with('$')
@@ -1247,7 +1249,8 @@ impl<'a> ChartParser<'a> {
                 let is_dot_repeat = *token == ".";
                 let is_measure_repeat = *token == "%";
                 let is_stop_token = Command::parse_stop_token(token).is_some();
-                if !token.starts_with('/')
+                if !token.starts_with('\\')
+                    && !token.starts_with('/')
                     && !token.starts_with('@')
                     && !token.starts_with('"')
                     && !token.starts_with('$')
@@ -1415,8 +1418,8 @@ impl<'a> ChartParser<'a> {
         let mut pending_hairpins: Vec<Hairpin> = Vec::new();
         let mut pending_staff_text: Vec<StaffText> = Vec::new();
 
-        // Seed each section from the chart-wide `/Duration` default (if any).
-        // A `/Duration` inside the section overrides these below.
+        // Seed each section from the chart-wide `\Duration` default (if any).
+        // A `\Duration` inside the section overrides these below.
         let mut section_chord_length: Option<(ChordRhythm, MusicalDuration)> =
             self.default_duration.as_ref().and_then(|v| {
                 Self::parse_chord_length_value(
@@ -1438,8 +1441,8 @@ impl<'a> ChartParser<'a> {
             }
 
             if let Some(value) = trimmed
-                .strip_prefix("/duration ")
-                .or_else(|| trimmed.strip_prefix("/Duration "))
+                .strip_prefix("\\duration ")
+                .or_else(|| trimmed.strip_prefix("\\Duration "))
             {
                 let value = value.trim();
                 section_chord_length = Self::parse_chord_length_value(
@@ -1451,8 +1454,8 @@ impl<'a> ChartParser<'a> {
             }
 
             if let Some(value) = trimmed
-                .strip_prefix("/octave ")
-                .or_else(|| trimmed.strip_prefix("/Octave "))
+                .strip_prefix("\\octave ")
+                .or_else(|| trimmed.strip_prefix("\\Octave "))
             {
                 let value = value.trim();
                 if let Some((octave, melody_block)) = value.split_once(char::is_whitespace) {
@@ -1521,7 +1524,7 @@ impl<'a> ChartParser<'a> {
                 continue;
             }
 
-            if let Some(value) = trimmed.strip_prefix("/ChordLength ") {
+            if let Some(value) = trimmed.strip_prefix("\\ChordLength ") {
                 section_chord_length = Self::parse_chord_length_value(
                     value.trim(),
                     self.time_signature.unwrap_or(TimeSignature::common_time()),
@@ -2108,7 +2111,7 @@ impl<'a> ChartParser<'a> {
                 continue;
             }
 
-            if *token_str == "/octave" {
+            if *token_str == "\\octave" {
                 if let Some(next) = tokens_str.get(token_idx + 1) {
                     line_melody_octave = next.parse::<u8>().ok().or(line_melody_octave);
                     skip_next_token = true;
@@ -2116,13 +2119,13 @@ impl<'a> ChartParser<'a> {
                 continue;
             }
 
-            if *token_str == "/ChordLength"
-                || *token_str == "/duration"
-                || *token_str == "/Duration"
+            if *token_str == "\\ChordLength"
+                || *token_str == "\\duration"
+                || *token_str == "\\Duration"
             {
                 if let Some(next) = tokens_str.get(token_idx + 1) {
                     chord_length_override = Self::parse_chord_length_value(next, time_sig);
-                    if *token_str == "/duration" || *token_str == "/Duration" {
+                    if *token_str == "\\duration" || *token_str == "\\Duration" {
                         default_melody_duration = Some(next.to_string());
                     }
                     skip_next_token = true;
@@ -2197,10 +2200,10 @@ impl<'a> ChartParser<'a> {
                 continue;
             }
 
-            // Check for command (e.g., "/fermata", "/accent")
-            // Commands are applied to the PREVIOUS chord
-            if token_str.starts_with('/') && display_override.is_none() {
-                if *token_str == "/octave" {
+            // Check for a command keyword (e.g. `\\fermata`, `\\accent`).
+            // Commands are applied to the PREVIOUS chord.
+            if token_str.starts_with('\\') && display_override.is_none() {
+                if *token_str == "\\octave" {
                     skip_next_token = true;
                     continue;
                 }
@@ -2237,7 +2240,13 @@ impl<'a> ChartParser<'a> {
                     }
                     continue;
                 }
+            }
 
+            // Slash runs are rhythm, not keywords: `/`, `//`, `//.`. They used
+            // to share the branch above, back when a command was also written
+            // with a leading slash — splitting the two is the whole reason
+            // commands moved to a backslash.
+            if token_str.starts_with('/') && display_override.is_none() {
                 // Check for standalone slash duration notation (e.g., "//", "///", "////")
                 // This allows syntax like "Ab9' //" where the slashes are separated by a space
                 //
@@ -3404,7 +3413,7 @@ impl<'a> ChartParser<'a> {
                     let token_has_explicit_length =
                         Self::token_has_explicit_chord_length(&chord_token);
                     // A rhythm-slash token immediately after this chord (`E/B /`)
-                    // sets its duration explicitly, so the `/Duration` default
+                    // sets its duration explicitly, so the `\Duration` default
                     // must NOT pre-fill it — otherwise the slash would only add a
                     // continuation on top of the default instead of overriding it.
                     let slash_token_follows = tokens_str.get(token_idx + 1).is_some_and(|t| {
@@ -5181,12 +5190,12 @@ mod tests {
 
     #[test]
     fn rhythm_slash_overrides_duration_default() {
-        // Under `/Duration 2` (half notes) a trailing rhythm slash sets that
+        // Under `\Duration 2` (half notes) a trailing rhythm slash sets that
         // chord's length explicitly, ignoring the default. From "Life Giving
         // Water": `E B/D# A/C# E/B / /G# / A B E B4` must tile into four 4/4
         // bars, with `E/B` (one beat, via `/`) and the floating `/G#` → `E/G#`
         // (one beat) both landing in measure 2.
-        let measures = parse_line("/Duration 2 E B/D# A/C# E/B / /G# / A B E B4");
+        let measures = parse_line("\\Duration 2 E B/D# A/C# E/B / /G# / A B E B4");
         assert_eq!(measures.len(), 4);
         let ts = TimeSignature::common_time();
 
@@ -5253,7 +5262,7 @@ Parallel Melody Test
 120bpm 6/8 #E
 
 opening 2
-<< /ChordLength 8. F#m7 G#m7 Amaj7 B | C#m ;
+<< \ChordLength 8. F#m7 G#m7 Amaj7 B | C#m ;
    m { <F# 'C#>4. <G# 'D#>4. <A 'E>4. <B 'F#>4. } >>
 "#;
         let chart = parse_chart(input).expect("Should parse");
@@ -5274,8 +5283,8 @@ opening 2
         let input = r##"
 Alias Test
 120bpm 4/4 #C
-/alias fb ^"4-3 2-1"
-/alias #fb ^"#4-3 2-1"
+\alias fb ^"4-3 2-1"
+\alias #fb ^"#4-3 2-1"
 
 Verse 2
 A<#fb>
@@ -5365,7 +5374,7 @@ C#m <fb> /. _<fb> /.
 
     #[test]
     fn chord_length_directive_applies_to_following_chords() {
-        let measures = parse_line("| /ChordLength /. C#m B/C# |");
+        let measures = parse_line("| \\ChordLength /. C#m B/C# |");
         let time_sig = TimeSignature::new(4, 4);
 
         assert_eq!(measures.len(), 1);
@@ -5390,7 +5399,7 @@ Chord Length Section
 120bpm 4/4 #C
 
 Intro 1
-/ChordLength 4.
+\ChordLength 4.
 | C#m B/C# |
 "#;
         let chart = parse_chart(input).expect("Should parse");
@@ -5411,7 +5420,7 @@ Duration Section
 120bpm 6/8 #C
 
 Intro 1
-/Duration 8.
+\Duration 8.
 << C#m B/C# A/C# G#m7/C# ;
    m { C# D# E F# } >>
 "#;
@@ -5434,19 +5443,19 @@ Intro 1
 
     #[test]
     fn global_duration_applies_to_sections_until_overridden() {
-        // A top-level `/Duration` (before any section) sets a chart-wide default
-        // that each section inherits; a section's own `/Duration` overrides it.
+        // A top-level `\Duration` (before any section) sets a chart-wide default
+        // that each section inherits; a section's own `\Duration` overrides it.
         let input = r#"
 Global Duration
 120bpm 4/4 #C
 
-/Duration 2
+\Duration 2
 
 VS 2
 C G Am F
 
 CH 2
-/Duration 4
+\Duration 4
 C E G Am Bm Dm F G
 "#;
         let chart = parse_chart(input).expect("Should parse");
@@ -5565,7 +5574,7 @@ Let Block Section
 
 let openingHits = {
   <<
-    /ChordLength 8. F#m7 G#m7 Amaj7 B ;
+    \ChordLength 8. F#m7 G#m7 Amaj7 B ;
     m { <F# 'C#>8. <G# 'D#>8. <A 'E>8. <B 'F#>8. }
   >>
 }
@@ -5598,8 +5607,8 @@ let chords = {
 
 let melody = {
   intro 2
-  /octave 3 m { C#2. }
-  /octave 2 m { <F# 'C#>8. <G# 'D#> <A 'E> <B 'F#> }
+  \octave 3 m { C#2. }
+  \octave 2 m { <F# 'C#>8. <G# 'D#> <A 'E> <B 'F#> }
 }
 
 << <chords> ; <melody> >>
@@ -5647,7 +5656,7 @@ Octave Carry
 120bpm 6/8 #E
 
 intro 1
-/octave 4
+\octave 4
 m { C#8. D# E F# }
 
 vs 1
@@ -5682,7 +5691,7 @@ let chords = {
 
 let melody = {
   intro
-  /octave 4
+  \octave 4
   C#2.
   <,,F# 'C#>8. <G# 'D#> <A 'E> <B 'F#>
 }
@@ -5939,7 +5948,7 @@ VS
 Thriller - Dirty Loops, Cory Wong
 Transcribed By: Cody Wright
 120bpm 4/4 #Ab
-/push = triplet
+\push = triplet
 
 COUNT 2
 

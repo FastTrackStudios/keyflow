@@ -10,7 +10,7 @@ files: VS Code, Zed, Helix, Neovim, Sublime LSP, Emacs `eglot` / `lsp-mode`.
 
 - **Diagnostics** — error squiggles with stable codes (`kf001-parse-failed`, …)
 - **Completion** — chord roots, qualities, section headers (`VS:`, `CH:`, …),
-  slash commands (`/fermata`, `/accent`, …), `$riff` melody-variable recall
+  slash commands (`\fermata`, `\accent`, …), `$riff` melody-variable recall
 - **Hover** — chord-token info, scale-degree resolution against the active key,
   melody-variable bodies
 - **Semantic tokens** — high-fidelity highlighting that mirrors the

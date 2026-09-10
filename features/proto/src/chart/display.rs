@@ -73,7 +73,7 @@ impl std::fmt::Display for Chart {
 
         // Default push command if set
         if let Some(ref default_push) = self.default_push_amount {
-            write!(f, "/push = ")?;
+            write!(f, "\\push = ")?;
             match &default_push.base {
                 PushPullBase::Standard => {
                     // Standard push (8th note)

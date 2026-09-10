@@ -59,50 +59,56 @@ pub struct DirectiveSpec {
 
 /// Every directive a chart may carry, in the order a menu should show them.
 ///
-/// Includes the two that are not [`ChartSetting`]s: `/duration`, which the
-/// text parser reads before settings get a look, and `/alias`, which is a
-/// naming form rather than a setting.
+/// Includes the three that are not [`ChartSetting`]s: `\duration` and
+/// `\progression`, which the text parser reads before settings get a look,
+/// and `\alias`, which is a naming form rather than a setting.
 pub const DIRECTIVES: &[DirectiveSpec] = &[
     DirectiveSpec {
         key: "duration",
         label: "Default duration",
-        example: "/duration 4",
+        example: "\\duration 4",
         summary: "the length every chord takes unless it says otherwise",
+    },
+    DirectiveSpec {
+        key: "progression",
+        label: "Default progression",
+        example: "\\progression G B C Cm",
+        summary: "the chords a section falls back to when it names none",
     },
     DirectiveSpec {
         key: "push",
         label: "Push feel",
-        example: "/push standard",
+        example: "\\push standard",
         summary: "how a pushed chord divides the beat",
     },
     DirectiveSpec {
         key: "swing",
         label: "Swing",
-        example: "/swing straight",
+        example: "\\swing straight",
         summary: "straight, triplet, or a ratio",
     },
     DirectiveSpec {
         key: "smart_repeats",
         label: "Smart repeats",
-        example: "/smart_repeats = true",
+        example: "\\smart_repeats = true",
         summary: "group repeated phrases under repeat signs",
     },
     DirectiveSpec {
         key: "auto_rhythm_slashes",
         label: "Auto rhythm slashes",
-        example: "/auto_rhythm_slashes = true",
+        example: "\\auto_rhythm_slashes = true",
         summary: "fill long chords with quarter-note slashes",
     },
     DirectiveSpec {
         key: "push_alters_rhythm",
         label: "Push alters rhythm",
-        example: "/push_alters_rhythm = true",
+        example: "\\push_alters_rhythm = true",
         summary: "a push changes the notation, not just the symbol",
     },
     DirectiveSpec {
         key: "alias",
         label: "Alias",
-        example: "/alias name value",
+        example: "\\alias name value",
         summary: "give a name to a run of chart text",
     },
 ];
@@ -160,14 +166,14 @@ impl ChartSettings {
         }
     }
 
-    /// Parse a setting line (e.g., "/SMART_REPEATS=true" or "/push 4")
+    /// Parse a directive line (e.g. `\SMART_REPEATS=true` or `\push 4`).
     ///
     /// Supports two syntaxes:
     /// - `/SETTING=value` - standard key=value format
-    /// - `/push 4` - space-separated format for push mode specifically
+    /// - `\push 4` - space-separated format for push mode specifically
     pub fn parse_setting_line(&mut self, line: &str) -> Result<(), String> {
-        // Remove leading slash and trim
-        let line = line.trim().trim_start_matches('/').trim();
+        // Remove the leading backslash and trim.
+        let line = line.trim().trim_start_matches('\\').trim();
 
         // Try splitting by '=' first (standard format)
         let (key, value): (String, String) = if let Some(eq_pos) = line.find('=') {
@@ -181,7 +187,7 @@ impl ChartSettings {
                 (upper.unwrap(), parts[1..].join(" "))
             } else {
                 return Err(format!(
-                    "Invalid setting format: '{}'. Expected /SETTING=value or /push <mode>",
+                    "Invalid setting format: '{}'. Expected \\SETTING=value or \\push <mode>",
                     line
                 ));
             }
@@ -434,9 +440,10 @@ mod tests {
     #[test]
     fn every_directive_example_parses() {
         for spec in DIRECTIVES {
-            // `/duration` and `/alias` are read by the text parser before
-            // settings see the line; the rest must round-trip through here.
-            if matches!(spec.key, "duration" | "alias") {
+            // `\duration`, `\progression` and `\alias` are read by the text
+            // parser before settings see the line; the rest must round-trip
+            // through here.
+            if matches!(spec.key, "duration" | "progression" | "alias") {
                 continue;
             }
             let mut settings = ChartSettings::new();
@@ -460,7 +467,7 @@ mod tests {
             let key = setting.directive_key();
             assert!(
                 DIRECTIVES.iter().any(|d| d.key == key),
-                "{setting:?} writes /{key}, which no DirectiveSpec describes"
+                "{setting:?} writes \\\\{key}, which no DirectiveSpec describes"
             );
         }
     }
@@ -470,8 +477,8 @@ mod tests {
     fn every_example_matches_its_key() {
         for spec in DIRECTIVES {
             assert!(
-                spec.example.starts_with(&format!("/{}", spec.key)),
-                "{:?} is not an example of /{}",
+                spec.example.starts_with(&format!("\\{}", spec.key)),
+                "{:?} is not an example of \\{}",
                 spec.example,
                 spec.key,
             );
@@ -488,14 +495,16 @@ mod tests {
     #[test]
     fn test_parse_smart_repeats_true() {
         let mut settings = ChartSettings::new();
-        settings.parse_setting_line("/SMART_REPEATS=true").unwrap();
+        settings.parse_setting_line("\\SMART_REPEATS=true").unwrap();
         assert!(settings.smart_repeats());
     }
 
     #[test]
     fn test_parse_smart_repeats_false() {
         let mut settings = ChartSettings::new();
-        settings.parse_setting_line("/SMART_REPEATS=false").unwrap();
+        settings
+            .parse_setting_line("\\SMART_REPEATS=false")
+            .unwrap();
         assert!(!settings.smart_repeats());
     }
 
@@ -504,51 +513,51 @@ mod tests {
         let mut settings = ChartSettings::new();
 
         // Test various true values
-        settings.parse_setting_line("/SMART_REPEATS=1").unwrap();
+        settings.parse_setting_line("\\SMART_REPEATS=1").unwrap();
         assert!(settings.smart_repeats());
 
-        settings.parse_setting_line("/SMART_REPEATS=yes").unwrap();
+        settings.parse_setting_line("\\SMART_REPEATS=yes").unwrap();
         assert!(settings.smart_repeats());
 
-        settings.parse_setting_line("/SMART_REPEATS=on").unwrap();
+        settings.parse_setting_line("\\SMART_REPEATS=on").unwrap();
         assert!(settings.smart_repeats());
 
         // Test various false values
-        settings.parse_setting_line("/SMART_REPEATS=0").unwrap();
+        settings.parse_setting_line("\\SMART_REPEATS=0").unwrap();
         assert!(!settings.smart_repeats());
 
-        settings.parse_setting_line("/SMART_REPEATS=no").unwrap();
+        settings.parse_setting_line("\\SMART_REPEATS=no").unwrap();
         assert!(!settings.smart_repeats());
 
-        settings.parse_setting_line("/SMART_REPEATS=off").unwrap();
+        settings.parse_setting_line("\\SMART_REPEATS=off").unwrap();
         assert!(!settings.smart_repeats());
     }
 
     #[test]
     fn test_parse_invalid_setting() {
         let mut settings = ChartSettings::new();
-        let result = settings.parse_setting_line("/UNKNOWN_SETTING=true");
+        let result = settings.parse_setting_line("\\UNKNOWN_SETTING=true");
         assert!(result.is_err());
     }
 
     #[test]
     fn test_parse_invalid_format() {
         let mut settings = ChartSettings::new();
-        let result = settings.parse_setting_line("/SMART_REPEATS");
+        let result = settings.parse_setting_line("\\SMART_REPEATS");
         assert!(result.is_err());
     }
 
     #[test]
     fn test_parse_invalid_bool() {
         let mut settings = ChartSettings::new();
-        let result = settings.parse_setting_line("/SMART_REPEATS=maybe");
+        let result = settings.parse_setting_line("\\SMART_REPEATS=maybe");
         assert!(result.is_err());
     }
 
     #[test]
     fn test_case_insensitive_setting_name() {
         let mut settings = ChartSettings::new();
-        settings.parse_setting_line("/smart_repeats=true").unwrap();
+        settings.parse_setting_line("\\smart_repeats=true").unwrap();
         assert!(settings.smart_repeats());
     }
 
@@ -556,7 +565,7 @@ mod tests {
     fn test_whitespace_handling() {
         let mut settings = ChartSettings::new();
         settings
-            .parse_setting_line("  /  SMART_REPEATS  =  true  ")
+            .parse_setting_line("  \\  SMART_REPEATS  =  true  ")
             .unwrap();
         assert!(settings.smart_repeats());
     }
@@ -564,21 +573,21 @@ mod tests {
     #[test]
     fn test_push_mode_standard() {
         let mut settings = ChartSettings::new();
-        settings.parse_setting_line("/push=standard").unwrap();
+        settings.parse_setting_line("\\push=standard").unwrap();
         assert!(matches!(settings.push_mode, PushPullBase::Standard));
     }
 
     #[test]
     fn test_push_mode_triplet() {
         let mut settings = ChartSettings::new();
-        settings.parse_setting_line("/push=triplet").unwrap();
+        settings.parse_setting_line("\\push=triplet").unwrap();
         assert!(matches!(settings.push_mode, PushPullBase::Triplet));
     }
 
     #[test]
     fn test_push_mode_duration_quarter() {
         let mut settings = ChartSettings::new();
-        settings.parse_setting_line("/push=4").unwrap();
+        settings.parse_setting_line("\\push=4").unwrap();
         match settings.push_mode {
             PushPullBase::Duration {
                 duration,
@@ -596,7 +605,7 @@ mod tests {
     #[test]
     fn test_push_mode_duration_eighth_triplet() {
         let mut settings = ChartSettings::new();
-        settings.parse_setting_line("/push=8t").unwrap();
+        settings.parse_setting_line("\\push=8t").unwrap();
         match settings.push_mode {
             PushPullBase::Duration {
                 duration,
@@ -614,7 +623,7 @@ mod tests {
     #[test]
     fn test_push_mode_duration_dotted() {
         let mut settings = ChartSettings::new();
-        settings.parse_setting_line("/push=4.").unwrap();
+        settings.parse_setting_line("\\push=4.").unwrap();
         match settings.push_mode {
             PushPullBase::Duration {
                 duration,
@@ -632,7 +641,7 @@ mod tests {
     #[test]
     fn test_push_mode_sixteenth() {
         let mut settings = ChartSettings::new();
-        settings.parse_setting_line("/push=16").unwrap();
+        settings.parse_setting_line("\\push=16").unwrap();
         match settings.push_mode {
             PushPullBase::Duration {
                 duration,
@@ -649,9 +658,9 @@ mod tests {
 
     #[test]
     fn test_push_mode_space_separated() {
-        // Test that "/push 4" works without equals sign
+        // Test that "\push 4" works without equals sign
         let mut settings = ChartSettings::new();
-        settings.parse_setting_line("/push 4").unwrap();
+        settings.parse_setting_line("\\push 4").unwrap();
         match settings.push_mode {
             PushPullBase::Duration {
                 duration,
@@ -666,7 +675,7 @@ mod tests {
         }
 
         // Also test with triplet modifier
-        settings.parse_setting_line("/push 8t").unwrap();
+        settings.parse_setting_line("\\push 8t").unwrap();
         match settings.push_mode {
             PushPullBase::Duration {
                 duration,
@@ -686,15 +695,17 @@ mod tests {
         let mut settings = ChartSettings::new();
 
         // Set to triplet mode
-        settings.parse_setting_line("/push=triplet").unwrap();
-        settings.parse_setting_line("/smart_repeats=true").unwrap();
+        settings.parse_setting_line("\\push=triplet").unwrap();
+        settings.parse_setting_line("\\smart_repeats=true").unwrap();
 
         // Create checkpoint
         let checkpoint = settings.checkpoint();
 
         // Change settings
-        settings.parse_setting_line("/push=standard").unwrap();
-        settings.parse_setting_line("/smart_repeats=false").unwrap();
+        settings.parse_setting_line("\\push=standard").unwrap();
+        settings
+            .parse_setting_line("\\smart_repeats=false")
+            .unwrap();
 
         // Verify changes took effect
         assert!(matches!(settings.push_mode, PushPullBase::Standard));
