@@ -207,6 +207,27 @@ fn the_last_name_in_a_header_is_the_one_it_points_at() {
     );
 }
 
+/// chordsheet.com writers space `PRE CHORUS` however they like, and a spaced
+/// one was coming out as a custom section — which then could not be recalled
+/// by anything that named it.
+#[test]
+fn a_spaced_pre_chorus_is_the_same_section_as_a_hyphenated_one() {
+    let chart = import_str(
+        "=PRE CHORUS\nA B\n=CHORUS\nC D\n=ALT CHORUS | PRE CHORUS PROGRESSION\n",
+        &ImportOptions::default(),
+    );
+    assert_eq!(
+        chart.sections[0].section.section_type,
+        SectionType::Pre(Box::new(SectionType::Chorus))
+    );
+    let recalled: Vec<String> = chart.sections[2]
+        .measures()
+        .iter()
+        .map(|m| m.chords[0].full_symbol.clone())
+        .collect();
+    assert_eq!(recalled, ["A", "B"], "the alt chorus takes the pre-chorus");
+}
+
 /// A form-only chart — headers and nothing else — is a real way people use the
 /// site, and the form is the whole content.
 #[test]

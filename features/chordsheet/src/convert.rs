@@ -806,6 +806,24 @@ fn duration_for(ticks: u32, denominator: u8) -> MusicalDuration {
     MusicalDuration::new(0, beats, subdivision)
 }
 
+/// `PRE CHORUS` → `pre-chorus`, so it lands on the same section type as
+/// `PRE-CHORUS` does.
+///
+/// chordsheet.com writers space these however they like, and a spaced one was
+/// coming out as a custom section — which then could not be recalled by
+/// anything that named it. Only `pre` and `post` are joined: they are the only
+/// two-word section names, and `SectionType::parse` matches loosely enough
+/// that joining anything else turns a phrase into whatever it ends with.
+fn hyphenate_pre_post(name: &str) -> String {
+    let words: Vec<&str> = name.split_whitespace().collect();
+    match words.as_slice() {
+        [first, second] if matches!(first.to_ascii_lowercase().as_str(), "pre" | "post") => {
+            format!("{first}-{second}")
+        }
+        _ => name.to_string(),
+    }
+}
+
 /// The last section name mentioned in a piece of header text.
 ///
 /// Two-word names are tried before one-word ones so `PRE CHORUS` resolves to
@@ -889,6 +907,7 @@ impl SectionHeader {
         }
 
         let section_type = SectionType::parse(base)
+            .or_else(|_| SectionType::parse(&hyphenate_pre_post(base)))
             .unwrap_or_else(|_| SectionType::Custom(custom_section_name(base)));
 
         Self {
