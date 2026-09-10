@@ -1681,6 +1681,48 @@ G D Em
 
     // endregion: --- Simile and direct repeat
 
+    // region: --- Staff text placement
+
+    fn text_on(chart: &crate::chart::Chart, measure: usize) -> Vec<String> {
+        chart.sections[0].measures()[measure]
+            .staff_text
+            .iter()
+            .map(|t| t.text.clone())
+            .collect()
+    }
+
+    /// Text between two chords belongs to the bar it opens, not the one it
+    /// follows — and text after a bar's chords belongs to that bar.
+    #[test]
+    fn staff_text_lands_on_the_bar_it_was_written_against() {
+        let opening =
+            parse_chart("T - A\n4/4\n\nvs 2\n| Bm / | ^\"Back to top\" !G / |\n").expect("parse");
+        assert!(text_on(&opening, 0).is_empty(), "not on the bar before");
+        assert_eq!(text_on(&opening, 1), ["Back to top"]);
+
+        let trailing =
+            parse_chart("T - A\n4/4\n\nvs 2\n| Bm / ^\"Ring out\" | !G / |\n").expect("parse");
+        assert_eq!(
+            text_on(&trailing, 0),
+            ["Ring out"],
+            "trailing text stays put"
+        );
+        assert!(text_on(&trailing, 1).is_empty());
+    }
+
+    /// A cue on a bar that also carries explicit durations used to vanish: the
+    /// auto-duration pass appended `_2` to `^"…"`, which no longer ends in a
+    /// quote and so stopped being staff text at all.
+    #[test]
+    fn staff_text_survives_a_bar_with_explicit_durations() {
+        let chart =
+            parse_chart("T - A\n4/4\n\nvs 1\n| ^\"Back to top\" !G_2 !A_2 |\n").expect("parse");
+        assert_eq!(text_on(&chart, 0), ["Back to top"]);
+        assert_eq!(chart.sections[0].measures()[0].chords.len(), 2);
+    }
+
+    // endregion: --- Staff text placement
+
     // region: --- Reusing a progression
 
     fn symbols(chart: &crate::chart::Chart, section: usize) -> Vec<String> {

@@ -1249,10 +1249,17 @@ impl<'a> ChartParser<'a> {
                 let is_dot_repeat = *token == ".";
                 let is_measure_repeat = *token == "%";
                 let is_stop_token = Command::parse_stop_token(token).is_some();
+                // `^"…"` and `_"…"` are staff text, not chords. Appending a
+                // duration to one leaves `^"Back to top"_2`, which no longer
+                // ends in a quote and so stops being staff text at all — the
+                // cue was silently dropped from any bar that also carried an
+                // explicit duration.
+                let is_annotation =
+                    token.starts_with('"') || token.starts_with("^\"") || token.starts_with("_\"");
                 if !token.starts_with('\\')
                     && !token.starts_with('/')
                     && !token.starts_with('@')
-                    && !token.starts_with('"')
+                    && !is_annotation
                     && !token.starts_with('$')
                     && !is_dot_repeat
                     && !is_measure_repeat
@@ -2166,11 +2173,23 @@ impl<'a> ChartParser<'a> {
 
             if let Some((text, placement)) = Self::parse_quoted_text_token(token_str) {
                 let beat = current_measure_beats.floor().max(0.0) as u8 + 1;
-                let target_measure = if current_measure.chords.is_empty()
+                // Text sitting between two chords belongs to the measure it
+                // opens, not the one it follows. `| Bm | ^"Back to top" G |`
+                // is a cue over the second bar — attaching it to whatever
+                // `measures.last()` happens to be put it over the first, and
+                // when the split parse gave each bar its own pass there was no
+                // previous measure to hold it and the cue was dropped
+                // altogether.
+                //
+                // An empty current measure that a barline *just* opened is the
+                // measure being written. One that is empty for any other
+                // reason means the text trails the bar before it.
+                let opens_this_measure = measure_was_created_by_separator || measures.is_empty();
+                let current_is_empty = current_measure.chords.is_empty()
                     && current_measure.rhythm_elements.is_empty()
                     && current_measure.figured_bass.is_empty()
-                    && current_measure.staff_text.is_empty()
-                {
+                    && current_measure.staff_text.is_empty();
+                let target_measure = if current_is_empty && !opens_this_measure {
                     measures.last_mut().unwrap_or(&mut current_measure)
                 } else {
                     &mut current_measure

@@ -162,6 +162,51 @@ fn an_empty_section_recalls_the_last_one_of_its_kind() {
     assert_eq!(recalled, ["C", "G", "Am", "F"]);
 }
 
+/// A header often names the section it borrows from rather than being one.
+/// `SOLO OVER CHORUS` is the chorus; `KEYS SOLO (SAME AS VERSE)` is the verse.
+/// Left alone those came out as an empty bar, which is the one reading that is
+/// certainly wrong — the writer said where the chords are.
+#[test]
+fn a_section_recalls_the_one_its_name_points_at() {
+    let chart = import_str(
+        "=VERSE\nA B C D\n=CHORUS\nE F G A\n=SOLO OVER CHORUS\n=KEYS SOLO (SAME AS VERSE)\n",
+        &ImportOptions::default(),
+    );
+    let symbols = |i: usize| -> Vec<String> {
+        chart.sections[i]
+            .measures()
+            .iter()
+            .map(|m| m.chords[0].full_symbol.clone())
+            .collect()
+    };
+    assert_eq!(symbols(2), symbols(1), "solo over chorus is the chorus");
+    assert_eq!(
+        symbols(3),
+        symbols(0),
+        "keys solo same as verse is the verse"
+    );
+}
+
+/// The *last* name in the header wins — "solo over chorus" is the chorus, not
+/// the solo — and a two-word name beats the one it ends with.
+#[test]
+fn the_last_name_in_a_header_is_the_one_it_points_at() {
+    let chart = import_str(
+        "=CHORUS\nA B C D\n=PRE-CHORUS\nE F G A\n=ALT CHORUS | PRE CHORUS PROGRESSION\n",
+        &ImportOptions::default(),
+    );
+    let recalled: Vec<String> = chart.sections[2]
+        .measures()
+        .iter()
+        .map(|m| m.chords[0].full_symbol.clone())
+        .collect();
+    assert_eq!(
+        recalled,
+        ["E", "F", "G", "A"],
+        "the pre-chorus, not the chorus"
+    );
+}
+
 /// A form-only chart — headers and nothing else — is a real way people use the
 /// site, and the form is the whole content.
 #[test]

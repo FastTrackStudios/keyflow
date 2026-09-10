@@ -267,14 +267,8 @@ impl<'a> Converter<'a> {
             // has the music the form promises, and keep whatever the author
             // wrote as the section comment.
             let recall = self
-                .chart
-                .sections
-                .iter()
-                .rev()
-                .find(|s| {
-                    s.section.section_type == self.section.section_type && !s.measures().is_empty()
-                })
-                .map(|s| s.measures().to_vec());
+                .recall_by_type(&self.section.section_type)
+                .or_else(|| self.recall_by_name());
             match recall {
                 Some(measures) => {
                     self.measures = measures;
@@ -302,6 +296,44 @@ impl<'a> Converter<'a> {
         self.repeat_open = None;
         self.open_volta = None;
         self.pending_volta = None;
+    }
+
+    /// The most recent section of this type that actually has bars.
+    fn recall_by_type(&self, section_type: &SectionType) -> Option<Vec<Measure>> {
+        self.chart
+            .sections
+            .iter()
+            .rev()
+            .find(|s| s.section.section_type == *section_type && !s.measures().is_empty())
+            .map(|s| s.measures().to_vec())
+    }
+
+    /// The section this one's *name* points at.
+    ///
+    /// A chordsheet.com header often names the section it borrows from rather
+    /// than being one: `SOLO OVER CHORUS`, `DOUBLE CHORUS`,
+    /// `KEYS SOLO (SAME AS VERSE)`, `ALT CHORUS | PRE CHORUS PROGRESSION`.
+    /// Left alone those come out as an empty bar, which is the one reading
+    /// that is certainly wrong — the writer told us where the chords are.
+    ///
+    /// The *last* section name in the header wins, because that is the object
+    /// of the phrase: "solo over chorus" is the chorus, not the solo. The
+    /// qualifier (a `(…)` or the part after a `|`) is read before the name
+    /// proper, since that is where the writer puts the correction.
+    fn recall_by_name(&self) -> Option<Vec<Measure>> {
+        let comment = self.section.comment.clone().unwrap_or_default();
+        let name = self.section.name.clone().unwrap_or_default();
+        for text in [comment.as_str(), name.as_str()] {
+            if let Some(section_type) = last_section_name(text) {
+                if section_type == self.section.section_type {
+                    continue;
+                }
+                if let Some(measures) = self.recall_by_type(&section_type) {
+                    return Some(measures);
+                }
+            }
+        }
+        None
     }
 
     fn drain_pending_text_onto_last(&mut self) {
@@ -772,6 +804,36 @@ fn duration_for(ticks: u32, denominator: u8) -> MusicalDuration {
     let beats = (ticks / beat) as i32;
     let subdivision = ((ticks % beat) * 1000 / beat).min(999) as i32;
     MusicalDuration::new(0, beats, subdivision)
+}
+
+/// The last section name mentioned in a piece of header text.
+///
+/// Two-word names are tried before one-word ones so `PRE CHORUS` resolves to
+/// the pre-chorus rather than to the chorus it ends with.
+fn last_section_name(text: &str) -> Option<SectionType> {
+    let words: Vec<String> = text
+        .split(|c: char| !c.is_alphanumeric() && c != '-')
+        .filter(|w| !w.is_empty())
+        .map(str::to_ascii_lowercase)
+        .collect();
+
+    for end in (1..=words.len()).rev() {
+        // `pre` and `post` are the only names that take a second word, and
+        // they have to be tried first or `PRE CHORUS` reads as the chorus.
+        // Nothing else is joined up: `SectionType::parse` matches loosely
+        // enough that `chorus-progression` comes back as a chorus, which
+        // would make any phrase ending in a section name into that section.
+        if end >= 2 && matches!(words[end - 2].as_str(), "pre" | "post") {
+            let pair = format!("{}-{}", words[end - 2], words[end - 1]);
+            if let Ok(section_type) = SectionType::parse(&pair) {
+                return Some(section_type);
+            }
+        }
+        if let Ok(section_type) = SectionType::parse(&words[end - 1]) {
+            return Some(section_type);
+        }
+    }
+    None
 }
 
 /// The root of a chord symbol, for [`RootNotation::from_string`].
