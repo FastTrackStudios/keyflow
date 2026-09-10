@@ -589,6 +589,63 @@ impl<'a> ChartParser<'a> {
         measure
     }
 
+    /// `%` → 1, `%3` → 3. Anything else is not a simile mark.
+    ///
+    /// `%` on its own is `%1`: one more measure of what the last one was.
+    /// `%0` is not a count, it is a typo — treated as no match so it surfaces
+    /// as an unknown token rather than silently doing nothing.
+    pub(super) fn parse_measure_repeat(token: &str) -> Option<usize> {
+        let digits = token.strip_prefix('%')?;
+        if digits.is_empty() {
+            return Some(1);
+        }
+        digits.parse::<usize>().ok().filter(|n| *n > 0)
+    }
+
+    /// `.` → 1, `.3` → 3, `._4` → 1.
+    ///
+    /// `._N` is not a count: the auto-duration pass appends `_N` to bare
+    /// tokens, so a `.` that has been through it arrives as `._4`. The
+    /// duration is already carried by the chord being repeated.
+    ///
+    /// `.` is also the staccato prefix (`.C`), and in a chart written in
+    /// scale degrees `.3` is staccato on the ♭III — a real chord — as much as
+    /// it is three repeats. The notation system decides, the same way it
+    /// decides that `b3` is a flat degree rather than the note B: in a degree
+    /// chart the counted form is off, and repeats are written `. . .`.
+    pub(super) fn parse_dot_repeat(token: &str, system: NotationSystem) -> Option<usize> {
+        let rest = token.strip_prefix('.')?;
+        if rest.is_empty() || rest.starts_with('_') {
+            return Some(1);
+        }
+        if system == NotationSystem::Degree {
+            return None;
+        }
+        rest.parse::<usize>().ok().filter(|n| *n > 0)
+    }
+
+    /// The measure a simile mark stands for: the same music, none of the
+    /// annotation.
+    ///
+    /// A simile mark says "play that again", not "print that again". Cloning
+    /// the previous measure whole would redraw its cues, its ending bracket
+    /// and its repeat dots once per `%` — and `%3` would stack three copies of
+    /// a cue that was written once.
+    fn simile_copy(measure: &Measure) -> Measure {
+        let mut copy = measure.clone();
+        copy.staff_text.clear();
+        copy.text_cues.clear();
+        copy.dynamics.clear();
+        copy.classical_dynamics.clear();
+        copy.hairpins.clear();
+        copy.volta_start = None;
+        copy.start_repeat = RepeatMark::None;
+        copy.end_repeat = RepeatMark::None;
+        copy.repeat_count = 1;
+        copy.source_span = None;
+        copy
+    }
+
     pub(super) fn join_multiline_parallel_containers(lines: &[&str]) -> Vec<String> {
         let mut out = Vec::new();
         let mut current = String::new();
@@ -2072,7 +2129,9 @@ impl<'a> ChartParser<'a> {
                 continue;
             }
 
-            if *token_str == "%" {
+            // `%` is the simile mark: one more measure of what the last one
+            // was. `%3` is three of them — `%` on its own is `%1`.
+            if let Some(repeats) = Self::parse_measure_repeat(token_str) {
                 if !current_measure.chords.is_empty()
                     || !current_measure.rhythm_elements.is_empty()
                     || !current_measure.figured_bass.is_empty()
@@ -2086,7 +2145,10 @@ impl<'a> ChartParser<'a> {
                 }
 
                 if let Some(previous_measure) = measures.last().cloned() {
-                    measures.push(previous_measure);
+                    let repeated = Self::simile_copy(&previous_measure);
+                    for _ in 0..repeats {
+                        measures.push(repeated.clone());
+                    }
                 }
 
                 just_processed_separator = false;
@@ -3187,54 +3249,69 @@ impl<'a> ChartParser<'a> {
                 }
             }
 
-            // Check for dot repeat token (. repeats the last chord)
-            // Note: apply_auto_durations may add _N suffix, so check for "." or "._N" pattern
-            if *token_str == "." || token_str.starts_with("._") {
-                if let Some(ref prev_chord) = last_chord {
-                    // Clone the last chord with a fresh position
-                    let mut repeat_chord = prev_chord.clone();
-                    repeat_chord.original_token = ".".to_string();
-                    repeat_chord.position = AbsolutePosition::at_beginning(); // Will be recalculated
-                                                                              // Clear push/pull - the dot repeat doesn't inherit the timing modifier
-                    repeat_chord.push_pull = None;
-                    // Inherit the source chord's rhythm and duration
-                    // "F/C ." = two measures (F/C for 4 beats, then F/C repeated for 4 beats)
-                    // The rhythm and duration are already set from the clone
+            // `.` repeats the last chord for as long as that chord lasted —
+            // a direct repeat, not a measure one. `.3` is three of them.
+            // (`apply_auto_durations` may have appended `_N`, hence `._4`.)
+            if let Some(dot_repeats) = Self::parse_dot_repeat(token_str, chord_system) {
+                // Take the chord as it stands *now*, not as it was when its
+                // token was read. A slash run is a token of its own, so in
+                // `G // .` the `//` lands on `G` after `last_chord` was
+                // snapshotted — and a `.` reading the snapshot inherits a
+                // whole bar instead of the two beats `G` actually got, which
+                // turns `G // . . .` into four measures instead of two.
+                let live_chord = current_measure
+                    .chords
+                    .last()
+                    .or_else(|| measures.last().and_then(|m| m.chords.last()))
+                    .cloned()
+                    .or_else(|| last_chord.clone());
+                if let Some(ref prev_chord) = live_chord {
+                    for _ in 0..dot_repeats {
+                        // Clone the last chord with a fresh position
+                        let mut repeat_chord = prev_chord.clone();
+                        repeat_chord.original_token = ".".to_string();
+                        repeat_chord.position = AbsolutePosition::at_beginning(); // Will be recalculated
+                                                                                  // Clear push/pull - the dot repeat doesn't inherit the timing modifier
+                        repeat_chord.push_pull = None;
+                        // Inherit the source chord's rhythm and duration
+                        // "F/C ." = two measures (F/C for 4 beats, then F/C repeated for 4 beats)
+                        // The rhythm and duration are already set from the clone
 
-                    let chord_beats = repeat_chord.duration.to_beats(time_sig);
+                        let chord_beats = repeat_chord.duration.to_beats(time_sig);
 
-                    // Handle measure boundaries (same logic as regular chord)
-                    if !just_processed_separator
-                        && current_measure_beats + chord_beats > beats_per_measure + 0.001
-                    {
-                        if !current_measure.chords.is_empty()
-                            || !current_measure.rhythm_elements.is_empty()
+                        // Handle measure boundaries (same logic as regular chord)
+                        if !just_processed_separator
+                            && current_measure_beats + chord_beats > beats_per_measure + 0.001
+                        {
+                            if !current_measure.chords.is_empty()
+                                || !current_measure.rhythm_elements.is_empty()
+                            {
+                                measures.push(current_measure.clone());
+                            }
+                            current_measure = Measure::new();
+                            current_measure.time_signature =
+                                (time_sig.numerator as u8, time_sig.denominator as u8);
+                            current_measure_beats = 0.0;
+                        }
+                        just_processed_separator = false;
+                        measure_was_created_by_separator = false;
+
+                        current_measure
+                            .rhythm_elements
+                            .push(RhythmElement::Chord(repeat_chord.clone()));
+                        current_measure.chords.push(repeat_chord);
+                        current_measure_beats += chord_beats;
+
+                        // Auto-advance measure if full
+                        if !just_processed_separator
+                            && (current_measure_beats - beats_per_measure).abs() < 0.001
                         {
                             measures.push(current_measure.clone());
+                            current_measure = Measure::new();
+                            current_measure.time_signature =
+                                (time_sig.numerator as u8, time_sig.denominator as u8);
+                            current_measure_beats = 0.0;
                         }
-                        current_measure = Measure::new();
-                        current_measure.time_signature =
-                            (time_sig.numerator as u8, time_sig.denominator as u8);
-                        current_measure_beats = 0.0;
-                    }
-                    just_processed_separator = false;
-                    measure_was_created_by_separator = false;
-
-                    current_measure
-                        .rhythm_elements
-                        .push(RhythmElement::Chord(repeat_chord.clone()));
-                    current_measure.chords.push(repeat_chord);
-                    current_measure_beats += chord_beats;
-
-                    // Auto-advance measure if full
-                    if !just_processed_separator
-                        && (current_measure_beats - beats_per_measure).abs() < 0.001
-                    {
-                        measures.push(current_measure.clone());
-                        current_measure = Measure::new();
-                        current_measure.time_signature =
-                            (time_sig.numerator as u8, time_sig.denominator as u8);
-                        current_measure_beats = 0.0;
                     }
                 }
                 continue;

@@ -43,4 +43,4 @@ See also: [[slash-notation|Rhythmic Slash Notation]] · [[chords|Chords]]
 
 ---
 
-Previous: [[slash-notation|Rhythmic Slash Notation]] · Up: [[rhythm|Rhythm]]
+Previous: [[slash-notation|Rhythmic Slash Notation]] · Next: [[repeats|Repeats]] · Up: [[rhythm|Rhythm]]

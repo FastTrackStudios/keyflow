@@ -38,6 +38,9 @@
 (chord_line
   (dot_repeat) @operator)
 
+(chord_line
+  (measure_repeat) @operator)
+
 ;; ---- Section headers -------------------------------------------------------
 (section_header
   kind: (section_kind) @keyword.control.section)

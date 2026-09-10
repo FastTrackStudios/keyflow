@@ -229,4 +229,45 @@ mod tests {
     fn the_fallback_starter_parses() {
         assert!(keyflow::parse(STARTER).is_ok());
     }
+
+    /// The cheatsheet's directive table is a second copy of `DIRECTIVES`, and
+    /// a second copy of that list is the thing `DIRECTIVES` exists to stop:
+    /// `parse_setting_line` rejects an unknown `/setting` outright, so a
+    /// cheatsheet that has fallen behind hands the reader a line that breaks
+    /// their chart.
+    #[test]
+    fn the_cheatsheet_lists_every_directive_and_no_others() {
+        use keyflow::chart::settings::DIRECTIVES;
+
+        let page = guide::vault()
+            .page("cheatsheet")
+            .expect("the guide has a cheatsheet page");
+
+        for spec in DIRECTIVES {
+            assert!(
+                page.source.contains(spec.example),
+                "the cheatsheet is missing `{}` — add the row `| `{}` | {} |`",
+                spec.key,
+                spec.example,
+                spec.summary
+            );
+        }
+
+        // And nothing invented: every `/word` in the table is a real one.
+        // A bare `` `/` `` is the time-signature and slash rows in the other
+        // tables, not a directive, so a key has to start with a letter.
+        let listed: Vec<&str> = page
+            .source
+            .lines()
+            .filter_map(|line| line.trim().strip_prefix("| `/"))
+            .filter_map(|rest| rest.split([' ', '`', '=']).next())
+            .filter(|key| key.starts_with(|c: char| c.is_ascii_alphabetic()))
+            .collect();
+        for key in listed {
+            assert!(
+                DIRECTIVES.iter().any(|d| d.key == key),
+                "the cheatsheet offers `/{key}`, which the parser would reject"
+            );
+        }
+    }
 }

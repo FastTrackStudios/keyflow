@@ -2,7 +2,7 @@
 title: Writing a Chart
 kind: concept
 type: concept
-order: 15
+order: 16
 stage: Writing
 summary: Where to type one, and what to do with it.
 ---
@@ -46,4 +46,4 @@ See also: [[introduction|An Introduction]]
 
 ---
 
-Previous: [[lilypond-rhythm|LilyPond Rhythm Notation]] · Up: [[introduction|An Introduction]]
+Previous: [[repeats|Repeats]] · Next: [[alternatives|Alternatives]] · Up: [[introduction|An Introduction]]

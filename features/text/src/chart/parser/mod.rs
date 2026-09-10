@@ -1460,6 +1460,128 @@ G D Em
         let key = chart.initial_key.as_ref().expect("Should have initial key");
         assert_eq!(key.root().name(), "C", "Key should default to C major");
     }
+
+    // region: --- Simile and direct repeat
+
+    /// `%` says "another measure of that", so it always advances by a whole
+    /// measure however the previous one was written.
+    #[test]
+    fn simile_repeats_a_whole_measure() {
+        let chart = parse_chart("T - A\n4/4\n\nvs 4\nG % % %\n").expect("parse");
+        let measures = chart.sections[0].measures();
+        assert_eq!(measures.len(), 4);
+        for measure in measures {
+            assert_eq!(measure.chords.len(), 1);
+            assert_eq!(measure.chords[0].full_symbol, "G");
+        }
+    }
+
+    /// `%3` is three simile marks, so `%` is `%1`.
+    #[test]
+    fn a_counted_simile_is_that_many_marks() {
+        let long = parse_chart("T - A\n4/4\n\nvs 4\nG % % %\n").expect("parse");
+        let short = parse_chart("T - A\n4/4\n\nvs 4\nG %3\n").expect("parse");
+        assert_eq!(
+            short.sections[0].measures().len(),
+            long.sections[0].measures().len()
+        );
+
+        let one = parse_chart("T - A\n4/4\n\nvs 2\nG %1\n").expect("parse");
+        assert_eq!(one.sections[0].measures().len(), 2);
+    }
+
+    /// A simile mark repeats the music, not the page. A cue written once is
+    /// printed once — otherwise `%3` stacks three copies of it.
+    #[test]
+    fn a_simile_does_not_reprint_the_annotations() {
+        let chart = parse_chart("T - A\n4/4\n\nvs 3\n^\"Build\" G %2\n").expect("parse");
+        let measures = chart.sections[0].measures();
+        assert_eq!(measures.len(), 3);
+        assert_eq!(measures[0].staff_text.len(), 1, "the cue is written once");
+        assert!(measures[1].staff_text.is_empty());
+        assert!(measures[2].staff_text.is_empty());
+    }
+
+    /// `.` is a *direct* repeat — it lasts as long as the chord it repeats,
+    /// which is not necessarily a measure. `G . . .` is four bars of G;
+    /// `G // . . .` is only two, because each unit is two beats.
+    #[test]
+    fn a_direct_repeat_inherits_the_length_it_repeats() {
+        let bars = parse_chart("T - A\n4/4\n\nvs 4\nG . . .\n").expect("parse");
+        assert_eq!(bars.sections[0].measures().len(), 4);
+
+        // A slash run is a token of its own, landing on `G` after it is
+        // parsed. Reading a stale snapshot of the chord gave the `.` a whole
+        // bar here, and this line came out twice as long as it should.
+        let halves = parse_chart("T - A\n4/4\n\nvs 2\nG // . . .\n").expect("parse");
+        let measures = halves.sections[0].measures();
+        assert_eq!(measures.len(), 2);
+        assert_eq!(measures[0].chords.len(), 2, "two half-bar chords per bar");
+
+        let eighths = parse_chart("T - A\n4/4\n\nvs 1\nG_8 . . . . . . .\n").expect("parse");
+        let measures = eighths.sections[0].measures();
+        assert_eq!(measures.len(), 1);
+        assert_eq!(measures[0].chords.len(), 8);
+    }
+
+    /// `.3` is three direct repeats, the same way `%3` is three simile marks.
+    #[test]
+    fn a_counted_direct_repeat_is_that_many_dots() {
+        for (counted, spelled_out) in [
+            ("G .3", "G . . ."),
+            ("G // .3", "G // . . ."),
+            ("G_8 .7", "G_8 . . . . . . ."),
+        ] {
+            let a = parse_chart(&format!("T - A\n4/4\n\nvs 8\n{counted}\n")).expect(counted);
+            let b =
+                parse_chart(&format!("T - A\n4/4\n\nvs 8\n{spelled_out}\n")).expect(spelled_out);
+            assert_eq!(
+                a.sections[0].measures().len(),
+                b.sections[0].measures().len(),
+                "`{counted}` should be `{spelled_out}`"
+            );
+        }
+    }
+
+    /// The two marks measure different things, and a chart can want either.
+    /// `%` counts bars; `.` counts whatever the chord lasted.
+    #[test]
+    fn simile_and_direct_repeat_are_not_the_same_mark() {
+        let simile = parse_chart("T - A\n4/4\n\nvs 3\nG // C // %2\n").expect("parse");
+        let measures = simile.sections[0].measures();
+        assert_eq!(measures.len(), 3, "one written bar plus two more of it");
+        assert_eq!(measures[2].chords.len(), 2);
+
+        let direct = parse_chart("T - A\n4/4\n\nvs 2\nG // C // .2\n").expect("parse");
+        let measures = direct.sections[0].measures();
+        assert_eq!(measures.len(), 2, "two more half-bars is one more bar");
+        assert_eq!(measures[1].chords[0].full_symbol, "C");
+    }
+
+    /// `.` is also the staccato prefix, so in a chart written in scale
+    /// degrees `.3` is staccato on the third as much as it is three repeats.
+    /// The notation system decides, the same way it decides `b3` is a flat
+    /// degree and not the note B.
+    #[test]
+    fn a_counted_direct_repeat_yields_to_staccato_in_a_degree_chart() {
+        let degrees = parse_chart("T - A\n4/4 #C\n\nvs 4\n1 .3 4 5\n").expect("parse");
+        let symbols: Vec<&str> = degrees.sections[0]
+            .measures()
+            .iter()
+            .map(|m| m.chords[0].full_symbol.as_str())
+            .collect();
+        assert_eq!(
+            symbols,
+            ["1", "3", "4", "5"],
+            "`.3` is staccato on the third"
+        );
+
+        // Spelled out, a repeat still works in a degree chart.
+        let spelled = parse_chart("T - A\n4/4 #C\n\nvs 4\n1 . . .\n").expect("parse");
+        assert_eq!(spelled.sections[0].measures().len(), 4);
+    }
+
+    // endregion: --- Simile and direct repeat
 }
 
 // endregion: --- Tests
