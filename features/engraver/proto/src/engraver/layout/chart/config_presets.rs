@@ -63,7 +63,8 @@ impl ChartLayoutConfig {
             last_system_fill_limit: spacing::DEFAULT_LAST_SYSTEM_FILL_LIMIT,
             draw_melody_barline_ties: true,
             beam_grouping: BeamGroupingMode::Standard,
-            draw_similes: true,
+            draw_similes: false,
+            fold_sections: false,
         }
     }
 
@@ -101,7 +102,8 @@ impl ChartLayoutConfig {
             last_system_fill_limit: spacing::DEFAULT_LAST_SYSTEM_FILL_LIMIT,
             draw_melody_barline_ties: true,
             beam_grouping: BeamGroupingMode::Standard,
-            draw_similes: true,
+            draw_similes: false,
+            fold_sections: false,
         }
     }
 
@@ -161,7 +163,8 @@ impl ChartLayoutConfig {
             last_system_fill_limit: 0.85,
             draw_melody_barline_ties: false,
             beam_grouping: BeamGroupingMode::JazzHalfBar,
-            draw_similes: true,
+            draw_similes: false,
+            fold_sections: false,
         }
     }
 
@@ -202,7 +205,8 @@ impl ChartLayoutConfig {
             last_system_fill_limit: 0.85,
             draw_melody_barline_ties: false,
             beam_grouping: BeamGroupingMode::JazzHalfBar,
-            draw_similes: true,
+            draw_similes: false,
+            fold_sections: false,
         }
     }
 

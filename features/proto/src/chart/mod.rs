@@ -31,7 +31,7 @@ pub use chart::{Chart, ChartClef};
 pub use commands::Command;
 pub use cues::{InstrumentGroup, TextCue};
 pub use dynamics::DynamicMarking;
-pub use fold::{fold_similes, unfold_similes};
+pub use fold::{expand_repeats, fold_sections, fold_similes, unfold_sections, unfold_similes};
 pub use index::{ChartIndex, ElementId};
 pub use measure::{KeyChange, Measure, RhythmSlash, TempoChange, TimeSignatureChange};
 pub use melody::{Melody, MelodyNote, MelodyVariables, OctaveModifier};

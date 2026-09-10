@@ -10,13 +10,14 @@ use peniko::Color;
 
 use crate::Chart;
 use crate::engraver::layout::context::LayoutContext;
+use crate::engraver::layout::text_metrics::TextFontMetrics;
 use crate::engraver::layout::tlayout::{
     BarlineType, ClefType, MarginLabelParams, layout_margin_label,
     rehearsal_mark::RehearsalMarkStyle,
 };
 use crate::engraver::scene::id::{ElementType, SemanticId};
 use crate::engraver::scene::node::SceneNode;
-use crate::engraver::scene::paint::PaintCommand;
+use crate::engraver::scene::paint::{FontStyle, FontWeight, PaintCommand, TextAnchor};
 use crate::sections::SectionType;
 
 use super::{ChartLayoutEngine, count_in_renderer, page_rendering, section_layout};
@@ -62,6 +63,72 @@ impl ChartLayoutEngine {
 
     /// Create a section label scene node.
     #[allow(clippy::too_many_arguments)]
+    /// A folded section, drawn as a rule across the page with its name on it.
+    ///
+    /// Stands where the staff would have been: a line the full content width,
+    /// the section's name set into a gap at its centre. The coloured capsule
+    /// in the left margin is drawn as it always is, so the eye finds the
+    /// section the same way it does anywhere else — this only replaces the
+    /// bars, which say nothing the section it repeats did not already say.
+    pub(super) fn draw_section_rule(
+        &self,
+        section: &crate::sections::Section,
+        x: f64,
+        staff_y: f64,
+        width: f64,
+        staff_height: f64,
+        ctx: &LayoutContext<'_>,
+        id: u64,
+    ) -> SceneNode {
+        let spatium = self.config.spatium;
+        let y = staff_y + staff_height / 2.0;
+        let thickness = spatium * 0.16;
+
+        let name = section_layout::section_label(&section.section_type, section.number, None);
+        let font_size = spatium * 1.5;
+        let text_metrics = TextFontMetrics::new(self.text_font_data.clone());
+        let text_width = text_metrics.horizontal_advance(&name, font_size);
+        // A gap for the name to sit in, so the rule reads as one line through
+        // the label rather than as two lines colliding with it.
+        let gap = text_width + spatium * 2.0;
+        let centre = x + width / 2.0;
+        let left_end = (centre - gap / 2.0).max(x);
+        let right_start = (centre + gap / 2.0).min(x + width);
+
+        let mut commands = vec![
+            PaintCommand::line(
+                Point::new(x, y),
+                Point::new(left_end, y),
+                Color::BLACK,
+                thickness,
+            ),
+            PaintCommand::line(
+                Point::new(right_start, y),
+                Point::new(x + width, y),
+                Color::BLACK,
+                thickness,
+            ),
+            PaintCommand::Text {
+                text: name.clone(),
+                font_family: "FreeSans".to_string(),
+                font_size,
+                // Nudged up by roughly half a cap height so the text sits on
+                // the rule rather than hanging from it.
+                position: Point::new(centre, y + font_size * 0.34),
+                color: Color::BLACK,
+                anchor: TextAnchor::Middle,
+                weight: FontWeight::Bold,
+                style: FontStyle::Normal,
+            },
+        ];
+        let _ = ctx;
+        commands.shrink_to_fit();
+
+        let mut node = SceneNode::leaf(SemanticId::new(ElementType::RehearsalMark, id), commands);
+        node.metadata.insert("folded_section".to_string(), name);
+        node
+    }
+
     pub(super) fn create_section_label(
         &self,
         section: &crate::sections::Section,

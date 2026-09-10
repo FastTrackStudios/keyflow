@@ -589,6 +589,18 @@ pub struct ChartSection {
     /// True if this section was recalled from a template
     pub from_template: bool,
 
+    /// Draw this section as a titled rule instead of its bars.
+    ///
+    /// A chorus that is note-for-note the chorus before it does not need
+    /// writing out again — a line across the page saying CHORUS says the same
+    /// thing in one row instead of eight. The measures are all still here, so
+    /// the chart plays and analyses unchanged; what folds is the drawing.
+    ///
+    /// Set by [`fold_sections`](crate::chart::fold::fold_sections), and drawn
+    /// only when the engraver is asked for a folded chart — spelled out in
+    /// full otherwise.
+    pub folded: bool,
+
     /// Source text span for this section header
     /// Links this section back to the original input text that generated it.
     pub source_span: Option<TextSpan>,
@@ -612,6 +624,7 @@ impl ChartSection {
             section,
             tracks: Vec::new(),
             from_template: false,
+            folded: false,
             source_span: None,
             template_span: None,
             alignment: None,
@@ -661,6 +674,7 @@ impl ChartSection {
             section,
             tracks: vec![Track::chords(measures)],
             from_template: true,
+            folded: false,
             source_span: None,
             template_span: None,
             alignment: None,
@@ -679,6 +693,7 @@ impl ChartSection {
             section,
             tracks: vec![Track::chords(measures)],
             from_template: true,
+            folded: false,
             source_span: Some(source_span),
             template_span: Some(template_span),
             alignment: None,

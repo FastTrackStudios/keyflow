@@ -32,6 +32,146 @@ pub fn fold_similes(chart: &mut Chart) {
     }
 }
 
+/// Collapse every section that is note-for-note an earlier one.
+///
+/// A chorus written out for the third time is eight bars of ink saying
+/// "chorus". [`ChartSection::folded`] asks the engraver to draw a titled rule
+/// instead — one row, and the reader knows exactly where they are.
+///
+/// A section folds only against an earlier section of the *same kind*, and
+/// only when every bar matches: same chords, same rhythm, same meter, same
+/// repeat structure, and no annotation of its own. A chorus with a cue on it
+/// that the first chorus did not have is a different chorus, and gets written.
+///
+/// The first occurrence never folds — something has to say what the chorus is.
+///
+/// [`ChartSection::folded`]: super::types::ChartSection::folded
+pub fn fold_sections(chart: &mut Chart) {
+    for idx in 1..chart.sections.len() {
+        let (earlier, rest) = chart.sections.split_at_mut(idx);
+        let current = &mut rest[0];
+        if current.measures().is_empty() {
+            continue;
+        }
+        let matched = earlier.iter().rev().any(|previous| {
+            !previous.folded
+                && previous.section.section_type == current.section.section_type
+                && section_repeats(previous.measures(), current.measures())
+        });
+        if matched {
+            current.folded = true;
+        }
+    }
+}
+
+/// Undo [`fold_sections`] — every section draws its bars again.
+pub fn unfold_sections(chart: &mut Chart) {
+    for section in &mut chart.sections {
+        section.folded = false;
+    }
+}
+
+/// Whether `current` is bar-for-bar what `previous` was.
+fn section_repeats(previous: &[Measure], current: &[Measure]) -> bool {
+    previous.len() == current.len()
+        && !previous.is_empty()
+        && previous
+            .iter()
+            .zip(current)
+            .all(|(before, after)| same_bar(before, after))
+}
+
+/// Like [`repeats`], but structure has to match rather than be absent: two
+/// choruses that both carry the same repeat sign are still the same chorus.
+fn same_bar(previous: &Measure, current: &Measure) -> bool {
+    current.time_signature == previous.time_signature
+        && current.repeat_count == previous.repeat_count
+        && current.start_repeat == previous.start_repeat
+        && current.end_repeat == previous.end_repeat
+        && current.end_barline == previous.end_barline
+        && current.volta_start == previous.volta_start
+        && !carries_annotation(current)
+        && !carries_annotation(previous)
+        && current.chords.len() == previous.chords.len()
+        && current
+            .chords
+            .iter()
+            .zip(&previous.chords)
+            .all(|(a, b)| same_chord(a, b))
+}
+
+/// Write every repeat out in full, and take the signs away.
+///
+/// The inverse of folding, for the reading where nothing is implied: a
+/// `|: … :|` span becomes the bars it stands for, twice, with the marks
+/// cleared. A player proof-reading a chart wants every bar in front of them
+/// rather than a instruction to go back.
+///
+/// A span carrying a volta is left exactly as it is, signs and all. First and
+/// second endings do not expand by duplication — the second pass skips the
+/// first ending and plays the second — and a wrong expansion is worse than an
+/// unexpanded one. Those spans keep their repeat signs, because that is the
+/// only honest way left to draw them.
+pub fn expand_repeats(chart: &mut Chart) {
+    for section in &mut chart.sections {
+        for track in &mut section.tracks {
+            track.measures = expanded(&track.measures);
+        }
+    }
+}
+
+fn expanded(measures: &[Measure]) -> Vec<Measure> {
+    use super::notations::RepeatMark;
+
+    let mut out: Vec<Measure> = Vec::with_capacity(measures.len());
+    let mut span_start = 0usize;
+    let mut idx = 0usize;
+
+    while idx < measures.len() {
+        let measure = &measures[idx];
+        if matches!(measure.start_repeat, RepeatMark::Forward) {
+            span_start = idx;
+        }
+
+        if matches!(measure.end_repeat, RepeatMark::Backward) {
+            let span = &measures[span_start..=idx];
+            // An ending bracket means the two passes differ, and duplicating
+            // the span would play the first ending twice.
+            if span.iter().any(|m| m.volta_start.is_some()) {
+                out.extend(measures[out.len().max(span_start)..=idx].iter().cloned());
+                idx += 1;
+                span_start = idx;
+                continue;
+            }
+
+            // The bars before the span are already in `out`; the span itself
+            // goes in twice, clean.
+            out.truncate(span_start.min(out.len()));
+            let passes = measure.repeat_count.max(2);
+            for _ in 0..passes {
+                out.extend(span.iter().map(clear_repeat_marks));
+            }
+            idx += 1;
+            span_start = idx;
+            continue;
+        }
+
+        out.push(measure.clone());
+        idx += 1;
+    }
+    out
+}
+
+fn clear_repeat_marks(measure: &Measure) -> Measure {
+    use super::notations::RepeatMark;
+
+    let mut copy = measure.clone();
+    copy.start_repeat = RepeatMark::None;
+    copy.end_repeat = RepeatMark::None;
+    copy.repeat_count = 1;
+    copy
+}
+
 /// Undo [`fold_similes`] — every bar draws its own chords again.
 ///
 /// The chords never went anywhere, so this is just clearing the flag. Useful
@@ -65,16 +205,7 @@ fn repeats(previous: &Measure, current: &Measure) -> bool {
 
     // Anything written on this bar is a reason to keep it drawn — folding it
     // away would take the annotation with it.
-    let carries_its_own = !current.staff_text.is_empty()
-        || !current.text_cues.is_empty()
-        || !current.dynamics.is_empty()
-        || !current.classical_dynamics.is_empty()
-        || !current.hairpins.is_empty()
-        || !current.figured_bass.is_empty()
-        || !current.suspensions.is_empty()
-        || !current.melodies.is_empty()
-        || current.volta_start.is_some();
-    if carries_its_own {
+    if carries_annotation(current) || current.volta_start.is_some() {
         return false;
     }
 
@@ -99,6 +230,18 @@ fn repeats(previous: &Measure, current: &Measure) -> bool {
             .iter()
             .zip(&previous.chords)
             .all(|(a, b)| same_chord(a, b))
+}
+
+/// Whether anything is written *on* this bar beyond its chords.
+fn carries_annotation(measure: &Measure) -> bool {
+    !measure.staff_text.is_empty()
+        || !measure.text_cues.is_empty()
+        || !measure.dynamics.is_empty()
+        || !measure.classical_dynamics.is_empty()
+        || !measure.hairpins.is_empty()
+        || !measure.figured_bass.is_empty()
+        || !measure.suspensions.is_empty()
+        || !measure.melodies.is_empty()
 }
 
 /// Two chords are the same for folding when they read the same and last the
@@ -231,6 +374,156 @@ mod tests {
         fold_similes(&mut chart);
         assert_eq!(flags(&chart), vec![vec![false, false, true]]);
     }
+
+    fn section_flags(chart: &Chart) -> Vec<bool> {
+        chart.sections.iter().map(|s| s.folded).collect()
+    }
+
+    fn typed(section_type: SectionType, measures: Vec<Measure>) -> ChartSection {
+        ChartSection::new(Section::new(section_type)).with_measures(measures)
+    }
+
+    /// A chorus written out for the third time is eight bars saying "chorus".
+    #[test]
+    fn a_section_that_repeats_an_earlier_one_folds() {
+        let chorus = || vec![measure(&["C"]), measure(&["G"])];
+        let mut chart = Chart::new();
+        chart.sections.push(typed(SectionType::Chorus, chorus()));
+        chart.sections.push(typed(
+            SectionType::Verse,
+            vec![measure(&["A"]), measure(&["F"])],
+        ));
+        chart.sections.push(typed(SectionType::Chorus, chorus()));
+        fold_sections(&mut chart);
+        assert_eq!(section_flags(&chart), vec![false, false, true]);
+    }
+
+    /// Only against its own kind, and only when every bar matches.
+    #[test]
+    fn a_section_does_not_fold_against_a_different_kind_or_a_different_shape() {
+        let bars = || vec![measure(&["C"]), measure(&["G"])];
+        let mut chart = Chart::new();
+        chart.sections.push(typed(SectionType::Chorus, bars()));
+        // Same music, different kind.
+        chart.sections.push(typed(SectionType::Verse, bars()));
+        // Same kind, one chord different.
+        chart.sections.push(typed(
+            SectionType::Chorus,
+            vec![measure(&["C"]), measure(&["D"])],
+        ));
+        fold_sections(&mut chart);
+        assert_eq!(section_flags(&chart), vec![false, false, false]);
+    }
+
+    /// A chorus that carries a cue the first one did not is a different
+    /// chorus, and gets written out.
+    #[test]
+    fn a_section_carrying_its_own_annotation_stays_written() {
+        use crate::chart::notations::{Placement, StaffText};
+
+        let mut annotated = measure(&["G"]);
+        annotated.staff_text.push(StaffText {
+            text: "Down".to_string(),
+            beat: 1,
+            placement: Placement::Above,
+            source_default_x: None,
+            boxed: false,
+            bold: false,
+            italic: false,
+        });
+        let mut chart = Chart::new();
+        chart.sections.push(typed(
+            SectionType::Chorus,
+            vec![measure(&["C"]), measure(&["G"])],
+        ));
+        chart
+            .sections
+            .push(typed(SectionType::Chorus, vec![measure(&["C"]), annotated]));
+        fold_sections(&mut chart);
+        assert_eq!(section_flags(&chart), vec![false, false]);
+    }
+
+    /// A folded section is never the thing a later one folds against — the
+    /// reader has to be able to find the bars somewhere.
+    #[test]
+    fn folding_always_points_back_to_a_written_section() {
+        let bars = || vec![measure(&["C"]), measure(&["G"])];
+        let mut chart = Chart::new();
+        for _ in 0..3 {
+            chart.sections.push(typed(SectionType::Chorus, bars()));
+        }
+        fold_sections(&mut chart);
+        assert_eq!(section_flags(&chart), vec![false, true, true]);
+
+        unfold_sections(&mut chart);
+        assert_eq!(section_flags(&chart), vec![false, false, false]);
+    }
+
+    // region: --- Expanding
+
+    fn symbols(measures: &[Measure]) -> Vec<String> {
+        measures
+            .iter()
+            .map(|m| m.chords[0].full_symbol.clone())
+            .collect()
+    }
+
+    #[test]
+    fn a_repeat_span_expands_to_the_bars_it_stands_for() {
+        use crate::chart::notations::RepeatMark;
+
+        let mut a = measure(&["A"]);
+        a.start_repeat = RepeatMark::Forward;
+        let mut b = measure(&["B"]);
+        b.end_repeat = RepeatMark::Backward;
+        let mut chart = chart_of(vec![vec![measure(&["G"]), a, b, measure(&["C"])]]);
+
+        expand_repeats(&mut chart);
+        let measures = chart.sections[0].measures();
+        assert_eq!(symbols(measures), ["G", "A", "B", "A", "B", "C"]);
+        assert!(
+            measures
+                .iter()
+                .all(|m| matches!(m.start_repeat, RepeatMark::None)
+                    && matches!(m.end_repeat, RepeatMark::None)),
+            "the signs go once the bars are written out"
+        );
+    }
+
+    /// First and second endings do not expand by duplication — the second pass
+    /// skips the first ending — so the span keeps its signs rather than being
+    /// expanded wrongly.
+    #[test]
+    fn a_span_with_an_ending_keeps_its_repeat_signs() {
+        use crate::chart::notations::{RepeatMark, Volta};
+
+        let mut a = measure(&["A"]);
+        a.start_repeat = RepeatMark::Forward;
+        let mut b = measure(&["B"]);
+        b.end_repeat = RepeatMark::Backward;
+        b.volta_start = Some(Volta {
+            numbers: vec![1],
+            label: String::new(),
+            length_measures: 1,
+        });
+        let mut chart = chart_of(vec![vec![a, b]]);
+
+        expand_repeats(&mut chart);
+        let measures = chart.sections[0].measures();
+        assert_eq!(symbols(measures), ["A", "B"], "left exactly as written");
+        assert!(matches!(measures[0].start_repeat, RepeatMark::Forward));
+        assert!(matches!(measures[1].end_repeat, RepeatMark::Backward));
+    }
+
+    #[test]
+    fn a_chart_with_no_repeats_is_unchanged_by_expanding() {
+        let mut chart = chart_of(vec![vec![measure(&["G"]), measure(&["C"])]]);
+        let before = symbols(chart.sections[0].measures());
+        expand_repeats(&mut chart);
+        assert_eq!(symbols(chart.sections[0].measures()), before);
+    }
+
+    // endregion: --- Expanding
 
     #[test]
     fn folding_is_idempotent_and_reversible() {

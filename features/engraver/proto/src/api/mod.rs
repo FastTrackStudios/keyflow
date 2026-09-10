@@ -311,10 +311,24 @@ pub mod pipeline {
     }
 
     /// A font bundle, a layout engine built from it, and every export.
-    /// A copy of `chart` with its repeated bars folded into simile marks.
+    /// A copy of `chart` with every repeat written out and the signs cleared.
+    ///
+    /// The default reading implies nothing: no simile marks, no repeat signs,
+    /// no folded sections — every bar the player plays is a bar on the page.
+    fn expanded(chart: &Chart) -> Chart {
+        let mut expanded = chart.clone();
+        keyflow_proto::chart::expand_repeats(&mut expanded);
+        keyflow_proto::chart::unfold_similes(&mut expanded);
+        keyflow_proto::chart::unfold_sections(&mut expanded);
+        expanded
+    }
+
+    /// A copy of `chart` with its repetition folded: repeated bars become
+    /// simile marks, and a section that repeats an earlier one becomes a rule.
     fn folded(chart: &Chart) -> Chart {
         let mut folded = chart.clone();
         keyflow_proto::chart::fold_similes(&mut folded);
+        keyflow_proto::chart::fold_sections(&mut folded);
         folded
     }
 
@@ -464,21 +478,31 @@ pub mod pipeline {
         ) -> ChartLayoutResult {
             let (layout_mode, config) = Self::resolve_preset(preset, options);
             match options.mode {
-                ChartMode::Default => self.layout_with_config(chart, &layout_mode, &config),
+                ChartMode::Default => {
+                    self.layout_with_config(&expanded(chart), &layout_mode, &config)
+                }
                 ChartMode::Folded => {
                     let mut config = config;
                     config.max_measures_per_system =
                         ChartLayoutEngine::FOLDED_MAX_MEASURES_PER_SYSTEM;
+                    config.fold_sections = true;
+                    config.draw_similes = true;
                     self.layout_with_config(&folded(chart), &layout_mode, &config)
                 }
-                ChartMode::Compact if matches!(preset, Preset::Page) => self
-                    .engine
-                    .layout_chart_compact(&folded(chart), &layout_mode, &config),
+                ChartMode::Compact if matches!(preset, Preset::Page) => {
+                    let mut config = config;
+                    config.fold_sections = true;
+                    config.draw_similes = true;
+                    self.engine
+                        .layout_chart_compact(&folded(chart), &layout_mode, &config)
+                }
                 // Snippet and Responsive have no pages to fit into, so the
                 // fitting half of Compact has nothing to aim at.
                 ChartMode::Compact => {
-                    let folded = folded(chart);
-                    self.layout_with_config(&folded, &layout_mode, &config)
+                    let mut config = config;
+                    config.fold_sections = true;
+                    config.draw_similes = true;
+                    self.layout_with_config(&folded(chart), &layout_mode, &config)
                 }
             }
         }

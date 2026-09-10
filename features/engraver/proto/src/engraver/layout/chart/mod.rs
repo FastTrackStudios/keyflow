@@ -380,6 +380,9 @@ pub struct ChartLayoutConfig {
     /// Draw a simile bar as the `repeat1Bar` mark rather than as its chords.
     /// See [`BehavioralFlags::draw_similes`](super::chart::config::BehavioralFlags).
     pub draw_similes: bool,
+    /// Draw a folded section as a titled rule instead of its bars.
+    /// See [`BehavioralFlags::fold_sections`](super::chart::config::BehavioralFlags).
+    pub fold_sections: bool,
     /// Spacing density (default 1.0). Higher values = tighter spacing.
     pub spacing_density: f64,
     /// Fill limit for last system justification (default 0.3).
@@ -1068,8 +1071,18 @@ impl ChartLayoutEngine {
                 .map(|kc| (kc.position.total_duration.measure as usize, kc))
                 .collect();
 
-            // Group measures into systems (count-based for consistent layout)
-            let systems = self.group_measures_into_systems(chart_section.measures(), content_width);
+            // A folded section draws as one titled rule rather than its bars,
+            // so it needs exactly one system and that system holds nothing.
+            // Everything else about a system — the page break check, the page
+            // background, the section label, the vertical advance — still has
+            // to happen, which is why this is an empty system rather than a
+            // separate path around the loop.
+            let section_folded = chart_section.folded && self.config.fold_sections;
+            let systems = if section_folded {
+                vec![Vec::new()]
+            } else {
+                self.group_measures_into_systems(chart_section.measures(), content_width)
+            };
 
             for (sys_idx, measure_indices) in systems.iter().enumerate() {
                 // Reset chord tracking at line breaks (new systems)
@@ -1347,12 +1360,28 @@ impl ChartLayoutEngine {
                     content_width
                 };
 
-                // Draw staff lines (shortened for short systems)
-                root.add_child(SceneNode::anonymous_leaf(self.draw_staff_lines(
-                    content_x,
-                    staff_y,
-                    actual_system_width,
-                )));
+                if section_folded {
+                    // The rule stands in for the staff: a line the width of
+                    // the page, saying the section is here and is what it was
+                    // last time.
+                    root.add_child(self.draw_section_rule(
+                        &chart_section.section,
+                        content_x,
+                        staff_y,
+                        content_width,
+                        staff_height,
+                        &ctx,
+                        id_counter,
+                    ));
+                    id_counter += 1;
+                } else {
+                    // Draw staff lines (shortened for short systems)
+                    root.add_child(SceneNode::anonymous_leaf(self.draw_staff_lines(
+                        content_x,
+                        staff_y,
+                        actual_system_width,
+                    )));
+                }
 
                 // System-wide chord-symbol Y baseline (used as a fallback for the
                 // section label and for measures without melodies). Per-measure
@@ -1423,13 +1452,17 @@ impl ChartLayoutEngine {
                     page_number: Some(page_number),
                 };
 
-                let prefix_result =
-                    prefix_renderer::render_system_prefix(&prefix_ctx, id_counter, &ctx);
+                // A folded row has no staff, so a clef and key signature on it
+                // would be hanging off the front of a rule.
+                if !section_folded {
+                    let prefix_result =
+                        prefix_renderer::render_system_prefix(&prefix_ctx, id_counter, &ctx);
 
-                for node in prefix_result.nodes {
-                    root.add_child(node);
+                    for node in prefix_result.nodes {
+                        root.add_child(node);
+                    }
+                    id_counter = prefix_result.next_id;
                 }
-                id_counter = prefix_result.next_id;
 
                 // Start measures after prefix
                 let mut measure_x = content_x + prefix_width;
@@ -2051,6 +2084,22 @@ impl ChartLayoutEngine {
 
                 page_y += actual_system_height + self.config.system_spacing;
                 global_system_index += 1;
+            }
+
+            // A folded section drew no measures, so nothing inside the loop
+            // advanced the counters those measures are still worth. The bars
+            // are played whether or not they are drawn: skipping them here
+            // would restart the bar numbers after the fold and slide every
+            // later beat position earlier than the music.
+            if section_folded {
+                let bars = chart_section.measures().len();
+                for measure in chart_section.measures() {
+                    let ticks = i64::from(measure.time_signature.0)
+                        * (1920 / i64::from(measure.time_signature.1));
+                    cumulative_ticks += ticks;
+                    cumulative_time += ticks as f64 * seconds_per_tick;
+                }
+                global_measure_index += bars;
             }
 
             // Update global measure offset for next section (for chart_measurements lookup)

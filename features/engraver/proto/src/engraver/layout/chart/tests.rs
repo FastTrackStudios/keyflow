@@ -2522,7 +2522,16 @@ fn compact_does_not_shrink_a_chart_that_already_fits() {
 fn a_simile_bar_wants_less_width_than_the_bar_it_repeats() {
     use keyflow_proto::chart::fold_similes;
 
-    let engine = ChartLayoutEngine::new(test_style(), Arc::new(Vec::new()), Arc::new(Vec::new()));
+    // The mark is a folded-chart thing, so the weight only drops for an
+    // engine that has been asked to draw one.
+    let mut config = ChartLayoutConfig::master_rhythm();
+    config.draw_similes = true;
+    let engine = ChartLayoutEngine::with_config(
+        config,
+        test_style(),
+        Arc::new(Vec::new()),
+        Arc::new(Vec::new()),
+    );
     let mut chart = long_chart(1, 2, "G");
     fold_similes(&mut chart);
 

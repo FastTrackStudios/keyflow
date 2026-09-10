@@ -825,27 +825,35 @@ impl LayoutPipeline {
             ),
         };
 
-        // Folding is a change to the chart, not to the layout, so it happens
-        // here rather than inside the engine. The chords stay on every bar —
-        // what folds is the ink.
-        let folded;
-        let chart = if chart_mode.folds() {
-            let mut copy = chart.clone();
-            keyflow::chart::fold_similes(&mut copy);
-            folded = copy;
-            &folded
+        // Folding and expanding are changes to the chart, not to the layout,
+        // so they happen here rather than inside the engine. Either way the
+        // chords stay on every bar — what changes is what gets drawn.
+        let mut prepared = chart.clone();
+        if chart_mode.folds() {
+            keyflow::chart::fold_similes(&mut prepared);
+            keyflow::chart::fold_sections(&mut prepared);
         } else {
-            chart
-        };
+            keyflow::chart::expand_repeats(&mut prepared);
+            keyflow::chart::unfold_similes(&mut prepared);
+            keyflow::chart::unfold_sections(&mut prepared);
+        }
+        let chart = &prepared;
 
         match chart_mode {
             ChartModeArg::Default => self.engine.layout_chart_with_config(chart, &mode, &config),
             ChartModeArg::Folded => {
                 let mut config = config;
                 config.max_measures_per_system = ChartLayoutEngine::FOLDED_MAX_MEASURES_PER_SYSTEM;
+                config.fold_sections = true;
+                config.draw_similes = true;
                 self.engine.layout_chart_with_config(chart, &mode, &config)
             }
-            ChartModeArg::Compact => self.engine.layout_chart_compact(chart, &mode, &config),
+            ChartModeArg::Compact => {
+                let mut config = config;
+                config.fold_sections = true;
+                config.draw_similes = true;
+                self.engine.layout_chart_compact(chart, &mode, &config)
+            }
         }
     }
 
