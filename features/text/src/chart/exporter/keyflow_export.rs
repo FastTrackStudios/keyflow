@@ -76,21 +76,29 @@ pub fn chart_to_keyflow(chart: &Chart) -> String {
                 out.push_str("    ");
             }
 
+            // One barline between two measures, whatever decoration it
+            // carries. `:|` already closes a bar and opens the next, and a
+            // repeat that ends where the next begins is `:|:` — writing
+            // `:| |:` puts an empty measure between them.
+            let mut pending_close = false;
             for measure in row {
-                write_measure(&mut out, measure, section_chord_length.as_ref());
+                let opens = matches!(measure.start_repeat, RepeatMark::Forward);
+                out.push_str(match (pending_close, opens) {
+                    (true, true) => ":|: ",
+                    (true, false) => ":| ",
+                    (false, true) => "|: ",
+                    (false, false) => "| ",
+                });
+                out.push_str(&measure_to_keyflow(measure, section_chord_length.as_ref()));
+                out.push(' ');
+                pending_close = matches!(measure.end_repeat, RepeatMark::Backward);
             }
-            out.push('|');
+            out.push_str(if pending_close { ":|" } else { "|" });
             out.push('\n');
         }
     }
 
     out
-}
-
-fn write_measure(out: &mut String, measure: &Measure, default_chord_length: Option<&ChordRhythm>) {
-    out.push_str("| ");
-    out.push_str(&measure_to_keyflow(measure, default_chord_length));
-    out.push(' ');
 }
 
 fn key_to_syntax(key: &keyflow_proto::Key) -> String {
@@ -135,10 +143,27 @@ fn section_header(section: &keyflow_proto::ChartSection, count: usize) -> String
     }
 }
 
+/// The measures a section writes out, and the repeat signs it keeps.
+///
+/// A repeat that opens and closes inside one section stays a repeat: `|: … :|`
+/// says what the music does in four bars where writing the passes out takes
+/// eight, and the reader can see the shape. The chart modes decide whether it
+/// is *drawn* as a sign or spelled out — but only if the text still has it,
+/// and folding cannot un-expand.
+///
+/// A repeat that opens in one section and closes in another is different. It
+/// has no single line to sit on, so the pass it implies is written out where
+/// it lands, which is what `repeat_prefix` carries in.
 fn expand_measures_without_repeat_symbols(
     measures: &[Measure],
     repeat_prefix: Option<&[Measure]>,
 ) -> Vec<Measure> {
+    // Nothing to write out: every repeat here opens and closes in this
+    // section, so the signs can stay and say it in half the bars.
+    if repeat_prefix.is_none() && repeats_are_self_contained(measures) {
+        return measures.to_vec();
+    }
+
     let mut expanded = Vec::new();
     let mut repeat_start = 0usize;
 
@@ -162,6 +187,26 @@ fn expand_measures_without_repeat_symbols(
     }
 
     expanded
+}
+
+/// Whether every repeat in this section closes inside it.
+///
+/// One that opens here and closes in the next section has no line to sit on,
+/// so it is written out instead — see [`cross_section_repeat_prefix`].
+fn repeats_are_self_contained(measures: &[Measure]) -> bool {
+    let mut open = false;
+    for measure in measures {
+        if matches!(measure.start_repeat, RepeatMark::Forward) {
+            open = true;
+        }
+        if matches!(measure.end_repeat, RepeatMark::Backward) {
+            if !open {
+                return false;
+            }
+            open = false;
+        }
+    }
+    !open
 }
 
 fn cross_section_repeat_prefix(measures: &[Measure]) -> Option<Vec<Measure>> {
@@ -243,6 +288,14 @@ fn measure_notation_to_keyflow(
 
     for text in &measure.staff_text {
         parts.push(staff_text_to_syntax(text));
+    }
+
+    // A simile bar is written the way it was meant: `%`, not the chords it
+    // stands for. Spelling them out is what the mark exists to avoid, and it
+    // is what the reader would have to fold back up in their head.
+    if measure.simile {
+        parts.push("%".to_string());
+        return parts.join(" ");
     }
 
     for dynamic in &measure.dynamics {

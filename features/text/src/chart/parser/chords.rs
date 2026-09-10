@@ -1651,6 +1651,7 @@ impl<'a> ChartParser<'a> {
                 // lines of this section so they come out section-relative.
                 self.section_beats_offset =
                     measures.iter().map(|m| f64::from(m.time_signature.0)).sum();
+                self.carried_measure = measures.last().cloned();
                 let mut line_measures = self.parse_chord_line_with_default_chord_length(
                     line,
                     section_type,
@@ -1687,6 +1688,7 @@ impl<'a> ChartParser<'a> {
 
         self.melody_octave_memory = section_melody_octave;
         self.section_beats_offset = 0.0;
+        self.carried_measure = None;
         Ok(measures)
     }
 
@@ -2148,7 +2150,11 @@ impl<'a> ChartParser<'a> {
                     measure_has_slash_rhythm = false;
                 }
 
-                if let Some(previous_measure) = measures.last().cloned() {
+                let previous_measure = measures
+                    .last()
+                    .cloned()
+                    .or_else(|| self.carried_measure.clone());
+                if let Some(previous_measure) = previous_measure {
                     let repeated = Self::simile_copy(&previous_measure);
                     for _ in 0..repeats {
                         measures.push(repeated.clone());
@@ -3274,7 +3280,14 @@ impl<'a> ChartParser<'a> {
                     .last()
                     .or_else(|| measures.last().and_then(|m| m.chords.last()))
                     .cloned()
-                    .or_else(|| last_chord.clone());
+                    .or_else(|| last_chord.clone())
+                    .or_else(|| {
+                        // Nothing on this line yet: the chord to repeat is the
+                        // last one of the previous row.
+                        self.carried_measure
+                            .as_ref()
+                            .and_then(|m| m.chords.last().cloned())
+                    });
                 if let Some(ref prev_chord) = live_chord {
                     for _ in 0..dot_repeats {
                         // Clone the last chord with a fresh position
@@ -3723,12 +3736,14 @@ impl<'a> ChartParser<'a> {
         default_melody_octave: Option<u8>,
     ) -> Result<Vec<Measure>, String> {
         let mut measures = Vec::new();
+        let mut split_found_something = false;
         for (part_offset, part) in Self::split_top_level_measures_spanned(line) {
             let trim_left = part.len() - part.trim_start().len();
             let trimmed = part.trim();
             if trimmed.is_empty() {
                 continue;
             }
+            split_found_something = true;
             let mut parsed = self.parse_chord_line_inner(
                 trimmed,
                 section_type,
@@ -3741,7 +3756,13 @@ impl<'a> ChartParser<'a> {
             measures.append(&mut parsed);
         }
 
-        if measures.is_empty() {
+        // Retry the whole line only when the split found nothing to try. A
+        // split that found bars and parsed no measures out of them is an
+        // answer — an empty one — and re-entering here with the same line
+        // lands straight back in this function. `\ChordLength /` over a line
+        // whose only bar is `%` did exactly that, and recursed until the
+        // stack ran out.
+        if measures.is_empty() && !split_found_something {
             self.parse_chord_line_inner(
                 line,
                 section_type,

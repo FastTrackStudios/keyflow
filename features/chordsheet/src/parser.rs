@@ -579,10 +579,15 @@ fn scan_bar(s: &mut Scanner<'_>) -> Bar {
         }
         s.pos = save;
 
-        // No glue and no space: still the same bar. chordsheet.com needs no
-        // separator between chords — `AD/A` is two chords, `,,B,` is a stroke
-        // run with a chord in it, `Dr1D` is a chord, a rest and a chord.
-        if starts_cell(s.peek()) {
+        // A comma keeps the bar open, and nothing else does.
+        //
+        // This is the rule that decides how long a run of chords is. `_` glues
+        // cells into one bar and a comma marks a slot inside one, but a chord
+        // written straight after a chord that did not end in either starts the
+        // *next bar*: `C#C#/CF#` is three bars of one chord, not one bar of
+        // three, and `A,A,A,A,A,G#,C#C#` is a seven-slot bar followed by a bar
+        // of C# — which is exactly what the site's own PDFs draw.
+        if cells.last().is_some_and(|c: &Cell| c.stroke) && starts_cell(s.peek()) {
             continue;
         }
         break;

@@ -11,6 +11,16 @@ fn bars(source: &str) -> Vec<Item> {
         .unwrap_or_default()
 }
 
+fn only_bars(source: &str) -> Vec<Bar> {
+    bars(source)
+        .into_iter()
+        .filter_map(|i| match i {
+            Item::Bar(bar) => Some(bar),
+            _ => None,
+        })
+        .collect()
+}
+
 fn only_bar(source: &str) -> Bar {
     bars(source)
         .into_iter()
@@ -87,19 +97,23 @@ fn a_comma_closes_a_slot() {
 
     let bar = only_bar(",,B,");
     assert_eq!(symbols(&bar), vec![None, None, Some("B")]);
+    assert_eq!(only_bars(",,B,").len(), 1, "the commas hold it to one bar");
 
     let bar = only_bar(",,,,");
     assert_eq!(bar.cells.len(), 4);
 }
 
-/// The *Africa* intro riff — eight chords in one bar, no glue anywhere. This
-/// is the shape that proves both rules at once: a comma closes a slot, and an
-/// uppercase root with no separator starts the next chord.
+/// A comma keeps the bar open, and nothing else does.
+///
+/// The *Africa* intro riff: `A,A,A,A,A,G#,` is a seven-slot bar, and the `C#`
+/// after it — written straight onto the end, with no comma to hold it — opens
+/// the next one. The site's own PDF draws exactly that.
 #[test]
-fn a_run_of_chords_and_commas_is_one_bar() {
-    let bar = only_bar("A,A,A,A,A,G#,C#C#");
+fn a_comma_holds_the_bar_open_and_a_bare_chord_starts_the_next() {
+    let bars = only_bars("A,A,A,A,A,G#,C#C#");
+    assert_eq!(bars.len(), 2);
     assert_eq!(
-        symbols(&bar),
+        symbols(&bars[0]),
         vec![
             Some("A"),
             Some("A"),
@@ -107,25 +121,43 @@ fn a_run_of_chords_and_commas_is_one_bar() {
             Some("A"),
             Some("A"),
             Some("G#"),
-            Some("C#"),
             Some("C#")
         ]
     );
+    assert_eq!(symbols(&bars[1]), vec![Some("C#")]);
 }
 
-/// No separator is needed between chords: chordsheet.com reads a new
-/// uppercase root as the next chord in the same bar.
+/// A chord written straight after one that ended in neither a comma nor a glue
+/// starts the next *bar*. This is the rule that decides how long a chart is:
+/// `C#C#/CF#` is three bars of one chord, not one bar of three.
 #[test]
-fn an_uppercase_root_starts_the_next_chord() {
-    assert_eq!(symbols(&only_bar("AD/A")), vec![Some("A"), Some("D/A")]);
-    assert_eq!(symbols(&only_bar("D/F#G")), vec![Some("D/F#"), Some("G")]);
-    assert_eq!(symbols(&only_bar("EbAb")), vec![Some("Eb"), Some("Ab")]);
+fn a_bare_chord_after_a_bare_chord_is_the_next_bar() {
+    let bars = only_bars("C#C#/CF#");
+    assert_eq!(bars.len(), 3);
+    assert_eq!(symbols(&bars[0]), vec![Some("C#")]);
+    assert_eq!(symbols(&bars[1]), vec![Some("C#/C")]);
+    assert_eq!(symbols(&bars[2]), vec![Some("F#")]);
 
-    // Lowercase is quality and extension, never a boundary — and a lowercase
-    // root is legal too, so splitting on it would cut every minor chord.
+    // `_` glues, so the run after the first chord is one bar of three.
+    let bars = only_bars("AD/A_G_D/F#");
+    assert_eq!(bars.len(), 2);
+    assert_eq!(symbols(&bars[0]), vec![Some("A")]);
+    assert_eq!(
+        symbols(&bars[1]),
+        vec![Some("D/A"), Some("G"), Some("D/F#")]
+    );
+}
+
+/// Only an *uppercase* root is a boundary. Lowercase is quality and extension,
+/// and a lowercase root is legal too, so splitting there would cut every minor
+/// chord in half.
+#[test]
+fn lowercase_is_never_a_chord_boundary() {
     for whole in ["Dm7b5", "Cmaj7", "Gsus4", "F#dim7", "a(b6)", "BbM7"] {
         assert_eq!(symbols(&only_bar(whole)), vec![Some(whole)], "{whole}");
     }
+    assert_eq!(symbols(&only_bars("EbAb")[0]), vec![Some("Eb")]);
+    assert_eq!(symbols(&only_bars("EbAb")[1]), vec![Some("Ab")]);
 }
 
 #[test]

@@ -1598,6 +1598,48 @@ G D Em
         assert_eq!(spelled.sections[0].measures().len(), 4);
     }
 
+    /// A four-bar row is an editing convenience, not a musical boundary. `%`
+    /// and `.` both mean "the thing before this", and at the start of a row
+    /// that thing is the last bar of the row above.
+    #[test]
+    fn a_repeat_at_the_start_of_a_row_reaches_into_the_row_before() {
+        let simile =
+            parse_chart("T - A\n4/4\n\nvs 8\n| !B / | % | !B / | % |\n    | % | !B / | % | % |\n")
+                .expect("parse");
+        let measures = simile.sections[0].measures();
+        assert_eq!(measures.len(), 8, "every bar of both rows survives");
+        assert!(
+            measures
+                .iter()
+                .all(|m| m.chords.iter().any(|c| c.full_symbol == "B")),
+            "the `%` opening the second row is the B that ended the first"
+        );
+
+        let dots = parse_chart(
+            "T - A\n4/4\n\nvs 8\n| !G / | !A / | Em / | !D / |\n    | . | . | . | . |\n",
+        )
+        .expect("parse");
+        let measures = dots.sections[0].measures();
+        assert_eq!(measures.len(), 8);
+        assert_eq!(
+            measures[4].chords[0].full_symbol, "D",
+            "the dot opening the second row repeats the D that ended the first"
+        );
+    }
+
+    /// `%` with genuinely nothing before it is not a crash.
+    ///
+    /// Under a `\ChordLength` directive a line whose only bar was `%` used to
+    /// recurse until the stack ran out: the barred-line path split the line,
+    /// got no measures out of it, and retried the whole line — landing back in
+    /// the same function.
+    #[test]
+    fn a_simile_with_nothing_before_it_is_not_a_crash() {
+        let chart = parse_chart("T - A\n4/4\n\nvs 1\n\\ChordLength /\n| % |\n")
+            .expect("parse rather than overflow");
+        assert_eq!(chart.sections.len(), 1);
+    }
+
     // endregion: --- Simile and direct repeat
 
     // region: --- Reusing a progression

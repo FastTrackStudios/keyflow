@@ -387,37 +387,19 @@ impl<'a> Converter<'a> {
         }
         self.close_open_volta();
 
-        match times {
-            // `(A B)` with no count is a plain repeat: mark the barlines and
-            // leave the measures alone, matching how keyflow text writes
-            // `|: … :|`.
-            None | Some(0) | Some(1) => {
-                self.measures[start].start_repeat = RepeatMark::Forward;
-                if let Some(last) = self.measures.last_mut() {
-                    last.end_repeat = RepeatMark::Backward;
-                }
-            }
-            // `(A B)x3` plays the pattern three times. keyflow's own parser
-            // records the count on the last measure of the pattern and then
-            // writes the repeats out, so the chart's timeline is real; we do
-            // the same.
-            Some(n) => {
-                let pattern: Vec<Measure> = self.measures[start..].to_vec();
-                if let Some(last) = self.measures.last_mut() {
-                    last.repeat_count = n as usize;
-                }
-                for _ in 1..n {
-                    self.measures.extend(pattern.iter().map(|m| {
-                        let mut m = m.clone();
-                        m.repeat_count = 1;
-                        // Only the first pass carries the ending brackets and
-                        // the text; a redrawn pass would double them up.
-                        m.volta_start = None;
-                        m.staff_text.clear();
-                        m
-                    }));
-                }
-            }
+        // `( … )` and `( … )x4` are both repeat signs, and stay repeat signs.
+        //
+        // Writing the passes out here would throw the shape away before anyone
+        // could ask for it: `(Cm,,, Gm,,, Bb,,, Gm,Bb,)x4` is a four-bar phrase
+        // played four times, and a chart that says so reads better than
+        // sixteen bars that leave the reader to notice. Expanding is the
+        // *default* chart mode's job, and it can expand from this; folding
+        // cannot un-expand.
+        self.measures[start].start_repeat = RepeatMark::Forward;
+        let passes = times.unwrap_or(2).max(2) as usize;
+        if let Some(last) = self.measures.last_mut() {
+            last.end_repeat = RepeatMark::Backward;
+            last.repeat_count = passes;
         }
     }
 
@@ -436,10 +418,16 @@ impl<'a> Converter<'a> {
         // reprint them outright. Neither has a keyflow counterpart, so both
         // become the chords they stand for — the shorthand is lost, the music
         // is not.
-        let repeat_back = bar.simile.map(u32::from).or(bar.reprint);
+        // `%` and `%%` are simile marks: one bar drawn as the mark for each
+        // bar they stand for. `%1` / `%2` / `%4` are *reprints* — the site
+        // redraws those bars in full — so they come out written.
         if bar.cells.is_empty() {
-            if let Some(count) = repeat_back {
-                self.reprint(count as usize);
+            if let Some(count) = bar.simile {
+                self.reprint(usize::from(count), true);
+                return;
+            }
+            if let Some(count) = bar.reprint {
+                self.reprint(count as usize, false);
                 return;
             }
         }
@@ -469,7 +457,7 @@ impl<'a> Converter<'a> {
 
     /// Copy the last `count` measures forward — what `%`, `%%`, `%1`, `%2`
     /// and `%4` all ultimately mean.
-    fn reprint(&mut self, count: usize) {
+    fn reprint(&mut self, count: usize, simile: bool) {
         let len = self.measures.len();
         let start = len.saturating_sub(count.max(1));
         if start == len {
@@ -484,6 +472,7 @@ impl<'a> Converter<'a> {
             m.staff_text.clear();
             m.end_barline = BarlineStyle::Normal;
             m.time_signature = self.time_signature;
+            m.simile = simile;
             self.measures.push(m);
         }
     }

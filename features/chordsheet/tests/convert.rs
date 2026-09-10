@@ -69,39 +69,64 @@ fn a_split_bar_divides_the_measure() {
     assert_round_trips(&chart);
 }
 
-/// Eight chords crammed into one bar is ordinary chordsheet.com — the *Africa*
-/// intro riff is written exactly this way. They have to come out as eighths,
-/// not as eight quarter-note bars.
+/// The *Africa* intro riff. A comma holds the bar open, so `A,A,A,A,A,G#,` is
+/// a seven-slot bar — and the `C#` written straight onto the end of it, with
+/// no comma to hold it, opens the next bar. Seven chords in one bar have to
+/// come out as sub-beat values, not as seven quarter-note bars.
 #[test]
 fn a_crowded_bar_subdivides_rather_than_overflowing() {
     let chart = import_str("=INTRO\nA,A,A,A,A,G#,C#C#\n", &ImportOptions::default());
     let measures = chart.sections[0].measures();
-    assert_eq!(measures.len(), 1, "eight chords, still one bar");
-    assert_eq!(measures[0].chords.len(), 8);
+    assert_eq!(measures.len(), 2, "the bare C# starts a second bar");
+    assert_eq!(measures[0].chords.len(), 7);
+    assert_eq!(measures[1].chords.len(), 1);
 
     let reparsed = assert_round_trips(&chart);
     assert_eq!(
         reparsed.sections[0].measures().len(),
-        1,
-        "the exported bar must re-parse as one measure, not two"
+        2,
+        "the crowded bar must re-parse as one measure, not several"
     );
 }
 
+/// `( … )` and `( … )x4` both stay repeat signs. Writing the passes out here
+/// would throw the shape away before anyone could ask for it — a four-bar
+/// phrase played four times reads better than sixteen bars — and the default
+/// chart mode can expand from this, where folding cannot un-expand.
 #[test]
-fn a_bare_repeat_becomes_repeat_marks_and_a_counted_one_is_written_out() {
+fn a_repeat_stays_a_repeat_however_many_times_it_is_played() {
     let bare = import_str("=A\n(A B C D)\n", &ImportOptions::default());
     let measures = bare.sections[0].measures();
     assert_eq!(measures.len(), 4);
     assert_eq!(measures[0].start_repeat, RepeatMark::Forward);
     assert_eq!(measures[3].end_repeat, RepeatMark::Backward);
+    assert_eq!(measures[3].repeat_count, 2, "a bare repeat plays twice");
 
     let counted = import_str("=A\n(A B C D)x3\n", &ImportOptions::default());
-    assert_eq!(
-        counted.sections[0].measures().len(),
-        12,
-        "x3 plays the four-bar phrase three times"
+    let measures = counted.sections[0].measures();
+    assert_eq!(measures.len(), 4, "still the four bars that were written");
+    assert_eq!(measures[0].start_repeat, RepeatMark::Forward);
+    assert_eq!(measures[3].end_repeat, RepeatMark::Backward);
+    assert_eq!(measures[3].repeat_count, 3);
+}
+
+/// A `%` is a simile mark, and stays one. A `%N` reprint is the site redrawing
+/// those bars in full, and stays that.
+#[test]
+fn a_simile_survives_the_import_but_a_reprint_does_not() {
+    let chart = import_str("=A\nA % %\n", &ImportOptions::default());
+    let measures = chart.sections[0].measures();
+    assert_eq!(measures.len(), 3);
+    assert!(!measures[0].simile);
+    assert!(measures[1].simile && measures[2].simile);
+
+    let chart = import_str("=A\nA B %2\n", &ImportOptions::default());
+    let measures = chart.sections[0].measures();
+    assert_eq!(measures.len(), 4);
+    assert!(
+        measures.iter().all(|m| !m.simile),
+        "a reprint is written out, not marked"
     );
-    assert_eq!(counted.sections[0].measures()[3].repeat_count, 3);
 }
 
 /// `%` and `%N` have no keyflow counterpart, so they become the bars they
@@ -212,6 +237,42 @@ fn a_per_bar_meter_change_applies_from_that_bar_on() {
             (10, 8),
             (11, 8),
         ]
+    );
+}
+
+/// A repeat has to survive the trip to `.kf` and back, or the folded chart
+/// modes have nothing to fold: the text is where the shape lives.
+#[test]
+fn a_repeat_survives_the_export_as_a_repeat() {
+    let chart = import_str("=VS\n(A B C D)x4\n", &ImportOptions::default());
+    let text = to_kf(&chart);
+    assert!(text.contains("|:"), "the repeat opens in the text:\n{text}");
+    assert!(text.contains(":|"), "and closes:\n{text}");
+    assert!(
+        text.lines().filter(|l| l.contains('A')).count() == 1,
+        "the phrase is written once, not four times:\n{text}"
+    );
+
+    let reparsed = assert_round_trips(&chart);
+    let measures = reparsed.sections[0].measures();
+    assert_eq!(measures.len(), 4);
+    assert_eq!(measures[0].start_repeat, RepeatMark::Forward);
+    assert_eq!(measures[3].end_repeat, RepeatMark::Backward);
+}
+
+/// Two repeats back to back share one barline. `:| |:` puts an empty measure
+/// between them; `:|:` is the barline that both closes and opens.
+#[test]
+fn back_to_back_repeats_share_a_barline() {
+    let chart = import_str("=VS\n(A B) (C D)\n", &ImportOptions::default());
+    let text = to_kf(&chart);
+    assert!(text.contains(":|:"), "{text}");
+
+    let reparsed = assert_round_trips(&chart);
+    assert_eq!(
+        reparsed.sections[0].measures().len(),
+        chart.sections[0].measures().len(),
+        "no phantom measure between the two repeats"
     );
 }
 
