@@ -625,6 +625,7 @@ mod tests {
     use crate::chord::ChordRhythm;
     use crate::key::Key;
     use crate::primitives::{MusicalNote, Note, RootNotation};
+    use crate::proto::chart::notations::RepeatMark;
     use crate::sections::SectionType;
     use crate::time::MusicalDuration;
     use crate::time::MusicalPositionExt;
@@ -1638,6 +1639,44 @@ G D Em
         let chart = parse_chart("T - A\n4/4\n\nvs 1\n\\ChordLength /\n| % |\n")
             .expect("parse rather than overflow");
         assert_eq!(chart.sections.len(), 1);
+    }
+
+    /// `|: … :|` on its own reads as twice, so a phrase played four times has
+    /// to say so — otherwise the chart is half as long as the song.
+    ///
+    /// The count goes on the closing barline, `:|x4`, and leaves the phrase
+    /// written once. A *line-level* `x4` is a different instruction: it
+    /// duplicates the measures.
+    #[test]
+    fn a_count_on_the_closing_barline_leaves_the_phrase_written_once() {
+        for spelling in ["|: !A | !B :|x4", "|: !A | !B :|4"] {
+            let chart = parse_chart(&format!("T - A\n4/4\n\nvs 2\n{spelling}\n")).expect(spelling);
+            let measures = chart.sections[0].measures();
+            assert_eq!(measures.len(), 2, "{spelling}");
+            assert_eq!(measures[1].repeat_count, 4, "{spelling}");
+        }
+
+        let expanded = parse_chart("T - A\n4/4\n\nvs 8\n|: !A | !B :| x4\n").expect("parse");
+        assert_eq!(
+            expanded.sections[0].measures().len(),
+            8,
+            "a line-level x4 still duplicates"
+        );
+    }
+
+    /// Two repeats back to back share one barline. `:| |:` reads as an empty
+    /// measure sitting between them; `:|:` is the barline that does both.
+    #[test]
+    fn back_to_back_repeats_share_one_barline() {
+        for spelling in ["|: !A | !B :|: !C | !D :|", "|: !A | !B :|x4: !C | !D :|"] {
+            let chart = parse_chart(&format!("T - A\n4/4\n\nvs 4\n{spelling}\n")).expect(spelling);
+            let measures = chart.sections[0].measures();
+            assert_eq!(measures.len(), 4, "no phantom measure — {spelling}");
+            assert_eq!(measures[0].start_repeat, RepeatMark::Forward);
+            assert_eq!(measures[1].end_repeat, RepeatMark::Backward);
+            assert_eq!(measures[2].start_repeat, RepeatMark::Forward);
+            assert_eq!(measures[3].end_repeat, RepeatMark::Backward);
+        }
     }
 
     // endregion: --- Simile and direct repeat

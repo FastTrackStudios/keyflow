@@ -63,6 +63,36 @@ impl ChartLayoutEngine {
 
     /// Create a section label scene node.
     #[allow(clippy::too_many_arguments)]
+    /// `x4` over the closing barline of a repeat.
+    ///
+    /// Right-aligned to the barline and sitting above the staff, where
+    /// chordsheet.com and every lead sheet put it.
+    pub(super) fn create_repeat_count_label(
+        &self,
+        passes: usize,
+        barline_x: f64,
+        staff_y: f64,
+        id: u64,
+    ) -> SceneNode {
+        let spatium = self.config.spatium;
+        let font_size = spatium * 2.0;
+        SceneNode::leaf(
+            SemanticId::new(ElementType::RehearsalMark, id),
+            vec![PaintCommand::Text {
+                text: format!("x{passes}"),
+                font_family: "FreeSans".to_string(),
+                font_size,
+                // Clear of the repeat bracket, which reaches the top staff
+                // line and a little above it.
+                position: Point::new(barline_x - spatium * 0.6, staff_y - spatium * 1.9),
+                color: Color::BLACK,
+                anchor: TextAnchor::End,
+                weight: FontWeight::Bold,
+                style: FontStyle::Normal,
+            }],
+        )
+    }
+
     /// A folded section, drawn as a rule across the page with its name on it.
     ///
     /// Stands where the staff would have been: a line the full content width,

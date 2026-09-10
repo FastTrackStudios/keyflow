@@ -2015,6 +2015,31 @@ impl ChartLayoutEngine {
                             "barline",
                         );
                         root.add_child(barline);
+
+                        // How many times the repeat plays, over its closing
+                        // barline. `|: … :|` on its own reads as twice, so a
+                        // phrase played four times has to say so — otherwise
+                        // the chart is half as long as the song.
+                        if matches!(
+                            measure.end_repeat,
+                            crate::chart::notations::RepeatMark::Backward
+                        ) && measure.repeat_count > 2
+                        {
+                            let label = self.create_repeat_count_label(
+                                measure.repeat_count,
+                                measure_x,
+                                staff_y,
+                                id_counter,
+                            );
+                            id_counter += 1;
+                            record_system_ink_bottom(
+                                &mut system_ink_bottom,
+                                &mut system_height_contributors,
+                                &label,
+                                "repeat_count",
+                            );
+                            root.add_child(label);
+                        }
                     }
                 }
 

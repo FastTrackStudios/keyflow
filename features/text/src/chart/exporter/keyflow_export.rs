@@ -81,19 +81,39 @@ pub fn chart_to_keyflow(chart: &Chart) -> String {
             // repeat that ends where the next begins is `:|:` — writing
             // `:| |:` puts an empty measure between them.
             let mut pending_close = false;
+            let mut pending_passes: Option<usize> = None;
             for measure in row {
                 let opens = matches!(measure.start_repeat, RepeatMark::Forward);
-                out.push_str(match (pending_close, opens) {
-                    (true, true) => ":|: ",
-                    (true, false) => ":| ",
-                    (false, true) => "|: ",
-                    (false, false) => "| ",
-                });
+                match (pending_close, opens) {
+                    (true, _) => {
+                        out.push_str(":|");
+                        if let Some(passes) = pending_passes.take() {
+                            out.push('x');
+                            out.push_str(&passes.to_string());
+                        }
+                        out.push_str(if opens { ": " } else { " " });
+                    }
+                    (false, true) => out.push_str("|: "),
+                    (false, false) => out.push_str("| "),
+                }
                 out.push_str(&measure_to_keyflow(measure, section_chord_length.as_ref()));
                 out.push(' ');
                 pending_close = matches!(measure.end_repeat, RepeatMark::Backward);
+                pending_passes = if pending_close && measure.repeat_count > 2 {
+                    Some(measure.repeat_count)
+                } else {
+                    None
+                };
             }
-            out.push_str(if pending_close { ":|" } else { "|" });
+            if pending_close {
+                out.push_str(":|");
+                if let Some(passes) = pending_passes {
+                    out.push('x');
+                    out.push_str(&passes.to_string());
+                }
+            } else {
+                out.push('|');
+            }
             out.push('\n');
         }
     }

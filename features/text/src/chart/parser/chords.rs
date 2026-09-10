@@ -1836,10 +1836,8 @@ impl<'a> ChartParser<'a> {
         }
 
         let line_to_parse = Self::normalize_parallel_container_syntax(&line_to_parse);
-        let line_to_parse = line_to_parse
-            .replace("|:", "| @repeat-start ")
-            .replace(":|", " @repeat-end |")
-            .replace("m {", "m{");
+        let line_to_parse = Self::normalize_repeat_barlines(&line_to_parse);
+        let line_to_parse = line_to_parse.replace("m {", "m{");
 
         // Preprocess: Expand `()` rhythm groups into explicit per-chord lily
         // durations (e.g. `(C G)` → `C_2 G_2`, `(D Em G)` → `D_2t Em_2t G_2t`).
@@ -2914,7 +2912,11 @@ impl<'a> ChartParser<'a> {
                 continue;
             }
 
-            if *token_str == "@repeat-end" {
+            if let Some(passes) = token_str.strip_prefix("@repeat-end") {
+                let passes: Option<usize> = passes
+                    .strip_prefix(':')
+                    .and_then(|n| n.parse().ok())
+                    .filter(|n| *n > 1);
                 if current_measure.chords.is_empty()
                     && current_measure.rhythm_elements.is_empty()
                     && current_measure.figured_bass.is_empty()
@@ -2922,9 +2924,15 @@ impl<'a> ChartParser<'a> {
                 {
                     if let Some(measure) = measures.last_mut() {
                         measure.end_repeat = RepeatMark::Backward;
+                        if let Some(passes) = passes {
+                            measure.repeat_count = passes;
+                        }
                     }
                 } else {
                     current_measure.end_repeat = RepeatMark::Backward;
+                    if let Some(passes) = passes {
+                        current_measure.repeat_count = passes;
+                    }
                     Self::finalize_measure_for_separator(
                         &mut measures,
                         &current_measure,
@@ -3775,6 +3783,78 @@ impl<'a> ChartParser<'a> {
         } else {
             Ok(measures)
         }
+    }
+
+    /// Rewrite the repeat barlines into the marker tokens the chord loop
+    /// reads, keeping any count written on the closing one.
+    ///
+    /// `:|x4` and `:|4` both mean "play it four times", and both used to be
+    /// dropped: `:|` was replaced first, leaving the count stuck to the
+    /// barline that replaced it. The count is carried on the token instead,
+    /// as `@repeat-end:4`.
+    ///
+    /// Note that a *line-level* `x4` is a different thing — it duplicates the
+    /// measures — so the two spellings do not mean the same, and only the one
+    /// attached to `:|` leaves the phrase written once.
+    fn normalize_repeat_barlines(input: &str) -> String {
+        let mut out = String::with_capacity(input.len() + 16);
+        let bytes = input.as_bytes();
+        let mut i = 0usize;
+        while i < bytes.len() {
+            if bytes[i..].starts_with(b"|:") {
+                out.push_str("| @repeat-start ");
+                i += 2;
+                continue;
+            }
+            if bytes[i..].starts_with(b":|") {
+                i += 2;
+
+                // An optional count on the closing barline: `:|x4`, `:|4`.
+                let mut j = i;
+                if matches!(bytes.get(j), Some(b'x' | b'X')) {
+                    j += 1;
+                }
+                let digits_start = j;
+                while bytes.get(j).is_some_and(u8::is_ascii_digit) {
+                    j += 1;
+                }
+                let count = &input[digits_start..j];
+                if !count.is_empty() {
+                    i = j;
+                }
+
+                out.push_str(" @repeat-end");
+                if !count.is_empty() {
+                    out.push(':');
+                    out.push_str(count);
+                }
+
+                // One barline between two measures. A repeat that ends where
+                // the next begins is written `:|:` (or `:|x4 |:`), and both
+                // have to come out as a single `|` — two would parse as an
+                // empty measure sitting between the repeats.
+                let mut k = i;
+                while matches!(bytes.get(k), Some(b' ' | b'\t')) {
+                    k += 1;
+                }
+                let opens_next = bytes.get(k) == Some(&b':')
+                    || (bytes[k..].starts_with(b"|:") && {
+                        k += 1;
+                        true
+                    });
+                if opens_next {
+                    out.push_str(" | @repeat-start ");
+                    i = k + 1;
+                } else {
+                    out.push_str(" |");
+                }
+                continue;
+            }
+            let ch = input[i..].chars().next().unwrap_or_default();
+            out.push(ch);
+            i += ch.len_utf8();
+        }
+        out
     }
 
     fn normalize_parallel_container_syntax(input: &str) -> String {
