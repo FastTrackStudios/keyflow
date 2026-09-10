@@ -2643,3 +2643,39 @@ fn five_ordinary_bars_are_two_lines() {
 }
 
 // endregion: --- Chart modes
+
+/// Folding a section is supposed to buy vertical space. A rule and a word
+/// need a fraction of the room a staff does, so a chart whose sections are
+/// folded has to end up shorter than the same chart written out — otherwise
+/// folding costs the same as not folding and the mode is pointless.
+#[test]
+fn a_folded_section_costs_far_less_height_than_a_written_one() {
+    let engine = ChartLayoutEngine::new(test_style(), Arc::new(Vec::new()), Arc::new(Vec::new()));
+    let mut config = ChartLayoutConfig::master_rhythm();
+    config.fold_sections = true;
+
+    let chart = long_chart(6, 4, "G");
+    let written = engine.layout_chart_with_config(&chart, &LayoutMode::paginated_a4(), &config);
+
+    let mut folded_chart = chart.clone();
+    for section in folded_chart.sections.iter_mut().skip(1) {
+        section.folded = true;
+    }
+    let folded =
+        engine.layout_chart_with_config(&folded_chart, &LayoutMode::paginated_a4(), &config);
+
+    let last_y = |layout: &ChartLayoutResult| {
+        layout.pages[layout.pages.len() - 1]
+            .systems
+            .last()
+            .map(|s| s.y + s.height)
+            .unwrap_or_default()
+    };
+    assert_eq!(folded.pages.len(), 1);
+    assert!(
+        last_y(&folded) < last_y(&written) * 0.6,
+        "folded ran to {}, written to {}",
+        last_y(&folded),
+        last_y(&written)
+    );
+}

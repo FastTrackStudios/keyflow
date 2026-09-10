@@ -429,9 +429,33 @@ impl<'a> Converter<'a> {
         // cannot un-expand.
         self.measures[start].start_repeat = RepeatMark::Forward;
         let passes = times.unwrap_or(2).max(2) as usize;
-        if let Some(last) = self.measures.last_mut() {
-            last.end_repeat = RepeatMark::Backward;
-            last.repeat_count = passes;
+        let Some(close) = self.closing_barline(start) else {
+            return;
+        };
+        self.measures[close].end_repeat = RepeatMark::Backward;
+        self.measures[close].repeat_count = passes;
+    }
+
+    /// Which bar of the span carries the closing repeat sign.
+    ///
+    /// Normally the last one. But a span with endings — `(A B 1.C 2.D)` — plays
+    /// its second ending on the way *out*, so the sign goes at the end of the
+    /// first ending and the second ending sits past it. Sending the reader back
+    /// from the end of the second ending would ask them to play it twice.
+    fn closing_barline(&self, start: usize) -> Option<usize> {
+        let second_ending =
+            self.measures
+                .iter()
+                .enumerate()
+                .skip(start)
+                .find_map(|(index, measure)| {
+                    let volta = measure.volta_start.as_ref()?;
+                    volta.numbers.iter().any(|n| *n >= 2).then_some(index)
+                });
+        match second_ending {
+            Some(index) if index > start => Some(index - 1),
+            Some(_) => None,
+            None => self.measures.len().checked_sub(1),
         }
     }
 

@@ -85,7 +85,8 @@ impl ChartLayoutEngine {
                 // Clear of the repeat bracket, which reaches the top staff
                 // line and a little above it.
                 position: Point::new(barline_x - spatium * 0.6, staff_y - spatium * 1.9),
-                color: Color::BLACK,
+                // The count belongs to the repeat sign, so it wears its colour.
+                color: super::constants::REPEAT_COLOR,
                 anchor: TextAnchor::End,
                 weight: FontWeight::Bold,
                 style: FontStyle::Normal,

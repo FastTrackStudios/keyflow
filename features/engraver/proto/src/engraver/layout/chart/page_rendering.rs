@@ -174,7 +174,7 @@ fn draw_bracket_repeat(
     spatium: f64,
     opens_right: bool,
 ) {
-    let red = Color::from_rgb8(220, 38, 38);
+    let red = super::constants::REPEAT_COLOR;
     let stroke = spatium * 0.34;
     let top = staff_y - spatium * 0.5;
     let bottom = staff_y + staff_height + spatium * 0.5;
@@ -745,7 +745,7 @@ mod tests {
         assert!(
             colors
                 .iter()
-                .all(|color| *color == Color::from_rgb8(220, 38, 38))
+                .all(|color| *color == crate::layout::chart::constants::REPEAT_COLOR)
         );
         assert!(
             min_y < 20.0 && max_y > 60.0,

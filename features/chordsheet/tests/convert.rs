@@ -394,3 +394,32 @@ fn the_manual_meta_example_converts_and_round_trips() {
     assert_eq!(chart.sections.len(), 3);
     assert_round_trips(&chart);
 }
+
+/// A repeat with endings sends the reader back from the end of the *first*
+/// ending. The second ending is the way out, and is played once.
+#[test]
+fn the_closing_repeat_sits_at_the_end_of_the_first_ending() {
+    let chart = import_str(
+        "=PRECHORUS\n(G#,,, Bb,,, Gm,,, 1.G#,,,2.G7,,,)x2\n",
+        &ImportOptions::default(),
+    );
+    let measures = chart.sections[0].measures();
+    assert_eq!(measures.len(), 5);
+
+    let closing: Vec<usize> = measures
+        .iter()
+        .enumerate()
+        .filter(|(_, m)| m.end_repeat == RepeatMark::Backward)
+        .map(|(i, _)| i)
+        .collect();
+    assert_eq!(closing, [3], "the bar that is the first ending");
+    assert_eq!(
+        measures[3].repeat_count, 2,
+        "the count travels with the sign"
+    );
+    assert_eq!(measures[4].end_repeat, RepeatMark::None, "the way out");
+
+    let text = to_kf(&chart);
+    assert!(text.contains("[1] !G# / :|x2"), "{text}");
+    assert_round_trips(&chart);
+}

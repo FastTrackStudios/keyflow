@@ -1102,11 +1102,29 @@ impl ChartLayoutEngine {
                 // a full page-level skyline pass, reserve explicit north/south
                 // notation bands: chord symbols live above the staff, while
                 // dynamics/text/figured bass live below.
-                let system_top_reserve = self.config.spatium * 2.0;
-                let system_bottom_reserve = self.config.spatium * 4.5;
+                // A folded row is a rule and a word. It has no staff to draw,
+                // no chord symbols above it and no dynamics below it, so the
+                // bands that clear those have nothing to clear: charging it a
+                // full system is what pushed Mr. Brightside's folded chart onto
+                // a second page.
+                let system_top_reserve = if section_folded {
+                    self.config.spatium * 1.0
+                } else {
+                    self.config.spatium * 2.0
+                };
+                let system_bottom_reserve = if section_folded {
+                    self.config.spatium * 1.0
+                } else {
+                    self.config.spatium * 4.5
+                };
+                let row_height = if section_folded {
+                    self.config.spatium * 1.5
+                } else {
+                    staff_height
+                };
                 let system_height = system_top_reserve
                     + melody_extra_above
-                    + staff_height
+                    + row_height
                     + melody_extra_below
                     + system_bottom_reserve;
 
@@ -1363,7 +1381,7 @@ impl ChartLayoutEngine {
                         content_x,
                         staff_y,
                         content_width,
-                        staff_height,
+                        row_height,
                         &ctx,
                         id_counter,
                     ));
@@ -2069,9 +2087,18 @@ impl ChartLayoutEngine {
                 }
 
                 // Track system layout
-                let base_system_height = system_top_reserve + staff_height;
+                let base_system_height = system_top_reserve + row_height;
                 let ink_system_height = system_ink_bottom - system_page_top;
-                let actual_system_height = ink_system_height.max(base_system_height);
+                // A folded row is measured, not discovered: its ink is the
+                // rule and the label capsule, both of which are centred on the
+                // row and overhang it by design. Letting them grow the row
+                // would give a section that draws nothing back the vertical
+                // space folding it was meant to save.
+                let actual_system_height = if section_folded {
+                    base_system_height
+                } else {
+                    ink_system_height.max(base_system_height)
+                };
                 let extra_system_height = (actual_system_height - base_system_height).max(0.0);
                 if extra_system_height > self.config.spatium {
                     let source_measures = measure_indices
@@ -2102,7 +2129,13 @@ impl ChartLayoutEngine {
                     measure_indices: measure_indices.clone(),
                 });
 
-                page_y += actual_system_height + self.config.system_spacing;
+                // A rule needs less air around it than a staff does.
+                let spacing = if section_folded {
+                    self.config.system_spacing * 0.5
+                } else {
+                    self.config.system_spacing
+                };
+                page_y += actual_system_height + spacing;
                 global_system_index += 1;
             }
 

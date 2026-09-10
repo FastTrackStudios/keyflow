@@ -34,8 +34,8 @@ use crate::engraver::scene::id::{ElementType, SemanticId};
 use crate::engraver::scene::node::SceneNode;
 use crate::engraver::scene::paint::PaintCommand;
 
-const DYNAMIC_COLOR: Color = Color::from_rgb8(220, 38, 38);
-const STAFF_TEXT_COLOR: Color = Color::from_rgb8(220, 38, 38);
+const DYNAMIC_COLOR: Color = super::constants::REPEAT_COLOR;
+const STAFF_TEXT_COLOR: Color = super::constants::REPEAT_COLOR;
 const DYNAMIC_GLYPH_SIZE_SP: f64 = 3.05;
 const STAFF_TEXT_FONT_SIZE_SP: f64 = 2.5;
 
