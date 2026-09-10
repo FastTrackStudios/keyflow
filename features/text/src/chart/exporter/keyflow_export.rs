@@ -18,6 +18,15 @@ pub fn chart_to_keyflow(chart: &Chart) -> String {
 
     if let Some(title) = chart.metadata.title.as_deref() {
         out.push_str(title);
+        // `Title - Artist` is the header form the parser recognizes. Without
+        // the artist half, a title made of words that scan as chords ("American
+        // Idiot") is read back as a bar line, and the chart grows a section.
+        if let Some(artist) = chart.metadata.artist.as_deref() {
+            if !artist.trim().is_empty() {
+                out.push_str(" - ");
+                out.push_str(artist.trim());
+            }
+        }
         out.push('\n');
     }
 
@@ -110,7 +119,18 @@ fn section_header(section: &keyflow_proto::ChartSection, count: usize) -> String
         SectionType::Post(inner) if matches!(inner.as_ref(), SectionType::Chorus) => {
             format!("post {count}")
         }
-        SectionType::Custom(name) => format!("{name} {count}"),
+        SectionType::Instrumental => format!("inst {count}"),
+        SectionType::Solo => format!("solo {count}"),
+        SectionType::Interlude => format!("interlude {count}"),
+        SectionType::Vamp => format!("vamp {count}"),
+        SectionType::Refrain => format!("refrain {count}"),
+        SectionType::Turnaround => format!("turnaround {count}"),
+        SectionType::Breakdown => format!("breakdown {count}"),
+        SectionType::Hits => format!("hits {count}"),
+        // A custom name goes in brackets. Bare, only single well-known words
+        // parse back as a section header — `Guitar Solo 4` reads as chords,
+        // and every bar under it silently joins the section above.
+        SectionType::Custom(name) => format!("[{name}] {count}"),
         _ => format!("section {count}"),
     }
 }
@@ -307,23 +327,102 @@ fn measure_notation_to_keyflow(
     }
 }
 
-fn even_chord_duration_suffixes(chord_count: usize, time_signature: (u8, u8)) -> Vec<&'static str> {
-    if time_signature == (6, 8) {
-        return match chord_count {
-            0 | 1 => vec![],
-            2 => vec!["4.", "4."],
-            3 => vec!["4", "4", "4"],
-            4 => vec!["8.", "8.", "8.", "8."],
-            _ => vec!["8"; chord_count],
-        };
+/// Duration suffixes for a bar whose chords carry no usable rhythm of their
+/// own — a split bar from an importer, where all we know is how many chords
+/// share the measure.
+///
+/// The short counts are the house conventions (`2 2`, `4 4 2`, `4 4 4 4`).
+/// Beyond that the bar is subdivided so the spans still *add up*: a bar of
+/// eight chords in 4/4 is eight eighths, not eight quarters. Writing eight
+/// quarters into one `| … |` is not a cosmetic problem — the parser reads it
+/// back as two measures, so a section quietly doubles in length.
+fn even_chord_duration_suffixes(chord_count: usize, time_signature: (u8, u8)) -> Vec<String> {
+    let conventional: &[&str] = if time_signature == (6, 8) {
+        match chord_count {
+            0 | 1 => &[],
+            2 => &["4.", "4."],
+            3 => &["4", "4", "4"],
+            4 => &["8.", "8.", "8.", "8."],
+            _ => &[],
+        }
+    } else {
+        match chord_count {
+            0 | 1 => &[],
+            2 => &["2", "2"],
+            3 => &["4", "4", "2"],
+            4 => &["4", "4", "4", "4"],
+            _ => &[],
+        }
+    };
+    if chord_count <= 4 {
+        return conventional.iter().map(|s| (*s).to_string()).collect();
     }
-    match chord_count {
-        0 | 1 => vec![],
-        2 => vec!["2", "2"],
-        3 => vec!["4", "4", "2"],
-        4 => vec!["4", "4", "4", "4"],
-        _ => vec!["4"; chord_count],
+    subdivide_measure(chord_count, time_signature)
+}
+
+/// Split a measure among `chord_count` chords on the coarsest note grid that
+/// has a slot for each, handing any leftover slots to the last chords.
+fn subdivide_measure(chord_count: usize, (numerator, denominator): (u8, u8)) -> Vec<String> {
+    let beat = beat_ticks(denominator);
+    let bar = beat * u32::from(numerator.max(1));
+
+    let mut unit = beat;
+    while bar / unit < chord_count as u32 && unit > 1 {
+        unit /= 2;
     }
+    let slots = bar / unit;
+    let chords = chord_count as u32;
+    if slots < chords {
+        // Finer than a 32nd would not help. One unit each, and the bar runs
+        // long — better an odd bar than a dropped chord.
+        return vec![ticks_to_suffix(unit); chord_count];
+    }
+
+    let base = slots / chords;
+    let remainder = slots % chords;
+    (0..chords)
+        .map(|i| {
+            let extra = u32::from(i >= chords - remainder);
+            ticks_to_suffix((base + extra) * unit)
+        })
+        .collect()
+}
+
+/// Ticks in one beat, where a quarter note is 48.
+fn beat_ticks(denominator: u8) -> u32 {
+    match denominator {
+        1 => 192,
+        2 => 96,
+        4 => 48,
+        8 => 24,
+        16 => 12,
+        32 => 6,
+        _ => 48,
+    }
+}
+
+fn ticks_to_suffix(ticks: u32) -> String {
+    const PLAIN: [(u32, &str); 6] = [
+        (192, "1"),
+        (96, "2"),
+        (48, "4"),
+        (24, "8"),
+        (12, "16"),
+        (6, "32"),
+    ];
+    for (base, name) in PLAIN {
+        if ticks == base {
+            return name.to_string();
+        }
+        if ticks == base + base / 2 {
+            return format!("{name}.");
+        }
+    }
+    PLAIN
+        .iter()
+        .find(|(base, _)| ticks >= *base)
+        .map_or("32", |(_, name)| *name)
+        .to_string()
 }
 
 fn chord_symbol_to_syntax(symbol: &str) -> String {
@@ -416,9 +515,34 @@ fn chord_to_syntax(
             }
         }
         ChordRhythm::Default => token.push_str(" /"),
-        ChordRhythm::Explicit(_) => {}
+        // An explicit note value is the only thing that says how long a
+        // sub-beat chord lasts. Dropped, the chord reads as a whole bar and
+        // the measure runs long.
+        ChordRhythm::Explicit(duration) => token.push_str(&explicit_duration_suffix(&duration)),
     }
     token
+}
+
+/// `_8`, `_4.`, `_16~` — a chord's explicit note value in keyflow syntax.
+fn explicit_duration_suffix(duration: &keyflow_proto::core::duration::NotationDuration) -> String {
+    use keyflow_proto::core::duration::NoteValue;
+    let value = match duration.note_value {
+        NoteValue::Whole => "1",
+        NoteValue::Half => "2",
+        NoteValue::Quarter => "4",
+        NoteValue::Eighth => "8",
+        NoteValue::Sixteenth => "16",
+        NoteValue::ThirtySecond => "32",
+        NoteValue::SixtyFourth => "64",
+    };
+    let mut out = format!("_{value}");
+    for _ in 0..duration.dots {
+        out.push('.');
+    }
+    if duration.tied {
+        out.push('~');
+    }
+    out
 }
 
 fn melody_to_syntax(melody: &Melody) -> String {

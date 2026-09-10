@@ -1,0 +1,16 @@
+= intro
+Bm 
+= verse
+$ (Bm A G_Em Bm)
+(D A D A
+C G C G )
+= chorus (I have become ...)
+A C_G D D o
+= interlude - guitar solo -
+D A D A 
+C G C G
+= chorus (I have become ...)
+A C_G D D
+D.S. al coda con rep.
+= coda - guitar solo -
+O (Bm A G_Em Bm) 

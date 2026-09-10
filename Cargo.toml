@@ -23,6 +23,7 @@ members = [
     "features/syntax",
     "features/annotate",
     "features/chordpro",
+    "features/chordsheet",
     "features/daw-analysis",
     "features/live",
     "features/lsp",
@@ -67,6 +68,7 @@ repository = "https://github.com/FastTrackStudios/keyflow"
 keyflow = { path = "features/keyflow", default-features = false }
 keyflow-text = { path = "features/text" }
 keyflow-chordpro = { path = "features/chordpro" }
+keyflow-chordsheet = { path = "features/chordsheet" }
 keyflow-midi = { path = "features/midi" }
 keyflow-live = { path = "features/live" }
 keyflow-musicxml = { path = "features/musicxml" }

@@ -1,0 +1,18 @@
+# A comment 
+= A 
+(A B C D)x2
+A %1 C_D E
+= B
+(A B 1. C D 2. E F)
+- simile mark one bar
+A B C %
+- simile mark two bars
+A B %%
++ A second Page
+(A B %2
+C_D E_F %2 )x3
+- 4 bars repeat
+( E F G A
+%4)
+- empty bars
+A * * D 

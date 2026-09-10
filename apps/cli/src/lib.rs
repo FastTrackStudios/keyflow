@@ -158,6 +158,24 @@ enum Commands {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
+    /// Import a chordsheet.com source `.txt` and emit Keyflow text.
+    ///
+    /// Prints the converted `.kf` to stdout by default so it can be piped or
+    /// captured. Title and artist come from the backup's `manifest.json` when
+    /// `--manifest` points at one, and from the `ARTIST - TITLE.txt` filename
+    /// otherwise — the source text itself carries neither.
+    Chordsheet {
+        /// Path to a chordsheet.com `.txt`, or a directory of them.
+        input: PathBuf,
+        /// Write the Keyflow text here instead of stdout. With a directory
+        /// input this is the output directory, one `.kf` per source.
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// A backup's `manifest.json`, for real titles and artists. Defaults
+        /// to `manifest.json` beside the input directory when one exists.
+        #[arg(long)]
+        manifest: Option<PathBuf>,
+    },
     /// Compare a MusicXML import against a .kf parse after both become Chart objects.
     MusicxmlCompare {
         /// Path to the source .musicxml or .mxl file.
@@ -1394,6 +1412,12 @@ fn run(cli: Cli) -> Result<(), String> {
             Ok(())
         }
 
+        Commands::Chordsheet {
+            input,
+            output,
+            manifest,
+        } => chordsheet_import(&input, output.as_deref(), manifest.as_deref()),
+
         Commands::MusicxmlKf { input, output } => {
             let chart = keyflow_musicxml::import_file(&input)
                 .map_err(|e| format!("musicxml import: {e}"))?;
@@ -1860,6 +1884,95 @@ fn run(cli: Cli) -> Result<(), String> {
             profile,
         } => orchestra::orchestrate(&input, part.as_deref(), profile.as_deref()),
     }
+}
+
+/// `kf chordsheet` — translate chordsheet.com source text to Keyflow text.
+///
+/// A directory input converts every `*.txt` in it (top level only), which is
+/// the shape an account backup arrives in: a `source/` folder beside a
+/// `manifest.json`.
+fn chordsheet_import(
+    input: &std::path::Path,
+    output: Option<&std::path::Path>,
+    manifest: Option<&std::path::Path>,
+) -> Result<(), String> {
+    use keyflow_chordsheet::manifest::Manifest;
+
+    let manifest_path = manifest.map(std::path::Path::to_path_buf).or_else(|| {
+        // A backup keeps `manifest.json` one level up from `source/`.
+        let candidates = [
+            input.join("manifest.json"),
+            input.parent()?.join("manifest.json"),
+        ];
+        candidates.into_iter().find(|p| p.is_file())
+    });
+    let manifest = match &manifest_path {
+        Some(path) => Manifest::read(path).map_err(|e| format!("{e}"))?,
+        None => Manifest::default(),
+    };
+
+    let convert = |path: &std::path::Path| -> Result<String, String> {
+        let source = std::fs::read_to_string(path)
+            .map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
+        let chart = keyflow_chordsheet::import_str(&source, &manifest.options_for(path));
+        Ok(keyflow::text::chart::exporter::chart_to_keyflow(&chart))
+    };
+
+    if input.is_dir() {
+        let out_dir = output.ok_or("--output is required when the input is a directory")?;
+        std::fs::create_dir_all(out_dir)
+            .map_err(|e| format!("Failed to create {}: {e}", out_dir.display()))?;
+
+        let mut sources: Vec<PathBuf> = std::fs::read_dir(input)
+            .map_err(|e| format!("Failed to read {}: {e}", input.display()))?
+            .filter_map(|entry| entry.ok().map(|e| e.path()))
+            .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("txt"))
+            .collect();
+        sources.sort();
+        if sources.is_empty() {
+            return Err(format!("No .txt files found in {}", input.display()));
+        }
+
+        let mut failed = 0usize;
+        for path in &sources {
+            let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("chart");
+            match convert(path) {
+                Ok(text) => {
+                    let out = out_dir.join(format!("{stem}.kf"));
+                    std::fs::write(&out, text)
+                        .map_err(|e| format!("Failed to write {}: {e}", out.display()))?;
+                }
+                Err(e) => {
+                    failed += 1;
+                    eprintln!("  ⚠ {}: {e}", path.display());
+                }
+            }
+        }
+        eprintln!(
+            "Converted {} of {} charts into {}",
+            sources.len() - failed,
+            sources.len(),
+            out_dir.display()
+        );
+        return Ok(());
+    }
+
+    let text = convert(input)?;
+    match output {
+        Some(output) => {
+            if let Some(parent) = output.parent() {
+                if !parent.as_os_str().is_empty() {
+                    std::fs::create_dir_all(parent)
+                        .map_err(|e| format!("Failed to create {}: {e}", parent.display()))?;
+                }
+            }
+            std::fs::write(output, text)
+                .map_err(|e| format!("Failed to write {}: {e}", output.display()))?;
+            eprintln!("Wrote {}", output.display());
+        }
+        None => print!("{text}"),
+    }
+    Ok(())
 }
 
 #[cfg(test)]
