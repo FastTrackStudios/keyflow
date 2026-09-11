@@ -1299,10 +1299,8 @@ C G Am F x4
 
     let metrics = result.page_metrics(1).expect("Should have page 1");
 
-    // Check with reasonable min/max spacing. Three spatia is the bare gap:
-    // this chart is plain chords, so nothing sits between the lines and the
-    // layout no longer holds the wide annotation band open under each one.
-    let warnings = metrics.check_spacing(15.0, 60.0);
+    // Check with reasonable min/max spacing (20-60 points)
+    let warnings = metrics.check_spacing(20.0, 60.0);
 
     println!("\n=== Spacing Check Test ===");
     metrics.print_debug();
@@ -1534,12 +1532,9 @@ Em7 Am7 D7 Gmaj7
             "Page {} should have at least 1 system",
             metrics.page_number
         );
-        // Sixteen, not ten: these are plain chords with nothing between the
-        // lines, so they sit at the bare three-spatium gap rather than the
-        // wide annotation band, and a page holds half again as many.
         assert!(
-            metrics.system_count <= 16,
-            "Page {} should have at most 16 systems, got {}",
+            metrics.system_count <= 10,
+            "Page {} should have at most 10 systems, got {}",
             metrics.page_number,
             metrics.system_count
         );
@@ -2695,14 +2690,16 @@ fn a_folded_section_costs_far_less_height_than_a_written_one() {
 }
 
 /// The wide band between systems is for the text, figures and endings that
-/// live there. A chart of plain chords has none, and holding it open anyway
-/// left a visible hole under every line and broke the page early.
+/// live there. Compact's job is to fit the chart on a page, so there it is
+/// only held open where something uses it — everywhere else that band is the
+/// air a chart on a stand is read by, and it stays.
 #[test]
-fn plain_systems_sit_closer_than_annotated_ones() {
+fn compact_sits_plain_systems_closer_than_annotated_ones() {
     use keyflow_proto::chart::notations::{Placement, StaffText};
 
     let engine = ChartLayoutEngine::new(test_style(), Arc::new(Vec::new()), Arc::new(Vec::new()));
-    let config = ChartLayoutConfig::master_rhythm();
+    let mut config = ChartLayoutConfig::master_rhythm();
+    config.tight_system_spacing = true;
     let chart = long_chart(3, 4, "G");
 
     let mut annotated = chart.clone();
@@ -2731,5 +2728,18 @@ fn plain_systems_sit_closer_than_annotated_ones() {
         "plain systems ({}) should sit closer than ones carrying text ({})",
         pitch(&plain),
         pitch(&with_text)
+    );
+
+    // And without the toggle, both sit at the full band: a chart being read
+    // off a stand keeps its air whether or not this line happens to use it.
+    let mut roomy = config.clone();
+    roomy.tight_system_spacing = false;
+    let plain_roomy = engine.layout_chart_with_config(&chart, &LayoutMode::paginated_a4(), &roomy);
+    let text_roomy =
+        engine.layout_chart_with_config(&annotated, &LayoutMode::paginated_a4(), &roomy);
+    assert_eq!(
+        pitch(&plain_roomy),
+        pitch(&text_roomy),
+        "by default every system gets the same gap"
     );
 }

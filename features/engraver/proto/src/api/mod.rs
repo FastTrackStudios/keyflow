@@ -504,6 +504,7 @@ pub mod pipeline {
                     let mut config = config;
                     config.fold_sections = true;
                     config.draw_similes = true;
+                    config.tight_system_spacing = true;
                     self.layout_with_config(&folded(chart), &layout_mode, &config)
                 }
             }

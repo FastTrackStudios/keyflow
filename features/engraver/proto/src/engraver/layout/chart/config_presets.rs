@@ -65,6 +65,7 @@ impl ChartLayoutConfig {
             beam_grouping: BeamGroupingMode::Standard,
             draw_similes: false,
             fold_sections: false,
+            tight_system_spacing: false,
         }
     }
 
@@ -104,6 +105,7 @@ impl ChartLayoutConfig {
             beam_grouping: BeamGroupingMode::Standard,
             draw_similes: false,
             fold_sections: false,
+            tight_system_spacing: false,
         }
     }
 
@@ -165,6 +167,7 @@ impl ChartLayoutConfig {
             beam_grouping: BeamGroupingMode::JazzHalfBar,
             draw_similes: false,
             fold_sections: false,
+            tight_system_spacing: false,
         }
     }
 
@@ -207,6 +210,7 @@ impl ChartLayoutConfig {
             beam_grouping: BeamGroupingMode::JazzHalfBar,
             draw_similes: false,
             fold_sections: false,
+            tight_system_spacing: false,
         }
     }
 

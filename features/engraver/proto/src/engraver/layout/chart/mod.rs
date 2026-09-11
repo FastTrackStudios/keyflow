@@ -456,6 +456,19 @@ pub struct ChartLayoutConfig {
     /// Draw a folded section as a titled rule instead of its bars.
     /// See [`BehavioralFlags::fold_sections`](super::chart::config::BehavioralFlags).
     pub fold_sections: bool,
+    /// Pack systems by their ink rather than holding the annotation band open
+    /// under every one of them.
+    ///
+    /// Off by default: `system_spacing` is deliberately generous so that text,
+    /// figures and endings between two lines never crowd either, and a chart
+    /// being read off a stand wants that air. Compact mode turns it on, where
+    /// fitting the chart on one page is the whole point — a line that carries
+    /// nothing below it then sits at the bare gap, close enough to keep its
+    /// ink off its neighbour's and no further.
+    ///
+    /// A folded row is tight either way. It is a rule and a word, and the
+    /// space it saves is the reason to fold.
+    pub tight_system_spacing: bool,
     /// Spacing density (default 1.0). Higher values = tighter spacing.
     pub spacing_density: f64,
     /// Fill limit for last system justification (default 0.3).
@@ -824,6 +837,12 @@ impl ChartLayoutEngine {
         mode: &LayoutMode,
         config: &ChartLayoutConfig,
     ) -> ChartLayoutResult {
+        // Fitting the chart on one page is the whole point here, so the
+        // annotation band is only held open where something uses it.
+        let mut config = config.clone();
+        config.tight_system_spacing = true;
+        let config = &config;
+
         if !matches!(mode, LayoutMode::Paginated { .. }) {
             return self.layout_chart_with_config(chart, mode, config);
         }
@@ -1198,11 +1217,11 @@ impl ChartLayoutEngine {
                     .collect();
                 let system_bottom_reserve = if section_folded {
                     self.config.spatium * 1.0
-                } else if draws_below_staff(&system_measures) {
-                    self.config.spatium * 4.5
-                } else {
+                } else if self.config.tight_system_spacing && !draws_below_staff(&system_measures) {
                     // Nothing hangs below the staff but the odd repeat arm.
                     self.config.spatium * 1.5
+                } else {
+                    self.config.spatium * 4.5
                 };
                 // A folded row is as tall as its margin capsule, so the rule
                 // runs through the badge's middle and the two read as one
@@ -2258,34 +2277,51 @@ impl ChartLayoutEngine {
                 // A folded row placed against a staff keeps the ordinary bare
                 // gap; only two folded rows in a row close up, and the
                 // compactor does that once it can see what follows.
-                // The wide band belongs to whichever side puts something in
-                // it: what this line hangs below itself, or what the next one
-                // carries above its own staff. Reserving it here is the
-                // cautious half of the job — the compactor takes back what
-                // neither side turned out to need, and it cannot give room
-                // back that was never left.
-                let next_system_draws_above = systems
-                    .get(sys_idx + 1)
-                    .map(|next| {
-                        let next_measures: Vec<Measure> = next
-                            .iter()
-                            .filter_map(|idx| chart_section.measures().get(*idx).cloned())
-                            .collect();
-                        draws_above_staff(&next_measures)
-                    })
-                    .or_else(|| {
-                        chart
-                            .sections
-                            .get(section_idx + 1)
-                            .map(|next| draws_above_staff(next.measures()))
-                    })
-                    .unwrap_or(false);
-                let spacing = if (!section_folded && draws_below_staff(&system_measures))
-                    || next_system_draws_above
-                {
-                    self.config.system_spacing
+                // What comes next decides how much room this line leaves
+                // behind it. A folded row is a rule and a word: it takes the
+                // air under the line above rather than asking for its own.
+                let next_section_folded = chart
+                    .sections
+                    .get(section_idx + 1)
+                    .is_some_and(|next| next.folded && self.config.fold_sections);
+                let next_is_folded = if sys_idx + 1 < systems.len() {
+                    section_folded
                 } else {
+                    next_section_folded
+                };
+                // Under `tight_system_spacing` the wide band belongs to
+                // whichever side puts something in it: what this line hangs
+                // below itself, or what the next one carries above its own
+                // staff. Reserving it here is the cautious half of the job —
+                // the compactor takes back what neither side turned out to
+                // need, and it cannot give room back that was never left.
+                let next_system_draws_above = || {
+                    systems
+                        .get(sys_idx + 1)
+                        .map(|next| {
+                            let next_measures: Vec<Measure> = next
+                                .iter()
+                                .filter_map(|idx| chart_section.measures().get(*idx).cloned())
+                                .collect();
+                            draws_above_staff(&next_measures)
+                        })
+                        .or_else(|| {
+                            chart
+                                .sections
+                                .get(section_idx + 1)
+                                .map(|next| draws_above_staff(next.measures()))
+                        })
+                        .unwrap_or(false)
+                };
+                let spacing = if section_folded || next_is_folded {
                     bare_system_gap(&self.config)
+                } else if self.config.tight_system_spacing
+                    && !draws_below_staff(&system_measures)
+                    && !next_system_draws_above()
+                {
+                    bare_system_gap(&self.config)
+                } else {
+                    self.config.system_spacing
                 };
                 page_y += actual_system_height + spacing;
                 global_system_index += 1;
@@ -2400,10 +2436,16 @@ impl ChartLayoutEngine {
                 for system_idx in 1..page.systems.len() {
                     let lower_system_index = page.systems[system_idx].index;
                     let upper_system_index = page.systems[system_idx - 1].index;
+                    let touches_a_folded_row = folded_systems.contains(&upper_system_index)
+                        || folded_systems.contains(&lower_system_index);
                     let target_gap = if folded_systems.contains(&upper_system_index)
                         && folded_systems.contains(&lower_system_index)
                     {
                         folded_gap
+                    } else if touches_a_folded_row {
+                        bare_gap
+                    } else if !self.config.tight_system_spacing {
+                        annotated_gap
                     } else if systems_with_ink_below.contains(&upper_system_index)
                         || systems_with_ink_above.contains(&lower_system_index)
                     {
