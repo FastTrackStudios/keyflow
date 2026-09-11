@@ -488,12 +488,14 @@ pub mod pipeline {
                     // job, and it is the thing Compact trades readability for.
                     let mut config = config;
                     config.fold_sections = true;
+                    config.fit_whole_section_on_one_system = true;
                     config.draw_similes = true;
                     self.layout_with_config(&folded(chart), &layout_mode, &config)
                 }
                 ChartMode::Compact if matches!(preset, Preset::Page) => {
                     let mut config = config;
                     config.fold_sections = true;
+                    config.fit_whole_section_on_one_system = true;
                     config.draw_similes = true;
                     self.engine
                         .layout_chart_compact(&folded(chart), &layout_mode, &config)
@@ -503,6 +505,7 @@ pub mod pipeline {
                 ChartMode::Compact => {
                     let mut config = config;
                     config.fold_sections = true;
+                    config.fit_whole_section_on_one_system = true;
                     config.draw_similes = true;
                     config.tight_system_spacing = true;
                     self.layout_with_config(&folded(chart), &layout_mode, &config)

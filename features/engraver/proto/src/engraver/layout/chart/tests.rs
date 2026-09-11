@@ -2759,3 +2759,45 @@ fn compact_sits_plain_systems_closer_than_annotated_ones() {
         "by default every system gets the same gap"
     );
 }
+
+/// Folded and compact ask for a five-bar section on one line: splitting it
+/// spends a whole system of height to print one bar, and height is the thing
+/// both modes are trying to save. Default keeps the four-bar grid.
+#[test]
+fn a_five_bar_section_fits_one_line_when_asked() {
+    let engine = ChartLayoutEngine::new(test_style(), Arc::new(Vec::new()), Arc::new(Vec::new()));
+    let chart = long_chart(1, 5, "G");
+
+    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0);
+    assert_eq!(systems.len(), 2, "by default the cap holds at four");
+
+    let mut config = ChartLayoutConfig::master_rhythm();
+    config.fit_whole_section_on_one_system = true;
+    let engine = ChartLayoutEngine::with_config(
+        config,
+        test_style(),
+        Arc::new(Vec::new()),
+        Arc::new(Vec::new()),
+    );
+    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0);
+    assert_eq!(systems.len(), 1);
+    assert_eq!(systems[0].len(), 5);
+}
+
+/// Only the whole section, and only one bar past the cap. Six bars are still
+/// two lines — the allowance is for the section that *nearly* fits, not for
+/// packing a chart in generally.
+#[test]
+fn six_bars_are_still_two_lines_with_the_allowance_on() {
+    let mut config = ChartLayoutConfig::master_rhythm();
+    config.fit_whole_section_on_one_system = true;
+    let engine = ChartLayoutEngine::with_config(
+        config,
+        test_style(),
+        Arc::new(Vec::new()),
+        Arc::new(Vec::new()),
+    );
+    let chart = long_chart(1, 6, "G");
+    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0);
+    assert_eq!(systems.len(), 2);
+}

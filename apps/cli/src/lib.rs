@@ -857,12 +857,14 @@ impl LayoutPipeline {
             ChartModeArg::Folded => {
                 let mut config = config;
                 config.fold_sections = true;
+                config.fit_whole_section_on_one_system = true;
                 config.draw_similes = true;
                 self.engine.layout_chart_with_config(chart, &mode, &config)
             }
             ChartModeArg::Compact => {
                 let mut config = config;
                 config.fold_sections = true;
+                config.fit_whole_section_on_one_system = true;
                 config.draw_similes = true;
                 self.engine.layout_chart_compact(chart, &mode, &config)
             }

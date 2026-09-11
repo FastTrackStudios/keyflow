@@ -266,6 +266,33 @@ fn resolve_chord_collisions(
         }
     }
 
+    // The last symbol has to stay inside its own bar. A symbol that hangs past
+    // the closing barline lands on the first symbol of the next bar, and that
+    // pair is beyond this pass — it only ever sees one measure. Pull it back as
+    // far as its neighbour allows.
+    if let Some(last) = chord_bounds.len().checked_sub(1) {
+        let right = chord_bounds[last].world_bounds.x1 + adjustments[last];
+        // Short of the barline by the same gap two symbols keep from each
+        // other: the next bar's first symbol starts at that barline.
+        let overhang = right - (measure_end_x - min_gap);
+        if overhang > 0.0 {
+            let room = if last == 0 {
+                (chord_bounds[last].world_bounds.x0 + adjustments[last]
+                    - (measure_start_x - chord_bounds[last].world_bounds.width() * 0.5))
+                    .max(0.0)
+            } else {
+                (chord_bounds[last].world_bounds.x0 + adjustments[last]
+                    - (chord_bounds[last - 1].world_bounds.x1 + adjustments[last - 1] + min_gap))
+                    .max(0.0)
+            };
+            let pull = overhang.min(room);
+            if pull > 0.0 {
+                adjustments[last] -= pull;
+                had_collisions = true;
+            }
+        }
+    }
+
     ChordCollisionResult {
         adjustments,
         had_collisions,

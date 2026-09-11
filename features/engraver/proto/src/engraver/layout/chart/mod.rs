@@ -469,6 +469,14 @@ pub struct ChartLayoutConfig {
     /// A folded row is tight either way. It is a rule and a word, and the
     /// space it saves is the reason to fold.
     pub tight_system_spacing: bool,
+    /// Let a section that runs one bar past the line cap stay on one line.
+    ///
+    /// Off by default: four bars to a line is the grid a chart is read by.
+    /// But a five-bar section split in two costs a whole system of height for
+    /// one bar of music, and when the point is to fit the chart — folded and
+    /// compact both ask for this — a line of five is the cheaper answer. Only
+    /// when the whole section fits, and only when the chord symbols do.
+    pub fit_whole_section_on_one_system: bool,
     /// Spacing density (default 1.0). Higher values = tighter spacing.
     pub spacing_density: f64,
     /// Fill limit for last system justification (default 0.3).
@@ -838,9 +846,11 @@ impl ChartLayoutEngine {
         config: &ChartLayoutConfig,
     ) -> ChartLayoutResult {
         // Fitting the chart on one page is the whole point here, so the
-        // annotation band is only held open where something uses it.
+        // annotation band is only held open where something uses it, and a
+        // section one bar past the line cap stays on one line.
         let mut config = config.clone();
         config.tight_system_spacing = true;
+        config.fit_whole_section_on_one_system = true;
         let config = &config;
 
         if !matches!(mode, LayoutMode::Paginated { .. }) {
@@ -3590,6 +3600,22 @@ impl ChartLayoutEngine {
         // better one cramped bar than an empty line and the same cramped bar.
         let usable = content_width.max(1.0);
 
+        // A section one bar past the cap goes on one line, when asked. Two
+        // lines for five bars costs a system of height to print a single bar,
+        // and that bar is what a reader loses the chart's shape to.
+        if self.config.fit_whole_section_on_one_system
+            && measures.len() == self.config.max_measures_per_system + 1
+            && !measures.iter().any(starts_long_volta)
+        {
+            let squeezed: f64 = measures
+                .iter()
+                .map(|measure| self.chord_symbol_width_floor(measure, &text_metrics))
+                .sum();
+            if squeezed <= usable {
+                return vec![(0..measures.len()).collect()];
+            }
+        }
+
         for (idx, measure) in measures.iter().enumerate() {
             if starts_long_volta(measure) && !current_system.is_empty() {
                 systems.push(std::mem::take(&mut current_system));
@@ -3662,6 +3688,32 @@ impl ChartLayoutEngine {
             .map(|c| text_metrics.horizontal_advance(&c.full_symbol, font_size) + gap)
             .sum();
         symbols.max(self.config.min_measure_width)
+    }
+
+    /// The narrowest this measure can honestly be drawn.
+    ///
+    /// [`Self::chord_symbol_width_needed`] asks for a comfortable bar — it
+    /// carries `min_measure_width`, which at the master-rhythm preset is a
+    /// quarter of the page. That is the right question when deciding how many
+    /// bars to put on a line, and the wrong one when asking whether a section
+    /// *can* be squeezed onto one: four bars of that floor already fill the
+    /// page, so the answer would always be no. This asks only for room for the
+    /// symbols, and a bar with none still gets its slashes.
+    fn chord_symbol_width_floor(
+        &self,
+        measure: &crate::chart::types::Measure,
+        text_metrics: &TextFontMetrics,
+    ) -> f64 {
+        let font_size = self.config.harmony_style.root_size;
+        let gap = self.config.min_chord_symbol_gap.max(1.0);
+        let symbols: f64 = measure
+            .chords
+            .iter()
+            .filter(|c| !c.full_symbol.is_empty() && c.full_symbol != "s")
+            .map(|c| text_metrics.horizontal_advance(&c.full_symbol, font_size) + gap)
+            .sum();
+        // Four slashes and the space they need to read as four.
+        symbols.max(self.config.spatium * 8.0)
     }
 }
 

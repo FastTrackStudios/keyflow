@@ -66,6 +66,7 @@ impl ChartLayoutConfig {
             draw_similes: false,
             fold_sections: false,
             tight_system_spacing: false,
+            fit_whole_section_on_one_system: false,
         }
     }
 
@@ -106,6 +107,7 @@ impl ChartLayoutConfig {
             draw_similes: false,
             fold_sections: false,
             tight_system_spacing: false,
+            fit_whole_section_on_one_system: false,
         }
     }
 
@@ -168,6 +170,7 @@ impl ChartLayoutConfig {
             draw_similes: false,
             fold_sections: false,
             tight_system_spacing: false,
+            fit_whole_section_on_one_system: false,
         }
     }
 
@@ -211,6 +214,7 @@ impl ChartLayoutConfig {
             draw_similes: false,
             fold_sections: false,
             tight_system_spacing: false,
+            fit_whole_section_on_one_system: false,
         }
     }
 
