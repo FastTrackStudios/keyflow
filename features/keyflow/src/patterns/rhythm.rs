@@ -56,12 +56,12 @@ pub static TRIPLET_PUSH: Pattern = Pattern::new(
     PatternCategory::PushPull,
     r#"Thriller Verse
 120bpm 4/4 #Ab
-/push = triplet
+\push = triplet
 
 VS
 'F/C . | Cm . | 'F/C . | Cm . | 'F/C . | Cm . | 'F/C . | Cm // Gm7 // 'Abmaj7 / Abmaj7#5 / 'Db7#11/G //
 "#,
-    "Demonstrates triplet push timing with the ' prefix. When /push = triplet is set, \
+    "Demonstrates triplet push timing with the ' prefix. When \\push = triplet is set, \
      pushed chords are anticipated by one triplet eighth (160 ticks at 480 PPQ).",
 );
 
@@ -72,7 +72,7 @@ pub static TRIPLET_MIXED: Pattern = Pattern::new(
     PatternCategory::Triplets,
     r#"Thriller Chorus
 120bpm 4/4 #Ab
-/push = triplet
+\push = triplet
 
 CH
 Cm/Eb / 'Eb // | 'Eb / 'F/C / 'Cm // | 'F/A //// | 'Fm9 ////

@@ -41,7 +41,7 @@ impl<'a> ChartParser<'a> {
     }
 
     pub(super) fn parse_alias_declaration(line: &str) -> Option<(String, String)> {
-        let (name, value) = if let Some(rest) = line.strip_prefix("/alias ") {
+        let (name, value) = if let Some(rest) = line.strip_prefix("\\alias ") {
             let mut parts = rest.splitn(2, char::is_whitespace);
             (parts.next()?.trim(), parts.next()?.trim())
         } else {
@@ -147,8 +147,8 @@ impl<'a> ChartParser<'a> {
 
     fn parse_classical_dynamic_line(line: &str) -> Option<Dynamic> {
         let value = line
-            .strip_prefix("/dyn ")
-            .or_else(|| line.strip_prefix("/dynamic "))
+            .strip_prefix("\\dyn ")
+            .or_else(|| line.strip_prefix("\\dynamic "))
             .or_else(|| line.strip_prefix("dyn "))
             .or_else(|| line.strip_prefix("dynamic "))?
             .trim();
@@ -172,7 +172,7 @@ impl<'a> ChartParser<'a> {
 
     fn parse_hairpin_line(line: &str) -> Option<Hairpin> {
         let value = line
-            .strip_prefix("/hairpin ")
+            .strip_prefix("\\hairpin ")
             .or_else(|| line.strip_prefix("hairpin "))?
             .trim();
         let mut parts = value.split_whitespace();
@@ -240,7 +240,7 @@ impl<'a> ChartParser<'a> {
     /// verbatim. Returns the bass-note text (without the slash).
     ///
     /// Deliberately rejects rhythm slashes (`//`, `/.`), durations (`/4`),
-    /// commands (`/fermata`), and slash-family notation (`/maj7`).
+    /// commands (`\fermata`), and slash-family notation (`/maj7`).
     fn parse_floating_slash_bass(token: &str) -> Option<&str> {
         let bass = token.strip_prefix('/')?;
         if bass.is_empty() || bass.contains('/') {
@@ -587,6 +587,64 @@ impl<'a> ChartParser<'a> {
         let mut measure = Measure::new();
         measure.time_signature = (time_sig.numerator as u8, time_sig.denominator as u8);
         measure
+    }
+
+    /// `%` → 1, `%3` → 3. Anything else is not a simile mark.
+    ///
+    /// `%` on its own is `%1`: one more measure of what the last one was.
+    /// `%0` is not a count, it is a typo — treated as no match so it surfaces
+    /// as an unknown token rather than silently doing nothing.
+    pub(super) fn parse_measure_repeat(token: &str) -> Option<usize> {
+        let digits = token.strip_prefix('%')?;
+        if digits.is_empty() {
+            return Some(1);
+        }
+        digits.parse::<usize>().ok().filter(|n| *n > 0)
+    }
+
+    /// `.` → 1, `.3` → 3, `._4` → 1.
+    ///
+    /// `._N` is not a count: the auto-duration pass appends `_N` to bare
+    /// tokens, so a `.` that has been through it arrives as `._4`. The
+    /// duration is already carried by the chord being repeated.
+    ///
+    /// `.` is also the staccato prefix (`.C`), and in a chart written in
+    /// scale degrees `.3` is staccato on the ♭III — a real chord — as much as
+    /// it is three repeats. The notation system decides, the same way it
+    /// decides that `b3` is a flat degree rather than the note B: in a degree
+    /// chart the counted form is off, and repeats are written `. . .`.
+    pub(super) fn parse_dot_repeat(token: &str, system: NotationSystem) -> Option<usize> {
+        let rest = token.strip_prefix('.')?;
+        if rest.is_empty() || rest.starts_with('_') {
+            return Some(1);
+        }
+        if system == NotationSystem::Degree {
+            return None;
+        }
+        rest.parse::<usize>().ok().filter(|n| *n > 0)
+    }
+
+    /// The measure a simile mark stands for: the same music, none of the
+    /// annotation.
+    ///
+    /// A simile mark says "play that again", not "print that again". Cloning
+    /// the previous measure whole would redraw its cues, its ending bracket
+    /// and its repeat dots once per `%` — and `%3` would stack three copies of
+    /// a cue that was written once.
+    fn simile_copy(measure: &Measure) -> Measure {
+        let mut copy = measure.clone();
+        copy.simile = true;
+        copy.staff_text.clear();
+        copy.text_cues.clear();
+        copy.dynamics.clear();
+        copy.classical_dynamics.clear();
+        copy.hairpins.clear();
+        copy.volta_start = None;
+        copy.start_repeat = RepeatMark::None;
+        copy.end_repeat = RepeatMark::None;
+        copy.repeat_count = 1;
+        copy.source_span = None;
+        copy
     }
 
     pub(super) fn join_multiline_parallel_containers(lines: &[&str]) -> Vec<String> {
@@ -1083,7 +1141,7 @@ impl<'a> ChartParser<'a> {
                 .any(|t| t.chars().all(|c| c == '/') && !t.is_empty());
             let has_chord_length_directive = tokens
                 .iter()
-                .any(|t| *t == "/ChordLength" || *t == "/duration" || *t == "/Duration");
+                .any(|t| *t == "\\ChordLength" || *t == "\\duration" || *t == "\\Duration");
 
             let chord_count = tokens
                 .iter()
@@ -1097,7 +1155,8 @@ impl<'a> ChartParser<'a> {
                     // Dot repeats ARE counted - they occupy time in the measure.
                     // `$name` melody-variable recall is NOT a chord — it shouldn't
                     // shrink the chord-duration share for the real chords in the bar.
-                    !t.starts_with('/')
+                    !t.starts_with('\\')
+                        && !t.starts_with('/')
                         && !t.starts_with('@')
                         && !t.starts_with('"')
                         && !t.starts_with('$')
@@ -1124,7 +1183,8 @@ impl<'a> ChartParser<'a> {
                             if melody_mask[*i] || annotation_mask[*i] {
                                 return false;
                             }
-                            !t.starts_with('/')
+                            !t.starts_with('\\')
+                            && !t.starts_with('/')
                             && !t.starts_with('@')
                             && !t.starts_with('"')
                             && !t.starts_with('$')
@@ -1189,9 +1249,17 @@ impl<'a> ChartParser<'a> {
                 let is_dot_repeat = *token == ".";
                 let is_measure_repeat = *token == "%";
                 let is_stop_token = Command::parse_stop_token(token).is_some();
-                if !token.starts_with('/')
+                // `^"…"` and `_"…"` are staff text, not chords. Appending a
+                // duration to one leaves `^"Back to top"_2`, which no longer
+                // ends in a quote and so stops being staff text at all — the
+                // cue was silently dropped from any bar that also carried an
+                // explicit duration.
+                let is_annotation =
+                    token.starts_with('"') || token.starts_with("^\"") || token.starts_with("_\"");
+                if !token.starts_with('\\')
+                    && !token.starts_with('/')
                     && !token.starts_with('@')
-                    && !token.starts_with('"')
+                    && !is_annotation
                     && !token.starts_with('$')
                     && !is_dot_repeat
                     && !is_measure_repeat
@@ -1357,8 +1425,8 @@ impl<'a> ChartParser<'a> {
         let mut pending_hairpins: Vec<Hairpin> = Vec::new();
         let mut pending_staff_text: Vec<StaffText> = Vec::new();
 
-        // Seed each section from the chart-wide `/Duration` default (if any).
-        // A `/Duration` inside the section overrides these below.
+        // Seed each section from the chart-wide `\Duration` default (if any).
+        // A `\Duration` inside the section overrides these below.
         let mut section_chord_length: Option<(ChordRhythm, MusicalDuration)> =
             self.default_duration.as_ref().and_then(|v| {
                 Self::parse_chord_length_value(
@@ -1380,8 +1448,8 @@ impl<'a> ChartParser<'a> {
             }
 
             if let Some(value) = trimmed
-                .strip_prefix("/duration ")
-                .or_else(|| trimmed.strip_prefix("/Duration "))
+                .strip_prefix("\\duration ")
+                .or_else(|| trimmed.strip_prefix("\\Duration "))
             {
                 let value = value.trim();
                 section_chord_length = Self::parse_chord_length_value(
@@ -1393,8 +1461,8 @@ impl<'a> ChartParser<'a> {
             }
 
             if let Some(value) = trimmed
-                .strip_prefix("/octave ")
-                .or_else(|| trimmed.strip_prefix("/Octave "))
+                .strip_prefix("\\octave ")
+                .or_else(|| trimmed.strip_prefix("\\Octave "))
             {
                 let value = value.trim();
                 if let Some((octave, melody_block)) = value.split_once(char::is_whitespace) {
@@ -1463,7 +1531,7 @@ impl<'a> ChartParser<'a> {
                 continue;
             }
 
-            if let Some(value) = trimmed.strip_prefix("/ChordLength ") {
+            if let Some(value) = trimmed.strip_prefix("\\ChordLength ") {
                 section_chord_length = Self::parse_chord_length_value(
                     value.trim(),
                     self.time_signature.unwrap_or(TimeSignature::common_time()),
@@ -1590,6 +1658,7 @@ impl<'a> ChartParser<'a> {
                 // lines of this section so they come out section-relative.
                 self.section_beats_offset =
                     measures.iter().map(|m| f64::from(m.time_signature.0)).sum();
+                self.carried_measure = measures.last().cloned();
                 let mut line_measures = self.parse_chord_line_with_default_chord_length(
                     line,
                     section_type,
@@ -1626,6 +1695,7 @@ impl<'a> ChartParser<'a> {
 
         self.melody_octave_memory = section_melody_octave;
         self.section_beats_offset = 0.0;
+        self.carried_measure = None;
         Ok(measures)
     }
 
@@ -1773,10 +1843,8 @@ impl<'a> ChartParser<'a> {
         }
 
         let line_to_parse = Self::normalize_parallel_container_syntax(&line_to_parse);
-        let line_to_parse = line_to_parse
-            .replace("|:", "| @repeat-start ")
-            .replace(":|", " @repeat-end |")
-            .replace("m {", "m{");
+        let line_to_parse = Self::normalize_repeat_barlines(&line_to_parse);
+        let line_to_parse = line_to_parse.replace("m {", "m{");
 
         // Preprocess: Expand `()` rhythm groups into explicit per-chord lily
         // durations (e.g. `(C G)` → `C_2 G_2`, `(D Em G)` → `D_2t Em_2t G_2t`).
@@ -2050,7 +2118,7 @@ impl<'a> ChartParser<'a> {
                 continue;
             }
 
-            if *token_str == "/octave" {
+            if *token_str == "\\octave" {
                 if let Some(next) = tokens_str.get(token_idx + 1) {
                     line_melody_octave = next.parse::<u8>().ok().or(line_melody_octave);
                     skip_next_token = true;
@@ -2058,13 +2126,13 @@ impl<'a> ChartParser<'a> {
                 continue;
             }
 
-            if *token_str == "/ChordLength"
-                || *token_str == "/duration"
-                || *token_str == "/Duration"
+            if *token_str == "\\ChordLength"
+                || *token_str == "\\duration"
+                || *token_str == "\\Duration"
             {
                 if let Some(next) = tokens_str.get(token_idx + 1) {
                     chord_length_override = Self::parse_chord_length_value(next, time_sig);
-                    if *token_str == "/duration" || *token_str == "/Duration" {
+                    if *token_str == "\\duration" || *token_str == "\\Duration" {
                         default_melody_duration = Some(next.to_string());
                     }
                     skip_next_token = true;
@@ -2072,7 +2140,9 @@ impl<'a> ChartParser<'a> {
                 continue;
             }
 
-            if *token_str == "%" {
+            // `%` is the simile mark: one more measure of what the last one
+            // was. `%3` is three of them — `%` on its own is `%1`.
+            if let Some(repeats) = Self::parse_measure_repeat(token_str) {
                 if !current_measure.chords.is_empty()
                     || !current_measure.rhythm_elements.is_empty()
                     || !current_measure.figured_bass.is_empty()
@@ -2085,8 +2155,15 @@ impl<'a> ChartParser<'a> {
                     measure_has_slash_rhythm = false;
                 }
 
-                if let Some(previous_measure) = measures.last().cloned() {
-                    measures.push(previous_measure);
+                let previous_measure = measures
+                    .last()
+                    .cloned()
+                    .or_else(|| self.carried_measure.clone());
+                if let Some(previous_measure) = previous_measure {
+                    let repeated = Self::simile_copy(&previous_measure);
+                    for _ in 0..repeats {
+                        measures.push(repeated.clone());
+                    }
                 }
 
                 just_processed_separator = false;
@@ -2096,11 +2173,23 @@ impl<'a> ChartParser<'a> {
 
             if let Some((text, placement)) = Self::parse_quoted_text_token(token_str) {
                 let beat = current_measure_beats.floor().max(0.0) as u8 + 1;
-                let target_measure = if current_measure.chords.is_empty()
+                // Text sitting between two chords belongs to the measure it
+                // opens, not the one it follows. `| Bm | ^"Back to top" G |`
+                // is a cue over the second bar — attaching it to whatever
+                // `measures.last()` happens to be put it over the first, and
+                // when the split parse gave each bar its own pass there was no
+                // previous measure to hold it and the cue was dropped
+                // altogether.
+                //
+                // An empty current measure that a barline *just* opened is the
+                // measure being written. One that is empty for any other
+                // reason means the text trails the bar before it.
+                let opens_this_measure = measure_was_created_by_separator || measures.is_empty();
+                let current_is_empty = current_measure.chords.is_empty()
                     && current_measure.rhythm_elements.is_empty()
                     && current_measure.figured_bass.is_empty()
-                    && current_measure.staff_text.is_empty()
-                {
+                    && current_measure.staff_text.is_empty();
+                let target_measure = if current_is_empty && !opens_this_measure {
                     measures.last_mut().unwrap_or(&mut current_measure)
                 } else {
                     &mut current_measure
@@ -2134,10 +2223,10 @@ impl<'a> ChartParser<'a> {
                 continue;
             }
 
-            // Check for command (e.g., "/fermata", "/accent")
-            // Commands are applied to the PREVIOUS chord
-            if token_str.starts_with('/') && display_override.is_none() {
-                if *token_str == "/octave" {
+            // Check for a command keyword (e.g. `\\fermata`, `\\accent`).
+            // Commands are applied to the PREVIOUS chord.
+            if token_str.starts_with('\\') && display_override.is_none() {
+                if *token_str == "\\octave" {
                     skip_next_token = true;
                     continue;
                 }
@@ -2174,7 +2263,13 @@ impl<'a> ChartParser<'a> {
                     }
                     continue;
                 }
+            }
 
+            // Slash runs are rhythm, not keywords: `/`, `//`, `//.`. They used
+            // to share the branch above, back when a command was also written
+            // with a leading slash — splitting the two is the whole reason
+            // commands moved to a backslash.
+            if token_str.starts_with('/') && display_override.is_none() {
                 // Check for standalone slash duration notation (e.g., "//", "///", "////")
                 // This allows syntax like "Ab9' //" where the slashes are separated by a space
                 //
@@ -2836,7 +2931,15 @@ impl<'a> ChartParser<'a> {
                 continue;
             }
 
-            if *token_str == "@repeat-end" {
+            if let Some(passes) = token_str.strip_prefix("@repeat-end") {
+                // A repeat with no count on it plays twice — that is what the
+                // sign means — so the count is always known and can always be
+                // printed.
+                let passes: usize = passes
+                    .strip_prefix(':')
+                    .and_then(|n| n.parse().ok())
+                    .filter(|n| *n > 1)
+                    .unwrap_or(2);
                 if current_measure.chords.is_empty()
                     && current_measure.rhythm_elements.is_empty()
                     && current_measure.figured_bass.is_empty()
@@ -2844,9 +2947,11 @@ impl<'a> ChartParser<'a> {
                 {
                     if let Some(measure) = measures.last_mut() {
                         measure.end_repeat = RepeatMark::Backward;
+                        measure.repeat_count = passes;
                     }
                 } else {
                     current_measure.end_repeat = RepeatMark::Backward;
+                    current_measure.repeat_count = passes;
                     Self::finalize_measure_for_separator(
                         &mut measures,
                         &current_measure,
@@ -3187,54 +3292,76 @@ impl<'a> ChartParser<'a> {
                 }
             }
 
-            // Check for dot repeat token (. repeats the last chord)
-            // Note: apply_auto_durations may add _N suffix, so check for "." or "._N" pattern
-            if *token_str == "." || token_str.starts_with("._") {
-                if let Some(ref prev_chord) = last_chord {
-                    // Clone the last chord with a fresh position
-                    let mut repeat_chord = prev_chord.clone();
-                    repeat_chord.original_token = ".".to_string();
-                    repeat_chord.position = AbsolutePosition::at_beginning(); // Will be recalculated
-                                                                              // Clear push/pull - the dot repeat doesn't inherit the timing modifier
-                    repeat_chord.push_pull = None;
-                    // Inherit the source chord's rhythm and duration
-                    // "F/C ." = two measures (F/C for 4 beats, then F/C repeated for 4 beats)
-                    // The rhythm and duration are already set from the clone
+            // `.` repeats the last chord for as long as that chord lasted —
+            // a direct repeat, not a measure one. `.3` is three of them.
+            // (`apply_auto_durations` may have appended `_N`, hence `._4`.)
+            if let Some(dot_repeats) = Self::parse_dot_repeat(token_str, chord_system) {
+                // Take the chord as it stands *now*, not as it was when its
+                // token was read. A slash run is a token of its own, so in
+                // `G // .` the `//` lands on `G` after `last_chord` was
+                // snapshotted — and a `.` reading the snapshot inherits a
+                // whole bar instead of the two beats `G` actually got, which
+                // turns `G // . . .` into four measures instead of two.
+                let live_chord = current_measure
+                    .chords
+                    .last()
+                    .or_else(|| measures.last().and_then(|m| m.chords.last()))
+                    .cloned()
+                    .or_else(|| last_chord.clone())
+                    .or_else(|| {
+                        // Nothing on this line yet: the chord to repeat is the
+                        // last one of the previous row.
+                        self.carried_measure
+                            .as_ref()
+                            .and_then(|m| m.chords.last().cloned())
+                    });
+                if let Some(ref prev_chord) = live_chord {
+                    for _ in 0..dot_repeats {
+                        // Clone the last chord with a fresh position
+                        let mut repeat_chord = prev_chord.clone();
+                        repeat_chord.original_token = ".".to_string();
+                        repeat_chord.position = AbsolutePosition::at_beginning(); // Will be recalculated
+                                                                                  // Clear push/pull - the dot repeat doesn't inherit the timing modifier
+                        repeat_chord.push_pull = None;
+                        // Inherit the source chord's rhythm and duration
+                        // "F/C ." = two measures (F/C for 4 beats, then F/C repeated for 4 beats)
+                        // The rhythm and duration are already set from the clone
 
-                    let chord_beats = repeat_chord.duration.to_beats(time_sig);
+                        let chord_beats = repeat_chord.duration.to_beats(time_sig);
 
-                    // Handle measure boundaries (same logic as regular chord)
-                    if !just_processed_separator
-                        && current_measure_beats + chord_beats > beats_per_measure + 0.001
-                    {
-                        if !current_measure.chords.is_empty()
-                            || !current_measure.rhythm_elements.is_empty()
+                        // Handle measure boundaries (same logic as regular chord)
+                        if !just_processed_separator
+                            && current_measure_beats + chord_beats > beats_per_measure + 0.001
+                        {
+                            if !current_measure.chords.is_empty()
+                                || !current_measure.rhythm_elements.is_empty()
+                            {
+                                measures.push(current_measure.clone());
+                            }
+                            current_measure = Measure::new();
+                            current_measure.time_signature =
+                                (time_sig.numerator as u8, time_sig.denominator as u8);
+                            current_measure_beats = 0.0;
+                        }
+                        just_processed_separator = false;
+                        measure_was_created_by_separator = false;
+
+                        current_measure
+                            .rhythm_elements
+                            .push(RhythmElement::Chord(repeat_chord.clone()));
+                        current_measure.chords.push(repeat_chord);
+                        current_measure_beats += chord_beats;
+
+                        // Auto-advance measure if full
+                        if !just_processed_separator
+                            && (current_measure_beats - beats_per_measure).abs() < 0.001
                         {
                             measures.push(current_measure.clone());
+                            current_measure = Measure::new();
+                            current_measure.time_signature =
+                                (time_sig.numerator as u8, time_sig.denominator as u8);
+                            current_measure_beats = 0.0;
                         }
-                        current_measure = Measure::new();
-                        current_measure.time_signature =
-                            (time_sig.numerator as u8, time_sig.denominator as u8);
-                        current_measure_beats = 0.0;
-                    }
-                    just_processed_separator = false;
-                    measure_was_created_by_separator = false;
-
-                    current_measure
-                        .rhythm_elements
-                        .push(RhythmElement::Chord(repeat_chord.clone()));
-                    current_measure.chords.push(repeat_chord);
-                    current_measure_beats += chord_beats;
-
-                    // Auto-advance measure if full
-                    if !just_processed_separator
-                        && (current_measure_beats - beats_per_measure).abs() < 0.001
-                    {
-                        measures.push(current_measure.clone());
-                        current_measure = Measure::new();
-                        current_measure.time_signature =
-                            (time_sig.numerator as u8, time_sig.denominator as u8);
-                        current_measure_beats = 0.0;
                     }
                 }
                 continue;
@@ -3326,7 +3453,7 @@ impl<'a> ChartParser<'a> {
                     let token_has_explicit_length =
                         Self::token_has_explicit_chord_length(&chord_token);
                     // A rhythm-slash token immediately after this chord (`E/B /`)
-                    // sets its duration explicitly, so the `/Duration` default
+                    // sets its duration explicitly, so the `\Duration` default
                     // must NOT pre-fill it — otherwise the slash would only add a
                     // continuation on top of the default instead of overriding it.
                     let slash_token_follows = tokens_str.get(token_idx + 1).is_some_and(|t| {
@@ -3636,12 +3763,14 @@ impl<'a> ChartParser<'a> {
         default_melody_octave: Option<u8>,
     ) -> Result<Vec<Measure>, String> {
         let mut measures = Vec::new();
+        let mut split_found_something = false;
         for (part_offset, part) in Self::split_top_level_measures_spanned(line) {
             let trim_left = part.len() - part.trim_start().len();
             let trimmed = part.trim();
             if trimmed.is_empty() {
                 continue;
             }
+            split_found_something = true;
             let mut parsed = self.parse_chord_line_inner(
                 trimmed,
                 section_type,
@@ -3654,7 +3783,13 @@ impl<'a> ChartParser<'a> {
             measures.append(&mut parsed);
         }
 
-        if measures.is_empty() {
+        // Retry the whole line only when the split found nothing to try. A
+        // split that found bars and parsed no measures out of them is an
+        // answer — an empty one — and re-entering here with the same line
+        // lands straight back in this function. `\ChordLength /` over a line
+        // whose only bar is `%` did exactly that, and recursed until the
+        // stack ran out.
+        if measures.is_empty() && !split_found_something {
             self.parse_chord_line_inner(
                 line,
                 section_type,
@@ -3667,6 +3802,78 @@ impl<'a> ChartParser<'a> {
         } else {
             Ok(measures)
         }
+    }
+
+    /// Rewrite the repeat barlines into the marker tokens the chord loop
+    /// reads, keeping any count written on the closing one.
+    ///
+    /// `:|x4` and `:|4` both mean "play it four times", and both used to be
+    /// dropped: `:|` was replaced first, leaving the count stuck to the
+    /// barline that replaced it. The count is carried on the token instead,
+    /// as `@repeat-end:4`.
+    ///
+    /// Note that a *line-level* `x4` is a different thing — it duplicates the
+    /// measures — so the two spellings do not mean the same, and only the one
+    /// attached to `:|` leaves the phrase written once.
+    fn normalize_repeat_barlines(input: &str) -> String {
+        let mut out = String::with_capacity(input.len() + 16);
+        let bytes = input.as_bytes();
+        let mut i = 0usize;
+        while i < bytes.len() {
+            if bytes[i..].starts_with(b"|:") {
+                out.push_str("| @repeat-start ");
+                i += 2;
+                continue;
+            }
+            if bytes[i..].starts_with(b":|") {
+                i += 2;
+
+                // An optional count on the closing barline: `:|x4`, `:|4`.
+                let mut j = i;
+                if matches!(bytes.get(j), Some(b'x' | b'X')) {
+                    j += 1;
+                }
+                let digits_start = j;
+                while bytes.get(j).is_some_and(u8::is_ascii_digit) {
+                    j += 1;
+                }
+                let count = &input[digits_start..j];
+                if !count.is_empty() {
+                    i = j;
+                }
+
+                out.push_str(" @repeat-end");
+                if !count.is_empty() {
+                    out.push(':');
+                    out.push_str(count);
+                }
+
+                // One barline between two measures. A repeat that ends where
+                // the next begins is written `:|:` (or `:|x4 |:`), and both
+                // have to come out as a single `|` — two would parse as an
+                // empty measure sitting between the repeats.
+                let mut k = i;
+                while matches!(bytes.get(k), Some(b' ' | b'\t')) {
+                    k += 1;
+                }
+                let opens_next = bytes.get(k) == Some(&b':')
+                    || (bytes[k..].starts_with(b"|:") && {
+                        k += 1;
+                        true
+                    });
+                if opens_next {
+                    out.push_str(" | @repeat-start ");
+                    i = k + 1;
+                } else {
+                    out.push_str(" |");
+                }
+                continue;
+            }
+            let ch = input[i..].chars().next().unwrap_or_default();
+            out.push(ch);
+            i += ch.len_utf8();
+        }
+        out
     }
 
     fn normalize_parallel_container_syntax(input: &str) -> String {
@@ -5103,12 +5310,12 @@ mod tests {
 
     #[test]
     fn rhythm_slash_overrides_duration_default() {
-        // Under `/Duration 2` (half notes) a trailing rhythm slash sets that
+        // Under `\Duration 2` (half notes) a trailing rhythm slash sets that
         // chord's length explicitly, ignoring the default. From "Life Giving
         // Water": `E B/D# A/C# E/B / /G# / A B E B4` must tile into four 4/4
         // bars, with `E/B` (one beat, via `/`) and the floating `/G#` → `E/G#`
         // (one beat) both landing in measure 2.
-        let measures = parse_line("/Duration 2 E B/D# A/C# E/B / /G# / A B E B4");
+        let measures = parse_line("\\Duration 2 E B/D# A/C# E/B / /G# / A B E B4");
         assert_eq!(measures.len(), 4);
         let ts = TimeSignature::common_time();
 
@@ -5175,7 +5382,7 @@ Parallel Melody Test
 120bpm 6/8 #E
 
 opening 2
-<< /ChordLength 8. F#m7 G#m7 Amaj7 B | C#m ;
+<< \ChordLength 8. F#m7 G#m7 Amaj7 B | C#m ;
    m { <F# 'C#>4. <G# 'D#>4. <A 'E>4. <B 'F#>4. } >>
 "#;
         let chart = parse_chart(input).expect("Should parse");
@@ -5196,8 +5403,8 @@ opening 2
         let input = r##"
 Alias Test
 120bpm 4/4 #C
-/alias fb ^"4-3 2-1"
-/alias #fb ^"#4-3 2-1"
+\alias fb ^"4-3 2-1"
+\alias #fb ^"#4-3 2-1"
 
 Verse 2
 A<#fb>
@@ -5287,7 +5494,7 @@ C#m <fb> /. _<fb> /.
 
     #[test]
     fn chord_length_directive_applies_to_following_chords() {
-        let measures = parse_line("| /ChordLength /. C#m B/C# |");
+        let measures = parse_line("| \\ChordLength /. C#m B/C# |");
         let time_sig = TimeSignature::new(4, 4);
 
         assert_eq!(measures.len(), 1);
@@ -5312,7 +5519,7 @@ Chord Length Section
 120bpm 4/4 #C
 
 Intro 1
-/ChordLength 4.
+\ChordLength 4.
 | C#m B/C# |
 "#;
         let chart = parse_chart(input).expect("Should parse");
@@ -5333,7 +5540,7 @@ Duration Section
 120bpm 6/8 #C
 
 Intro 1
-/Duration 8.
+\Duration 8.
 << C#m B/C# A/C# G#m7/C# ;
    m { C# D# E F# } >>
 "#;
@@ -5356,19 +5563,19 @@ Intro 1
 
     #[test]
     fn global_duration_applies_to_sections_until_overridden() {
-        // A top-level `/Duration` (before any section) sets a chart-wide default
-        // that each section inherits; a section's own `/Duration` overrides it.
+        // A top-level `\Duration` (before any section) sets a chart-wide default
+        // that each section inherits; a section's own `\Duration` overrides it.
         let input = r#"
 Global Duration
 120bpm 4/4 #C
 
-/Duration 2
+\Duration 2
 
 VS 2
 C G Am F
 
 CH 2
-/Duration 4
+\Duration 4
 C E G Am Bm Dm F G
 "#;
         let chart = parse_chart(input).expect("Should parse");
@@ -5487,7 +5694,7 @@ Let Block Section
 
 let openingHits = {
   <<
-    /ChordLength 8. F#m7 G#m7 Amaj7 B ;
+    \ChordLength 8. F#m7 G#m7 Amaj7 B ;
     m { <F# 'C#>8. <G# 'D#>8. <A 'E>8. <B 'F#>8. }
   >>
 }
@@ -5520,8 +5727,8 @@ let chords = {
 
 let melody = {
   intro 2
-  /octave 3 m { C#2. }
-  /octave 2 m { <F# 'C#>8. <G# 'D#> <A 'E> <B 'F#> }
+  \octave 3 m { C#2. }
+  \octave 2 m { <F# 'C#>8. <G# 'D#> <A 'E> <B 'F#> }
 }
 
 << <chords> ; <melody> >>
@@ -5569,7 +5776,7 @@ Octave Carry
 120bpm 6/8 #E
 
 intro 1
-/octave 4
+\octave 4
 m { C#8. D# E F# }
 
 vs 1
@@ -5604,7 +5811,7 @@ let chords = {
 
 let melody = {
   intro
-  /octave 4
+  \octave 4
   C#2.
   <,,F# 'C#>8. <G# 'D#> <A 'E> <B 'F#>
 }
@@ -5861,7 +6068,7 @@ VS
 Thriller - Dirty Loops, Cory Wong
 Transcribed By: Cody Wright
 120bpm 4/4 #Ab
-/push = triplet
+\push = triplet
 
 COUNT 2
 

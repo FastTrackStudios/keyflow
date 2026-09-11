@@ -22,7 +22,7 @@ the LSP server, with both surfaces agreeing on token kinds.
   (`_8t`, `.4`)
 - Section headers: `VS 1:`, `CH 4 "Down":`, `Bridge`, `IN`, `PreCH`, …
 - Metadata header: `120bpm 4/4 #C`
-- Config directives: `/push = triplet`, `/swing = 0.667`
+- Config directives: `\push = triplet`, `\swing = 0.667`
 - `;` line comments
 
 See [`grammar.js`](./grammar.js) for the full rule set and

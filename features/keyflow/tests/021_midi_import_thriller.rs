@@ -204,7 +204,7 @@ fn detect_section_push_type(
         }
     }
 
-    // Section uses /push 4 if it has quarter pushes and no triplet pushes
+    // Section uses \push 4 if it has quarter pushes and no triplet pushes
     if quarter_pushes > 0 && triplet_pushes == 0 {
         Some("4".to_string())
     } else {
@@ -1310,7 +1310,7 @@ fn is_simple_section(section_type: &str) -> bool {
 }
 
 /// Analyze all chords to determine if triplet push is dominant (>50%).
-/// Returns true if we should use `/push = triplet` setting.
+/// Returns true if we should use `\push = triplet` setting.
 fn should_use_triplet_push_setting(chords: &[ChordMarker], ppq: u32) -> bool {
     let mut triplet_pushes = 0;
     let mut other_pushes = 0;
@@ -1551,7 +1551,7 @@ fn generate_keyflow_chart(midi: &MidiFile) -> String {
     let (bpm, time_sig) = (midi.initial_tempo(), midi.initial_time_signature());
     let beats_per_measure = time_sig.0 as i32;
 
-    // Determine if we should use /push = triplet
+    // Determine if we should use \push = triplet
     let use_triplet_setting = should_use_triplet_push_setting(&chords, ppq);
 
     let mut output = String::new();
@@ -1566,7 +1566,7 @@ fn generate_keyflow_chart(midi: &MidiFile) -> String {
         time_sig.1
     ));
     if use_triplet_setting {
-        output.push_str("/push = triplet\n");
+        output.push_str("\\push = triplet\n");
     }
     output.push('\n');
 
@@ -1670,7 +1670,7 @@ fn generate_keyflow_chart_from_notes(midi: &MidiFile) -> String {
     // Detect chords from MIDI notes
     let detected = detect_chords_from_notes(midi);
 
-    // Determine if we should use /push = triplet
+    // Determine if we should use \push = triplet
     let use_triplet_setting = should_use_triplet_push_from_detected(&detected, ppq, songstart);
 
     let mut output = String::new();
@@ -1686,7 +1686,7 @@ fn generate_keyflow_chart_from_notes(midi: &MidiFile) -> String {
         time_sig.1
     ));
     if use_triplet_setting {
-        output.push_str("/push = triplet\n");
+        output.push_str("\\push = triplet\n");
     }
     output.push('\n');
 
@@ -1713,7 +1713,7 @@ fn generate_keyflow_chart_from_notes(midi: &MidiFile) -> String {
         // Add section-specific push directive if different from global
         if let Some(ref push_type) = section_push_type {
             if use_triplet_setting && push_type == "4" {
-                output.push_str("/push 4\n");
+                output.push_str("\\push 4\n");
             }
         }
 
@@ -1738,8 +1738,8 @@ fn generate_keyflow_chart_from_notes(midi: &MidiFile) -> String {
         let elements = apply_groove_pattern_push(elements);
 
         // Determine push setting for this section
-        // If section has /push 4, use short push (which now means quarter push)
-        // If global has /push = triplet, use short push (which means triplet)
+        // If section has \push 4, use short push (which now means quarter push)
+        // If global has \push = triplet, use short push (which means triplet)
         let use_short_push_for_section = use_triplet_setting || section_push_type.is_some();
 
         // Format the elements with measure awareness
@@ -2052,7 +2052,7 @@ fn test_hits_section_rhythm_with_rests() {
         }
     }
 
-    // Format as keyflow notation (use_triplet_default = true for /push = triplet)
+    // Format as keyflow notation (use_triplet_default = true for \push = triplet)
     let keyflow = format_measure_rhythm(&elements, ppq, true);
     println!("\nKeyflow notation: {}", keyflow);
 
@@ -2219,7 +2219,7 @@ fn test_generate_keyflow_chart() {
         chart_text.contains("bpm 4/4 #Eb"),
         "Should have tempo and time signature"
     );
-    assert!(chart_text.contains("/push = triplet"));
+    assert!(chart_text.contains("\\push = triplet"));
 
     // Verify sections are present. Count-In is a cue marker, not a section, so
     // the generated chart does not emit a "COUNT" section header.
@@ -2431,7 +2431,7 @@ fn test_generate_chart_from_detected_notes() {
     // Verify structure
     assert!(chart_text.contains("Thriller - Dirty Loops"));
     assert!(chart_text.contains("bpm 4/4 #Eb"));
-    assert!(chart_text.contains("/push = triplet") || chart_text.contains("/push"));
+    assert!(chart_text.contains("\\push = triplet") || chart_text.contains("\\push"));
 
     // Verify sections are present. Count-In is a cue marker, not a section, so
     // the generated chart does not emit a "COUNT" section header.
@@ -2643,7 +2643,7 @@ fn test_rhythm_elements_for_hits_section() {
     // Format as keyflow notation
     let section_length_measures = 2; // HITS is 2 measures
     let beats_per_measure = 4; // 4/4 time
-    let use_short_push = true; // assume /push = triplet setting
+    let use_short_push = true; // assume \\push = triplet setting
     let keyflow = format_rhythm_elements(
         &elements,
         section_start,
@@ -2834,7 +2834,7 @@ fn format_rhythm_no_bars(
 /// Expected content (Cm from end of CH carries over into Interlude A):
 /// - CH (last line): >Cm/Eb / 'Eb /// | 'Eb / 'F/C / 'Cm // | 'F/A | r8t >Ab9_8t r8t r8t >'F9_8t r8t r4.
 /// - Interlude A: '_4Cm . . . . . . . (Cm carries over from CH, lasts all 8 measures)
-/// - Interlude B (HORNS): /push 4, 'Cm . 'Cm7b5 . 'Cm Cm/maj7 'B/C .
+/// - Interlude B (HORNS): \push 4, 'Cm . 'Cm7b5 . 'Cm Cm/maj7 'B/C .
 /// - Interlude C (WINDS): C C+ // C // Cm7b5 Cmaj7 / 'Cmaj7 . Fm/C Cdim7
 /// - Interlude D (TRUMPETS): Fm6 . 'Dbmaj7/F . D/F . B7/F .
 /// - Outro A: Em7b5/D 'Dmaj9 x3 / Gm7/D 'D11
@@ -2923,12 +2923,12 @@ fn test_interlude_outro_hits_sections() {
     let (interlude_b, push_b) = generate_section(start, len);
     println!("Interlude B (HORNS):");
     if let Some(ref p) = push_b {
-        println!("/push {}", p);
+        println!("\\push {}", p);
     }
     println!("{}\n", interlude_b);
 
-    // Verify HORNS section has /push 4
-    assert_eq!(push_b, Some("4".to_string()), "HORNS should use /push 4");
+    // Verify HORNS section has \push 4
+    assert_eq!(push_b, Some("4".to_string()), "HORNS should use \\push 4");
 
     // Verify key chords in HORNS (allowing for chord name variations)
     assert!(
@@ -3060,7 +3060,7 @@ fn test_interlude_outro_hits_sections() {
         "CH (last line): >Cm/Eb / 'Eb /// 'Eb / 'F/C / 'Cm // 'F/A r8t >Ab9_8t r8t r8t >'F9_8t r8t r4."
     );
     println!("Interlude A: '_4Cm . . . . . . . (Cm carries over from CH)");
-    println!("Interlude B: /push 4 / 'Cm . 'Cm7b5 . 'Cm Cm/maj7 'B/C .");
+    println!("Interlude B: \\push 4 / 'Cm . 'Cm7b5 . 'Cm Cm/maj7 'B/C .");
     println!("Interlude C: C C+ // C // Cm7b5 Cmaj7 / 'Cmaj7 . Fm/C Cdim7");
     println!("Interlude D: Fm6 . 'Dbmaj7/F . D/F . B7/F .");
     println!("Outro A: Em7b5/D 'Dmaj9 x3 / Gm7/D 'D11");

@@ -297,3 +297,14 @@ mod tests {
         assert!((width - 14.0).abs() < 0.001);
     }
 }
+
+// ============================================================================
+// Notation Colour
+// ============================================================================
+
+/// The red every repeat-related mark is drawn in.
+///
+/// The bracket repeat, the `x4` count above its closing barline, dynamics and
+/// staff text are all one visual family — they are named here once so they
+/// cannot drift apart.
+pub const REPEAT_COLOR: peniko::Color = peniko::Color::from_rgb8(220, 38, 38);

@@ -2,7 +2,7 @@
 title: Alternatives
 kind: reference
 type: reference
-order: 16
+order: 17
 stage: Writing
 summary: What Keyflow is not, and what to reach for instead.
 ---

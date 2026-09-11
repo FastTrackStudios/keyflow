@@ -329,6 +329,10 @@ pub struct ChartSection {
     /// True if this section was recalled from a template
     pub from_template: bool,
 
+    /// Draw this section as a titled rule instead of its bars. See
+    /// [`ChartSection::folded`](crate::chart::types::ChartSection::folded).
+    pub folded: bool,
+
     /// Source text span for this section header
     /// Links this section back to the original input text that generated it.
     pub source_span: Option<TextSpan>,
@@ -343,6 +347,7 @@ impl ChartSection {
             section,
             tracks: Vec::new(),
             from_template: false,
+            folded: false,
             source_span: None,
             template_span: None,
         }
@@ -383,6 +388,7 @@ impl ChartSection {
             section,
             tracks: vec![Track::chords(measures)],
             from_template: true,
+            folded: false,
             source_span: None,
             template_span: None,
         }
@@ -399,6 +405,7 @@ impl ChartSection {
             section,
             tracks: vec![Track::chords(measures)],
             from_template: true,
+            folded: false,
             source_span: Some(source_span),
             template_span: Some(template_span),
         }

@@ -8,9 +8,9 @@
 //! # What belongs in it
 //!
 //! Keyflow's COMMANDS: the `/…` directive lines that configure a chart —
-//! `/duration` for the default length of every chord, `/push` for how a
-//! push divides, `/swing` for the feel — plus the two ways to name
-//! something (`/alias`, `let`) and the chord shorthand.
+//! `\duration` for the default length of every chord, `\push` for how a
+//! push divides, `\swing` for the feel — plus the two ways to name
+//! something (`\alias`, `let`) and the chord shorthand.
 //!
 //! Not the chart language itself. A duration written on a chord (`C_8`) is
 //! typed constantly and by hand; nobody needs a menu to reach it, and a
@@ -37,8 +37,8 @@ use keyflow::chart::settings::DIRECTIVES;
 
 /// Which group a directive belongs in.
 ///
-/// `/duration`, `/push` and `/swing` set a value the whole chart inherits;
-/// the rest are on/off. `/alias` names something, which is neither.
+/// `\duration`, `\push` and `\swing` set a value the whole chart inherits;
+/// the rest are on/off. `\alias` names something, which is neither.
 fn group_for(key: &str) -> &'static str {
     match key {
         "duration" | "push" | "swing" => "Defaults",
@@ -70,21 +70,21 @@ pub fn commands() -> Vec<CommandEntry> {
         })
         .collect();
 
-    // `/push` and `/swing` each take a feel that is worth one keystroke
+    // `\push` and `\swing` each take a feel that is worth one keystroke
     // rather than remembering the vocabulary. The table carries the
     // canonical example; these are the other value anyone actually writes.
     out.push(CommandEntry {
         label: "Push feel — triplet",
         group: "Defaults",
-        desc: "/push triplet",
-        kind: CommandKind::InsertBlockSnippet("/push triplet", 0),
+        desc: "\\push triplet",
+        kind: CommandKind::InsertBlockSnippet("\\push triplet", 0),
         icon: "/",
     });
     out.push(CommandEntry {
         label: "Swing — triplet",
         group: "Defaults",
-        desc: "/swing triplet",
-        kind: CommandKind::InsertBlockSnippet("/swing triplet", 0),
+        desc: "\\swing triplet",
+        kind: CommandKind::InsertBlockSnippet("\\swing triplet", 0),
         icon: "/",
     });
 

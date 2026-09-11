@@ -349,7 +349,7 @@ impl<'a> ChartParser<'a> {
         // lane join, so fall back to section parsing. Doing this before
         // `section_plan_from_toc` avoids surfacing a confusing TOC error for a
         // section that merely contains an inline parallel (e.g. after
-        // `/Duration`).
+        // `\Duration`).
         let mut resolved_branches = Vec::with_capacity(branches.len());
         for (_, branch) in &branches {
             let branch = branch.trim();
@@ -420,6 +420,7 @@ impl<'a> ChartParser<'a> {
         parser.aliases = self.aliases.clone();
         parser.melody_octave_memory = self.melody_octave_memory;
         parser.default_duration = self.default_duration.clone();
+        parser.default_progression = self.default_progression.clone();
         parser.parse_sections(&lines, 0)?;
         parser.post_process();
 
@@ -529,7 +530,7 @@ impl<'a> ChartParser<'a> {
             .map(|line| {
                 let trimmed = line.trim();
                 if trimmed.is_empty()
-                    || trimmed.starts_with('/')
+                    || trimmed.starts_with('\\')
                     || trimmed.starts_with("dyn ")
                     || trimmed.starts_with("dynamic ")
                     || trimmed.starts_with("hairpin ")
@@ -624,6 +625,7 @@ mod tests {
     use crate::chord::ChordRhythm;
     use crate::key::Key;
     use crate::primitives::{MusicalNote, Note, RootNotation};
+    use crate::proto::chart::notations::RepeatMark;
     use crate::sections::SectionType;
     use crate::time::MusicalDuration;
     use crate::time::MusicalPositionExt;
@@ -1190,7 +1192,7 @@ F/C .
         let input = r#"
 Dot Push Test
 120bpm 4/4 #C
-/push = triplet
+\push = triplet
 
 VS
 'F/C .
@@ -1460,6 +1462,367 @@ G D Em
         let key = chart.initial_key.as_ref().expect("Should have initial key");
         assert_eq!(key.root().name(), "C", "Key should default to C major");
     }
+
+    // region: --- Simile and direct repeat
+
+    /// `%` says "another measure of that", so it always advances by a whole
+    /// measure however the previous one was written.
+    #[test]
+    fn simile_repeats_a_whole_measure() {
+        let chart = parse_chart("T - A\n4/4\n\nvs 4\nG % % %\n").expect("parse");
+        let measures = chart.sections[0].measures();
+        assert_eq!(measures.len(), 4);
+        for measure in measures {
+            assert_eq!(measure.chords.len(), 1);
+            assert_eq!(measure.chords[0].full_symbol, "G");
+        }
+    }
+
+    /// A simile bar keeps its chords — playback and analysis see a normal
+    /// measure — and is flagged so the engraver draws the mark instead.
+    #[test]
+    fn a_simile_measure_carries_its_chords_and_says_it_is_one() {
+        let chart = parse_chart("T - A\n4/4\n\nvs 4\nG % % %\n").expect("parse");
+        let measures = chart.sections[0].measures();
+        assert!(!measures[0].simile, "the written bar is not a simile");
+        for measure in &measures[1..] {
+            assert!(measure.simile);
+            assert_eq!(
+                measure.chords[0].full_symbol, "G",
+                "the chords are still there — only the drawing changes"
+            );
+        }
+    }
+
+    /// `%3` is three simile marks, so `%` is `%1`.
+    #[test]
+    fn a_counted_simile_is_that_many_marks() {
+        let long = parse_chart("T - A\n4/4\n\nvs 4\nG % % %\n").expect("parse");
+        let short = parse_chart("T - A\n4/4\n\nvs 4\nG %3\n").expect("parse");
+        assert_eq!(
+            short.sections[0].measures().len(),
+            long.sections[0].measures().len()
+        );
+
+        let one = parse_chart("T - A\n4/4\n\nvs 2\nG %1\n").expect("parse");
+        assert_eq!(one.sections[0].measures().len(), 2);
+    }
+
+    /// A simile mark repeats the music, not the page. A cue written once is
+    /// printed once — otherwise `%3` stacks three copies of it.
+    #[test]
+    fn a_simile_does_not_reprint_the_annotations() {
+        let chart = parse_chart("T - A\n4/4\n\nvs 3\n^\"Build\" G %2\n").expect("parse");
+        let measures = chart.sections[0].measures();
+        assert_eq!(measures.len(), 3);
+        assert_eq!(measures[0].staff_text.len(), 1, "the cue is written once");
+        assert!(measures[1].staff_text.is_empty());
+        assert!(measures[2].staff_text.is_empty());
+    }
+
+    /// `.` is a *direct* repeat — it lasts as long as the chord it repeats,
+    /// which is not necessarily a measure. `G . . .` is four bars of G;
+    /// `G // . . .` is only two, because each unit is two beats.
+    #[test]
+    fn a_direct_repeat_inherits_the_length_it_repeats() {
+        let bars = parse_chart("T - A\n4/4\n\nvs 4\nG . . .\n").expect("parse");
+        assert_eq!(bars.sections[0].measures().len(), 4);
+
+        // A slash run is a token of its own, landing on `G` after it is
+        // parsed. Reading a stale snapshot of the chord gave the `.` a whole
+        // bar here, and this line came out twice as long as it should.
+        let halves = parse_chart("T - A\n4/4\n\nvs 2\nG // . . .\n").expect("parse");
+        let measures = halves.sections[0].measures();
+        assert_eq!(measures.len(), 2);
+        assert_eq!(measures[0].chords.len(), 2, "two half-bar chords per bar");
+
+        let eighths = parse_chart("T - A\n4/4\n\nvs 1\nG_8 . . . . . . .\n").expect("parse");
+        let measures = eighths.sections[0].measures();
+        assert_eq!(measures.len(), 1);
+        assert_eq!(measures[0].chords.len(), 8);
+    }
+
+    /// `.3` is three direct repeats, the same way `%3` is three simile marks.
+    #[test]
+    fn a_counted_direct_repeat_is_that_many_dots() {
+        for (counted, spelled_out) in [
+            ("G .3", "G . . ."),
+            ("G // .3", "G // . . ."),
+            ("G_8 .7", "G_8 . . . . . . ."),
+        ] {
+            let a = parse_chart(&format!("T - A\n4/4\n\nvs 8\n{counted}\n")).expect(counted);
+            let b =
+                parse_chart(&format!("T - A\n4/4\n\nvs 8\n{spelled_out}\n")).expect(spelled_out);
+            assert_eq!(
+                a.sections[0].measures().len(),
+                b.sections[0].measures().len(),
+                "`{counted}` should be `{spelled_out}`"
+            );
+        }
+    }
+
+    /// The two marks measure different things, and a chart can want either.
+    /// `%` counts bars; `.` counts whatever the chord lasted.
+    #[test]
+    fn simile_and_direct_repeat_are_not_the_same_mark() {
+        let simile = parse_chart("T - A\n4/4\n\nvs 3\nG // C // %2\n").expect("parse");
+        let measures = simile.sections[0].measures();
+        assert_eq!(measures.len(), 3, "one written bar plus two more of it");
+        assert_eq!(measures[2].chords.len(), 2);
+
+        let direct = parse_chart("T - A\n4/4\n\nvs 2\nG // C // .2\n").expect("parse");
+        let measures = direct.sections[0].measures();
+        assert_eq!(measures.len(), 2, "two more half-bars is one more bar");
+        assert_eq!(measures[1].chords[0].full_symbol, "C");
+    }
+
+    /// `.` is also the staccato prefix, so in a chart written in scale
+    /// degrees `.3` is staccato on the third as much as it is three repeats.
+    /// The notation system decides, the same way it decides `b3` is a flat
+    /// degree and not the note B.
+    #[test]
+    fn a_counted_direct_repeat_yields_to_staccato_in_a_degree_chart() {
+        let degrees = parse_chart("T - A\n4/4 #C\n\nvs 4\n1 .3 4 5\n").expect("parse");
+        let symbols: Vec<&str> = degrees.sections[0]
+            .measures()
+            .iter()
+            .map(|m| m.chords[0].full_symbol.as_str())
+            .collect();
+        assert_eq!(
+            symbols,
+            ["1", "3", "4", "5"],
+            "`.3` is staccato on the third"
+        );
+
+        // Spelled out, a repeat still works in a degree chart.
+        let spelled = parse_chart("T - A\n4/4 #C\n\nvs 4\n1 . . .\n").expect("parse");
+        assert_eq!(spelled.sections[0].measures().len(), 4);
+    }
+
+    /// A four-bar row is an editing convenience, not a musical boundary. `%`
+    /// and `.` both mean "the thing before this", and at the start of a row
+    /// that thing is the last bar of the row above.
+    #[test]
+    fn a_repeat_at_the_start_of_a_row_reaches_into_the_row_before() {
+        let simile =
+            parse_chart("T - A\n4/4\n\nvs 8\n| !B / | % | !B / | % |\n    | % | !B / | % | % |\n")
+                .expect("parse");
+        let measures = simile.sections[0].measures();
+        assert_eq!(measures.len(), 8, "every bar of both rows survives");
+        assert!(
+            measures
+                .iter()
+                .all(|m| m.chords.iter().any(|c| c.full_symbol == "B")),
+            "the `%` opening the second row is the B that ended the first"
+        );
+
+        let dots = parse_chart(
+            "T - A\n4/4\n\nvs 8\n| !G / | !A / | Em / | !D / |\n    | . | . | . | . |\n",
+        )
+        .expect("parse");
+        let measures = dots.sections[0].measures();
+        assert_eq!(measures.len(), 8);
+        assert_eq!(
+            measures[4].chords[0].full_symbol, "D",
+            "the dot opening the second row repeats the D that ended the first"
+        );
+    }
+
+    /// `%` with genuinely nothing before it is not a crash.
+    ///
+    /// Under a `\ChordLength` directive a line whose only bar was `%` used to
+    /// recurse until the stack ran out: the barred-line path split the line,
+    /// got no measures out of it, and retried the whole line — landing back in
+    /// the same function.
+    #[test]
+    fn a_simile_with_nothing_before_it_is_not_a_crash() {
+        let chart = parse_chart("T - A\n4/4\n\nvs 1\n\\ChordLength /\n| % |\n")
+            .expect("parse rather than overflow");
+        assert_eq!(chart.sections.len(), 1);
+    }
+
+    /// `|: … :|` on its own reads as twice, so a phrase played four times has
+    /// to say so — otherwise the chart is half as long as the song.
+    ///
+    /// The count goes on the closing barline, `:|x4`, and leaves the phrase
+    /// written once. A *line-level* `x4` is a different instruction: it
+    /// duplicates the measures.
+    #[test]
+    fn a_count_on_the_closing_barline_leaves_the_phrase_written_once() {
+        for spelling in ["|: !A | !B :|x4", "|: !A | !B :|4"] {
+            let chart = parse_chart(&format!("T - A\n4/4\n\nvs 2\n{spelling}\n")).expect(spelling);
+            let measures = chart.sections[0].measures();
+            assert_eq!(measures.len(), 2, "{spelling}");
+            assert_eq!(measures[1].repeat_count, 4, "{spelling}");
+        }
+
+        let expanded = parse_chart("T - A\n4/4\n\nvs 8\n|: !A | !B :| x4\n").expect("parse");
+        assert_eq!(
+            expanded.sections[0].measures().len(),
+            8,
+            "a line-level x4 still duplicates"
+        );
+    }
+
+    /// Two repeats back to back share one barline. `:| |:` reads as an empty
+    /// measure sitting between them; `:|:` is the barline that does both.
+    #[test]
+    fn back_to_back_repeats_share_one_barline() {
+        for spelling in ["|: !A | !B :|: !C | !D :|", "|: !A | !B :|x4: !C | !D :|"] {
+            let chart = parse_chart(&format!("T - A\n4/4\n\nvs 4\n{spelling}\n")).expect(spelling);
+            let measures = chart.sections[0].measures();
+            assert_eq!(measures.len(), 4, "no phantom measure — {spelling}");
+            assert_eq!(measures[0].start_repeat, RepeatMark::Forward);
+            assert_eq!(measures[1].end_repeat, RepeatMark::Backward);
+            assert_eq!(measures[2].start_repeat, RepeatMark::Forward);
+            assert_eq!(measures[3].end_repeat, RepeatMark::Backward);
+        }
+    }
+
+    // endregion: --- Simile and direct repeat
+
+    // region: --- Staff text placement
+
+    fn text_on(chart: &crate::chart::Chart, measure: usize) -> Vec<String> {
+        chart.sections[0].measures()[measure]
+            .staff_text
+            .iter()
+            .map(|t| t.text.clone())
+            .collect()
+    }
+
+    /// Text between two chords belongs to the bar it opens, not the one it
+    /// follows — and text after a bar's chords belongs to that bar.
+    #[test]
+    fn staff_text_lands_on_the_bar_it_was_written_against() {
+        let opening =
+            parse_chart("T - A\n4/4\n\nvs 2\n| Bm / | ^\"Back to top\" !G / |\n").expect("parse");
+        assert!(text_on(&opening, 0).is_empty(), "not on the bar before");
+        assert_eq!(text_on(&opening, 1), ["Back to top"]);
+
+        let trailing =
+            parse_chart("T - A\n4/4\n\nvs 2\n| Bm / ^\"Ring out\" | !G / |\n").expect("parse");
+        assert_eq!(
+            text_on(&trailing, 0),
+            ["Ring out"],
+            "trailing text stays put"
+        );
+        assert!(text_on(&trailing, 1).is_empty());
+    }
+
+    /// A cue on a bar that also carries explicit durations used to vanish: the
+    /// auto-duration pass appended `_2` to `^"…"`, which no longer ends in a
+    /// quote and so stopped being staff text at all.
+    #[test]
+    fn staff_text_survives_a_bar_with_explicit_durations() {
+        let chart =
+            parse_chart("T - A\n4/4\n\nvs 1\n| ^\"Back to top\" !G_2 !A_2 |\n").expect("parse");
+        assert_eq!(text_on(&chart, 0), ["Back to top"]);
+        assert_eq!(chart.sections[0].measures()[0].chords.len(), 2);
+    }
+
+    // endregion: --- Staff text placement
+
+    // region: --- Reusing a progression
+
+    fn symbols(chart: &crate::chart::Chart, section: usize) -> Vec<String> {
+        chart.sections[section]
+            .measures()
+            .iter()
+            .map(|m| {
+                m.chords
+                    .first()
+                    .map_or_else(|| "-".to_string(), |c| c.full_symbol.clone())
+            })
+            .collect()
+    }
+
+    /// A header with nothing under it is the last section of its kind.
+    #[test]
+    fn an_empty_section_repeats_its_own_kind() {
+        let chart = parse_chart("T - A\n4/4\n\nVS 4\nG B C Cm\n\nCH 4\nCm C G B\n\nVS 4\n\nCH 4\n")
+            .expect("parse");
+        assert_eq!(
+            symbols(&chart, 2),
+            symbols(&chart, 0),
+            "verse two is verse one"
+        );
+        assert_eq!(symbols(&chart, 3), symbols(&chart, 1));
+    }
+
+    /// Intro, Outro, Pre and Post are the sections a song usually has one of,
+    /// so an empty one is left empty rather than silently copying an earlier.
+    #[test]
+    fn an_empty_intro_does_not_copy_the_first_one() {
+        let chart =
+            parse_chart("T - A\n4/4\n\nIN 4\nG B C Cm\n\nVS 4\nF F E E\n\nIN 4\n").expect("parse");
+        assert_eq!(symbols(&chart, 2), vec!["-", "-", "-", "-"]);
+    }
+
+    /// `IN 4 = VS` — the intro is the verse, which is how most songs are built.
+    #[test]
+    fn a_section_can_borrow_another_sections_chords() {
+        let chart = parse_chart(
+            "T - A\n4/4\n\nVS 4\nG B C Cm\n\nIN 4 = VS\n\nBR 4\nAm F C G\n\nINST 4 = BR\n",
+        )
+        .expect("parse");
+        assert_eq!(
+            symbols(&chart, 1),
+            symbols(&chart, 0),
+            "intro borrows the verse"
+        );
+        assert_eq!(
+            symbols(&chart, 3),
+            symbols(&chart, 2),
+            "instrumental borrows the bridge"
+        );
+    }
+
+    /// Explicit beats the exclusion list: `IN 8 = IN` is how you say the
+    /// second intro really is the first one again.
+    #[test]
+    fn borrowing_reaches_the_types_an_empty_header_will_not() {
+        let chart = parse_chart("T - A\n4/4\n\nIN 4\nG B C Cm\n\nVS 4\nF F E E\n\nIN 4 = IN\n")
+            .expect("parse");
+        assert_eq!(symbols(&chart, 2), symbols(&chart, 0));
+    }
+
+    /// *Creep* is four chords and a form. One `\progression` and the chart is
+    /// the form.
+    #[test]
+    fn a_default_progression_fills_every_section_that_names_none() {
+        let chart = parse_chart(
+            "Creep - Radiohead\n4/4 #G\n\n\\progression G B C Cm\n\nIN 4\nVS 8\nCH 4\n",
+        )
+        .expect("parse");
+        assert_eq!(symbols(&chart, 0), ["G", "B", "C", "Cm"]);
+        assert_eq!(
+            symbols(&chart, 1),
+            ["G", "B", "C", "Cm", "G", "B", "C", "Cm"],
+            "it repeats to fill the section"
+        );
+        assert_eq!(symbols(&chart, 2), ["G", "B", "C", "Cm"]);
+    }
+
+    /// The three ways are tried in order, and anything written wins over all
+    /// of them.
+    #[test]
+    fn written_chords_beat_recall_and_recall_beats_the_default() {
+        let chart = parse_chart(
+            "T - A\n4/4\n\n\\progression G G G G\n\nVS 4\nA A A A\n\nCH 4\n\nBR 4 = VS\nOUT 4\n",
+        )
+        .expect("parse");
+        assert_eq!(symbols(&chart, 0), ["A", "A", "A", "A"], "written wins");
+        assert_eq!(
+            symbols(&chart, 1),
+            ["G", "G", "G", "G"],
+            "no chorus to recall"
+        );
+        assert_eq!(symbols(&chart, 2), ["A", "A", "A", "A"], "`= VS` wins");
+        assert_eq!(symbols(&chart, 3), ["G", "G", "G", "G"], "outro falls back");
+    }
+
+    // endregion: --- Reusing a progression
 }
 
 // endregion: --- Tests

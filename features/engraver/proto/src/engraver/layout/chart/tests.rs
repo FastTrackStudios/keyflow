@@ -2437,3 +2437,367 @@ mod slash_continuation_guard {
         );
     }
 }
+
+// region: --- Chart modes
+
+/// A chart long enough to run past one page at four bars a line.
+fn long_chart(sections: usize, bars_per_section: usize, symbol: &str) -> Chart {
+    let mut chart = Chart::new();
+    chart.time_signature = Some(TimeSignature::new(4, 4));
+    for _ in 0..sections {
+        let measures: Vec<Measure> = (0..bars_per_section)
+            .map(|_| {
+                let mut m = Measure::new();
+                m.chords.push(ChordInstance::new(
+                    root(symbol),
+                    symbol.to_string(),
+                    Chord::new(root(symbol), ChordQuality::Major),
+                    ChordRhythm::Default,
+                    symbol.to_string(),
+                    MusicalDuration::new(0, 4, 0),
+                    AbsolutePosition::at_beginning(),
+                ));
+                m
+            })
+            .collect();
+        chart
+            .sections
+            .push(ChartSection::new(Section::new(SectionType::Verse)).with_measures(measures));
+    }
+    chart
+}
+
+fn page_count(engine: &ChartLayoutEngine, chart: &Chart, config: &ChartLayoutConfig) -> usize {
+    engine
+        .layout_chart_with_config(chart, &LayoutMode::paginated_a4(), config)
+        .pages
+        .len()
+}
+
+/// Compact keeps pushing — wider systems, then smaller ones — until the chart
+/// lands on one page.
+#[test]
+fn compact_fits_a_chart_that_paginates_at_four_bars_a_line() {
+    let engine = ChartLayoutEngine::new(test_style(), Arc::new(Vec::new()), Arc::new(Vec::new()));
+    let config = ChartLayoutConfig::master_rhythm();
+    let chart = long_chart(14, 8, "G");
+
+    let plain = page_count(&engine, &chart, &config);
+    assert!(
+        plain > 1,
+        "the fixture has to paginate for this to mean anything"
+    );
+
+    let compact = engine
+        .layout_chart_compact(&chart, &LayoutMode::paginated_a4(), &config)
+        .pages
+        .len();
+    assert!(
+        compact < plain,
+        "compact should shrink {plain} pages, got {compact}"
+    );
+}
+
+/// A chart that already fits is left alone rather than shrunk for the sake of
+/// it — the first rung of the ladder is the ordinary layout.
+#[test]
+fn compact_does_not_shrink_a_chart_that_already_fits() {
+    let engine = ChartLayoutEngine::new(test_style(), Arc::new(Vec::new()), Arc::new(Vec::new()));
+    let config = ChartLayoutConfig::master_rhythm();
+    let chart = long_chart(2, 4, "G");
+
+    let plain = engine.layout_chart_with_config(&chart, &LayoutMode::paginated_a4(), &config);
+    let compact = engine.layout_chart_compact(&chart, &LayoutMode::paginated_a4(), &config);
+    assert_eq!(plain.pages.len(), 1);
+    assert_eq!(compact.pages.len(), 1);
+    assert_eq!(
+        compact.total_width, plain.total_width,
+        "same layout, not a scaled-down one"
+    );
+}
+
+/// A simile bar asks for a fraction of the width a written bar does, because
+/// none of its chords are drawn.
+#[test]
+fn a_simile_bar_wants_less_width_than_the_bar_it_repeats() {
+    use keyflow_proto::chart::fold_similes;
+
+    // The mark is a folded-chart thing, so the weight only drops for an
+    // engine that has been asked to draw one.
+    let mut config = ChartLayoutConfig::master_rhythm();
+    config.draw_similes = true;
+    let engine = ChartLayoutEngine::with_config(
+        config,
+        test_style(),
+        Arc::new(Vec::new()),
+        Arc::new(Vec::new()),
+    );
+    let mut chart = long_chart(1, 2, "G");
+    fold_similes(&mut chart);
+
+    let measures = chart.sections[0].measures();
+    assert!(measures[1].simile, "the fixture's second bar should fold");
+
+    let metrics = TextFontMetrics::new(Arc::new(Vec::new()));
+    let written = engine.estimate_measure_content_weight(&measures[0], &metrics);
+    let folded = engine.estimate_measure_content_weight(&measures[1], &metrics);
+    assert!(
+        folded < written,
+        "a simile bar ({folded}) should want less than a written one ({written})"
+    );
+}
+
+/// A system stops when the next bar's chord symbols would not fit beside the
+/// ones already on the line, whatever the cap says. Raising the cap is exactly
+/// what the folded and compact modes do, and without this a bar of six chords
+/// at eight bars a line prints as one smear.
+#[test]
+fn a_system_stops_when_the_chord_symbols_run_out_of_room() {
+    let mut config = ChartLayoutConfig::master_rhythm();
+    config.max_measures_per_system = 16;
+    let engine = ChartLayoutEngine::with_config(
+        config,
+        test_style(),
+        Arc::new(Vec::new()),
+        Arc::new(Vec::new()),
+    );
+
+    // Bars carrying six chords each, at a cap that would otherwise put
+    // sixteen of them on one line.
+    let mut chart = Chart::new();
+    chart.time_signature = Some(TimeSignature::new(4, 4));
+    let measures: Vec<Measure> = (0..16)
+        .map(|_| {
+            let mut m = Measure::new();
+            for symbol in ["Bbm7", "G#maj7", "F#13", "Ebm9", "C#7", "A#dim7"] {
+                m.chords.push(ChordInstance::new(
+                    root("C"),
+                    symbol.to_string(),
+                    Chord::new(root("C"), ChordQuality::Major),
+                    ChordRhythm::Default,
+                    symbol.to_string(),
+                    MusicalDuration::new(0, 4, 0),
+                    AbsolutePosition::at_beginning(),
+                ));
+            }
+            m
+        })
+        .collect();
+    chart
+        .sections
+        .push(ChartSection::new(Section::new(SectionType::Verse)).with_measures(measures));
+
+    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0);
+    assert!(
+        systems.len() > 1,
+        "sixteen six-chord bars should not share one 500pt line"
+    );
+    assert!(
+        systems.iter().all(|s| !s.is_empty()),
+        "a system always holds at least one measure"
+    );
+    assert_eq!(
+        systems.iter().map(Vec::len).sum::<usize>(),
+        16,
+        "every measure lands on exactly one system"
+    );
+}
+
+/// An ending stays with the phrase it ends. Four bars to a line, five when the
+/// fifth is a second ending — which is what a chart with a first and second
+/// ending looks like everywhere.
+#[test]
+fn a_second_ending_stays_on_the_line_with_its_phrase() {
+    use keyflow_proto::chart::notations::Volta;
+
+    let engine = ChartLayoutEngine::new(test_style(), Arc::new(Vec::new()), Arc::new(Vec::new()));
+    let mut chart = long_chart(1, 5, "G");
+    {
+        let section = &mut chart.sections[0];
+        let measures = section.chord_track_mut().expect("chord track");
+        for (idx, number) in [(3usize, 1u8), (4, 2)] {
+            measures.measures[idx].volta_start = Some(Volta {
+                numbers: vec![number],
+                label: String::new(),
+                length_measures: 1,
+            });
+        }
+    }
+
+    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0);
+    assert_eq!(
+        systems.len(),
+        1,
+        "five bars ending in a second ending are one line, got {systems:?}"
+    );
+}
+
+/// Without an ending the cap still holds at four — and the fifth bar is not
+/// left standing on a line of its own. Four-and-one is how a phrase that runs
+/// one bar past the line used to come out; three-and-two is how it reads.
+#[test]
+fn five_ordinary_bars_are_two_lines_of_three_and_two() {
+    let engine = ChartLayoutEngine::new(test_style(), Arc::new(Vec::new()), Arc::new(Vec::new()));
+    let chart = long_chart(1, 5, "G");
+    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0);
+    assert_eq!(systems.len(), 2);
+    assert_eq!(systems[0].len(), 3);
+    assert_eq!(systems[1].len(), 2);
+}
+
+/// Nothing is rebalanced when the tail is already in company: a six-bar
+/// section is four and two, because the four-bar grid is worth more than an
+/// even split.
+#[test]
+fn six_bars_keep_the_four_bar_grid() {
+    let engine = ChartLayoutEngine::new(test_style(), Arc::new(Vec::new()), Arc::new(Vec::new()));
+    let chart = long_chart(1, 6, "G");
+    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0);
+    assert_eq!(systems.len(), 2);
+    assert_eq!(systems[0].len(), 4);
+    assert_eq!(systems[1].len(), 2);
+}
+
+// endregion: --- Chart modes
+
+/// Folding a section is supposed to buy vertical space. A rule and a word
+/// need a fraction of the room a staff does, so a chart whose sections are
+/// folded has to end up shorter than the same chart written out — otherwise
+/// folding costs the same as not folding and the mode is pointless.
+#[test]
+fn a_folded_section_costs_far_less_height_than_a_written_one() {
+    let engine = ChartLayoutEngine::new(test_style(), Arc::new(Vec::new()), Arc::new(Vec::new()));
+    let mut config = ChartLayoutConfig::master_rhythm();
+    config.fold_sections = true;
+
+    let chart = long_chart(6, 4, "G");
+    let written = engine.layout_chart_with_config(&chart, &LayoutMode::paginated_a4(), &config);
+
+    let mut folded_chart = chart.clone();
+    for section in folded_chart.sections.iter_mut().skip(1) {
+        section.folded = true;
+    }
+    let folded =
+        engine.layout_chart_with_config(&folded_chart, &LayoutMode::paginated_a4(), &config);
+
+    let last_y = |layout: &ChartLayoutResult| {
+        layout.pages[layout.pages.len() - 1]
+            .systems
+            .last()
+            .map(|s| s.y + s.height)
+            .unwrap_or_default()
+    };
+    assert_eq!(folded.pages.len(), 1);
+
+    let written_row = written.pages[0].systems[1].height;
+    let folded_row = folded.pages[0].systems[1].height;
+    assert!(
+        folded_row < written_row,
+        "a folded row ({folded_row}) should cost less than the staff it stands in for ({written_row})"
+    );
+
+    let top = folded.pages[0].systems[0].y;
+    let folded_run = last_y(&folded) - top;
+    let written_run = last_y(&written) - top;
+    assert!(
+        folded_run < written_run * 0.85,
+        "folded ran {folded_run} past the first system, written {written_run}"
+    );
+}
+
+/// The wide band between systems is for the text, figures and endings that
+/// live there. Compact's job is to fit the chart on a page, so there it is
+/// only held open where something uses it — everywhere else that band is the
+/// air a chart on a stand is read by, and it stays.
+#[test]
+fn compact_sits_plain_systems_closer_than_annotated_ones() {
+    use keyflow_proto::chart::notations::{Placement, StaffText};
+
+    let engine = ChartLayoutEngine::new(test_style(), Arc::new(Vec::new()), Arc::new(Vec::new()));
+    let mut config = ChartLayoutConfig::master_rhythm();
+    config.tight_system_spacing = true;
+    let chart = long_chart(3, 4, "G");
+
+    let mut annotated = chart.clone();
+    for section in annotated.sections.iter_mut() {
+        section.measures_mut()[0].staff_text.push(StaffText {
+            text: "BACK TO TOP".to_string(),
+            beat: 1,
+            placement: Placement::Above,
+            source_default_x: None,
+            boxed: false,
+            bold: false,
+            italic: false,
+        });
+    }
+
+    let plain = engine.layout_chart_with_config(&chart, &LayoutMode::paginated_a4(), &config);
+    let with_text =
+        engine.layout_chart_with_config(&annotated, &LayoutMode::paginated_a4(), &config);
+
+    let pitch = |layout: &ChartLayoutResult| {
+        let systems = &layout.pages[0].systems;
+        systems[1].y - systems[0].y
+    };
+    assert!(
+        pitch(&plain) < pitch(&with_text),
+        "plain systems ({}) should sit closer than ones carrying text ({})",
+        pitch(&plain),
+        pitch(&with_text)
+    );
+
+    // And without the toggle, both sit at the full band: a chart being read
+    // off a stand keeps its air whether or not this line happens to use it.
+    let mut roomy = config.clone();
+    roomy.tight_system_spacing = false;
+    let plain_roomy = engine.layout_chart_with_config(&chart, &LayoutMode::paginated_a4(), &roomy);
+    let text_roomy =
+        engine.layout_chart_with_config(&annotated, &LayoutMode::paginated_a4(), &roomy);
+    assert_eq!(
+        pitch(&plain_roomy),
+        pitch(&text_roomy),
+        "by default every system gets the same gap"
+    );
+}
+
+/// Folded and compact ask for a five-bar section on one line: splitting it
+/// spends a whole system of height to print one bar, and height is the thing
+/// both modes are trying to save. Default keeps the four-bar grid.
+#[test]
+fn a_five_bar_section_fits_one_line_when_asked() {
+    let engine = ChartLayoutEngine::new(test_style(), Arc::new(Vec::new()), Arc::new(Vec::new()));
+    let chart = long_chart(1, 5, "G");
+
+    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0);
+    assert_eq!(systems.len(), 2, "by default the cap holds at four");
+
+    let mut config = ChartLayoutConfig::master_rhythm();
+    config.fit_whole_section_on_one_system = true;
+    let engine = ChartLayoutEngine::with_config(
+        config,
+        test_style(),
+        Arc::new(Vec::new()),
+        Arc::new(Vec::new()),
+    );
+    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0);
+    assert_eq!(systems.len(), 1);
+    assert_eq!(systems[0].len(), 5);
+}
+
+/// Only the whole section, and only one bar past the cap. Six bars are still
+/// two lines — the allowance is for the section that *nearly* fits, not for
+/// packing a chart in generally.
+#[test]
+fn six_bars_are_still_two_lines_with_the_allowance_on() {
+    let mut config = ChartLayoutConfig::master_rhythm();
+    config.fit_whole_section_on_one_system = true;
+    let engine = ChartLayoutEngine::with_config(
+        config,
+        test_style(),
+        Arc::new(Vec::new()),
+        Arc::new(Vec::new()),
+    );
+    let chart = long_chart(1, 6, "G");
+    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0);
+    assert_eq!(systems.len(), 2);
+}

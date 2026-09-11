@@ -122,6 +122,21 @@ pub struct ChordRenderResult {
     pub next_id: u64,
 }
 
+impl ChordRenderResult {
+    /// Nothing drawn, and the run of repeated symbols left as it was.
+    ///
+    /// For a bar that carries chords but prints none of them — a simile.
+    #[must_use]
+    pub fn empty(next_id: u64, last_chord_symbol: Option<String>) -> Self {
+        Self {
+            nodes: Vec::new(),
+            chord_bounds: Vec::new(),
+            last_chord_symbol,
+            next_id,
+        }
+    }
+}
+
 // ============================================================================
 // Collision Detection
 // ============================================================================
@@ -177,8 +192,8 @@ pub struct ChordCollisionResult {
 fn resolve_chord_collisions(
     chord_bounds: &[ChordBoundsInfo],
     min_gap: f64,
-    _measure_start_x: f64,
-    _measure_end_x: f64,
+    measure_start_x: f64,
+    measure_end_x: f64,
 ) -> ChordCollisionResult {
     if chord_bounds.len() < 2 {
         return ChordCollisionResult {
@@ -207,19 +222,74 @@ fn resolve_chord_collisions(
             let overlap = min_gap - gap;
             had_collisions = true;
 
-            // Only shift the first chord left - the second chord's notehead
-            // is already correctly positioned via segment minimum widths.
-            // Moving only the first chord left preserves notehead-chord alignment.
-            adjustments[i] -= overlap;
+            // Moving the first chord left is preferred — the second chord's
+            // notehead is already positioned by the segment minimums, and
+            // leaving it put preserves that alignment.
+            //
+            // But it can only go as far as there is room for it: the start of
+            // the measure, or whatever the chord before it left free. Moving it
+            // past either used to be exactly what happened, which is how a bar
+            // of seven symbols came out with two of them printed on top of each
+            // other — the pair that collided had already been walked past.
+            // Whatever will not fit to the left is given to the chord on the
+            // right instead, and if that would carry it out of the measure it
+            // stops at the barline and the pair takes the narrower gap.
+            let room_to_the_left = if i == 0 {
+                // The first symbol in a measure may hang half its width to the
+                // left, into the barline or the clef — the same allowance the
+                // minimum-width pass makes for it.
+                measure_start_x - bounds_a.world_bounds.width() * 0.5
+            } else {
+                chord_bounds[i - 1].world_bounds.x1 + adjustments[i - 1] + min_gap
+            };
+            let can_move_left = (bounds_a.world_bounds.x0 + adjustments[i] - room_to_the_left)
+                .max(0.0)
+                .min(overlap);
+            adjustments[i] -= can_move_left;
+
+            let residual = overlap - can_move_left;
+            if residual > 0.0 {
+                let room_to_the_right =
+                    (measure_end_x - (bounds_b.world_bounds.x1 + adjustments[i + 1])).max(0.0);
+                adjustments[i + 1] += residual.min(room_to_the_right);
+            }
 
             tracing::debug!(
                 "[chord-collision] Detected overlap of {:.1}pt between chords {} and {}. \
-                 Moving first chord left by {:.1}pt (preserves notehead alignment)",
+                 Moved the first {:.1}pt left, the second {:.1}pt right",
                 overlap,
                 i,
                 i + 1,
-                overlap
+                can_move_left,
+                residual.max(0.0)
             );
+        }
+    }
+
+    // The last symbol has to stay inside its own bar. A symbol that hangs past
+    // the closing barline lands on the first symbol of the next bar, and that
+    // pair is beyond this pass — it only ever sees one measure. Pull it back as
+    // far as its neighbour allows.
+    if let Some(last) = chord_bounds.len().checked_sub(1) {
+        let right = chord_bounds[last].world_bounds.x1 + adjustments[last];
+        // Short of the barline by the same gap two symbols keep from each
+        // other: the next bar's first symbol starts at that barline.
+        let overhang = right - (measure_end_x - min_gap);
+        if overhang > 0.0 {
+            let room = if last == 0 {
+                (chord_bounds[last].world_bounds.x0 + adjustments[last]
+                    - (measure_start_x - chord_bounds[last].world_bounds.width() * 0.5))
+                    .max(0.0)
+            } else {
+                (chord_bounds[last].world_bounds.x0 + adjustments[last]
+                    - (chord_bounds[last - 1].world_bounds.x1 + adjustments[last - 1] + min_gap))
+                    .max(0.0)
+            };
+            let pull = overhang.min(room);
+            if pull > 0.0 {
+                adjustments[last] -= pull;
+                had_collisions = true;
+            }
         }
     }
 
@@ -1901,9 +1971,14 @@ mod tests {
         assert!((result.adjustments[0] + 2.0).abs() < 0.1);
     }
 
+    /// A run of crowded symbols has to come out with every one of them clear
+    /// of its neighbours — which is the thing the resolver is for, and the
+    /// thing it used to get wrong. Moving each pair's left symbol left without
+    /// asking what was already there walked the middle one straight into the
+    /// first, and the loop had gone past that pair by then, so the two were
+    /// printed on top of each other. A bar of Africa's intro did exactly that.
     #[test]
     fn test_collision_three_chords_cascade() {
-        // Three overlapping chords - each first chord of a pair moves left
         let bounds = vec![
             make_bounds(10.0, 30.0), // ends at 40
             make_bounds(42.0, 30.0), // starts at 42, ends at 72 (gap 2)
@@ -1911,11 +1986,25 @@ mod tests {
         ];
         let result = resolve_chord_collisions(&bounds, 4.0, 0.0, 200.0);
         assert!(result.had_collisions);
-        // First chord shifts left for first pair collision
-        assert!(result.adjustments[0] < 0.0);
-        // Middle chord shifts left for second pair collision
-        assert!(result.adjustments[1] < 0.0);
-        // Last chord should not move (no chord after it)
-        assert!((result.adjustments[2]).abs() < 0.001);
+
+        let placed: Vec<(f64, f64)> = bounds
+            .iter()
+            .zip(&result.adjustments)
+            .map(|(b, adjustment)| {
+                (
+                    b.world_bounds.x0 + adjustment,
+                    b.world_bounds.x1 + adjustment,
+                )
+            })
+            .collect();
+        for pair in placed.windows(2) {
+            let gap = pair[1].0 - pair[0].1;
+            assert!(
+                gap >= 4.0 - 0.001,
+                "symbols {:?} and {:?} are only {gap} apart",
+                pair[0],
+                pair[1]
+            );
+        }
     }
 }

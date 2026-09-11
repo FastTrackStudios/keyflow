@@ -65,6 +65,8 @@ pub use collision::{ChordCollisionContext, resolve_chord_positions};
 use std::sync::Arc;
 
 use crate::Chart;
+use crate::chart::Measure;
+use crate::chart::notations::Placement;
 use crate::engraver::layout::context::{LayoutContext, LayoutContextOwned};
 use crate::engraver::layout::orchestrator::{PageLayout, PageMargins, SystemLayout};
 use crate::engraver::layout::segment::SegmentType;
@@ -110,6 +112,77 @@ fn prevailing_fifths_at(chart: &Chart, section_idx: usize, local_measure: usize)
         }
     }
     fifths
+}
+
+/// Does anything on these bars draw below the staff?
+///
+/// The south band under a system exists to clear dynamics, cues, figures and
+/// text placed below the staff. A system of plain chords and slashes has none
+/// of that, and holding the band open anyway breaks the page earlier than the
+/// music needs.
+fn draws_below_staff(measures: &[Measure]) -> bool {
+    let below = |placement: &Placement| matches!(placement, Placement::Below);
+    measures.iter().any(|measure| {
+        !measure.text_cues.is_empty()
+            || !measure.hairpins.is_empty()
+            || measure
+                .classical_dynamics
+                .iter()
+                .any(|dynamic| below(&dynamic.placement))
+            || measure.staff_text.iter().any(|text| below(&text.placement))
+            || measure
+                .figured_bass
+                .iter()
+                .any(|figure| below(&figure.placement))
+            || measure
+                .suspensions
+                .iter()
+                .any(|figure| below(&figure.placement))
+    })
+}
+
+/// Does anything on these bars draw above the staff, beyond the chord symbols
+/// every bar has?
+///
+/// `system_spacing` is deliberately generous — eight spatia — so that text,
+/// figures and endings between two lines never crowd either of them. The band
+/// belongs to whichever side actually puts something in it: a line whose text
+/// sits above it needs the room above it, not below.
+fn draws_above_staff(measures: &[Measure]) -> bool {
+    let above = |placement: &Placement| matches!(placement, Placement::Above);
+    measures.iter().any(|measure| {
+        measure.volta_start.is_some()
+            || !measure.melodies.is_empty()
+            || measure
+                .classical_dynamics
+                .iter()
+                .any(|dynamic| above(&dynamic.placement))
+            || measure.staff_text.iter().any(|text| above(&text.placement))
+            || measure
+                .figured_bass
+                .iter()
+                .any(|figure| above(&figure.placement))
+            || measure
+                .suspensions
+                .iter()
+                .any(|figure| above(&figure.placement))
+    })
+}
+
+/// The gap between two systems that carry nothing between them.
+///
+/// Enough to keep one line's ink off the next, and no more. Used both when
+/// systems are placed and when the vertical compactor closes up after them, so
+/// the page breaks taken during layout survive the compaction.
+fn bare_system_gap(config: &ChartLayoutConfig) -> f64 {
+    (config.spatium * 3.0).max(8.0)
+}
+
+/// The gap above and below a folded row.
+///
+/// A rule and a word: it needs to read as its own line and nothing more.
+fn folded_system_gap(config: &ChartLayoutConfig) -> f64 {
+    config.spatium * 1.5
 }
 
 fn collect_system_ink_bounds(scene: &SceneNode, page: &PageLayout) -> Vec<Option<Rect>> {
@@ -344,7 +417,7 @@ pub struct ChartLayoutConfig {
     /// - A half note chord (2 beats) becomes 2 quarter slashes
     ///
     /// This is standard notation for master rhythm charts.
-    /// Can be disabled with `/AUTO_RHYTHM_SLASHES=false` in the chart.
+    /// Can be disabled with `\AUTO_RHYTHM_SLASHES=false` in the chart.
     pub auto_rhythm_slashes: bool,
     /// Show measure numbers above the first measure of each system.
     /// When true, displays the measure number (accounting for offset) above bars.
@@ -377,6 +450,33 @@ pub struct ChartLayoutConfig {
     /// Duration-to-space power law slope (default 1.2).
     /// Controls how aggressively longer notes get more space.
     pub spacing_slope: f64,
+    /// Draw a simile bar as the `repeat1Bar` mark rather than as its chords.
+    /// See [`BehavioralFlags::draw_similes`](super::chart::config::BehavioralFlags).
+    pub draw_similes: bool,
+    /// Draw a folded section as a titled rule instead of its bars.
+    /// See [`BehavioralFlags::fold_sections`](super::chart::config::BehavioralFlags).
+    pub fold_sections: bool,
+    /// Pack systems by their ink rather than holding the annotation band open
+    /// under every one of them.
+    ///
+    /// Off by default: `system_spacing` is deliberately generous so that text,
+    /// figures and endings between two lines never crowd either, and a chart
+    /// being read off a stand wants that air. Compact mode turns it on, where
+    /// fitting the chart on one page is the whole point — a line that carries
+    /// nothing below it then sits at the bare gap, close enough to keep its
+    /// ink off its neighbour's and no further.
+    ///
+    /// A folded row is tight either way. It is a rule and a word, and the
+    /// space it saves is the reason to fold.
+    pub tight_system_spacing: bool,
+    /// Let a section that runs one bar past the line cap stay on one line.
+    ///
+    /// Off by default: four bars to a line is the grid a chart is read by.
+    /// But a five-bar section split in two costs a whole system of height for
+    /// one bar of music, and when the point is to fit the chart — folded and
+    /// compact both ask for this — a line of five is the cheaper answer. Only
+    /// when the whole section fits, and only when the chord symbols do.
+    pub fit_whole_section_on_one_system: bool,
     /// Spacing density (default 1.0). Higher values = tighter spacing.
     pub spacing_density: f64,
     /// Fill limit for last system justification (default 0.3).
@@ -721,6 +821,86 @@ impl ChartLayoutEngine {
     /// This temporarily applies the given config for layout, then restores
     /// the engine's default config. Useful for charts with rhythmic complexity
     /// that need stemmed notation.
+    /// Lay out as few pages as this chart can be persuaded into.
+    ///
+    /// Tries a ladder of settings, most readable first: the ordinary four bars
+    /// a line, then wider systems, then wider systems at a smaller scale. It
+    /// stops at the first one that reaches a single page, so a chart that
+    /// already fits is never shrunk, and one that needs six bars a line is not
+    /// also scaled down.
+    ///
+    /// Nothing fits on one page for every chart, and this does not pretend to:
+    /// when no rung gets there, the one that produced the fewest pages wins,
+    /// ties going to the more readable. Bounded at [`COMPACT_LADDER`]'s length
+    /// of layout passes, which is the cost of asking.
+    ///
+    /// Only paginated modes have pages to count. Under a continuous or snippet
+    /// mode this lays out once at `config` and returns that.
+    ///
+    /// [`COMPACT_LADDER`]: Self::COMPACT_LADDER
+    #[must_use]
+    pub fn layout_chart_compact(
+        &self,
+        chart: &Chart,
+        mode: &LayoutMode,
+        config: &ChartLayoutConfig,
+    ) -> ChartLayoutResult {
+        // Fitting the chart on one page is the whole point here, so the
+        // annotation band is only held open where something uses it, and a
+        // section one bar past the line cap stays on one line.
+        let mut config = config.clone();
+        config.tight_system_spacing = true;
+        config.fit_whole_section_on_one_system = true;
+        let config = &config;
+
+        if !matches!(mode, LayoutMode::Paginated { .. }) {
+            return self.layout_chart_with_config(chart, mode, config);
+        }
+
+        let mut best: Option<ChartLayoutResult> = None;
+        for (measures, scale) in Self::COMPACT_LADDER {
+            let mut rung = config.clone();
+            rung.max_measures_per_system = measures;
+            if scale < 1.0 {
+                rung = rung.with_scale(scale);
+            }
+            let result = self.layout_chart_with_config(chart, mode, &rung);
+            if result.pages.len() <= 1 {
+                return result;
+            }
+            if best
+                .as_ref()
+                .is_none_or(|current| result.pages.len() < current.pages.len())
+            {
+                best = Some(result);
+            }
+        }
+        best.unwrap_or_else(|| self.layout_chart_with_config(chart, mode, config))
+    }
+
+    /// `(measures per system, scale)` pairs for [`layout_chart_compact`],
+    /// ordered most readable first.
+    ///
+    /// Wider systems come before smaller type: a chart reads better at eight
+    /// bars a line than at four bars a line three-quarters the size.
+    ///
+    /// [`layout_chart_compact`]: Self::layout_chart_compact
+    pub const COMPACT_LADDER: [(usize, f64); 13] = [
+        (4, 1.0),
+        (5, 1.0),
+        (6, 1.0),
+        (8, 1.0),
+        (6, 0.9),
+        (8, 0.9),
+        (8, 0.8),
+        (10, 0.8),
+        (10, 0.7),
+        (12, 0.7),
+        (12, 0.65),
+        (14, 0.6),
+        (16, 0.55),
+    ];
+
     pub fn layout_chart_with_config(
         &self,
         chart: &Chart,
@@ -793,6 +973,13 @@ impl ChartLayoutEngine {
         let mut page_number = 1u32;
         let mut page_y = self.config.margins.top;
         let mut global_system_index = 0usize;
+        // Systems whose text, figures or endings need the full gap held open.
+        let mut systems_with_ink_below: std::collections::HashSet<usize> =
+            std::collections::HashSet::new();
+        let mut systems_with_ink_above: std::collections::HashSet<usize> =
+            std::collections::HashSet::new();
+        // Folded rows are measured, not discovered — see below.
+        let mut folded_systems: std::collections::HashSet<usize> = std::collections::HashSet::new();
         let mut id_counter = 100u64;
 
         // Track previous chord to hide duplicates (reset at each system start)
@@ -987,8 +1174,18 @@ impl ChartLayoutEngine {
                 .map(|kc| (kc.position.total_duration.measure as usize, kc))
                 .collect();
 
-            // Group measures into systems (count-based for consistent layout)
-            let systems = self.group_measures_into_systems(chart_section.measures(), content_width);
+            // A folded section draws as one titled rule rather than its bars,
+            // so it needs exactly one system and that system holds nothing.
+            // Everything else about a system — the page break check, the page
+            // background, the section label, the vertical advance — still has
+            // to happen, which is why this is an empty system rather than a
+            // separate path around the loop.
+            let section_folded = chart_section.folded && self.config.fold_sections;
+            let systems = if section_folded {
+                vec![Vec::new()]
+            } else {
+                self.group_measures_into_systems(chart_section.measures(), content_width)
+            };
 
             for (sys_idx, measure_indices) in systems.iter().enumerate() {
                 // Reset chord tracking at line breaks (new systems)
@@ -1014,11 +1211,59 @@ impl ChartLayoutEngine {
                 // a full page-level skyline pass, reserve explicit north/south
                 // notation bands: chord symbols live above the staff, while
                 // dynamics/text/figured bass live below.
-                let system_top_reserve = self.config.spatium * 2.0;
-                let system_bottom_reserve = self.config.spatium * 4.5;
+                // A folded row is a rule and a word. It has no staff to draw,
+                // no chord symbols above it and no dynamics below it, so the
+                // bands that clear those have nothing to clear: charging it a
+                // full system is what pushed Mr. Brightside's folded chart onto
+                // a second page.
+                let system_top_reserve = if section_folded {
+                    self.config.spatium * 1.0
+                } else {
+                    self.config.spatium * 2.0
+                };
+                let system_measures: Vec<Measure> = measure_indices
+                    .iter()
+                    .filter_map(|idx| chart_section.measures().get(*idx).cloned())
+                    .collect();
+                let system_bottom_reserve = if section_folded {
+                    self.config.spatium * 1.0
+                } else if self.config.tight_system_spacing && !draws_below_staff(&system_measures) {
+                    // Nothing hangs below the staff but the odd repeat arm.
+                    self.config.spatium * 1.5
+                } else {
+                    self.config.spatium * 4.5
+                };
+                // A folded row is as tall as its margin capsule, so the rule
+                // runs through the badge's middle and the two read as one
+                // mark. A capsule that runs to two or three lines overhangs
+                // the row instead of stretching it — exactly as it overhangs a
+                // staff today — or a section whose badge needs two lines would
+                // cost more folded than written.
+                let label_height = section_folded
+                    .then(|| {
+                        self.section_label_height(
+                            &chart_section.section,
+                            // Neither the page's x nor the staff's y changes
+                            // how tall the capsule comes out.
+                            0.0,
+                            self.config.margins.left,
+                            0.0,
+                            staff_height,
+                            section_letters.get(&section_idx).copied(),
+                            &ctx,
+                        )
+                    })
+                    .unwrap_or(staff_height);
+                let row_height = if section_folded {
+                    label_height
+                        .min(staff_height)
+                        .max(label_height / 2.0 + self.config.spatium * 0.5)
+                } else {
+                    staff_height
+                };
                 let system_height = system_top_reserve
                     + melody_extra_above
-                    + staff_height
+                    + row_height
                     + melody_extra_below
                     + system_bottom_reserve;
 
@@ -1266,12 +1511,28 @@ impl ChartLayoutEngine {
                     content_width
                 };
 
-                // Draw staff lines (shortened for short systems)
-                root.add_child(SceneNode::anonymous_leaf(self.draw_staff_lines(
-                    content_x,
-                    staff_y,
-                    actual_system_width,
-                )));
+                if section_folded {
+                    // The rule stands in for the staff: a line the width of
+                    // the page, saying the section is here and is what it was
+                    // last time.
+                    root.add_child(self.draw_section_rule(
+                        &chart_section.section,
+                        content_x,
+                        staff_y,
+                        content_width,
+                        label_height,
+                        &ctx,
+                        id_counter,
+                    ));
+                    id_counter += 1;
+                } else {
+                    // Draw staff lines (shortened for short systems)
+                    root.add_child(SceneNode::anonymous_leaf(self.draw_staff_lines(
+                        content_x,
+                        staff_y,
+                        actual_system_width,
+                    )));
+                }
 
                 // System-wide chord-symbol Y baseline (used as a fallback for the
                 // section label and for measures without melodies). Per-measure
@@ -1342,13 +1603,17 @@ impl ChartLayoutEngine {
                     page_number: Some(page_number),
                 };
 
-                let prefix_result =
-                    prefix_renderer::render_system_prefix(&prefix_ctx, id_counter, &ctx);
+                // A folded row has no staff, so a clef and key signature on it
+                // would be hanging off the front of a rule.
+                if !section_folded {
+                    let prefix_result =
+                        prefix_renderer::render_system_prefix(&prefix_ctx, id_counter, &ctx);
 
-                for node in prefix_result.nodes {
-                    root.add_child(node);
+                    for node in prefix_result.nodes {
+                        root.add_child(node);
+                    }
+                    id_counter = prefix_result.next_id;
                 }
-                id_counter = prefix_result.next_id;
 
                 // Start measures after prefix
                 let mut measure_x = content_x + prefix_width;
@@ -1606,13 +1871,26 @@ impl ChartLayoutEngine {
                             note_line_stacks: &measure_result.note_line_stacks,
                         };
 
-                        let chord_result = chord_renderer::render_chord_symbols(
-                            &chord_ctx,
-                            measure,
-                            previous_chord_symbol.as_deref(),
-                            id_counter,
-                            &ctx,
-                        );
+                        // A simile bar prints no chord symbol. The mark says
+                        // "that bar again", and the bar it repeats is right
+                        // there with the symbol over it — printing it twice is
+                        // the clutter the mark was reached for to avoid.
+                        // `previous_chord_symbol` is deliberately left alone,
+                        // so `hide_repeated_chords` still sees the run.
+                        let chord_result = if measure.simile && self.config.draw_similes {
+                            chord_renderer::ChordRenderResult::empty(
+                                id_counter,
+                                previous_chord_symbol.clone(),
+                            )
+                        } else {
+                            chord_renderer::render_chord_symbols(
+                                &chord_ctx,
+                                measure,
+                                previous_chord_symbol.as_deref(),
+                                id_counter,
+                                &ctx,
+                            )
+                        };
                         let chord_obstacles = chord_result.chord_bounds;
                         // Kept for anchoring suspension figures to their chords;
                         // `chord_obstacles` itself is consumed as obstacles below.
@@ -1888,6 +2166,43 @@ impl ChartLayoutEngine {
                             "barline",
                         );
                         root.add_child(barline);
+
+                        // How many times the repeat plays, over its closing
+                        // barline — including the `x2` a bare repeat implies.
+                        // Strictly, engraving leaves that one off. But the
+                        // count is the thing a player is scanning for, and it
+                        // is easier to find in the same place every time than
+                        // to notice an absence and know what it means.
+                        if matches!(
+                            measure.end_repeat,
+                            crate::chart::notations::RepeatMark::Backward
+                        ) {
+                            let label = self.create_repeat_count_label(
+                                measure.repeat_count.max(2),
+                                measure_x,
+                                staff_y,
+                                id_counter,
+                            );
+                            id_counter += 1;
+                            // The count starts just above the staff, where the
+                            // bracket ends — and rides the skyline up from
+                            // there, because the last bar of a repeat usually
+                            // has a chord symbol sitting in exactly that spot.
+                            if let Some(label) = notation_renderer::autoplace_node(
+                                &mut system_skyline,
+                                label,
+                                true,
+                                self.config.spatium * 0.1,
+                            ) {
+                                record_system_ink_bottom(
+                                    &mut system_ink_bottom,
+                                    &mut system_height_contributors,
+                                    &label,
+                                    "repeat_count",
+                                );
+                                root.add_child(label);
+                            }
+                        }
                     }
                 }
 
@@ -1922,9 +2237,18 @@ impl ChartLayoutEngine {
                 }
 
                 // Track system layout
-                let base_system_height = system_top_reserve + staff_height;
+                let base_system_height = system_top_reserve + row_height;
                 let ink_system_height = system_ink_bottom - system_page_top;
-                let actual_system_height = ink_system_height.max(base_system_height);
+                // A folded row is measured, not discovered: its ink is the
+                // rule and the label capsule, both of which are centred on the
+                // row and overhang it by design. Letting them grow the row
+                // would give a section that draws nothing back the vertical
+                // space folding it was meant to save.
+                let actual_system_height = if section_folded {
+                    base_system_height
+                } else {
+                    ink_system_height.max(base_system_height)
+                };
                 let extra_system_height = (actual_system_height - base_system_height).max(0.0);
                 if extra_system_height > self.config.spatium {
                     let source_measures = measure_indices
@@ -1947,6 +2271,16 @@ impl ChartLayoutEngine {
                     );
                 }
 
+                if section_folded {
+                    folded_systems.insert(global_system_index);
+                } else {
+                    if draws_below_staff(&system_measures) {
+                        systems_with_ink_below.insert(global_system_index);
+                    }
+                    if draws_above_staff(&system_measures) {
+                        systems_with_ink_above.insert(global_system_index);
+                    }
+                }
                 current_page_systems.push(SystemLayout {
                     index: global_system_index,
                     y: page_y,
@@ -1955,8 +2289,79 @@ impl ChartLayoutEngine {
                     measure_indices: measure_indices.clone(),
                 });
 
-                page_y += actual_system_height + self.config.system_spacing;
+                // A rule needs less air around it than a staff does, and two
+                // lines carrying no text need less than the full band. This
+                // has to match what `compact_paginated_vertical_dead_space`
+                // will hold back afterwards: page breaks are decided here, and
+                // a break taken against spacing the compactor then removes
+                // leaves a page that did not need to start.
+                // A folded row placed against a staff keeps the ordinary bare
+                // gap; only two folded rows in a row close up, and the
+                // compactor does that once it can see what follows.
+                // What comes next decides how much room this line leaves
+                // behind it. A folded row is a rule and a word: it takes the
+                // air under the line above rather than asking for its own.
+                let next_section_folded = chart
+                    .sections
+                    .get(section_idx + 1)
+                    .is_some_and(|next| next.folded && self.config.fold_sections);
+                let next_is_folded = if sys_idx + 1 < systems.len() {
+                    section_folded
+                } else {
+                    next_section_folded
+                };
+                // Under `tight_system_spacing` the wide band belongs to
+                // whichever side puts something in it: what this line hangs
+                // below itself, or what the next one carries above its own
+                // staff. Reserving it here is the cautious half of the job —
+                // the compactor takes back what neither side turned out to
+                // need, and it cannot give room back that was never left.
+                let next_system_draws_above = || {
+                    systems
+                        .get(sys_idx + 1)
+                        .map(|next| {
+                            let next_measures: Vec<Measure> = next
+                                .iter()
+                                .filter_map(|idx| chart_section.measures().get(*idx).cloned())
+                                .collect();
+                            draws_above_staff(&next_measures)
+                        })
+                        .or_else(|| {
+                            chart
+                                .sections
+                                .get(section_idx + 1)
+                                .map(|next| draws_above_staff(next.measures()))
+                        })
+                        .unwrap_or(false)
+                };
+                let spacing = if section_folded || next_is_folded {
+                    bare_system_gap(&self.config)
+                } else if self.config.tight_system_spacing
+                    && !draws_below_staff(&system_measures)
+                    && !next_system_draws_above()
+                {
+                    bare_system_gap(&self.config)
+                } else {
+                    self.config.system_spacing
+                };
+                page_y += actual_system_height + spacing;
                 global_system_index += 1;
+            }
+
+            // A folded section drew no measures, so nothing inside the loop
+            // advanced the counters those measures are still worth. The bars
+            // are played whether or not they are drawn: skipping them here
+            // would restart the bar numbers after the fold and slide every
+            // later beat position earlier than the music.
+            if section_folded {
+                let bars = chart_section.measures().len();
+                for measure in chart_section.measures() {
+                    let ticks = i64::from(measure.time_signature.0)
+                        * (1920 / i64::from(measure.time_signature.1));
+                    cumulative_ticks += ticks;
+                    cumulative_time += ticks as f64 * seconds_per_tick;
+                }
+                global_measure_index += bars;
             }
 
             // Update global measure offset for next section (for chart_measurements lookup)
@@ -1999,11 +2404,22 @@ impl ChartLayoutEngine {
             total_width,
             beat_positions,
         };
-        self.compact_paginated_vertical_dead_space(&mut result);
+        self.compact_paginated_vertical_dead_space(
+            &mut result,
+            &systems_with_ink_below,
+            &systems_with_ink_above,
+            &folded_systems,
+        );
         result
     }
 
-    fn compact_paginated_vertical_dead_space(&self, result: &mut ChartLayoutResult) {
+    fn compact_paginated_vertical_dead_space(
+        &self,
+        result: &mut ChartLayoutResult,
+        systems_with_ink_below: &std::collections::HashSet<usize>,
+        systems_with_ink_above: &std::collections::HashSet<usize>,
+        folded_systems: &std::collections::HashSet<usize>,
+    ) {
         // Compaction should preserve ink clearance, not a second system-spacing
         // reserve. Larger north/south reserves are useful during initial system
         // construction, but after all notation is rendered we can safely pack
@@ -2011,22 +2427,53 @@ impl ChartLayoutEngine {
         // the configured `system_spacing` so compacted lines never sit tighter
         // than the pre-compactor layout — only genuine dead space beyond that
         // baseline is removed.
-        let target_gap = self
+        let annotated_gap = self
             .config
             .system_spacing
             .max(self.config.spatium * 1.5)
             .max(8.0);
+        let bare_gap = bare_system_gap(&self.config).min(annotated_gap);
+        let folded_gap = folded_system_gap(&self.config).min(annotated_gap);
 
         for _ in 0..1 {
             let mut page_shift_plans: Vec<(u32, Vec<(usize, f64)>)> = Vec::new();
 
             for page in &result.pages {
-                let system_bounds = collect_system_ink_bounds(&result.scene, page);
+                let mut system_bounds = collect_system_ink_bounds(&result.scene, page);
+                // A folded row's ink is a rule and a word centred on it, and
+                // the word's bounding box swings with its letters. Measuring
+                // that leaves four folded rows sitting at four different
+                // distances. The row's own box is the deliberate one, so it is
+                // what the row is spaced by.
+                for (slot, system) in system_bounds.iter_mut().zip(&page.systems) {
+                    if folded_systems.contains(&system.index) {
+                        let top = page.y_offset + system.y;
+                        *slot = Some(Rect::new(0.0, top, 0.0, top + system.height));
+                    }
+                }
                 let mut cumulative_shift = 0.0;
                 let mut shifts = Vec::new();
 
                 for system_idx in 1..page.systems.len() {
                     let lower_system_index = page.systems[system_idx].index;
+                    let upper_system_index = page.systems[system_idx - 1].index;
+                    let touches_a_folded_row = folded_systems.contains(&upper_system_index)
+                        || folded_systems.contains(&lower_system_index);
+                    let target_gap = if folded_systems.contains(&upper_system_index)
+                        && folded_systems.contains(&lower_system_index)
+                    {
+                        folded_gap
+                    } else if touches_a_folded_row {
+                        bare_gap
+                    } else if !self.config.tight_system_spacing {
+                        annotated_gap
+                    } else if systems_with_ink_below.contains(&upper_system_index)
+                        || systems_with_ink_above.contains(&lower_system_index)
+                    {
+                        annotated_gap
+                    } else {
+                        bare_gap
+                    };
                     let removable = system_bounds
                         .get(system_idx - 1)
                         .and_then(|upper| upper.as_ref())
@@ -2289,8 +2736,15 @@ impl ChartLayoutEngine {
                 .map(|kc| (kc.position.total_duration.measure as usize, kc))
                 .collect();
 
-            // Group measures into systems (count-based for consistent layout)
-            let systems = self.group_measures_into_systems(chart_section.measures(), content_width);
+            // A folded section draws as one titled rule rather than its bars,
+            // exactly as it does on a page. Scrolling a chart is not a reason
+            // to read a chorus out twice.
+            let section_folded = chart_section.folded && self.config.fold_sections;
+            let systems = if section_folded {
+                vec![Vec::new()]
+            } else {
+                self.group_measures_into_systems(chart_section.measures(), content_width)
+            };
 
             for (sys_idx, measure_indices) in systems.iter().enumerate() {
                 // Reset chord tracking at line breaks (new systems)
@@ -2315,12 +2769,40 @@ impl ChartLayoutEngine {
                 // Match the paginated path: reserve skyline-like north/south
                 // bands so adjacent systems cannot overlap above/below staff
                 // notation before a full page-level skyline pass exists.
-                let system_top_reserve = self.config.spatium * 2.0;
-                let system_bottom_reserve = self.config.spatium * 4.5;
+                let label_height = section_folded
+                    .then(|| {
+                        self.section_label_height(
+                            &chart_section.section,
+                            0.0,
+                            self.config.margins.left,
+                            0.0,
+                            staff_height,
+                            section_letters.get(&section_idx).copied(),
+                            &ctx,
+                        )
+                    })
+                    .unwrap_or(staff_height);
+                let row_height = if section_folded {
+                    label_height
+                        .min(staff_height)
+                        .max(label_height / 2.0 + self.config.spatium * 0.5)
+                } else {
+                    staff_height
+                };
+                let system_top_reserve = if section_folded {
+                    self.config.spatium * 1.0
+                } else {
+                    self.config.spatium * 2.0
+                };
+                let system_bottom_reserve = if section_folded {
+                    self.config.spatium * 1.0
+                } else {
+                    self.config.spatium * 4.5
+                };
                 let staff_y = total_height + system_top_reserve + melody_extra_above;
                 let system_height = system_top_reserve
                     + melody_extra_above
-                    + staff_height
+                    + row_height
                     + melody_extra_below
                     + system_bottom_reserve;
 
@@ -2434,12 +2916,25 @@ impl ChartLayoutEngine {
                     content_width
                 };
 
-                // Draw staff lines (shortened for short systems)
-                root.add_child(SceneNode::anonymous_leaf(self.draw_staff_lines(
-                    content_x,
-                    staff_y,
-                    actual_system_width,
-                )));
+                if section_folded {
+                    root.add_child(self.draw_section_rule(
+                        &chart_section.section,
+                        content_x,
+                        staff_y,
+                        content_width,
+                        label_height,
+                        &ctx,
+                        id_counter,
+                    ));
+                    id_counter += 1;
+                } else {
+                    // Draw staff lines (shortened for short systems)
+                    root.add_child(SceneNode::anonymous_leaf(self.draw_staff_lines(
+                        content_x,
+                        staff_y,
+                        actual_system_width,
+                    )));
+                }
 
                 // Place chord symbols above the highest note content (MuseScore skyline approach)
                 let _chord_y = staff_y + constants::CHORD_Y_OFFSET - melody_extra_above;
@@ -2501,13 +2996,17 @@ impl ChartLayoutEngine {
                     page_number: None, // Continuous mode has no pages
                 };
 
-                let prefix_result =
-                    prefix_renderer::render_system_prefix(&prefix_ctx, id_counter, &ctx);
+                // A folded row has no staff, so a clef and key signature on it
+                // would be hanging in the air.
+                if !section_folded {
+                    let prefix_result =
+                        prefix_renderer::render_system_prefix(&prefix_ctx, id_counter, &ctx);
 
-                for node in prefix_result.nodes {
-                    root.add_child(node);
+                    for node in prefix_result.nodes {
+                        root.add_child(node);
+                    }
+                    id_counter = prefix_result.next_id;
                 }
-                id_counter = prefix_result.next_id;
 
                 // Start measures after prefix
                 let mut measure_x = content_x + prefix_width;
@@ -3012,12 +3511,48 @@ impl ChartLayoutEngine {
                             Self::end_barline_type(measure),
                         ));
 
+                        // How many times the repeat plays, over its closing
+                        // barline — the same mark the paginated path draws,
+                        // because the same chart scrolled is still the chart.
+                        if matches!(
+                            measure.end_repeat,
+                            crate::chart::notations::RepeatMark::Backward
+                        ) {
+                            let label = self.create_repeat_count_label(
+                                measure.repeat_count.max(2),
+                                measure_x,
+                                staff_y,
+                                id_counter,
+                            );
+                            id_counter += 1;
+                            if let Some(label) = notation_renderer::autoplace_node(
+                                &mut system_skyline,
+                                label,
+                                true,
+                                self.config.spatium * 0.1,
+                            ) {
+                                root.add_child(label);
+                            }
+                        }
+
                         global_measure_index += 1;
                     }
                 }
 
-                total_height += system_height + self.config.system_spacing;
+                let spacing = if section_folded {
+                    bare_system_gap(&self.config)
+                } else {
+                    self.config.system_spacing
+                };
+                total_height += system_height + spacing;
                 global_system_index += 1;
+            }
+
+            // A folded section drew no measures, so the bar numbers have to be
+            // advanced by hand — the bars are played whether or not they are
+            // drawn.
+            if section_folded {
+                global_measure_index += chart_section.measures().len();
             }
 
             // Update global measure offset for next section (for chart_measurements lookup)
@@ -3039,22 +3574,89 @@ impl ChartLayoutEngine {
     ///
     /// Always uses count-based grouping to maintain consistent layout.
     /// Rhythm compression handles fitting content within the allocated width.
+    /// Break the section's measures into systems.
+    ///
+    /// `max_measures_per_system` is a cap, not a target: a system also stops
+    /// when the next bar's chord symbols would not fit beside the ones already
+    /// on the line. Without that, raising the cap — which is exactly what the
+    /// folded and compact modes do — packs bars in until the symbols run into
+    /// each other, and a bar of six chords at eight bars a line prints as one
+    /// smear.
     fn group_measures_into_systems(
         &self,
         measures: &[crate::chart::types::Measure],
-        _content_width: f64,
+        content_width: f64,
     ) -> Vec<Vec<usize>> {
         let mut systems = Vec::new();
-        let mut current_system = Vec::new();
+        let mut current_system: Vec<usize> = Vec::new();
+        let mut current_width = 0.0f64;
+
+        let text_metrics = TextFontMetrics::new(self.text_font_data.clone());
+        let widths: Vec<f64> = measures
+            .iter()
+            .map(|m| self.chord_symbol_width_needed(m, &text_metrics))
+            .collect();
+        // A system always holds at least one measure, however wide it is —
+        // better one cramped bar than an empty line and the same cramped bar.
+        let usable = content_width.max(1.0);
+
+        // A section one bar past the cap goes on one line, when asked. Two
+        // lines for five bars costs a system of height to print a single bar,
+        // and that bar is what a reader loses the chart's shape to.
+        if self.config.fit_whole_section_on_one_system
+            && measures.len() == self.config.max_measures_per_system + 1
+            && !measures.iter().any(starts_long_volta)
+        {
+            let squeezed: f64 = measures
+                .iter()
+                .map(|measure| self.chord_symbol_width_floor(measure, &text_metrics))
+                .sum();
+            if squeezed <= usable {
+                return vec![(0..measures.len()).collect()];
+            }
+        }
 
         for (idx, measure) in measures.iter().enumerate() {
             if starts_long_volta(measure) && !current_system.is_empty() {
                 systems.push(std::mem::take(&mut current_system));
+                current_width = 0.0;
+            }
+
+            // An ending stays with the phrase it ends. A four-bar line whose
+            // next bar is a second ending runs to five rather than stranding
+            // `[2]` on a line of its own — which is what a chart with a first
+            // and second ending looks like everywhere. It overrides the width
+            // check as well as the cap, since one more bar on an otherwise
+            // full line is exactly the case, and it is bounded so a run of
+            // endings cannot walk off the page.
+            let keeps_an_ending_with_its_phrase = measure.volta_start.is_some()
+                && !starts_long_volta(measure)
+                && !current_system.is_empty()
+                && current_system.len() < self.config.max_measures_per_system + VOLTA_SYSTEM_SLACK;
+
+            let wanted = widths[idx];
+            if !keeps_an_ending_with_its_phrase
+                && !current_system.is_empty()
+                && current_width + wanted > usable
+            {
+                systems.push(std::mem::take(&mut current_system));
+                current_width = 0.0;
             }
 
             current_system.push(idx);
-            if current_system.len() >= self.config.max_measures_per_system {
+            current_width += wanted;
+
+            let next_keeps_its_ending = measures
+                .get(idx + 1)
+                .is_some_and(|m| m.volta_start.is_some() && !starts_long_volta(m));
+            let slack = if next_keeps_its_ending {
+                VOLTA_SYSTEM_SLACK
+            } else {
+                0
+            };
+            if current_system.len() >= self.config.max_measures_per_system + slack {
                 systems.push(std::mem::take(&mut current_system));
+                current_width = 0.0;
             }
         }
 
@@ -3062,8 +3664,118 @@ impl ChartLayoutEngine {
             systems.push(current_system);
         }
 
+        rescue_orphan_bar(&mut systems, &widths, usable, measures);
         systems
     }
+
+    /// The width this measure's chord symbols need, laid end to end.
+    ///
+    /// An estimate, and deliberately a cheap one: this runs before the real
+    /// measurement pass, and only has to be good enough to stop a line taking
+    /// more bars than it can print. A bar with no symbols still asks for the
+    /// configured minimum, so an empty line is never chosen over a full one.
+    fn chord_symbol_width_needed(
+        &self,
+        measure: &crate::chart::types::Measure,
+        text_metrics: &TextFontMetrics,
+    ) -> f64 {
+        let font_size = self.config.harmony_style.root_size;
+        let gap = self.config.min_chord_symbol_gap.max(1.0);
+        let symbols: f64 = measure
+            .chords
+            .iter()
+            .filter(|c| !c.full_symbol.is_empty() && c.full_symbol != "s")
+            .map(|c| text_metrics.horizontal_advance(&c.full_symbol, font_size) + gap)
+            .sum();
+        symbols.max(self.config.min_measure_width)
+    }
+
+    /// The narrowest this measure can honestly be drawn.
+    ///
+    /// [`Self::chord_symbol_width_needed`] asks for a comfortable bar — it
+    /// carries `min_measure_width`, which at the master-rhythm preset is a
+    /// quarter of the page. That is the right question when deciding how many
+    /// bars to put on a line, and the wrong one when asking whether a section
+    /// *can* be squeezed onto one: four bars of that floor already fill the
+    /// page, so the answer would always be no. This asks only for room for the
+    /// symbols, and a bar with none still gets its slashes.
+    fn chord_symbol_width_floor(
+        &self,
+        measure: &crate::chart::types::Measure,
+        text_metrics: &TextFontMetrics,
+    ) -> f64 {
+        let font_size = self.config.harmony_style.root_size;
+        let gap = self.config.min_chord_symbol_gap.max(1.0);
+        let symbols: f64 = measure
+            .chords
+            .iter()
+            .filter(|c| !c.full_symbol.is_empty() && c.full_symbol != "s")
+            .map(|c| text_metrics.horizontal_advance(&c.full_symbol, font_size) + gap)
+            .sum();
+        // Four slashes and the space they need to read as four.
+        symbols.max(self.config.spatium * 8.0)
+    }
+}
+
+/// How far past the bars-per-line cap a system may run to keep an ending with
+/// its phrase. Two, so a first and second ending both fit.
+const VOLTA_SYSTEM_SLACK: usize = 2;
+
+/// Pull a stranded last bar back onto a line with company.
+///
+/// The grouper takes four bars and breaks, so a five-bar section comes out
+/// four-and-one and the fifth bar gets a line of the page to itself. A phrase
+/// that runs one past the line reads as three-and-two everywhere else — the
+/// bar belongs with the music, not alone under it.
+///
+/// Only the true orphan is rescued. A two- or three-bar tail is an ordinary
+/// short line and the four-bar grid is worth more than evening it out.
+fn rescue_orphan_bar(
+    systems: &mut [Vec<usize>],
+    widths: &[f64],
+    usable: f64,
+    measures: &[crate::chart::types::Measure],
+) {
+    let Some((last, rest)) = systems.split_last_mut() else {
+        return;
+    };
+    let Some(previous) = rest.last_mut() else {
+        return;
+    };
+    if last.len() != 1 || previous.len() < 3 {
+        return;
+    }
+
+    let Some(moved) = previous.last().copied() else {
+        return;
+    };
+
+    // The bar that moves must not be in the middle of an ending: a volta drawn
+    // across a line break is worse than a bar on its own. A bar that *starts*
+    // one is free to move — a second ending opening the next line is how every
+    // chart with two endings is set.
+    let splits_an_ending = previous.iter().any(|idx| {
+        measures.get(*idx).is_some_and(|measure| {
+            measure.volta_start.as_ref().is_some_and(|volta| {
+                *idx < moved && *idx + usize::from(volta.length_measures) > moved
+            })
+        })
+    });
+    if splits_an_ending {
+        return;
+    }
+    let width = widths.get(moved).copied().unwrap_or(0.0)
+        + last
+            .first()
+            .and_then(|idx| widths.get(*idx))
+            .copied()
+            .unwrap_or(0.0);
+    if width > usable {
+        return;
+    }
+
+    previous.pop();
+    last.insert(0, moved);
 }
 
 fn starts_long_volta(measure: &crate::chart::types::Measure) -> bool {

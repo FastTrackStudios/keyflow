@@ -41,6 +41,7 @@ features/proto/       the domain model and the musical primitives —
 features/syntax/      spans, tokens, the syntax AST, highlighting
 features/text/        the parser and the chart model
 features/chordpro/    ) the formats: import and export
+features/chordsheet/  )
 features/midi/        )
 features/musicxml/    )
 features/musx/        )
@@ -180,6 +181,10 @@ the repo and cannot be:
   public; they are not ours to redistribute.
 - `features/examples/png-project-charts` — the reference charts the
   MusicXML importer and the engraver layout tests measure against.
+- `features/examples/chordsheet/source` (plus `manifest.json` beside it) —
+  a chordsheet.com account backup, which `keyflow-chordsheet`'s corpus
+  test converts and round-trips through `chart_to_keyflow`. Same reason:
+  200-odd transcriptions of commercial songs.
 
 Put a local copy at those paths and run `cargo test -- --ignored` to run
 them. Each `#[ignore]` says which corpus it wants.

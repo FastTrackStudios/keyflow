@@ -677,12 +677,15 @@ pub fn measure_measure_with_config(
             }
         }
 
-        // Handle the last visible chord: reserve space for its width + trailing
+        // Handle the last visible chord: it has to fit inside the bar. Half
+        // its width was reserved here once, on the theory that a symbol may
+        // hang over the closing barline — but the next bar's first symbol
+        // starts at that barline, so what hangs over lands on it. A bar of
+        // Highway to Hell's intro printed `D/F#` into the `A` after it.
         if let Some(&(last_idx, last_width)) = visible_chord_info.last()
             && last_idx < segment_mins.len()
         {
-            let trailing_for_last = last_width * 0.5; // Half-width trailing
-            segment_mins[last_idx] = segment_mins[last_idx].max(trailing_for_last);
+            segment_mins[last_idx] = segment_mins[last_idx].max(last_width + min_gap);
         }
 
         // Sum segment minimums to get total min_width.
@@ -952,6 +955,53 @@ mod tests {
             "dense chord clusters should reserve a summed per-segment floor: dense={} filler={}",
             dense_measure.min_width,
             filler_measure.min_width
+        );
+    }
+
+    /// Four symbols, one to a beat, have to fit between the barlines — all of
+    /// the last one included. Half its width was reserved here once, on the
+    /// theory that a symbol may hang over the closing barline. The first
+    /// symbol of the next bar starts at that barline, and the per-measure
+    /// collision pass cannot see across it, so what hung over was printed on
+    /// top of it: a bar of Highway to Hell's intro came out `D/F#A`.
+    #[test]
+    fn the_last_symbol_fits_inside_the_bar() {
+        use crate::chord::{Chord, ChordQuality, ChordRhythm};
+        use crate::primitives::RootNotation;
+        use crate::time::{AbsolutePosition, MusicalDuration, MusicalPosition};
+
+        fn chord_on_beat(symbol: &str, beat: i32) -> crate::chart::types::ChordInstance {
+            let root = RootNotation::from_string("C").expect("test root should parse");
+            crate::chart::types::ChordInstance::new(
+                root.clone(),
+                symbol.to_string(),
+                Chord::new(root, ChordQuality::Major),
+                ChordRhythm::Default,
+                symbol.to_string(),
+                MusicalDuration::new(0, 1, 0),
+                AbsolutePosition::new(MusicalPosition::new(0, beat, 0), 0),
+            )
+        }
+
+        let style = make_test_style();
+        let mut cache = MeasurementCache::new();
+
+        let mut measure = Measure::new();
+        measure.time_signature = (4, 4);
+        measure.chords = vec![
+            chord_on_beat("G", 0),
+            chord_on_beat("D/F#", 1),
+            chord_on_beat("G", 2),
+            chord_on_beat("D/F#", 3),
+        ];
+
+        let measured = measure_measure(&measure, &style, &mut cache);
+        assert_eq!(measured.visible_chord_count, 4);
+        let symbols: f64 = measured.chord_widths.iter().sum();
+        assert!(
+            measured.min_width >= symbols,
+            "the bar must be wide enough for every symbol: min_width={} symbols={symbols}",
+            measured.min_width
         );
     }
 

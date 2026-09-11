@@ -28,7 +28,7 @@ use keyflow::Chart;
 /// The test chart source - Push Pull Triplets
 const TEST_CHART: &str = r#"Push Pull Triplets - Test
 120bpm 4/4 #Ab
-/push = triplet
+\push = triplet
 
 COUNT 2
 

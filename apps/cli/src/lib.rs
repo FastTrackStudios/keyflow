@@ -28,6 +28,24 @@ use keyflow::engraver::layout::chart::{
 use keyflow::engraver::style::MStyle;
 use keyflow::Chart;
 
+/// How much folding and fitting to do — see `engraver`'s `ChartMode`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum)]
+enum ChartModeArg {
+    /// Every bar as written.
+    #[default]
+    Default,
+    /// Fold repeated bars into simile marks.
+    Folded,
+    /// Fold, then widen and shrink until the chart fits one page.
+    Compact,
+}
+
+impl ChartModeArg {
+    fn folds(self) -> bool {
+        !matches!(self, Self::Default)
+    }
+}
+
 /// Layout preset choice for the `png` / `svg` subcommands.
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum PresetMode {
@@ -94,6 +112,15 @@ enum Commands {
         /// Output PDF path
         #[arg(short, long, default_value = "chart.pdf")]
         output: PathBuf,
+        /// How much of the chart's repetition to fold away, and how hard to
+        /// try to fit one page.
+        #[arg(long, value_enum, default_value_t = ChartModeArg::Default)]
+        chart_mode: ChartModeArg,
+        /// Pack the systems by their ink instead of holding the annotation
+        /// band open under every one. What `--chart-mode compact` does for
+        /// spacing, without its shrinking.
+        #[arg(long)]
+        tight_spacing: bool,
     },
     /// Import MIDI and render the generated chart to PDF
     MidiPdf {
@@ -158,6 +185,24 @@ enum Commands {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
+    /// Import a chordsheet.com source `.txt` and emit Keyflow text.
+    ///
+    /// Prints the converted `.kf` to stdout by default so it can be piped or
+    /// captured. Title and artist come from the backup's `manifest.json` when
+    /// `--manifest` points at one, and from the `ARTIST - TITLE.txt` filename
+    /// otherwise — the source text itself carries neither.
+    Chordsheet {
+        /// Path to a chordsheet.com `.txt`, or a directory of them.
+        input: PathBuf,
+        /// Write the Keyflow text here instead of stdout. With a directory
+        /// input this is the output directory, one `.kf` per source.
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// A backup's `manifest.json`, for real titles and artists. Defaults
+        /// to `manifest.json` beside the input directory when one exists.
+        #[arg(long)]
+        manifest: Option<PathBuf>,
+    },
     /// Compare a MusicXML import against a .kf parse after both become Chart objects.
     MusicxmlCompare {
         /// Path to the source .musicxml or .mxl file.
@@ -214,6 +259,15 @@ enum Commands {
         /// 2.0 gives a Retina-resolution PNG.
         #[arg(long, default_value_t = 2.0)]
         scale: f32,
+        /// How much of the chart's repetition to fold away, and how hard to
+        /// try to fit one page.
+        #[arg(long, value_enum, default_value_t = ChartModeArg::Default)]
+        chart_mode: ChartModeArg,
+        /// Pack the systems by their ink instead of holding the annotation
+        /// band open under every one. What `--chart-mode compact` does for
+        /// spacing, without its shrinking.
+        #[arg(long)]
+        tight_spacing: bool,
     },
     /// Preprocess a markdown docs tree: render ```` ```kf ```` blocks to inline
     /// SVG, writing a generated mirror tree a stock dodeca (`ddc`) build serves.
@@ -767,6 +821,8 @@ impl LayoutPipeline {
         preset: PresetMode,
         breakpoint: BreakpointArg,
         width_pt: f64,
+        chart_mode: ChartModeArg,
+        tight_spacing: bool,
     ) -> ChartLayoutResult {
         let options = PresetOptions::for_export().with_viewport_pt(width_pt);
         let (mode, config) = match preset {
@@ -779,7 +835,40 @@ impl LayoutPipeline {
                 ChartLayoutConfig::responsive_for(breakpoint.to_engraver()),
             ),
         };
-        self.engine.layout_chart_with_config(chart, &mode, &config)
+
+        // Folding and expanding are changes to the chart, not to the layout,
+        // so they happen here rather than inside the engine. Either way the
+        // chords stay on every bar — what changes is what gets drawn.
+        let mut prepared = chart.clone();
+        if chart_mode.folds() {
+            keyflow::chart::fold_similes(&mut prepared);
+            keyflow::chart::fold_sections(&mut prepared);
+        } else {
+            keyflow::chart::expand_repeats(&mut prepared);
+            keyflow::chart::unfold_similes(&mut prepared);
+            keyflow::chart::unfold_sections(&mut prepared);
+        }
+        let chart = &prepared;
+
+        let mut config = config;
+        config.tight_system_spacing |= tight_spacing;
+        match chart_mode {
+            ChartModeArg::Default => self.engine.layout_chart_with_config(chart, &mode, &config),
+            ChartModeArg::Folded => {
+                let mut config = config;
+                config.fold_sections = true;
+                config.fit_whole_section_on_one_system = true;
+                config.draw_similes = true;
+                self.engine.layout_chart_with_config(chart, &mode, &config)
+            }
+            ChartModeArg::Compact => {
+                let mut config = config;
+                config.fold_sections = true;
+                config.fit_whole_section_on_one_system = true;
+                config.draw_similes = true;
+                self.engine.layout_chart_compact(chart, &mode, &config)
+            }
+        }
     }
 
     /// Attach every embeddable font to an SVG export config.
@@ -969,7 +1058,14 @@ fn render_variant_pngs(
     scale: f32,
     output_base: &std::path::Path,
 ) -> Result<Vec<PathBuf>, String> {
-    let layout = pipeline.layout_preset(chart, preset, breakpoint, width_pt);
+    let layout = pipeline.layout_preset(
+        chart,
+        preset,
+        breakpoint,
+        width_pt,
+        ChartModeArg::Default,
+        false,
+    );
     let svgs: Vec<String> = if layout.pages.is_empty() {
         vec![pipeline
             .export_svg_continuous(&layout)
@@ -1159,7 +1255,12 @@ fn run(cli: Cli) -> Result<(), String> {
             Ok(())
         }
 
-        Commands::Pdf { input, output } => {
+        Commands::Pdf {
+            input,
+            output,
+            chart_mode,
+            tight_spacing,
+        } => {
             let source = read_source(&input)?;
             let chart = parse_chart(&source)?;
             let pipeline = LayoutPipeline::new()?;
@@ -1172,6 +1273,8 @@ fn run(cli: Cli) -> Result<(), String> {
                 PresetMode::Page,
                 BreakpointArg::Desktop,
                 BreakpointArg::Desktop.default_width_pt(),
+                chart_mode,
+                tight_spacing,
             );
 
             println!(
@@ -1393,6 +1496,12 @@ fn run(cli: Cli) -> Result<(), String> {
             }
             Ok(())
         }
+
+        Commands::Chordsheet {
+            input,
+            output,
+            manifest,
+        } => chordsheet_import(&input, output.as_deref(), manifest.as_deref()),
 
         Commands::MusicxmlKf { input, output } => {
             let chart = keyflow_musicxml::import_file(&input)
@@ -1631,13 +1740,22 @@ fn run(cli: Cli) -> Result<(), String> {
             breakpoint,
             width,
             scale,
+            chart_mode,
+            tight_spacing,
         } => {
             let source = read_source(&input)?;
             let chart = parse_chart(&source)?;
             let pipeline = LayoutPipeline::new()?;
 
             let viewport_pt = width.unwrap_or_else(|| breakpoint.default_width_pt());
-            let layout = pipeline.layout_preset(&chart, mode, breakpoint, viewport_pt);
+            let layout = pipeline.layout_preset(
+                &chart,
+                mode,
+                breakpoint,
+                viewport_pt,
+                chart_mode,
+                tight_spacing,
+            );
 
             // ContinuousScroll has no `pages`; render the whole scene as one image.
             let svgs: Vec<String> = if layout.pages.is_empty() {
@@ -1860,6 +1978,95 @@ fn run(cli: Cli) -> Result<(), String> {
             profile,
         } => orchestra::orchestrate(&input, part.as_deref(), profile.as_deref()),
     }
+}
+
+/// `kf chordsheet` — translate chordsheet.com source text to Keyflow text.
+///
+/// A directory input converts every `*.txt` in it (top level only), which is
+/// the shape an account backup arrives in: a `source/` folder beside a
+/// `manifest.json`.
+fn chordsheet_import(
+    input: &std::path::Path,
+    output: Option<&std::path::Path>,
+    manifest: Option<&std::path::Path>,
+) -> Result<(), String> {
+    use keyflow_chordsheet::manifest::Manifest;
+
+    let manifest_path = manifest.map(std::path::Path::to_path_buf).or_else(|| {
+        // A backup keeps `manifest.json` one level up from `source/`.
+        let candidates = [
+            input.join("manifest.json"),
+            input.parent()?.join("manifest.json"),
+        ];
+        candidates.into_iter().find(|p| p.is_file())
+    });
+    let manifest = match &manifest_path {
+        Some(path) => Manifest::read(path).map_err(|e| format!("{e}"))?,
+        None => Manifest::default(),
+    };
+
+    let convert = |path: &std::path::Path| -> Result<String, String> {
+        let source = std::fs::read_to_string(path)
+            .map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
+        let chart = keyflow_chordsheet::import_str(&source, &manifest.options_for(path));
+        Ok(keyflow::text::chart::exporter::chart_to_keyflow(&chart))
+    };
+
+    if input.is_dir() {
+        let out_dir = output.ok_or("--output is required when the input is a directory")?;
+        std::fs::create_dir_all(out_dir)
+            .map_err(|e| format!("Failed to create {}: {e}", out_dir.display()))?;
+
+        let mut sources: Vec<PathBuf> = std::fs::read_dir(input)
+            .map_err(|e| format!("Failed to read {}: {e}", input.display()))?
+            .filter_map(|entry| entry.ok().map(|e| e.path()))
+            .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("txt"))
+            .collect();
+        sources.sort();
+        if sources.is_empty() {
+            return Err(format!("No .txt files found in {}", input.display()));
+        }
+
+        let mut failed = 0usize;
+        for path in &sources {
+            let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("chart");
+            match convert(path) {
+                Ok(text) => {
+                    let out = out_dir.join(format!("{stem}.kf"));
+                    std::fs::write(&out, text)
+                        .map_err(|e| format!("Failed to write {}: {e}", out.display()))?;
+                }
+                Err(e) => {
+                    failed += 1;
+                    eprintln!("  ⚠ {}: {e}", path.display());
+                }
+            }
+        }
+        eprintln!(
+            "Converted {} of {} charts into {}",
+            sources.len() - failed,
+            sources.len(),
+            out_dir.display()
+        );
+        return Ok(());
+    }
+
+    let text = convert(input)?;
+    match output {
+        Some(output) => {
+            if let Some(parent) = output.parent() {
+                if !parent.as_os_str().is_empty() {
+                    std::fs::create_dir_all(parent)
+                        .map_err(|e| format!("Failed to create {}: {e}", parent.display()))?;
+                }
+            }
+            std::fs::write(output, text)
+                .map_err(|e| format!("Failed to write {}: {e}", output.display()))?;
+            eprintln!("Wrote {}", output.display());
+        }
+        None => print!("{text}"),
+    }
+    Ok(())
 }
 
 #[cfg(test)]

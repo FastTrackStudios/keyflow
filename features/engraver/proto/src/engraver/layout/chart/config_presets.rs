@@ -63,6 +63,10 @@ impl ChartLayoutConfig {
             last_system_fill_limit: spacing::DEFAULT_LAST_SYSTEM_FILL_LIMIT,
             draw_melody_barline_ties: true,
             beam_grouping: BeamGroupingMode::Standard,
+            draw_similes: false,
+            fold_sections: false,
+            tight_system_spacing: false,
+            fit_whole_section_on_one_system: false,
         }
     }
 
@@ -100,6 +104,10 @@ impl ChartLayoutConfig {
             last_system_fill_limit: spacing::DEFAULT_LAST_SYSTEM_FILL_LIMIT,
             draw_melody_barline_ties: true,
             beam_grouping: BeamGroupingMode::Standard,
+            draw_similes: false,
+            fold_sections: false,
+            tight_system_spacing: false,
+            fit_whole_section_on_one_system: false,
         }
     }
 
@@ -159,6 +167,10 @@ impl ChartLayoutConfig {
             last_system_fill_limit: 0.85,
             draw_melody_barline_ties: false,
             beam_grouping: BeamGroupingMode::JazzHalfBar,
+            draw_similes: false,
+            fold_sections: false,
+            tight_system_spacing: false,
+            fit_whole_section_on_one_system: false,
         }
     }
 
@@ -199,11 +211,15 @@ impl ChartLayoutConfig {
             last_system_fill_limit: 0.85,
             draw_melody_barline_ties: false,
             beam_grouping: BeamGroupingMode::JazzHalfBar,
+            draw_similes: false,
+            fold_sections: false,
+            tight_system_spacing: false,
+            fit_whole_section_on_one_system: false,
         }
     }
 
-    /// Apply settings from a parsed chart (`/AUTO_RHYTHM_SLASHES=…`,
-    /// `/PUSH_ALTERS_RHYTHM=…`, …).
+    /// Apply settings from a parsed chart (`\AUTO_RHYTHM_SLASHES=…`,
+    /// `\PUSH_ALTERS_RHYTHM=…`, …).
     #[must_use]
     pub fn with_chart_settings(mut self, settings: &crate::chart::ChartSettings) -> Self {
         self.auto_rhythm_slashes = settings.auto_rhythm_slashes();

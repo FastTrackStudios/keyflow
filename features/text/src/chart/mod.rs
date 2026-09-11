@@ -8,16 +8,31 @@ pub struct ChartParser<'a> {
     chart: &'a mut Chart,
     aliases: HashMap<String, String>,
     melody_octave_memory: Option<u8>,
-    /// Chart-wide default duration set by a top-level `/Duration` directive
+    /// Chart-wide default duration set by a top-level `\Duration` directive
     /// (before any section). Each section starts from this default unless it
-    /// overrides with its own `/Duration`. `None` means no global default.
+    /// overrides with its own `\Duration`. `None` means no global default.
     default_duration: Option<String>,
+    /// Chart-wide chord progression set by a top-level `\progression` line.
+    ///
+    /// The fallback for a section that names no chords and has nothing to
+    /// recall. Kept as the source text rather than as measures: the key in
+    /// force at the section decides how scale-degree chords resolve, so it is
+    /// parsed where it is used, not where it is written.
+    default_progression: Option<String>,
     /// Running tally of the chart's notation system, accumulated from chord
     /// lines as they're parsed. Used as the fallback scope (after the current
     /// line) when resolving an ambiguous `b<digit>` root — see
     /// `resolve_notation_system`.
     chart_letter_votes: u32,
     chart_degree_votes: u32,
+    /// The last measure the current section has so far, published before each
+    /// chord line.
+    ///
+    /// A line is parsed on its own, so `%` and `.` — both of which mean "the
+    /// thing before this" — have nothing to reach for when they open one. A
+    /// four-bar row is an editing convenience, not a musical boundary, and a
+    /// `%` at the start of the second row means the last bar of the first.
+    carried_measure: Option<keyflow_proto::chart::types::Measure>,
     /// Beats already consumed by earlier lines of the section currently being
     /// parsed. `parse_section_measures` refreshes this before each chord line
     /// so positions computed inside a single-line parse (e.g. key changes)
@@ -32,8 +47,10 @@ impl<'a> ChartParser<'a> {
             aliases: HashMap::new(),
             melody_octave_memory: None,
             default_duration: None,
+            default_progression: None,
             chart_letter_votes: 0,
             chart_degree_votes: 0,
+            carried_measure: None,
             section_beats_offset: 0.0,
         }
     }

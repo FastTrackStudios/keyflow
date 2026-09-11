@@ -45,6 +45,13 @@ pub struct ParsedSection {
     /// applied at the start of the section. Stored verbatim for the caller to
     /// parse with `Key::parse`.
     pub key_change: Option<String>,
+    /// The section this one borrows its chords from — `IN 4 = VS`.
+    ///
+    /// Songs repeat themselves across section types as readily as within
+    /// them: the intro is often the verse, and the instrumental before the
+    /// bridge is usually the bridge. Same-type recall (an empty `CH` after a
+    /// `CH`) already handled the within-type case; this is the rest of it.
+    pub same_as: Option<SectionType>,
 }
 
 impl ParsedSection {
@@ -55,6 +62,7 @@ impl ParsedSection {
             measure_expr: None,
             comment: None,
             key_change: None,
+            same_as: None,
         }
     }
 
@@ -68,6 +76,7 @@ impl ParsedSection {
             measure_expr,
             comment: None,
             key_change: None,
+            same_as: None,
         }
     }
 
@@ -82,7 +91,15 @@ impl ParsedSection {
             measure_expr,
             comment,
             key_change: None,
+            same_as: None,
         }
+    }
+
+    /// Attach the section this one borrows its chords from (builder).
+    #[must_use]
+    pub fn with_same_as(mut self, same_as: Option<SectionType>) -> Self {
+        self.same_as = same_as;
+        self
     }
 
     /// Attach a key-change token (builder).
@@ -410,6 +427,12 @@ impl SectionType {
     pub fn parse_with_measure_count(input: &str) -> Option<ParsedSection> {
         let input = input.trim();
 
+        // Peel a trailing `= OTHER` first — `IN 4 = VS` — so everything below
+        // sees the plain header. It has to come before the key change, or
+        // `BR 8 = VS #G` would hand `#G` to the wrong parser.
+        let (input, same_as) = extract_same_as(input);
+        let input = input.trim();
+
         // Peel a trailing key-change token (`BR 8 #G`) so the section header is
         // still recognized; the caller applies it at the section start.
         let (input, key_change) = extract_trailing_key_change(input);
@@ -459,7 +482,8 @@ impl SectionType {
                         measure_expr,
                         comment,
                     )
-                    .with_key_change(key_change),
+                    .with_key_change(key_change)
+                    .with_same_as(same_as),
                 );
             }
         }
@@ -484,7 +508,11 @@ impl SectionType {
         //   "SOLO"           → Solo (no instrument, no measures)
         // Note: "SOLO \"Keys\"" is handled by the quoted comment extraction above.
         if let Some(solo_result) = parse_solo_section(&parts, comment.clone()) {
-            return Some(solo_result.with_key_change(key_change));
+            return Some(
+                solo_result
+                    .with_key_change(key_change)
+                    .with_same_as(same_as),
+            );
         }
 
         let section_str = parts[0];
@@ -549,8 +577,11 @@ impl SectionType {
                     .map(|inner| SectionType::Post(Box::new(inner)))
             });
 
-        section_type
-            .map(|st| ParsedSection::full(st, measure_expr, comment).with_key_change(key_change))
+        section_type.map(|st| {
+            ParsedSection::full(st, measure_expr, comment)
+                .with_key_change(key_change)
+                .with_same_as(same_as)
+        })
     }
 }
 
@@ -582,6 +613,35 @@ fn base_section_type(token: &str) -> Option<SectionType> {
 /// Peel a trailing key-change token (`#G`, `bBb`) off a section-header line.
 /// Only accidental-prefixed tokens that parse as a key are stripped, so
 /// measure counts and sub-labels are never mistaken for a key.
+/// `IN 4 = VS` → (`IN 4`, `Verse`).
+///
+/// The name after `=` is a section name, resolved with [`SectionType::parse`];
+/// a bracketed one (`= [Guitar Solo]`) names a custom section. An `=` followed
+/// by something that is not a section leaves the header alone, so a title that
+/// happens to contain one is not mangled.
+fn extract_same_as(input: &str) -> (&str, Option<SectionType>) {
+    let Some((head, tail)) = input.rsplit_once('=') else {
+        return (input, None);
+    };
+    let tail = tail.trim();
+    let name = tail
+        .strip_prefix('[')
+        .and_then(|rest| rest.strip_suffix(']'))
+        .unwrap_or(tail);
+    if name.is_empty() {
+        return (input, None);
+    }
+    let resolved = if tail.starts_with('[') {
+        SectionType::Custom(name.to_string())
+    } else {
+        match SectionType::parse(name) {
+            Ok(section_type) => section_type,
+            Err(_) => return (input, None),
+        }
+    };
+    (head.trim_end(), Some(resolved))
+}
+
 fn extract_trailing_key_change(input: &str) -> (&str, Option<String>) {
     if let Some((head, last)) = input.rsplit_once(char::is_whitespace)
         && (last.starts_with('#') || last.starts_with('b'))

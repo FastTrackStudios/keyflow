@@ -4,8 +4,8 @@
 //! - Comment syntax (;)
 //! - Section prefix (^)
 //! - Accent shorthand (->)
-//! - Custom commands (/fermata, /accent)
-//! - Settings system (/SMART_REPEATS=true)
+//! - Custom commands (\fermata, \accent)
+//! - Settings system (\SMART_REPEATS=true)
 
 use keyflow::chart::Command;
 
@@ -77,7 +77,7 @@ fn test_fermata_command() {
     let input = r#"Test Song - Artist
 120bpm 4/4 #C
 
-intro, 1/ 4/ 5/ 1/ /fermata
+intro, 1/ 4/ 5/ 1/ \fermata
 "#;
 
     let chart = keyflow::parse(input).unwrap();
@@ -107,7 +107,7 @@ fn test_accent_slash_command() {
     let input = r#"Test Song - Artist
 120bpm 4/4 #C
 
-intro, 1/ 4/ /accent 5/ 1/
+intro, 1/ 4/ \accent 5/ 1/
 "#;
 
     let chart = keyflow::parse(input).unwrap();
@@ -122,7 +122,7 @@ intro, 1/ 4/ /accent 5/ 1/
         measure.chords.len()
     );
 
-    // Second chord should have accent from /accent command
+    // Second chord should have accent from \accent command
     if measure.chords.len() >= 2 {
         assert!(
             !measure.chords[1].commands.is_empty(),
@@ -134,7 +134,7 @@ intro, 1/ 4/ /accent 5/ 1/
 
 #[test]
 fn test_settings_parsing_true() {
-    let input = r#"/SMART_REPEATS=true
+    let input = r#"\\SMART_REPEATS=true
 
 Test Song - Artist
 120bpm 4/4 #C
@@ -149,7 +149,7 @@ intro, 1/ 4/ 5/ 1/
 
 #[test]
 fn test_settings_parsing_false() {
-    let input = r#"/SMART_REPEATS=false
+    let input = r#"\\SMART_REPEATS=false
 
 Test Song - Artist  
 120bpm 4/4 #C
@@ -164,13 +164,13 @@ intro, 1/ 4/ 5/ 1/
 
 #[test]
 fn test_combined_features() {
-    let input = r#"/SMART_REPEATS=true
+    let input = r#"\\SMART_REPEATS=true
 
 Test Song - Artist
 120bpm 4/4 #C
 
 ; Main intro section
-intro, 1->/ 4/ 5/ 1/ /fermata
+intro, 1->/ 4/ 5/ 1/ \fermata
 
 ; Second intro section
 intro, 1/ 4/ 5->/ 1/

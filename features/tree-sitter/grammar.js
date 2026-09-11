@@ -100,13 +100,26 @@ module.exports = grammar({
       prec(
         2,
         seq(
-          repeat1(choice($.bar, $.chord_token, $.slash_run, $.dot_repeat)),
+          repeat1(
+            choice(
+              $.bar,
+              $.chord_token,
+              $.slash_run,
+              $.measure_repeat,
+              $.dot_repeat,
+            ),
+          ),
           $._eol,
         ),
       ),
     bar: ($) => "|",
     slash_run: ($) => /\/+\.?/,
-    dot_repeat: ($) => ".",
+    // `%` is the simile mark — one more measure of the last one — and `%3`
+    // is three of them. `.` is a *direct* repeat: it lasts as long as the
+    // chord it repeats, so `G . . .` is four bars but `G // . . .` is two.
+    // `.3` counts direct repeats the same way `%3` counts simile marks.
+    measure_repeat: ($) => /%[0-9]*/,
+    dot_repeat: ($) => /\.[0-9]*/,
     chord_token: ($) =>
       // Keyflow chord with optional push-pull prefix and explicit duration
       // suffix (`'_8t`, `_4`, …). Permissive — engine validates.
@@ -149,12 +162,14 @@ module.exports = grammar({
     time_signature_token: ($) => /[0-9]+\/[0-9]+/,
     key_signature: ($) => /[#b][A-G][b#]?m?(?:in)?/,
 
-    // -------------------------------------------------- `/push = triplet`
+    // -------------------------------------------------- `\push = triplet`
+    // Backslash, not slash: a line opening with `/` is a bar of rhythm
+    // slashes, and the two would be impossible to tell apart.
     config_directive: ($) =>
       seq(
-        "/",
+        "\\",
         field("name", $.config_name),
-        optional(seq("=", field("value", $.config_value))),
+        optional(seq(choice("=", /[ \t]+/), field("value", $.config_value))),
         $._eol,
       ),
     config_name: ($) => /[a-zA-Z_][a-zA-Z0-9_]*/,

@@ -7353,12 +7353,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "keyflow-chordsheet"
+version = "0.0.1-alpha"
+dependencies = [
+ "engraver",
+ "keyflow-proto",
+ "keyflow-syntax",
+ "keyflow-text",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tracing",
+]
+
+[[package]]
 name = "keyflow-cli"
 version = "0.0.1-alpha"
 dependencies = [
  "clap",
  "dawfile-reaper",
  "keyflow",
+ "keyflow-chordsheet",
  "keyflow-musicxml",
  "keyflow-orchestra",
  "keyflow-sync",

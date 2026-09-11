@@ -38,7 +38,7 @@ fn test_exact_output() {
     let expected = r#"Thriller - Dirty Loops, Cory Wong
 Transcribed By: Cody Wright
 131bpm 4/4 #Eb
-/push = triplet
+\push = triplet
 
 COUNT 2
 
@@ -97,7 +97,7 @@ Interlude A 8
 . . . .
 
 Interlude B 8 "HORNS"
-/push 4
+\push 4
 'Cm . 'Cm7b5 .
 'Cm 'Cm/maj7 'Cmaj7b5 .
 

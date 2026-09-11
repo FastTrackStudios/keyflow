@@ -719,7 +719,7 @@ fn test_chord_position_properties() {
     // glyphs/durations (whole=1920, half=960, …), which auto-expansion to
     // quarter slashes would erase.
     let source = r#"
-/AUTO_RHYTHM_SLASHES=false
+\AUTO_RHYTHM_SLASHES=false
 #G
 
 VS
@@ -1123,7 +1123,7 @@ fn test_triplet_push_positions() {
     let source = r#"
 Thriller Verse
 120bpm 4/4 #Ab
-/push = triplet
+\push = triplet
 
 VS
 'F/C . | Cm . | 'F/C . | Cm . | 'F/C . | Cm . | 'F/C . | Cm // Gm7 // 'Abmaj7 / Abmaj7#5 / 'Db7#11/G //
@@ -1131,7 +1131,7 @@ VS
     let result = layout_snippet(source);
 
     println!("\n=== Triplet Push Chord Positions ===");
-    println!("Source: 'F/C . | Cm . | ... (with /push = triplet)\n");
+    println!("Source: 'F/C . | Cm . | ... (with \\push = triplet)\n");
 
     // Print all beat positions
     println!("All beat positions:");
@@ -1177,7 +1177,7 @@ fn test_triplet_mixed_pattern() {
     let source = r#"
 Thriller Chorus
 120bpm 4/4 #Ab
-/push = triplet
+\push = triplet
 
 CH
 Cm/Eb / 'Eb // | 'Eb / 'F/C / 'Cm // | 'F/A //// | 'Fm9 ////

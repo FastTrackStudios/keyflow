@@ -57,4 +57,4 @@ See also: [Sections](/appendix/sections), [[rhythm|Rhythm]]
 
 ---
 
-Previous: [[header|Header]] · Next: [[chords|Chords]] · Up: [[introduction|An Introduction]]
+Previous: [[header|Header]] · Next: [[reuse|Reusing a Progression]] · Up: [[introduction|An Introduction]]
