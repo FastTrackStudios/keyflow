@@ -2174,13 +2174,24 @@ impl ChartLayoutEngine {
                                 id_counter,
                             );
                             id_counter += 1;
-                            record_system_ink_bottom(
-                                &mut system_ink_bottom,
-                                &mut system_height_contributors,
-                                &label,
-                                "repeat_count",
-                            );
-                            root.add_child(label);
+                            // The count starts just above the staff, where the
+                            // bracket ends — and rides the skyline up from
+                            // there, because the last bar of a repeat usually
+                            // has a chord symbol sitting in exactly that spot.
+                            if let Some(label) = notation_renderer::autoplace_node(
+                                &mut system_skyline,
+                                label,
+                                true,
+                                self.config.spatium * 0.1,
+                            ) {
+                                record_system_ink_bottom(
+                                    &mut system_ink_bottom,
+                                    &mut system_height_contributors,
+                                    &label,
+                                    "repeat_count",
+                                );
+                                root.add_child(label);
+                            }
                         }
                     }
                 }
@@ -2715,8 +2726,15 @@ impl ChartLayoutEngine {
                 .map(|kc| (kc.position.total_duration.measure as usize, kc))
                 .collect();
 
-            // Group measures into systems (count-based for consistent layout)
-            let systems = self.group_measures_into_systems(chart_section.measures(), content_width);
+            // A folded section draws as one titled rule rather than its bars,
+            // exactly as it does on a page. Scrolling a chart is not a reason
+            // to read a chorus out twice.
+            let section_folded = chart_section.folded && self.config.fold_sections;
+            let systems = if section_folded {
+                vec![Vec::new()]
+            } else {
+                self.group_measures_into_systems(chart_section.measures(), content_width)
+            };
 
             for (sys_idx, measure_indices) in systems.iter().enumerate() {
                 // Reset chord tracking at line breaks (new systems)
@@ -2741,12 +2759,40 @@ impl ChartLayoutEngine {
                 // Match the paginated path: reserve skyline-like north/south
                 // bands so adjacent systems cannot overlap above/below staff
                 // notation before a full page-level skyline pass exists.
-                let system_top_reserve = self.config.spatium * 2.0;
-                let system_bottom_reserve = self.config.spatium * 4.5;
+                let label_height = section_folded
+                    .then(|| {
+                        self.section_label_height(
+                            &chart_section.section,
+                            0.0,
+                            self.config.margins.left,
+                            0.0,
+                            staff_height,
+                            section_letters.get(&section_idx).copied(),
+                            &ctx,
+                        )
+                    })
+                    .unwrap_or(staff_height);
+                let row_height = if section_folded {
+                    label_height
+                        .min(staff_height)
+                        .max(label_height / 2.0 + self.config.spatium * 0.5)
+                } else {
+                    staff_height
+                };
+                let system_top_reserve = if section_folded {
+                    self.config.spatium * 1.0
+                } else {
+                    self.config.spatium * 2.0
+                };
+                let system_bottom_reserve = if section_folded {
+                    self.config.spatium * 1.0
+                } else {
+                    self.config.spatium * 4.5
+                };
                 let staff_y = total_height + system_top_reserve + melody_extra_above;
                 let system_height = system_top_reserve
                     + melody_extra_above
-                    + staff_height
+                    + row_height
                     + melody_extra_below
                     + system_bottom_reserve;
 
@@ -2860,12 +2906,25 @@ impl ChartLayoutEngine {
                     content_width
                 };
 
-                // Draw staff lines (shortened for short systems)
-                root.add_child(SceneNode::anonymous_leaf(self.draw_staff_lines(
-                    content_x,
-                    staff_y,
-                    actual_system_width,
-                )));
+                if section_folded {
+                    root.add_child(self.draw_section_rule(
+                        &chart_section.section,
+                        content_x,
+                        staff_y,
+                        content_width,
+                        label_height,
+                        &ctx,
+                        id_counter,
+                    ));
+                    id_counter += 1;
+                } else {
+                    // Draw staff lines (shortened for short systems)
+                    root.add_child(SceneNode::anonymous_leaf(self.draw_staff_lines(
+                        content_x,
+                        staff_y,
+                        actual_system_width,
+                    )));
+                }
 
                 // Place chord symbols above the highest note content (MuseScore skyline approach)
                 let _chord_y = staff_y + constants::CHORD_Y_OFFSET - melody_extra_above;
@@ -2927,13 +2986,17 @@ impl ChartLayoutEngine {
                     page_number: None, // Continuous mode has no pages
                 };
 
-                let prefix_result =
-                    prefix_renderer::render_system_prefix(&prefix_ctx, id_counter, &ctx);
+                // A folded row has no staff, so a clef and key signature on it
+                // would be hanging in the air.
+                if !section_folded {
+                    let prefix_result =
+                        prefix_renderer::render_system_prefix(&prefix_ctx, id_counter, &ctx);
 
-                for node in prefix_result.nodes {
-                    root.add_child(node);
+                    for node in prefix_result.nodes {
+                        root.add_child(node);
+                    }
+                    id_counter = prefix_result.next_id;
                 }
-                id_counter = prefix_result.next_id;
 
                 // Start measures after prefix
                 let mut measure_x = content_x + prefix_width;
@@ -3438,12 +3501,48 @@ impl ChartLayoutEngine {
                             Self::end_barline_type(measure),
                         ));
 
+                        // How many times the repeat plays, over its closing
+                        // barline — the same mark the paginated path draws,
+                        // because the same chart scrolled is still the chart.
+                        if matches!(
+                            measure.end_repeat,
+                            crate::chart::notations::RepeatMark::Backward
+                        ) {
+                            let label = self.create_repeat_count_label(
+                                measure.repeat_count.max(2),
+                                measure_x,
+                                staff_y,
+                                id_counter,
+                            );
+                            id_counter += 1;
+                            if let Some(label) = notation_renderer::autoplace_node(
+                                &mut system_skyline,
+                                label,
+                                true,
+                                self.config.spatium * 0.1,
+                            ) {
+                                root.add_child(label);
+                            }
+                        }
+
                         global_measure_index += 1;
                     }
                 }
 
-                total_height += system_height + self.config.system_spacing;
+                let spacing = if section_folded {
+                    bare_system_gap(&self.config)
+                } else {
+                    self.config.system_spacing
+                };
+                total_height += system_height + spacing;
                 global_system_index += 1;
+            }
+
+            // A folded section drew no measures, so the bar numbers have to be
+            // advanced by hand — the bars are played whether or not they are
+            // drawn.
+            if section_folded {
+                global_measure_index += chart_section.measures().len();
             }
 
             // Update global measure offset for next section (for chart_measurements lookup)
@@ -3539,6 +3638,7 @@ impl ChartLayoutEngine {
             systems.push(current_system);
         }
 
+        rescue_orphan_bar(&mut systems, &widths, usable, measures);
         systems
     }
 
@@ -3568,6 +3668,59 @@ impl ChartLayoutEngine {
 /// How far past the bars-per-line cap a system may run to keep an ending with
 /// its phrase. Two, so a first and second ending both fit.
 const VOLTA_SYSTEM_SLACK: usize = 2;
+
+/// Pull a stranded last bar back onto a line with company.
+///
+/// The grouper takes four bars and breaks, so a five-bar section comes out
+/// four-and-one and the fifth bar gets a line of the page to itself. A phrase
+/// that runs one past the line reads as three-and-two everywhere else — the
+/// bar belongs with the music, not alone under it.
+///
+/// Only the true orphan is rescued. A two- or three-bar tail is an ordinary
+/// short line and the four-bar grid is worth more than evening it out.
+fn rescue_orphan_bar(
+    systems: &mut [Vec<usize>],
+    widths: &[f64],
+    usable: f64,
+    measures: &[crate::chart::types::Measure],
+) {
+    let Some((last, rest)) = systems.split_last_mut() else {
+        return;
+    };
+    let Some(previous) = rest.last_mut() else {
+        return;
+    };
+    if last.len() != 1 || previous.len() < 3 {
+        return;
+    }
+
+    // An ending is already placed by the rule that keeps it with its phrase,
+    // and a long volta forces its own break. Neither is an orphan to rescue.
+    let touches_a_volta = previous
+        .iter()
+        .chain(last.iter())
+        .filter_map(|idx| measures.get(*idx))
+        .any(|measure| measure.volta_start.is_some());
+    if touches_a_volta {
+        return;
+    }
+
+    let Some(moved) = previous.last().copied() else {
+        return;
+    };
+    let width = widths.get(moved).copied().unwrap_or(0.0)
+        + last
+            .first()
+            .and_then(|idx| widths.get(*idx))
+            .copied()
+            .unwrap_or(0.0);
+    if width > usable {
+        return;
+    }
+
+    previous.pop();
+    last.insert(0, moved);
+}
 
 fn starts_long_volta(measure: &crate::chart::types::Measure) -> bool {
     measure

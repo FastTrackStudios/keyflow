@@ -2632,14 +2632,30 @@ fn a_second_ending_stays_on_the_line_with_its_phrase() {
     );
 }
 
-/// Without an ending the cap still holds at four.
+/// Without an ending the cap still holds at four — and the fifth bar is not
+/// left standing on a line of its own. Four-and-one is how a phrase that runs
+/// one bar past the line used to come out; three-and-two is how it reads.
 #[test]
-fn five_ordinary_bars_are_two_lines() {
+fn five_ordinary_bars_are_two_lines_of_three_and_two() {
     let engine = ChartLayoutEngine::new(test_style(), Arc::new(Vec::new()), Arc::new(Vec::new()));
     let chart = long_chart(1, 5, "G");
     let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0);
     assert_eq!(systems.len(), 2);
+    assert_eq!(systems[0].len(), 3);
+    assert_eq!(systems[1].len(), 2);
+}
+
+/// Nothing is rebalanced when the tail is already in company: a six-bar
+/// section is four and two, because the four-bar grid is worth more than an
+/// even split.
+#[test]
+fn six_bars_keep_the_four_bar_grid() {
+    let engine = ChartLayoutEngine::new(test_style(), Arc::new(Vec::new()), Arc::new(Vec::new()));
+    let chart = long_chart(1, 6, "G");
+    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0);
+    assert_eq!(systems.len(), 2);
     assert_eq!(systems[0].len(), 4);
+    assert_eq!(systems[1].len(), 2);
 }
 
 // endregion: --- Chart modes
