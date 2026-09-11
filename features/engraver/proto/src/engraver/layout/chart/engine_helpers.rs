@@ -194,6 +194,27 @@ impl ChartLayoutEngine {
             return container;
         }
 
+        let (_, label_node) = layout_margin_label(
+            &self.margin_label_params(section, page_x, margin_width, staff_y, staff_height, letter),
+            ctx,
+        );
+        container.add_child(label_node);
+        container
+    }
+
+    /// The capsule parameters for a section's margin label.
+    ///
+    /// Shared with [`Self::section_label_height`] so the height the folded rule
+    /// centres itself on is the height the capsule is actually drawn at.
+    fn margin_label_params(
+        &self,
+        section: &crate::sections::Section,
+        page_x: f64,
+        margin_width: f64,
+        staff_y: f64,
+        staff_height: f64,
+        letter: Option<char>,
+    ) -> MarginLabelParams {
         let (section_type, abbreviation) = self.section_type_to_strings(&section.section_type);
         // The capsule text is assembled by the shared `section_label` helper so
         // it can never drift from `chart_section_timeline`'s label. It equals
@@ -204,25 +225,62 @@ impl ChartLayoutEngine {
             section.number,
             letter,
         ));
-        let (_, label_node) = layout_margin_label(
-            &MarginLabelParams {
-                section_type,
-                abbreviation,
-                number: section.number,
-                letter,
-                comment: section.comment.clone(),
-                label_override,
-                page_x,
-                margin_width,
-                staff_y,
-                staff_height,
-                style: self.get_section_theme(&section.section_type),
-                ..Default::default()
-            },
+        MarginLabelParams {
+            section_type,
+            abbreviation,
+            number: section.number,
+            letter,
+            comment: section.comment.clone(),
+            label_override,
+            page_x,
+            margin_width,
+            staff_y,
+            staff_height,
+            style: self.get_section_theme(&section.section_type),
+            ..Default::default()
+        }
+    }
+
+    /// How tall this section's margin capsule comes out.
+    ///
+    /// A folded row draws its rule through the middle of the capsule, so it
+    /// has to know how far down the middle is before it draws anything.
+    pub(super) fn section_label_height(
+        &self,
+        section: &crate::sections::Section,
+        page_x: f64,
+        margin_width: f64,
+        staff_y: f64,
+        staff_height: f64,
+        letter: Option<char>,
+        ctx: &LayoutContext<'_>,
+    ) -> f64 {
+        if let Some(label_text) = section.metadata.get("repeat_pass.labels") {
+            let pass_gap = repeat_pass_label_gap(staff_height);
+            let mut height = 0.0;
+            for (index, pass_label) in repeat_pass_label_parts(label_text).into_iter().enumerate() {
+                let (layout, _) = self.layout_pass_label(
+                    pass_label,
+                    section,
+                    page_x,
+                    margin_width,
+                    staff_y,
+                    staff_height,
+                    ctx,
+                );
+                height += layout.height;
+                if index > 0 {
+                    height += pass_gap;
+                }
+            }
+            return height;
+        }
+        layout_margin_label(
+            &self.margin_label_params(section, page_x, margin_width, staff_y, staff_height, letter),
             ctx,
-        );
-        container.add_child(label_node);
-        container
+        )
+        .0
+        .height
     }
 
     pub(super) fn repeat_pass_dynamic_slots(

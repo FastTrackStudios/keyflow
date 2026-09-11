@@ -65,6 +65,8 @@ pub use collision::{ChordCollisionContext, resolve_chord_positions};
 use std::sync::Arc;
 
 use crate::Chart;
+use crate::chart::Measure;
+use crate::chart::notations::Placement;
 use crate::engraver::layout::context::{LayoutContext, LayoutContextOwned};
 use crate::engraver::layout::orchestrator::{PageLayout, PageMargins, SystemLayout};
 use crate::engraver::layout::segment::SegmentType;
@@ -110,6 +112,77 @@ fn prevailing_fifths_at(chart: &Chart, section_idx: usize, local_measure: usize)
         }
     }
     fifths
+}
+
+/// Does anything on these bars draw below the staff?
+///
+/// The south band under a system exists to clear dynamics, cues, figures and
+/// text placed below the staff. A system of plain chords and slashes has none
+/// of that, and holding the band open anyway breaks the page earlier than the
+/// music needs.
+fn draws_below_staff(measures: &[Measure]) -> bool {
+    let below = |placement: &Placement| matches!(placement, Placement::Below);
+    measures.iter().any(|measure| {
+        !measure.text_cues.is_empty()
+            || !measure.hairpins.is_empty()
+            || measure
+                .classical_dynamics
+                .iter()
+                .any(|dynamic| below(&dynamic.placement))
+            || measure.staff_text.iter().any(|text| below(&text.placement))
+            || measure
+                .figured_bass
+                .iter()
+                .any(|figure| below(&figure.placement))
+            || measure
+                .suspensions
+                .iter()
+                .any(|figure| below(&figure.placement))
+    })
+}
+
+/// Does anything on these bars draw above the staff, beyond the chord symbols
+/// every bar has?
+///
+/// `system_spacing` is deliberately generous — eight spatia — so that text,
+/// figures and endings between two lines never crowd either of them. The band
+/// belongs to whichever side actually puts something in it: a line whose text
+/// sits above it needs the room above it, not below.
+fn draws_above_staff(measures: &[Measure]) -> bool {
+    let above = |placement: &Placement| matches!(placement, Placement::Above);
+    measures.iter().any(|measure| {
+        measure.volta_start.is_some()
+            || !measure.melodies.is_empty()
+            || measure
+                .classical_dynamics
+                .iter()
+                .any(|dynamic| above(&dynamic.placement))
+            || measure.staff_text.iter().any(|text| above(&text.placement))
+            || measure
+                .figured_bass
+                .iter()
+                .any(|figure| above(&figure.placement))
+            || measure
+                .suspensions
+                .iter()
+                .any(|figure| above(&figure.placement))
+    })
+}
+
+/// The gap between two systems that carry nothing between them.
+///
+/// Enough to keep one line's ink off the next, and no more. Used both when
+/// systems are placed and when the vertical compactor closes up after them, so
+/// the page breaks taken during layout survive the compaction.
+fn bare_system_gap(config: &ChartLayoutConfig) -> f64 {
+    (config.spatium * 3.0).max(8.0)
+}
+
+/// The gap above and below a folded row.
+///
+/// A rule and a word: it needs to read as its own line and nothing more.
+fn folded_system_gap(config: &ChartLayoutConfig) -> f64 {
+    config.spatium * 1.5
 }
 
 fn collect_system_ink_bounds(scene: &SceneNode, page: &PageLayout) -> Vec<Option<Rect>> {
@@ -871,6 +944,13 @@ impl ChartLayoutEngine {
         let mut page_number = 1u32;
         let mut page_y = self.config.margins.top;
         let mut global_system_index = 0usize;
+        // Systems whose text, figures or endings need the full gap held open.
+        let mut systems_with_ink_below: std::collections::HashSet<usize> =
+            std::collections::HashSet::new();
+        let mut systems_with_ink_above: std::collections::HashSet<usize> =
+            std::collections::HashSet::new();
+        // Folded rows are measured, not discovered — see below.
+        let mut folded_systems: std::collections::HashSet<usize> = std::collections::HashSet::new();
         let mut id_counter = 100u64;
 
         // Track previous chord to hide duplicates (reset at each system start)
@@ -1112,13 +1192,43 @@ impl ChartLayoutEngine {
                 } else {
                     self.config.spatium * 2.0
                 };
+                let system_measures: Vec<Measure> = measure_indices
+                    .iter()
+                    .filter_map(|idx| chart_section.measures().get(*idx).cloned())
+                    .collect();
                 let system_bottom_reserve = if section_folded {
                     self.config.spatium * 1.0
-                } else {
+                } else if draws_below_staff(&system_measures) {
                     self.config.spatium * 4.5
-                };
-                let row_height = if section_folded {
+                } else {
+                    // Nothing hangs below the staff but the odd repeat arm.
                     self.config.spatium * 1.5
+                };
+                // A folded row is as tall as its margin capsule, so the rule
+                // runs through the badge's middle and the two read as one
+                // mark. A capsule that runs to two or three lines overhangs
+                // the row instead of stretching it — exactly as it overhangs a
+                // staff today — or a section whose badge needs two lines would
+                // cost more folded than written.
+                let label_height = section_folded
+                    .then(|| {
+                        self.section_label_height(
+                            &chart_section.section,
+                            // Neither the page's x nor the staff's y changes
+                            // how tall the capsule comes out.
+                            0.0,
+                            self.config.margins.left,
+                            0.0,
+                            staff_height,
+                            section_letters.get(&section_idx).copied(),
+                            &ctx,
+                        )
+                    })
+                    .unwrap_or(staff_height);
+                let row_height = if section_folded {
+                    label_height
+                        .min(staff_height)
+                        .max(label_height / 2.0 + self.config.spatium * 0.5)
                 } else {
                     staff_height
                 };
@@ -1381,7 +1491,7 @@ impl ChartLayoutEngine {
                         content_x,
                         staff_y,
                         content_width,
-                        row_height,
+                        label_height,
                         &ctx,
                         id_counter,
                     ));
@@ -2121,6 +2231,16 @@ impl ChartLayoutEngine {
                     );
                 }
 
+                if section_folded {
+                    folded_systems.insert(global_system_index);
+                } else {
+                    if draws_below_staff(&system_measures) {
+                        systems_with_ink_below.insert(global_system_index);
+                    }
+                    if draws_above_staff(&system_measures) {
+                        systems_with_ink_above.insert(global_system_index);
+                    }
+                }
                 current_page_systems.push(SystemLayout {
                     index: global_system_index,
                     y: page_y,
@@ -2129,11 +2249,43 @@ impl ChartLayoutEngine {
                     measure_indices: measure_indices.clone(),
                 });
 
-                // A rule needs less air around it than a staff does.
-                let spacing = if section_folded {
-                    self.config.system_spacing * 0.5
-                } else {
+                // A rule needs less air around it than a staff does, and two
+                // lines carrying no text need less than the full band. This
+                // has to match what `compact_paginated_vertical_dead_space`
+                // will hold back afterwards: page breaks are decided here, and
+                // a break taken against spacing the compactor then removes
+                // leaves a page that did not need to start.
+                // A folded row placed against a staff keeps the ordinary bare
+                // gap; only two folded rows in a row close up, and the
+                // compactor does that once it can see what follows.
+                // The wide band belongs to whichever side puts something in
+                // it: what this line hangs below itself, or what the next one
+                // carries above its own staff. Reserving it here is the
+                // cautious half of the job — the compactor takes back what
+                // neither side turned out to need, and it cannot give room
+                // back that was never left.
+                let next_system_draws_above = systems
+                    .get(sys_idx + 1)
+                    .map(|next| {
+                        let next_measures: Vec<Measure> = next
+                            .iter()
+                            .filter_map(|idx| chart_section.measures().get(*idx).cloned())
+                            .collect();
+                        draws_above_staff(&next_measures)
+                    })
+                    .or_else(|| {
+                        chart
+                            .sections
+                            .get(section_idx + 1)
+                            .map(|next| draws_above_staff(next.measures()))
+                    })
+                    .unwrap_or(false);
+                let spacing = if (!section_folded && draws_below_staff(&system_measures))
+                    || next_system_draws_above
+                {
                     self.config.system_spacing
+                } else {
+                    bare_system_gap(&self.config)
                 };
                 page_y += actual_system_height + spacing;
                 global_system_index += 1;
@@ -2195,11 +2347,22 @@ impl ChartLayoutEngine {
             total_width,
             beat_positions,
         };
-        self.compact_paginated_vertical_dead_space(&mut result);
+        self.compact_paginated_vertical_dead_space(
+            &mut result,
+            &systems_with_ink_below,
+            &systems_with_ink_above,
+            &folded_systems,
+        );
         result
     }
 
-    fn compact_paginated_vertical_dead_space(&self, result: &mut ChartLayoutResult) {
+    fn compact_paginated_vertical_dead_space(
+        &self,
+        result: &mut ChartLayoutResult,
+        systems_with_ink_below: &std::collections::HashSet<usize>,
+        systems_with_ink_above: &std::collections::HashSet<usize>,
+        folded_systems: &std::collections::HashSet<usize>,
+    ) {
         // Compaction should preserve ink clearance, not a second system-spacing
         // reserve. Larger north/south reserves are useful during initial system
         // construction, but after all notation is rendered we can safely pack
@@ -2207,22 +2370,47 @@ impl ChartLayoutEngine {
         // the configured `system_spacing` so compacted lines never sit tighter
         // than the pre-compactor layout — only genuine dead space beyond that
         // baseline is removed.
-        let target_gap = self
+        let annotated_gap = self
             .config
             .system_spacing
             .max(self.config.spatium * 1.5)
             .max(8.0);
+        let bare_gap = bare_system_gap(&self.config).min(annotated_gap);
+        let folded_gap = folded_system_gap(&self.config).min(annotated_gap);
 
         for _ in 0..1 {
             let mut page_shift_plans: Vec<(u32, Vec<(usize, f64)>)> = Vec::new();
 
             for page in &result.pages {
-                let system_bounds = collect_system_ink_bounds(&result.scene, page);
+                let mut system_bounds = collect_system_ink_bounds(&result.scene, page);
+                // A folded row's ink is a rule and a word centred on it, and
+                // the word's bounding box swings with its letters. Measuring
+                // that leaves four folded rows sitting at four different
+                // distances. The row's own box is the deliberate one, so it is
+                // what the row is spaced by.
+                for (slot, system) in system_bounds.iter_mut().zip(&page.systems) {
+                    if folded_systems.contains(&system.index) {
+                        let top = page.y_offset + system.y;
+                        *slot = Some(Rect::new(0.0, top, 0.0, top + system.height));
+                    }
+                }
                 let mut cumulative_shift = 0.0;
                 let mut shifts = Vec::new();
 
                 for system_idx in 1..page.systems.len() {
                     let lower_system_index = page.systems[system_idx].index;
+                    let upper_system_index = page.systems[system_idx - 1].index;
+                    let target_gap = if folded_systems.contains(&upper_system_index)
+                        && folded_systems.contains(&lower_system_index)
+                    {
+                        folded_gap
+                    } else if systems_with_ink_below.contains(&upper_system_index)
+                        || systems_with_ink_above.contains(&lower_system_index)
+                    {
+                        annotated_gap
+                    } else {
+                        bare_gap
+                    };
                     let removable = system_bounds
                         .get(system_idx - 1)
                         .and_then(|upper| upper.as_ref())

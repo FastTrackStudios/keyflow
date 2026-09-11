@@ -1299,8 +1299,10 @@ C G Am F x4
 
     let metrics = result.page_metrics(1).expect("Should have page 1");
 
-    // Check with reasonable min/max spacing (20-60 points)
-    let warnings = metrics.check_spacing(20.0, 60.0);
+    // Check with reasonable min/max spacing. Three spatia is the bare gap:
+    // this chart is plain chords, so nothing sits between the lines and the
+    // layout no longer holds the wide annotation band open under each one.
+    let warnings = metrics.check_spacing(15.0, 60.0);
 
     println!("\n=== Spacing Check Test ===");
     metrics.print_debug();
@@ -1532,9 +1534,12 @@ Em7 Am7 D7 Gmaj7
             "Page {} should have at least 1 system",
             metrics.page_number
         );
+        // Sixteen, not ten: these are plain chords with nothing between the
+        // lines, so they sit at the bare three-spatium gap rather than the
+        // wide annotation band, and a page holds half again as many.
         assert!(
-            metrics.system_count <= 10,
-            "Page {} should have at most 10 systems, got {}",
+            metrics.system_count <= 16,
+            "Page {} should have at most 16 systems, got {}",
             metrics.page_number,
             metrics.system_count
         );
@@ -2672,10 +2677,59 @@ fn a_folded_section_costs_far_less_height_than_a_written_one() {
             .unwrap_or_default()
     };
     assert_eq!(folded.pages.len(), 1);
+
+    let written_row = written.pages[0].systems[1].height;
+    let folded_row = folded.pages[0].systems[1].height;
     assert!(
-        last_y(&folded) < last_y(&written) * 0.6,
-        "folded ran to {}, written to {}",
-        last_y(&folded),
-        last_y(&written)
+        folded_row < written_row,
+        "a folded row ({folded_row}) should cost less than the staff it stands in for ({written_row})"
+    );
+
+    let top = folded.pages[0].systems[0].y;
+    let folded_run = last_y(&folded) - top;
+    let written_run = last_y(&written) - top;
+    assert!(
+        folded_run < written_run * 0.85,
+        "folded ran {folded_run} past the first system, written {written_run}"
+    );
+}
+
+/// The wide band between systems is for the text, figures and endings that
+/// live there. A chart of plain chords has none, and holding it open anyway
+/// left a visible hole under every line and broke the page early.
+#[test]
+fn plain_systems_sit_closer_than_annotated_ones() {
+    use keyflow_proto::chart::notations::{Placement, StaffText};
+
+    let engine = ChartLayoutEngine::new(test_style(), Arc::new(Vec::new()), Arc::new(Vec::new()));
+    let config = ChartLayoutConfig::master_rhythm();
+    let chart = long_chart(3, 4, "G");
+
+    let mut annotated = chart.clone();
+    for section in annotated.sections.iter_mut() {
+        section.measures_mut()[0].staff_text.push(StaffText {
+            text: "BACK TO TOP".to_string(),
+            beat: 1,
+            placement: Placement::Above,
+            source_default_x: None,
+            boxed: false,
+            bold: false,
+            italic: false,
+        });
+    }
+
+    let plain = engine.layout_chart_with_config(&chart, &LayoutMode::paginated_a4(), &config);
+    let with_text =
+        engine.layout_chart_with_config(&annotated, &LayoutMode::paginated_a4(), &config);
+
+    let pitch = |layout: &ChartLayoutResult| {
+        let systems = &layout.pages[0].systems;
+        systems[1].y - systems[0].y
+    };
+    assert!(
+        pitch(&plain) < pitch(&with_text),
+        "plain systems ({}) should sit closer than ones carrying text ({})",
+        pitch(&plain),
+        pitch(&with_text)
     );
 }
