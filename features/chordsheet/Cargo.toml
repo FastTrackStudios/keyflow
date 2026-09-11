@@ -23,6 +23,10 @@ serde_json = { workspace = true, optional = true }
 
 [dev-dependencies]
 keyflow-text.workspace = true
+# The render smoke test lays the corpus out. A dev-only edge: nothing in this
+# crate's library depends on the engraver.
+engraver = { workspace = true, features = ["svg"] }
+keyflow-proto.workspace = true
 
 [lints]
 workspace = true

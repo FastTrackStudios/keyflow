@@ -7356,6 +7356,7 @@ dependencies = [
 name = "keyflow-chordsheet"
 version = "0.0.1-alpha"
 dependencies = [
+ "engraver",
  "keyflow-proto",
  "keyflow-syntax",
  "keyflow-text",

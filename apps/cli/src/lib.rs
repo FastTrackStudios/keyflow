@@ -116,6 +116,11 @@ enum Commands {
         /// try to fit one page.
         #[arg(long, value_enum, default_value_t = ChartModeArg::Default)]
         chart_mode: ChartModeArg,
+        /// Pack the systems by their ink instead of holding the annotation
+        /// band open under every one. What `--chart-mode compact` does for
+        /// spacing, without its shrinking.
+        #[arg(long)]
+        tight_spacing: bool,
     },
     /// Import MIDI and render the generated chart to PDF
     MidiPdf {
@@ -258,6 +263,11 @@ enum Commands {
         /// try to fit one page.
         #[arg(long, value_enum, default_value_t = ChartModeArg::Default)]
         chart_mode: ChartModeArg,
+        /// Pack the systems by their ink instead of holding the annotation
+        /// band open under every one. What `--chart-mode compact` does for
+        /// spacing, without its shrinking.
+        #[arg(long)]
+        tight_spacing: bool,
     },
     /// Preprocess a markdown docs tree: render ```` ```kf ```` blocks to inline
     /// SVG, writing a generated mirror tree a stock dodeca (`ddc`) build serves.
@@ -812,6 +822,7 @@ impl LayoutPipeline {
         breakpoint: BreakpointArg,
         width_pt: f64,
         chart_mode: ChartModeArg,
+        tight_spacing: bool,
     ) -> ChartLayoutResult {
         let options = PresetOptions::for_export().with_viewport_pt(width_pt);
         let (mode, config) = match preset {
@@ -839,6 +850,8 @@ impl LayoutPipeline {
         }
         let chart = &prepared;
 
+        let mut config = config;
+        config.tight_system_spacing |= tight_spacing;
         match chart_mode {
             ChartModeArg::Default => self.engine.layout_chart_with_config(chart, &mode, &config),
             ChartModeArg::Folded => {
@@ -1043,7 +1056,14 @@ fn render_variant_pngs(
     scale: f32,
     output_base: &std::path::Path,
 ) -> Result<Vec<PathBuf>, String> {
-    let layout = pipeline.layout_preset(chart, preset, breakpoint, width_pt, ChartModeArg::Default);
+    let layout = pipeline.layout_preset(
+        chart,
+        preset,
+        breakpoint,
+        width_pt,
+        ChartModeArg::Default,
+        false,
+    );
     let svgs: Vec<String> = if layout.pages.is_empty() {
         vec![pipeline
             .export_svg_continuous(&layout)
@@ -1237,6 +1257,7 @@ fn run(cli: Cli) -> Result<(), String> {
             input,
             output,
             chart_mode,
+            tight_spacing,
         } => {
             let source = read_source(&input)?;
             let chart = parse_chart(&source)?;
@@ -1251,6 +1272,7 @@ fn run(cli: Cli) -> Result<(), String> {
                 BreakpointArg::Desktop,
                 BreakpointArg::Desktop.default_width_pt(),
                 chart_mode,
+                tight_spacing,
             );
 
             println!(
@@ -1717,13 +1739,21 @@ fn run(cli: Cli) -> Result<(), String> {
             width,
             scale,
             chart_mode,
+            tight_spacing,
         } => {
             let source = read_source(&input)?;
             let chart = parse_chart(&source)?;
             let pipeline = LayoutPipeline::new()?;
 
             let viewport_pt = width.unwrap_or_else(|| breakpoint.default_width_pt());
-            let layout = pipeline.layout_preset(&chart, mode, breakpoint, viewport_pt, chart_mode);
+            let layout = pipeline.layout_preset(
+                &chart,
+                mode,
+                breakpoint,
+                viewport_pt,
+                chart_mode,
+                tight_spacing,
+            );
 
             // ContinuousScroll has no `pages`; render the whole scene as one image.
             let svgs: Vec<String> = if layout.pages.is_empty() {

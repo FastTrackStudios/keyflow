@@ -3694,20 +3694,24 @@ fn rescue_orphan_bar(
         return;
     }
 
-    // An ending is already placed by the rule that keeps it with its phrase,
-    // and a long volta forces its own break. Neither is an orphan to rescue.
-    let touches_a_volta = previous
-        .iter()
-        .chain(last.iter())
-        .filter_map(|idx| measures.get(*idx))
-        .any(|measure| measure.volta_start.is_some());
-    if touches_a_volta {
-        return;
-    }
-
     let Some(moved) = previous.last().copied() else {
         return;
     };
+
+    // The bar that moves must not be in the middle of an ending: a volta drawn
+    // across a line break is worse than a bar on its own. A bar that *starts*
+    // one is free to move — a second ending opening the next line is how every
+    // chart with two endings is set.
+    let splits_an_ending = previous.iter().any(|idx| {
+        measures.get(*idx).is_some_and(|measure| {
+            measure.volta_start.as_ref().is_some_and(|volta| {
+                *idx < moved && *idx + usize::from(volta.length_measures) > moved
+            })
+        })
+    });
+    if splits_an_ending {
+        return;
+    }
     let width = widths.get(moved).copied().unwrap_or(0.0)
         + last
             .first()
