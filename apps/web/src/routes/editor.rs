@@ -14,13 +14,14 @@ use crate::chart::ChartFonts;
 use crate::chart_preview::ChartPreview;
 use crate::chart_url;
 use crate::keyflow_editor::KeyflowEditor;
+use crate::routes::library::BoundChart;
 use crate::routes::{SaveToLibrary, Shell};
 
 /// `/editor` — the editor seeded with the default example.
 #[component]
 pub fn Editor() -> Element {
     rsx! {
-        EditorScreen { initial: examples::DEFAULT_CHART.to_string(), from_link: false }
+        EditorScreen { initial: examples::DEFAULT_CHART.to_string(), from_link: false, bound: None }
     }
 }
 
@@ -28,7 +29,7 @@ pub fn Editor() -> Element {
 #[component]
 pub fn Chart(data: String) -> Element {
     match chart_url::decode(&data) {
-        Ok(source) => rsx! { EditorScreen { initial: source, from_link: true } },
+        Ok(source) => rsx! { EditorScreen { initial: source, from_link: true, bound: None } },
         // A truncated or mangled link is the common case here — a chat client
         // that broke the URL across a line, say. Say so plainly and offer a
         // way forward rather than showing an empty editor.
@@ -70,8 +71,11 @@ impl Pane {
     }
 }
 
+/// The editor over one document. `bound` names the stored chart it is
+/// an edit of, when it is one — then Save updates that chart in place
+/// rather than keeping a new one. See [`crate::routes::library`].
 #[component]
-fn EditorScreen(initial: String, from_link: bool) -> Element {
+pub fn EditorScreen(initial: String, from_link: bool, bound: Option<BoundChart>) -> Element {
     // Component-local, deliberately. `keyflow_ui::signals::CHART_SOURCE` is
     // a *global* editor buffer, which is right for a single-window desktop
     // app and wrong here: seeding it from the route meant every navigation
@@ -125,12 +129,15 @@ fn EditorScreen(initial: String, from_link: bool) -> Element {
                     KeyflowEditor {
                         initial: source(),
                         on_change: move |text| source.set(text),
-                        note: from_link.then(|| "Opened from a link".to_string()),
+                        note: match &bound {
+                            Some(chart) => Some(format!("Editing “{}” in your library", chart.title)),
+                            None => from_link.then(|| "Opened from a link".to_string()),
+                        },
                         // Keeping a chart is the one thing the URL
                         // cannot do. Signed out this is an invitation
                         // and nothing more — the editor is never gated
                         // behind an account.
-                        actions: rsx! { SaveToLibrary { source: source() } },
+                        actions: rsx! { SaveToLibrary { source: source(), bound: bound.clone() } },
                     }
                 }
             }

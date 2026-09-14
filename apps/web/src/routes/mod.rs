@@ -7,17 +7,17 @@ mod editor;
 mod graph;
 mod guide_page;
 mod home;
-mod library;
+pub mod library;
 mod workbench;
 
 pub use appendix_page::{AppendixIndex, AppendixPage};
 pub use auth_callback::AuthCallback;
 pub use devices::Devices;
-pub use editor::{Chart, Editor};
+pub use editor::{Chart, Editor, EditorScreen};
 pub use graph::GuideGraph;
 pub use guide_page::{GuideIndex, GuidePage};
 pub use home::Home;
-pub use library::{Library, SaveToLibrary};
+pub use library::{Library, LibraryChart, SaveToLibrary};
 pub use workbench::Workbench;
 
 use dioxus::prelude::*;

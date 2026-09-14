@@ -247,6 +247,9 @@ pub struct StoredChart {
     pub sections: Vec<String>,
     /// The song it arranges, by slug; `None` is unattached.
     pub song: Option<String>,
+    /// Which reading of the song this is, in the person's words; kept
+    /// so that saving an edit does not silently rename the arrangement.
+    pub arrangement: Option<String>,
 }
 
 /// What a save answers with.
@@ -275,6 +278,9 @@ pub struct Draft {
     /// the editor's Save makes, since a person saves a chart before
     /// they have said what song it is.
     pub song: Option<String>,
+    /// The arrangement label to keep on an edit of a stored chart.
+    /// Absent on a fresh save.
+    pub arrangement: Option<String>,
 }
 
 /// Title, key and sections for a chart, read out of the chart itself.
@@ -327,6 +333,7 @@ pub fn draft_from_source(source: &str) -> Draft {
         slug: None,
         org: None,
         song: None,
+        arrangement: None,
     }
 }
 
@@ -448,6 +455,52 @@ pub async fn delete_chart(org: &str, slug: &str) -> Result<(), LibraryError> {
     vox::delete_chart(org, slug).await
 }
 
+/// A new song in `org`'s library, by title. Answers its slug, which
+/// is what a chart names to attach itself ([`Draft::song`]).
+///
+/// # Errors
+///
+/// As [`list_songlists`]; an empty title is refused by the server.
+pub async fn create_song(
+    org: &str,
+    title: &str,
+    key: Option<&str>,
+    writers: &[String],
+) -> Result<String, LibraryError> {
+    vox::create_song(org, title, key, writers).await
+}
+
+/// A new, empty song list in `org`.
+///
+/// # Errors
+///
+/// As [`list_songlists`].
+pub async fn create_songlist(org: &str, title: &str) -> Result<SongList, LibraryError> {
+    vox::create_songlist(org, title).await
+}
+
+/// Put a song at the end of a list. Answers the list as it now is.
+///
+/// # Errors
+///
+/// As [`list_songlists`].
+pub async fn add_to_songlist(org: &str, list: &str, song: &str) -> Result<SongList, LibraryError> {
+    vox::add_to_songlist(org, list, song).await
+}
+
+/// Take a song out of a list. The song itself stays in the library.
+///
+/// # Errors
+///
+/// As [`list_songlists`].
+pub async fn remove_from_songlist(
+    org: &str,
+    list: &str,
+    song: &str,
+) -> Result<SongList, LibraryError> {
+    vox::remove_from_songlist(org, list, song).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -500,8 +553,9 @@ mod tests {
             slug,
             org,
             song,
+            arrangement,
         } = draft_from_source(keyflow_ui::examples::EXAMPLE_THRILLER);
-        assert!(slug.is_none() && org.is_none() && song.is_none());
+        assert!(slug.is_none() && org.is_none() && song.is_none() && arrangement.is_none());
     }
 
     /// Sections go up as anchors, in order, once each. They are what

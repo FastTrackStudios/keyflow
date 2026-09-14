@@ -1,68 +1,57 @@
-//! The library — the two screens an account is actually for.
+//! The library — the screens an account is actually for.
 //!
-//! [`SaveToLibrary`] is a button in the editor's pane header, and
+//! [`SaveToLibrary`] is a button in the editor's pane header,
 //! [`Library`] is `/library`: a workspace's song lists, its songs, and
-//! the charts kept there. Between them they are the entire user-facing
-//! surface of [`crate::library`], and both hold to the same rule the
-//! account itself does: **nothing here gates the editor**. Signed out,
-//! the button is an invitation and the screen is a sentence explaining
-//! what an account would give you. The chart in the URL keeps working
-//! either way.
+//! the charts kept there, and [`LibraryChart`] is `/library/:org/:slug`,
+//! one stored chart open in the editor and bound to it. Between them
+//! they are the entire user-facing surface of [`crate::library`], and
+//! all hold to the same rule the account itself does: **nothing here
+//! gates the editor**. Signed out, the button is an invitation and the
+//! screen is a sentence explaining what an account would give you. The
+//! chart in the URL keeps working either way.
 //!
 //! # What the shelf shows
 //!
 //! Three groups, in the order a band thinks about them:
 //!
 //! * **Song lists** — "Adult Jam", a set, a repertoire. Each opens to
-//!   its songs in order. A list that names a song the library no
+//!   its songs in order, and a song can be taken out of a list without
+//!   leaving the library. A list that names a song the library no
 //!   longer has shows the slug, greyed, rather than silently shrinking:
-//!   a missing song is something to fix, not something to hide.
+//!   a missing song is something to fix, not something to hide. New
+//!   lists are made right here, by title.
 //! * **Songs** — everything in the workspace's library, with who wrote
-//!   it and its usual key.
-//! * **Charts** — the unattached ones, which is what the editor's Save
-//!   makes. A chart that belongs to a song is reached through the song.
+//!   it and its usual key, and a way to put each into a list.
+//! * **Charts** — the unattached ones, saved before there were songs
+//!   to attach to. A chart that belongs to a song is reached through
+//!   the song.
+//!
+//! # Editing is in place
 //!
 //! Opening a song opens *the* chart of it — the one the server marks
-//! default, else its first — because "open Wonderwall" means the chart,
-//! and asking which arrangement every time would be asking a question
-//! the person did not have.
+//! default, else its first — **bound**: the editor knows which stored
+//! chart it is showing, and Save writes back to that chart, keeping its
+//! song and arrangement. Nothing is copied into the URL first. A chart
+//! saved from a plain editor becomes a new song, with the chart as its
+//! default, and the editor then navigates to the bound view so the next
+//! Save is an edit rather than a second song with the same name.
 //!
 //! # Every state a save can be in
 //!
-//! Saving over a network has more states than "done", and each of them
-//! is a different thing to say:
-//!
-//! * **signed out** — an invitation, not a failure. The person has not
-//!   done anything wrong; they have not signed in.
-//! * **saving** — the button says so and refuses a second click, because
-//!   two saves of the same chart is two versions of it.
-//! * **saved** — with a way through to the library, since "where did it
-//!   go" is the immediate next question.
-//! * **failed** — the reason, in words, and the chart untouched. A
-//!   failed save must never look like a lost chart.
-//! * **not available yet** — its own case, because the server may not
-//!   carry the library methods yet and "your library is not on this
-//!   server yet" is not a failure anyone can act on. See
-//!   [`crate::library::LibraryError::Unsupported`].
+//! * **signed out** — an invitation, not a failure.
+//! * **saving** — the button says so and refuses a second click.
+//! * **saved** — with a way through to the library.
+//! * **failed** — the reason, in words, and the chart untouched.
+//! * **not available yet** — [`crate::library::LibraryError::Unsupported`].
 //!
 //! # Which org
 //!
 //! Task auto-provisions a personal org for every account, so the common
 //! case is exactly one and nobody is asked anything. Someone in several
-//! is asked once, and the answer is remembered
-//! ([`crate::library::ORG_KEY`]); the shelf then has a picker to change
-//! it, since a person in a band and a church has two libraries. The
-//! decision itself is [`crate::library::choose_org`], which is pure and
-//! tested; what is here is only the panel that shows it.
-//!
-//! # Opening a chart puts it back in the URL
-//!
-//! "Open" reads the chart in full and navigates to `/c/:data` — the
-//! same shareable route a link produces. So an opened chart behaves
-//! exactly like every other chart on the site: shareable, bookmarkable,
-//! and editable with no further round trips. Saving it again derives the
-//! same slug from the same title, which makes that a new *version*
-//! rather than a second chart.
+//! is asked once, the answer is remembered ([`crate::library::ORG_KEY`]),
+//! and the shelf has a picker to change it — a person in a band and a
+//! church has two libraries. The decision itself is
+//! [`crate::library::choose_org`], which is pure and tested.
 
 use std::collections::HashMap;
 
@@ -70,11 +59,77 @@ use dioxus::prelude::*;
 
 use crate::Route;
 use crate::auth::{AuthState, use_auth};
-use crate::chart_url;
 use crate::library::{
     self, ChartEntry, LibraryError, Org, OrgTarget, SongEntry, SongList, StoredChart,
 };
-use crate::routes::Shell;
+use crate::routes::{EditorScreen, Shell};
+
+// ── A chart the editor is bound to ───────────────────────────────────
+
+/// The stored chart an editor is an edit of. Everything Save needs to
+/// write back in place: where it lives, what it is called on the shelf,
+/// and the song and arrangement it must keep.
+#[derive(Clone, Debug, PartialEq)]
+pub struct BoundChart {
+    pub org: String,
+    pub slug: String,
+    pub title: String,
+    pub song: Option<String>,
+    pub arrangement: Option<String>,
+}
+
+impl BoundChart {
+    fn of(org: &str, chart: &StoredChart) -> Self {
+        Self {
+            org: org.to_owned(),
+            slug: chart.slug.clone(),
+            title: chart.title.clone(),
+            song: chart.song.clone(),
+            arrangement: chart.arrangement.clone(),
+        }
+    }
+}
+
+/// `/library/:org/:slug` — one stored chart, open and bound.
+#[component]
+pub fn LibraryChart(org: String, slug: String) -> Element {
+    let auth = use_auth();
+    let chart = use_resource(move || {
+        let org = org.clone();
+        let slug = slug.clone();
+        let signed_in = matches!((auth.state)(), AuthState::SignedIn(_));
+        async move {
+            if !signed_in {
+                return Err(LibraryError::SignedOut);
+            }
+            library::read_chart(&org, &slug)
+                .await
+                .map(|chart| (org, chart))
+        }
+    });
+
+    match (&(auth.state)(), &*chart.read_unchecked()) {
+        (AuthState::Loading, _) | (_, None) => rsx! {
+            Shell { section { class: "kf-prose", p { class: "kf-note", "One moment…" } } }
+        },
+        (_, Some(Ok((org, chart)))) => rsx! {
+            EditorScreen {
+                initial: chart.source.clone(),
+                from_link: false,
+                bound: Some(BoundChart::of(org, chart)),
+            }
+        },
+        (_, Some(Err(error))) => rsx! {
+            Shell {
+                section { class: "kf-prose",
+                    h1 { "That chart could not be opened" }
+                    p { role: "alert", "{error}" }
+                    Link { class: "kf-account-link", to: Route::Library {}, "Back to your library" }
+                }
+            }
+        },
+    }
+}
 
 // ── Save ─────────────────────────────────────────────────────────────
 
@@ -89,10 +144,15 @@ enum SaveState {
 }
 
 /// The Save button in the editor, and the panel under it.
+///
+/// With `bound`, Save is an edit of that chart. Without, it makes a new
+/// song from the chart's title and keeps the chart as its default, then
+/// moves the editor to the bound view of what it just made.
 #[component]
-pub fn SaveToLibrary(source: String) -> Element {
+pub fn SaveToLibrary(source: String, bound: Option<BoundChart>) -> Element {
     let mut auth = use_auth();
     let mut state = use_signal(|| SaveState::Idle);
+    let navigator = use_navigator();
 
     let signed_in = matches!((auth.state)(), AuthState::SignedIn(_));
     let showing = state();
@@ -104,15 +164,31 @@ pub fn SaveToLibrary(source: String) -> Element {
         _ => "Save",
     };
 
-    let here = format!("/c/{}", chart_url::encode(&source));
+    let here = format!("/c/{}", crate::chart_url::encode(&source));
 
+    let bound_for_save = bound.clone();
     let start_save = move |source: String, org: Option<String>| {
+        let bound = bound_for_save.clone();
         spawn(async move {
             state.set(SaveState::Saving);
+            let mut draft = library::draft_from_source(&source);
+
+            if let Some(chart) = bound {
+                draft.org = Some(chart.org);
+                draft.slug = Some(chart.slug);
+                draft.song = chart.song;
+                draft.arrangement = chart.arrangement;
+                state.set(match library::save_chart(&draft).await {
+                    Ok(_) => SaveState::Saved(draft.title),
+                    Err(error) => SaveState::Failed(error.to_string()),
+                });
+                return;
+            }
+
             let org = match org {
-                Some(slug) => Some(slug),
+                Some(slug) => slug,
                 None => match library::org_target().await {
-                    Ok(OrgTarget::One(slug)) => Some(slug),
+                    Ok(OrgTarget::One(slug)) => slug,
                     Ok(OrgTarget::Choose(orgs)) => {
                         state.set(SaveState::Pick(orgs));
                         return;
@@ -127,25 +203,45 @@ pub fn SaveToLibrary(source: String) -> Element {
                     }
                 },
             };
-            let mut draft = library::draft_from_source(&source);
-            draft.org = org;
-            state.set(match library::save_chart(&draft).await {
-                Ok(saved) => SaveState::Saved(saved.slug),
-                Err(error) => SaveState::Failed(error.to_string()),
-            });
+
+            let song =
+                match library::create_song(&org, &draft.title, draft.key.as_deref(), &[]).await {
+                    Ok(slug) => slug,
+                    Err(error) => {
+                        state.set(SaveState::Failed(error.to_string()));
+                        return;
+                    }
+                };
+            draft.org = Some(org.clone());
+            draft.song = Some(song);
+            match library::save_chart(&draft).await {
+                Ok(saved) => {
+                    state.set(SaveState::Saved(draft.title.clone()));
+                    navigator.push(Route::LibraryChart {
+                        org,
+                        slug: saved.slug,
+                    });
+                }
+                Err(error) => state.set(SaveState::Failed(error.to_string())),
+            }
         });
     };
 
     let on_click_source = source.clone();
+    let save_on_click = start_save.clone();
     rsx! {
         div { class: "kf-save",
             button {
                 class: "kf-button",
                 disabled: saving,
-                title: "Keep this chart in your FastTrackStudio account",
+                title: if bound.is_some() {
+                    "Save your changes to this chart"
+                } else {
+                    "Keep this chart as a song in your FastTrackStudio library"
+                },
                 onclick: move |_| {
                     if signed_in {
-                        start_save(on_click_source.clone(), None);
+                        save_on_click(on_click_source.clone(), None);
                     } else if inviting {
                         state.set(SaveState::Idle);
                     } else {
@@ -184,9 +280,9 @@ pub fn SaveToLibrary(source: String) -> Element {
                     }
                 },
 
-                SaveState::Saved(slug) => rsx! {
+                SaveState::Saved(title) => rsx! {
                     div { class: "kf-save-panel",
-                        p { class: "kf-account-note", "Kept as “{slug}”." }
+                        p { class: "kf-account-note", "Saved “{title}”." }
                         div { class: "kf-account-actions",
                             Link { class: "kf-account-link", to: Route::Library {},
                                 "Your library"
@@ -211,6 +307,7 @@ pub fn SaveToLibrary(source: String) -> Element {
                                     onclick: {
                                         let slug = org.slug.clone();
                                         let source = source.clone();
+                                        let start_save = start_save.clone();
                                         move |_| {
                                             library::remember_org(&slug);
                                             start_save(source.clone(), Some(slug.clone()));
@@ -227,7 +324,7 @@ pub fn SaveToLibrary(source: String) -> Element {
                     div { class: "kf-save-panel",
                         p { class: "kf-account-error", role: "alert", "{message}" }
                         p { class: "kf-account-note",
-                            "Your chart is untouched, and it is still in this link."
+                            "Your chart is untouched, and it is still in this editor."
                         }
                         div { class: "kf-account-actions",
                             button {
@@ -322,6 +419,8 @@ pub fn Library() -> Element {
     // `chart:<slug>`, so exactly that row says "Opening…".
     let mut opening = use_signal(|| None::<String>);
     let mut trouble = use_signal(|| None::<String>);
+    let mut new_list = use_signal(String::new);
+    let mut making_list = use_signal(|| false);
     let navigator = use_navigator();
 
     let state = (auth.state)();
@@ -337,19 +436,19 @@ pub fn Library() -> Element {
         }
     });
 
-    let open_chart = move |org: String, slug: String| {
+    // Every mutation of the shelf goes through here: run it, show what
+    // went wrong if anything did, and reload the shelf either way — the
+    // server is the truth about what is in a list.
+    let mutate = move |what: String,
+                       work: std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<(), LibraryError>>>,
+    >| {
         spawn(async move {
-            opening.set(Some(format!("chart:{slug}")));
             trouble.set(None);
-            match library::read_chart(&org, &slug).await {
-                Ok(StoredChart { source, .. }) => {
-                    navigator.push(Route::Chart {
-                        data: chart_url::encode(&source),
-                    });
-                }
-                Err(error) => trouble.set(Some(error.to_string())),
+            if let Err(error) = work.await {
+                trouble.set(Some(format!("{what}: {error}")));
             }
-            opening.set(None);
+            reload += 1;
         });
     };
 
@@ -357,21 +456,18 @@ pub fn Library() -> Element {
         spawn(async move {
             opening.set(Some(format!("song:{slug}")));
             trouble.set(None);
-            let opened = match library::list_charts(&org, Some(&slug)).await {
+            match library::list_charts(&org, Some(&slug)).await {
                 Ok(charts) => match library::default_chart(&charts) {
-                    Some(chart) => library::read_chart(&org, &chart.slug).await,
-                    None => Err(LibraryError::Refused(format!(
+                    Some(chart) => {
+                        navigator.push(Route::LibraryChart {
+                            org,
+                            slug: chart.slug.clone(),
+                        });
+                    }
+                    None => trouble.set(Some(format!(
                         "“{slug}” has no chart yet. Write one in the editor and save it."
                     ))),
                 },
-                Err(error) => Err(error),
-            };
-            match opened {
-                Ok(StoredChart { source, .. }) => {
-                    navigator.push(Route::Chart {
-                        data: chart_url::encode(&source),
-                    });
-                }
                 Err(error) => trouble.set(Some(error.to_string())),
             }
             opening.set(None);
@@ -453,6 +549,10 @@ pub fn Library() -> Element {
                             .map(|song| (song.slug.clone(), song.clone()))
                             .collect();
                         let songs = songs.clone();
+                        let list_choices: Vec<(String, String)> = songlists
+                            .iter()
+                            .map(|list| (list.id.clone(), list.title.clone()))
+                            .collect();
                         let empty = songlists.is_empty() && songs.is_empty() && charts.is_empty();
                         rsx! {
                             if elsewhere.len() > 1 {
@@ -478,57 +578,129 @@ pub fn Library() -> Element {
                             if empty {
                                 p {
                                     "Nothing here yet. Write a chart and press Save above it —
-                                     it will be waiting the next time you sign in."
+                                     it becomes a song in this library."
                                 }
                                 Link { class: "kf-account-link", to: Route::Editor {},
                                     "Open the editor"
                                 }
                             }
 
-                            if !songlists.is_empty() {
-                                div { class: "kf-library-section",
-                                    h2 { "Song lists" }
-                                    for list in songlists {
-                                        details {
-                                            key: "{list.id}",
-                                            class: "kf-library-group",
-                                            summary {
-                                                "{list.title}"
-                                                span { class: "kf-library-count",
-                                                    {plural(list.songs.len(), "song")}
-                                                }
+                            div { class: "kf-library-section",
+                                h2 { "Song lists" }
+                                for list in songlists {
+                                    details {
+                                        key: "{list.id}",
+                                        class: "kf-library-group",
+                                        summary {
+                                            "{list.title}"
+                                            span { class: "kf-library-count",
+                                                {plural(list.songs.len(), "song")}
                                             }
-                                            ul { class: "kf-library-list",
-                                                for row in rows_of(&list, &by_slug) {
-                                                    match row {
-                                                        ListRow::Song(song) => rsx! {
-                                                            SongRow {
-                                                                key: "{list.id}/{song.slug}",
-                                                                song: song.clone(),
-                                                                busy: opening() == Some(format!("song:{}", song.slug)),
-                                                                on_open: {
-                                                                    let org = org.clone();
-                                                                    let slug = song.slug.clone();
-                                                                    move |()| open_song(org.clone(), slug.clone())
-                                                                },
-                                                            }
-                                                        },
-                                                        ListRow::Missing(slug) => rsx! {
-                                                            li { key: "{list.id}/{slug}", class: "kf-library-row",
-                                                                div { class: "kf-library-what",
-                                                                    span { class: "kf-library-title kf-library-missing",
-                                                                        "{slug}"
-                                                                    }
-                                                                    span { class: "kf-library-meta",
-                                                                        "not in this library any more"
-                                                                    }
+                                        }
+                                        if list.songs.is_empty() {
+                                            p { class: "kf-library-meta kf-library-empty",
+                                                "Empty. Add songs from the list below."
+                                            }
+                                        }
+                                        ul { class: "kf-library-list",
+                                            for row in rows_of(&list, &by_slug) {
+                                                match row {
+                                                    ListRow::Song(song) => rsx! {
+                                                        SongRow {
+                                                            key: "{list.id}/{song.slug}",
+                                                            song: song.clone(),
+                                                            busy: opening() == Some(format!("song:{}", song.slug)),
+                                                            lists: Vec::<(String, String)>::new(),
+                                                            in_list: Some(list.title.clone()),
+                                                            on_open: {
+                                                                let org = org.clone();
+                                                                let slug = song.slug.clone();
+                                                                move |()| open_song(org.clone(), slug.clone())
+                                                            },
+                                                            on_add: move |_| {},
+                                                            on_remove: {
+                                                                let org = org.clone();
+                                                                let list_id = list.id.clone();
+                                                                let slug = song.slug.clone();
+                                                                let title = song.title.clone();
+                                                                move |()| {
+                                                                    let (org, list_id, slug) = (org.clone(), list_id.clone(), slug.clone());
+                                                                    mutate(format!("removing “{title}”"), Box::pin(async move {
+                                                                        library::remove_from_songlist(&org, &list_id, &slug).await.map(|_| ())
+                                                                    }));
+                                                                }
+                                                            },
+                                                        }
+                                                    },
+                                                    ListRow::Missing(slug) => rsx! {
+                                                        li { key: "{list.id}/{slug}", class: "kf-library-row",
+                                                            div { class: "kf-library-what",
+                                                                span { class: "kf-library-title kf-library-missing",
+                                                                    "{slug}"
+                                                                }
+                                                                span { class: "kf-library-meta",
+                                                                    "not in this library any more"
                                                                 }
                                                             }
-                                                        },
-                                                    }
+                                                            div { class: "kf-library-actions",
+                                                                button {
+                                                                    class: "kf-button",
+                                                                    onclick: {
+                                                                        let org = org.clone();
+                                                                        let list_id = list.id.clone();
+                                                                        let slug = slug.clone();
+                                                                        move |_| {
+                                                                            let (org, list_id, slug) = (org.clone(), list_id.clone(), slug.clone());
+                                                                            mutate(format!("removing “{slug}”"), Box::pin(async move {
+                                                                                library::remove_from_songlist(&org, &list_id, &slug).await.map(|_| ())
+                                                                            }));
+                                                                        }
+                                                                    },
+                                                                    "Remove"
+                                                                }
+                                                            }
+                                                        }
+                                                    },
                                                 }
                                             }
                                         }
+                                    }
+                                }
+                                form { class: "kf-library-new",
+                                    onsubmit: {
+                                        let org = org.clone();
+                                        move |e: FormEvent| {
+                                            e.prevent_default();
+                                            let title = new_list().trim().to_owned();
+                                            if title.is_empty() || making_list() {
+                                                return;
+                                            }
+                                            making_list.set(true);
+                                            let org = org.clone();
+                                            spawn(async move {
+                                                trouble.set(None);
+                                                match library::create_songlist(&org, &title).await {
+                                                    Ok(_) => new_list.set(String::new()),
+                                                    Err(error) => trouble.set(Some(format!("making “{title}”: {error}"))),
+                                                }
+                                                making_list.set(false);
+                                                reload += 1;
+                                            });
+                                        }
+                                    },
+                                    input {
+                                        class: "kf-input",
+                                        r#type: "text",
+                                        placeholder: "New song list…",
+                                        "aria-label": "New song list",
+                                        value: "{new_list}",
+                                        oninput: move |e| new_list.set(e.value()),
+                                    }
+                                    button {
+                                        class: "kf-button",
+                                        r#type: "submit",
+                                        disabled: making_list() || new_list().trim().is_empty(),
+                                        if making_list() { "Making…" } else { "Make list" }
                                     }
                                 }
                             }
@@ -542,11 +714,25 @@ pub fn Library() -> Element {
                                                 key: "{song.slug}",
                                                 song: song.clone(),
                                                 busy: opening() == Some(format!("song:{}", song.slug)),
+                                                lists: list_choices.clone(),
+                                                in_list: None,
                                                 on_open: {
                                                     let org = org.clone();
                                                     let slug = song.slug.clone();
                                                     move |()| open_song(org.clone(), slug.clone())
                                                 },
+                                                on_add: {
+                                                    let org = org.clone();
+                                                    let slug = song.slug.clone();
+                                                    let title = song.title.clone();
+                                                    move |list_id: String| {
+                                                        let (org, slug) = (org.clone(), slug.clone());
+                                                        mutate(format!("adding “{title}”"), Box::pin(async move {
+                                                            library::add_to_songlist(&org, &list_id, &slug).await.map(|_| ())
+                                                        }));
+                                                    }
+                                                },
+                                                on_remove: move |()| {},
                                             }
                                         }
                                     }
@@ -556,18 +742,16 @@ pub fn Library() -> Element {
                             if !charts.is_empty() {
                                 div { class: "kf-library-section",
                                     h2 { "Charts" }
+                                    p { class: "kf-library-meta",
+                                        "Charts saved before they had a song. Open one and save it to
+                                         keep editing it here."
+                                    }
                                     ul { class: "kf-library-list",
                                         for chart in charts {
                                             ChartRow {
                                                 key: "{chart.slug}",
                                                 chart: chart.clone(),
                                                 org: org.clone(),
-                                                busy: opening() == Some(format!("chart:{}", chart.slug)),
-                                                on_open: {
-                                                    let slug = chart.slug.clone();
-                                                    let org = org.clone();
-                                                    move |()| open_chart(org.clone(), slug.clone())
-                                                },
                                                 on_deleted: move |()| reload += 1,
                                             }
                                         }
@@ -591,9 +775,19 @@ fn plural(n: usize, noun: &str) -> String {
     }
 }
 
-/// A song on the shelf: title, who wrote it, its key, and Open.
+/// A song on the shelf: title, who wrote it, its key, and what can be
+/// done with it — Open always; "Add to" a list when there are lists to
+/// add to; Remove when the row is inside a list.
 #[component]
-fn SongRow(song: SongEntry, busy: bool, on_open: EventHandler<()>) -> Element {
+fn SongRow(
+    song: SongEntry,
+    busy: bool,
+    lists: Vec<(String, String)>,
+    in_list: Option<String>,
+    on_open: EventHandler<()>,
+    on_add: EventHandler<String>,
+    on_remove: EventHandler<()>,
+) -> Element {
     let meta: Vec<String> = [
         (!song.writers.is_empty()).then(|| song.writers.join(", ")),
         song.key.clone(),
@@ -617,21 +811,40 @@ fn SongRow(song: SongEntry, busy: bool, on_open: EventHandler<()>) -> Element {
                     onclick: move |_| on_open.call(()),
                     if busy { "Opening…" } else { "Open" }
                 }
+                if !lists.is_empty() {
+                    select {
+                        class: "kf-select",
+                        "aria-label": "Add to a song list",
+                        value: "",
+                        onchange: move |e| {
+                            let id = e.value();
+                            if !id.is_empty() {
+                                on_add.call(id);
+                            }
+                        },
+                        option { value: "", "Add to…" }
+                        for (id, title) in lists.clone() {
+                            option { key: "{id}", value: "{id}", "{title}" }
+                        }
+                    }
+                }
+                if let Some(list) = in_list {
+                    button {
+                        class: "kf-button",
+                        title: "Take this song out of “{list}”",
+                        onclick: move |_| on_remove.call(()),
+                        "Remove"
+                    }
+                }
             }
         }
     }
 }
 
-/// An unattached chart on the shelf: what it is, Open, and Remove
-/// behind a confirmation.
+/// An unattached chart on the shelf: what it is, Open (bound, so a save
+/// edits it), and Remove behind a confirmation.
 #[component]
-fn ChartRow(
-    chart: ChartEntry,
-    org: String,
-    busy: bool,
-    on_open: EventHandler<()>,
-    on_deleted: EventHandler<()>,
-) -> Element {
+fn ChartRow(chart: ChartEntry, org: String, on_deleted: EventHandler<()>) -> Element {
     let mut confirming = use_signal(|| false);
     let mut deleting = use_signal(|| false);
     let mut failed = use_signal(|| None::<String>);
@@ -658,11 +871,10 @@ fn ChartRow(
                 }
             }
             div { class: "kf-library-actions",
-                button {
+                Link {
                     class: "kf-button",
-                    disabled: busy,
-                    onclick: move |_| on_open.call(()),
-                    if busy { "Opening…" } else { "Open" }
+                    to: Route::LibraryChart { org: org.clone(), slug: chart.slug.clone() },
+                    "Open"
                 }
                 if confirming() {
                     button {
@@ -740,6 +952,27 @@ mod tests {
         assert!(matches!(&rows[0], ListRow::Song(s) if s.slug == "basket-case"));
         assert!(matches!(&rows[1], ListRow::Missing(slug) if slug == "gone"));
         assert!(matches!(&rows[2], ListRow::Song(s) if s.slug == "wonderwall"));
+    }
+
+    /// What Save writes back for a bound chart is exactly what it was
+    /// bound to: same org, same slug, same song, same arrangement.
+    #[test]
+    fn a_bound_chart_carries_everything_a_save_must_keep() {
+        let stored = StoredChart {
+            slug: "wonderwall-default".to_owned(),
+            title: "Wonderwall".to_owned(),
+            source: "Wonderwall\n".to_owned(),
+            key: Some("F#m".to_owned()),
+            notation: None,
+            sections: vec!["vs-1".to_owned()],
+            song: Some("wonderwall".to_owned()),
+            arrangement: Some("Default".to_owned()),
+        };
+        let bound = BoundChart::of("rockstars-of-tomorrow", &stored);
+        assert_eq!(bound.org, "rockstars-of-tomorrow");
+        assert_eq!(bound.slug, "wonderwall-default");
+        assert_eq!(bound.song.as_deref(), Some("wonderwall"));
+        assert_eq!(bound.arrangement.as_deref(), Some("Default"));
     }
 
     #[test]

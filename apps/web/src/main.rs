@@ -60,6 +60,11 @@ pub enum Route {
     // — the editor is never gated behind an account.
     #[route("/library")]
     Library {},
+    // One stored chart, open in the editor and bound to it: Save
+    // updates this chart rather than keeping a new one. The org is in
+    // the path because a chart slug is only unique within its org.
+    #[route("/library/:org/:slug")]
+    LibraryChart { org: String, slug: String },
     #[route("/guide")]
     GuideIndex {},
     // Before `/guide/:slug`, or "graph" would match as a page slug.
@@ -95,7 +100,7 @@ pub enum Route {
 
 use routes::{
     AppendixIndex, AppendixPage, AuthCallback, Chart, Devices, Editor, GuideGraph, GuideIndex,
-    GuidePage, Home, Library, NotFound, Workbench,
+    GuidePage, Home, Library, LibraryChart, NotFound, Workbench,
 };
 
 fn main() {
