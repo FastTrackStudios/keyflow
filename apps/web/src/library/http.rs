@@ -1,8 +1,10 @@
 //! `window.fetch`, and nothing else.
 //!
-//! Two verbs, shared by [`super::discovery`] (a GET) and
-//! [`super::mcp`] (a POST). Both send the signed-in person's bearer
-//! token, and neither knows what is in the body.
+//! One verb — a GET with the signed-in person's bearer token — for
+//! [`super::discovery`], which reads Task's well-known document before
+//! any session exists. Everything else the library does goes over vox
+//! ([`super::vox`]); this is the one call that is HTTP under every
+//! transport.
 //!
 //! # Why `fetch` and not an HTTP client
 //!
@@ -14,10 +16,9 @@
 //! out of rust-lld, because each compiles its own copy of the
 //! wasm-streams glue. `apps/web/Cargo.toml` says so at length.
 //!
-//! Note that this constraint outlives the MCP transport above it. When
-//! the architect pin moves and the chart calls become vox, discovery is
-//! still a plain GET on a well-known path, and this is still how it is
-//! sent.
+//! Note that this constraint outlived the MCP transport that used to
+//! sit beside discovery: the chart calls became vox, discovery is still
+//! a plain GET on a well-known path, and this is still how it is sent.
 //!
 //! # The signatures are the same on both targets
 //!
@@ -27,39 +28,12 @@
 
 use super::LibraryError;
 
-/// POST a body, with a bearer token and a JSON content type.
+/// GET, with a bearer token.
 ///
 /// # Errors
 ///
 /// [`LibraryError::Transport`] if the request never got an answer, or
 /// [`LibraryError::Refused`] carrying the body of a non-2xx response.
-#[cfg(target_arch = "wasm32")]
-pub async fn post_json(url: &str, body: &str, token: &str) -> Result<String, LibraryError> {
-    let headers = web_sys::Headers::new().map_err(js)?;
-    headers
-        .set("content-type", "application/json")
-        .map_err(js)?;
-    // MCP's streamable-HTTP transport lets a server answer either as
-    // JSON or as an event stream; Task always answers JSON, and saying
-    // we accept both is what a compliant server expects to see.
-    headers
-        .set("accept", "application/json, text/event-stream")
-        .map_err(js)?;
-    headers
-        .set("authorization", &format!("Bearer {token}"))
-        .map_err(js)?;
-    let init = web_sys::RequestInit::new();
-    init.set_method("POST");
-    init.set_headers(&headers);
-    init.set_body(&wasm_bindgen::JsValue::from_str(body));
-    send(web_sys::Request::new_with_str_and_init(url, &init).map_err(js)?).await
-}
-
-/// GET, with a bearer token.
-///
-/// # Errors
-///
-/// As [`post_json`].
 #[cfg(target_arch = "wasm32")]
 pub async fn get(url: &str, token: &str) -> Result<String, LibraryError> {
     let headers = web_sys::Headers::new().map_err(js)?;
@@ -109,12 +83,6 @@ fn js(error: wasm_bindgen::JsValue) -> LibraryError {
 }
 
 /// There is no browser on the host, and no session to present to one.
-#[cfg(not(target_arch = "wasm32"))]
-#[allow(clippy::unused_async)]
-pub async fn post_json(_url: &str, _body: &str, _token: &str) -> Result<String, LibraryError> {
-    Err(LibraryError::Transport("not in a browser".to_owned()))
-}
-
 #[cfg(not(target_arch = "wasm32"))]
 #[allow(clippy::unused_async)]
 pub async fn get(_url: &str, _token: &str) -> Result<String, LibraryError> {

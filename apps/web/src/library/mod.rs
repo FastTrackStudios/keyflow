@@ -1,99 +1,94 @@
-//! The chart library — charts kept in a FastTrackStudio account.
+//! The library — the songs, song lists and charts kept in a
+//! FastTrackStudio workspace.
 //!
 //! The editor's persistence story is the URL ([`crate::chart_url`]): a
 //! chart deflates into a `/c/:data` path, so sharing one is sharing a
 //! link and nothing needs an account. That is deliberately enough to be
 //! useful, and none of it changes here. What it cannot do is give
-//! someone their charts back on a different machine, or a list of
-//! everything they have written. That is what an account is for — and
-//! only that. **The editor stays fully usable signed out**; this module
-//! adds a place to keep charts, never a gate in front of writing one.
+//! someone their charts back on a different machine, or show a band its
+//! repertoire. That is what an account is for — and only that. **The
+//! editor stays fully usable signed out**; this module adds a place to
+//! keep charts and a way to see a workspace's library, never a gate in
+//! front of writing one.
 //!
-//! # Where the charts actually live
+//! # Where the library actually lives
 //!
-//! In Task (`task.fasttrackstudio.app`), the vault product, under the
-//! signed-in person's org. Keyflow does not run a server and is not
-//! about to start: Task already is one — files on disk, versioned,
-//! reachable from the desktop app, the CLI and the phone — and a chart
-//! is a small text document, which is precisely what it stores. Keyflow
-//! writes into someone's existing vault rather than inventing a second
-//! account with a second copy of their work in it.
+//! In Task (`task.fasttrackstudio.app`), the vault product, under each
+//! workspace ("org") the signed-in person belongs to. Keyflow does not
+//! run a server and is not about to start: Task already is one — files
+//! on disk, versioned, reachable from the desktop app, the CLI and the
+//! phone — and a chart is a small text document, which is precisely
+//! what it stores. Keyflow reads and writes someone's existing vault
+//! rather than inventing a second account with a second copy of their
+//! work in it.
+//!
+//! # What is on the shelf
+//!
+//! Three things, and the words are Task's (ADR 0003/0004):
+//!
+//! * A **song** — a title, who wrote it, its usual key. The thing a
+//!   band means when it says "we do Wonderwall".
+//! * A **chart** — Keyflow source, the document this editor edits. A
+//!   chart is usually an *arrangement of a song* (`song:<slug>`), and a
+//!   song's charts have one **default**: the one to open when somebody
+//!   asks for "the chart". A chart with no song is *unattached*, which
+//!   is what the editor's Save makes and is a perfectly ordinary state.
+//! * A **song list** — an ordered list of songs: a repertoire, a set,
+//!   "Adult Jam". Task keeps it as a collection of `song:` references
+//!   and knows nothing about what it is for.
 //!
 //! # This module is a seam
 //!
-//! Five operations, in Keyflow's own words: [`list_charts`],
-//! [`read_chart`], [`save_chart`], [`delete_chart`], and
-//! [`org_target`] for the workspace they act in. Callers speak charts
-//! and orgs; nothing above this file mentions a wire format, and nothing
-//! above it should ever start to. That is the whole design constraint,
-//! and the next section is why.
+//! The operations, in Keyflow's own words: [`list_songlists`],
+//! [`list_songs`], [`list_charts`], [`read_chart`], [`save_chart`],
+//! [`delete_chart`], and [`org_target`] for the workspace they act in.
+//! Callers speak songs, charts and orgs; nothing above this file
+//! mentions a wire, and nothing above it should ever start to.
 //!
 //! ```text
-//! routes::library      the screens — charts, orgs, states
+//! routes::library      the screens — lists, songs, charts, states
 //!        │
 //!   library (here)     the operations, in domain terms
-//!        ├── mcp       ← today's transport. Replaceable.
+//!        ├── vox       ← the transport: Task's org lane, typed
 //!        ├── discovery ← orgs. HTTP either way.
-//!        └── http      ← window.fetch
+//!        └── http      ← window.fetch, for discovery
 //! ```
 //!
-//! # The transport, and why it is this one
+//! # The transport
 //!
-//! **The chart calls go over Task's MCP JSON-RPC endpoint
-//! (`POST /mcp`) with `window.fetch`, and that is a stepping stone, not
-//! the destination.** The intended transport is vox — architect's RPC
-//! layer, the same one Task's own web app, CLI and desktop client use,
-//! reaching `resources-proto`'s chart methods directly, with generated
-//! clients, typed errors and live subscriptions for free. That is what
-//! ADR 0003 (the cross-app backend: Task as the shared store for
-//! Session, Signal, Ignition and Keyflow) always intended.
+//! **vox** — architect's RPC layer, the same one Task's own web app,
+//! CLI and desktop client use — reaching `resources-proto`'s song and
+//! chart methods and `collection-proto`'s song lists directly, with
+//! generated clients and typed errors. That is what ADR 0003 (the
+//! cross-app backend: Task as the shared store for Session, Signal,
+//! Ignition and Keyflow) always intended, and [`vox`] says how.
 //!
-//! It could not be done when this was written, and the reason is a link
-//! error rather than a design view. Keyflow was pinned to architect
-//! `v0.0.2`; Task is on `v0.7.1`. Two architect versions in one wasm
-//! binary means two reqwest majors in one wasm binary, and each compiles
-//! its own copy of the wasm-streams glue — which comes out of rust-lld
-//! as a hundred `duplicate symbol: intounderlyingsource_*` errors.
-//! `apps/web/Cargo.toml` says the same thing at length in three separate
-//! places, because it is the binding constraint on this crate's whole
-//! dependency list: it is why the guide's graph rail uses *this* repo's
-//! `view-knowledge-graph` rather than task's, why `dioxus/fullstack` is
-//! not in the `web` feature, and why signing in is hand-rolled OIDC over
-//! `fetch` instead of `auth-http`.
-//!
-//! So: no `resources-proto`, no second `architect`, no client crate at
-//! all. Task exposes the same vault operations over MCP as plain JSON
-//! over HTTP, and JSON over HTTP is something `window.fetch` and
-//! `serde_json` — both already here for [`crate::auth`] — can do without
-//! adding a byte to the dependency graph.
-//!
-//! **The pin is being lifted.** When it reaches v0.7.1, the change is
-//! meant to be: take a vox client, rewrite the four functions at the
-//! bottom of this file to call it, delete [`mcp`]. Nothing in
-//! [`crate::routes::library`] should need to change, and if it does,
-//! this seam was drawn in the wrong place. [`discovery`] does not change
-//! either — a well-known document fetched before any session exists is
-//! HTTP under every transport.
+//! It was MCP JSON-RPC over `fetch` for a while, because this repo and
+//! Task were pinned to different architect tags and two copies of the
+//! same crate from two git sources do not link into one wasm binary.
+//! The pins are one tag now (`Cargo.toml`, the architect block), the
+//! proto crates come from Task by git, and the stepping stone is gone:
+//! four hand-parsed tool calls became six typed ones, and the screens
+//! above did not change shape — which is what the seam was for.
+//! [`discovery`] did not change either: a well-known document fetched
+//! before any session exists is HTTP under every transport.
 //!
 //! # What is pure, and why
 //!
-//! Everything except the `fetch` calls in [`http`]. Building a JSON-RPC
-//! envelope, reading a tool result out of the two-layer MCP response,
-//! deciding which org to write to — all of it is ordinary functions over
-//! strings that `just test` runs on the host, exactly the way
-//! [`crate::oidc`] keeps PKCE testable on a target with no browser in
-//! it. The browser half is then thin enough to read in one screen.
+//! Everything except the dial in [`vox`] and the `fetch` in [`http`].
+//! Deciding which org to write to, reading a chart's title and key out
+//! of the chart, turning a wire row into a shelf row — all of it is
+//! ordinary functions that `just test` runs on the host, exactly the
+//! way [`crate::oidc`] keeps PKCE testable on a target with no browser
+//! in it.
 //!
-//! # Degrading when a tool is not there
+//! # Degrading when the server cannot do something
 //!
-//! `list_charts`, `read_chart` and `write_chart` are live. `delete_chart`
-//! is not yet, and an older deployment has none of them: either answers
-//! `tools/call` with `unknown tool`, and that part of the library is
-//! then simply not available — which is a sentence on a page, not a
-//! panic and not a blank screen. [`LibraryError::Unsupported`] is that
-//! case, kept separate from every other failure precisely so the UI can
-//! say the true thing about it. It is a fallback rather than the normal
-//! path, and Remove is the one control that routinely takes it today.
+//! An older deployment without a method answers `UnknownMethod`, and
+//! that part of the library is then simply not available — which is a
+//! sentence on a page, not a panic and not a blank screen.
+//! [`LibraryError::Unsupported`] is that case, kept separate from every
+//! other failure precisely so the UI can say the true thing about it.
 
 // The transport half is browser-only, and the host build of the site
 // (`cargo check --workspace`, which is not `just web-check`) compiles
@@ -102,7 +97,7 @@
 
 pub mod discovery;
 mod http;
-mod mcp;
+mod vox;
 
 pub use discovery::{ORG_KEY, Org, OrgTarget, choose_org, my_orgs, org_target, remember_org};
 
@@ -120,28 +115,18 @@ pub fn task_base_url() -> String {
         .to_owned()
 }
 
-/// The MCP JSON-RPC endpoint — the *account* lane, which resolves the
-/// caller's orgs from their membership rather than being pinned to one.
-///
-/// Here rather than in [`mcp`] only because it is one line of the same
-/// base URL; it goes when that module does.
-#[must_use]
-pub fn mcp_url(base: &str) -> String {
-    format!("{}/mcp", base.trim_end_matches('/'))
-}
-
 // ── Failures ─────────────────────────────────────────────────────────
 
 /// Why a library operation did not happen.
 ///
-/// Deliberately transport-free: not one variant names HTTP, JSON-RPC or
-/// MCP, so the same set survives the move to vox and the screens keep
-/// matching on the same cases. Every variant is a different sentence on
-/// the screen, which is the only reason there is more than one of them.
-/// In particular [`Self::Unsupported`] is not folded into
-/// [`Self::Refused`]: "your charts are not available on this server yet"
-/// and "the server said no" ask the person to do completely different
-/// things.
+/// Deliberately transport-free: not one variant names a socket, a
+/// handshake or a generated client, so the same set survived the move
+/// from MCP to vox and the screens kept matching on the same cases.
+/// Every variant is a different sentence on the screen, which is the
+/// only reason there is more than one of them. In particular
+/// [`Self::Unsupported`] is not folded into [`Self::Refused`]: "your
+/// charts are not available on this server yet" and "the server said
+/// no" ask the person to do completely different things.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LibraryError {
     /// Nobody is signed in, so there is no token to present. Not an
@@ -152,15 +137,15 @@ pub enum LibraryError {
     /// Task auto-provisions a personal org on first ask, so this is
     /// rare; when it happens it is said plainly rather than retried.
     NoOrg,
-    /// The server does not offer chart storage. An older deployment, or
-    /// one with the vault plugin turned off.
+    /// The server does not offer this part of the library. An older
+    /// deployment, or one with the vault plugin turned off.
     Unsupported,
     /// The server understood and declined, and said why.
     Refused(String),
     /// The server answered with something this client cannot read.
     Malformed(String),
-    /// The request never got an answer — offline, DNS, CORS, a dead
-    /// host.
+    /// The request never got an answer — offline, DNS, a dead host, a
+    /// socket that would not open.
     Transport(String),
 }
 
@@ -185,9 +170,39 @@ impl std::fmt::Display for LibraryError {
 
 impl std::error::Error for LibraryError {}
 
-// ── What a kept chart is ─────────────────────────────────────────────
+// ── What is on the shelf ─────────────────────────────────────────────
 
-/// A row in a listing.
+/// A song in a workspace's library.
+///
+/// The thing a set list names. It carries no chart: a song's charts are
+/// asked for when someone opens it ([`list_charts`] with the song), and
+/// a library of two hundred songs is not two hundred documents.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SongEntry {
+    pub slug: String,
+    pub title: String,
+    /// Who wrote it, as the server has it. For a covers repertoire this
+    /// is the artist; empty is ordinary.
+    pub writers: Vec<String>,
+    /// The song's usual key; an arrangement may differ and says so on
+    /// its own chart.
+    pub key: Option<String>,
+    pub tags: Vec<String>,
+}
+
+/// An ordered list of songs — a repertoire, a set, "Adult Jam".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SongList {
+    pub id: String,
+    pub title: String,
+    /// Song slugs, in the list's order. Slugs rather than
+    /// [`SongEntry`]s because the list and the library are two calls,
+    /// and a slug in a list whose song has since gone is shown as the
+    /// slug rather than dropped — a missing song is information.
+    pub songs: Vec<String>,
+}
+
+/// A row in a chart listing.
 ///
 /// Named for what it is rather than `ChartSummary`, which is taken:
 /// [`keyflow::summary::ChartSummary`] is the language's own projection
@@ -200,10 +215,18 @@ pub struct ChartEntry {
     pub title: String,
     pub key: Option<String>,
     pub notation: Option<String>,
-    /// The shape of the song — `["IN", "VS 1", "CH"]`. Enough to tell
+    /// The shape of the song — `["in", "vs-1", "ch"]`. Enough to tell
     /// two charts with similar titles apart at a glance, which is what
     /// a shelf is for.
     pub sections: Vec<String>,
+    /// The song this chart arranges, by slug; `None` is unattached.
+    pub song: Option<String>,
+    /// Which reading of the song this is, in a person's own words —
+    /// `acoustic in G`. Empty for the first chart of most songs.
+    pub arrangement: Option<String>,
+    /// The song's main chart: the one to open when nobody names an
+    /// arrangement. Never true for an unattached chart.
+    pub is_default: bool,
     /// As the server spelled it. Not parsed into a date type: it is
     /// shown, not computed with, and inventing a chrono dependency to
     /// reformat a string nobody sorts by is not worth it.
@@ -222,6 +245,8 @@ pub struct StoredChart {
     pub key: Option<String>,
     pub notation: Option<String>,
     pub sections: Vec<String>,
+    /// The song it arranges, by slug; `None` is unattached.
+    pub song: Option<String>,
 }
 
 /// What a save answers with.
@@ -246,6 +271,10 @@ pub struct Draft {
     /// second chart.
     pub slug: Option<String>,
     pub org: Option<String>,
+    /// The song to attach it to, by slug. Absent is unattached — what
+    /// the editor's Save makes, since a person saves a chart before
+    /// they have said what song it is.
+    pub song: Option<String>,
 }
 
 /// Title, key and sections for a chart, read out of the chart itself.
@@ -297,6 +326,7 @@ pub fn draft_from_source(source: &str) -> Draft {
         source: source.to_owned(),
         slug: None,
         org: None,
+        song: None,
     }
 }
 
@@ -331,56 +361,91 @@ fn anchors(labels: &[String]) -> Vec<String> {
     out
 }
 
+/// The chart to open when somebody asks for a song and names no
+/// arrangement: the one the server marks default, else the first.
+///
+/// The fallback matters for a library that was imported rather than
+/// written here — every song has at least one chart, and a song whose
+/// only chart is not flagged still opens.
+#[must_use]
+pub fn default_chart(charts: &[ChartEntry]) -> Option<&ChartEntry> {
+    charts
+        .iter()
+        .find(|chart| chart.is_default)
+        .or_else(|| charts.first())
+}
+
 // ── The operations ───────────────────────────────────────────────────
 //
 // The seam. Free async functions rather than a trait, because there is
 // exactly one implementation at a time and a trait would buy a vtable,
 // an object-safety problem around `async fn`, and a second place to
 // change when the transport moves. What matters is that the signatures
-// name charts and orgs, and that swapping `mcp` for a vox client leaves
-// them alone.
+// name songs, charts and orgs. Every one takes the org explicitly: the
+// transport is one connection *per org*, and "whichever org the server
+// picks" is not a lane anybody can dial.
 
-/// Everything this account has kept, in `org` (or its default org).
+/// The song lists kept in `org`, each with its songs in order.
 ///
 /// # Errors
 ///
 /// [`LibraryError::SignedOut`] with no session,
-/// [`LibraryError::Unsupported`] where the server has no chart storage,
+/// [`LibraryError::Unsupported`] where the server has no collections,
+/// [`LibraryError::Refused`] where the token is not a member of `org`,
 /// or whatever the server said.
-pub async fn list_charts(org: Option<&str>) -> Result<Vec<ChartEntry>, LibraryError> {
-    mcp::list_charts(org).await
+pub async fn list_songlists(org: &str) -> Result<Vec<SongList>, LibraryError> {
+    vox::list_songlists(org).await
+}
+
+/// Every song in `org`'s library.
+///
+/// # Errors
+///
+/// As [`list_songlists`].
+pub async fn list_songs(org: &str) -> Result<Vec<SongEntry>, LibraryError> {
+    vox::list_songs(org).await
+}
+
+/// Every chart in `org` — or, with `song`, one song's arrangements.
+///
+/// # Errors
+///
+/// As [`list_songlists`].
+pub async fn list_charts(org: &str, song: Option<&str>) -> Result<Vec<ChartEntry>, LibraryError> {
+    vox::list_charts(org, song).await
 }
 
 /// One chart, in full, ready to open in the editor.
 ///
 /// # Errors
 ///
-/// As [`list_charts`].
-pub async fn read_chart(slug: &str, org: Option<&str>) -> Result<StoredChart, LibraryError> {
-    mcp::read_chart(slug, org).await
+/// As [`list_songlists`].
+pub async fn read_chart(org: &str, slug: &str) -> Result<StoredChart, LibraryError> {
+    vox::read_chart(org, slug).await
 }
 
 /// Keep a chart: a new one, or a new version of one already there.
 ///
-/// Named for what a person is doing. The lane it lands on is called
-/// `write_chart` — see [`mcp`] — and the difference is the seam doing
-/// its job: "save" is the word on the button, `write_*` is the pattern
+/// Named for what a person is doing. The method it lands on is called
+/// `upsert_chart` — see [`vox`] — and the difference is the seam doing
+/// its job: "save" is the word on the button, `upsert_*` is the pattern
 /// every ADR-0003 asset lane follows.
 ///
 /// # Errors
 ///
-/// As [`list_charts`].
+/// [`LibraryError::NoOrg`] when the draft names no workspace, else as
+/// [`list_songlists`].
 pub async fn save_chart(draft: &Draft) -> Result<SaveOutcome, LibraryError> {
-    mcp::save_chart(draft).await
+    vox::save_chart(draft).await
 }
 
 /// Take a chart off the shelf.
 ///
 /// # Errors
 ///
-/// As [`list_charts`].
-pub async fn delete_chart(slug: &str, org: Option<&str>) -> Result<(), LibraryError> {
-    mcp::delete_chart(slug, org).await
+/// As [`list_songlists`].
+pub async fn delete_chart(org: &str, slug: &str) -> Result<(), LibraryError> {
+    vox::delete_chart(org, slug).await
 }
 
 #[cfg(test)]
@@ -423,9 +488,10 @@ mod tests {
     /// A draft never carries a notation, and the type has no field for
     /// one. See [`draft_from_source`] for why that is a decision rather
     /// than an omission; this destructuring is what makes the shape
-    /// hard to change by accident.
+    /// hard to change by accident. It is also unattached and homeless
+    /// until the screen says otherwise.
     #[test]
-    fn a_draft_makes_no_claim_about_notation() {
+    fn a_draft_makes_no_claim_about_notation_song_or_org() {
         let Draft {
             title: _,
             source: _,
@@ -433,8 +499,9 @@ mod tests {
             sections: _,
             slug,
             org,
+            song,
         } = draft_from_source(keyflow_ui::examples::EXAMPLE_THRILLER);
-        assert!(slug.is_none() && org.is_none());
+        assert!(slug.is_none() && org.is_none() && song.is_none());
     }
 
     /// Sections go up as anchors, in order, once each. They are what
@@ -464,9 +531,36 @@ mod tests {
         );
     }
 
+    fn chart(slug: &str, is_default: bool) -> ChartEntry {
+        ChartEntry {
+            slug: slug.to_owned(),
+            title: slug.to_owned(),
+            key: None,
+            notation: None,
+            sections: Vec::new(),
+            song: Some("s".to_owned()),
+            arrangement: None,
+            is_default,
+            updated_at: None,
+        }
+    }
+
+    /// "The chart" of a song is the flagged one; an imported song whose
+    /// chart was never flagged still opens.
     #[test]
-    fn urls_are_built_off_one_base() {
-        assert_eq!(mcp_url("https://task.test/"), "https://task.test/mcp");
+    fn a_songs_default_chart_is_the_flagged_one_else_the_first() {
+        let flagged = [chart("a", false), chart("b", true)];
+        assert_eq!(default_chart(&flagged).map(|c| c.slug.as_str()), Some("b"));
+        let unflagged = [chart("a", false), chart("b", false)];
+        assert_eq!(
+            default_chart(&unflagged).map(|c| c.slug.as_str()),
+            Some("a")
+        );
+        assert!(default_chart(&[]).is_none());
+    }
+
+    #[test]
+    fn the_base_url_is_the_production_server() {
         assert_eq!(task_base_url(), "https://task.fasttrackstudio.app");
     }
 }

@@ -12,14 +12,14 @@
 //! know — and a picker listing every org on a shared server, most of
 //! which the person cannot write to, is worse than no picker at all.
 //!
-//! # Why this is not in [`super::mcp`]
+//! # Why this is not in [`super::vox`]
 //!
-//! Because it does not change when the transport does. The chart calls
-//! are MCP-over-HTTP today and vox tomorrow (see the module docs above);
-//! discovery is a plain HTTP GET on a well-known path either way — it is
-//! how a client learns what a server hosts *before* it has a session or
-//! a transport. Tangling it into the MCP module would mean deleting and
-//! rewriting it for no reason when the pin moves.
+//! Because it does not change when the transport does. The library
+//! calls were MCP-over-HTTP once and are vox now (see the module docs
+//! above); discovery was a plain HTTP GET on a well-known path under
+//! both — it is how a client learns what a server hosts *before* it has
+//! a session or a transport. Keeping it apart is what let the transport
+//! move without this file changing.
 //!
 //! # What is pure
 //!

@@ -1898,3 +1898,27 @@ body {
 .kf-library-title { font-weight: 550; color: var(--ink); }
 .kf-library-meta { font-size: 0.8rem; color: var(--ink-soft); }
 .kf-library-actions { display: flex; gap: 0.4rem; flex: 0 0 auto; }
+
+/* The shelf is three groups — song lists, songs, charts — and a song
+   list is a native disclosure: the browser keeps it open or shut, so
+   nothing re-renders to toggle it and it works without a script. */
+.kf-library-section { margin: 0 0 2rem; }
+.kf-library-section > h2 { font-size: 1.05rem; margin: 0 0 0.5rem; }
+.kf-library-group { border-bottom: 1px solid var(--line); }
+.kf-library-group > summary {
+  cursor: pointer;
+  padding: 0.75rem 0;
+  font-weight: 550;
+  color: var(--ink);
+  list-style: none;
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+.kf-library-group > summary::-webkit-details-marker { display: none; }
+.kf-library-group > summary::before { content: "▸"; color: var(--ink-soft); font-size: 0.8rem; }
+.kf-library-group[open] > summary::before { content: "▾"; }
+.kf-library-count { font-size: 0.8rem; color: var(--ink-soft); font-weight: 400; }
+.kf-library-group > .kf-library-list { padding-left: 1.2rem; }
+.kf-library-group > .kf-library-list > .kf-library-row:last-child { border-bottom: 0; }
+.kf-library-missing { color: var(--ink-soft); font-style: italic; }
