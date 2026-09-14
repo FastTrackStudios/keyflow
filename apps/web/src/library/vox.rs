@@ -800,7 +800,10 @@ mod tests {
         assert_eq!(doc.sections, ["vs-1"]);
         assert_eq!(doc.updated_at, "2026-09-14T10:00:00Z");
         assert_eq!(doc.arrangement, "acoustic");
-        assert!(doc.is_default, "a chart saved to a song asks to be its chart");
+        assert!(
+            doc.is_default,
+            "a chart saved to a song asks to be its chart"
+        );
     }
 
     #[test]
