@@ -1,12 +1,31 @@
-//! The chart library — the two screens an account is actually for.
+//! The library — the two screens an account is actually for.
 //!
 //! [`SaveToLibrary`] is a button in the editor's pane header, and
-//! [`Library`] is `/library`, the list of everything kept. Between them
-//! they are the entire user-facing surface of [`crate::library`], and
-//! both hold to the same rule the account itself does: **nothing here
-//! gates the editor**. Signed out, the button is an invitation and the
-//! screen is a sentence explaining what an account would give you. The
-//! chart in the URL keeps working either way.
+//! [`Library`] is `/library`: a workspace's song lists, its songs, and
+//! the charts kept there. Between them they are the entire user-facing
+//! surface of [`crate::library`], and both hold to the same rule the
+//! account itself does: **nothing here gates the editor**. Signed out,
+//! the button is an invitation and the screen is a sentence explaining
+//! what an account would give you. The chart in the URL keeps working
+//! either way.
+//!
+//! # What the shelf shows
+//!
+//! Three groups, in the order a band thinks about them:
+//!
+//! * **Song lists** — "Adult Jam", a set, a repertoire. Each opens to
+//!   its songs in order. A list that names a song the library no
+//!   longer has shows the slug, greyed, rather than silently shrinking:
+//!   a missing song is something to fix, not something to hide.
+//! * **Songs** — everything in the workspace's library, with who wrote
+//!   it and its usual key.
+//! * **Charts** — the unattached ones, which is what the editor's Save
+//!   makes. A chart that belongs to a song is reached through the song.
+//!
+//! Opening a song opens *the* chart of it — the one the server marks
+//! default, else its first — because "open Wonderwall" means the chart,
+//! and asking which arrangement every time would be asking a question
+//! the person did not have.
 //!
 //! # Every state a save can be in
 //!
@@ -22,8 +41,8 @@
 //! * **failed** — the reason, in words, and the chart untouched. A
 //!   failed save must never look like a lost chart.
 //! * **not available yet** — its own case, because the server may not
-//!   carry the chart tools yet and "your library is not on this server
-//!   yet" is not a failure anyone can act on. See
+//!   carry the library methods yet and "your library is not on this
+//!   server yet" is not a failure anyone can act on. See
 //!   [`crate::library::LibraryError::Unsupported`].
 //!
 //! # Which org
@@ -31,9 +50,10 @@
 //! Task auto-provisions a personal org for every account, so the common
 //! case is exactly one and nobody is asked anything. Someone in several
 //! is asked once, and the answer is remembered
-//! ([`crate::library::ORG_KEY`]). The decision itself is
-//! [`crate::library::choose_org`], which is pure and tested; what is
-//! here is only the panel that shows it.
+//! ([`crate::library::ORG_KEY`]); the shelf then has a picker to change
+//! it, since a person in a band and a church has two libraries. The
+//! decision itself is [`crate::library::choose_org`], which is pure and
+//! tested; what is here is only the panel that shows it.
 //!
 //! # Opening a chart puts it back in the URL
 //!
@@ -44,36 +64,31 @@
 //! same slug from the same title, which makes that a new *version*
 //! rather than a second chart.
 
+use std::collections::HashMap;
+
 use dioxus::prelude::*;
 
 use crate::Route;
 use crate::auth::{AuthState, use_auth};
 use crate::chart_url;
-use crate::library::{self, ChartEntry, LibraryError, Org, OrgTarget, StoredChart};
+use crate::library::{
+    self, ChartEntry, LibraryError, Org, OrgTarget, SongEntry, SongList, StoredChart,
+};
 use crate::routes::Shell;
 
-// ── Saving ───────────────────────────────────────────────────────────
+// ── Save ─────────────────────────────────────────────────────────────
 
-/// What the save control is currently saying.
 #[derive(Clone, Debug, PartialEq)]
 enum SaveState {
-    /// Nothing to say — just the button.
     Idle,
-    /// Signed out, and the person asked to save anyway.
     Invited,
     Saving,
-    /// Saved, and which chart it became.
     Saved(String),
-    /// The account is in several orgs and has not picked one.
     Pick(Vec<Org>),
     Failed(String),
 }
 
-/// "Save" for the chart currently in the editor.
-///
-/// Takes the source rather than reading a global buffer, for the same
-/// reason [`crate::routes::editor`] keeps the chart in a component
-/// signal: the chart belongs to the screen showing it.
+/// The Save button in the editor, and the panel under it.
 #[component]
 pub fn SaveToLibrary(source: String) -> Element {
     let mut auth = use_auth();
@@ -81,9 +96,6 @@ pub fn SaveToLibrary(source: String) -> Element {
 
     let signed_in = matches!((auth.state)(), AuthState::SignedIn(_));
     let showing = state();
-    // Read out before the match below consumes `showing`: the button's
-    // label and its disabled-ness are facts about the state, and the
-    // panel is a rendering of it.
     let saving = matches!(showing, SaveState::Saving);
     let inviting = matches!(showing, SaveState::Invited);
     let label = match showing {
@@ -92,11 +104,6 @@ pub fn SaveToLibrary(source: String) -> Element {
         _ => "Save",
     };
 
-    // The chart, encoded as the route that carries it. Two jobs: it is
-    // where a sign-in redirect must come back to (the editor's URL does
-    // not track typing, so parking the current path would park an empty
-    // editor), and it is what makes "sign in to save" safe to click
-    // mid-chart.
     let here = format!("/c/{}", chart_url::encode(&source));
 
     let start_save = move |source: String, org: Option<String>| {
@@ -151,10 +158,6 @@ pub fn SaveToLibrary(source: String) -> Element {
             match showing {
                 SaveState::Idle | SaveState::Saving => rsx! {},
 
-                // Signed out. An invitation, and an honest sentence
-                // about what is and is not at stake — the chart is in
-                // the link either way, and saying so is what makes
-                // leaving for the issuer a safe-looking thing to do.
                 SaveState::Invited => rsx! {
                     div { class: "kf-save-panel",
                         p { class: "kf-account-note",
@@ -197,8 +200,6 @@ pub fn SaveToLibrary(source: String) -> Element {
                     }
                 },
 
-                // Several workspaces, and no answer remembered. Asked
-                // once; the choice is remembered on the way through.
                 SaveState::Pick(orgs) => rsx! {
                     div { class: "kf-save-panel",
                         p { class: "kf-account-note", "Which workspace should keep it?" }
@@ -242,37 +243,89 @@ pub fn SaveToLibrary(source: String) -> Element {
     }
 }
 
-// ── The library screen ───────────────────────────────────────────────
+// ── The shelf ────────────────────────────────────────────────────────
 
-/// What `/library` found.
+/// What `/library` has to show once it knows who is asking.
 #[derive(Clone, Debug, PartialEq)]
 enum Shelf {
-    /// The account is in several orgs and has not picked one.
+    /// Several workspaces and no remembered choice: ask once.
     Pick(Vec<Org>),
-    Charts {
-        /// The org these came from.
+    /// One workspace's library, and the others it could switch to.
+    Library {
         org: String,
-        /// Everywhere else they could have come from, for the switcher.
         elsewhere: Vec<Org>,
+        songlists: Vec<SongList>,
+        songs: Vec<SongEntry>,
+        /// The unattached charts only; a song's charts are reached
+        /// through the song.
         charts: Vec<ChartEntry>,
     },
 }
 
-/// `/library` — everything this account has kept.
+/// The shelf for the chosen (or remembered, or only) workspace.
+///
+/// Three calls on one connection, in the order the page shows them.
+/// The chart listing is the whole shelf and is filtered here to the
+/// unattached ones, because "every chart" and "the charts a song owns"
+/// are the same server call with and without a filter, and one call
+/// for the shelf beats one per song.
+async fn shelf_for(chosen: Option<String>) -> Result<Shelf, LibraryError> {
+    let orgs = library::my_orgs().await?;
+    let remembered = chosen.or_else(|| crate::prefs::string(library::ORG_KEY));
+    match library::choose_org(&orgs, remembered.as_deref()) {
+        OrgTarget::None => Err(LibraryError::NoOrg),
+        OrgTarget::Choose(orgs) => Ok(Shelf::Pick(orgs)),
+        OrgTarget::One(slug) => {
+            let songlists = library::list_songlists(&slug).await?;
+            let songs = library::list_songs(&slug).await?;
+            let charts = library::list_charts(&slug, None)
+                .await?
+                .into_iter()
+                .filter(|chart| chart.song.is_none())
+                .collect();
+            Ok(Shelf::Library {
+                org: slug,
+                elsewhere: orgs,
+                songlists,
+                songs,
+                charts,
+            })
+        }
+    }
+}
+
+/// A song list's rows: its songs in the list's order, resolved against
+/// the library, with a missing one kept as its slug.
+fn rows_of(list: &SongList, songs: &HashMap<String, SongEntry>) -> Vec<ListRow> {
+    list.songs
+        .iter()
+        .map(|slug| match songs.get(slug) {
+            Some(song) => ListRow::Song(song.clone()),
+            None => ListRow::Missing(slug.clone()),
+        })
+        .collect()
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum ListRow {
+    Song(SongEntry),
+    Missing(String),
+}
+
+/// `/library`.
 #[component]
 pub fn Library() -> Element {
     let mut auth = use_auth();
     let mut picked = use_signal(|| None::<String>);
     let mut reload = use_signal(|| 0_u32);
+    // What is being opened right now, as `song:<slug>` or
+    // `chart:<slug>`, so exactly that row says "Opening…".
     let mut opening = use_signal(|| None::<String>);
     let mut trouble = use_signal(|| None::<String>);
     let navigator = use_navigator();
 
     let state = (auth.state)();
     let shelf = use_resource(move || {
-        // Read both so the listing re-runs when the org changes and
-        // when something asks for a refresh — a save from the editor,
-        // or a delete from this screen.
         let chosen = picked();
         let _ = reload();
         let signed_in = matches!((auth.state)(), AuthState::SignedIn(_));
@@ -284,14 +337,37 @@ pub fn Library() -> Element {
         }
     });
 
-    let open = move |slug: String, org: Option<String>| {
+    let open_chart = move |org: String, slug: String| {
         spawn(async move {
-            opening.set(Some(slug.clone()));
+            opening.set(Some(format!("chart:{slug}")));
             trouble.set(None);
-            match library::read_chart(&slug, org.as_deref()).await {
+            match library::read_chart(&org, &slug).await {
                 Ok(StoredChart { source, .. }) => {
-                    // Straight back into the URL the rest of the site
-                    // speaks. See the module docs.
+                    navigator.push(Route::Chart {
+                        data: chart_url::encode(&source),
+                    });
+                }
+                Err(error) => trouble.set(Some(error.to_string())),
+            }
+            opening.set(None);
+        });
+    };
+
+    let open_song = move |org: String, slug: String| {
+        spawn(async move {
+            opening.set(Some(format!("song:{slug}")));
+            trouble.set(None);
+            let opened = match library::list_charts(&org, Some(&slug)).await {
+                Ok(charts) => match library::default_chart(&charts) {
+                    Some(chart) => library::read_chart(&org, &chart.slug).await,
+                    None => Err(LibraryError::Refused(format!(
+                        "“{slug}” has no chart yet. Write one in the editor and save it."
+                    ))),
+                },
+                Err(error) => Err(error),
+            };
+            match opened {
+                Ok(StoredChart { source, .. }) => {
                     navigator.push(Route::Chart {
                         data: chart_url::encode(&source),
                     });
@@ -305,26 +381,23 @@ pub fn Library() -> Element {
     rsx! {
         Shell {
             section { class: "kf-prose kf-library",
-                h1 { "Your charts" }
+                h1 { "Your library" }
 
                 if let Some(message) = trouble() {
                     p { class: "kf-account-error", role: "alert", "{message}" }
                 }
 
                 match (&state, &*shelf.read_unchecked()) {
-                    // Before the stored session has resolved. Nothing,
-                    // rather than a flash of "sign in" at someone who
-                    // turns out to be signed in — the same reason
-                    // `AccountMenu` draws nothing while loading.
                     (AuthState::Loading, _) | (_, None) => rsx! {
                         p { class: "kf-note", "One moment…" }
                     },
 
                     (_, Some(Err(LibraryError::SignedOut))) => rsx! {
                         p {
-                            "A FastTrackStudio account keeps your charts, so you can open them
-                             again from any browser. The editor does not need one — a chart
-                             lives in its link — but a link is not a shelf."
+                            "A FastTrackStudio account keeps your charts, and shows you the
+                             songs and set lists of every workspace you are in. The editor
+                             does not need one — a chart lives in its link — but a link is
+                             not a shelf."
                         }
                         div { class: "kf-account-actions",
                             button {
@@ -354,7 +427,7 @@ pub fn Library() -> Element {
                     },
 
                     (_, Some(Ok(Shelf::Pick(orgs)))) => rsx! {
-                        p { "You are in more than one workspace. Which one holds your charts?" }
+                        p { "You are in more than one workspace. Which library do you want?" }
                         div { class: "kf-save-orgs",
                             for org in orgs.clone() {
                                 button {
@@ -370,10 +443,17 @@ pub fn Library() -> Element {
                         }
                     },
 
-                    (_, Some(Ok(Shelf::Charts { org, elsewhere, charts }))) => {
+                    (_, Some(Ok(Shelf::Library { org, elsewhere, songlists, songs, charts }))) => {
                         let org = org.clone();
-                        let charts = charts.clone();
                         let elsewhere = elsewhere.clone();
+                        let songlists = songlists.clone();
+                        let charts = charts.clone();
+                        let by_slug: HashMap<String, SongEntry> = songs
+                            .iter()
+                            .map(|song| (song.slug.clone(), song.clone()))
+                            .collect();
+                        let songs = songs.clone();
+                        let empty = songlists.is_empty() && songs.is_empty() && charts.is_empty();
                         rsx! {
                             if elsewhere.len() > 1 {
                                 p { class: "kf-library-where",
@@ -395,7 +475,7 @@ pub fn Library() -> Element {
                                 }
                             }
 
-                            if charts.is_empty() {
+                            if empty {
                                 p {
                                     "Nothing here yet. Write a chart and press Save above it —
                                      it will be waiting the next time you sign in."
@@ -403,20 +483,93 @@ pub fn Library() -> Element {
                                 Link { class: "kf-account-link", to: Route::Editor {},
                                     "Open the editor"
                                 }
-                            } else {
-                                ul { class: "kf-library-list",
-                                    for chart in charts {
-                                        LibraryRow {
-                                            key: "{chart.slug}",
-                                            chart: chart.clone(),
-                                            org: org.clone(),
-                                            busy: opening() == Some(chart.slug.clone()),
-                                            on_open: {
-                                                let slug = chart.slug.clone();
-                                                let org = org.clone();
-                                                move |()| open(slug.clone(), Some(org.clone()))
-                                            },
-                                            on_deleted: move |()| reload += 1,
+                            }
+
+                            if !songlists.is_empty() {
+                                div { class: "kf-library-section",
+                                    h2 { "Song lists" }
+                                    for list in songlists {
+                                        details {
+                                            key: "{list.id}",
+                                            class: "kf-library-group",
+                                            summary {
+                                                "{list.title}"
+                                                span { class: "kf-library-count",
+                                                    {plural(list.songs.len(), "song")}
+                                                }
+                                            }
+                                            ul { class: "kf-library-list",
+                                                for row in rows_of(&list, &by_slug) {
+                                                    match row {
+                                                        ListRow::Song(song) => rsx! {
+                                                            SongRow {
+                                                                key: "{list.id}/{song.slug}",
+                                                                song: song.clone(),
+                                                                busy: opening() == Some(format!("song:{}", song.slug)),
+                                                                on_open: {
+                                                                    let org = org.clone();
+                                                                    let slug = song.slug.clone();
+                                                                    move |()| open_song(org.clone(), slug.clone())
+                                                                },
+                                                            }
+                                                        },
+                                                        ListRow::Missing(slug) => rsx! {
+                                                            li { key: "{list.id}/{slug}", class: "kf-library-row",
+                                                                div { class: "kf-library-what",
+                                                                    span { class: "kf-library-title kf-library-missing",
+                                                                        "{slug}"
+                                                                    }
+                                                                    span { class: "kf-library-meta",
+                                                                        "not in this library any more"
+                                                                    }
+                                                                }
+                                                            }
+                                                        },
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if !songs.is_empty() {
+                                div { class: "kf-library-section",
+                                    h2 { "Songs" }
+                                    ul { class: "kf-library-list",
+                                        for song in songs {
+                                            SongRow {
+                                                key: "{song.slug}",
+                                                song: song.clone(),
+                                                busy: opening() == Some(format!("song:{}", song.slug)),
+                                                on_open: {
+                                                    let org = org.clone();
+                                                    let slug = song.slug.clone();
+                                                    move |()| open_song(org.clone(), slug.clone())
+                                                },
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if !charts.is_empty() {
+                                div { class: "kf-library-section",
+                                    h2 { "Charts" }
+                                    ul { class: "kf-library-list",
+                                        for chart in charts {
+                                            ChartRow {
+                                                key: "{chart.slug}",
+                                                chart: chart.clone(),
+                                                org: org.clone(),
+                                                busy: opening() == Some(format!("chart:{}", chart.slug)),
+                                                on_open: {
+                                                    let slug = chart.slug.clone();
+                                                    let org = org.clone();
+                                                    move |()| open_chart(org.clone(), slug.clone())
+                                                },
+                                                on_deleted: move |()| reload += 1,
+                                            }
                                         }
                                     }
                                 }
@@ -429,14 +582,50 @@ pub fn Library() -> Element {
     }
 }
 
-/// One chart on the shelf.
-///
-/// Delete is two clicks, not one and not a browser `confirm()`. A chart
-/// is somebody's work and the row is small; one misplaced click should
-/// not be able to remove it, and a modal dialog for a list item is more
-/// interruption than the decision deserves.
+/// `1 song`, `12 songs`.
+fn plural(n: usize, noun: &str) -> String {
+    if n == 1 {
+        format!("{n} {noun}")
+    } else {
+        format!("{n} {noun}s")
+    }
+}
+
+/// A song on the shelf: title, who wrote it, its key, and Open.
 #[component]
-fn LibraryRow(
+fn SongRow(song: SongEntry, busy: bool, on_open: EventHandler<()>) -> Element {
+    let meta: Vec<String> = [
+        (!song.writers.is_empty()).then(|| song.writers.join(", ")),
+        song.key.clone(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+
+    rsx! {
+        li { class: "kf-library-row",
+            div { class: "kf-library-what",
+                span { class: "kf-library-title", "{song.title}" }
+                if !meta.is_empty() {
+                    span { class: "kf-library-meta", "{meta.join(\" · \")}" }
+                }
+            }
+            div { class: "kf-library-actions",
+                button {
+                    class: "kf-button",
+                    disabled: busy,
+                    onclick: move |_| on_open.call(()),
+                    if busy { "Opening…" } else { "Open" }
+                }
+            }
+        }
+    }
+}
+
+/// An unattached chart on the shelf: what it is, Open, and Remove
+/// behind a confirmation.
+#[component]
+fn ChartRow(
     chart: ChartEntry,
     org: String,
     busy: bool,
@@ -447,14 +636,6 @@ fn LibraryRow(
     let mut deleting = use_signal(|| false);
     let mut failed = use_signal(|| None::<String>);
 
-    // Key, then the shape of the song, then when it last changed. The
-    // sections are what tell two charts with similar titles apart
-    // without opening either.
-    //
-    // `notation` is the stored *dialect*, and every chart this editor
-    // writes is `keyflow` — a column reading "keyflow" on every row
-    // says nothing, so it appears only when it is something else (a
-    // chart imported as ChordPro, say).
     let meta: Vec<String> = [
         chart.key.clone(),
         (!chart.sections.is_empty()).then(|| chart.sections.join(" ")),
@@ -495,7 +676,7 @@ fn LibraryRow(
                                 let org = org.clone();
                                 spawn(async move {
                                     deleting.set(true);
-                                    match library::delete_chart(&slug, Some(&org)).await {
+                                    match library::delete_chart(&org, &slug).await {
                                         Ok(()) => on_deleted.call(()),
                                         Err(error) => failed.set(Some(error.to_string())),
                                     }
@@ -523,20 +704,48 @@ fn LibraryRow(
     }
 }
 
-/// Resolve the org and fetch its charts.
-///
-/// `chosen` is a pick made in this session, which beats the remembered
-/// one — someone using the switcher is answering the question again.
-async fn shelf_for(chosen: Option<String>) -> Result<Shelf, LibraryError> {
-    let orgs = library::my_orgs().await?;
-    let remembered = chosen.or_else(|| crate::prefs::string(library::ORG_KEY));
-    match library::choose_org(&orgs, remembered.as_deref()) {
-        OrgTarget::None => Err(LibraryError::NoOrg),
-        OrgTarget::Choose(orgs) => Ok(Shelf::Pick(orgs)),
-        OrgTarget::One(slug) => Ok(Shelf::Charts {
-            charts: library::list_charts(Some(&slug)).await?,
-            elsewhere: orgs,
-            org: slug,
-        }),
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn song(slug: &str) -> SongEntry {
+        SongEntry {
+            slug: slug.to_owned(),
+            title: slug.to_uppercase(),
+            writers: Vec::new(),
+            key: None,
+            tags: Vec::new(),
+        }
+    }
+
+    /// A list keeps its order and does not lose a song the library
+    /// lacks — that row says so instead.
+    #[test]
+    fn a_song_list_resolves_in_order_and_keeps_what_is_missing() {
+        let library: HashMap<String, SongEntry> = [song("wonderwall"), song("basket-case")]
+            .into_iter()
+            .map(|s| (s.slug.clone(), s))
+            .collect();
+        let list = SongList {
+            id: "adult-jam".to_owned(),
+            title: "Adult Jam".to_owned(),
+            songs: vec![
+                "basket-case".to_owned(),
+                "gone".to_owned(),
+                "wonderwall".to_owned(),
+            ],
+        };
+        let rows = rows_of(&list, &library);
+        assert_eq!(rows.len(), 3);
+        assert!(matches!(&rows[0], ListRow::Song(s) if s.slug == "basket-case"));
+        assert!(matches!(&rows[1], ListRow::Missing(slug) if slug == "gone"));
+        assert!(matches!(&rows[2], ListRow::Song(s) if s.slug == "wonderwall"));
+    }
+
+    #[test]
+    fn counts_read_as_english() {
+        assert_eq!(plural(1, "song"), "1 song");
+        assert_eq!(plural(0, "song"), "0 songs");
+        assert_eq!(plural(199, "song"), "199 songs");
     }
 }

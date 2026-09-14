@@ -153,6 +153,12 @@ web-sys = { version = "0.3", features = [
     "RequestInit",
     "Response",
     "Headers",
+    # The chart library's vox connection to Task: a WebSocket carrying
+    # binary frames, and the open/error/close events the dial awaits.
+    "WebSocket",
+    "BinaryType",
+    "Event",
+    "CloseEvent",
 ] }
 # Pinned exactly, and low: `dx build` refuses to run when the crate version
 # and the wasm-bindgen-cli in the dev shell disagree, and the CLI comes from
@@ -174,6 +180,20 @@ tracing = { workspace = true }
 # client in wasm.
 serde = { workspace = true }
 serde_json = { workspace = true }
+
+# The chart library's wire contract with Task: songs and charts
+# (`ResourcesService`), song lists (`CollectionService`) and the
+# `song:<slug>` references a list holds. Every target takes the types —
+# the host build type-checks the seam and runs its tests — and only the
+# browser build dials anything (see the wasm32 table below). The `vox`
+# feature is what generates the clients.
+resources-proto = { workspace = true, features = ["vox"] }
+collection-proto = { workspace = true, features = ["vox"] }
+links-proto = { workspace = true, features = ["vox"] }
+# Named here for `architect::vox::VoxError`, the error every generated
+# client answers with, so the seam can map it once. Already in the graph
+# through the three proto crates; this only puts the name in scope.
+architect = { workspace = true, features = ["vox"] }
 
 # ── dev-guide only ────────────────────────────────────────────────────
 # Re-rendering the guide at runtime needs the same builder `build.rs`
@@ -197,6 +217,14 @@ getrandom = { version = "0.3", features = ["wasm_js"] }
 # not exist in a browser.
 gloo-timers = { version = "0.3", features = ["futures"] }
 console_error_panic_hook = "0.1"
+# The vox client stack the library dials Task with: the initiator
+# handshake and `FromVoxLane` (`vox-core`), the browser WebSocket link
+# (`vox-websocket`), and a oneshot to await the socket opening. Browser
+# only — the host build has no socket to dial, and the native link
+# would want tokio-tungstenite for nothing.
+vox-core = { workspace = true }
+vox-websocket = { workspace = true }
+futures-channel = { workspace = true }
 
 [lints]
 workspace = true

@@ -2083,6 +2083,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "724d27a0ee38b700e5e164350e79aba601a0db673ac47fce1cb74c3e38864036"
 
 [[package]]
+name = "collection-proto"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#1f956e4dbfaf4b1d61e505cf3c802082001dc1e8"
+dependencies = [
+ "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.8.2)",
+ "facet",
+ "links-proto",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "vox",
+ "vox-types",
+]
+
+[[package]]
 name = "color"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5783,7 +5798,7 @@ dependencies = [
  "log",
  "presser",
  "thiserror 2.0.20",
- "windows 0.58.0",
+ "windows 0.62.2",
 ]
 
 [[package]]
@@ -6348,7 +6363,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.58.0",
+ "windows-core 0.62.2",
 ]
 
 [[package]]
@@ -7575,8 +7590,10 @@ dependencies = [
 name = "keyflow-web"
 version = "0.0.1-alpha"
 dependencies = [
+ "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.8.2)",
  "architect-ui",
  "base64 0.22.1",
+ "collection-proto",
  "console_error_panic_hook",
  "dioxus",
  "dioxus-web",
@@ -7585,12 +7602,15 @@ dependencies = [
  "editor-keyflow-lang",
  "editor-state",
  "flate2",
+ "futures-channel",
  "getrandom 0.3.4",
  "gloo-timers",
  "js-sys",
  "keyflow",
  "keyflow-ui",
  "kurbo 0.13.1",
+ "links-proto",
+ "resources-proto",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -7601,6 +7621,8 @@ dependencies = [
  "tracing-subscriber",
  "tracing-wasm",
  "view-knowledge-graph",
+ "vox-core",
+ "vox-websocket",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -7879,13 +7901,15 @@ dependencies = [
 [[package]]
 name = "links-proto"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/task?branch=main#2ae35126c833eb4e95a466eb7972b2077850fb9f"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#1f956e4dbfaf4b1d61e505cf3c802082001dc1e8"
 dependencies = [
  "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.8.2)",
  "facet",
  "serde",
  "serde_json",
  "thiserror 2.0.20",
+ "vox",
+ "vox-types",
 ]
 
 [[package]]
@@ -9919,6 +9943,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "org-proto"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#1f956e4dbfaf4b1d61e505cf3c802082001dc1e8"
+dependencies = [
+ "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.8.2)",
+ "chrono",
+ "eyre",
+ "facet",
+ "serde",
+ "thiserror 2.0.20",
+ "toml 0.8.2",
+ "uuid",
+]
+
+[[package]]
 name = "ort"
 version = "2.0.0-rc.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11572,6 +11611,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e061d1b48cb8d38042de4ae0a7a6401009d6143dc80d2e2d6f31f0bdd6470c7"
 
 [[package]]
+name = "resources-proto"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#1f956e4dbfaf4b1d61e505cf3c802082001dc1e8"
+dependencies = [
+ "architect 0.1.0 (git+https://github.com/FastTrackStudios/architect?tag=v0.8.2)",
+ "facet",
+ "org-proto",
+ "serde",
+ "thiserror 2.0.20",
+ "vox",
+ "vox-types",
+]
+
+[[package]]
 name = "resvg"
 version = "0.43.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12826,7 +12879,7 @@ dependencies = [
 [[package]]
 name = "ssg"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/task?branch=main#2ae35126c833eb4e95a466eb7972b2077850fb9f"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#1f956e4dbfaf4b1d61e505cf3c802082001dc1e8"
 dependencies = [
  "ssg-ui",
  "ssg-vault",
@@ -12835,7 +12888,7 @@ dependencies = [
 [[package]]
 name = "ssg-build"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/task?branch=main#2ae35126c833eb4e95a466eb7972b2077850fb9f"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#1f956e4dbfaf4b1d61e505cf3c802082001dc1e8"
 dependencies = [
  "notify",
  "ssg-vault",
@@ -12844,7 +12897,7 @@ dependencies = [
 [[package]]
 name = "ssg-ui"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/task?branch=main#2ae35126c833eb4e95a466eb7972b2077850fb9f"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#1f956e4dbfaf4b1d61e505cf3c802082001dc1e8"
 dependencies = [
  "dioxus",
  "ssg-vault",
@@ -12856,7 +12909,7 @@ dependencies = [
 [[package]]
 name = "ssg-vault"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/task?branch=main#2ae35126c833eb4e95a466eb7972b2077850fb9f"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#1f956e4dbfaf4b1d61e505cf3c802082001dc1e8"
 dependencies = [
  "pulldown-cmark",
 ]
@@ -15413,7 +15466,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "view-knowledge-graph"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/task?branch=main#2ae35126c833eb4e95a466eb7972b2077850fb9f"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#1f956e4dbfaf4b1d61e505cf3c802082001dc1e8"
 dependencies = [
  "architect-ui",
  "dioxus",
@@ -15563,6 +15616,23 @@ dependencies = [
  "vox-phon",
  "vox-rt",
  "vox-schema",
+]
+
+[[package]]
+name = "vox-websocket"
+version = "0.10.0-rc.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9fe651cdc222634dbc3f2501230fe3858941fcddaac643c60b0514a1685ec4cd"
+dependencies = [
+ "futures-channel",
+ "futures-util",
+ "js-sys",
+ "tokio",
+ "tokio-tungstenite 0.29.0",
+ "vox-core",
+ "vox-types",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
