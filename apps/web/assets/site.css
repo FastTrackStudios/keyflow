@@ -332,6 +332,18 @@ body {
 .kf-account-form input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .kf-account-form input:disabled { opacity: 0.6; }
 
+/* The same field, anywhere outside the account form. */
+.kf-input {
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 0.3rem;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.85rem;
+}
+.kf-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
 .kf-account-error {
   margin: 0.6rem 0 0;
   font-size: 0.75rem;
@@ -1922,3 +1934,7 @@ body {
 .kf-library-group > .kf-library-list { padding-left: 1.2rem; }
 .kf-library-group > .kf-library-list > .kf-library-row:last-child { border-bottom: 0; }
 .kf-library-missing { color: var(--ink-soft); font-style: italic; }
+.kf-library-empty { padding: 0.25rem 0 0.75rem 1.2rem; }
+.kf-library-new { display: flex; gap: 0.5rem; align-items: center; margin: 0.75rem 0 0; }
+.kf-library-new .kf-input { flex: 1; min-width: 0; }
+.kf-library-actions .kf-select { max-width: 9rem; }

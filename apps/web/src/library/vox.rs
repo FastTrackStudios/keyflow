@@ -180,6 +180,7 @@ pub fn chart_from(chart: ChartDoc) -> StoredChart {
         notation: blank_to_none(chart.notation),
         sections: chart.sections,
         song: song_slug(&chart.song),
+        arrangement: blank_to_none(chart.arrangement),
     }
 }
 
@@ -265,8 +266,18 @@ pub fn chart_doc_from(draft: &Draft, updated_at: String) -> ChartDoc {
             .as_deref()
             .map(|s| NodeRef::song(s.trim()).to_token())
             .unwrap_or_default(),
-        arrangement: String::new(),
-        is_default: false,
+        arrangement: draft
+            .arrangement
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or_default()
+            .to_owned(),
+        // A fresh chart of a song is its default only if it is the first;
+        // the server keeps whichever chart already holds the flag, so
+        // asking for it on every save is safe and makes an imported
+        // song's first edit-and-save land as "the chart" rather than a
+        // sibling nobody opens.
+        is_default: draft.song.is_some(),
         updated_at,
     }
 }
@@ -510,6 +521,66 @@ pub async fn delete_chart(org: &str, slug: &str) -> Result<(), LibraryError> {
         .map_err(error_from)
 }
 
+#[cfg(target_arch = "wasm32")]
+pub async fn create_song(
+    org: &str,
+    title: &str,
+    key: Option<&str>,
+    writers: &[String],
+) -> Result<String, LibraryError> {
+    let saved = resources(dial::caller(org).await?)
+        .upsert_song(resources_proto::SongDoc {
+            slug: String::new(),
+            title: title.trim().to_owned(),
+            writers: writers.to_vec(),
+            key: key.unwrap_or_default().trim().to_owned(),
+            tags: Vec::new(),
+            updated_at: String::new(),
+        })
+        .await
+        .map_err(error_from)?;
+    Ok(saved.slug)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn create_songlist(org: &str, title: &str) -> Result<SongList, LibraryError> {
+    let list = collections(dial::caller(org).await?)
+        .create(
+            org.to_owned(),
+            title.trim().to_owned(),
+            collection_proto::CollectionKind::new(SONGLIST_KIND),
+        )
+        .await
+        .map_err(error_from)?;
+    Ok(songlist_from(list))
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn add_to_songlist(org: &str, list: &str, song: &str) -> Result<SongList, LibraryError> {
+    let list = collections(dial::caller(org).await?)
+        .add_item(collection_proto::Placement {
+            collection_id: list.to_owned(),
+            node: NodeRef::song(song),
+            after: None,
+        })
+        .await
+        .map_err(error_from)?;
+    Ok(songlist_from(list))
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn remove_from_songlist(
+    org: &str,
+    list: &str,
+    song: &str,
+) -> Result<SongList, LibraryError> {
+    let list = collections(dial::caller(org).await?)
+        .remove_item(list.to_owned(), NodeRef::song(song))
+        .await
+        .map_err(error_from)?;
+    Ok(songlist_from(list))
+}
+
 // The host build has no socket to dial (see the module docs). It keeps
 // the same signatures so the seam and the screens type-check there, and
 // every call answers the way [`super::http`] does on the host.
@@ -544,9 +615,37 @@ mod host {
     pub async fn delete_chart(_org: &str, _slug: &str) -> Result<(), LibraryError> {
         Err(offline())
     }
+    pub async fn create_song(
+        _org: &str,
+        _title: &str,
+        _key: Option<&str>,
+        _writers: &[String],
+    ) -> Result<String, LibraryError> {
+        Err(offline())
+    }
+    pub async fn create_songlist(_org: &str, _title: &str) -> Result<SongList, LibraryError> {
+        Err(offline())
+    }
+    pub async fn add_to_songlist(
+        _org: &str,
+        _list: &str,
+        _song: &str,
+    ) -> Result<SongList, LibraryError> {
+        Err(offline())
+    }
+    pub async fn remove_from_songlist(
+        _org: &str,
+        _list: &str,
+        _song: &str,
+    ) -> Result<SongList, LibraryError> {
+        Err(offline())
+    }
 }
 #[cfg(not(target_arch = "wasm32"))]
-pub use host::{delete_chart, list_charts, list_songlists, list_songs, read_chart, save_chart};
+pub use host::{
+    add_to_songlist, create_song, create_songlist, delete_chart, list_charts, list_songlists,
+    list_songs, read_chart, remove_from_songlist, save_chart,
+};
 
 #[cfg(test)]
 mod tests {
@@ -690,6 +789,7 @@ mod tests {
             slug: None,
             org: Some("acme".to_owned()),
             song: Some("cafe".to_owned()),
+            arrangement: Some("acoustic".to_owned()),
         };
         let doc = chart_doc_from(&draft, "2026-09-14T10:00:00Z".to_owned());
         assert_eq!(doc.source, source);
@@ -699,7 +799,11 @@ mod tests {
         assert_eq!(doc.song, "song:cafe");
         assert_eq!(doc.sections, ["vs-1"]);
         assert_eq!(doc.updated_at, "2026-09-14T10:00:00Z");
-        assert!(!doc.is_default);
+        assert_eq!(doc.arrangement, "acoustic");
+        assert!(
+            doc.is_default,
+            "a chart saved to a song asks to be its chart"
+        );
     }
 
     #[test]
@@ -712,10 +816,12 @@ mod tests {
             slug: Some("t".to_owned()),
             org: None,
             song: None,
+            arrangement: None,
         };
         let doc = chart_doc_from(&draft, String::new());
         assert_eq!(doc.song, "");
         assert_eq!(doc.slug, "t");
         assert_eq!(doc.key, "");
+        assert!(!doc.is_default, "an unattached chart is nobody's default");
     }
 }
