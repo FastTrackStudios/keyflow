@@ -1,0 +1,21 @@
+=INTRO
+6:8(A%)x4
+=VERSE 1
+(A%)(D%)
+AEG%
+(A%)
+=VERSE 2
+(A%)(D%)
+AEG%
+A%
+=PRE-CHORUS
+(F#m%A%)
+G%EE_*_*_D
+=VERSE 3   SAME AS VERSE 2
+=PRE-CHORUS 2
+(F#m%A%)
+F#mGA%
+F#mG_r4
+=OUTRO  WHOLE SECTION REPEATS x7
+
+(A%)x3F#mG

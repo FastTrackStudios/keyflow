@@ -1,0 +1,26 @@
+=INTRO
+(Bbm%)x4 Ebm F# Bbm%
+=VERSE 1
+(Bbm%) Ebm F#
+(Bbm%)x3 Ebm F#(Bbm%)
+=PRE-CHORUS
+F# Ab Bbm% 
+F#% Abr1
+=CHORUS
+Bbm F# G# Fm 
+Bbm F# G# r1
+=VERSE 2
+(Bbm%) Ebm F#) Bbm%
+=PRE-CHORUS
+F#% Abr1
+=CHORUS
+(Bbm F# G# Fm)
+=BRIDGE
+F# G# Ebm %
+ Db Ebm F#% 
+Bbm G# F#%
+F G# G#_G#_r4
+=Chorus
+(Bbm F# G# F)x6
+=Outro
+Bbm_Bbm_r4

@@ -1,0 +1,27 @@
+=INTRO
+(Ebm %)Db%(Ebm %)
+=VERSE 1
+-"Bass & Drums only"
+(Ebm%)x4
+=CHORUS 1
+Db%Ebm%
+Db%(B"Let Note Ring Out"%)
+=VERSE 2
+=CHORUS 2
+Db%Ebm%
+BDb(B%)
+=BRIDGE
+Abm%F#%
+B%Db%
+=GUITAR SOLO
+(Ebm %) (B%)
+=RE-INTRO
+=VERSE 3
+=CHORUS 3
+(Db % Ebm %)
+B % Abm %
+Db % (Ebm %)x4
+=CHORUS 4 (OUTRO)
+(Db % Ebm %)
+B % Abm %
+Db % Ebm %)

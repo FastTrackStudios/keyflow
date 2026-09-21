@@ -1,0 +1,32 @@
+:8 Bar Drum Intro
+:Instrumental
+(D%G%)
+:Verse 1 
+-Did I say....
+D%G
+D%G%
+:PC 
+-Overthinkin....
+D%G%
+:Chorus
+(D%G%)AG
+:Instrumental
+D%G%
+:Verse 2
+D%G%
+Dmaj7 Cmaj7 G Gm
+:Chorus 
+(D%G%)AG
+:Instrumental 
+D%G%
+:PC [DOWN] 
+-Overthinkin....'
+D%G%
+:Chorus [DOWN]
+(Dmaj7Cmaj7GGm)AG
+:Instrumental [BIG]
+(DCGGm)
+:Chorus
+(DCGGm)AG
+:Ending
+D%D

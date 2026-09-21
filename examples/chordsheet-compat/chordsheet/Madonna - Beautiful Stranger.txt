@@ -1,0 +1,45 @@
+=INTRO
+C#7,,, C#,,, C#7,,, C#,,,
+P1
+=VERSE (DOUBLE VERSE)
+(C#7,,, C#,,, C#7,,, C#,,,)x4
+P2
+=PART 2
+(B,,, A,,, C#7,,, C#,,,)x2
+P3
+=PART 3
+(F#,,, ,,,, E,,, B,,,
+C#7,,, C#,,, C#7,,, C#,,,)x2
+P4
+=POST CHORUS
+(E,_B, F#,_A, C#"2nd time break"_,,, ,,,,)x2
+=TURN AROUND
+C#7,,, C#,,,
+P1
++
+=VERSE 2
+(C#7,,, C#,,, C#7,,, C#,,,)x2
+P2
+=PART 2
+(B,,, A,,, C#7,,, C#,,,)x2
+
+P3
+=PART 3
+(F#,,, ,,,, E,,, B,,,
+C#7,,, C#,,, C#7,,, C#,,,)x1
+
+P2
+=PART 2
+-DOWN
+(B,,, A,,, C#7,,, C#,,,)x2
+P3
+=PART 3
+-DOWN
+F#,,, ,,,, E,,, B,,,
+-BIG
+(C#7,,, C#,,, C#7,,, C#,,,)x2
+P4
+=POST CHORUS
+(E,_B, F#,_A, C#"2nd time end"_,,, ,,,,)x2
+P1
+-POSSIBLE JAM OUT OVER INTRO

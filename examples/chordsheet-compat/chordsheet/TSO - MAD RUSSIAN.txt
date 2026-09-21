@@ -1,0 +1,9 @@
+:CHORUS
+C_B_A_C		D_B_C_D
+:NEXT
+C_B_A_C		D_C_B_D
+C_B_A_C		D_C_B_D
+C_A_B_D
+C_A_B_D
+
+C_B_C_B	C_B_D_G

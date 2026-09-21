@@ -1,0 +1,28 @@
+=INTRO
+[D,, F#m,, D,, F#m,,]
+[E,, B,, C#m,, G#m, A,,]
+[E,, B,, C#m,, A,,]
+
+=VERSE
+[D,, F#m,, D,, F#m,,]
+[E,, B,, C#m,, G#m, A,,]
+[E,, B,, C#m,, A,,]
+[E,, B,, C#m,, A,,]
+
+=CHORUS
+[F#m,, E,, B,, F#m,,]
+[F#m,, E,, B,, F#m,,]
+[F#m,, E,, B,, F#m,,]
+[F#m,, E,, B,, F#m,,]
+
+=BRIDGE
+[A,, Am,, F,, C,,]
+[G,, Dm,, F,, E,,]
+[A,, Am,, F,, C,,]
+[G,, Dm,, F,, E,,]
+
+=OUTRO
+[F#m,, E,, B,, F#m,,]
+[F#m,, E,, B,, F#m,,]
+[F#m,, E,, B,, F#m,,]
+[F#m,, E,, B,, F#m,,]

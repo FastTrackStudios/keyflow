@@ -1,0 +1,15 @@
+=INTRO
+(Bmaj7_B7Emaj7)
+=VERSE
+Bmaj7_B7Emaj7Bmaj7_B7Amaj7
+Bmaj7_B7Emaj7G#m7_D#7/A#G#m7_*_C#m7_F#7
+Bmaj7_B7Emaj7Bmaj7_B7Amaj7
+Bmaj7_B7Emaj7G#m7_D#7/A#
+=CHORUS
+(G#m7_D#7/A#B_C#)x3G#m7_D#7/A#B_C#
+B_F
+=BRIDGE
+EBED
+EBC#Eb
+=VERSE
+=OUTRO (SAME AS FIRST PARRT OF CHORUS)

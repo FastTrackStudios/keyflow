@@ -1,0 +1,6 @@
+=INTRO/VERSE
+B_D_E, B_D_A,
+=CHORUS
+B D A E
+=BRIDGE
+D E

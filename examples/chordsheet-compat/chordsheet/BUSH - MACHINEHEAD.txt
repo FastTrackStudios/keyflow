@@ -1,0 +1,14 @@
+-SECTIONS ONLY CHART
+-Emajor/C#minor
+-
+=INTRO
+-GUITAR RIFF
+(C#_Eb_E_F#)x2
+C#_"HIT",,, ,,,, A_"BAND IN",,, ,,,,
+C#,,, ,,,, A_,,, ,,,,
+=VERSE
+(C#,,, ,,,, A_,,, ,,,,)
+=CHORUS
+(E_B C#_A)
+=POST
+(F#m A)

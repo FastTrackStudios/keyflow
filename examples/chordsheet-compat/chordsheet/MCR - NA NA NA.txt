@@ -1,0 +1,22 @@
+=INTRO X 2
+=INTRO/VERSE
+(G,,, ,,,, D,,, ,,,,  
+C,,, F,,, G,,, 1.D,,,2.F,,,)
+
+=CHORUS 1
+(Bb,,, ,,,, F,,, ,,,, 
+Gm,,, ,,,, Eb,,, F#,,,)x2
+Gm"RIFF BAND OUT"_,,, ,,,, ,,,, ,"STOP"_,,,
+=VERSE x1
+=CHORUS X 2
+=BRIDGE 
+(Gm,,, F#,,, Fm,,, C,,, 
+Eb,,, D"F THIRD TIME"_,,, G,,, ,,,,)x3
+,,,, ,,,,
+=CHORUS SOLO
+Bb,,, ,,,, F,,, ,,,, 
+Gm,,, ,,,, Eb,,, F#,,, 
+,"RIFF BAND OUT"_,,, ,,,,
+=CHORUS x2
+=TAG & Resolve
+(Eb,F#,)x2 Bb

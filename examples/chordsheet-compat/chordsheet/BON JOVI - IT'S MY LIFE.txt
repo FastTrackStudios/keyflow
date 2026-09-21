@@ -1,0 +1,23 @@
+=INTRO
+(Cm_Cm_r2_*r1)Cm_r1r1
+=VERSE
+Cm_Cm_r4_Cm r1 Cm_Cm_r2 r1
+Cm_Cm_r4_Cm r1 (Cm %)
+r1
+=CHORUS
+(Cm Ab Eb Bb/D 
+Cm Ab Bb Bb_G/B)
+=REINTRO
+=VERSE 2
+Cm_Cm_r4_Cm r1 Cm_Cm_r2 r1
+Cm_Cm_r4_Cm r1
+Cm % F % r1
+=CHORUS
+=GUITAR SOLO
+Ab%Bb%
+Cm%F%
+
+-Let Chord Ring Out
+Cm r1 r1 r1
+Cm_Cm_r2_*
+=OUTRO/DOUBLE CHORUS

@@ -1,0 +1,29 @@
+:INTRO & VERSE 1
+-RIFF A
+,, ,"BAND IN"_,,, ,"VOCALS IN"_,,, ,,,,
+:PRE-CHORUS
+-RIFF B
+,,,, ,,,, ,"STOP"
+:INST & BRIDGE 1
+-RIFF A
+,,,, ,"VOCALS IN"_,,, ,,,,
+
+:SHOTS ON E
+-EMPTINESS...
+,,,, ,"2 COUNT BREAK"
+:SOLO 1 & VERSE 2
+-RIFF A
+,,,, ,"VOCALS IN"_,,, ,,,,
+
+:PRE CHORUS
+-RIFF B
+,,,, ,,,, ,"DRUMS OUT"
+:SOLO
+-RIFF C
+,,,, ,,,,
+:BRIDGE 2
+-RIFF B+
+,,,, ,,,,
+:CHORUS
+-RIFF A
+,,,, ,,,,"STOP ON 2 COUNT"

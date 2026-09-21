@@ -1,0 +1,24 @@
+=Intro Guitar Only First 2x 
+(Am %)x3 Am Am_*_A#
+
+=Verse
+(Am % % % 
+G F# Am Am*_*_A#)
+
+=Chorus 
+F# F Am B 
+G A#
+
+=Hits
+Am %
+
+=Verse 2
+=Chorus 2
+=Hits
+=Verse 3
+=Chorus 3"Drums only for 5 Bars" 
+A# Am  Am*_*_A# F#m 
+F A B G 
+A#
+=Outro Hits
+(A %)x4

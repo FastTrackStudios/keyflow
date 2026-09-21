@@ -1,0 +1,27 @@
+=INTRO
+Bm_A Bm_D/G A Bm
+=VERSE
+(Bm_A Bm_D/G A Bm)x2
+=PRE CHORUS
+-WITH BREAKS
+Bm Bm Bm Bm
+Bm_A Bm_D/G Bm_A Bm B,_A_G
+=CHORUS
+(Bm D A A,,A_G)x2
+Bm Bm
+-BACK TO VERSE AND REPEAT
+-
+=BRIDGE
+(Em B Em B Em B G G)x2
+Bm C# D Em 
+-
+Bm"BAND OUT" D A A"STOP"
+(Bm"BAND IN" D A A_G)x3
+Bm D A A
+=SECTION
+Bm A G A
+Bm A G F#
+=SECTION
+-DOWN
+Bm A G A
+Bm A G F#

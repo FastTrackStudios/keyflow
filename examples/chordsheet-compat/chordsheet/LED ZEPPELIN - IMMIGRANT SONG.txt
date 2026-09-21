@@ -1,0 +1,28 @@
+:INTRO 1
+-FIRST TIME 4X
+-SECOND TIME 2X
+
+(F#,,,,)x4
+:CHORUS
+-"A-ah-ahh-ah, ah-ah-ahh-ah!"
+F#,,, F#,,, F#,,, F#,,_A
+:VERSE 1 & 2
+E_,,, ,,_E_A
+F#,,, ,,,, ,,,, ,,,,
+,,,, ,,,_A
+E_,,, ,,_E_A F#,,, ,,,,
+:PRECHORUS
+-"On we sweep with"
+A,,, B,,, C,,, C,,C
+-BACK TO TOP
+-
+:TURNAROUND 1:40
+-
+(F#,,,)x2
+
+:VERSE 3
+F#,,, F#,,, F#,,, F#,,_C7
+:ENDING
+(F#,,, F#,,C7)x3
+(F#,,C7)x8
+-STOP ON 3 COUNT

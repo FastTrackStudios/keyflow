@@ -1,0 +1,40 @@
+= Page One
+A A A A
+A A A A
+A A A A
+A A A A
+A A A A
+
+# shorthand to add a page break and a new section title
++ Page Two
+B B B B
+B B B B
+B B B B
+B B B B
+B B B B
+
+# page three just the page break without a title
++
+C C C C
+C C C C
+C C C C
+C C C C
+C C C C
+
+# page 4 just a simple text line without border
++
+- Page Four
+D D D D
+D D D D
+D D D D
+D D D D
+D D D D
+
+# page five bordered title,  no section
++
+: Page Five
+E E E E
+E E E E
+E E E E
+E E E E
+E E E E

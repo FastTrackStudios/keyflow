@@ -1,0 +1,47 @@
+=INTRO
+(Ab%)x4
+AbDbAb%
+DbDAbF
+AA_AbAb_FE_Eb
+=VERSE 1
+(Ab%Ab_A
+(Bb_Eb%)Ab)
+=PRE-CHORUS
+DbDAb%
+Bb%Eb%
+=CHORUS
+Ab%Ab_F#F
+DbDbmBb_EbAb
+=VERSE 2
+(Ab%Ab_A
+(Bb_Eb%)Ab)
+=PRE-CHORUS
+DbDAb%
+Bb%Eb%
+=CHORUS 2
+Ab%Ab_F#F
+DbDbm(Bb_Eb"TAG")x3Ab
+=GUITAR SOLO 2
+Db%Ab%
+DbDAbF
+AA_AbAb_FE_Eb
+AbDbAb%
+DbDAbF
+AA_AbAb_FE_Eb
+=RE-INTRO
+(Ab%)
+=VERSE 3
+Ab%Ab_A
+(Bb_Eb%)Ab
+=PRE-CHORUS
+DbDAb%
+Bb%Eb%
+=CHORUS 3
+Ab%Ab_F#F
+DbDbm(Bb_Eb"TAG")x3Ab
+=GUITAR SOLO 3
+Db%Ab%
+DbDAbF
+AA_AbAb_FE_Eb
+=OUTRO  SAME AS INTRO
+(Ab%)x4  Ab_r4

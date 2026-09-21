@@ -1,0 +1,24 @@
+=GUITAR INTRO
+=VERSE 1
+(Amaj7 C#m7_E)x4
+=PRE-CHORUS 
+- "SAME AS VERSE"
+=CHORUS 1
+- "SAME AS VERSE"
+=VERSE 1
+- "SAME AS VERSE"
+=PRE-CHORUS 
+- "SAME AS VERSE"
+=CHORUS 2
+(Amaj7 C#m7_E)x4
+(Amaj7 E_B) (Amaj7 C#m7_E)
+=BRIDGE
+(E%)x4 
+(A%E%)
+=DOWN CHORUS
+r1r1r1r1
+=CHORUS
+(Amaj7 C#m7_E)x4
+(Amaj7 E_B) (Amaj7 C#m7_E)
+=OUTRO
+(Amaj7 C#m7_E)x12

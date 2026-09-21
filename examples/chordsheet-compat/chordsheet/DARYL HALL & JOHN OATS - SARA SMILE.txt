@@ -1,0 +1,15 @@
+=INTRO
+(D_AG_C)
+=VERSE
+(DCBbA)
+=PRE CHORUS
+Bb_CC#_DBb_C
+Eb_DG_r4r4
+=CHORUS
+
+(D_AG_C_Eb_A "A On & 1")
+=VERSE
+=CHORUS
+=BRIDGE
+G_C_D_EEb_Bb_C#"C# On & 1"
+=CHORUS/OUTRO

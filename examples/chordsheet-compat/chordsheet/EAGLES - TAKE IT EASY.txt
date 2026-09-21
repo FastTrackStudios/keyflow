@@ -1,0 +1,28 @@
+=INTRO
+(G,,, ,,,, Am7/G .,,,  D7sus4/G .,,,)x2
+G"RIFF"_,,, ,,,,
+
+///// Am7/G 302013 D7sus4/G 3x0213
+
+=VERSE
+G,,, ,,,, ,,_D, C,,,
+G,,, D,,, C,,, G,,,
+=CHORUS
+Em,,, ,"D SECOND TIME"_,,, C,,, G,,,
+Am,,, C,,, Em,,, ,,,,
+C,,, G,,, C,,, G,,,
+Am,,, C,,, G,,, ,,,,
+G"RIFF FIRST TIME ONLY"_,,, ,,,,
+=VERSE
+=SOLO (VERSE & 1/2 CHORUS)
+G,,, ,,,, ,,_D, C,,,
+G,,, D,,, C,,, G,,,
+Em,,, D,,, C,,, G,,,
+Am,,, C,,, Em,,, ,D,,
+=VERSE
+=CHORUS
+-BREAK BEFORE BRIDGE
+=BRIDGE
+(C,,, ,,,, G,,, ,,,,)x2
+(C,,, ,,,, G,,, G7,,,)x2
+C,,, ,,,, Em

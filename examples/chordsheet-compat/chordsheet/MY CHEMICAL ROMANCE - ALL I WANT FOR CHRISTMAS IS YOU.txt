@@ -1,0 +1,30 @@
+=INTRO   FREE TEMPO PIANO
+GBCCm
+D_*_*_BEm_*_*_EbD_*_Em_*"All I Want For X-Mas"Am_D
+r1G"Is You"EmA
+Dmr1
+=PICK UP VERSE 1
+(G%)C%
+Eb%
+(G%)C%
+Eb_Eb Eb_r2
+=CHORUS
+GG_BEmEm_Eb
+DEmAD
+GEmAmD
+=VERSE 2
+=CHORUS
+GG_BEmEm_Eb
+DEmAD
+GEmAmD_Eb
+=BRIDGE
+(B%Em%)Eb%
+DEmAm%
+DEbr4
+=DOWN CHORUS
+(G%"GUITAR ONLY")C%
+EbD_r4
+G"FULL BAND"G_BEm Em_Eb
+DEmADD
+=OUTRO
+(GEmAmD)x8

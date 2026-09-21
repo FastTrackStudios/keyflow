@@ -1,0 +1,29 @@
+:INTRO
+(G7,,, ,,,,)x4
+:VERSE
+(G7,,, ,,,, Em,,, ,,,,)x2
+:PRE CHORUS
+C,,, ,,,, Em,,, ,,,, 
+C,,, ,,,, D,,, ,,,,
+:CHORUS
+(Em,,, ,,,, C,,, ,,,,
+D,,, ,,,, 1. G,,, ,D/F#,, 2.
+:INTRUMENTAL
+G7,,, ,,,, ,,,, ,,,,)
+:VERSE 2
+:PRE CHORUS 2
++
+:CHORUS 2
+(Em,,, ,,,, C,,, ,,,,
+D,,, ,,,, 1. G,,, ,D/F#,, 2.G,,, G,A,)
+:BRIDGE
+D,,, A,,, Bm,,, ,G_"HORN LICK",,
+D,,, A,,, Bm,,, ,C,C#
+D,,, A,,, Bm,,, ,G_"HORN LICK",,
+D,,, A,,, Bm,,, Bm,A,
+
+:INTRUMENTAL
+:VERSE 3
+:PRE CHORUS 3
+:CHORUS 3
+:OUTRO BRIDGE

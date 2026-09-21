@@ -1,0 +1,27 @@
+=INTRO
+,,,Bb_C
+-GUITAR ON BEATS 2 & 4
+,C,C ,C,C ,C,Bb_C
+
+=VERSE
+-GUITAR ON BEATS 2 & 4
+(C,,, G/B,G, Eb,,, F,,Bb_C)x2
+-GUITAR ON BEAT 1
+C,,, G/B,G, Eb,,, F,,Bb_C
+=CHORUS
+C,,, G/B,G, Eb,,, F,G,
+C,,, G/B,Ab_Bb Eb,,, F,,Bb_C
+=VERSE 2
+-STOP ON FIRST MEASURE
+=CHORUS
+-STOP ON LAST MEASURE
+=INTRO x5
++
+=DOWN BRIDGE
+-KEYS ONLY FIRST TIME
+(C,,, G/B,,, Eb,,, F,G, 
+Ab,,, Bb,,, Ab,,, F,G,)x2
+
+=CHORUS
+-STOP ON FIRST MEASURE
+-STOP ON LAST MEASURE

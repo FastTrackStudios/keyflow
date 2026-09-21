@@ -1,0 +1,17 @@
+=INTRO
+-"Riff played on the "&" of 4 and 1"
+(*_*_*_E% *_*_*_E%
+*_*_*_C#m% *_*_*_C#m%)
+=VERSE
+-"Same as Intro"
+=CHORUS
+(E%) C#m%A%
+=VERSE 2
+-"Same as Intro"
+=DOUBLE CHORUS
+=VERSE 3
+-"Same as Intro"
+=CHORUS
+=DOWN CHORUS
+-"Same as chorus x2"
+=OUTRO DOUBLE CHORUS

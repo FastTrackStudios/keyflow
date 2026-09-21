@@ -1,0 +1,18 @@
+=VERSE 1
+E,_C, D, G_,,"FATHER"_, ,"GUITAR"_,,,
+G,_C, Em, D_,,"GUITAR"_, ,,,,
+G,_C, D, Em_,,"GUITAR"_, ,,,,
+E,_C, D, G"BUILD"_,,, ,,_G_F#
+=VERSE 2 & 3
+(E,_C, D, G,,, ,,,,
+G,_C, Em, D,,, ,,,,
+G,_C, D, Em,,, ,,,,
+E,_C, D, 1. G,,, ,,G_F# 2. G_F#)
+=CHORUS
+(Em_C G,,_F#)x2 Em_C G_Em D,,, ,,,, 
+G,,,, ,"Break"_,,,
+=VERSE 4
+=CHORUS
+=SOLO OVER VERSE
+=CHORUS
+=CHORUS

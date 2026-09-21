@@ -1,0 +1,27 @@
+=INTRO 
+-CHARTED IN 1/2 TIME
+-
+(Dm"Bb+D" C "A+Db" Dm "Bb+D#" C "G+D")
+A,,, G,,, A,,, G,,,
+,"DRUMS"_, (Dm,,,)x4
+
+=VERSE
+-
+(Dm"D"_,,,, C"E"_,,, Gm"G"_,,,, Dm"A"_,,,)
+=CHORUS
+(F,,,,, C, Gm,,,,, Dm,)
+-
+=INSTRUMENTAL
+A,,, G,,, A,,, G,,"DRUM BREAK"_,
+Dm,,, ,,,, ,,,, ,,,,
++
+=VERSE 2
+-
+Dm"D"_,,,, C"E"_,,, Gm"G"_,,,, Dm"A"_,,,
+=CHORUS 2
+(F,,,,, C, Gm,,,,, Dm,)
+=OUTRO
+-
+A"GUITAR ONLY"_,
+A,,, G,,, A,,, G,,,
+,,Dm

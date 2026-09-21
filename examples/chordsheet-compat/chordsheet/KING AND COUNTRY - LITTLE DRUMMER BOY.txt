@@ -1,0 +1,15 @@
+:INTRO
+-CHUG GUITAR   
+-LEAD D-G-Gb
+D,,, ,,,, Dsus,,, D,,,
+:VERSE
+-CHUG GUITAR
+(D,, ,,,, ,,,, ,,,,)x2
+Em7 G D_Asus ,,,,
+Em7 G C G Asus ,,,,
+D,,, ,,,, ,,,, ,,,,
+:OUTRO
+-CHORDS
+(D/F# G Asus Bm)x4
+-REPEAT AS NEEDED
+D

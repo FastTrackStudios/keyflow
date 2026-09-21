@@ -1,0 +1,23 @@
+:INTRO
+E7,,, A7,,, E,E, E7,,,
+
+:1/2 CHORUS
+A7,,, ,,,, E7,,, ,,,,
+B,,, ,,,, E7,,, ,"BUILD HERE"_,,,
+:FULL CHORUS       THE REST OF THE SONG IS 12 BAR BLUES
+E7,,, A7,,, E7,,, ,,,,
+A7,,, ,,,, E7,,, ,,,,
+B,,, ,,,, E7,,, ,,,,
+
+:VERSE 1 | CHORUS | SOLO | VERSE 2
+E7,,, A7,,, E7,,, ,,,,
+A7,,, ,,,, E7,,, ,,,,
+B,,, ,,,, E7,,, ,,,,
+
+:ENDING ON NEXT PAGE
+
+:FINAL CHORUS
+E7,,, A7,,, E7,,, ,,,,
+A7,,, ,,,, E7,,, ,,,,
+B,,, ,,,, E7
+A_G_E_D_E_D_A_G_E  D_Eb,E7

@@ -1,0 +1,23 @@
+=INTRO
+-
+(,"DRUMS & GUITAR"_,,, ,,,,)x2 (,"FULL BAND"_,,, ,,,,)x4
+,"HITS"_,,, ,,,,
+=VERSE 1
+(,,,, ,,,,)x4 (,,,, ,,,,)x4
+=CHORUS
+(,,,, ,,,,)x4
+=VERSE 2
+-
+(,"DOWN"_,,, ,,,,)x4 (,"FULL BAND"_,,, ,,,,)x4
+=INSTRUMENTAL
+-
+(,"DOWN"_,,, ,,,,)x2
+=VERSE 3
+(,,,, ,,,,)x4 (,,,, ,,,,)x4
+=BRIDGE
+(,,,, ,,,, ,,,, ,,,,)x2
+,"HITS"_,,, ,,,,
+=CHORUS
+-
+(,"INSTRUMENTAL"_,,, ,,,,)x2 (,"ADD VOCALS"_,,, ,,,,)x4
+(,,,, ,,,,)x4

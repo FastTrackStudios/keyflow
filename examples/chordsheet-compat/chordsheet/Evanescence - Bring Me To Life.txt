@@ -1,0 +1,24 @@
+=Intro
+(Em %"Piano Only" Am %) 
+Em % Cm Em
+=Verse
+(Em %)x5 r2"1 Bar Rest of 2/4"
+=Chorus A
+(Em G D Em)x2 "1 Bar Guitar only Em"
+
+=Verse 
+-4x's   "1 Bar Rest of 4/4"
+=Chorus A
+=Chorus B
+(C D Em 1. % 2. Em_F#_G_Bm_)
+=Bridge A
+Am Em_G Dm Em_F#_G_Bm_ 
+Am G Bm "1 Bar Rest of 4/4"
+=Bridge B
+(Em %)x3 C D
+=Chorus A
+-E/G/D/Rest for drums
+=Chorus A
+=Chorus B
+C D Em %
+C D Em

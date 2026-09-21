@@ -1,0 +1,17 @@
+=INTRO
+G,,, F,,, C,,, G,,,
+=VERSE 1 & 2
+(G,,, F,,, C,,, G,,,)x2
+=CHORUS 1 & 2
+G,,, F,,, C,,, G,,,
+G,,, F,,, C,,, C"GUNPOWDER & LEAD"_,
+G,,, ,,,,
+-REPEAT, BACK TO VERSE 2
+-
+=BRIDGE
+F,,, ,,,, ,"STOP"_,,,
+=CHORUS
+G,,, F,,, C,,, G,,,
+G,,, F,,, C,,, C,,,
+=SOLO OUT
+(G,,, F,,, C,,, G,,,)x4

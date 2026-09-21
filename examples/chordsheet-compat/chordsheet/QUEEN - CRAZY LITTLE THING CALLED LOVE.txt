@@ -1,0 +1,27 @@
+:INTRO
+(D,,,)x4
+:VERSE 1 & 2
+(D,,, ,,,, G,,, C,_G,
+D,,, ,,,, G,,, C,_G,
+D,,, Bb,_C, D,,,"STOP")
+
+:BRIDGE
+G,,, ,,,, C,,, G,,,
+Bb,,, ,,,, E,_A, F"STOP"
+D"543" A"543" E A"7542"_,,,
+
+:VERSE 3
++
+
+:SOLO
+Bb,,, ,,,, D,,, ,,,,
+Bb,,, ,,,,
+E,,, A"STOP" 
+D"543" A"543" E A"STOP"
+
+:ACAPELLA VERSE 4
+-
+:VERSE 5
+D,,, ,,,, G,,, C,_G,
+D,,, ,,,, G,,, C,_G,
+(D,,, Bb,_C,)x8 D

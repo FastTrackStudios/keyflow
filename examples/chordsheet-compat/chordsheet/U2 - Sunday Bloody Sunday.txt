@@ -1,0 +1,34 @@
+:INTRO
+-DRUMS
+(,,,,)x4 (Bm_D G,,,)x4
+:VERSE 1 
+(Bm_D G,,,)x2 (D,, Em,,,)x2 Em,,,
+:CHORUS
+(Bm_D G,,,)x2
+:VERSE 2    "Sunday..."
+(Bm_D G,,,)x4 (Bm_D, G,,,)x2
+:PRE CHORUS - DOWN
+-"SUNDAY..."     INSTRUMENTAL
+(F_Em D,,,)x2 Bm_D, G,,,
+:VERSE 3    "Sunday..."
+(Bm_D G,,,)x4 (Bm_D, G,,,)x2
+:PRE CHORUS | CHORUS
+-"HOW LONG..."
+(D em,,,)x2 Em,,, (Bm_D, G,,,)x4
+: SOLO
+(Bm_D G,,,)x4
+:BREAKDOWN
+-NO GUITAR
+(Bm_D G,,,)x6
+:BRIDGE
+-"No More!!" "Wipe Your Tears Away.."
+(Bm_D G,,,)x8
+:PRE CHORUS DOWN 
+-"SUNDAY..."
+(F_Em D,,,)x4 (Bm_D, G,,,)x2
+:VERSE 4
+(Bm_D G,,,)x4
+:FINAL CHORUS
+(Bm_D G,,,)x4
+:INSTRUMENTAL OUTRO
+(Bm_D G,,,)x4

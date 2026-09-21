@@ -1,0 +1,16 @@
+=Intro
+-"Drums Only for 4 measures."
+=Verse
+Am % G C (G)x4 Am % C % (G)x3 
+=Preverse
+Am % C % (G)x3
+=Chorus
+(Am % C % G % % %)
+=Verse
+(Am % C % G % % %)  
+=Preverse
+Am % C % G G_r4 (r1) 
+=Chorus x3
+=Interlude
+G_C (G)x13 G_r4 (r1)x2
+=Chorus x4

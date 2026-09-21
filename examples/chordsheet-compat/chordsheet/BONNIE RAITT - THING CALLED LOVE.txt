@@ -1,0 +1,21 @@
+:INTRO
+-
+(A"BASS"_,,, ,,,,)(A"BAND IN"_,,, ,,,,)
+:VERSE 1 & 2, 3 & 4
+(A,,, ,,,, A,,, ,,,, 
+C,,, G,,, A,,, ,,,,)
+:CHORUS
+(F,,, Bb,_C,)x3 F,,, D,,,,
+
+:BACK TO "BAND IN" INSTRUMENTAL
+
+:BRIDGE
+(A,_C, ,,,)x5 F,,, D,,,
+:SOLO
+(A,_C, D,_G,)x10
+
+:CHORUS
+(F,,, Bb,_C,)x11 F,,, D,,,
+
+:OUTRO
+(A,,, ,,,,)x3

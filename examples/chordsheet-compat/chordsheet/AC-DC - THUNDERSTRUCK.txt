@@ -1,0 +1,16 @@
+:INTRO 
+-Counts are 1/2 time 67 BPM
+,,,, ,,,,
+,"DRUMS"_,,, B"BASS"_,,, B"R.GTR"_,,,
+:VERSE 1
+B,,, ,,,, (B,_A_E A_A_E,)x4 ,B,
+:VERSE 2
+,,B, B,B,
+:HITS
+B_A_E (A_B_A_E)x3
+:CHORUS
+(B_A_E_A_E)x4 BBB"I was shaken.."B
+:SOLO
+(E_B_A_E)x4 (B_A_,,)x4 ,
+:CHORUS
+(B_A_E_A_E)x4 (B_E_B_E)x4 (B_A_E_A_E)x8 B"Ending"_B_B

@@ -1,0 +1,5 @@
+=VERSE
+(E, G,)
+=CHORUS
+(C#, G#, F#, ,,)x2
+E, E, A, C,

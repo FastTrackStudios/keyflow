@@ -1,0 +1,22 @@
+=INTRO
+-D PICK UP
+Em,,, ,,,,
+=VERSE 1
+(Em,,, ,,,, ,,,, ,,,,)x2
+=PRE CHORUS
+G,,, ,,,, A,,, ,,,"STOP"_,
+=CHORUS
+C,,, G,,, D,,, A,,Bm
+C,,, G,,, D,,, A"STOP" 
+=EXTRA MEASURE
+Em,,,
+=VERSE 2
+=PRE CHORUS 2
+=CHORUS 2
+=BRIDGE
+Em,,, ,,,, ,,,, ,,,,
+,,,, ,,,, ,,,, A,,,
+=CHORUS 3
+-
+C"DOWN"_,,, G,,, D"BAND IN"_,,, A,,Bm
+C,,, G,,, D,,, A"STOP"

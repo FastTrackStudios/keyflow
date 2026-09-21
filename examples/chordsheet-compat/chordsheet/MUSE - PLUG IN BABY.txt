@@ -1,0 +1,20 @@
+-NOTE: STAY BIG THROUGH FIRST CHORD OF VERSE
+-
+=INTRO
+(F#,,, ,,,, G,,, ,,,, D"BAND IN"_,,, ,,,,)x2
+=VERSE
+(F#,,, ,,,, G"DOWN, VOCALS IN"_,,, ,,,, D,,, ,,,)x3
+F#"BUILD"_,,, ,,,,
+=CHORUS
+G,,, ,,,, Bm,,, F#,,,)x3 
+G,,, ,,,, D,,, ,,,,
+=INSTRUMENTAL
+F#,,, ,,,, G,,, ,,,, D,,, ,,,,
+
+P1
+-BACK TO TOP ONLY 1X THROUGH INTRO, FULL BAND
+-
+P0
+=INST CONT. PLUS INTRO
+(F#,,, ,,,, G,,, ,,,, D,,, ,,,,)x2
+F#,,, ,,,, G

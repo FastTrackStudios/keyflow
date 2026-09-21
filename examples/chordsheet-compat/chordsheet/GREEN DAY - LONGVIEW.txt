@@ -1,0 +1,40 @@
+-STANDARD TUNING
+=INTRO
+-Bass & Drums
+(E,,, D,,, E,,, D,,,)x2
+
+=VERSE 1
+-Bass & Drums
+(E,,, D,,, E,,, D,,,)x4
+
+=CHORUS
+(B,,, A,E, B,,, 1.A,E,2.A,,,)
+=Instrumental
+-Bass & Drums
+E,,, D,,, E,,, D,,,
+
+=VERSE 2
+-Bass & Drums
+(E,,, D,,, E,,, D,,,)x4
+=CHORUS
+(B,,, A,E, B,,, 1.A,E,2.A,,,)
+
+=BRIDGE
+(E,,, D,,,)x4
+
+=CHORUS RIFF
+(B,,, A,E, B,,, 1.A,E,2.A,,,)
+
+=INTRUMENTAL
+-Bass & Drums
+(E,,, D,,, E,,, D,,,)
+
+=VERSE 3
+-Bass & Drums
+(E,,, D,,, E,,, D,,,)x4
+D,,A
+
+=CHORUS
+=CHORUS
+-
+=INTRUMENTAL OUTRO

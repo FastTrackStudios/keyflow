@@ -1,0 +1,13 @@
+=INTRO
+(CmAbEbBb)x4
+=VERSE
+(CmAbEbBb)x4
+=CHORUS
+(CmAbEbBb)x2
+=VERSE 2
+=CHORUS
+=SOLO
+(CmAbEbBb)x2
+=DOUBLE CHORUS
+=OUTRO
+(CmAbEb)

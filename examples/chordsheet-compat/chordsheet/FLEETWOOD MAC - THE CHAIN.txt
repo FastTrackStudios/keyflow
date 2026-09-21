@@ -1,0 +1,18 @@
+=INTRO
+(Em,,, ,,,,)x4
+=VERSE
+(Em,,, A,,, D,C, Em,,,)x2
+
+=CHORUS
+(Am,,, ,,,, Em,C, Dsus4,,,)x2
+=INTRO 1/2
+-
+=VERSE x3 PROGRESSION
+-
+=CHORUS x3 PROGRESSION
+-
+=BREAK
+(Em,,, ,,,,)x2 ,,,,
+-
+=BASS BREAK AND SOLO OUTRO
+Am,,, Em,,,

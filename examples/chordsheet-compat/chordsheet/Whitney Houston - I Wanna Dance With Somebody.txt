@@ -1,0 +1,29 @@
+-"Play the hits in unison on the last measure."
+=Intro
+(Gb_r4)x2 (Gb)x4 Ebm7 % 
+B Am7_Bm Gb % 
+=Verse
+Db % Ebm7*_Abm7 Db % Ebm7 Ebm 
+=Prechorus
+Abm7 Db Gb Gbm_B Abm7_Ebm Eb B_Db
+-"Play the hits in unison on the last measure."
+=Chorus
+(Gb)x4 Ebm7 % B % (Gb)x3 
+Ebm7 % B Abm7_Bm Gb %
+=Verse
+Db % Ebm7*_Abm7 
+Db % Ebm7*_Ebm 
+=Preverse
+=Chorus
+(Gb)x3 Ebm7 % B % 
+(Gb)x3 Ebm7 % B Abm7_Ab
+=Interlude
+Ebm*_Db Ebm*_Abm Ebm Eb Db % 
+=Prechorus
+Abm7 Db Gb Gbm_B Abm7_Ebm Eb Db
+=Chorus/Outro
+(Ab)x4 Fm7 % Db % 
+(Ab)x4 Fm7 % Db Bm7_Eb
+(Ab)x12 Fm7 Fm Db Bbm7_Bbm
+-"Fades out on the Second Time on the Fm7." 
+(Ab % % % Fm7 Fm Db %)

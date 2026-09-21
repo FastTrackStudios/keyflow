@@ -1,0 +1,24 @@
+:INTRO
+(Bm,,, A,,, E,,, ,,,,)
+:VERSE
+-x4
+:CHORUS
+-x2
+:INSTRUMENTAL
+-x1
+:VERSE 2
+-x4
+:CHORUS
+-x2
+:INSTRUMENTAL
+-x4
+:DOWN VERSE
+-x2
+:UP VERSE
+-x2
+:CHORUS
+-x2
+:INSTRUMENTAL
+-x3
+:TAG W/ STOPS
+Bm A E

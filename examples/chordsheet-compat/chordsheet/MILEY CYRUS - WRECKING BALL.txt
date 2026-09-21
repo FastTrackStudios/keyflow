@@ -1,0 +1,41 @@
+=INTRO
+Dm,,, F,,, C,,, Gm,,,
+
+=VERSE 1
+(Dm,,, F,,, C,,, Gm,,,)x2
+
+=PRECHORUS
+(Bb,,, Dm,,, F,,, Bb,,,)x2
+Bb"HOLD"_,,,
+
+=CHORUS
+-BAND IN
+(F,,, C,,, Dm,,, Bb,,,)x2 
+-TAG
+Dm,,, Bb,,,,
+
+=VERSE 2
+(Dm,,, F,,, C,,, Gm,,,)x2
+
+=PRECHORUS
+(Bb,,, Dm,,, F,,, Bb,,,)x2
++
+= DOUBLE CHORUS
+(F,,, C,,, Dm,,, Bb,,,)x4
+-TAG
+Dm,,, Bb,,,,
+
+=BRIDGE
+(Bb,,, ,,,, Dm,,, ,,,, 
+F,,, ,,,, 
+Am,,, ,,,,)x4
+
+=VERSE 3 
+-DOWN
+Dm,,, F,,, C,,, Gm,,,
+,,,,
+
+=CHORUS
+(F,,, C,,, Dm,,, Bb,,,)x4
+-TAG
+(Dm,,, Bb,,,)x2

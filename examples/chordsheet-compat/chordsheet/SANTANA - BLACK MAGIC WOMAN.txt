@@ -1,0 +1,14 @@
+:INTRO
+(Dm7)x12
+(Dm7,,, Gm,,, ,,,, Dm7,,,)x2
+Dm7_"STOP"_
+:SOLO
+Dm7,,, ,,,, Am7,,, ,,,, 
+Dm7,,, ,,,, Gm,,, ,,,, 
+Dm7,,, A7,,, Dm,,, ,,,,
+Dm7_"STOP"
+
+:VERSE 1 & 2, SOLO 3 & 4, VERSE 3
+Dm7,,, ,,,, Am7,,, ,,,, 
+Dm7,,, ,,,, Gm,,, ,,,, 
+Dm7,,, A7,,, Dm,,, ,"STOP"

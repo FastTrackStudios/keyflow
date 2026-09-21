@@ -1,0 +1,22 @@
+=INTRO
+(Em%)
+=VERSE
+(Am%Em%)
+Em_r1 (r1)x3
+=PRE-CHORUS
+EmF#mAmCEm%
+=CHORUS
+F#m_AmB_Em F#m_AmB_*_*_D
+=INTERLUDE
+(Em_*_*_D)x4
+=RE-INTRO
+=VERSE
+=PRE-CHORUS
+=CHORUS
+=BASS INTERLUDE
+(Em_*_*_D)x10
+=PRECHORUS
+=CHORUS
+=INTERLUDE
+=OUTRO
+(Em_*_*_D)x4 (Em%)x8

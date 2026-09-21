@@ -1,0 +1,16 @@
+=INTRO
+(D_GD_r1)x3
+=VERSE 1
+(D_GD_r1)x3G_FG_r1
+D_GD_r1 AA_r1) D_GD_r1
+=CHORUS
+(D_GD) G_F G D_GD 
+AA_D_GD_r1
+=VERSE 2
+(D_GD_r1)G_FG_r1
+D_GD_r1 AA_r1 D_GD_r1
+=INTERLUDE "Same As Verse 2"
+=DOUBLE CHORUS
+(D_GD) G_F G D_GD
+AA"Play this at the end of chorus the first time around"
+AA"Play this at the end of chorus the second time around for outro"_D_GD_r1

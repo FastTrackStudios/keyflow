@@ -1,0 +1,23 @@
+=INTRO
+C_C_D, C_C_D, C_C_D, D,,,
+=VERSE 1 & 2
+(G,,, D,,_Eb Em,,, B,,,
+G,,, D,,_Eb Em,,, B7,,,
+=CHORUS 1 & 2
+C,_D, G,_Em,
+C,_D, G,,,
+C,_D, G,_Em,
+C,_D, G,,,)
+=BRIDGE
+Dm7,,, G,,, C,,, Am,,,
+Dm7,,, G,,, C,,,
+C_C_D, C_C_D, C_C_D, D,,,
++
+=VERSE 3
+=CHORUS
+=BRIDGE 2 GUITAR SOLO
+=VERSE 4
+=FINAL CHORUS
+C,_D, G,_Em,
+C,_D, B7,,,
+C,D, C,,, G

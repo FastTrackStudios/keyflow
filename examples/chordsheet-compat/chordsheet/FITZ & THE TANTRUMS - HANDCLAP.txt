@@ -1,0 +1,20 @@
+=INTRO
+Cm_EbAb_Gm Cm_EbAb_r4
+=VERSE
+(Cm_EbAb_Gm Cm_EbAb_Bb)
+Cm_EbAb_Gm
+=PRE-CHORUS
+Cm_EbAb_Gm Cm_EbAb_Bb
+=VERSE 2
+=PR-ECHORUS 2
+=BRIDGE
+(AbBbCmGm)x3
+AbBbr1r1
+=CHORUS
+(AbBbCmGm)
+=VERSE 3
+=PRE-CHORUS 3
+=BRIDGE 2
+=DOUBLE CHORUS
+=OUTRO
+(Cm_EbAb_Gm)

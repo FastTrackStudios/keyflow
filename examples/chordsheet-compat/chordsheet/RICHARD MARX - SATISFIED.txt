@@ -1,0 +1,30 @@
+=INTRO
+(D,_C, C,_C_B_A)x5
+D,_C, C_B_A_G G,,,
+=VERSE 1
+- SLOW WALK DOWNS IN VERSES
+(E,E, D,D_C#_B 
+E,E, D_C#_B_A) x2
+=PRE CHORUS
+(Bm,,, D,,, Em,,, G,,,)x2
+=CHORUS
+(D,_C, C,_C_B_A)x3
+D,_C, C_B_A_G G,,,
+=VERSE 2
+-
+=PRECHORUS
+(Bm,,, D,,, Em,,, G,,,)x2
+=CHORUS
++
+=SOLO (over verse, then over chorus)
+(E,E, D,D_C#_B 
+E,E, D_C#_B_A) x2
+(D,_C, C,_C_B_A)x3
+D,_C, C_B_A_G G,,,
+=CHORUS & OUTRO
+-
+-CHORUS/INTRO PATTERN BUT NOW IN E
+-PLAY 4 TIMES, TWICE WITH VOCALS, TWICE WITH GUITAR
+-
+(E,_D, D,_D_C#_B)x3
+E,_D, D_C#_B_A

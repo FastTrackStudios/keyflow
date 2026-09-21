@@ -1,0 +1,18 @@
+=Intro
+E D G A_B
+
+=Verse
+(E_A E_A)x6
+
+=Chorus
+E D E % % 
+D E A_C#_E_B
+
+=Verse "4x's"
+=Chorus
+=Bridge
+C G A B C
+=Intro 2
+F D# G# A#_D_F_C
+=Chorus
+(F_*_A# F_*_A#)x6

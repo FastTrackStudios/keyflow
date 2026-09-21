@@ -1,0 +1,41 @@
+:GUITAR PICK UP
+(EG#mAB_A)
+:VERSE 1
+EG#mAB_A
+EG#mAB C#m
+:CHORUS 
+-Holiday...
+E_G#mAEA
+E_G#mAEA
+-Heartbeat
+E_G#mECEC
+:Instrumental
+EG#mAB_A
+:VERSE 2
+EG#mAB_A
+EG#mABC#m
+:CHORUS 
+-Holiday...
+E_G#mAEA
+E_G#mAEA
+E_G#mAEA
+-Heartbeat
+E_G#mECEC
+ECEC
+:BRIDGE x6
+C#mEG#mA_B
+:PC
+ECECECEC
+:VERSE 3
+EG#mAB_A
+EG#mAB
+:CHORUS 
+-Holiday...
+E_G#mAEA
+E_G#mAEA
+E_G#m
+:OUTRO
+-Lets Go Away
+AEAE_G#m
+AEAE_G#mA_C#mB_F#m
+E

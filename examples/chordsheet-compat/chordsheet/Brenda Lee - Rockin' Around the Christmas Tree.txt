@@ -1,0 +1,14 @@
+=INTRO
+AbFmDbEb7
+=VERSE
+(Ab%(Eb7%)Eb7Ab)
+=CHORUS
+Db%Cm%
+Fm_*_*_Fm7Fm7Bb7_r1Eb7
+=VERSE
+=GUITAR SOLO"SAME AS VERSE"
+=CHORUS
+=VERSE
+=OUTRO
+r4_Eb_r4_E r4_F_r4_G
+AbFmDb_BbAb

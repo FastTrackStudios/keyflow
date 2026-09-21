@@ -1,0 +1,18 @@
+=INTRO
+(D,,, ,,,, ,,,, ,,,)
+=VERSE 1
+D,,, ,,,, ,,,, ,,,,
+D,,, ,,,, G,,, ,,,,
+D,,, ,,,,
+
+=CHORUS
+-WALK DOWN WITH 7 CHORDS
+G,,, ,,,, ,,,, ,,,,
+D,,, D_Db_C_B E,,, ,,,,
+D,,, D_Db_C_B E,A,
+
+=INSTRUMENTAL VERSE & CHORUS
+D,,, ,,,,
+=VERSE 2
+=CHORUS
+=INSTRUMENTAL OUTRO - VERSE AND CHORUS

@@ -1,0 +1,13 @@
+:INTRO
+Am,,,,, G,,_Em,, Am,,,,,
+Am,,_F,, Em,,,,, D,,,,, *,,,,,,
+:VERSE
+-CHUG VERSE 2
+Am_FM7 Em7 Am *
+Am_FM7 Em7 D *
+FM7_AM C Em7 *
+Am_FM7 Em7 Am *
+:CHORUS
+G_Em Am Dm_E Am
+A_G_F_E Dm_Em 1. D"LET CHORD RING" * 
+2. Am"LET CHORD RING" *

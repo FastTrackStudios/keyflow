@@ -1,0 +1,13 @@
+=INTRO
+(EE_*_*_B"ON & 1"CC_F#_B_E)
+=VERSE
+EE_*_*_B"ON & 1"CC_F#_B_E
+EE_*_*_B"ON & 1"CC_C_A_D
+=CHORUS
+(GG_*_*_G#"ON & 1"A_*_*_E"ON & 1"D_*_A_D"ON & 1")
+AEA_BD_*_D_B
+=VERSE
+=BRIDGE
+DC_*_B_ED_B_A_r4A_r4_E
+E_AB_D 2:4D_B
+=OUTRO(SAME AS VERSE)

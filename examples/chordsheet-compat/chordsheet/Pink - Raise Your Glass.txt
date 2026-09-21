@@ -1,0 +1,28 @@
+=Intro
+G_D_C C C_C/E_D D 
+=Verse
+G_Bm_C C C_Em_D D 
+G_D/G_D_C C C_C/E_D D 
+G_D_C C C_Em_D D G_D_C C
+-"Ring out for 2 measures"
+C 
+=Chorus
+(G_G/D_D_C C C_Em_D D) x2
+=Verse
+G_D/G_D_C C C_D D G_C C C_D D 
+=Prechorus
+G_D_C C C_Em_D D G_C C 
+-"Let it ring"
+C %
+=Chorus
+(G_C C C_Em_D D G_G/D_C C C_Em_D D)
+=Interlude
+D_C C C_D D_G G_D_C 
+C C_Em_D D_G _G_D_C C G Em 
+C_Em_G 
+=Chorus/Outro
+(G_C C C_Em_D D) 
+G_G/D_C C 
+(C_Em_D D G_D_C C)
+C_Em_D D G_G/D_C C
+C_Em_D D G r1

@@ -1,0 +1,19 @@
+=A
+(A,_E, F#m,_D, A,_E, F#,,,
+D,,, E,,, Bm,_E, A,,,)
+
+=Up Bb Eb/F
+Bb,_F, Gm,_Eb, Bb,_F, G,,,
+Bb,,, F,,, Cm,_F, Bb,,,
+
+
+=Up B E/F#
+B,_F#, G#m,_E, B,_F#, G#,,,
+E,,, F#,,, C#m,_F#, B,,,
+
+
+=Up C F/G
+C,_G, Am,_F, C,_G, A,,,
+C,,, G,,, Dm,_G, C,,,
+
+(F,,, Dm,,, C,,, Am,_G)

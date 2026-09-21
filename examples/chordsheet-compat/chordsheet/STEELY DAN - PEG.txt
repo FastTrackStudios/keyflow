@@ -1,0 +1,15 @@
+=INTRO
+Gmaj7F#7Fmaj7E7
+D#maj7D7C_C_B_*C_C_G_*
+=VERSE 1
+(Cmaj7_Gmaj7)x4(Fmaj7_Cmaj7)(Cmaj7_Gmaj7)
+Gmaj7_Dm7Fmaj7_Cmaj7(Am_Gmaj7)
+=CHORUS
+(Cmaj7_B7Am7_E7)C#_Cmaj7G_F#7
+Bm7_E7Am7_D7
+=INTERLUDE
+(Cmaj7_Gmaj7)F#7_Bm7_Em7*_Bm7_Cmaj7_*
+=RE-INTRO
+=GUITAR SOLO (SAME AS VERSE 1)
+=VERSE 2 (SAME AS VERSE 1)
+=CHOURS/OUTRO (x5)

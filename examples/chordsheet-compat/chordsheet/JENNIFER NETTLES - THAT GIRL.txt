@@ -1,0 +1,21 @@
+:INTRO
+-
+,_"DRUMS",,, ,,,,
+:INSTRUMENAL
+Em C Am B7
+
+:VERSE
+(Em C Am B7)
+
+:PRE CHORUS
+Am Em C B7 
+,_"1X BREAK",,,
+
+:CHORUS
+(Em C Am B7)
+
+-BACK TO INSTRUMENTAL
+:PRE CHORUS
+Am Em C B7 
+:CHORUS
+:OUTRO

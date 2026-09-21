@@ -1,0 +1,25 @@
+=INTRO    UP 1/2 STEP
+Em,,, Em,,,
+
+=VERSE
+Em,_G, D,_C, Em,_G, D,,,
+C,_G, D,_Em, C,_G, D,,,
+
+=CHORUS
+(C,_D, Em,,, C,_D, Em,,,
+C,_G, D,_Em, G,,, D,,,)x2
+
+=Inst x2
+-Extra measure
+
+=VERSE 2 Down 1/2 Up 1/2
+
+
+=BRIDGE
+(D_E, D_D_E, D_D_E, D_D_EG,)X2
+
+=INTRO 
+=INST CHORUS, CHORUS, INSTR. CHORUS
+
+=ENDING
+D_E D_D_E_E E,,,

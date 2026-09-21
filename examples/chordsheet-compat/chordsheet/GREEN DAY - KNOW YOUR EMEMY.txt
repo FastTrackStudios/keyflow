@@ -1,0 +1,27 @@
+:INTRO
+(,,,,)x4 (B_B_E_B ,_B_E_B)x2
+:CHORUS
+(B_B_E_B ,_B_E_B B_B_E_B ,F#,,)
+(B_B_E_B ,_B_E_B B_B_E_B ,F#,,)x2
+:VERSE
+(B_B_E_B ,_B_E_B B_B_E_B ,F#,,)x4
+:CHORUS
+(B_B_E_B ,_B_E_B B_B_E_B ,F#,,)x2
+:BRIDGE
+(E_E_E_Eb B,,,)x3 (F#_F#_B_F# ,_F#_B_F#)
+:SOLOR CHORUS 8 BARS
+(B_B_E_B ,_B_E_B B_B_E_B ,F#,,)x2
+:SOLO BRIDGE 8 BARS
+-
+(E_E_E_Eb B,,,)x3 (F#_F#_B_F# ,_F#_B_F#)x2
+:VERSE
+(F#_F#_B_F# ,_F#_B_F#)x4
+:CHORUS
+-BAND OUT
+(B_B_E_B ,_B_E_B)x2
+:CHORUS
+-BAND IN ON F#
+(B_B_E_B ,_B_E_B B_B_E_B ,F#,,)
+:FINAL CHORUS
+(B_B_E_B ,_B_E_B A_B_E_B ,F#,,)x4
+-END ON B

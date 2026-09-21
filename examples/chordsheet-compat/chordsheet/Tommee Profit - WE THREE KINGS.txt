@@ -1,0 +1,13 @@
+:INTRO
+-LOOP
+(Dm,,,,, ,,,,,,)x2
+:VERSE
+(Dm C_Dm)x2
+BbM7_C Dm BbM7_C NC "STOP"
+:OTHER
+(Dm C_Dm)x2
+:CHORUS
+Dm BbM7_C Dm BbM7_Gm
+BbM7_C Gm BbM7 C NC "STOP"
+:OUTRO
+(Dm BbM7_C)x4

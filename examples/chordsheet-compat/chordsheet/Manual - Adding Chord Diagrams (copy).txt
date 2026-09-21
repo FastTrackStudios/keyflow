@@ -1,0 +1,145 @@
+: Ex. 1  Love Me Tender /Aura Lee  Elvis
+-
+= verse
+D E7 A7 D
+D E7 A7 D 
+ 
+= chorus
+D_F#7/C# Bm _ D7/A G _ Gm6  D
+D_B7 E7 A7 D
+
+TAB1
+- To show how to add chord diagrams, we'll use this well-known song.
+
+
+
++
+: Ex. 2  Love Me Tender /Aura Lee  Elvis
+-
+= verse
+D E7 . A7 D
+D E7 A7 D 
+ 
+= chorus
+D_F#7/C# Bm _ D7/A G _ Gm6  D
+D_B7 E7 A7 D
+
+TAB1
+- To add a chord diagram, you need to put a period after the chord. 
+- So I wrote “E7 .” on the first line.
+
++
+: Ex. 3  Love Me Tender /Aura Lee  Elvis
+-
+= verse
+D E7 . A7 . D
+D E7 . A7 . D 
+ 
+= chorus
+D_F#7/C# Bm _ D7/A G _ Gm6  D
+D_B7 . E7 . A7 . D
+
+TAB1
+- Here I added a period after all dominant seventh chords.
+
+
+
++
+: Ex. 4  Love Me Tender /Aura Lee  Elvis
+-
+= verse
+. D E7 A7 D
+D E7 A7 D 
+ 
+= chorus
+D_F#7/C# Bm _ D7/A G _ Gm6  D
+D_B7 E7 A7 D
+
+TAB1
+- For convenience, you can add a period before the line and a chord diagram 
+- will be added to each chord on that line.
+- Here I added a period before the first line.
+
++
+: Ex. 5  Love Me Tender /Aura Lee  Elvis
+-
+= verse
+. D E7 A7 D
+. D E7 A7 D 
+ 
+= chorus
+. D_F#7/C# Bm _ D7/A G _ Gm6  D
+. D_B7 E7 A7 D
+
+TAB1
+- Here I started each line with a “.” 
+- Therefore, chord diagrams are displayed throughout.
+- But you probably notice that some chord diagrams are missing ...
+
++
+: Ex. 6  Love Me Tender /Aura Lee  Elvis
+-
+-
+= verse
+. D E7 A7 D
+. D E7 A7 D 
+ 
+= chorus
+. D_F#7/C# Bm _ D7/A G _ Gm6  D
+. D_B7 E7 A7 D
+
+
+TAB1
+- uncommon chords used in this song
+
+//// F#7/C# x44656x11324 D7/A x00212 Gm6 3x233x
+-
+
+
+- The chord diagrams come from a chord dictionary.
+- Which of course can't contain every chord imaginable.
+- But you can also define your own.
+
++
+: Ex. 7  Love Me Tender /Aura Lee  Elvis
+-
+-
+= verse
+. D E7 A7 D
+. D E7 A7 D 
+ 
+= chorus
+. D'_F#7/C# Bm _ D7/A G _ Gm6  D
+. D_B7 E7 A7 D
+
+
+
+///// F#7/C# x44656x11324 D7/A x00212 Gm6 3x233x
+
+
+TAB1
+- Different voicings
+// D' x57775x12341
+
+- Sometimes you want to specify different voicings of the same chord within a song.
+- You can do this by adding an apostrophe to differentiate between D and D'.
++
+: Ex. 8  Love Me Tender /Aura Lee  Elvis
+-
+-
+= verse
+D. E7. A7. D
+D E7 A7 D 
+ 
+= chorus
+. D'_F#7/C#. Bm. _ D7/A. G. _ Gm6.  D
+D_B7. E7 A7 D
+
+
+# hint, this is only required in this tutorial.
+///// F#7/C# x44656x11324 D7/A x00212 Gm6 3x233x
+
+
+TAB1
+- To make the chart clearer, I recommend doing the following:
+- Show the chord diagram only on the very first occurrence of a chord.

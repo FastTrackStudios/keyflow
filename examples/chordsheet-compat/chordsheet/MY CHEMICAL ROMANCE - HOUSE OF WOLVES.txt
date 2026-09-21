@@ -1,0 +1,30 @@
+=INTRO
+-DRUM INTRO
+,,,, ,,,, ,,,, ,,,,
+-BAND IN
+E_D_C_B E_D_C_B E_F#_G_F# E_D_C_B
+
+=VERSE
+-Second time WALK BASS
+(Em,_C, F#,_B, Em,_C, A,_B,)x2
+
+=PRE-CHORUS
+B_C,, C_D,_Eb
+
+=CHORUS
+(E,,, C,,, G,,, B,,,)
+-BACK TO TOP "BAND IN"
+-
+=BRIDGE
+-
+(Em"DT-TWICE"_,_G_A)x4
+,,,, Em"DT-TWICE"_,_G_A ,,,, B"DT-TWICE"_,D_E
+E,,, B_A,, B,_D, B,,,
+
+=CHORUS
+(E,,, C,,, G,,, B,,,)
+=CHORUS W/ LEAD
+E,,, C,,, G,,, B,,,
+E,,, C,,, G,,, B,,"STOP"_,
+=INTRO RIFF
+E_D_C_B E_D_C_B E_F#_G_F# E_D_C_B

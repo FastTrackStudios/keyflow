@@ -1,0 +1,20 @@
+= Intro
+Em % % %
+= Verse
+(Em % % %) x2
+= Refrain "Hit B on 1 of last bar"
+C % B B_r4_r2
+= Chorus "Hit C on 1 and rest on last bar"
+(G B7 Em C) x4
+= Inst. "Em for 2 bars"
+= Verse
+= Refrain 
+= Chorus "Keep going to the Bridge"
+= Bridge "Half Time"
+Em % G %
+C % B7 %
+= Inst. "Em for 2 bars"
+= Chorus "Down for first 2 bars"
+= Outro
+Em % % %
+Em_r4_r2"Hit on 1"

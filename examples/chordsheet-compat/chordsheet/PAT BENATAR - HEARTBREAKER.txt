@@ -1,0 +1,24 @@
+=INTRO (1 BAR DRUMS, THEN FULL BAND ON 4)
+*_*_*_G#(F*_*_*_G#)F
+
+=VERSE
+(F5 Eb C# Bbm_*_C_Eb)
+(Fm_Eb C# Bb C)
+
+=CHORUS
+(F_*_*_G G# Bb_*_C Db_*_C)
+
+=REINTRO
+(F*_*_*_G#)F
+
+=VERSE 2
+=CHORUS 2
+=REINTRO
+=BRIDGE
+Eb_F C_Bb G#_*_G_F *_Eb_D_* 
+Eb_F C_Bb G_Eb Bb_F
+(C)x4
+=PAGE 2
+(F_r4 C_r4 Bb_r4 C_r4)(C)
+=DOUBLE CHORUS
+=GUITAR SOLO (SAME AS CHORUSX6)

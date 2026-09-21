@@ -1,0 +1,14 @@
+:VERSE 2
+C Dm C/E F#dim7/Eb
+Dm7 G C C_Dm7_C/E
+F Dm7 Em7 A
+F Dm7 Em7 A
+Dm7 G_E/G# Am7 D/F#
+C/G F/G F F/G
+
+:BRIDGE
+C G/B Gm7 C_D_E
+F C/E Dm7_C/E_F G
+C G/B Gm7 C_D_E F F D/F# 
+C/G F/G F_C/E_Dm7
+C Dm7 Em7 Dm7_F/G

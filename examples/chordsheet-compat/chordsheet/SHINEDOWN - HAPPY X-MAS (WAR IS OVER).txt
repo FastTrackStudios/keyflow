@@ -1,0 +1,20 @@
+=INTRO/VERSE
+6:8 Ab%"GUITAR INTRO" Bbm% Eb%
+Ab%"FULL BAND"Db%Ebm%
+Ab%Db%
+=CHORUS
+Gb%AbAb_*_Ab_F#_F
+EbmGbBbmEb_r4
+=VERSE
+Ab%Bbm%Eb%
+Ab%Db%EbF_Eb
+Ab%Db%
+=CHORUS
+=VERSE
+Ab%Bbm_ABbmEb%
+Ab%Db_CmF_DbEbFm_Eb
+Ab%Db%
+=CHORUS
+=OUTRO
+Ab"JUST GUITAR & VOCALS"%Bbm"FULL BAND"%Eb
+Fm_EbDm

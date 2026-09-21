@@ -1,0 +1,34 @@
+=INTRO 1
+-SWELL ON E
+E,,, ,,,, ,,,, ,,,,
+=VERSE 1
+(E,,, C#,,, C#m,,, E,,,)x2
+=INTRO 2
+E,,, ,,,, ,,,,
+=VERSE 2
+(E,,, C#,,, C#m,,, E,,,)x2
+E_F#_G_G#
+=CHORUS 2
+A,,, ,,,, E,,, ,,,,
+A,,, ,,,, F#,,, B,,,
+=INTRO 3
+E,,, ,,,, ,,,, ,,,,
+=VERSE 3
+(E,,, C#,,, C#m,,, E,,,)x2
+E_F#_G_G#
+=CHORUS-ISH 3
+A,,, ,,,, E,,, ,,,,
+A,,, ,,,, E,,, E_F#_G_G#
+=SOLO
+-7/8 TIME CHANGE
+A,,, ,,, E,,, ,,,
+A,,, ,,, E,,, E_F#_G_G#
+=CHORUS 4
+A,,, ,,,, E,,, ,,,,
+A,,, ,,,, F#,,, B,,,
+=INSTUMENTAL
+(E,,, ,,,, ,,,, ,,,,)
+=VERSE 4
+(E,,, C#,,, C#m,,, E,,,)x2
+=INTRO
+(E,,, ,,,, ,,,,)x2 ,"STOP"_,,,

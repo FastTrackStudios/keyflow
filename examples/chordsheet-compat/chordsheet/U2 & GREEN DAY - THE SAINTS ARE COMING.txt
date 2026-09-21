@@ -1,0 +1,27 @@
+=INTRO
+(Em,,, Em/D,,, Bm,,, ,,,,)x2
+=VERSE 1
+(Em,,, Em/D,,, Bm,,, ,,,,)x4
+=VERSE 2
+(Em,,, Em/D,,, Bm,,, ,,,,)x2
+(Em,,, Em/D,,, Bm,,, 
+,"DRUMS ONLY"_,,, ,,,,
+=INSTRUMENTAL
+(Em,,,  F#7sus4,,,  Bm/D,,,  F#/C#,,,)x2
+=VERSE 3
+(Em,,, Em/D,,, Bm,,, ,,,,)x3 
+Em,,, ,,,,
++
+=CHORUS
+Em,,, G,,, Em,,, G,,,
+Em"DOUBLE TIME"_,,, Em/D,,,
+Em"STANDARD"_,,, G,,, Em,,, G,,,
+Em"DOUBLE TIME"_,,, G,,, Em,,, G"STOP"
+=INSTRUMENTAL W/ SOLO
+(Em,,,  F#7sus4,,,  Bm/D,,,  F#/C#,,,)x4
+=VERSE (LIKE VERSE 3)
+=CHORUS
+Em,,, G,,, Em,,, G,,,
+Em"DOUBLE TIME"_,,, Em/D,,,
+Em"STANDARD"_,,, G,,, Em,,, G,,,
+(Em"DOUBLE TIME"_,,, G,,,)x3

@@ -1,0 +1,19 @@
+=INTRO
+(D,, Bb,,)x4 (D" SYNTH BASS"_,, Bb,,)x4 (G,, Eb,,)x4
+=VERSE
+(C,, Ab,,)x3 C,, ,,, (C,, Ab,,)x4 
+(F,, C#,,)x4 (Bb,, F#,,)x4 
+(Eb,, B,,)x4 (Eb,, B,,)x3 Eb,, ,,,
+=Ooh ooh ooh And our freedom's consuming...
+-DRUMS IN
+Eb B Bb Bb Eb B Abm Abm 
+Bb F# F F Bb F# Eb Eb
+F A C F A C F A
+=BRIDGE
+(F C#)x3 F F (F C#)x3 F F
+(Bb"GUITAR & BASS IN" F#)x4 (Eb B)x4
+=VERSE 3
+(Ab E)x3 Ab Ab (Ab E)x4
+(C# A)x4 (F# D)x4
+(B G)x4 (B G)x4
+(B)x7

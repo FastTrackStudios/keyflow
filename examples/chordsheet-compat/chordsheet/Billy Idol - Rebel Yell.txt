@@ -1,0 +1,25 @@
+=Intro
+(Bm) x3 G F#m Em %
+G F#m Em Em_*_D_A
+(B"Let it ring out")x3
+=Verse
+(Bm%) A%G Em_*_D_A) 
+=Chorus
+(Bm%) A%G Em_*_D_A)
+(B"Let it ring out")x3
+=Verse 
+=Chorus
+=Re-intro
+(G F#m Em %)x2
+G F#m Em Em_*_D_A
+(B"Let it ring out")x3
+=Guitar Solo
+(Bm % % % A % Gmaj7 G_Em) 
+=Drum Break 
+(_r1) x7
+=Verse
+(Bm % % % A % G Gm_Bm) (Bm) x3 A% G%
+=Chorus
+(Bm % % % A % G %)
+=Outro
+(Bm % % % D % G %) (Bm) x3
