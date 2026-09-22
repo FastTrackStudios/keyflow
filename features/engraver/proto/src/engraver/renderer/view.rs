@@ -245,4 +245,29 @@ impl ChartView {
         let state = self.cursor.compute_at_time(&cached.layout, playhead_secs)?;
         Some(state.cursor_y)
     }
+
+    /// The page holding `y_pt`, as `(x, y, width, height)` in chart points
+    /// — what a panel showing ONE page at a time reads: its zoom is the
+    /// panel's size over the page's, and its scroll is the page's corner.
+    ///
+    /// The last page for a `y` past the end, so a playhead running off the
+    /// bottom keeps the final page up rather than showing nothing. `None`
+    /// before the first [`ChartView::paint`], or for a layout with no pages
+    /// (a continuous one).
+    #[must_use]
+    pub fn page_at_pt(&self, y_pt: f64) -> Option<(f64, f64, f64, f64)> {
+        let pages = &self.cached.as_ref()?.layout.pages;
+        let page = pages
+            .iter()
+            .rev()
+            .find(|page| y_pt >= page.y_offset)
+            .or_else(|| pages.first())?;
+        Some((page.x_offset, page.y_offset, page.width, page.height))
+    }
+
+    /// How many pages the chart laid out to.
+    #[must_use]
+    pub fn pages(&self) -> usize {
+        self.cached.as_ref().map_or(0, |c| c.layout.pages.len())
+    }
 }
