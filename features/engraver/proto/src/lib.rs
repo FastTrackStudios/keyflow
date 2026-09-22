@@ -74,8 +74,10 @@ pub use engraver::{
     export, fonts, import, interaction, layout, model, notation, quantize, scene, style,
 };
 // The GPU renderer (wgpu/vello) is only available with the `wgpu` feature;
-// the `svg` feature provides layout + SVG export without it.
-#[cfg(feature = "wgpu")]
+// the `svg` feature provides layout + SVG export without it. `paint` is the
+// middle tier: the scene/cursor painters and `ChartView`, on any
+// `anyrender::PaintScene` — no wgpu pipeline.
+#[cfg(feature = "paint")]
 pub use engraver::renderer;
 
 // endregion: --- Re-exports

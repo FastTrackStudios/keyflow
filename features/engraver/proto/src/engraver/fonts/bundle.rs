@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use crate::engraver::layout::chart::ChartLayoutEngine;
-#[cfg(feature = "wgpu")]
+#[cfg(feature = "paint")]
 use crate::engraver::renderer::scene_renderer::VelloSceneRenderer;
 use crate::engraver::style::MStyle;
 
@@ -253,7 +253,7 @@ impl ChartFontBundle {
         fonts
     }
 
-    #[cfg(feature = "wgpu")]
+    #[cfg(feature = "paint")]
     #[must_use]
     pub fn configure_renderer<'a>(
         &'a self,
@@ -280,9 +280,36 @@ impl ChartFontBundle {
             .with_named_font_arc("ChicagoFLF", self.aux_font_data.clone())
             .with_named_font_arc("Bravura", self.bravura_font_data.clone())
             .with_named_font_arc("FreeSans", self.freesans_font_data.clone())
-            .with_named_font_arc("section-note", self.aux_font_data.clone())
-            .with_named_font_arc("section-comment", self.aux_font_data.clone())
+            // The comment under a section-label capsule
+            // (`PaintCommand::section_comment`, `layout_margin_label`'s
+            // "BRIDGE" under "INST", "DOWN" under "CH 4") is the SAME
+            // sans family as the capsule's own label and the header —
+            // not Chicago, which is what these two used to point at (the
+            // "section-comment" family name predates the "sans-serif"
+            // fix above and has the identical bug: it was never actually
+            // FreeSans, just closer to it than the Chicago default so
+            // nobody had noticed until the label capsule sat right next
+            // to it in the same colour and weight). "section-note" has
+            // no current caller; aligned anyway so it does not repeat
+            // this the day something does use it.
+            .with_named_font_arc("section-note", self.freesans_font_data.clone())
+            .with_named_font_arc("section-comment", self.freesans_font_data.clone())
             .with_named_font_arc("title-bold", self.aux_font_data.clone())
             .with_named_font_arc("part-name-bold", self.aux_font_data.clone())
+            // The header (artist/composer, version, tempo, subtitle,
+            // footer) and every section-label capsule
+            // (`layout_margin_label`) are written with the CSS-style
+            // generic name "sans-serif" — meant to pair with the
+            // title/part-name's bold "FreeSans" as its regular weight,
+            // which is exactly what a browser resolves it to for the
+            // SVG/wasm chart panes. This renderer has no generic-name
+            // resolution of its own (`render_text` falls back to the
+            // default TEXT font — Chicago — for anything unregistered), so
+            // without this a native/GPU chart's header and section labels
+            // render in Chicago while the title stays FreeSans: two
+            // unrelated typefaces side by side where the SVG path shows
+            // one family in two weights. Alias it to the same embedded
+            // FreeSans.
+            .with_named_font_arc("sans-serif", self.freesans_font_data.clone())
     }
 }

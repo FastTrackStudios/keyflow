@@ -14,8 +14,11 @@ live = ["dep:keyflow-live"]
 # This is what lightweight / wasm consumers (e.g. an editor rendering `.kf`
 # fences) should enable — it never pulls in wgpu/vello.
 svg = ["dep:engraver", "engraver/svg"]
-# Live GPU renderer (wgpu/vello) on top of `svg`.
-wgpu = ["svg", "engraver/wgpu"]
+# Paint a live chart (scene + cursor) into any `anyrender::PaintScene` — see
+# `engraver::renderer::ChartView`. No wgpu.
+paint = ["svg", "engraver/paint"]
+# Live GPU renderer (wgpu/vello) on top of `paint`.
+wgpu = ["paint", "engraver/wgpu"]
 # Full engraver: svg + wgpu + PDF export.
 engraver = ["svg", "wgpu", "engraver/engraver"]
 # PDF chart export (kf CLI, site) — split out because printpdf's azul dep
