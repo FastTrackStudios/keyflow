@@ -501,6 +501,51 @@ pub async fn remove_from_songlist(
     vox::remove_from_songlist(org, list, song).await
 }
 
+/// This account's personal workspace, made on first ask.
+///
+/// Idempotent — the slug is a function of the account — so a caller that
+/// is unsure whether one exists simply asks.
+///
+/// # Errors
+///
+/// As [`list_songlists`].
+pub async fn ensure_personal_org() -> Result<String, LibraryError> {
+    vox::ensure_personal_org().await
+}
+
+/// Retitle a list. Same list, same songs, same order.
+///
+/// # Errors
+///
+/// As [`list_songlists`].
+pub async fn rename_songlist(org: &str, list: &str, title: &str) -> Result<SongList, LibraryError> {
+    vox::rename_songlist(org, list, title).await
+}
+
+/// Remove a list. Every song it gathered stays in the library.
+///
+/// # Errors
+///
+/// As [`list_songlists`].
+pub async fn delete_songlist(org: &str, list: &str) -> Result<(), LibraryError> {
+    vox::delete_songlist(org, list).await
+}
+
+/// Move a song within a list, to sit after `after` — or first, when that
+/// is `None`. The running order of a set.
+///
+/// # Errors
+///
+/// As [`list_songlists`].
+pub async fn move_in_songlist(
+    org: &str,
+    list: &str,
+    song: &str,
+    after: Option<&str>,
+) -> Result<SongList, LibraryError> {
+    vox::move_in_songlist(org, list, song, after).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

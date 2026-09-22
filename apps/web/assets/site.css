@@ -1938,3 +1938,37 @@ body {
 .kf-library-new { display: flex; gap: 0.5rem; align-items: center; margin: 0.75rem 0 0; }
 .kf-library-new .kf-input { flex: 1; min-width: 0; }
 .kf-library-actions .kf-select { max-width: 9rem; }
+
+/* Finding a song. A repertoire runs to hundreds, so the search box sits
+   above the shelf rather than inside any one group, and the count beside
+   it says how much of the library is answering. */
+.kf-library-find {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 0 1.5rem;
+}
+.kf-library-find .kf-input { flex: 1; min-width: 0; }
+
+/* A list's own verbs — rename, delete — under its summary rather than on
+   it, so opening the list is one target and acting on it is another. */
+.kf-library-listbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0 0.5rem 1.2rem;
+}
+.kf-library-listbar .kf-library-new { margin: 0; flex: 1; }
+
+/* The running order. A set is read aloud by number, so the number is
+   part of the row rather than something to count. Tabular figures keep
+   every title on one left edge from 1 to 99. */
+.kf-library-place {
+  flex: 0 0 1.75rem;
+  text-align: right;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+.kf-icon-button { padding-inline: 0.5rem; }
+.kf-icon-button:disabled { opacity: 0.35; cursor: default; }

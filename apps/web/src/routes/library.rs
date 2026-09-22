@@ -370,7 +370,20 @@ async fn shelf_for(chosen: Option<String>) -> Result<Shelf, LibraryError> {
     let orgs = library::my_orgs().await?;
     let remembered = chosen.or_else(|| crate::prefs::string(library::ORG_KEY));
     match library::choose_org(&orgs, remembered.as_deref()) {
-        OrgTarget::None => Err(LibraryError::NoOrg),
+        // Nobody's first chart should need a second product. An account
+        // that belongs to no workspace gets its personal one here, on the
+        // spot — the call is idempotent, so the worst case of asking is
+        // being told the slug it already had.
+        OrgTarget::None => {
+            let slug = library::ensure_personal_org().await?;
+            Ok(Shelf::Library {
+                org: slug,
+                elsewhere: Vec::new(),
+                songlists: Vec::new(),
+                songs: Vec::new(),
+                charts: Vec::new(),
+            })
+        }
         OrgTarget::Choose(orgs) => Ok(Shelf::Pick(orgs)),
         OrgTarget::One(slug) => {
             let songlists = library::list_songlists(&slug).await?;
@@ -421,6 +434,13 @@ pub fn Library() -> Element {
     let mut trouble = use_signal(|| None::<String>);
     let mut new_list = use_signal(String::new);
     let mut making_list = use_signal(|| false);
+    // What is typed in the search box. A repertoire is hundreds of songs
+    // long; scrolling is not a way to find one.
+    let mut query = use_signal(String::new);
+    // The list being retitled, as `(id, draft title)` — one at a time,
+    // because renaming is a deliberate act and two open editors would be
+    // two ways to lose what you typed.
+    let mut renaming = use_signal(|| None::<(String, String)>);
     let navigator = use_navigator();
 
     let state = (auth.state)();
@@ -554,6 +574,10 @@ pub fn Library() -> Element {
                             .map(|list| (list.id.clone(), list.title.clone()))
                             .collect();
                         let empty = songlists.is_empty() && songs.is_empty() && charts.is_empty();
+                        let q = query();
+                        let shown: Vec<SongEntry> =
+                            songs.iter().filter(|s| matches(s, &q)).cloned().collect();
+                        let searching = !q.trim().is_empty();
                         rsx! {
                             if elsewhere.len() > 1 {
                                 p { class: "kf-library-where",
@@ -570,6 +594,26 @@ pub fn Library() -> Element {
                                             option { key: "{choice.slug}", value: "{choice.slug}",
                                                 "{choice.name}"
                                             }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if !songs.is_empty() {
+                                div { class: "kf-library-find",
+                                    input {
+                                        class: "kf-input",
+                                        r#type: "search",
+                                        placeholder: "Search songs…",
+                                        "aria-label": "Search songs",
+                                        value: "{q}",
+                                        oninput: move |e| query.set(e.value()),
+                                    }
+                                    span { class: "kf-library-meta",
+                                        if searching {
+                                            {format!("{} of {}", shown.len(), plural(songs.len(), "song"))}
+                                        } else {
+                                            {plural(songs.len(), "song")}
                                         }
                                     }
                                 }
@@ -597,13 +641,71 @@ pub fn Library() -> Element {
                                                 {plural(list.songs.len(), "song")}
                                             }
                                         }
+                                        div { class: "kf-library-listbar",
+                                            if renaming().is_some_and(|(id, _)| id == list.id) {
+                                                form {
+                                                    class: "kf-library-new",
+                                                    onsubmit: {
+                                                        let org = org.clone();
+                                                        let list_id = list.id.clone();
+                                                        move |e: FormEvent| {
+                                                            e.prevent_default();
+                                                            let Some((_, title)) = renaming() else { return };
+                                                            let title = title.trim().to_owned();
+                                                            if title.is_empty() {
+                                                                return;
+                                                            }
+                                                            let (org, list_id) = (org.clone(), list_id.clone());
+                                                            renaming.set(None);
+                                                            mutate(format!("renaming to “{title}”"), Box::pin(async move {
+                                                                library::rename_songlist(&org, &list_id, &title).await.map(|_| ())
+                                                            }));
+                                                        }
+                                                    },
+                                                    input {
+                                                        class: "kf-input",
+                                                        r#type: "text",
+                                                        "aria-label": "List title",
+                                                        autofocus: true,
+                                                        value: "{renaming().map(|(_, t)| t).unwrap_or_default()}",
+                                                        oninput: {
+                                                            let list_id = list.id.clone();
+                                                            move |e: FormEvent| renaming.set(Some((list_id.clone(), e.value())))
+                                                        },
+                                                    }
+                                                    button { class: "kf-button", r#type: "submit", "Rename" }
+                                                    button {
+                                                        class: "kf-account-link",
+                                                        r#type: "button",
+                                                        onclick: move |_| renaming.set(None),
+                                                        "Cancel"
+                                                    }
+                                                }
+                                            } else {
+                                                button {
+                                                    class: "kf-button",
+                                                    onclick: {
+                                                        let list_id = list.id.clone();
+                                                        let title = list.title.clone();
+                                                        move |_| renaming.set(Some((list_id.clone(), title.clone())))
+                                                    },
+                                                    "Rename"
+                                                }
+                                                DeleteList {
+                                                    org: org.clone(),
+                                                    list: list.id.clone(),
+                                                    title: list.title.clone(),
+                                                    on_deleted: move |()| reload += 1,
+                                                }
+                                            }
+                                        }
                                         if list.songs.is_empty() {
                                             p { class: "kf-library-meta kf-library-empty",
                                                 "Empty. Add songs from the list below."
                                             }
                                         }
                                         ul { class: "kf-library-list",
-                                            for row in rows_of(&list, &by_slug) {
+                                            for (at, row) in rows_of(&list, &by_slug).into_iter().enumerate() {
                                                 match row {
                                                     ListRow::Song(song) => rsx! {
                                                         SongRow {
@@ -612,6 +714,27 @@ pub fn Library() -> Element {
                                                             busy: opening() == Some(format!("song:{}", song.slug)),
                                                             lists: Vec::<(String, String)>::new(),
                                                             in_list: Some(list.title.clone()),
+                                                            place: Some(at + 1),
+                                                            can_up: at > 0,
+                                                            can_down: at + 1 < list.songs.len(),
+                                                            on_move: {
+                                                                let org = org.clone();
+                                                                let list_id = list.id.clone();
+                                                                let order = list.songs.clone();
+                                                                let slug = song.slug.clone();
+                                                                let title = song.title.clone();
+                                                                move |up: bool| {
+                                                                    let Some((moving, after)) = move_plan(&order, &slug, up) else {
+                                                                        return;
+                                                                    };
+                                                                    let (org, list_id) = (org.clone(), list_id.clone());
+                                                                    mutate(format!("moving “{title}”"), Box::pin(async move {
+                                                                        library::move_in_songlist(&org, &list_id, &moving, Some(&after))
+                                                                            .await
+                                                                            .map(|_| ())
+                                                                    }));
+                                                                }
+                                                            },
                                                             on_open: {
                                                                 let org = org.clone();
                                                                 let slug = song.slug.clone();
@@ -708,8 +831,13 @@ pub fn Library() -> Element {
                             if !songs.is_empty() {
                                 div { class: "kf-library-section",
                                     h2 { "Songs" }
+                                    if searching && shown.is_empty() {
+                                        p { class: "kf-library-meta",
+                                            "No song here matches “{q}”."
+                                        }
+                                    }
                                     ul { class: "kf-library-list",
-                                        for song in songs {
+                                        for song in shown.clone() {
                                             SongRow {
                                                 key: "{song.slug}",
                                                 song: song.clone(),
@@ -766,6 +894,54 @@ pub fn Library() -> Element {
     }
 }
 
+/// Does this song answer to what was typed in the search box?
+///
+/// Title first, then writers, because "who is this by" is the second way
+/// a person looks for a song they half-remember. Case-insensitive and
+/// substring rather than prefix: a repertoire is full of titles whose
+/// distinguishing word is in the middle.
+fn matches(song: &SongEntry, query: &str) -> bool {
+    let q = query.trim().to_lowercase();
+    if q.is_empty() {
+        return true;
+    }
+    song.title.to_lowercase().contains(&q)
+        || song
+            .writers
+            .iter()
+            .any(|w| w.to_lowercase().contains(&q))
+        || song.key.as_deref().is_some_and(|k| k.to_lowercase() == q)
+}
+
+/// The one reorder that moves `slug` a place `up` (or down) in `order`:
+/// which song to move, and which song it should land after.
+///
+/// **Every move names a predecessor.** The collection lane places an item
+/// *after* another one and reads a missing predecessor as "put it at the
+/// end" — so asking to move to the top by naming nothing sends the song
+/// to the bottom of the list instead, which is the opposite of what the
+/// button says. Promoting the second song is therefore expressed as
+/// demoting the first: one call, same result, and no way to mean "the
+/// end" by accident.
+///
+/// `None` when the move would fall off an end, so the button can be
+/// disabled rather than send a request that means nothing.
+fn move_plan(order: &[String], slug: &str, up: bool) -> Option<(String, String)> {
+    let at = order.iter().position(|s| s == slug)?;
+    if up {
+        match at {
+            0 => None,
+            // Swap with the song above by moving *it* after this one.
+            1 => Some((order[0].clone(), slug.to_owned())),
+            _ => Some((slug.to_owned(), order[at - 2].clone())),
+        }
+    } else if at + 1 >= order.len() {
+        None
+    } else {
+        Some((slug.to_owned(), order[at + 1].clone()))
+    }
+}
+
 /// `1 song`, `12 songs`.
 fn plural(n: usize, noun: &str) -> String {
     if n == 1 {
@@ -777,16 +953,24 @@ fn plural(n: usize, noun: &str) -> String {
 
 /// A song on the shelf: title, who wrote it, its key, and what can be
 /// done with it — Open always; "Add to" a list when there are lists to
-/// add to; Remove when the row is inside a list.
+/// add to; Remove when the row is inside a list; and, inside a list, the
+/// two buttons that make it a *running order* rather than a bag.
+///
+/// `place` is the row's position in its list, one-based, and is shown:
+/// a set list is read aloud by number.
 #[component]
 fn SongRow(
     song: SongEntry,
     busy: bool,
     lists: Vec<(String, String)>,
     in_list: Option<String>,
+    #[props(default = None)] place: Option<usize>,
+    #[props(default = false)] can_up: bool,
+    #[props(default = false)] can_down: bool,
     on_open: EventHandler<()>,
     on_add: EventHandler<String>,
     on_remove: EventHandler<()>,
+    #[props(default = EventHandler::default())] on_move: EventHandler<bool>,
 ) -> Element {
     let meta: Vec<String> = [
         (!song.writers.is_empty()).then(|| song.writers.join(", ")),
@@ -798,6 +982,9 @@ fn SongRow(
 
     rsx! {
         li { class: "kf-library-row",
+            if let Some(n) = place {
+                span { class: "kf-library-place", "{n}" }
+            }
             div { class: "kf-library-what",
                 span { class: "kf-library-title", "{song.title}" }
                 if !meta.is_empty() {
@@ -805,6 +992,24 @@ fn SongRow(
                 }
             }
             div { class: "kf-library-actions",
+                if place.is_some() {
+                    button {
+                        class: "kf-button kf-icon-button",
+                        disabled: !can_up,
+                        title: "Move up",
+                        "aria-label": "Move “{song.title}” up",
+                        onclick: move |_| on_move.call(true),
+                        "↑"
+                    }
+                    button {
+                        class: "kf-button kf-icon-button",
+                        disabled: !can_down,
+                        title: "Move down",
+                        "aria-label": "Move “{song.title}” down",
+                        onclick: move |_| on_move.call(false),
+                        "↓"
+                    }
+                }
                 button {
                     class: "kf-button",
                     disabled: busy,
@@ -837,6 +1042,64 @@ fn SongRow(
                     }
                 }
             }
+        }
+    }
+}
+
+/// Delete a song list, behind the same two-step confirmation a chart's
+/// removal uses — the second click is the answer, so nothing is lost to
+/// one stray press and no browser dialog is involved.
+///
+/// The songs are not the list, so the confirmation says so: what goes is
+/// the running order, and that is the thing worth a moment's pause.
+#[component]
+fn DeleteList(
+    org: String,
+    list: String,
+    title: String,
+    on_deleted: EventHandler<()>,
+) -> Element {
+    let mut confirming = use_signal(|| false);
+    let mut deleting = use_signal(|| false);
+    let mut failed = use_signal(|| None::<String>);
+
+    rsx! {
+        if confirming() {
+            button {
+                class: "kf-button kf-button-on",
+                disabled: deleting(),
+                onclick: {
+                    let (org, list) = (org.clone(), list.clone());
+                    move |_| {
+                        let (org, list) = (org.clone(), list.clone());
+                        spawn(async move {
+                            deleting.set(true);
+                            match library::delete_songlist(&org, &list).await {
+                                Ok(()) => on_deleted.call(()),
+                                Err(error) => failed.set(Some(error.to_string())),
+                            }
+                            deleting.set(false);
+                            confirming.set(false);
+                        });
+                    }
+                },
+                if deleting() { "Deleting…" } else { "Really delete" }
+            }
+            button {
+                class: "kf-button",
+                onclick: move |_| confirming.set(false),
+                "Keep"
+            }
+        } else {
+            button {
+                class: "kf-button",
+                title: "Delete “{title}”. Its songs stay in the library.",
+                onclick: move |_| confirming.set(true),
+                "Delete list"
+            }
+        }
+        if let Some(message) = failed() {
+            span { class: "kf-account-error", role: "alert", "{message}" }
         }
     }
 }
@@ -928,6 +1191,51 @@ mod tests {
             key: None,
             tags: Vec::new(),
         }
+    }
+
+    /// The move that promotes the second song is the one that demotes the
+    /// first — because the lane can only place a song *after* another,
+    /// and naming nothing means the end of the list. Sending `None` here
+    /// once put the second song of a 204-song set at number 204.
+    #[test]
+    fn every_move_names_the_song_it_lands_after() {
+        let order: Vec<String> = ["a", "b", "c", "d"].map(String::from).to_vec();
+
+        assert_eq!(move_plan(&order, "a", true), None, "the first cannot rise");
+        assert_eq!(move_plan(&order, "d", false), None, "the last cannot fall");
+
+        // Second one up: move `a` to sit after `b`.
+        assert_eq!(
+            move_plan(&order, "b", true),
+            Some(("a".to_owned(), "b".to_owned()))
+        );
+        // Third one up: it lands after the first.
+        assert_eq!(
+            move_plan(&order, "c", true),
+            Some(("c".to_owned(), "a".to_owned()))
+        );
+        // Anything down lands after its successor.
+        assert_eq!(
+            move_plan(&order, "b", false),
+            Some(("b".to_owned(), "c".to_owned()))
+        );
+        assert_eq!(move_plan(&order, "unknown", true), None);
+    }
+
+    /// Searching answers on what a person half-remembers: part of the
+    /// title, or who it is by.
+    #[test]
+    fn search_matches_a_title_or_a_writer_and_ignores_case() {
+        let mut tune = song("africa");
+        tune.title = "AFRICA".to_owned();
+        tune.writers = vec!["TOTO".to_owned()];
+        tune.key = Some("A".to_owned());
+
+        assert!(matches(&tune, ""), "an empty box hides nothing");
+        assert!(matches(&tune, "fri"), "a word in the middle still finds it");
+        assert!(matches(&tune, "toto"), "and so does who it is by");
+        assert!(matches(&tune, "a"), "a one-letter key is an exact match");
+        assert!(!matches(&tune, "hosanna"));
     }
 
     /// A list keeps its order and does not lose a song the library

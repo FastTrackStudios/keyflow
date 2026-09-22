@@ -173,8 +173,8 @@ just grammar         # regenerate the tree-sitter C parser (gitignored)
 ### The corpus tests are `#[ignore]`d
 
 `just test` is green on a clean clone. Twenty-nine tests that read
-reference corpora are marked `#[ignore]`, because the corpora are not in
-the repo and cannot be:
+reference corpora are marked `#[ignore]`, because the corpora are not
+where a clean clone's tests can read them:
 
 - `features/examples/mxl` — the orchestral corpus the `keyflow-orchestra`
   tests read, which is transcriptions of commercial scores. This repo is
@@ -182,9 +182,12 @@ the repo and cannot be:
 - `features/examples/png-project-charts` — the reference charts the
   MusicXML importer and the engraver layout tests measure against.
 - `features/examples/chordsheet/source` (plus `manifest.json` beside it) —
-  a chordsheet.com account backup, which `keyflow-chordsheet`'s corpus
-  test converts and round-trips through `chart_to_keyflow`. Same reason:
-  200-odd transcriptions of commercial songs.
+  our chordsheet.com account backup, which `keyflow-chordsheet`'s corpus
+  tests convert, round-trip and engrave. These charts are ours and ARE
+  committed, at `examples/chordsheet-compat/` — but outside the crate, and a
+  fixture lives inside the crate that reads it, so the tests look for a
+  local copy: `cp -r examples/chordsheet-compat/chordsheet
+  features/examples/chordsheet/source` and the manifest beside it.
 
 Put a local copy at those paths and run `cargo test -- --ignored` to run
 them. Each `#[ignore]` says which corpus it wants.

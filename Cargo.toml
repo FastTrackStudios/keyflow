@@ -165,6 +165,10 @@ ssg-build = { git = "https://github.com/FastTrackStudios/task", branch = "main" 
 resources-proto = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
 collection-proto = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
 links-proto = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
+# The server lane, for exactly one call: `ensure_personal_org`. A person
+# who has just signed up belongs to no org, and the library's answer to
+# that must not be "go and open Task first".
+org-proto = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
 
 # ── apps ──────────────────────────────────────────────────────────────
 # The site. A workspace member so `cargo check --workspace` covers it on
@@ -193,14 +197,14 @@ keyflow-proto = { path = "features/proto" }
 keyflow-syntax = { path = "features/syntax" }
 
 # ── Facet reflection + vox RPC — the rc.5 fleet pins ──────────────────
-facet = { version = "0.50.0-rc.5", features = ["reflect", "chrono", "uuid"] }
-facet-json = { version = "0.50.0-rc.5" }
-vox = { version = "0.10.0-rc.5", default-features = false, features = ["runtime"] }
+facet = { version = "=0.50.0-rc.5", features = ["reflect", "chrono", "uuid"] }
+facet-json = { version = "=0.50.0-rc.5" }
+vox = { version = "=0.10.0-rc.5", default-features = false, features = ["runtime"] }
 # The client half of vox the site dials Task with: `vox-core` for the
 # initiator handshake and the `FromVoxLane` the generated clients
 # implement, `vox-websocket` for the browser WebSocket link.
-vox-core = "0.10.0-rc.5"
-vox-websocket = "0.10.0-rc.5"
+vox-core = "=0.10.0-rc.5"
+vox-websocket = "=0.10.0-rc.5"
 futures-channel = "0.3"
 
 # ── Architect framework — its own repo since the 2026-08 three-way split
