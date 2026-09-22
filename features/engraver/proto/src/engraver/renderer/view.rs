@@ -246,22 +246,35 @@ impl ChartView {
         Some(state.cursor_y)
     }
 
-    /// The page holding `y_pt`, as `(x, y, width, height)` in chart points
-    /// — what a panel showing ONE page at a time reads: its zoom is the
-    /// panel's size over the page's, and its scroll is the page's corner.
+    /// The page the playhead is on at `playhead_secs` (chart time),
+    /// 1-indexed as the layout counts them — for a panel showing ONE page
+    /// at a time, which then asks [`ChartView::page`] where it is.
     ///
-    /// The last page for a `y` past the end, so a playhead running off the
-    /// bottom keeps the final page up rather than showing nothing. `None`
-    /// before the first [`ChartView::paint`], or for a layout with no pages
-    /// (a continuous one).
+    /// By the cursor's own page number, not by a coordinate: the Page
+    /// preset lays pages out side by side, so every page shares one `y`
+    /// and a lookup by position finds the last page whatever the time.
+    /// `None` before the first [`ChartView::paint`], or when the time falls
+    /// outside the chart (before the downbeat, after the end).
     #[must_use]
-    pub fn page_at_pt(&self, y_pt: f64) -> Option<(f64, f64, f64, f64)> {
+    pub fn page_number_at_time(&self, playhead_secs: f64) -> Option<u32> {
+        let cached = self.cached.as_ref()?;
+        let state = self.cursor.compute_at_time(&cached.layout, playhead_secs)?;
+        Some(state.page)
+    }
+
+    /// Page `number` (1-indexed, as the layout counts them), as
+    /// `(x, y, width, height)` in chart points; past the end, the last.
+    /// A panel's zoom is its size over the page's, and its scroll is the
+    /// page's corner.
+    /// `None` before the first [`ChartView::paint`], or for a layout with
+    /// no pages (a continuous one).
+    #[must_use]
+    pub fn page(&self, number: u32) -> Option<(f64, f64, f64, f64)> {
         let pages = &self.cached.as_ref()?.layout.pages;
         let page = pages
             .iter()
-            .rev()
-            .find(|page| y_pt >= page.y_offset)
-            .or_else(|| pages.first())?;
+            .find(|page| page.number == number)
+            .or_else(|| pages.last())?;
         Some((page.x_offset, page.y_offset, page.width, page.height))
     }
 
