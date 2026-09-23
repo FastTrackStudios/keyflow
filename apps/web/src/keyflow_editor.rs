@@ -17,6 +17,7 @@
 
 use dioxus::prelude::*;
 
+use crate::collab::{COLLAB_STYLE, ChartCollab};
 use crate::prefs;
 use editor::{Editor, EditorState, editor_view};
 use editor_keyflow_lang::{HighlightTheme, highlight_css, keyflow_decorations, keyflow_hover};
@@ -43,8 +44,38 @@ pub fn KeyflowEditor(
     /// of those it is inside.
     #[props(default)]
     actions: Option<Element>,
+    /// The buffer, when the screen owns it — a shared library chart,
+    /// whose collaborative session writes remote edits into it. Absent,
+    /// the editor owns its own, seeded from `initial`.
+    #[props(default)]
+    state: Option<Signal<EditorState>>,
+    /// The shared chart this buffer is one copy of: other people's
+    /// carets are drawn from it.
+    #[props(default)]
+    collab: Option<ChartCollab>,
 ) -> Element {
-    let state = use_signal(|| EditorState::new(initial));
+    let own = use_signal(|| EditorState::new(initial));
+    let state = state.unwrap_or(own);
+    // The shared chart's transaction sink, built ONCE. Rebuilt per render,
+    // every presence update (each caret move, ours included) handed the
+    // editor a new callback prop mid-typing.
+    let on_transaction = use_hook(|| {
+        collab.map(|collab| {
+            Callback::new(move |event: editor::editor_view::TransactionEvent| {
+                collab.on_transaction(&event, &state.peek());
+            })
+        })
+    });
+    // Built once: the source is compared by identity, and `collab` is
+    // fixed for the life of the screen.
+    let decorations = use_hook(|| match collab {
+        None => editor_view::DecorationSource::ptr(keyflow_decorations),
+        Some(collab) => editor_view::DecorationSource::new(move |st: &EditorState| {
+            let mut out = keyflow_decorations(st);
+            out.extend(collab.carets(st));
+            out
+        }),
+    });
 
     let keymap = editor::standard_markdown_keymap();
 
@@ -74,6 +105,9 @@ pub fn KeyflowEditor(
     rsx! {
         document::Link { rel: "stylesheet", href: editor::EDITOR_STYLE }
         style { dangerous_inner_html: "{css}" }
+        if collab.is_some() {
+            style { dangerous_inner_html: COLLAB_STYLE }
+        }
 
         div { class: "kf-code-editor",
             div { class: "kf-pane-head",
@@ -105,10 +139,11 @@ pub fn KeyflowEditor(
                 Editor {
                     state,
                     keymap: keymap.clone(),
-                    decorations: editor_view::DecorationSource::ptr(keyflow_decorations),
+                    decorations: decorations.clone(),
                     hover: keyflow_hover as editor::HoverSource,
                     vim,
                     palette: Some(palette),
+                    on_transaction: on_transaction,
                 }
                 editor_view::palette::CommandPalette { state, palette }
                 }

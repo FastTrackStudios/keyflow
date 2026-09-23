@@ -99,8 +99,11 @@ engraver-score = { path = "features/engraver/score" }
 # understands the ```kf fence family natively. `editor-keyflow` (here)
 # implements its `fence_renderer` seam so charts engrave; editor-state
 # knows nothing about keyflow, which is what keeps the graph acyclic.
-editor = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.19" }
-editor-state = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.19" }
+editor = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.20" }
+editor-state = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.20" }
+# Byte-offset `Changes` ⇄ scalar text ops, at the editor's own tag: what
+# a remote edit to a shared chart becomes on its way into the editor.
+editor-crdt = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.20" }
 
 # ── features/editor — this repo's half of the editor integration ──────
 # Both need `editor-state` from below and `keyflow-text`/`engraver` from
@@ -169,6 +172,9 @@ links-proto = { git = "https://github.com/FastTrackStudios/task", branch = "main
 # who has just signed up belongs to no org, and the library's answer to
 # that must not be "go and open Task first".
 org-proto = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
+# `VaultSync::open_collab` — how a chart open in the editor joins its
+# live, shared Loro document on Task.
+vault-proto = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
 
 # ── apps ──────────────────────────────────────────────────────────────
 # The site. A workspace member so `cargo check --workspace` covers it on
@@ -242,6 +248,10 @@ music-catalog = { git = "https://github.com/FastTrackStudios/music-convention", 
 color-palette = { git = "https://github.com/FastTrackStudios/music-convention", tag = "v0.1.0" }
 # The Dioxus primitive library (was libs/ui/fts-ui, renamed on the split).
 architect-ui = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.8.2" }
+# Loro documents and their sync + presence sessions — the client half of
+# Task's per-file collaboration. Same tag as the rest of architect: two
+# copies of it would not link into one wasm binary.
+crdt = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.8.2" }
 
 # The FastTrackStudio account. One identity across Task, Session, Signal,
 # Keyflow and Ignition, served by auth.fasttrackstudio.app.
@@ -320,6 +330,11 @@ thiserror = "2.0"
 tracing = { version = "0.1", features = ["std"] }
 regex = "1"
 
+# LOCAL CO-DEVELOPMENT — do not commit.
+# Task's wire crates against the checkout next door, so the site and a
+# locally-served task-server agree on the vox schema. Without it the
+# handshake fails ("schema decode consumed N of M bytes") whenever
+# Task's protos have moved since the pinned `main`.
 [patch.crates-io]
 # Blitz from the FTS fork (0.3.0-beta.1 line, upstream 02523b83 +
 # fts-focus: focus-follows-pointerdown for all focusable content —
@@ -335,11 +350,15 @@ blitz-shell = { git = "https://github.com/FastTrackStudios/blitz", rev = "c82dd2
 blitz-net = { git = "https://github.com/FastTrackStudios/blitz", rev = "c82dd238000515c44c758845b9a17e9b48eb0087" }
 blitz-html = { git = "https://github.com/FastTrackStudios/blitz", rev = "c82dd238000515c44c758845b9a17e9b48eb0087" }
 
-# The session repo also patches `styx-format`, `phon` and `phon-jit` to
-# FastTrackStudios/vendor. None of the three resolves into this graph —
-# `vox` is pulled with default-features off — so they are deliberately
-# absent rather than carried as unused-patch warnings. Re-add them from
-# the session manifest if a crate here starts pulling the vox wire path.
+# The same vendored phon, phon-jit and facet-core Task patches in (see its
+# root manifest for each one's reason), so both ends of a vox call run one
+# codec. They became necessary here with `open_collab`: its reply carries a
+# `Uuid`, an opaque scalar upstream phon rc.5 cannot derive a decoder for —
+# the call failed in the browser with "cannot derive phon from this type".
+# Every earlier library reply happened to be strings and lists.
+phon = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.2.0" }
+phon-jit = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.2.0" }
+facet-core = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.2.0" }
 
 [workspace.lints.rust]
 # Flipped from "allow" 2026-07-28 (task cleanup): the blanket allows are

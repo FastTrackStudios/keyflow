@@ -197,6 +197,16 @@ org-proto = { workspace = true, features = ["vox"] }
 # client answers with, so the seam can map it once. Already in the graph
 # through the three proto crates; this only puts the name in scope.
 architect = { workspace = true, features = ["vox"] }
+# Editing a library chart together: `open_collab` (vault-proto), the
+# shared Loro document and its presence channel (crdt, whose dioxus
+# hooks drive the session), and the adapter that turns a remote edit
+# into editor changes (editor-crdt).
+vault-proto = { workspace = true, features = ["vox"] }
+crdt = { workspace = true, features = ["dioxus"] }
+editor-crdt = { workspace = true }
+uuid = { version = "1", features = ["v5", "js"] }
+# `vox::Caller`, the connection type the crdt hooks sync over.
+vox = { workspace = true }
 
 # ── dev-guide only ────────────────────────────────────────────────────
 # Re-rendering the guide at runtime needs the same builder `build.rs`
