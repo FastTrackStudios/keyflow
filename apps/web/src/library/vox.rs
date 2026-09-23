@@ -53,7 +53,7 @@ use std::fmt::Display;
 use architect::vox::VoxError;
 use collection_proto::Collection;
 use links_proto::{NodeKind, NodeRef};
-use resources_proto::{ChartDoc, ChartSummary, SongSummary};
+use resources_proto::{ChartDoc, ChartSummary, SongDoc, SongSummary};
 
 use super::{ChartEntry, Draft, LibraryError, SaveOutcome, SongEntry, SongList, StoredChart};
 
@@ -85,6 +85,14 @@ pub fn org_vox_url(base: &str, org: &str) -> String {
         base.to_owned()
     };
     format!("{ws}/org/{org}/vox")
+}
+
+/// The **server** lane's WebSocket URL — org management, which is where
+/// an account with no org goes to get one.
+#[must_use]
+pub fn server_vox_url(base: &str) -> String {
+    let org = org_vox_url(base, "x");
+    org.trim_end_matches("/org/x/vox").to_owned() + "/server/vox"
 }
 
 /// The subprotocol list a dial offers: always [`VOX_SUBPROTOCOL`], plus
@@ -196,6 +204,43 @@ pub fn song_from(song: SongSummary) -> SongEntry {
         writers: song.writers,
         key: blank_to_none(song.key),
         tags: song.tags,
+        updated_at: blank_to_none(song.updated_at),
+    }
+}
+
+/// A song document read for its own page. The same shelf row a listing
+/// gives, from the document rather than the summary.
+#[must_use]
+pub fn song_doc_to_entry(song: SongDoc) -> SongEntry {
+    song_from(SongSummary {
+        slug: song.slug,
+        title: song.title,
+        writers: song.writers,
+        key: song.key,
+        tags: song.tags,
+        rel_path: String::new(),
+        updated_at: song.updated_at,
+    })
+}
+
+/// The document an edited song goes up as. The slug is sent, so the
+/// server writes the song that is there rather than deriving a new one
+/// from a changed title; tags ride along untouched, because this screen
+/// does not edit them and dropping them would be a silent loss.
+#[must_use]
+pub fn song_doc_from(song: &SongEntry, updated_at: String) -> SongDoc {
+    SongDoc {
+        slug: song.slug.clone(),
+        title: song.title.trim().to_owned(),
+        writers: song.writers.clone(),
+        key: song
+            .key
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or_default()
+            .to_owned(),
+        tags: song.tags.clone(),
+        updated_at,
     }
 }
 
@@ -272,12 +317,12 @@ pub fn chart_doc_from(draft: &Draft, updated_at: String) -> ChartDoc {
             .map(str::trim)
             .unwrap_or_default()
             .to_owned(),
-        // A fresh chart of a song is its default only if it is the first;
-        // the server keeps whichever chart already holds the flag, so
-        // asking for it on every save is safe and makes an imported
-        // song's first edit-and-save land as "the chart" rather than a
-        // sibling nobody opens.
-        is_default: draft.song.is_some(),
+        // `is_default` is a request the server lets win, so a save sends
+        // it only when a person asked (`make_default`). Sending it on
+        // every save once made each edit of a secondary arrangement the
+        // song's main chart. The server gives a song's *first* chart the
+        // flag unasked, so a new song still gets its main chart.
+        is_default: draft.make_default && draft.song.is_some(),
         updated_at,
     }
 }
@@ -293,7 +338,7 @@ mod dial {
     use std::collections::HashMap;
 
     use super::super::task_base_url;
-    use super::{LibraryError, org_vox_url, subprotocols};
+    use super::{LibraryError, org_vox_url, server_vox_url, subprotocols};
 
     /// The raw lane a connection hands back, from which typed clients
     /// are made. Deliberately service-less: it is the connection, not a
@@ -325,12 +370,28 @@ mod dial {
         static ROOTS: RefCell<HashMap<(String, String), RootLane>> = RefCell::new(HashMap::new());
     }
 
+    /// The caller for the **server** lane — the one surface that is not
+    /// an org's, because provisioning the first org is the call a person
+    /// with no org has to be able to make.
+    pub async fn server_caller() -> Result<vox_core::Caller, LibraryError> {
+        lane(SERVER_LANE, &server_vox_url(&task_base_url())).await
+    }
+
+    /// The key the server lane is cached under. Not a slug, and not a
+    /// legal one, so it can never collide with an org's.
+    const SERVER_LANE: &str = "/server";
+
     /// The caller for `org`, as the signed-in person.
     pub async fn caller(org: &str) -> Result<vox_core::Caller, LibraryError> {
+        lane(org, &org_vox_url(&task_base_url(), org)).await
+    }
+
+    /// One connection per `(lane, token)`, opened on first use.
+    async fn lane(key: &str, url: &str) -> Result<vox_core::Caller, LibraryError> {
         let token = crate::auth::access_token()
             .await
             .ok_or(LibraryError::SignedOut)?;
-        let key = (org.to_owned(), token.clone());
+        let key = (key.to_owned(), token.clone());
         let cached = ROOTS.with(|roots| {
             roots
                 .borrow()
@@ -341,8 +402,7 @@ mod dial {
         if let Some(caller) = cached {
             return Ok(caller);
         }
-        let url = org_vox_url(&task_base_url(), org);
-        let link = dial_ws(&url, &token).await?;
+        let link = dial_ws(url, &token).await?;
         let root = vox_core::initiator_on(link)
             .establish::<RootLane>()
             .await
@@ -450,6 +510,56 @@ fn collections(caller: vox_core::Caller) -> collection_proto::CollectionServiceC
 
 // ── The operations ───────────────────────────────────────────────────
 
+/// Ask Task for this account's personal workspace, and answer its slug.
+///
+/// Every account gets one on first ask — the call is idempotent and the
+/// slug is derived from the account, so asking twice is asking once. It
+/// is the answer to a person who has just signed up and belongs to no
+/// org: without it the library can only say "open Task once", which
+/// sends somebody to another product to finish signing up for this one.
+#[cfg(target_arch = "wasm32")]
+pub async fn ensure_personal_org() -> Result<String, LibraryError> {
+    use vox_core::FromVoxLane as _;
+
+    let token = crate::auth::access_token()
+        .await
+        .ok_or(LibraryError::SignedOut)?;
+    let caller = dial::server_caller().await?;
+    let orgs = org_proto::OrgManagementServiceClient::from_vox_lane(caller, None);
+    let made = orgs
+        .ensure_personal_org(org_proto::PersonalOrgRequest {
+            session_token: token,
+        })
+        .await
+        .map_err(error_from)?;
+    Ok(made.slug)
+}
+
+/// The org lane's caller, for the collaborative session to sync over —
+/// the same connection every other call on this org uses.
+#[cfg(target_arch = "wasm32")]
+pub async fn org_caller(org: &str) -> Result<vox_core::Caller, LibraryError> {
+    dial::caller(org).await
+}
+
+/// Join the live, shared document of a chart on the charts shelf, and
+/// answer its id. The server registers the file for collaboration (and
+/// refuses a path it does not have); the id is what the sync session
+/// attaches to.
+#[cfg(target_arch = "wasm32")]
+pub async fn open_chart_collab(org: &str, slug: &str) -> Result<uuid::Uuid, LibraryError> {
+    use vox_core::FromVoxLane as _;
+    let vault = vault_proto::VaultSyncClient::from_vox_lane(dial::caller(org).await?, None);
+    let ack = vault
+        .open_collab(
+            resources_proto::assets::charts_vault_id(),
+            resources_proto::assets::chart_path(slug),
+        )
+        .await
+        .map_err(error_from)?;
+    Ok(ack.doc_id)
+}
+
 #[cfg(target_arch = "wasm32")]
 pub async fn list_songs(org: &str) -> Result<Vec<SongEntry>, LibraryError> {
     let songs = resources(dial::caller(org).await?)
@@ -543,6 +653,37 @@ pub async fn create_song(
 }
 
 #[cfg(target_arch = "wasm32")]
+pub async fn read_song(org: &str, slug: &str) -> Result<SongEntry, LibraryError> {
+    let song = resources(dial::caller(org).await?)
+        .song(slug.to_owned())
+        .await
+        .map_err(error_from)?;
+    Ok(song_doc_to_entry(song))
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn save_song(org: &str, song: &SongEntry) -> Result<(), LibraryError> {
+    let stamp = js_sys::Date::new_0()
+        .to_iso_string()
+        .as_string()
+        .unwrap_or_default();
+    resources(dial::caller(org).await?)
+        .upsert_song(song_doc_from(song, stamp))
+        .await
+        .map(|_| ())
+        .map_err(error_from)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn delete_song(org: &str, slug: &str) -> Result<(), LibraryError> {
+    resources(dial::caller(org).await?)
+        .delete_song(slug.to_owned())
+        .await
+        .map(|_deleted| ())
+        .map_err(error_from)
+}
+
+#[cfg(target_arch = "wasm32")]
 pub async fn create_songlist(org: &str, title: &str) -> Result<SongList, LibraryError> {
     let list = collections(dial::caller(org).await?)
         .create(
@@ -550,6 +691,45 @@ pub async fn create_songlist(org: &str, title: &str) -> Result<SongList, Library
             title.trim().to_owned(),
             collection_proto::CollectionKind::new(SONGLIST_KIND),
         )
+        .await
+        .map_err(error_from)?;
+    Ok(songlist_from(list))
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn rename_songlist(org: &str, list: &str, title: &str) -> Result<SongList, LibraryError> {
+    let list = collections(dial::caller(org).await?)
+        .rename(list.to_owned(), title.trim().to_owned())
+        .await
+        .map_err(error_from)?;
+    Ok(songlist_from(list))
+}
+
+/// Remove the list itself. The songs it gathered stay in the library —
+/// a song list is an ordering over songs that live elsewhere.
+#[cfg(target_arch = "wasm32")]
+pub async fn delete_songlist(org: &str, list: &str) -> Result<(), LibraryError> {
+    collections(dial::caller(org).await?)
+        .delete(list.to_owned())
+        .await
+        .map_err(error_from)
+}
+
+/// Move `song` to sit directly after `after`, or to the top when `after`
+/// is `None`. Ordering is what a set list is for.
+#[cfg(target_arch = "wasm32")]
+pub async fn move_in_songlist(
+    org: &str,
+    list: &str,
+    song: &str,
+    after: Option<&str>,
+) -> Result<SongList, LibraryError> {
+    let list = collections(dial::caller(org).await?)
+        .reorder(collection_proto::Placement {
+            collection_id: list.to_owned(),
+            node: NodeRef::song(song),
+            after: after.map(NodeRef::song),
+        })
         .await
         .map_err(error_from)?;
     Ok(songlist_from(list))
@@ -640,11 +820,46 @@ mod host {
     ) -> Result<SongList, LibraryError> {
         Err(offline())
     }
+    pub async fn rename_songlist(
+        _org: &str,
+        _list: &str,
+        _title: &str,
+    ) -> Result<SongList, LibraryError> {
+        Err(offline())
+    }
+    pub async fn ensure_personal_org() -> Result<String, LibraryError> {
+        Err(offline())
+    }
+    pub async fn delete_songlist(_org: &str, _list: &str) -> Result<(), LibraryError> {
+        Err(offline())
+    }
+    pub async fn open_chart_collab(_org: &str, _slug: &str) -> Result<uuid::Uuid, LibraryError> {
+        Err(offline())
+    }
+    pub async fn read_song(_org: &str, _slug: &str) -> Result<SongEntry, LibraryError> {
+        Err(offline())
+    }
+    pub async fn save_song(_org: &str, _song: &SongEntry) -> Result<(), LibraryError> {
+        Err(offline())
+    }
+    pub async fn delete_song(_org: &str, _slug: &str) -> Result<(), LibraryError> {
+        Err(offline())
+    }
+    pub async fn move_in_songlist(
+        _org: &str,
+        _list: &str,
+        _song: &str,
+        _after: Option<&str>,
+    ) -> Result<SongList, LibraryError> {
+        Err(offline())
+    }
 }
 #[cfg(not(target_arch = "wasm32"))]
 pub use host::{
-    add_to_songlist, create_song, create_songlist, delete_chart, list_charts, list_songlists,
-    list_songs, read_chart, remove_from_songlist, save_chart,
+    add_to_songlist, create_song, create_songlist, delete_chart, delete_song, delete_songlist,
+    ensure_personal_org, list_charts, list_songlists, list_songs, move_in_songlist,
+    open_chart_collab, read_chart, read_song, remove_from_songlist, rename_songlist, save_chart,
+    save_song,
 };
 
 #[cfg(test)]
@@ -757,6 +972,27 @@ mod tests {
         assert_eq!(chart.song.as_deref(), Some("build-my-life"));
     }
 
+    /// An edit writes the song that is there: same slug, same tags, the
+    /// fields this screen edits trimmed.
+    #[test]
+    fn an_edited_song_goes_up_under_its_own_slug_with_its_tags() {
+        let song = SongEntry {
+            slug: "wonderwall".to_owned(),
+            title: " Wonderwall (live) ".to_owned(),
+            writers: vec!["Noel Gallagher".to_owned()],
+            key: Some(" F#m ".to_owned()),
+            tags: vec!["britpop".to_owned()],
+            updated_at: None,
+        };
+        let doc = song_doc_from(&song, "2026-09-22T10:00:00Z".to_owned());
+        assert_eq!(doc.slug, "wonderwall");
+        assert_eq!(doc.title, "Wonderwall (live)");
+        assert_eq!(doc.key, "F#m");
+        assert_eq!(doc.tags, ["britpop"]);
+        assert_eq!(doc.updated_at, "2026-09-22T10:00:00Z");
+        assert_eq!(song_doc_to_entry(doc).key.as_deref(), Some("F#m"));
+    }
+
     #[test]
     fn a_song_list_is_its_song_items_in_collection_order() {
         let mut list = Collection::new(
@@ -790,6 +1026,7 @@ mod tests {
             org: Some("acme".to_owned()),
             song: Some("cafe".to_owned()),
             arrangement: Some("acoustic".to_owned()),
+            make_default: false,
         };
         let doc = chart_doc_from(&draft, "2026-09-14T10:00:00Z".to_owned());
         assert_eq!(doc.source, source);
@@ -801,9 +1038,14 @@ mod tests {
         assert_eq!(doc.updated_at, "2026-09-14T10:00:00Z");
         assert_eq!(doc.arrangement, "acoustic");
         assert!(
-            doc.is_default,
-            "a chart saved to a song asks to be its chart"
+            !doc.is_default,
+            "a save has no opinion on which chart is main — the server's request would win"
         );
+        let asked = Draft {
+            make_default: true,
+            ..draft.clone()
+        };
+        assert!(chart_doc_from(&asked, String::new()).is_default);
     }
 
     #[test]
@@ -817,6 +1059,7 @@ mod tests {
             org: None,
             song: None,
             arrangement: None,
+            make_default: true,
         };
         let doc = chart_doc_from(&draft, String::new());
         assert_eq!(doc.song, "");

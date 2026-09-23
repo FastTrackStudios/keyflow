@@ -193,10 +193,18 @@ pub fn SaveToLibrary(source: String, bound: Option<BoundChart>) -> Element {
                         state.set(SaveState::Pick(orgs));
                         return;
                     }
-                    Ok(OrgTarget::None) => {
-                        state.set(SaveState::Failed(LibraryError::NoOrg.to_string()));
-                        return;
-                    }
+                    // As on the shelf: an account with no workspace gets
+                    // its personal one now, rather than being sent to Task.
+                    Ok(OrgTarget::None) => match library::ensure_personal_org().await {
+                        Ok(slug) => {
+                            library::remember_org(&slug);
+                            slug
+                        }
+                        Err(error) => {
+                            state.set(SaveState::Failed(error.to_string()));
+                            return;
+                        }
+                    },
                     Err(error) => {
                         state.set(SaveState::Failed(error.to_string()));
                         return;
@@ -344,7 +352,7 @@ pub fn SaveToLibrary(source: String, bound: Option<BoundChart>) -> Element {
 
 /// What `/library` has to show once it knows who is asking.
 #[derive(Clone, Debug, PartialEq)]
-enum Shelf {
+pub(super) enum Shelf {
     /// Several workspaces and no remembered choice: ask once.
     Pick(Vec<Org>),
     /// One workspace's library, and the others it could switch to.
@@ -353,8 +361,9 @@ enum Shelf {
         elsewhere: Vec<Org>,
         songlists: Vec<SongList>,
         songs: Vec<SongEntry>,
-        /// The unattached charts only; a song's charts are reached
-        /// through the song.
+        /// Every chart in the workspace. The shelf counts a song's
+        /// charts and links its main one from this, and lists the
+        /// unattached ones on their own — one call for all three.
         charts: Vec<ChartEntry>,
     },
 }
@@ -366,20 +375,29 @@ enum Shelf {
 /// unattached ones, because "every chart" and "the charts a song owns"
 /// are the same server call with and without a filter, and one call
 /// for the shelf beats one per song.
-async fn shelf_for(chosen: Option<String>) -> Result<Shelf, LibraryError> {
+pub(super) async fn shelf_for(chosen: Option<String>) -> Result<Shelf, LibraryError> {
     let orgs = library::my_orgs().await?;
     let remembered = chosen.or_else(|| crate::prefs::string(library::ORG_KEY));
     match library::choose_org(&orgs, remembered.as_deref()) {
-        OrgTarget::None => Err(LibraryError::NoOrg),
+        // Nobody's first chart should need a second product. An account
+        // that belongs to no workspace gets its personal one here, on the
+        // spot — the call is idempotent, so the worst case of asking is
+        // being told the slug it already had.
+        OrgTarget::None => {
+            let slug = library::ensure_personal_org().await?;
+            Ok(Shelf::Library {
+                org: slug,
+                elsewhere: Vec::new(),
+                songlists: Vec::new(),
+                songs: Vec::new(),
+                charts: Vec::new(),
+            })
+        }
         OrgTarget::Choose(orgs) => Ok(Shelf::Pick(orgs)),
         OrgTarget::One(slug) => {
             let songlists = library::list_songlists(&slug).await?;
             let songs = library::list_songs(&slug).await?;
-            let charts = library::list_charts(&slug, None)
-                .await?
-                .into_iter()
-                .filter(|chart| chart.song.is_none())
-                .collect();
+            let charts = library::list_charts(&slug, None).await?;
             Ok(Shelf::Library {
                 org: slug,
                 elsewhere: orgs,
@@ -391,9 +409,95 @@ async fn shelf_for(chosen: Option<String>) -> Result<Shelf, LibraryError> {
     }
 }
 
+/// The charts the shelf lists on their own: those with no song, **and**
+/// those whose song is no longer in the library. Deleting a song keeps
+/// its charts by design, and a chart reached only through a song that is
+/// gone would otherwise be on the server and nowhere on the screen.
+pub(super) fn unattached(charts: Vec<ChartEntry>, songs: &[SongEntry]) -> Vec<ChartEntry> {
+    charts
+        .into_iter()
+        .filter(|chart| match &chart.song {
+            None => true,
+            Some(slug) => !songs.iter().any(|song| &song.slug == slug),
+        })
+        .collect()
+}
+
+/// How the Songs section is ordered.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum SortBy {
+    Title,
+    Writer,
+    Key,
+    Recent,
+}
+
+impl SortBy {
+    pub(super) const ALL: [Self; 4] = [Self::Title, Self::Writer, Self::Key, Self::Recent];
+
+    pub(super) fn id(self) -> &'static str {
+        match self {
+            Self::Title => "title",
+            Self::Writer => "writer",
+            Self::Key => "key",
+            Self::Recent => "recent",
+        }
+    }
+
+    pub(super) fn label(self) -> &'static str {
+        match self {
+            Self::Title => "Title",
+            Self::Writer => "Writer",
+            Self::Key => "Key",
+            Self::Recent => "Recently changed",
+        }
+    }
+
+    pub(super) fn from_id(id: &str) -> Self {
+        Self::ALL
+            .into_iter()
+            .find(|s| s.id() == id)
+            .unwrap_or(Self::Title)
+    }
+}
+
+/// Where the sort choice is remembered: a band that thinks in keys
+/// should not have to say so every visit.
+pub(super) const SORT_KEY: &str = "keyflow.library.sort";
+
+/// Order songs for the shelf. Every order falls back to the title, so
+/// two songs by one writer (or in one key) still read alphabetically,
+/// and songs missing the field sort last rather than first.
+pub(super) fn sort_songs(songs: &mut [SongEntry], by: SortBy) {
+    let title = |s: &SongEntry| s.title.to_lowercase();
+    match by {
+        SortBy::Title => songs.sort_by_key(title),
+        SortBy::Writer => songs.sort_by_key(|s| {
+            (
+                s.writers.is_empty(),
+                s.writers.first().map(|w| w.to_lowercase()),
+                title(s),
+            )
+        }),
+        SortBy::Key => songs.sort_by_key(|s| {
+            (
+                s.key.is_none(),
+                s.key.as_deref().map(str::to_lowercase),
+                title(s),
+            )
+        }),
+        // Newest first; RFC 3339 in one zone sorts as text.
+        SortBy::Recent => songs.sort_by(|a, b| {
+            (b.updated_at.is_some(), &b.updated_at)
+                .cmp(&(a.updated_at.is_some(), &a.updated_at))
+                .then_with(|| title(a).cmp(&title(b)))
+        }),
+    }
+}
+
 /// A song list's rows: its songs in the list's order, resolved against
 /// the library, with a missing one kept as its slug.
-fn rows_of(list: &SongList, songs: &HashMap<String, SongEntry>) -> Vec<ListRow> {
+pub(super) fn rows_of(list: &SongList, songs: &HashMap<String, SongEntry>) -> Vec<ListRow> {
     list.songs
         .iter()
         .map(|slug| match songs.get(slug) {
@@ -404,515 +508,112 @@ fn rows_of(list: &SongList, songs: &HashMap<String, SongEntry>) -> Vec<ListRow> 
 }
 
 #[derive(Clone, Debug, PartialEq)]
-enum ListRow {
+pub(super) enum ListRow {
     Song(SongEntry),
     Missing(String),
 }
 
-/// `/library`.
-#[component]
-pub fn Library() -> Element {
-    let mut auth = use_auth();
-    let mut picked = use_signal(|| None::<String>);
-    let mut reload = use_signal(|| 0_u32);
-    // What is being opened right now, as `song:<slug>` or
-    // `chart:<slug>`, so exactly that row says "Opening…".
-    let mut opening = use_signal(|| None::<String>);
-    let mut trouble = use_signal(|| None::<String>);
-    let mut new_list = use_signal(String::new);
-    let mut making_list = use_signal(|| false);
-    let navigator = use_navigator();
+/// Does this song answer to what was typed in the search box?
+///
+/// Title first, then writers, because "who is this by" is the second way
+/// a person looks for a song they half-remember. Case-insensitive and
+/// substring rather than prefix: a repertoire is full of titles whose
+/// distinguishing word is in the middle.
+pub(super) fn matches(song: &SongEntry, query: &str) -> bool {
+    let q = query.trim().to_lowercase();
+    if q.is_empty() {
+        return true;
+    }
+    song.title.to_lowercase().contains(&q)
+        || song.writers.iter().any(|w| w.to_lowercase().contains(&q))
+        || song.key.as_deref().is_some_and(|k| k.to_lowercase() == q)
+}
 
-    let state = (auth.state)();
-    let shelf = use_resource(move || {
-        let chosen = picked();
-        let _ = reload();
-        let signed_in = matches!((auth.state)(), AuthState::SignedIn(_));
-        async move {
-            if !signed_in {
-                return Err(LibraryError::SignedOut);
-            }
-            shelf_for(chosen).await
+/// The one reorder that moves `slug` a place `up` (or down) in `order`:
+/// which song to move, and which song it should land after.
+///
+/// **Every move names a predecessor.** The collection lane places an item
+/// *after* another one and reads a missing predecessor as "put it at the
+/// end" — so asking to move to the top by naming nothing sends the song
+/// to the bottom of the list instead, which is the opposite of what the
+/// button says. Promoting the second song is therefore expressed as
+/// demoting the first: one call, same result, and no way to mean "the
+/// end" by accident.
+///
+/// `None` when the move would fall off an end, so the button can be
+/// disabled rather than send a request that means nothing.
+pub(super) fn move_plan(order: &[String], slug: &str, up: bool) -> Option<(String, String)> {
+    let at = order.iter().position(|s| s == slug)?;
+    if up {
+        match at {
+            0 => None,
+            // Swap with the song above by moving *it* after this one.
+            1 => Some((order[0].clone(), slug.to_owned())),
+            _ => Some((slug.to_owned(), order[at - 2].clone())),
         }
-    });
-
-    // Every mutation of the shelf goes through here: run it, show what
-    // went wrong if anything did, and reload the shelf either way — the
-    // server is the truth about what is in a list.
-    let mutate = move |what: String,
-                       work: std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<(), LibraryError>>>,
-    >| {
-        spawn(async move {
-            trouble.set(None);
-            if let Err(error) = work.await {
-                trouble.set(Some(format!("{what}: {error}")));
-            }
-            reload += 1;
-        });
-    };
-
-    let open_song = move |org: String, slug: String| {
-        spawn(async move {
-            opening.set(Some(format!("song:{slug}")));
-            trouble.set(None);
-            match library::list_charts(&org, Some(&slug)).await {
-                Ok(charts) => match library::default_chart(&charts) {
-                    Some(chart) => {
-                        navigator.push(Route::LibraryChart {
-                            org,
-                            slug: chart.slug.clone(),
-                        });
-                    }
-                    None => trouble.set(Some(format!(
-                        "“{slug}” has no chart yet. Write one in the editor and save it."
-                    ))),
-                },
-                Err(error) => trouble.set(Some(error.to_string())),
-            }
-            opening.set(None);
-        });
-    };
-
-    rsx! {
-        Shell {
-            section { class: "kf-prose kf-library",
-                h1 { "Your library" }
-
-                if let Some(message) = trouble() {
-                    p { class: "kf-account-error", role: "alert", "{message}" }
-                }
-
-                match (&state, &*shelf.read_unchecked()) {
-                    (AuthState::Loading, _) | (_, None) => rsx! {
-                        p { class: "kf-note", "One moment…" }
-                    },
-
-                    (_, Some(Err(LibraryError::SignedOut))) => rsx! {
-                        p {
-                            "A FastTrackStudio account keeps your charts, and shows you the
-                             songs and set lists of every workspace you are in. The editor
-                             does not need one — a chart lives in its link — but a link is
-                             not a shelf."
-                        }
-                        div { class: "kf-account-actions",
-                            button {
-                                class: "kf-account-submit",
-                                disabled: (auth.pending)(),
-                                onclick: move |_| auth.begin_sign_in(),
-                                "Sign in"
-                            }
-                            Link { class: "kf-account-link", to: Route::Editor {},
-                                "Back to the editor"
-                            }
-                        }
-                    },
-
-                    (_, Some(Err(error))) => rsx! {
-                        p { role: "alert", "{error}" }
-                        div { class: "kf-account-actions",
-                            button {
-                                class: "kf-button",
-                                onclick: move |_| reload += 1,
-                                "Try again"
-                            }
-                            Link { class: "kf-account-link", to: Route::Editor {},
-                                "Back to the editor"
-                            }
-                        }
-                    },
-
-                    (_, Some(Ok(Shelf::Pick(orgs)))) => rsx! {
-                        p { "You are in more than one workspace. Which library do you want?" }
-                        div { class: "kf-save-orgs",
-                            for org in orgs.clone() {
-                                button {
-                                    key: "{org.slug}",
-                                    class: "kf-button",
-                                    onclick: move |_| {
-                                        library::remember_org(&org.slug);
-                                        picked.set(Some(org.slug.clone()));
-                                    },
-                                    "{org.name}"
-                                }
-                            }
-                        }
-                    },
-
-                    (_, Some(Ok(Shelf::Library { org, elsewhere, songlists, songs, charts }))) => {
-                        let org = org.clone();
-                        let elsewhere = elsewhere.clone();
-                        let songlists = songlists.clone();
-                        let charts = charts.clone();
-                        let by_slug: HashMap<String, SongEntry> = songs
-                            .iter()
-                            .map(|song| (song.slug.clone(), song.clone()))
-                            .collect();
-                        let songs = songs.clone();
-                        let list_choices: Vec<(String, String)> = songlists
-                            .iter()
-                            .map(|list| (list.id.clone(), list.title.clone()))
-                            .collect();
-                        let empty = songlists.is_empty() && songs.is_empty() && charts.is_empty();
-                        rsx! {
-                            if elsewhere.len() > 1 {
-                                p { class: "kf-library-where",
-                                    label { r#for: "kf-library-org", "Workspace" }
-                                    select {
-                                        id: "kf-library-org",
-                                        class: "kf-select",
-                                        value: "{org}",
-                                        onchange: move |e| {
-                                            library::remember_org(&e.value());
-                                            picked.set(Some(e.value()));
-                                        },
-                                        for choice in elsewhere.clone() {
-                                            option { key: "{choice.slug}", value: "{choice.slug}",
-                                                "{choice.name}"
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            if empty {
-                                p {
-                                    "Nothing here yet. Write a chart and press Save above it —
-                                     it becomes a song in this library."
-                                }
-                                Link { class: "kf-account-link", to: Route::Editor {},
-                                    "Open the editor"
-                                }
-                            }
-
-                            div { class: "kf-library-section",
-                                h2 { "Song lists" }
-                                for list in songlists {
-                                    details {
-                                        key: "{list.id}",
-                                        class: "kf-library-group",
-                                        summary {
-                                            "{list.title}"
-                                            span { class: "kf-library-count",
-                                                {plural(list.songs.len(), "song")}
-                                            }
-                                        }
-                                        if list.songs.is_empty() {
-                                            p { class: "kf-library-meta kf-library-empty",
-                                                "Empty. Add songs from the list below."
-                                            }
-                                        }
-                                        ul { class: "kf-library-list",
-                                            for row in rows_of(&list, &by_slug) {
-                                                match row {
-                                                    ListRow::Song(song) => rsx! {
-                                                        SongRow {
-                                                            key: "{list.id}/{song.slug}",
-                                                            song: song.clone(),
-                                                            busy: opening() == Some(format!("song:{}", song.slug)),
-                                                            lists: Vec::<(String, String)>::new(),
-                                                            in_list: Some(list.title.clone()),
-                                                            on_open: {
-                                                                let org = org.clone();
-                                                                let slug = song.slug.clone();
-                                                                move |()| open_song(org.clone(), slug.clone())
-                                                            },
-                                                            on_add: move |_| {},
-                                                            on_remove: {
-                                                                let org = org.clone();
-                                                                let list_id = list.id.clone();
-                                                                let slug = song.slug.clone();
-                                                                let title = song.title.clone();
-                                                                move |()| {
-                                                                    let (org, list_id, slug) = (org.clone(), list_id.clone(), slug.clone());
-                                                                    mutate(format!("removing “{title}”"), Box::pin(async move {
-                                                                        library::remove_from_songlist(&org, &list_id, &slug).await.map(|_| ())
-                                                                    }));
-                                                                }
-                                                            },
-                                                        }
-                                                    },
-                                                    ListRow::Missing(slug) => rsx! {
-                                                        li { key: "{list.id}/{slug}", class: "kf-library-row",
-                                                            div { class: "kf-library-what",
-                                                                span { class: "kf-library-title kf-library-missing",
-                                                                    "{slug}"
-                                                                }
-                                                                span { class: "kf-library-meta",
-                                                                    "not in this library any more"
-                                                                }
-                                                            }
-                                                            div { class: "kf-library-actions",
-                                                                button {
-                                                                    class: "kf-button",
-                                                                    onclick: {
-                                                                        let org = org.clone();
-                                                                        let list_id = list.id.clone();
-                                                                        let slug = slug.clone();
-                                                                        move |_| {
-                                                                            let (org, list_id, slug) = (org.clone(), list_id.clone(), slug.clone());
-                                                                            mutate(format!("removing “{slug}”"), Box::pin(async move {
-                                                                                library::remove_from_songlist(&org, &list_id, &slug).await.map(|_| ())
-                                                                            }));
-                                                                        }
-                                                                    },
-                                                                    "Remove"
-                                                                }
-                                                            }
-                                                        }
-                                                    },
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                form { class: "kf-library-new",
-                                    onsubmit: {
-                                        let org = org.clone();
-                                        move |e: FormEvent| {
-                                            e.prevent_default();
-                                            let title = new_list().trim().to_owned();
-                                            if title.is_empty() || making_list() {
-                                                return;
-                                            }
-                                            making_list.set(true);
-                                            let org = org.clone();
-                                            spawn(async move {
-                                                trouble.set(None);
-                                                match library::create_songlist(&org, &title).await {
-                                                    Ok(_) => new_list.set(String::new()),
-                                                    Err(error) => trouble.set(Some(format!("making “{title}”: {error}"))),
-                                                }
-                                                making_list.set(false);
-                                                reload += 1;
-                                            });
-                                        }
-                                    },
-                                    input {
-                                        class: "kf-input",
-                                        r#type: "text",
-                                        placeholder: "New song list…",
-                                        "aria-label": "New song list",
-                                        value: "{new_list}",
-                                        oninput: move |e| new_list.set(e.value()),
-                                    }
-                                    button {
-                                        class: "kf-button",
-                                        r#type: "submit",
-                                        disabled: making_list() || new_list().trim().is_empty(),
-                                        if making_list() { "Making…" } else { "Make list" }
-                                    }
-                                }
-                            }
-
-                            if !songs.is_empty() {
-                                div { class: "kf-library-section",
-                                    h2 { "Songs" }
-                                    ul { class: "kf-library-list",
-                                        for song in songs {
-                                            SongRow {
-                                                key: "{song.slug}",
-                                                song: song.clone(),
-                                                busy: opening() == Some(format!("song:{}", song.slug)),
-                                                lists: list_choices.clone(),
-                                                in_list: None,
-                                                on_open: {
-                                                    let org = org.clone();
-                                                    let slug = song.slug.clone();
-                                                    move |()| open_song(org.clone(), slug.clone())
-                                                },
-                                                on_add: {
-                                                    let org = org.clone();
-                                                    let slug = song.slug.clone();
-                                                    let title = song.title.clone();
-                                                    move |list_id: String| {
-                                                        let (org, slug) = (org.clone(), slug.clone());
-                                                        mutate(format!("adding “{title}”"), Box::pin(async move {
-                                                            library::add_to_songlist(&org, &list_id, &slug).await.map(|_| ())
-                                                        }));
-                                                    }
-                                                },
-                                                on_remove: move |()| {},
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            if !charts.is_empty() {
-                                div { class: "kf-library-section",
-                                    h2 { "Charts" }
-                                    p { class: "kf-library-meta",
-                                        "Charts saved before they had a song. Open one and save it to
-                                         keep editing it here."
-                                    }
-                                    ul { class: "kf-library-list",
-                                        for chart in charts {
-                                            ChartRow {
-                                                key: "{chart.slug}",
-                                                chart: chart.clone(),
-                                                org: org.clone(),
-                                                on_deleted: move |()| reload += 1,
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    } else if at + 1 >= order.len() {
+        None
+    } else {
+        Some((slug.to_owned(), order[at + 1].clone()))
     }
 }
 
+/// What a bulk add will do to one list: the picked songs it does not
+/// hold yet, in the order picked, and how many it already had. Adding a
+/// song a list already holds is refused by the lane, so those are
+/// counted rather than sent.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) struct BulkPlan {
+    pub(super) to_add: Vec<String>,
+    pub(super) already: usize,
+}
+
+pub(super) fn bulk_plan(picked: &[String], list: &SongList) -> BulkPlan {
+    let (already, to_add): (Vec<&String>, Vec<&String>) =
+        picked.iter().partition(|slug| list.songs.contains(slug));
+    BulkPlan {
+        to_add: to_add.into_iter().cloned().collect(),
+        already: already.len(),
+    }
+}
+
+/// `Added 3 songs to “Adult Jam” (2 were already there).`
+pub(super) fn bulk_summary(added: usize, already: usize, list: &str) -> String {
+    let mut out = format!("Added {} to “{list}”", plural(added, "song"));
+    match already {
+        0 => {}
+        1 => out.push_str(" (1 was already there)"),
+        n => out.push_str(&format!(" ({n} were already there)")),
+    }
+    out.push('.');
+    out
+}
+
 /// `1 song`, `12 songs`.
-fn plural(n: usize, noun: &str) -> String {
+/// `2026-09-22T22:45:00.527Z` → `22 Sep 2026`. The server's stamps are
+/// RFC 3339; a person reads a day, not a millisecond. Anything that does
+/// not start with a date is shown as it came rather than hidden.
+pub(crate) fn short_date(stamp: &str) -> String {
+    const MONTHS: [&str; 12] = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    let date = stamp.get(..10).unwrap_or(stamp);
+    let mut parts = date.split('-');
+    let parsed = (|| {
+        let year: u32 = parts.next()?.parse().ok()?;
+        let month: usize = parts.next()?.parse().ok()?;
+        let day: u32 = parts.next()?.parse().ok()?;
+        let name = MONTHS.get(month.checked_sub(1)?)?;
+        Some(format!("{day} {name} {year}"))
+    })();
+    parsed.unwrap_or_else(|| stamp.to_owned())
+}
+
+pub(super) fn plural(n: usize, noun: &str) -> String {
     if n == 1 {
         format!("{n} {noun}")
     } else {
         format!("{n} {noun}s")
-    }
-}
-
-/// A song on the shelf: title, who wrote it, its key, and what can be
-/// done with it — Open always; "Add to" a list when there are lists to
-/// add to; Remove when the row is inside a list.
-#[component]
-fn SongRow(
-    song: SongEntry,
-    busy: bool,
-    lists: Vec<(String, String)>,
-    in_list: Option<String>,
-    on_open: EventHandler<()>,
-    on_add: EventHandler<String>,
-    on_remove: EventHandler<()>,
-) -> Element {
-    let meta: Vec<String> = [
-        (!song.writers.is_empty()).then(|| song.writers.join(", ")),
-        song.key.clone(),
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
-
-    rsx! {
-        li { class: "kf-library-row",
-            div { class: "kf-library-what",
-                span { class: "kf-library-title", "{song.title}" }
-                if !meta.is_empty() {
-                    span { class: "kf-library-meta", "{meta.join(\" · \")}" }
-                }
-            }
-            div { class: "kf-library-actions",
-                button {
-                    class: "kf-button",
-                    disabled: busy,
-                    onclick: move |_| on_open.call(()),
-                    if busy { "Opening…" } else { "Open" }
-                }
-                if !lists.is_empty() {
-                    select {
-                        class: "kf-select",
-                        "aria-label": "Add to a song list",
-                        value: "",
-                        onchange: move |e| {
-                            let id = e.value();
-                            if !id.is_empty() {
-                                on_add.call(id);
-                            }
-                        },
-                        option { value: "", "Add to…" }
-                        for (id, title) in lists.clone() {
-                            option { key: "{id}", value: "{id}", "{title}" }
-                        }
-                    }
-                }
-                if let Some(list) = in_list {
-                    button {
-                        class: "kf-button",
-                        title: "Take this song out of “{list}”",
-                        onclick: move |_| on_remove.call(()),
-                        "Remove"
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// An unattached chart on the shelf: what it is, Open (bound, so a save
-/// edits it), and Remove behind a confirmation.
-#[component]
-fn ChartRow(chart: ChartEntry, org: String, on_deleted: EventHandler<()>) -> Element {
-    let mut confirming = use_signal(|| false);
-    let mut deleting = use_signal(|| false);
-    let mut failed = use_signal(|| None::<String>);
-
-    let meta: Vec<String> = [
-        chart.key.clone(),
-        (!chart.sections.is_empty()).then(|| chart.sections.join(" ")),
-        chart.notation.clone().filter(|n| n != "keyflow"),
-        chart.updated_at.clone(),
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
-
-    rsx! {
-        li { class: "kf-library-row",
-            div { class: "kf-library-what",
-                span { class: "kf-library-title", "{chart.title}" }
-                if !meta.is_empty() {
-                    span { class: "kf-library-meta", "{meta.join(\" · \")}" }
-                }
-                if let Some(message) = failed() {
-                    span { class: "kf-account-error", role: "alert", "{message}" }
-                }
-            }
-            div { class: "kf-library-actions",
-                Link {
-                    class: "kf-button",
-                    to: Route::LibraryChart { org: org.clone(), slug: chart.slug.clone() },
-                    "Open"
-                }
-                if confirming() {
-                    button {
-                        class: "kf-button kf-button-on",
-                        disabled: deleting(),
-                        onclick: {
-                            let slug = chart.slug.clone();
-                            let org = org.clone();
-                            move |_| {
-                                let slug = slug.clone();
-                                let org = org.clone();
-                                spawn(async move {
-                                    deleting.set(true);
-                                    match library::delete_chart(&org, &slug).await {
-                                        Ok(()) => on_deleted.call(()),
-                                        Err(error) => failed.set(Some(error.to_string())),
-                                    }
-                                    deleting.set(false);
-                                    confirming.set(false);
-                                });
-                            }
-                        },
-                        if deleting() { "Removing…" } else { "Really remove" }
-                    }
-                    button {
-                        class: "kf-button",
-                        onclick: move |_| confirming.set(false),
-                        "Keep"
-                    }
-                } else {
-                    button {
-                        class: "kf-button",
-                        onclick: move |_| confirming.set(true),
-                        "Remove"
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -927,7 +628,165 @@ mod tests {
             writers: Vec::new(),
             key: None,
             tags: Vec::new(),
+            updated_at: None,
         }
+    }
+
+    fn titled(
+        slug: &str,
+        title: &str,
+        writer: Option<&str>,
+        key: Option<&str>,
+        at: Option<&str>,
+    ) -> SongEntry {
+        SongEntry {
+            title: title.to_owned(),
+            writers: writer.map(|w| vec![w.to_owned()]).unwrap_or_default(),
+            key: key.map(str::to_owned),
+            updated_at: at.map(str::to_owned),
+            ..song(slug)
+        }
+    }
+
+    fn order(songs: &[SongEntry]) -> Vec<&str> {
+        songs.iter().map(|s| s.slug.as_str()).collect()
+    }
+
+    /// Every order breaks ties by title, and a song missing the field
+    /// sorts after the ones that have it.
+    #[test]
+    fn songs_sort_by_each_field_with_title_as_the_tiebreak() {
+        let mut songs = vec![
+            titled(
+                "c",
+                "cecilia",
+                Some("Simon"),
+                None,
+                Some("2026-09-01T00:00:00Z"),
+            ),
+            titled("a", "Africa", Some("Toto"), Some("A"), None),
+            titled(
+                "b",
+                "Birdland",
+                None,
+                Some("A"),
+                Some("2026-09-20T00:00:00Z"),
+            ),
+            titled(
+                "d",
+                "Dreams",
+                Some("Simon"),
+                Some("C"),
+                Some("2026-09-10T00:00:00Z"),
+            ),
+        ];
+        sort_songs(&mut songs, SortBy::Title);
+        assert_eq!(order(&songs), ["a", "b", "c", "d"], "case does not matter");
+        sort_songs(&mut songs, SortBy::Writer);
+        assert_eq!(order(&songs), ["c", "d", "a", "b"]);
+        sort_songs(&mut songs, SortBy::Key);
+        assert_eq!(order(&songs), ["a", "b", "d", "c"]);
+        sort_songs(&mut songs, SortBy::Recent);
+        assert_eq!(
+            order(&songs),
+            ["b", "d", "c", "a"],
+            "newest first, undated last"
+        );
+        assert_eq!(SortBy::from_id("nonsense"), SortBy::Title);
+        for by in SortBy::ALL {
+            assert_eq!(SortBy::from_id(by.id()), by);
+        }
+    }
+
+    /// A bulk add sends only what the list lacks, and says how many it
+    /// already had rather than failing on them.
+    #[test]
+    fn a_bulk_add_skips_what_the_list_already_holds() {
+        let list = SongList {
+            id: "set".to_owned(),
+            title: "Set".to_owned(),
+            songs: vec!["b".to_owned()],
+        };
+        let picked: Vec<String> = ["c", "b", "a"].map(String::from).to_vec();
+        let plan = bulk_plan(&picked, &list);
+        assert_eq!(plan.to_add, ["c", "a"], "in the order picked");
+        assert_eq!(plan.already, 1);
+        assert_eq!(
+            bulk_summary(2, 1, "Set"),
+            "Added 2 songs to “Set” (1 was already there)."
+        );
+        assert_eq!(bulk_summary(1, 0, "Set"), "Added 1 song to “Set”.");
+    }
+
+    /// A chart whose song was deleted is still on the shelf.
+    #[test]
+    fn a_chart_of_a_deleted_song_counts_as_unattached() {
+        let chart = |slug: &str, song: Option<&str>| ChartEntry {
+            slug: slug.to_owned(),
+            title: slug.to_owned(),
+            key: None,
+            notation: None,
+            sections: Vec::new(),
+            song: song.map(str::to_owned),
+            arrangement: None,
+            is_default: false,
+            updated_at: None,
+        };
+        let shelf = unattached(
+            vec![
+                chart("loose", None),
+                chart("kept", Some("a")),
+                chart("orphan", Some("gone")),
+            ],
+            &[song("a")],
+        );
+        let slugs: Vec<&str> = shelf.iter().map(|c| c.slug.as_str()).collect();
+        assert_eq!(slugs, ["loose", "orphan"]);
+    }
+
+    /// The move that promotes the second song is the one that demotes the
+    /// first — because the lane can only place a song *after* another,
+    /// and naming nothing means the end of the list. Sending `None` here
+    /// once put the second song of a 204-song set at number 204.
+    #[test]
+    fn every_move_names_the_song_it_lands_after() {
+        let order: Vec<String> = ["a", "b", "c", "d"].map(String::from).to_vec();
+
+        assert_eq!(move_plan(&order, "a", true), None, "the first cannot rise");
+        assert_eq!(move_plan(&order, "d", false), None, "the last cannot fall");
+
+        // Second one up: move `a` to sit after `b`.
+        assert_eq!(
+            move_plan(&order, "b", true),
+            Some(("a".to_owned(), "b".to_owned()))
+        );
+        // Third one up: it lands after the first.
+        assert_eq!(
+            move_plan(&order, "c", true),
+            Some(("c".to_owned(), "a".to_owned()))
+        );
+        // Anything down lands after its successor.
+        assert_eq!(
+            move_plan(&order, "b", false),
+            Some(("b".to_owned(), "c".to_owned()))
+        );
+        assert_eq!(move_plan(&order, "unknown", true), None);
+    }
+
+    /// Searching answers on what a person half-remembers: part of the
+    /// title, or who it is by.
+    #[test]
+    fn search_matches_a_title_or_a_writer_and_ignores_case() {
+        let mut tune = song("africa");
+        tune.title = "AFRICA".to_owned();
+        tune.writers = vec!["TOTO".to_owned()];
+        tune.key = Some("A".to_owned());
+
+        assert!(matches(&tune, ""), "an empty box hides nothing");
+        assert!(matches(&tune, "fri"), "a word in the middle still finds it");
+        assert!(matches(&tune, "toto"), "and so does who it is by");
+        assert!(matches(&tune, "a"), "a one-letter key is an exact match");
+        assert!(!matches(&tune, "hosanna"));
     }
 
     /// A list keeps its order and does not lose a song the library
@@ -973,6 +832,14 @@ mod tests {
         assert_eq!(bound.slug, "wonderwall-default");
         assert_eq!(bound.song.as_deref(), Some("wonderwall"));
         assert_eq!(bound.arrangement.as_deref(), Some("Default"));
+    }
+
+    #[test]
+    fn stamps_read_as_a_day() {
+        assert_eq!(short_date("2026-09-22T22:45:00.527Z"), "22 Sep 2026");
+        assert_eq!(short_date("2026-01-03"), "3 Jan 2026");
+        assert_eq!(short_date("yesterday"), "yesterday");
+        assert_eq!(short_date("2026-13-01"), "2026-13-01");
     }
 
     #[test]

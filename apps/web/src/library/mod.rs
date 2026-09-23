@@ -188,6 +188,11 @@ pub struct SongEntry {
     /// its own chart.
     pub key: Option<String>,
     pub tags: Vec<String>,
+    /// When the song was last changed, as the server spelled it (RFC
+    /// 3339). Compared as text for "recently changed", which RFC 3339
+    /// sorts correctly as long as the zone is the same — and every
+    /// writer here stamps UTC.
+    pub updated_at: Option<String>,
 }
 
 /// An ordered list of songs — a repertoire, a set, "Adult Jam".
@@ -281,6 +286,11 @@ pub struct Draft {
     /// The arrangement label to keep on an edit of a stored chart.
     /// Absent on a fresh save.
     pub arrangement: Option<String>,
+    /// Ask for this chart to become its song's main one. Task reads the
+    /// flag as a request that *wins*, so it is only ever set by a person
+    /// choosing it — never by a save. A song's first chart is made main
+    /// by the server without being asked.
+    pub make_default: bool,
 }
 
 /// Title, key and sections for a chart, read out of the chart itself.
@@ -334,6 +344,7 @@ pub fn draft_from_source(source: &str) -> Draft {
         org: None,
         song: None,
         arrangement: None,
+        make_default: false,
     }
 }
 
@@ -446,6 +457,24 @@ pub async fn save_chart(draft: &Draft) -> Result<SaveOutcome, LibraryError> {
     vox::save_chart(draft).await
 }
 
+/// Make a stored chart its song's main one — the chart "open the song"
+/// opens. Read and written back whole, so nothing else about it moves.
+///
+/// # Errors
+///
+/// As [`list_songlists`].
+pub async fn make_main_chart(org: &str, slug: &str) -> Result<(), LibraryError> {
+    let chart = read_chart(org, slug).await?;
+    let mut draft = draft_from_source(&chart.source);
+    draft.title = chart.title;
+    draft.org = Some(org.to_owned());
+    draft.slug = Some(chart.slug);
+    draft.song = chart.song;
+    draft.arrangement = chart.arrangement;
+    draft.make_default = true;
+    save_chart(&draft).await.map(|_| ())
+}
+
 /// Take a chart off the shelf.
 ///
 /// # Errors
@@ -501,9 +530,123 @@ pub async fn remove_from_songlist(
     vox::remove_from_songlist(org, list, song).await
 }
 
+/// This account's personal workspace, made on first ask.
+///
+/// Idempotent — the slug is a function of the account — so a caller that
+/// is unsure whether one exists simply asks.
+///
+/// # Errors
+///
+/// As [`list_songlists`].
+pub async fn ensure_personal_org() -> Result<String, LibraryError> {
+    vox::ensure_personal_org().await
+}
+
+/// Retitle a list. Same list, same songs, same order.
+///
+/// # Errors
+///
+/// As [`list_songlists`].
+pub async fn rename_songlist(org: &str, list: &str, title: &str) -> Result<SongList, LibraryError> {
+    vox::rename_songlist(org, list, title).await
+}
+
+/// Remove a list. Every song it gathered stays in the library.
+///
+/// # Errors
+///
+/// As [`list_songlists`].
+pub async fn delete_songlist(org: &str, list: &str) -> Result<(), LibraryError> {
+    vox::delete_songlist(org, list).await
+}
+
+/// Move a song within a list, to sit after `after` — or **last**, when
+/// that is `None`: the lane reads a missing predecessor as the tail, not
+/// the head. The running order of a set.
+///
+/// # Errors
+///
+/// As [`list_songlists`].
+pub async fn move_in_songlist(
+    org: &str,
+    list: &str,
+    song: &str,
+    after: Option<&str>,
+) -> Result<SongList, LibraryError> {
+    vox::move_in_songlist(org, list, song, after).await
+}
+
+/// Join a chart's live, shared document and answer its id — see
+/// [`crate::collab`].
+///
+/// # Errors
+///
+/// As [`list_songlists`]; `Refused` when the server has no such file.
+pub async fn open_chart_collab(org: &str, slug: &str) -> Result<uuid::Uuid, LibraryError> {
+    vox::open_chart_collab(org, slug).await
+}
+
+/// The caller for `org`'s lane, which the collaborative session syncs
+/// over. Browser only.
+#[cfg(target_arch = "wasm32")]
+pub async fn org_caller(org: &str) -> Result<vox_core::Caller, LibraryError> {
+    vox::org_caller(org).await
+}
+
+/// One song, read back for its own page.
+///
+/// # Errors
+///
+/// As [`list_songlists`].
+pub async fn read_song(org: &str, slug: &str) -> Result<SongEntry, LibraryError> {
+    vox::read_song(org, slug).await
+}
+
+/// Write a song's title, writers and key back. The slug is what the song
+/// *is* — every chart and list names it — so it is kept whatever the
+/// title becomes.
+///
+/// # Errors
+///
+/// As [`list_songlists`]; an empty title is refused by the server.
+pub async fn save_song(org: &str, song: &SongEntry) -> Result<(), LibraryError> {
+    vox::save_song(org, song).await
+}
+
+/// Take a song out of the library. Its charts stay — an arrangement
+/// whose song is gone still opens — and a list that named it shows the
+/// slug greyed, which is the state a person can repair.
+///
+/// # Errors
+///
+/// As [`list_songlists`].
+pub async fn delete_song(org: &str, slug: &str) -> Result<(), LibraryError> {
+    vox::delete_song(org, slug).await
+}
+
+/// `"Neil Finn, Tim Finn"` → `["Neil Finn", "Tim Finn"]`. Writers are
+/// typed as one line, because that is how a credit is read.
+#[must_use]
+pub fn writers_from(line: &str) -> Vec<String> {
+    line.split([',', ';'])
+        .map(str::trim)
+        .filter(|w| !w.is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn writers_are_one_line_split_on_commas() {
+        assert_eq!(
+            writers_from(" Neil Finn,Tim Finn ; , "),
+            ["Neil Finn", "Tim Finn"]
+        );
+        assert!(writers_from("").is_empty());
+    }
 
     /// The chart describes itself; this module does not grow a second
     /// opinion about what key something is in.
@@ -554,8 +697,13 @@ mod tests {
             org,
             song,
             arrangement,
+            make_default,
         } = draft_from_source(keyflow_ui::examples::EXAMPLE_THRILLER);
         assert!(slug.is_none() && org.is_none() && song.is_none() && arrangement.is_none());
+        assert!(
+            !make_default,
+            "a save never asks to take the song's main chart"
+        );
     }
 
     /// Sections go up as anchors, in order, once each. They are what

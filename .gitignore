@@ -60,8 +60,9 @@ apps/web/.tailwind-src/
 # charts reference, as one linked stylesheet.
 apps/web/assets/chart-fonts.css
 
-# Reference corpora the `#[ignore]`d tests read. Not ours to redistribute —
-# the orchestral scores and reference charts are transcriptions of commercial
-# music, and features/examples/chordsheet is a chordsheet.com account backup.
+# Reference corpora the `#[ignore]`d tests read. The orchestral scores and
+# reference charts are transcriptions of commercial music, not ours to
+# redistribute. features/examples/chordsheet is the tests' local copy of our
+# own chordsheet backup, which is committed at examples/chordsheet-compat/.
 # Drop a local copy in and run `cargo test -- --ignored`.
 features/examples/
