@@ -6076,6 +6076,22 @@ VS
         assert_eq!(bars_of(&chart.sections[0]), vec!["4@0", "", "1@0", "5@0"]);
     }
 
+    /// A chart may open on a pre- or post-chorus with a bar count; the
+    /// header is a header there as much as anywhere else.
+    #[test]
+    fn a_chart_may_open_on_a_counted_pre_or_post() {
+        for (header, want) in [
+            ("PRE 2", SectionType::Pre(Box::new(SectionType::Chorus))),
+            ("Post 2", SectionType::Post(Box::new(SectionType::Chorus))),
+        ] {
+            let chart =
+                parse_chart(&format!("Top\n128bpm 4/4 #E\n\n{header}\n4 5\n")).expect("parses");
+            assert_eq!(chart.sections[0].section.section_type, want, "{header}");
+            assert_eq!(chart.sections[0].section.measure_count, Some(2), "{header}");
+            assert_eq!(bars_of(&chart.sections[0]), vec!["4@0", "5@0"], "{header}");
+        }
+    }
+
     /// Chord memory is off unless the chart turns it on: a bare `5` after
     /// a `5sus` is a 5, and a `4` after a `4:6` is a 4.
     #[test]
