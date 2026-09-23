@@ -79,21 +79,8 @@ tailwind-check: tailwind
 # ── Apps ─────────────────────────────────────────────────────────────────
 
 # Serve keyflow.fasttrackstudio.app with hot reload.
-#
-# `--fullstack` is NOT optional, for the reason spelled out under
-# `guide-preview` below: the `web` feature turns on `dioxus-web/hydrate`,
-# so the client always expects a hydration payload in the page. Without a
-# server half to render one, hydration dies in `atob` and the site is a
-# blank white page with one console exception and no other clue — which
-# is exactly what this recipe served until it grew the flag.
-#
-# `KEYFLOW_TASK_URL` points the library at a Task server other than
-# production (`KEYFLOW_TASK_URL=http://127.0.0.1:18080 just web` against
-# `just demo serve` next door). Both halves must resolve the same `facet`
-# and `vox` versions or the vox handshake fails before a call is made —
-# see the pins in the root manifest.
 web: tailwind
-    cd apps/web && dx serve --platform web --fullstack
+    cd apps/web && dx serve --platform web
 
 # Same server as `just web`, with three differences that all matter:
 #

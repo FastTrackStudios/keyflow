@@ -1,8 +1,8 @@
 //! Whole-corpus smoke test.
 //!
-//! Ignored: the corpus is our chordsheet.com account backup, committed at
-//! `examples/chordsheet-compat/` — outside this crate, and a fixture lives
-//! inside the crate that reads it. Copy its `chordsheet/` directory to
+//! Ignored: the corpus is a chordsheet.com account backup — 200-odd
+//! transcriptions of commercial songs — and this repo is public, so the files
+//! are not ours to ship. Drop a backup's `source/` directory at
 //! `features/examples/chordsheet/source/` (and its `manifest.json` beside it)
 //! and run `cargo test -p keyflow-chordsheet -- --ignored`.
 //!
@@ -21,7 +21,7 @@ fn corpus() -> Option<PathBuf> {
 }
 
 #[test]
-#[ignore = "needs a chordsheet.com backup at features/examples/chordsheet/source (copy it from examples/chordsheet-compat)"]
+#[ignore = "needs a chordsheet.com backup at features/examples/chordsheet/source (not redistributable)"]
 fn every_chart_in_the_backup_round_trips_through_keyflow_text() {
     let Some(dir) = corpus() else {
         panic!("corpus not present — see the module docs");
@@ -82,7 +82,7 @@ fn every_chart_in_the_backup_round_trips_through_keyflow_text() {
 /// PDFs rather than by any test: a five-bar phrase broken four-and-one, with
 /// the fifth bar alone on a line of its own.
 #[test]
-#[ignore = "needs a chordsheet.com backup at features/examples/chordsheet/source (copy it from examples/chordsheet-compat)"]
+#[ignore = "needs a chordsheet.com backup at features/examples/chordsheet/source (not redistributable)"]
 fn every_chart_in_the_backup_engraves_without_stranding_a_bar() {
     use engraver::api::pipeline::ChartMode;
     use engraver::api::pipeline::{ChartPipeline, Preset, PresetOptions};

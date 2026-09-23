@@ -190,23 +190,10 @@ serde_json = { workspace = true }
 resources-proto = { workspace = true, features = ["vox"] }
 collection-proto = { workspace = true, features = ["vox"] }
 links-proto = { workspace = true, features = ["vox"] }
-# The server lane's one call: `ensure_personal_org`, for an account that
-# signed up here and belongs to no workspace yet.
-org-proto = { workspace = true, features = ["vox"] }
 # Named here for `architect::vox::VoxError`, the error every generated
 # client answers with, so the seam can map it once. Already in the graph
 # through the three proto crates; this only puts the name in scope.
 architect = { workspace = true, features = ["vox"] }
-# Editing a library chart together: `open_collab` (vault-proto), the
-# shared Loro document and its presence channel (crdt, whose dioxus
-# hooks drive the session), and the adapter that turns a remote edit
-# into editor changes (editor-crdt).
-vault-proto = { workspace = true, features = ["vox"] }
-crdt = { workspace = true, features = ["dioxus"] }
-editor-crdt = { workspace = true }
-uuid = { version = "1", features = ["v5", "js"] }
-# `vox::Caller`, the connection type the crdt hooks sync over.
-vox = { workspace = true }
 
 # ── dev-guide only ────────────────────────────────────────────────────
 # Re-rendering the guide at runtime needs the same builder `build.rs`
