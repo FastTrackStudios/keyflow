@@ -4340,6 +4340,10 @@ impl<'a> ChartParser<'a> {
         // Use ChordMemory to process this chord and get the appropriate full symbol
         // Pass chord_part (which includes quality like "2maj") so it can detect explicit quality
         let current_key = self.current_key.clone();
+        // Off unless the chart asks for it (`/CHORD_MEMORY=true`): a chord
+        // is what is written. Read here, so a setting anywhere above applies.
+        let memory_on = self.settings.chord_memory();
+        self.chord_memory.set_enabled(memory_on);
         let mut full_symbol = if is_slash_chord_with_just_root {
             // Slash chord with just root - use the normalized symbol, don't recall from memory
             chord.normalized.clone()
@@ -5928,6 +5932,35 @@ VS
         assert!(f9.push_pull.is_some(), "F9 should have push_pull");
     }
 
+    /// Chord memory is off unless the chart turns it on: a bare `5` after
+    /// a `5sus` is a 5, and a `4` after a `4:6` is a 4.
+    #[test]
+    fn chord_memory_is_off_unless_the_chart_turns_it_on() {
+        let symbols = |memory: &str| {
+            let input = format!("Memory\n72bpm 4/4 #D\n{memory}\nIN 2\n4:6 5sus\nVS 2\n4 5\n");
+            let chart = parse_chart(&input).expect("Should parse");
+            chart.sections[1]
+                .measures()
+                .iter()
+                .flat_map(|m| m.chords.iter().map(|c| c.full_symbol.clone()))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(symbols(""), vec!["4", "5"]);
+        assert_eq!(symbols("/CHORD_MEMORY=true"), vec!["46", "5sus4"]);
+    }
+
+    /// `42` is the 4 chord add2, as worship charts write it.
+    #[test]
+    fn a_number_chord_with_a_two_is_add2() {
+        let chart = parse_chart("Two\n72bpm 4/4 #D\n\nVS 2\n6m7 42\n").expect("Should parse");
+        let chords: Vec<_> = chart.sections[0]
+            .measures()
+            .iter()
+            .flat_map(|m| m.chords.iter().map(|c| c.full_symbol.clone()))
+            .collect();
+        assert_eq!(chords, vec!["6m7", "4add2"]);
+    }
+
     #[test]
     fn test_accent_not_in_chord_memory() {
         use crate::sections::SectionType;
@@ -5940,6 +5973,7 @@ VS
         let input = r#"
 Accent Memory Test
 120bpm 4/4 #C
+/CHORD_MEMORY=true
 
 VS
 >Cmaj7 | C D E F

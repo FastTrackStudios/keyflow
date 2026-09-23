@@ -28,6 +28,7 @@ use keyflow::sections::SectionType;
 fn test_first_section_becomes_global() {
     let input = r#"First Section Global - Demo
 120bpm 4/4 #G
+/CHORD_MEMORY=true
 
 vs 4
 Gmaj13 C9 Gmaj13 C9
@@ -81,6 +82,7 @@ vs
 fn test_section_scoped_memory() {
     let input = r#"Section Scoped - Demo
 120bpm 4/4 #G
+/CHORD_MEMORY=true
 
 intro 2
 G C
@@ -124,6 +126,7 @@ G C G C
 fn test_chord_memory_one_time_overrides() {
     let input = r#"Chord Override Test - Demo
 120bpm 4/4 #G
+/CHORD_MEMORY=true
 
 vs 2
 Gmaj7 Gmaj7
@@ -166,6 +169,7 @@ ch 2
 fn test_global_chord_assignments() {
     let input = r#"Global Assignment Test - Demo
 120bpm 4/4 #G
+/CHORD_MEMORY=true
 Cm = Cm7b5
 G = Gmaj13
 
@@ -208,6 +212,7 @@ C G Cm Em
 fn test_override_global_assignment() {
     let input = r#"Override Global - Demo
 120bpm 4/4 #G
+/CHORD_MEMORY=true
 Cm = Cm7b5
 
 vs 4
@@ -235,6 +240,7 @@ Cm !Cm Cm !Cm
 fn test_template_recall() {
     let input = r#"Template Test - Demo
 120bpm 4/4 #G
+/CHORD_MEMORY=true
 
 vs 4
 Gmaj13 C9 Em7 D7
@@ -266,6 +272,7 @@ vs
 fn test_template_length_and_inline_chords() {
     let input = r#"Template Length Test - Demo
 120bpm 4/4 #G
+/CHORD_MEMORY=true
 
 vs 4
 Gmaj7 Cmaj7 Dmin7 G7
@@ -296,6 +303,7 @@ vs
 fn test_explicit_chord_qualities() {
     let input = r#"Explicit Quality Test - Demo
 120bpm 4/4 #G
+/CHORD_MEMORY=true
 
 intro 4
 G C Em D
@@ -339,6 +347,7 @@ I IV vi V
 fn test_section_local_recall() {
     let input = r#"Section Local - Demo
 120bpm 4/4 #G
+/CHORD_MEMORY=true
 
 intro 2
 G C
@@ -368,6 +377,7 @@ Gmaj13 C9 G C
 fn test_split_family_memory() {
     let input = r#"Split Family - Demo
 120bpm 4/4 #G
+/CHORD_MEMORY=true
 
 vs 4
 Cmaj7 Cm7 C Cm

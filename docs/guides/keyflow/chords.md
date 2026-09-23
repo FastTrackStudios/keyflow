@@ -24,8 +24,11 @@ A bar of varied chord qualities, engraved:
 Cmaj7  F#m7b5  Bbmaj9  G7b9
 ```
 
-This page is about writing **one chord, on its own**. (How chords carry their
-quality forward from bar to bar — "chord memory" — comes later.) Everything
+This page is about writing **one chord, on its own**, and a chord is exactly
+what is written: a `4` is a plain 4 chord even after a `4maj7`. Charts that
+want the older "chord memory" — a bare root recalls the quality its degree
+last had — turn it on with a setting line under the header:
+`/CHORD_MEMORY=true`. Everything
 after the root reads left to right: quality → seventh family → extensions →
 alterations → additions/omissions → slash bass.
 
@@ -124,6 +127,9 @@ Alterations sharpen or flatten a single tone — most often the 5th, 9th, 11th, 
 
 - **Add a tone** without implying the notes below it: `add` — `Cadd9` is a major
   triad plus a 9th, with *no* 7th.
+- **The added 2nd** has a shorthand, the way worship charts write it: a bare
+  `2` on a triad — `G2`, `42` (the 4 chord), `4:2` — is `add2`, and shows as
+  `Gadd2`, `4add2`.
 - **Remove a tone**: `no` — `C7no3` drops the 3rd, `Cno5` drops the 5th.
 
 ## Slash bass
