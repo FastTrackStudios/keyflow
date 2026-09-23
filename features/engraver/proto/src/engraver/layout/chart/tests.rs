@@ -2253,6 +2253,44 @@ fn mid_chart_time_signature_change_renders_in_red() {
     );
 }
 
+/// The playback cursor keeps time through a meter change: a bar of 2/4
+/// lasts two beats, so the bars after it start two beats sooner than a
+/// constant 4/4 would put them. (The layout used to advance every bar by
+/// the chart's opening meter, leaving the cursor a bar behind after God,
+/// I'm Just Grateful's 2/4 Breakdown.)
+#[test]
+fn beat_times_follow_each_measures_own_meter() {
+    let style = test_style();
+    let engine = ChartLayoutEngine::new(style, Arc::new(Vec::new()), Arc::new(Vec::new()));
+    // No tempo on the chart: 120 bpm, half a second a quarter.
+    let chart = chart_with_meters(&[(4, 4), (2, 4), (4, 4), (4, 4)]);
+    let cursor = ChartCursor::default();
+
+    for mode in [
+        LayoutMode::default(),
+        LayoutMode::ContinuousScroll { width: 2000.0 },
+    ] {
+        let layout = engine.layout_chart(&chart, &mode);
+        let start_of = |measure: usize| {
+            layout
+                .beat_positions
+                .iter()
+                .filter(|b| b.measure == measure)
+                .map(|b| b.time_start)
+                .fold(f64::INFINITY, f64::min)
+        };
+        let starts: Vec<f64> = (0..4).map(start_of).collect();
+        assert_eq!(starts, vec![0.0, 2.0, 3.0, 5.0], "{mode:?}");
+
+        let the_2_4 = layout.beat_positions.iter().find(|b| b.measure == 1).unwrap();
+        assert_eq!(the_2_4.time_signature, (2, 4), "{mode:?}");
+
+        // Just past the 2/4 bar the cursor is on the bar after it.
+        let state = cursor.compute_at_time(&layout, 3.1).unwrap();
+        assert_eq!(state.measure, 2, "{mode:?}");
+    }
+}
+
 #[test]
 fn mid_chart_key_change_renders_in_red() {
     use crate::key::Key;
