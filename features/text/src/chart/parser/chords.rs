@@ -4638,7 +4638,7 @@ impl<'a> ChartParser<'a> {
         // Use ChordMemory to process this chord and get the appropriate full symbol
         // Pass chord_part (which includes quality like "2maj") so it can detect explicit quality
         let current_key = self.current_key.clone();
-        // Off unless the chart asks for it (`/CHORD_MEMORY=true`): a chord
+        // Off unless the chart asks for it (`\chord_memory = true`): a chord
         // is what is written. Read here, so a setting anywhere above applies.
         let memory_on = self.settings.chord_memory();
         self.chord_memory.set_enabled(memory_on);
@@ -6407,7 +6407,8 @@ VS
                 .collect::<Vec<_>>()
         };
         assert_eq!(symbols(""), vec!["4", "5"]);
-        assert_eq!(symbols("/CHORD_MEMORY=true"), vec!["46", "5sus4"]);
+        // A suspension is never remembered, memory or not.
+        assert_eq!(symbols("\\chord_memory = true"), vec!["46", "5"]);
     }
 
     /// `42` is the 4 chord add2, as worship charts write it.
@@ -6434,7 +6435,7 @@ VS
         let input = r#"
 Accent Memory Test
 120bpm 4/4 #C
-/CHORD_MEMORY=true
+\chord_memory = true
 
 VS
 >Cmaj7 | C D E F

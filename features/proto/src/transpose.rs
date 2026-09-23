@@ -890,7 +890,8 @@ mod tests {
         assert_eq!(as_letters("6").as_deref(), Some("Dm"));
         assert_eq!(as_letters("2/5").as_deref(), Some("Gm/C"));
         assert_eq!(as_letters("6M").as_deref(), Some("D"));
-        assert_eq!(as_numbers("6").as_deref(), Some("6"));
+        // Spelled out in numbers too: the implied minor is written `6m`.
+        assert_eq!(as_numbers("6").as_deref(), Some("6m"));
         // A flat degree, not the note B: b7 in F is Eb.
         assert_eq!(as_letters("b7").as_deref(), Some("Eb"));
         assert_eq!(as_numbers("b7").as_deref(), Some("b7"));
