@@ -10,16 +10,12 @@ use dioxus::prelude::*;
 use keyflow_ui::examples;
 
 use crate::Route;
-use crate::auth::{AuthState, use_auth};
 use crate::chart::ChartFonts;
 use crate::chart_preview::ChartPreview;
 use crate::chart_url;
-use crate::collab::{ChartCollabSession, CollabStatus, use_chart_collab, use_org_connection};
 use crate::keyflow_editor::KeyflowEditor;
-use crate::library;
 use crate::routes::library::BoundChart;
 use crate::routes::{SaveToLibrary, Shell};
-use editor::EditorState;
 
 /// `/editor` — the editor seeded with the default example.
 #[component]
@@ -86,69 +82,11 @@ pub fn EditorScreen(initial: String, from_link: bool, bound: Option<BoundChart>)
     // wrote global state the outgoing screen was still subscribed to, and
     // `/c/:data` wedged the renderer. The chart belongs to the screen
     // showing it.
-    let mut source = use_signal(|| initial.clone());
+    let mut source = use_signal(|| initial);
     // Chart first on a phone too. Reading a chart is the common errand —
     // certainly so arriving from a shared link — and writing one is a
     // deliberate act with its tab right there.
     let mut pane = use_signal(|| Pane::Chart);
-
-    // ── A library chart is a shared document ────────────────────────
-    // Everyone with it open edits one Loro document on Task (see
-    // `crate::collab`). The buffer is owned here so the session can write
-    // other people's edits into it; every hook below runs whether or not
-    // the chart is bound, as hooks must, and does nothing when it is not.
-    let editor_state = use_signal(|| EditorState::new(initial.clone()));
-    let auth = use_auth();
-    let who = match (auth.state)() {
-        AuthState::SignedIn(account) => account.label(),
-        _ => "Someone".to_owned(),
-    };
-    let collab = use_chart_collab(who);
-    use_org_connection(bound.as_ref().map(|chart| chart.org.clone()));
-    let doc_id = {
-        let bound = bound.clone();
-        use_resource(move || {
-            let bound = bound.clone();
-            async move {
-                match bound {
-                    Some(chart) => library::open_chart_collab(&chart.org, &chart.slug)
-                        .await
-                        .map(Some),
-                    None => Ok(None),
-                }
-            }
-        })
-    };
-    // Local edits and caret moves reach the shared document through the
-    // editor's transaction sink (`ChartCollab::on_transaction`), wired in
-    // `KeyflowEditor` — synchronously, not from an effect.
-    let shared = bound.is_some();
-
-    // Who else is here is read by `CollabStatus` alone: reading presence
-    // in this component re-rendered the whole editor on every caret move.
-    let note = match &bound {
-        Some(chart) => Some(format!("Editing “{}” in your library", chart.title)),
-        None => from_link.then(|| "Opened from a link".to_string()),
-    };
-    let session = match (&bound, &*doc_id.read_unchecked()) {
-        (Some(_), Some(Ok(Some(id)))) => {
-            let id = *id;
-            rsx! {
-                ChartCollabSession {
-                    key: "{id}",
-                    doc_id: id,
-                    collab,
-                    state: editor_state,
-                    opened: initial.clone(),
-                }
-            }
-        }
-        (Some(_), Some(Err(error))) => {
-            tracing::warn!("collab unavailable for this chart: {error}");
-            rsx! {}
-        }
-        _ => rsx! {},
-    };
 
     rsx! {
         Shell {
@@ -188,35 +126,18 @@ pub fn EditorScreen(initial: String, from_link: bool, bound: Option<BoundChart>)
                 // screen reader agree with the eye.
                 div { class: "kf-editor-split",
                     ChartPreview { source: source() }
-                    {session}
                     KeyflowEditor {
                         initial: source(),
                         on_change: move |text| source.set(text),
-                        state: Some(editor_state),
-                        collab: shared.then_some(collab),
-                        note,
+                        note: match &bound {
+                            Some(chart) => Some(format!("Editing “{}” in your library", chart.title)),
+                            None => from_link.then(|| "Opened from a link".to_string()),
+                        },
                         // Keeping a chart is the one thing the URL
                         // cannot do. Signed out this is an invitation
                         // and nothing more — the editor is never gated
                         // behind an account.
-                        // A chart of a song also leads back to the song:
-                        // its other arrangements, its lists, its details.
-                        actions: rsx! {
-                            if shared {
-                                CollabStatus { collab }
-                            }
-                            if let Some(chart) = bound.clone() {
-                                if let Some(song) = chart.song.clone() {
-                                    Link {
-                                        class: "kf-account-link",
-                                        to: Route::LibrarySong { org: chart.org.clone(), slug: song },
-                                        title: "This song's charts, lists and details",
-                                        "Song"
-                                    }
-                                }
-                            }
-                            SaveToLibrary { source: source(), bound: bound.clone() }
-                        },
+                        actions: rsx! { SaveToLibrary { source: source(), bound: bound.clone() } },
                     }
                 }
             }
