@@ -6092,6 +6092,35 @@ VS
         }
     }
 
+    /// A bare header replays the section, whatever the section: a
+    /// pre-chorus and a post-chorus are sections like any other.
+    #[test]
+    fn a_bare_post_chorus_replays_it() {
+        let chart =
+            parse_chart("Song\n128bpm 4/4 #E\n\nPost 2\n1 4\nVS 2\n1 5\nPost\n").expect("parses");
+        assert_eq!(bars_of(&chart.sections[2]), vec!["1@0", "4@0"]);
+    }
+
+    #[test]
+    fn a_bare_pre_chorus_replays_it() {
+        let chart =
+            parse_chart("Song\n128bpm 4/4 #E\n\nPRE 2\n4 5\nCH 2\n1 1\nPRE\nCH\n").expect("parses");
+        assert_eq!(bars_of(&chart.sections[2]), vec!["4@0", "5@0"]);
+        assert_eq!(bars_of(&chart.sections[3]), vec!["1@0", "1@0"]);
+    }
+
+    /// A section written twice with different music replays the most recent
+    /// one: each time a section is written out, it becomes what its bare
+    /// header plays from then on.
+    #[test]
+    fn a_bare_header_replays_the_most_recent_writing() {
+        let chart =
+            parse_chart("Twice\n128bpm 4/4 #E\n\nCH 2\n1 4\nVS 2\n6m 5\nCH 2\n1 5\nCH\nVS\n")
+                .expect("parses");
+        assert_eq!(bars_of(&chart.sections[3]), vec!["1@0", "5@0"]);
+        assert_eq!(bars_of(&chart.sections[4]), vec!["6m@0", "5@0"]);
+    }
+
     /// Chord memory is off unless the chart turns it on: a bare `5` after
     /// a `5sus` is a 5, and a `4` after a `4:6` is a 4.
     #[test]

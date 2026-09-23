@@ -77,7 +77,12 @@ CH            ; replays the chorus
 ```
 
 So a full song is mostly its section list: lay out `VS`, `CH`, `BR` once, then
-order the repeats however the song goes.
+order the repeats however the song goes. Every section replays this way — an
+intro, a pre-chorus or a post-chorus as much as a verse.
+
+If you write a section out again with different music (a last chorus with a new
+ending, say), a bare header after that replays the **most recent** one: each
+time a section is written out, that is what its name plays from then on.
 
 That is repetition at the scale of a whole part. For the smaller kinds — one
 bar again, a line played twice, a span with first and second endings — see

@@ -248,21 +248,11 @@ impl<'a> ChartParser<'a> {
                             }
                         }
 
-                        // Save as template if not Intro/Outro/Pre/Post
-                        if !matches!(
-                            section_type,
-                            SectionType::Intro
-                                | SectionType::Outro
-                                | SectionType::Pre(_)
-                                | SectionType::Post(_)
-                        ) {
-                            let current_key = self.current_key.clone();
-                            self.templates.store(
-                                &section_type,
-                                &parsed_measures,
-                                current_key.as_ref(),
-                            );
-                        }
+                        // Every section written out is what its bare header replays
+                        // from here on — the most recent writing wins.
+                        let current_key = self.current_key.clone();
+                        self.templates
+                            .store(&section_type, &parsed_measures, current_key.as_ref());
 
                         // Complete first section if this was the first section
                         if was_first_section {
@@ -604,21 +594,14 @@ impl<'a> ChartParser<'a> {
                                 }
                             }
 
-                            // Save as template if not Intro/Outro/Pre/Post
-                            if !matches!(
-                                section_type,
-                                SectionType::Intro
-                                    | SectionType::Outro
-                                    | SectionType::Pre(_)
-                                    | SectionType::Post(_)
-                            ) {
-                                let current_key = self.current_key.clone();
-                                self.templates.store(
-                                    &section_type,
-                                    &parsed_measures,
-                                    current_key.as_ref(),
-                                );
-                            }
+                            // Every section written out is what its bare header replays
+                            // from here on — the most recent writing wins.
+                            let current_key = self.current_key.clone();
+                            self.templates.store(
+                                &section_type,
+                                &parsed_measures,
+                                current_key.as_ref(),
+                            );
                         }
 
                         let mut track = if track_type == TrackType::Chords {
