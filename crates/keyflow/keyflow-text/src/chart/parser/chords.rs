@@ -3463,9 +3463,17 @@ impl<'a> ChartParser<'a> {
             }
         }
 
+        // A one-shot meter change still waiting for its measure when the line
+        // ends is a bar of that meter with no new chord in it — `!T2/4` on a
+        // line of its own is "one bar of 2/4", the breakdown bar of a
+        // structure-only chart. Without this the bar was dropped and the
+        // section fell back to the prevailing meter.
+        let oneshot_bar_pending = oneshot_revert.is_some() && measures.len() == oneshot_measure_idx;
+
         // Add last measure if it has content
         // (If we just processed a separator, the empty measure was already pushed)
-        if !current_measure.chords.is_empty()
+        if oneshot_bar_pending
+            || !current_measure.chords.is_empty()
             || !current_measure.rhythm_elements.is_empty()
             || !current_measure.figured_bass.is_empty()
             || !current_measure.staff_text.is_empty()
@@ -5336,6 +5344,30 @@ C T2/4 Am T4/4 G
         assert_eq!(measures[0].time_signature, (4, 4));
         assert_eq!(measures[1].time_signature, (2, 4));
         assert_eq!(measures[2].time_signature, (4, 4));
+    }
+
+    #[test]
+    fn a_oneshot_meter_alone_on_its_line_is_a_bar_of_that_meter() {
+        // A structure-only chart's odd bar: `!T2/4` with no chord after it.
+        let chart = parse_chart(
+            "Song\n72bpm 4/4 #D\n\nCH 2\nBreakdown 1\n!T2/4\nVS 2\n",
+        )
+        .expect("Should parse");
+        let meters = |i: usize| -> Vec<(u8, u8)> {
+            chart.sections[i].measures().iter().map(|m| m.time_signature).collect()
+        };
+        assert_eq!(meters(0), vec![(4, 4), (4, 4)]);
+        assert_eq!(meters(1), vec![(2, 4)], "one bar of 2/4");
+        assert_eq!(meters(2), vec![(4, 4), (4, 4)], "and back to 4/4 after it");
+    }
+
+    #[test]
+    fn a_persistent_meter_alone_on_its_line_adds_no_bar() {
+        // `T3/4` switches the meter for what follows; it is not a bar itself.
+        let chart = parse_chart("Song\n120bpm 4/4 #C\n\nVS 2\nT3/4\nC G\n").expect("Should parse");
+        let m = chart.sections[0].measures();
+        assert_eq!(m.len(), 2);
+        assert!(m.iter().all(|m| m.time_signature == (3, 4)), "{:?}", m.iter().map(|m| m.time_signature).collect::<Vec<_>>());
     }
 
     #[test]
