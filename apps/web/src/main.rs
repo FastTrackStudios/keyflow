@@ -14,6 +14,7 @@ mod chart;
 mod chart_gpu;
 mod chart_preview;
 mod chart_url;
+mod collab;
 mod guide;
 #[cfg(feature = "dev-guide")]
 mod guide_live;
@@ -65,6 +66,10 @@ pub enum Route {
     // the path because a chart slug is only unique within its org.
     #[route("/library/:org/:slug")]
     LibraryChart { org: String, slug: String },
+    // One song: its charts, its lists, its details. Four segments, so it
+    // cannot be read as a chart slug.
+    #[route("/library/:org/song/:slug")]
+    LibrarySong { org: String, slug: String },
     #[route("/guide")]
     GuideIndex {},
     // Before `/guide/:slug`, or "graph" would match as a page slug.
@@ -100,7 +105,7 @@ pub enum Route {
 
 use routes::{
     AppendixIndex, AppendixPage, AuthCallback, Chart, Devices, Editor, GuideGraph, GuideIndex,
-    GuidePage, Home, Library, LibraryChart, NotFound, Workbench,
+    GuidePage, Home, Library, LibraryChart, LibrarySong, NotFound, Workbench,
 };
 
 fn main() {
