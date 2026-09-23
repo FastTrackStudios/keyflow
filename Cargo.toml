@@ -92,7 +92,9 @@ engraver-score = { path = "features/engraver/score" }
 # implements its `fence_renderer` seam so charts engrave; editor-state
 # knows nothing about keyflow, which is what keeps the graph acyclic.
 editor = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.0.3" }
-editor-state = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.0.3" }
+# Not the markdown fences (Typst, Mermaid): nothing here renders them, and
+# they would switch on in every app that takes keyflow's editor half.
+editor-state = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.0.3", default-features = false }
 
 # ── features/editor — this repo's half of the editor integration ──────
 # Both need `editor-state` from below and `keyflow-text`/`engraver` from
