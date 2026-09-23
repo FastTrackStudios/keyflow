@@ -8,6 +8,8 @@ mod graph;
 mod guide_page;
 mod home;
 pub mod library;
+mod shelf;
+mod song_page;
 mod workbench;
 
 pub use appendix_page::{AppendixIndex, AppendixPage};
@@ -17,7 +19,9 @@ pub use editor::{Chart, Editor, EditorScreen};
 pub use graph::GuideGraph;
 pub use guide_page::{GuideIndex, GuidePage};
 pub use home::Home;
-pub use library::{Library, LibraryChart, SaveToLibrary};
+pub use library::{LibraryChart, SaveToLibrary};
+pub use shelf::Library;
+pub use song_page::LibrarySong;
 pub use workbench::Workbench;
 
 use dioxus::prelude::*;

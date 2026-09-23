@@ -1893,82 +1893,686 @@ body {
  * wrapping them into a row makes the longest one unreadable. */
 .kf-save-orgs { display: flex; flex-direction: column; gap: 0.4rem; align-items: stretch; }
 
-.kf-library-where { display: flex; align-items: center; gap: 0.6rem; margin: 0 0 1.25rem; }
-.kf-library-where label { font-size: 0.85rem; color: var(--ink-soft); }
 
-.kf-library-list { list-style: none; margin: 0; padding: 0; }
+/* ── The library ──────────────────────────────────────────────────
+ *
+ * A working surface like the editor, not a page of prose: a rail that
+ * says where you are, and one pane beside it. Musical facts — keys,
+ * sections — are set in the mono face in the source-highlight colours,
+ * so a key on the shelf is the same blue it is in the chart's source.
+ * The one loud thing is on the song page: the chart itself, on paper. */
 
-.kf-library-row {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.75rem 0;
-  border-bottom: 1px solid var(--line);
+:root {
+  --kf-header-h: 3.55rem;
+  /* The early-alpha strip above the header. It scrolls away, but the
+   * preview is sized for the page at rest, so that the whole of it —
+   * and the whole of a chart's first page — is on screen on arrival. */
+  --kf-banner-h: 2.1rem;
 }
 
-.kf-library-what { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; flex: 1; }
-.kf-library-title { font-weight: 550; color: var(--ink); }
-.kf-library-meta { font-size: 0.8rem; color: var(--ink-soft); }
-.kf-library-actions { display: flex; gap: 0.4rem; flex: 0 0 auto; }
+.kf-shell:has(.kf-lib, .kf-song) .kf-header { padding-inline: clamp(1rem, 4vw, 3rem); }
+.kf-main:has(> .kf-lib),
+.kf-main:has(> .kf-song) { padding: 0 clamp(1rem, 4vw, 3rem) 4rem; }
 
-/* The shelf is three groups — song lists, songs, charts — and a song
-   list is a native disclosure: the browser keeps it open or shut, so
-   nothing re-renders to toggle it and it works without a script. */
-.kf-library-section { margin: 0 0 2rem; }
-.kf-library-section > h2 { font-size: 1.05rem; margin: 0 0 0.5rem; }
-.kf-library-group { border-bottom: 1px solid var(--line); }
-.kf-library-group > summary {
-  cursor: pointer;
-  padding: 0.75rem 0;
-  font-weight: 550;
+.kf-lib {
+  display: grid;
+  grid-template-columns: 15.5rem minmax(0, 1fr);
+  gap: clamp(1.5rem, 3vw, 3rem);
+  align-items: start;
+}
+/* The states with nothing to lay out — signed out, loading, a picker —
+ * are one short column, not a rail beside nothing. */
+.kf-lib:has(> .kf-lib-alone) { display: block; }
+
+.kf-lib-alone { max-width: 34rem; margin: clamp(3rem, 10vh, 6rem) auto 0; }
+.kf-lib-alone h1 { font-size: 2rem; letter-spacing: -0.03em; margin: 0 0 0.75rem; }
+.kf-lib-alone p { color: var(--ink-soft); line-height: 1.6; margin: 0 0 1.25rem; }
+.kf-lib-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
+.kf-lib-quiet { color: var(--ink-soft); }
+
+.kf-lib-choices { display: flex; flex-direction: column; gap: 0.5rem; }
+.kf-lib-choice {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  background: var(--surface);
   color: var(--ink);
-  list-style: none;
+  font: inherit;
+  font-weight: 550;
+  text-align: left;
+  cursor: pointer;
+}
+.kf-lib-choice:hover { border-color: var(--accent); }
+
+/* The rail. */
+.kf-lib-rail {
+  position: sticky;
+  top: var(--kf-header-h);
+  max-height: calc(100vh - var(--kf-header-h));
+  overflow-y: auto;
+  padding: 2rem 0 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.kf-lib-org { display: flex; flex-direction: column; gap: 0.2rem; padding: 0 0.6rem; }
+.kf-lib-org-hint { font-size: 0.75rem; color: var(--ink-soft); }
+.kf-lib-org-name { font-size: 1.05rem; font-weight: 650; letter-spacing: -0.01em; color: var(--ink); }
+.kf-lib-org-select {
+  margin-left: -0.35rem;
+  padding: 0.25rem 0.35rem;
+  border: 1px solid transparent;
+  border-radius: 0.4rem;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+.kf-lib-org-select:hover { border-color: var(--line); }
+
+.kf-lib-views { display: flex; flex-direction: column; gap: 0.1rem; }
+.kf-lib-views-head {
+  margin: 1.1rem 0 0.35rem;
+  padding: 0 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+.kf-lib-views-empty { margin: 0; padding: 0 0.6rem; font-size: 0.85rem; color: var(--ink-soft); }
+
+.kf-lib-view {
   display: flex;
   align-items: baseline;
-  gap: 0.6rem;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 0;
+  border-radius: 0.45rem;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.92rem;
+  text-align: left;
+  cursor: pointer;
 }
-.kf-library-group > summary::-webkit-details-marker { display: none; }
-.kf-library-group > summary::before { content: "▸"; color: var(--ink-soft); font-size: 0.8rem; }
-.kf-library-group[open] > summary::before { content: "▾"; }
-.kf-library-count { font-size: 0.8rem; color: var(--ink-soft); font-weight: 400; }
-.kf-library-group > .kf-library-list { padding-left: 1.2rem; }
-.kf-library-group > .kf-library-list > .kf-library-row:last-child { border-bottom: 0; }
-.kf-library-missing { color: var(--ink-soft); font-style: italic; }
-.kf-library-empty { padding: 0.25rem 0 0.75rem 1.2rem; }
-.kf-library-new { display: flex; gap: 0.5rem; align-items: center; margin: 0.75rem 0 0; }
-.kf-library-new .kf-input { flex: 1; min-width: 0; }
-.kf-library-actions .kf-select { max-width: 9rem; }
+.kf-lib-view:hover { background: var(--surface); color: var(--ink); }
+.kf-lib-view-on,
+.kf-lib-view-on:hover {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.kf-lib-view-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kf-lib-view-count {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+}
+.kf-lib-view:focus-visible,
+.kf-lib-choice:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-/* Finding a song. A repertoire runs to hundreds, so the search box sits
-   above the shelf rather than inside any one group, and the count beside
-   it says how much of the library is answering. */
-.kf-library-find {
+.kf-lib-newlist { display: flex; gap: 0.4rem; padding: 0 0.1rem; }
+.kf-lib-newlist .kf-lib-input { flex: 1; min-width: 0; }
+.kf-lib-newlist .kf-button { padding: 0.45rem 0.75rem; font-size: 0.85rem; }
+
+/* Shared controls. */
+.kf-lib-input {
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.9rem;
+}
+.kf-lib-input::placeholder { color: var(--ink-soft); opacity: 0.8; }
+.kf-lib-input:focus-visible,
+.kf-lib-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+.kf-lib-select {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+.kf-lib-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 550;
+  cursor: pointer;
+}
+.kf-lib-link:hover { text-decoration: underline; }
+.kf-lib-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+.kf-lib-link-danger { color: var(--danger); }
+.kf-button-danger { border-color: color-mix(in srgb, var(--danger) 55%, transparent); color: var(--danger); }
+.kf-button-danger:hover { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent); }
+.kf-button:disabled { opacity: 0.5; cursor: default; }
+.kf-lib-confirm { font-size: 0.85rem; color: var(--ink-soft); }
+.kf-lib-error { margin: 0; font-size: 0.85rem; color: var(--danger); }
+.kf-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Musical facts, in the source's own colours. */
+.kf-key {
+  display: inline-block;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid color-mix(in srgb, var(--syn-meta) 35%, transparent);
+  border-radius: 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--syn-meta);
+  white-space: nowrap;
+}
+.kf-sections {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--syn-section);
+}
+.kf-lib-date { font-size: 0.78rem; color: var(--ink-soft); white-space: nowrap; }
+
+/* The main pane. */
+.kf-lib-main { min-width: 0; padding-top: 2rem; container-type: inline-size; }
+
+.kf-lib-head {
   display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+}
+.kf-lib-head h1 {
+  margin: 0;
+  font-size: clamp(1.7rem, 2.6vw, 2.25rem);
+  font-weight: 650;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+}
+.kf-lib-sub { margin: 0.35rem 0 0; font-size: 0.88rem; color: var(--ink-soft); }
+.kf-lib-head-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.kf-lib-head-actions .kf-button { padding: 0.45rem 0.85rem; font-size: 0.85rem; }
+
+.kf-lib-rename { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.kf-lib-rename-input {
+  min-width: 12rem;
+  padding: 0.1rem 0.2rem;
+  border: 0;
+  border-bottom: 2px solid var(--accent);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: clamp(1.7rem, 2.6vw, 2.25rem);
+  font-weight: 650;
+  letter-spacing: -0.035em;
+}
+.kf-lib-rename-input:focus-visible { outline: none; }
+
+.kf-lib-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin: 1.5rem 0 0.75rem; }
+.kf-lib-search { flex: 1 1 18rem; max-width: 30rem; }
+.kf-lib-sort { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--ink-soft); }
+
+.kf-lib-trouble {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 1.25rem 0 0;
+  padding: 0.65rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  border-radius: 0.55rem;
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  font-size: 0.88rem;
+}
+
+.kf-lib-empty { max-width: 34rem; padding: 2.5rem 0; }
+.kf-lib-empty p { margin: 0 0 1rem; color: var(--ink-soft); line-height: 1.6; }
+
+/* The song table. A real table: a repertoire is rows and columns, and a
+ * screen reader should be able to say "Key, A" as it moves along one. */
+.kf-lib-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+.kf-lib-table th {
+  position: sticky;
+  top: var(--kf-header-h);
+  z-index: 1;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+  text-align: left;
+}
+.kf-lib-table td { padding: 0.5rem 0.75rem; border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent); vertical-align: middle; }
+.kf-lib-row:hover td { background: var(--surface); }
+.kf-lib-row-picked td,
+.kf-lib-row-picked:hover td { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.kf-lib-col-pick { width: 2.25rem; padding-right: 0 !important; }
+.kf-lib-col-song { width: 40%; }
+.kf-lib-col-artist { width: 30%; color: var(--ink-soft); font-size: 0.88rem; overflow-wrap: anywhere; }
+.kf-lib-col-key { width: 7rem; }
+.kf-lib-song-artist.kf-lib-artist-inline { display: none; }
+/* A running order has no artist column, so its rows always carry it. */
+.kf-lib-line .kf-lib-song-artist.kf-lib-artist-inline { display: flex; }
+.kf-lib-col-num { width: 5rem; text-align: right !important; }
+.kf-lib-col-date { width: 8rem; font-size: 0.8rem; color: var(--ink-soft); white-space: nowrap; }
+.kf-lib-col-go { width: 7.5rem; text-align: right !important; }
+.kf-lib-check { width: 1rem; height: 1rem; margin: 0; accent-color: var(--accent); cursor: pointer; vertical-align: middle; }
+
+.kf-lib-song { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; color: inherit; text-decoration: none; }
+.kf-lib-song-title { font-weight: 550; color: var(--ink); overflow-wrap: anywhere; }
+.kf-lib-song-artist { display: flex; gap: 0.75rem; min-width: 0; font-size: 0.8rem; color: var(--ink-soft); }
+/* A row's name is the button that picks it for the preview. */
+button.kf-lib-song {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.kf-lib-song:hover .kf-lib-song-title { color: var(--accent); }
+.kf-lib-song:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+
+/* The row on show in the preview: tinted, with the rail's accent edge. */
+.kf-lib-row-on td,
+.kf-lib-row-on:hover td { background: color-mix(in srgb, var(--accent) 13%, transparent); }
+.kf-lib-row-on td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+.kf-lib-line-on,
+.kf-lib-line-on:hover { background: color-mix(in srgb, var(--accent) 13%, transparent); box-shadow: inset 2px 0 0 var(--accent); }
+.kf-lib-line-on .kf-lib-line-actions > * { opacity: 1; }
+
+.kf-lib-count { font-family: var(--font-mono); font-size: 0.8rem; font-variant-numeric: tabular-nums; color: var(--ink-soft); }
+.kf-lib-count-none { opacity: 0.45; }
+
+.kf-lib-open {
+  display: inline-block;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 550;
+  color: var(--ink);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.kf-lib-open:hover { border-color: var(--accent); color: var(--accent); }
+.kf-lib-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.kf-lib-open-quiet { border-color: transparent; color: var(--ink-soft); }
+/* In a table of two hundred, the Open on every row is a column of noise
+ * until it is the row you are on. Kept in the layout (and in the tab
+ * order) so nothing shifts when it lights up. */
+@media (hover: hover) {
+  .kf-lib-table .kf-lib-open { border-color: transparent; color: var(--ink-soft); }
+  .kf-lib-row:hover .kf-lib-open,
+  .kf-lib-open:focus-visible { border-color: var(--line); color: var(--ink); }
+  .kf-lib-row:hover .kf-lib-open:hover { border-color: var(--accent); color: var(--accent); }
+}
+
+/* What to do with the ticked songs: pinned to the bottom of the pane, in
+ * reach from any row, and gone when nothing is ticked. */
+.kf-lib-bulk {
+  position: sticky;
+  bottom: 1.25rem;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1rem;
+  width: fit-content;
+  max-width: 100%;
+  margin: 1.25rem auto 0;
+  padding: 0.55rem 0.7rem 0.55rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  box-shadow: 0 14px 40px rgb(0 0 0 / 0.45);
+}
+.kf-lib-bulk-count { font-size: 0.9rem; font-weight: 600; }
+.kf-lib-bulk-note { font-size: 0.88rem; color: var(--ink-soft); }
+.kf-lib-bulk-add { border-color: var(--accent); }
+
+/* A list in running order. A set list is a narrow document — read down,
+ * not across — so its pane keeps a reading measure even on a wide screen,
+ * and each row's controls stay quiet until it is the row you are on. */
+.kf-lib-main-narrow { max-width: 60rem; }
+@media (hover: hover) {
+  .kf-lib-line .kf-lib-line-actions > * { opacity: 0.35; transition: opacity 120ms ease; }
+  .kf-lib-line:hover .kf-lib-line-actions > *,
+  .kf-lib-line:focus-within .kf-lib-line-actions > * { opacity: 1; }
+  .kf-lib-line .kf-lib-step:disabled { opacity: 0.12; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kf-lib-line .kf-lib-line-actions > * { transition: none; }
+}
+.kf-lib-order { list-style: none; margin: 0.25rem 0 0; padding: 0; }
+.kf-lib-line {
+  display: grid;
+  grid-template-columns: 2.25rem minmax(0, 1fr) 5.5rem auto;
   align-items: center;
   gap: 0.75rem;
-  margin: 0 0 1.5rem;
+  padding: 0.5rem 0.5rem 0.5rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
 }
-.kf-library-find .kf-input { flex: 1; min-width: 0; }
-
-/* A list's own verbs — rename, delete — under its summary rather than on
-   it, so opening the list is one target and acting on it is another. */
-.kf-library-listbar {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0 0 0.5rem 1.2rem;
-}
-.kf-library-listbar .kf-library-new { margin: 0; flex: 1; }
-
-/* The running order. A set is read aloud by number, so the number is
-   part of the row rather than something to count. Tabular figures keep
-   every title on one left edge from 1 to 99. */
-.kf-library-place {
-  flex: 0 0 1.75rem;
+.kf-lib-line:hover { background: var(--surface); }
+.kf-lib-line-loose { grid-template-columns: minmax(0, 1fr) 5.5rem auto; padding-left: 0.5rem; }
+.kf-lib-place {
   text-align: right;
+  font-family: var(--font-mono);
   font-size: 0.8rem;
-  color: var(--ink-soft);
   font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
 }
-.kf-icon-button { padding-inline: 0.5rem; }
-.kf-icon-button:disabled { opacity: 0.35; cursor: default; }
+.kf-lib-line-missing .kf-lib-song-title { font-style: italic; font-weight: 400; color: var(--ink-soft); }
+.kf-lib-line-actions { display: flex; align-items: center; justify-content: flex-end; gap: 0.35rem; }
+.kf-lib-step {
+  width: 1.9rem;
+  height: 1.9rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.kf-lib-step:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.kf-lib-step:disabled { opacity: 0.25; cursor: default; }
+.kf-lib-step:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.kf-lib-takeout { margin-left: 0.35rem; color: var(--ink-soft); font-weight: 500; }
+.kf-lib-takeout:hover { color: var(--danger); text-decoration: none; }
+
+/* The preview: the picked row's chart, every page, in its own scrolling
+ * column so reading a long chart never loses your place in the list.
+ * Only where three columns fit; the width is PREVIEW_QUERY in shelf.rs. */
+.kf-lib-preview { display: none; }
+@media (min-width: 75rem) {
+  .kf-lib { grid-template-columns: 15.5rem minmax(0, 1fr) clamp(26rem, 40vw, 64rem); }
+  .kf-lib-main-narrow { max-width: none; }
+  .kf-lib-preview {
+    position: sticky;
+    top: var(--kf-header-h);
+    display: flex;
+    flex-direction: column;
+    height: calc(100dvh - var(--kf-header-h) - var(--kf-banner-h));
+    min-width: 0;
+    padding: 0 0.25rem 1rem;
+  }
+}
+.kf-lib-preview-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 2rem 0 1rem;
+}
+.kf-lib-preview-what { min-width: 0; }
+.kf-lib-preview-title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.kf-lib-preview-by { margin: 0.25rem 0 0; font-size: 0.88rem; color: var(--ink-soft); }
+.kf-lib-preview-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.kf-lib-preview-actions .kf-button { padding: 0.45rem 0.85rem; font-size: 0.85rem; }
+
+.kf-lib-preview-arrs { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 1rem; }
+.kf-lib-arr {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.kf-lib-arr:hover { color: var(--ink); border-color: var(--ink-soft); }
+.kf-lib-arr-on,
+.kf-lib-arr-on:hover { border-color: var(--accent); color: var(--ink); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.kf-lib-arr:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.kf-lib-arr-main { font-size: 0.7rem; color: var(--accent); }
+
+/* Pages as sheets: each one its own piece of paper, stacked with a gap,
+ * rather than one white strip — a chart is read a page at a time. */
+.kf-lib-preview-paper .kf-chart,
+.kf-song-paper .kf-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+}
+.kf-lib-preview-paper .kf-chart-page,
+.kf-song-paper .kf-chart-page {
+  overflow: hidden;
+  border-radius: 0.4rem;
+  background: #ffffff;
+  box-shadow: 0 24px 60px -24px rgb(0 0 0 / 0.75);
+}
+
+/* In the preview, a page is sized to the space it has: the whole of it
+ * fits the column's height, so the first page is seen entire and the
+ * rest are a scroll away. The paper area is its own scroller and a size
+ * container, so `cqh` is the height a page may take and `cqw` the width;
+ * a page takes whichever binds first, and its own `aspect-ratio` (set by
+ * the engraver) gives the other side. 595 / 842 is A4, the engraver's
+ * sheet. */
+.kf-lib-preview-paper {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  container-type: size;
+}
+.kf-lib-preview-paper .kf-chart { align-items: center; padding-bottom: 1rem; }
+.kf-lib-preview-paper .kf-chart-page,
+.kf-lib-preview-paper .kf-lib-preview-blank {
+  flex: 0 0 auto;
+  width: min(100cqw, (100cqh - 1rem) * 595 / 842);
+  margin-inline: auto;
+}
+.kf-lib-preview-blank {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  aspect-ratio: 1 / 1.414;
+  padding: 2rem;
+  border: 1px dashed var(--line);
+  border-radius: 0.4rem;
+  color: var(--ink-soft);
+  text-align: center;
+}
+.kf-lib-preview-blank p { margin: 0; }
+.kf-lib-preview-empty { padding: 4rem 0; color: var(--ink-soft); }
+
+/* The list column narrows when the preview takes its share, and the
+ * table answers to the column it is in, not the window. */
+@container (max-width: 44rem) {
+  .kf-lib-col-artist { display: none; }
+  .kf-lib-song-artist.kf-lib-artist-inline { display: flex; }
+  .kf-lib-col-song { width: auto; }
+}
+@container (max-width: 30rem) {
+  .kf-lib-col-num, .kf-lib-col-date { display: none; }
+  .kf-lib-line { grid-template-columns: 1.75rem minmax(0, 1fr) auto; }
+  .kf-lib-line-key { display: none; }
+}
+
+/* ── One song ─────────────────────────────────────────────────── */
+
+.kf-song {
+  display: grid;
+  grid-template-columns: minmax(19rem, 25rem) minmax(0, 1fr);
+  gap: clamp(2rem, 4vw, 4.5rem);
+  align-items: start;
+  padding-top: 1.75rem;
+}
+.kf-song-side { min-width: 0; position: sticky; top: calc(var(--kf-header-h) + 0.5rem); }
+
+.kf-song-crumb a { font-size: 0.85rem; color: var(--ink-soft); text-decoration: none; }
+.kf-song-crumb a::before { content: "←"; margin-right: 0.4rem; }
+.kf-song-crumb a:hover { color: var(--ink); }
+
+.kf-song-head h1 {
+  margin: 1rem 0 0.6rem;
+  font-size: clamp(2rem, 3.4vw, 2.85rem);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.02;
+  overflow-wrap: anywhere;
+}
+.kf-song-by { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin: 0; font-size: 1.05rem; color: var(--ink-soft); }
+.kf-song-lists { margin: 0.9rem 0 0; font-size: 0.85rem; color: var(--ink-soft); }
+.kf-song-list-name { color: var(--ink); }
+.kf-song-lists-none { font-style: italic; }
+
+.kf-song-block { margin-top: 2.25rem; }
+.kf-song-block h2 { margin: 0 0 0.65rem; font-size: 0.8rem; font-weight: 500; color: var(--ink-soft); }
+.kf-song-block-head { display: flex; align-items: baseline; justify-content: space-between; }
+.kf-song-block-head h2 { margin-bottom: 0.65rem; }
+.kf-song-block .kf-lib-select { width: 100%; }
+
+.kf-song-arrs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.kf-song-arr-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.kf-song-arr-pick:hover { border-color: var(--ink-soft); }
+.kf-song-arr-on .kf-song-arr-pick,
+.kf-song-arr-on .kf-song-arr-pick:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.kf-song-arr-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.kf-song-arr-name { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; }
+.kf-song-arr-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+.kf-song-main {
+  padding: 0.05rem 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 550;
+  color: var(--accent);
+}
+
+.kf-song-add { display: flex; gap: 0.5rem; margin-top: 0.6rem; }
+.kf-song-add .kf-lib-input { flex: 1; min-width: 0; }
+.kf-song-add .kf-button { padding: 0.5rem 0.85rem; font-size: 0.85rem; }
+.kf-song-hint { margin: 0.45rem 0 0; font-size: 0.78rem; color: var(--ink-soft); }
+
+.kf-song-facts { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: 0.5rem 1rem; margin: 0; font-size: 0.92rem; }
+.kf-song-facts dt { color: var(--ink-soft); }
+.kf-song-facts dd { margin: 0; overflow-wrap: anywhere; }
+
+.kf-song-form { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: 0.55rem 1rem; align-items: center; }
+.kf-song-form label { font-size: 0.88rem; color: var(--ink-soft); }
+.kf-song-key-input { max-width: 8rem; font-family: var(--font-mono); }
+.kf-song-form-actions { grid-column: 1 / -1; display: flex; gap: 0.5rem; margin-top: 0.35rem; }
+.kf-song-form .kf-lib-error { grid-column: 1 / -1; }
+
+.kf-song-remove { margin-top: 2.75rem; padding-top: 1.25rem; border-top: 1px solid var(--line); }
+.kf-song-remove p { margin: 0 0 0.75rem; font-size: 0.9rem; color: var(--ink-soft); }
+
+/* The paper. The one loud thing in the library: the chart itself, in
+ * the shape it prints, lifted off the page. */
+.kf-song-stage { min-width: 0; max-width: 60rem; }
+.kf-song-stage-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+.kf-song-stage-what { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
+.kf-song-stage-name { font-size: 1.05rem; font-weight: 600; }
+.kf-song-stage-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.kf-song-stage-actions .kf-button { padding: 0.45rem 0.85rem; font-size: 0.85rem; }
+
+/* Sheets styled with the preview's, above. */
+.kf-song-paper-wait,
+.kf-song-blank {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1 / 1.414;
+  max-height: 80vh;
+  padding: 2rem;
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  text-align: center;
+}
+.kf-song-blank { border: 1px dashed var(--line); background: transparent; }
+.kf-song-blank p { margin: 0 0 0.5rem; max-width: 22rem; }
+
+/* Narrow screens: one column. The rail becomes a strip of views above
+ * the pane, and the paper follows the song's details. */
+@media (max-width: 60rem) {
+  .kf-song { grid-template-columns: minmax(0, 1fr); }
+  .kf-song-side { position: static; }
+}
+@media (max-width: 52rem) {
+  .kf-lib { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .kf-lib-rail { position: static; max-height: none; overflow: visible; padding: 1.25rem 0 0; gap: 0.9rem; }
+  .kf-lib-views { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; gap: 0.35rem; padding-bottom: 0.25rem; }
+  .kf-lib-views-head, .kf-lib-views-empty { display: none; }
+  .kf-lib-view { width: auto; flex: 0 0 auto; border: 1px solid var(--line); }
+  .kf-lib-view-on, .kf-lib-view-on:hover { box-shadow: none; border-color: var(--accent); }
+  .kf-lib-main { padding-top: 1.25rem; }
+}
+@media (max-width: 40rem) {
+  .kf-lib-col-num, .kf-lib-col-date, .kf-lib-col-artist { display: none; }
+  .kf-lib-song-artist.kf-lib-artist-inline { display: flex; }
+  .kf-lib-col-song { width: auto; }
+  .kf-lib-col-key { width: 4rem; }
+  .kf-lib-col-go { width: auto; }
+  .kf-lib-line { grid-template-columns: 1.75rem minmax(0, 1fr) auto; }
+  .kf-lib-line-key { display: none; }
+  .kf-lib-line-loose { grid-template-columns: minmax(0, 1fr) auto; }
+  .kf-lib-takeout { margin-left: 0; }
+  .kf-song-form, .kf-song-facts { grid-template-columns: minmax(0, 1fr); gap: 0.35rem; }
+}
