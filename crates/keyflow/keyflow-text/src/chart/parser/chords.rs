@@ -4568,6 +4568,14 @@ mod tests {
             expand_chord_groups("C m{ (D E) } G", c44).unwrap(),
             "C m{ (D E) } G"
         );
+        // A `(` attached to a chord is its addition, not a group; one after
+        // a barline or another group still is a group.
+        assert_eq!(
+            expand_chord_groups("5(add4) // 1", c44).unwrap(),
+            "5(add4) // 1"
+        );
+        assert_eq!(expand_chord_groups("C7(b9) F", c44).unwrap(), "C7(b9) F");
+        assert_eq!(expand_chord_groups("|(C G)|", c44).unwrap(), "|C_2 G_2|");
     }
 
     #[test]
@@ -5932,6 +5940,44 @@ VS
         assert!(f9.push_pull.is_some(), "F9 should have push_pull");
     }
 
+    /// Each bar's chords as `symbol@beat`, the way a chart reads.
+    fn bars_of(section: &crate::chart::ChartSection) -> Vec<String> {
+        section
+            .measures()
+            .iter()
+            .map(|m| {
+                m.chords
+                    .iter()
+                    .filter(|c| c.full_symbol != "s" && c.full_symbol != "r")
+                    .map(|c| format!("{}@{}", c.full_symbol, c.position.total_duration.beat))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            })
+            .collect()
+    }
+
+    /// A parenthesised addition is one chord like any other: the bare chord
+    /// after `5(add4) //` holds its own bar, not the two beats before it.
+    #[test]
+    fn a_parenthesised_addition_does_not_lend_its_length() {
+        let chart =
+            parse_chart("Paren\n72bpm 4/4 #Bb\n\nVS 8\n1 4 // 1 // 6m // 5(add4) // 42 x2\n")
+                .expect("parses");
+        assert_eq!(
+            bars_of(&chart.sections[0]),
+            vec![
+                "1@0",
+                "4@0 1@2",
+                "6m@0 5add4@2",
+                "4add2@0",
+                "1@0",
+                "4@0 1@2",
+                "6m@0 5add4@2",
+                "4add2@0"
+            ]
+        );
+    }
+
     /// Chord memory is off unless the chart turns it on: a bare `5` after
     /// a `5sus` is a 5, and a `4` after a `4:6` is a 4.
     #[test]
@@ -6573,6 +6619,21 @@ fn expand_chord_groups(line: &str, time_sig: TimeSignature) -> Result<String, St
                 i += 1;
             }
             out.push_str(&line[start..i]);
+            continue;
+        }
+
+        // A `(` attached to the token before it is part of that chord —
+        // `5(add4)`, `C7(b9)` — not a rhythm group. Read as a group it
+        // became `add4` with a lily length, and that length carried on to
+        // the chords after it.
+        let attached = line[..i]
+            .chars()
+            .next_back()
+            .is_some_and(|c| c.is_alphanumeric() || matches!(c, '#' | '+' | '^' | '°' | 'ø'));
+        if ch == '(' && attached {
+            let close = line[i..].find(')').map_or(bytes.len(), |at| i + at + 1);
+            out.push_str(&line[i..close]);
+            i = close;
             continue;
         }
 
