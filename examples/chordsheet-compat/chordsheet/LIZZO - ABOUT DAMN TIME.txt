@@ -1,0 +1,29 @@
+=INTRO
+(Ebm9)x2*_Bbm7Bbm9
+=VERSE 1
+Bbm9%*_Bbm7*_Bbm9 
+(Ebm9)x2*_Bbm7
+-"VOCALS ONLY ON THE LAST MEASURE."
+=PRECHORUS
+Bmaj7_Bbm9Abm9_Abm7Bmaj7_Bbm7Abm7_Abm9
+Bmaj7_Bbm7Abm9_Abm7Gbmaj7r1
+=CHORUS
+(Ebm9)x3 Gmaj7Abm7_Bbm7
+(Ebm9)*_Ebm7*_Bbm7Gbmaj7Abm7
+=VERSE 2
+Ebm7_Ebm9*_GbmEbm7*_Bbm7(Ebm9)
+*_Ebm7Dbm_Bbm7
+=PRECHORUS
+(Bmaj7_Bbm7Abm7)x2Gbmaj7*_Gbm7_Bbm7
+=CHORUS
+Ebm7*_Bbm7Ebm9%Gbmaj7Abm7_Bbm7
+(Ebm9)x2*_Bbm7Gbmaj7Abm7_Bbm7
+=INTERLUDE
+-"4 MEASURES OF DRUMS AND FLUTE."
+(r1)x3Ebm9*_Fm7Gbmaj7*_Bbm7
+Ebm9*_Gbm7Gbmaj7*_BbmBbm9
+=CHORUS
+Ebm9*_Fm9Gbmaj7Ebm7*_Ebm9
+*_Ebm7_Fm7Gbmaj7Gb7_Bbm7
+=OUTRO
+Ebm9%Ebm7*_Bbm7

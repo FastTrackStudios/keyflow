@@ -1,0 +1,39 @@
+=INTRO
+-
+,"DRUM"_,,, (D"RIFF 1"_,_Bm, A,_G,)  x4
+
+=VERSE 1
+-
+(D"RIFF 1"_,_Bm, A,_G,)  x4 (D"RIFF 2"_,_Bm, A,_G,)x2
+
+=VERSE 2
+-
+(D"RIFF 1"_,_Bm, A,_G,)  x4
+
+= PRE-CHORUS
+G,,, D,,, G,,, A,,, ,,,,
+
+=CHORUS
+-
+(D"RIFF 1"_,_Bm, A,_G,)  x4
+
+=GUITAR SOLO
+-
+(D"RIFF 1"_,_Bm, A,_G,) x4 
+G,,, D,,, G,,, A,,, ,,,, ,,,,
+
+=CHORUS
+-
+(D"RIFF 1"_,_Bm, A,_G,)  x4
+
+=PRE-CHORUS
+G,,, D,,, G,,, A,,, ,,,, ,,,,
+
+=CHORUS
+-BAND OUT
+(,,,, ,,,,)  x4
+
+=CHORUS VAMP OUT
+-
+(D"RIFF 2"_,_Bm, A,_G,)x4 (D"RIFF 1"_,_Bm, A,_G,)  x4
+(D"RIFF 2"_,_Bm, A,_G,)x4 (D"RIFF 1"_,_Bm, A,_G,)  x4

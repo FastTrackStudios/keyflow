@@ -1,0 +1,22 @@
+:INTRO
+,,,, ,,,, ,,B_C
+:SECTION 1 + 16 BAR SOLO
+B,,C B,,C (,"SOLO"_,,,)x4
+:SECTION 2
+B,,,
+:V1 & V2
+(B,,, ,,,,"RIFF")x2 C"Pre Chorus"_,,,
+:S2
+B,,,"RIFF"
+:V3
+B,,,"RIFF" C"Pre Chorus"_,,,
+:S2
+B,"HITS"_,,_"RIFF"
+:V4
+B,,,"RIFF"
+:INTRO
+,,,, ,,C_D E_F# G_A_B_C
+:V5
+B,,, ,,,,"RIFF"
+:PC
+C,,, D,,, C

@@ -1,0 +1,19 @@
+=INTRO
+(C#F#_*_*_F#E_*_*_EF#_*_*_F#)
+=CHORUS
+BAEB
+BC#m7E_AB_*_*_A#
+=INTERLUDE
+G#m7AG#m7Ebm7
+G#m7C#m7_G#m7
+=VERSE
+(C#F#_*_*_F#E_*_*_EF#_*_*_F#)
+=BRIDGE
+F#mC#mF#mC#m
+F#m_C#mF#m_C#mF#mC#m
+=VERSE
+=CHORUS
+=INTERLUDE
+=VERSE
+=BRIDGE
+=DOUBlE VERSE/OUTRO

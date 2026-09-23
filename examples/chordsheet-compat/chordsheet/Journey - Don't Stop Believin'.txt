@@ -1,0 +1,19 @@
+=INTRO
+EBC#m7A EBG#mA
+=VERSE
+(EBC#m7A EBG#mA)
+=GUITAR INTERLUDE
+-"Same as Intro"
+=VERSE 2
+-"Same as Intro"
+=PRE-CHORUS
+(A%E%)x3
+A%B_E B_E_A_*
+=VERSE 3
+(EBC#m7A) EBG#mA EBC#m7A EBG#mA
+=PRE-CHORUS
+=GUITAR SOLO
+-"Same as Intro"
+-"Fade out on the last time."
+=CHORUS
+(EBC#m7A EBG#mA)x3

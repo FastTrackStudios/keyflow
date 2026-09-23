@@ -1,0 +1,18 @@
+=INTRO
+(G,,,,, ,,,,"STOP"_,,)
+=VERSE
+-2 ON EACH
+(G D Em C)x2 
+=PRECHORUS
+Am C
+=CHORUS
+(G D Em C)x2 G
+=1/2 VERSE
+=PRECHORUS
+=CHORUS
+=BRIDGE
+Am C Am C
+-DOWN
+G D Em C
+=CHORUS
+(G D Em 2.C 3. C,,,, ,,,,,, ,,,,,)x3

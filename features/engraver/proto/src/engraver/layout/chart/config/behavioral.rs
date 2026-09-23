@@ -32,7 +32,7 @@ pub struct BehavioralFlags {
     /// - A half note chord (2 beats) becomes 2 quarter slashes
     ///
     /// This is the standard notation for master rhythm charts, making them
-    /// easier to read. Can be disabled via `/AUTO_RHYTHM_SLASHES=false` for
+    /// easier to read. Can be disabled via `\AUTO_RHYTHM_SLASHES=false` for
     /// specific sections where sustained chords (diamonds) are desired.
     pub auto_rhythm_slashes: bool,
 
@@ -61,8 +61,23 @@ pub struct BehavioralFlags {
     /// The apostrophe is rendered in a contrasting color (red) for visibility.
     /// This mode is simpler to read but less rhythmically precise.
     ///
-    /// Can be configured via `/PUSH_ALTERS_RHYTHM=false` in the chart.
+    /// Can be configured via `\PUSH_ALTERS_RHYTHM=false` in the chart.
     pub push_alters_rhythm: bool,
+
+    /// Draw a simile bar as the `repeat1Bar` mark rather than as its chords.
+    ///
+    /// Off by default, and on for a folded chart. The default reading spells
+    /// everything out — every bar in front of the reader, nothing implied —
+    /// so a simile bar engraves as the chords it stands for. Folding is what
+    /// turns the marks on.
+    pub draw_similes: bool,
+
+    /// Draw a folded section as a titled rule instead of its bars.
+    ///
+    /// Off by default. A section is only marked folded by asking for a folded
+    /// chart, and a chart being read bar by bar wants every bar — the rule is
+    /// for the reader who already knows the chorus.
+    pub fold_sections: bool,
 }
 
 /// Default minimum gap between chord symbols (in points).
@@ -80,6 +95,8 @@ impl Default for BehavioralFlags {
             auto_rhythm_slashes: true, // ON by default for master rhythm charts
             min_chord_symbol_gap: DEFAULT_MIN_CHORD_SYMBOL_GAP,
             push_alters_rhythm: true, // ON by default for accurate rhythm notation
+            draw_similes: false,
+            fold_sections: false,
         }
     }
 }
@@ -102,6 +119,8 @@ impl BehavioralFlags {
             auto_rhythm_slashes: true,
             min_chord_symbol_gap: DEFAULT_MIN_CHORD_SYMBOL_GAP,
             push_alters_rhythm: true,
+            draw_similes: false,
+            fold_sections: false,
         }
     }
 
@@ -116,6 +135,8 @@ impl BehavioralFlags {
             auto_rhythm_slashes: true,
             min_chord_symbol_gap: DEFAULT_MIN_CHORD_SYMBOL_GAP,
             push_alters_rhythm: true,
+            draw_similes: false,
+            fold_sections: false,
         }
     }
 
@@ -128,6 +149,8 @@ impl BehavioralFlags {
             auto_rhythm_slashes: true,
             min_chord_symbol_gap: DEFAULT_MIN_CHORD_SYMBOL_GAP,
             push_alters_rhythm: true,
+            draw_similes: false,
+            fold_sections: false,
         }
     }
 

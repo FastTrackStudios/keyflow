@@ -1,0 +1,18 @@
+=INTRO
+(Cm,,, G#,_G,)x2
+=DOUBLE VERSE
+(Cm,,, G#,_G,)x8
+=INSTRUMENTAL
+G#,,,  G,,,   Cm,,,   Fm,,,   
+G#,,,  G,,,
+=SINGLE VERSE
+(Cm,,, G#,_G,)x4
+=INSTRUMENTAL
+=BRIDGE
+(Cm,,, F,,,)x4
+=SOLO
+=VERSE
+=INSTRUMENTAL
+=VERSE
+=VERSE VOCALS W/KICK ONLY
+=VERSE W/ LEADS X4

@@ -1,0 +1,10 @@
+:1 Bar Count In
+=Verse 1
+(D,,F#,,D,)(r1)x4
+=PRE CHORUS
+(A,,,,,,,)(A,,,,,,,)
+=CHORUS
+(G G_A Bm Bm_C#m D A,,,r4)
+=VERSE 2
+=PRE CHORUS
+=CHORUS

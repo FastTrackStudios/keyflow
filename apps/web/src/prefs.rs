@@ -16,6 +16,10 @@
 /// Whether the editor starts in vim mode. Off unless someone asked.
 pub const VIM_MODE: &str = "keyflow.editor.vim";
 
+/// Which notation the engraved chart is forced into. Unset means
+/// "as written" — the chart is shown in whatever the source says.
+pub const NOTATION: &str = "keyflow.editor.notation";
+
 #[cfg(target_arch = "wasm32")]
 fn storage() -> Option<web_sys::Storage> {
     // `local_storage()` is `Err` when the browser refuses storage
@@ -50,3 +54,27 @@ pub const fn bool_or(_key: &str, default: bool) -> bool {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub const fn set_bool(_key: &str, _value: bool) {}
+
+/// Read a stored string, or `None` if it has never been set.
+#[cfg(target_arch = "wasm32")]
+#[must_use]
+pub fn string(key: &str) -> Option<String> {
+    storage().and_then(|s| s.get_item(key).ok().flatten())
+}
+
+/// Remember a string. Silently does nothing where storage is refused.
+#[cfg(target_arch = "wasm32")]
+pub fn set_string(key: &str, value: &str) {
+    if let Some(s) = storage() {
+        let _ = s.set_item(key, value);
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[must_use]
+pub const fn string(_key: &str) -> Option<String> {
+    None
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub const fn set_string(_key: &str, _value: &str) {}

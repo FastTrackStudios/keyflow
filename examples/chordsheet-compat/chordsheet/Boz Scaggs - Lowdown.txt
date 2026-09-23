@@ -1,0 +1,21 @@
+=Intro
+(r1_r1_r1_D_E)x4
+(Em9Am9_*_*_D_E)x4
+
+=VERSE 1
+(Em9Am9_*_*_D_E)x10
+
+=RE-INTRO
+(Em9Am9_*_*_D_E)x2
+
+=VERSE 2
+(Em9Am9_*_*_D_E)x10
+
+=BRIDGE
+Dmaj9C#7CB7
+(Em9Am9_*_*_D_E)x4
+=GUITAR SOLO
+(F#m9B)x4
+=VERSE 2
+=BRIDGE
+=OUTRO (SAME AS VERSE 2, BUT OPEN IT UP)

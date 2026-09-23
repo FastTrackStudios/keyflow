@@ -39,7 +39,7 @@ const STARTER: &str = "VS 1: | 1 4 | 5 6- |\n";
 pub fn Workbench(slug: String) -> Element {
     let nav = navigator();
 
-    let Some(page) = guide::page(&slug) else {
+    let Some(page) = guide::vault().page(&slug) else {
         return rsx! {
             Shell {
                 section { class: "kf-prose",
@@ -50,7 +50,7 @@ pub fn Workbench(slug: String) -> Element {
         };
     };
 
-    let examples = engraved_fences(page.body);
+    let examples = engraved_fences(page.source);
     let mut source = use_signal(|| {
         examples
             .first()
@@ -60,7 +60,7 @@ pub fn Workbench(slug: String) -> Element {
 
     // The chapter, read-only, in the lower pane.
     let guide_state = use_signal(|| EditorState {
-        doc: Doc::from_str(page.body),
+        doc: Doc::new(page.body),
         selection: Selection::caret(0),
         folds: Vec::new(),
         reading_mode: true,
@@ -123,7 +123,7 @@ pub fn Workbench(slug: String) -> Element {
                                 // Follow a wikilink WITHOUT leaving the
                                 // workbench — the whole point is to keep
                                 // reading while the editor stays put.
-                                if guide::page(&target).is_some() {
+                                if guide::vault().page(&target).is_some() {
                                     nav.push(Route::Workbench { slug: target });
                                 }
                             },
@@ -169,17 +169,44 @@ mod tests {
     }
 
     #[test]
-    fn most_chapters_open_on_a_real_example() {
-        // The workbench is much less useful if it starts blank, so this
-        // checks the guide actually carries examples to seed it with.
-        let with = guide::GUIDE_PAGES
+    fn every_chapter_but_the_prose_ones_opens_on_a_real_example() {
+        // The workbench is much less useful if it starts blank, so a
+        // chapter should carry an example to seed it with.
+        //
+        // Three pages carry none, and should not: two are about things
+        // other than notation, and one is a rendering fixture. Naming
+        // them beats a "how many may be missing" threshold, which erodes
+        // by one every time somebody adds a prose page — which is
+        // exactly how this test came to be passing with a count.
+        const PROSE_ONLY: [&str; 3] = ["alternatives", "writing-a-chart", "rendering-test"];
+
+        let missing: Vec<&str> = guide::vault()
+            .pages
             .iter()
-            .filter(|p| !engraved_fences(p.body).is_empty())
-            .count();
+            .filter(|p| !PROSE_ONLY.contains(&p.slug))
+            .filter(|p| engraved_fences(p.source).is_empty())
+            .map(|p| p.slug)
+            .collect();
         assert!(
-            with >= guide::GUIDE_PAGES.len() - 2,
-            "only {with} of {} chapters have an engraved example to open on",
-            guide::GUIDE_PAGES.len()
+            missing.is_empty(),
+            "these chapters have no engraved example to open on: {missing:?}. \
+             Add one, or add the page to PROSE_ONLY if it is deliberately not about notation."
+        );
+
+        // And the exemptions stay honest: a page that gains an example
+        // should come off the list rather than sit on it forever.
+        let stale: Vec<&str> = PROSE_ONLY
+            .iter()
+            .filter(|slug| {
+                guide::vault()
+                    .page(slug)
+                    .is_some_and(|p| !engraved_fences(p.source).is_empty())
+            })
+            .copied()
+            .collect();
+        assert!(
+            stale.is_empty(),
+            "these now have examples; drop them from PROSE_ONLY: {stale:?}"
         );
     }
 
@@ -187,8 +214,8 @@ mod tests {
     fn every_seeded_example_parses() {
         // The editor seeds from these, so a broken one greets the reader
         // with an error the moment they click "try it".
-        for p in guide::GUIDE_PAGES {
-            for ex in engraved_fences(p.body) {
+        for p in guide::vault().pages {
+            for ex in engraved_fences(p.source) {
                 assert!(
                     keyflow::parse(&ex).is_ok(),
                     "guide page `{}` would seed the workbench with a chart that does not parse:\n{ex}",
@@ -201,5 +228,44 @@ mod tests {
     #[test]
     fn the_fallback_starter_parses() {
         assert!(keyflow::parse(STARTER).is_ok());
+    }
+
+    /// The cheatsheet's directive table is a second copy of `DIRECTIVES`, and
+    /// a second copy of that list is the thing `DIRECTIVES` exists to stop:
+    /// `parse_setting_line` rejects an unknown `/setting` outright, so a
+    /// cheatsheet that has fallen behind hands the reader a line that breaks
+    /// their chart.
+    #[test]
+    fn the_cheatsheet_lists_every_directive_and_no_others() {
+        use keyflow::chart::settings::DIRECTIVES;
+
+        let page = guide::vault()
+            .page("cheatsheet")
+            .expect("the guide has a cheatsheet page");
+
+        for spec in DIRECTIVES {
+            assert!(
+                page.source.contains(spec.example),
+                "the cheatsheet is missing `{}` — add the row for `{}`: {}",
+                spec.key,
+                spec.example,
+                spec.summary
+            );
+        }
+
+        // And nothing invented: every `\word` in the table is a real one.
+        let listed: Vec<&str> = page
+            .source
+            .lines()
+            .filter_map(|line| line.trim().strip_prefix("| `\\\\"))
+            .filter_map(|rest| rest.split([' ', '`', '=']).next())
+            .filter(|key| key.starts_with(|c: char| c.is_ascii_alphabetic()))
+            .collect();
+        for key in listed {
+            assert!(
+                DIRECTIVES.iter().any(|d| d.key == key),
+                "the cheatsheet offers `\\{key}`, which the parser would reject"
+            );
+        }
     }
 }

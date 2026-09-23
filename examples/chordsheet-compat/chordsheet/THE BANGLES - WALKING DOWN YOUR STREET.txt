@@ -1,0 +1,29 @@
+=INTRO
+-GUITAR HOOK
+(C,,, ,,,,)x2 (C"BAND IN"_,,, ,,,,)x4
+
+=VERSE
+(Dm7,,, ,,,, C,,, ,,,,)x2
+
+=CHORUS
+(C,,, G,,,)x3 F,,, G#,,,
+=HOOK
+(C,,, ,,,,)x2
+=VERSE 2
+(Dm7,,, ,,,, C,,, ,,,,)x2
+=CHORUS 2
+(C,,, G,,,)x3 Dm7,,, ,,,,
+=BRIDGE
+F,,, ,,,, Am,,, ,,,,
+Dm7,,, ,,,, G,,, ,,,,
+=INSTRUMENTAL
+(C,C_B Bb,,,)x4
+(C,,, ,,,, ,"GUITAR LICK"_,,, ,,,,)x2
+=TAG
+-WALKING DOWN, DOWN...
+(C,,, ,,,,)x2
+=BRIDGE
+F,,, ,,,, Am,,, ,,,,
+Dm7,,, ,,,, G,,, ,,,,
+=CHORUS X2
+(C,,, G,,,)x3 F,,, G#,,,

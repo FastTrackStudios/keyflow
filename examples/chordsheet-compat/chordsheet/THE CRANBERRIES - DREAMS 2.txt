@@ -1,0 +1,18 @@
+=INTRO
+-FULL BAND | FIRST TIME UP, SECOND TIME DOWN
+(E,,, ,,,, A,,, ,,,, 
+B,,, ,,,, E,,, ,,,"SHOTS"_,)x2
+=VERSE
+-DOWN | SECOND TIME ADD HARMONIES
+(E,,, ,,,, A,,, ,,,, 
+B,,, ,,,, E,,, ,,,,)x2
+=CHORUS
+-SAME AS VERSE, ADD BACK BEAT
+-
+=BRIDGE
+(G,,, ,,, C,,, ,,,,)x2
+=VERSE 2
+=CHORUS 2
+=VERSE 3
+=INSTRUMENTAL OUTRO
+-PLAY PREGRESSION 3X, RESOLVE

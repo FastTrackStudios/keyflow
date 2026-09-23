@@ -15,7 +15,7 @@ on:
     branches: [main]
     paths:
       - "apps/mobile/**"
-      - "crates/keyflow/**"
+      - "features/**"
       - "flake.nix"
       - "flake.lock"
       - ".github/workflows/keyflow-ios.yml"

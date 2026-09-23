@@ -17,6 +17,7 @@
 
 use dioxus::prelude::*;
 
+use crate::collab::{COLLAB_STYLE, ChartCollab};
 use crate::prefs;
 use editor::{Editor, EditorState, editor_view};
 use editor_keyflow_lang::{HighlightTheme, highlight_css, keyflow_decorations, keyflow_hover};
@@ -34,8 +35,47 @@ pub fn KeyflowEditor(
     /// Optional aside for the pane header — "Opened from a link", say.
     #[props(default)]
     note: Option<String>,
+    /// Controls for the pane header, to the left of the Vim toggle.
+    ///
+    /// A slot rather than a `save: bool`, because what belongs to a
+    /// buffer is different in each screen that shows one: the editor
+    /// saves to the library, the workbench is a scratchpad in a guide
+    /// chapter and saves nothing. The editor pane should not know which
+    /// of those it is inside.
+    #[props(default)]
+    actions: Option<Element>,
+    /// The buffer, when the screen owns it — a shared library chart,
+    /// whose collaborative session writes remote edits into it. Absent,
+    /// the editor owns its own, seeded from `initial`.
+    #[props(default)]
+    state: Option<Signal<EditorState>>,
+    /// The shared chart this buffer is one copy of: other people's
+    /// carets are drawn from it.
+    #[props(default)]
+    collab: Option<ChartCollab>,
 ) -> Element {
-    let state = use_signal(|| EditorState::new(initial));
+    let own = use_signal(|| EditorState::new(initial));
+    let state = state.unwrap_or(own);
+    // The shared chart's transaction sink, built ONCE. Rebuilt per render,
+    // every presence update (each caret move, ours included) handed the
+    // editor a new callback prop mid-typing.
+    let on_transaction = use_hook(|| {
+        collab.map(|collab| {
+            Callback::new(move |event: editor::editor_view::TransactionEvent| {
+                collab.on_transaction(&event, &state.peek());
+            })
+        })
+    });
+    // Built once: the source is compared by identity, and `collab` is
+    // fixed for the life of the screen.
+    let decorations = use_hook(|| match collab {
+        None => editor_view::DecorationSource::ptr(keyflow_decorations),
+        Some(collab) => editor_view::DecorationSource::new(move |st: &EditorState| {
+            let mut out = keyflow_decorations(st);
+            out.extend(collab.carets(st));
+            out
+        }),
+    });
 
     let keymap = editor::standard_markdown_keymap();
 
@@ -52,7 +92,7 @@ pub fn KeyflowEditor(
     // `None` is what actually disables it — the `Editor` takes an
     // `Option<Signal<VimState>>` and plain editing is the absent case.
     let vim = vim_on().then_some(vim_state);
-    let slash = use_signal(|| None::<editor_view::slash::SlashState>);
+    let palette = use_signal(|| None::<editor_view::palette::PaletteState>);
 
     // Mirror the text out. `use_effect` and not the editor's transaction
     // sink, because the caller wants the resulting *text*, not the edits.
@@ -65,6 +105,9 @@ pub fn KeyflowEditor(
     rsx! {
         document::Link { rel: "stylesheet", href: editor::EDITOR_STYLE }
         style { dangerous_inner_html: "{css}" }
+        if collab.is_some() {
+            style { dangerous_inner_html: COLLAB_STYLE }
+        }
 
         div { class: "kf-code-editor",
             div { class: "kf-pane-head",
@@ -73,6 +116,9 @@ pub fn KeyflowEditor(
                     span { class: "kf-note", "{n}" }
                 }
                 span { class: "kf-pane-spacer" }
+                if let Some(actions) = actions {
+                    {actions}
+                }
                 button {
                     class: if vim_on() { "kf-button kf-button-on" } else { "kf-button" },
                     // The control says what it toggles, and its state
@@ -93,12 +139,13 @@ pub fn KeyflowEditor(
                 Editor {
                     state,
                     keymap: keymap.clone(),
-                    decorations: editor_view::DecorationSource::ptr(keyflow_decorations),
+                    decorations: decorations.clone(),
                     hover: keyflow_hover as editor::HoverSource,
                     vim,
-                    slash: Some(slash),
+                    palette: Some(palette),
+                    on_transaction: on_transaction,
                 }
-                editor_view::slash::SlashMenu { state, slash }
+                editor_view::palette::CommandPalette { state, palette }
                 }
             }
         }

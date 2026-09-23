@@ -1,0 +1,17 @@
+=INTRO
+C,Dm/C C,, C,Dm/C C,,
+Dm,, Dm,, C,Dm/C C,,
+=VERSE
+(C,Dm/C C,, C,Dm/C C,,
+Dm,, Dm,, C,Dm/C C,,)x2
+=CHORUS
+(F,, Em,, Dm,, ,,,)x2
+
+F,,  Em,,  Dm,,  ,,, 
+G,, F,, Am,,  ,,_G  Am,, ,,,
+P1
+-
+-ARRANGEMENT:
+-
+-INTRO, VERSE, CHORUS | VERSE 2, CHORUS, 
+-SOLO OVER VERSE, CHORUS | VERSE 3, CHORUS

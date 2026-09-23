@@ -1,0 +1,23 @@
+-"Drums Only for 2 measures"
+=Intro 
+(D % G % Bm % G %)
+=Verse
+(D G Bm G) x3
+=Pre-chorus
+F#m__ G G A__ Bm Bm C_ Bm Bm G 
+=Chorus
+(D % G % Bm % G %)
+=Interlude
+F#m G A Bm C Bm G %
+=Verse
+=Pre-chorus
+F#m G A_ Bm C_ Bm Bm G %
+=Chorus 
+=Interlude
+Em_D"Let it ring out"D%G%
+D% G G_G_r4_*
+=Outro Chorus
+D % G % Bm % G %
+D % G % Bm % G_r4r1
+=Outro
+Em_D"Let it ring out"

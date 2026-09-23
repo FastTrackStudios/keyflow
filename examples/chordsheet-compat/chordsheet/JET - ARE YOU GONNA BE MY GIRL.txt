@@ -1,0 +1,18 @@
+=INTRO
+A% %A_D_A_* A% %A_r4 
+A% %A_D_A_*
+=VERSE
+A_r4r1 (AA_r4)
+r1AA_D_A_* (D_*_*_C)x4
+=CHORUS
+(ACDA) 
+EG_G_*_*"Let it Ring out"r1
+=RE-INTRO
+A% %A_D_A_*
+=VERSE 2
+=CHORUS
+=GUITAR SOLO
+(A%)(ACDA)
+=CHORUS/OUTRO
+(ACDA)x3
+A_*_*_G D_D_*"Let it Ring out"

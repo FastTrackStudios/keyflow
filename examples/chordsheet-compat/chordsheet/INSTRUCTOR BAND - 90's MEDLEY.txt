@@ -1,0 +1,75 @@
+=Page One
+=BULLET WITH BUTTERFLY WINGS
+(B_A_B_G Em A)x6
+(B_EG_A)x4B_EA_G
+(B_GD_AE_G)x4 
+F#_E_F#A%
++Page Two
+=ENTER SANDMAN
+(Em_A)x8 (Em)x4 (Em_A)x8
+=(FULL BAND)
+(Em_A)x3G_F#_G)
+=VERSE
+(E_*_*_F)EG_F#_G)
+(F#_C_B)x4
+=CHORUS
+(F#_C_B)x3 E F#_C_B E
+=GUITAR SOLO
+(Em_A)x3G_F#_G)
+(F#_C_B)x6 (E F#_C_B)E
++Page 3
+=MAN IN THE BOX
+(Em% % %)x3
+=VERSE
+(Em% % %)
+G% % %
+Em% % %
+=CHORUS
+(EmGDA_*_G)
+=GUITAR SOLO (SAME AS VERSE)
+=CHORUS 2
+=OUTRO (SAME AS INTRO)
++Page Four
+=NIRVANA MIX-UP
+=IN BLOOM
+(Bb_GF_G#)(BbF#EbB_A)
+=SMELLS LIKE TEEN SPIRIT
+(F_BbG#_C#)x10
+=CHORUSx6
+=LITHIUM
+(F_AD_BbG#_BbC_Eb)x3
+(Bb_C#Bb_C#)x8EbC_*_G#
+=SMELLS LIKE TEEN SPIRIT
+(F_BbG#_C#)x8
++Page Five
+=I'M JUST A GIRL
+=INTRO
+D % % %
+=VERSE
+(D % % %)
+=CHORUS
+(BmAGA)x4 GC
+=RE-INTR0
+=VERSE 2
+=CHORUS
+(BmAGA)x4 
+=OUTRO
+(GC)x3B
++Page Six
+=UNDER THE BRIDGE
+(DF#DF#)
+=VERSE 1
+(E_BC#_G#AE_BC#_A)
+=INTERLUDE
+Emaj7 r1
+=VERSE 2
+=INTERLUDE
+=CHORUS
+(F#_EBF#)x4
+=BRIDGE
+(A_AmGFmaj7)x3 Fmaj7E7G
+(A_AmGFmaj7)x4
+=GUITAR SOLO
+(A_AmGFmaj7)x8
+=OUTRO
+(A_AmGFmaj7)x4A

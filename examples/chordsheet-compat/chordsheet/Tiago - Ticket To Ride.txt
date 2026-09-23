@@ -1,0 +1,22 @@
+:Intro
+(FMaj7%)
+
+:Verse
+-No Guitar
+(FMaj7%F9%
+FMaj7%Gm7Bb/C
+
+:Chorus
+Dm9FMaj7_F9BbMaj7Eb9
+Dm9_AbMaj7Gm7_Bb/CFMaj7 FMaj7 )
+
+:Bridge
+BbMaj7C#Maj7Gm7Am7
+BbMaj7C#Maj7CC7b13
+-Back to VERSE 1
+
+:Solo over VERSE
+-
+
+:Outro
+(FMaj7Dm9Gm7Bb/C)F#Maj7FMaj7

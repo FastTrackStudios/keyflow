@@ -1,0 +1,23 @@
+=INTRO/VERSE
+(B_B_B_r4%)x3 r1 
+(B_B_B_r4%)x3
+=PRE-CHORUS
+G A Em%
+=CHORUS
+(Bm_G D_A)x4 B_B_B_r4
+=VERSE
+(B_B_B_r4%)x3 
+=PRE-CHORUS
+-"Same as the first Pre-Chorus. However, hold on beat 3 of last Em"
+=CHORUS
+(Bm_G D_A)x3
+=BRIDGE
+G F# Bm %
+G F#_F#_r4
+=GUITAR SOLO
+(Bm_G D_A)
+=PRE-CHORUS 
+G A Em G
+=CHORUS x6
+=OUTRO
+B_B_B_r4

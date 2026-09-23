@@ -1,0 +1,11 @@
+= Intro "Band comes in after first progression"
+= Verse
+= Chorus
+= Verse
+= Chorus
+= Break
+= Solo
+= Break/Intro
+= Verse
+= Chorus
+= Outro

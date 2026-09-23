@@ -1,0 +1,52 @@
+:PART 1 | 4/4 | RICKS DRONE | 87 BPM | MEASURES 1-67 | 2:14
+-DRONE W/ MOOG SOLO
+-
+(Gm,,,)x34 
+-GUITAR SOLO
+(Gm,,,)x4 (D"4th Bend"_,,,)x3 (Cm"2nd Bend"_,,,)x4 (Gm"2nd Bend"_,,,)x7 
+(Dm"2nd Bend"_,,,)x4 (Cm"2nd pt"_,,,)x2 (Dm"2nd pt"_,,,)x2 (Gm"2nd pt"_,,,)x8 
+P4
+:PART 2 | 6/4 | SYD'S THEME | 137 BPM | MEASURES 68-124
+-PAD WITH GUITAR RIFF, RIFF 4 TIMES, BAND BUILD ON 5
+-
+(Gm7_"BbFGE")x12 (C_"BAND IN")x3 F (Gm7)x4
+(Eb)x2 (D)x2 F (Gm7)x4
+
+:PART 2 | 6/4 | GUITAR SOLO
+
+(Gm7)x8 (C)x3 F"STOP" (Gm7)x4
+(Eb)x2 (D)x2 Gm7 Gm/F# Gm/F 
+Edim7 Eb D Eb(b5) D
+P1
+:PART 3 | 6/4 | MOOG SOLO, THEN BASS & DRUMS
+-
+(Gm)x8 (Cm)x4 (Gm)x4 
+Eb D Eb D Gm Cm Gm (D7#9"HOLD")x2
+-REPEAT SECTION w/ BASS AND DRUM SOLO
+
+P2
+:PART 4 | 6/4 | VERSE 1
+(Gm Gm F# Bb
+Eb_Eb/D Cm_Bb F/A_F F_F#dim7)x2
+Gm7 Gm/F# Gm/F Edim7
+Eb Edim7 Bb/D Dm_D
+P0
+:PART 4 | 6/4 | GUITAR SOLO
+Gm Gm F# Bb
+Eb_Eb/D Cm_Bb F/A_F F_F#dim7
+P2
++
+:PART 4 | 6/4 | VERSE 2
+(Gm Gm F# Bb
+Eb_Eb/D Cm_Bb F/A_F F_F#dim7)x2
+Gm7 Gm/F# Gm/F Edim7
+Eb Edim7 Bb/D Dm_D
+P1
+:PART 5 | 6/4 | SAX SOLO
+-
+(Gm7)x8 (C11)x4 (Gm7)x4 (Eb)x2 (D)x2 
+P0
+:FEEL CHANGE 4/4
+-
+(Gm7)x8 (C11)x4 (Gm7)x4 (Eb)x2 (D)x2 
+Gm7

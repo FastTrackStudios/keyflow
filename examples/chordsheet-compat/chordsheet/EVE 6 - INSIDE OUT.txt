@@ -1,0 +1,26 @@
+=Intro
+A_E B A_E F# 
+(E_B F#)
+=VERSE 1
+(B_F# A_G B_F# E )
+B_F# A_G B_F# G
+=CHORUS
+A_E B A_E F# 
+(E_B F#)
+=VERSE 2
+B_F# A_G B_F# E
+B_F# A_G B_F# G
+
+=CHORUS 2
+A_E B A_E F# 
+(E_B F#)
+
+
+=BRIDGE
+(B_E A_E) x6
+=CHORUS 3
+(B_E A_E) x4
+=OUTRO
+(B_E A_E) x3
+B_E A_F#
+E_B F#

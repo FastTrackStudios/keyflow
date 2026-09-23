@@ -1,0 +1,36 @@
+=INTRO
+(B)x8
+
+=VERSE
+(B	E	B	F#) 	x2
+
+=PRECHORUS
+(B	E)	x2
+
+=CHORUS
+(B	E	D	A)	x2
+
+=INTRO
+(B)x3
+
+=VERSE 2
+(B	E	B	F#) 	x2
+
+
+
+=PRECHORUS
+(B	E)	x2
+
+=CHORUS
+(B	E	D	A)	x3
+
+=INSTRUMENTAL
+-
+(F#m)x5 (F#m)x1 (F#m)x4 E
+
+=BRIDGE
+D	E	D	A
+B	E	D	A
+
+=CHORUS
+(B	E	D	A)	x5

@@ -1,0 +1,17 @@
+=INTRO
+-
+,"DRUMS"_,,, ,,,, ,"BASS"_,,, ,,,, ,"GUITAR"_,,, ,,,,
+(E_C#m)x4 
+-F# F# C# B Ab A
+F#5_A
+=VERSE 1
+(E_C#m)x8
+=CHORUS
+(A,,, A,,, E,,, E,,,)x2
+F#5_A ,,,,
+=VERSE 2
+=CHORUS
+=BRIDGE
+(E,,, E,C#,)x2 (E"BUILD SECOND TIME"_,,, ,,,,)x2
+=VERSE
+=DOUBLE CHORUS

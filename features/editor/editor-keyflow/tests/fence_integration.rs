@@ -18,7 +18,7 @@ use editor_state::{EditorState, decoration::DecorationKind};
 
 fn state(text: &str) -> EditorState {
     EditorState {
-        doc: Doc::from_str(text),
+        doc: Doc::new(text),
         selection: Selection::caret(text.len()),
         folds: Vec::new(),
         reading_mode: false,

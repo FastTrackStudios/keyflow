@@ -28,10 +28,59 @@ use dioxus::prelude::*;
 use crate::chart::{ChartShape, Page, blank_page, engrave, export_pdf, export_svg, filename_for};
 use crate::chart_gpu;
 use crate::chart_url;
+use crate::notation::{CHOICES, Notation};
 
 /// Zoom bounds, matching keyflow-ui's native chart viewports.
 const ZOOM_MIN: f64 = 0.1;
 const ZOOM_MAX: f64 = 8.0;
+
+/// Breathing room left around a page that has been fitted to the screen.
+const FIT_MARGIN_PX: f64 = 12.0;
+
+/// The zoom at which a page `page_width_px` wide fits the chart column, or
+/// `None` off the browser (the host build, where there is nothing to measure).
+///
+/// Measures `.kf-editor`, not the stage and not the window. The stage is
+/// `display: none` until its tab is picked on a narrow screen, so it has no
+/// width to read at the moment the pages arrive; the window overshoots,
+/// because the shell's gutters are not a fixed number across breakpoints —
+/// guessing them at 32px left a 430px phone fitted flush to the edge with no
+/// margin at all. `.kf-editor` is on screen from the first paint (it holds
+/// the tabs) and below the breakpoint it IS the chart column.
+///
+/// On a desktop it is the full split rather than the chart's half, so the
+/// answer runs large — which costs nothing, because that is precisely where
+/// the caller throws the result away: the page already fits at the default
+/// zoom and only a SMALLER fit is ever applied.
+fn fit_zoom(page_width_px: f64) -> Option<f64> {
+    if page_width_px <= 0.0 {
+        return None;
+    }
+    let column = column_width()?;
+    let usable = column - FIT_MARGIN_PX * 2.0;
+    if usable <= 0.0 {
+        return None;
+    }
+    Some((usable / page_width_px).clamp(ZOOM_MIN, ZOOM_MAX))
+}
+
+/// The width of the editor column in CSS pixels. `None` anywhere there is no
+/// document, or before it has one.
+fn column_width() -> Option<f64> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let el = web_sys::window()?
+            .document()?
+            .query_selector(".kf-editor")
+            .ok()??;
+        let w = el.get_bounding_client_rect().width();
+        (w > 0.0).then_some(w)
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        None
+    }
+}
 
 /// Gap between stacked pages, in CSS px.
 const PAGE_GAP_PX: f64 = 24.0;
@@ -49,6 +98,10 @@ pub fn ChartPreview(
 ) -> Element {
     let mut pages = use_signal(|| vec![blank_page()]);
     let mut generation = use_signal(|| 0_u64);
+    // Which notation the chart is DRAWN in. The source is never touched;
+    // this re-notates on the way to the engraver, so the editor keeps
+    // showing what was typed while the chart shows what you asked for.
+    let mut notation = use_signal(Notation::remembered);
     let exporting = use_signal(|| false);
     let status = use_signal(|| Option::<String>::None);
 
@@ -57,7 +110,9 @@ pub fn ChartPreview(
     // newest drops itself on wake instead of overwriting a fresher one.
     // (This is why the preview does not use `use_memo` the way `Chart`
     // does — the point is *not* to engrave on every pass.)
-    use_effect(use_reactive!(|(source)| {
+    let shown_now = notation();
+    let src_for_render = source.clone();
+    use_effect(use_reactive!(|(src_for_render, shown_now)| {
         let mine = generation.peek().wrapping_add(1);
         generation.set(mine);
         spawn(async move {
@@ -66,7 +121,8 @@ pub fn ChartPreview(
             if *generation.peek() != mine {
                 return;
             }
-            let rendered = engrave(&source, ChartShape::Page).unwrap_or_else(|e| {
+            let shown = shown_now.apply(&src_for_render);
+            let rendered = engrave(&shown, ChartShape::Page).unwrap_or_else(|e| {
                 tracing::debug!("chart preview render failed: {e}");
                 vec![blank_page()]
             });
@@ -78,8 +134,48 @@ pub fn ChartPreview(
     let mut pan = use_signal(|| (24.0_f64, 24.0_f64));
     let mut dragging = use_signal(|| false);
     let mut last = use_signal(|| (0.0_f64, 0.0_f64));
+    // Fit the first page to the screen once, if the default zoom is wider
+    // than the screen is. A phone is ~390px across and a page engraves to
+    // ~595px at 75%, so the default put the top-left corner of a sheet on
+    // screen and left the reader to pan for the rest of it.
+    //
+    // Measured from the VIEWPORT, not from the stage. Below the breakpoint
+    // the stage is `display: none` until its tab is picked, so it has no
+    // size to observe at the moment the pages arrive — and a `ResizeObserver`
+    // on a hidden element is not the thing to hang a first impression on.
+    // The stage is the viewport less the page gutters at that width, which
+    // is a number this side already knows.
+    let mut fitted = use_signal(|| false);
+    use_effect(move || {
+        // `pages` is the ONLY thing this subscribes to, and the borrow ends
+        // on this line. `fitted` and `zoom` are read with `peek` on purpose:
+        // the effect writes all three, and an effect that reads a signal it
+        // also writes re-enters on every pass — which here meant a
+        // "RefCell already borrowed" panic out of the wasm microtask queue
+        // rather than anything as visible as a loop.
+        let first = pages.read().first().cloned();
+        if *fitted.peek() {
+            return;
+        }
+        let Some(page) = first else {
+            return;
+        };
+        let Some(fit) = fit_zoom(page.width_px) else {
+            return;
+        };
+        // Only ever downward, and only once. On a desktop the page already
+        // fits at 75% and this changes nothing; after the first fit the
+        // zoom belongs to whoever is reading.
+        if fit < *zoom.peek() {
+            zoom.set(fit);
+            pan.set((FIT_MARGIN_PX, FIT_MARGIN_PX));
+        }
+        fitted.set(true);
+    });
 
     let src_for_export = source.clone();
+    // What is on screen, for the exports that should match it.
+    let shown_for_export = shown_now.apply(&source);
 
     // One live surface, or none. Asked once: if WebGL2 is refused the
     // preview renders the same SVG pages the rest of the site does, and
@@ -164,8 +260,25 @@ pub fn ChartPreview(
                 button {
                     class: "kf-button",
                     onclick: move |_| {
-                        zoom.set(0.75);
-                        pan.set((24.0, 24.0));
+                        // `min(default, fit)`: on a desktop the page
+                        // already fits at 75% and this is the old
+                        // behaviour exactly, but on a phone 75% is wider
+                        // than the screen, and a Reset that puts the chart
+                        // back to not fitting is not a way out of a zoom.
+                        let fit = pages
+                            .read()
+                            .first()
+                            .and_then(|p| fit_zoom(p.width_px));
+                        match fit {
+                            Some(f) if f < 0.75 => {
+                                zoom.set(f);
+                                pan.set((FIT_MARGIN_PX, FIT_MARGIN_PX));
+                            }
+                            _ => {
+                                zoom.set(0.75);
+                                pan.set((24.0, 24.0));
+                            }
+                        }
                     },
                     "Reset"
                 }
@@ -173,8 +286,26 @@ pub fn ChartPreview(
 
                 span { class: "kf-preview-spacer" }
 
+                // Notation is a property of the VIEW, so it sits on the
+                // chart's header rather than the source's: it changes what
+                // is engraved, never what is typed.
+                select {
+                    class: "kf-select",
+                    title: "Engrave the chart in this notation, whatever the source is written in",
+                    value: notation().key(),
+                    onchange: move |e| {
+                        let next = Notation::from_key(&e.value());
+                        notation.set(next);
+                        next.remember();
+                    },
+                    for (choice, label, hint) in CHOICES.iter() {
+                        option { value: choice.key(), title: "{hint}", "{label}" }
+                    }
+                }
+
                 ShareButton {
                     source: src_for_export,
+                    shown: shown_for_export,
                     exporting,
                     status,
                 }
@@ -306,7 +437,14 @@ fn PreviewPage(page: Page) -> Element {
 /// cost permanent space to be mostly ignored; behind one they cost a
 /// click when you actually want them.
 #[component]
-fn ShareButton(source: String, exporting: Signal<bool>, status: Signal<Option<String>>) -> Element {
+fn ShareButton(
+    source: String,
+    /// The chart as it is currently drawn — the source re-notated by the
+    /// view. Equal to `source` unless a notation is being forced.
+    shown: String,
+    exporting: Signal<bool>,
+    status: Signal<Option<String>>,
+) -> Element {
     let mut open = use_signal(|| false);
 
     rsx! {
@@ -316,7 +454,7 @@ fn ShareButton(source: String, exporting: Signal<bool>, status: Signal<Option<St
             "Share"
         }
         if open() {
-            ShareDialog { source: source.clone(), exporting, status, open }
+            ShareDialog { source: source.clone(), shown: shown.clone(), exporting, status, open }
         }
     }
 }
@@ -325,6 +463,7 @@ fn ShareButton(source: String, exporting: Signal<bool>, status: Signal<Option<St
 #[component]
 fn ShareDialog(
     source: String,
+    shown: String,
     exporting: Signal<bool>,
     status: Signal<Option<String>>,
     open: Signal<bool>,
@@ -374,7 +513,12 @@ fn ShareDialog(
         });
     };
 
-    let (svg_src, pdf_src, kf_src) = (source.clone(), source.clone(), source.clone());
+    // The pictures are of the chart you are looking at, so they take the
+    // re-notated source; the `.kf` file and the share link are the
+    // document itself and must stay exactly what was typed. Forcing Roman
+    // numerals to read a chart must not hand someone a link that rewrites
+    // their song into Roman numerals.
+    let (svg_src, pdf_src, kf_src) = (shown.clone(), shown.clone(), source.clone());
 
     rsx! {
         // The backdrop closes on click; the sheet stops the click from

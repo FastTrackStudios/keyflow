@@ -1,0 +1,33 @@
+=INTRO
+
+(Em"keys"_,,, ,,,,)x2 (Em"band in"_,,, ,,,,)x2
+(Em,,, D/E,,, C/E,,, ,,,,)x2
+=VERSE
+(Em,,, D/E,,, C/E,,, 3.,,,, 4.,,_Am_Bm)x4
+=PRECHORUS
+C,,, D,,, Am7,,, ,,Am_Bm
+C,,, D,,, Am7,,, D_Cmaj7,, ,,,,
+=CHORUS
+(Em,,, ,,,, D,,, ,,,, 
+C,,, ,,,, Am7,,, D,Ddim)x2
+=Instrumental
+-SECOND TIME THU SKIP TO GUITAR SOLO
+(Em,,, D/E,,, C/E,,, ,,,,)x2
+
+-BACK TO VERSE, PRECHORUS, CHORUS
+
+=GUITAR SOLO OVER CHORUS
+(Em,,, ,,,, D,,, ,,,, 
+C,,, ,,,, Am7,,, D,Ddim)x2
+
+=AFTER GUITAR SOLO
+Em,,, ,,,, G,,, ,,,,
+Cmaj7,,, ,,,, Am7,,, ,,,,
+Em,,, ,,,, D,,, ,,,, 
+Cmaj7,,, ,,,, B,,, ,,,,
+
+=CHORUS
+(Em,,, ,,,, D,,, ,,,, 
+C,,, ,,,, Am7,,, D,Ddim)x4
+Em,,, ,,,,"Em Em"
+,,,, ,,,, Em,,, ,,,,"Em Em"

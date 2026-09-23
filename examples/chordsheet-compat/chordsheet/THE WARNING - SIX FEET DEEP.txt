@@ -1,0 +1,34 @@
+:INTRO
+-1X GUITAR ONLY, LISTEN FOR FILLS
+(C#,,, ,,,, ,,,, E"1X-IN  2X-GT ONLY"_,,,)x4
+
+:VERSE 1
+(C#,,, ,,,, ,"4X-OUT"_,,, E,,,)x4
+
+:CHORUS
+(C#,,, ,,,, A,,, B,,,
+C#,,, Eb,,, A,,, B,,,)
+
+:INSTRUMENTAL
+C#,,, ,,,, ,,,, A,,,
+
+:VERSE
+(C#,,, ,,,, ,,,, E"2X-D.FILL"_,,,)x2
+(C#"DT"_,,, B,,, A"2X-BREAK"_,,, F#"2X-D.FILL"_,,,)x2
+
+:CHORUS
+(C#,,, ,,,, A,,, B,,,
+C#,,, Eb,,, A,,, B,,,)
+
+:BRIDGE
+A,,, ,,,, F#_F#_E_F# G#_F#_E_F# 
+Eb,,, ,,,, C_G#_G#_Eb_C# E_Eb_Eb_F#_E
+:CHORUS
+-GUITAR ONLY
+C#,,, ,,,, A,,, B,,,
+C#,,, Eb,,, A,"OUT"_,, B,,,
+:CHORUS
+C#,,, ,,,, A,,, B,,,
+C#,,, Eb,,, A,,, B"OUT"_,,,
+:INSTRUMENTAL
+(C#,,, ,,,, ,,,, A,,,)

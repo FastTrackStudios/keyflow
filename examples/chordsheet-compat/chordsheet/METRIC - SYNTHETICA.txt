@@ -1,0 +1,25 @@
+=VERSE 1 (3X)
+Dm,,, F,,, Am,,, F,,,
+(Dm,,, F,,, Am,,, 2.F"LICK"_,,,
+3.F,,_G)x3
+=CHORUS
+Am,,, C,,, F,,, Dm"LICK"_,,,
+Am,,, C,,, F,,, 
+=VERSE 2 (2X)
+(Dm,,, F,,, Am,,, 1.F"LICK"_,,,
+2.F,,_G)
+=CHORUS
+=CHORUS
+-
+-
+
+=BRIDGE
+Dm,_E, Am,,,
+Dm,_E, Am,_F,
+C,,, G,,, Dm,_E, Am,_F,
+C,,, G,,, Dm,_E,
+=INSTRUMENTAL CHORUS
+Am,,, C,,, F,,, Dm"LICK"_,,,
+=CHORUS
+=CHORUS
+=CHORUS

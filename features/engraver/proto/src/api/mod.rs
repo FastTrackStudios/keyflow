@@ -191,6 +191,43 @@ pub mod pipeline {
         Responsive,
     }
 
+    /// How hard the engraver works to make a chart smaller.
+    ///
+    /// Orthogonal to [`Preset`], which decides the page geometry. This
+    /// decides how much of the chart's own repetition is folded away
+    /// before it is drawn, and how far the layout is allowed to bend to
+    /// fit. The same chart on the same paper reads very differently at
+    /// each of the three, and which one you want depends on whether the
+    /// reader is proof-reading it, playing it, or holding it on a stand
+    /// they cannot turn a page on.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+    pub enum ChartMode {
+        /// Every bar as written. What Keyflow has always done.
+        #[default]
+        Default,
+        /// Fold repeated bars into simile marks.
+        ///
+        /// Shorter, and often much shorter, without losing anything: a
+        /// folded bar keeps its chords, so the chart still plays,
+        /// transposes and analyses the same. What it loses is the ink.
+        /// A bar carrying a cue, a dynamic, an ending bracket or a
+        /// repeat sign is left drawn — that is the thing a reader would
+        /// actually miss.
+        Folded,
+        /// Everything `Folded` does, and then fit the page.
+        ///
+        /// Widens the systems past the usual four bars a line and, if
+        /// that is not enough, scales the whole layout down, stopping at
+        /// the first setting that lands the chart on one page. A chart
+        /// that will not fit however far it is pushed comes back at the
+        /// setting that got closest, so this can still run to more than
+        /// one page — it just will not have given up early.
+        ///
+        /// Only [`Preset::Page`] has pages to fit; under the other two
+        /// this behaves as `Folded`.
+        Compact,
+    }
+
     /// Paper size for [`Preset::Page`].
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum Paper {
@@ -216,6 +253,8 @@ pub mod pipeline {
         /// Zoom, which widens the effective viewport when choosing a
         /// responsive breakpoint.
         pub zoom: f64,
+        /// How much folding and fitting to do. See [`ChartMode`].
+        pub mode: ChartMode,
     }
 
     impl PresetOptions {
@@ -227,6 +266,7 @@ pub mod pipeline {
                 page_offsets: false,
                 viewport_pt: 800.0,
                 zoom: 1.0,
+                mode: ChartMode::Default,
             }
         }
 
@@ -238,6 +278,7 @@ pub mod pipeline {
                 page_offsets: true,
                 viewport_pt,
                 zoom,
+                mode: ChartMode::Default,
             }
         }
 
@@ -254,6 +295,13 @@ pub mod pipeline {
             self.viewport_pt = viewport_pt;
             self
         }
+
+        /// Choose how much folding and fitting to do.
+        #[must_use]
+        pub const fn with_mode(mut self, mode: ChartMode) -> Self {
+            self.mode = mode;
+            self
+        }
     }
 
     impl Default for PresetOptions {
@@ -263,6 +311,27 @@ pub mod pipeline {
     }
 
     /// A font bundle, a layout engine built from it, and every export.
+    /// A copy of `chart` with every repeat written out and the signs cleared.
+    ///
+    /// The default reading implies nothing: no simile marks, no repeat signs,
+    /// no folded sections — every bar the player plays is a bar on the page.
+    fn expanded(chart: &Chart) -> Chart {
+        let mut expanded = chart.clone();
+        keyflow_proto::chart::expand_repeats(&mut expanded);
+        keyflow_proto::chart::unfold_similes(&mut expanded);
+        keyflow_proto::chart::unfold_sections(&mut expanded);
+        expanded
+    }
+
+    /// A copy of `chart` with its repetition folded: repeated bars become
+    /// simile marks, and a section that repeats an earlier one becomes a rule.
+    fn folded(chart: &Chart) -> Chart {
+        let mut folded = chart.clone();
+        keyflow_proto::chart::fold_similes(&mut folded);
+        keyflow_proto::chart::fold_sections(&mut folded);
+        folded
+    }
+
     pub struct ChartPipeline {
         fonts: &'static ChartFontBundle,
         engine: ChartLayoutEngine,
@@ -407,8 +476,41 @@ pub mod pipeline {
             preset: Preset,
             options: PresetOptions,
         ) -> ChartLayoutResult {
-            let (mode, config) = Self::resolve_preset(preset, options);
-            self.layout_with_config(chart, &mode, &config)
+            let (layout_mode, config) = Self::resolve_preset(preset, options);
+            match options.mode {
+                ChartMode::Default => {
+                    self.layout_with_config(&expanded(chart), &layout_mode, &config)
+                }
+                ChartMode::Folded => {
+                    // Same grid as Default. A folded chart still has to look
+                    // like a chart — four bars to a line, so the eye can count
+                    // them without reading them. Packing more in is Compact's
+                    // job, and it is the thing Compact trades readability for.
+                    let mut config = config;
+                    config.fold_sections = true;
+                    config.fit_whole_section_on_one_system = true;
+                    config.draw_similes = true;
+                    self.layout_with_config(&folded(chart), &layout_mode, &config)
+                }
+                ChartMode::Compact if matches!(preset, Preset::Page) => {
+                    let mut config = config;
+                    config.fold_sections = true;
+                    config.fit_whole_section_on_one_system = true;
+                    config.draw_similes = true;
+                    self.engine
+                        .layout_chart_compact(&folded(chart), &layout_mode, &config)
+                }
+                // Snippet and Responsive have no pages to fit into, so the
+                // fitting half of Compact has nothing to aim at.
+                ChartMode::Compact => {
+                    let mut config = config;
+                    config.fold_sections = true;
+                    config.fit_whole_section_on_one_system = true;
+                    config.draw_similes = true;
+                    config.tight_system_spacing = true;
+                    self.layout_with_config(&folded(chart), &layout_mode, &config)
+                }
+            }
         }
 
         /// Lay a chart out with an explicit layout config.

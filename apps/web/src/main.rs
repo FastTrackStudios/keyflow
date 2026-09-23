@@ -14,10 +14,28 @@ mod chart;
 mod chart_gpu;
 mod chart_preview;
 mod chart_url;
+mod collab;
 mod guide;
+#[cfg(feature = "dev-guide")]
+mod guide_live;
 mod highlight;
 mod keyflow_editor;
+mod keyflow_palette;
+// Charts kept in a FastTrackStudio account — the client for Task's
+// vault, and the reason the header has a Library link. Pure request
+// builders and response parsers, so `just test` exercises the wire
+// format on the host; see the module docs for why the transport is MCP
+// over `fetch` rather than vox.
+mod library;
+mod notation;
+// PKCE, the two request shapes and the issuer's answers. Its own module
+// rather than a corner of `auth` because it is pure — no browser, no
+// HTTP — which is what lets `just test` exercise it on the host.
+mod oidc;
 mod prefs;
+// Not losing the chart across the sign-in redirect. Keyflow-specific:
+// the document lives in the URL, so leaving the tab is leaving the work.
+mod return_to;
 mod routes;
 mod typewriter;
 
@@ -37,6 +55,21 @@ pub enum Route {
     Editor {},
     #[route("/c/:data")]
     Chart { data: String },
+    // Charts kept in an account. Not a chart route: `/c/:data`
+    // still carries a document, and this is only the shelf it can be
+    // taken off. Signed out it explains itself rather than redirecting
+    // — the editor is never gated behind an account.
+    #[route("/library")]
+    Library {},
+    // One stored chart, open in the editor and bound to it: Save
+    // updates this chart rather than keeping a new one. The org is in
+    // the path because a chart slug is only unique within its org.
+    #[route("/library/:org/:slug")]
+    LibraryChart { org: String, slug: String },
+    // One song: its charts, its lists, its details. Four segments, so it
+    // cannot be read as a chart slug.
+    #[route("/library/:org/song/:slug")]
+    LibrarySong { org: String, slug: String },
     #[route("/guide")]
     GuideIndex {},
     // Before `/guide/:slug`, or "graph" would match as a page slug.
@@ -44,14 +77,36 @@ pub enum Route {
     GuideGraph {},
     #[route("/guide/:slug")]
     GuidePage { slug: String },
+    // The appendix: its own vault, its own URL. Reference rather than
+    // reading order, so it is not a stage of the guide.
+    #[route("/appendix")]
+    AppendixIndex {},
+    #[route("/appendix/:slug")]
+    AppendixPage { slug: String },
     // The workbench: the same chapter, with an editor and a live chart.
     #[route("/learn/:slug")]
     Workbench { slug: String },
+    // Where auth.fasttrackstudio.app returns from a sign-in. Registered
+    // at the issuer for the `keyflow` client, so the path is a contract
+    // and not a choice: see `auth::redirect_uri`. The whole query comes
+    // in as one string because a refusal arrives as `error=` with no
+    // `code`, and that case has to reach the screen rather than the
+    // router's 404.
+    #[route("/auth/callback?:..query")]
+    AuthCallback { query: String },
+    // A development view: the site at phone and tablet viewports. Not
+    // linked from the navigation — a URL you type while working on a
+    // responsive layout. Above the catch-all, like every real route.
+    #[route("/devices")]
+    Devices {},
     #[route("/:..segments")]
     NotFound { segments: Vec<String> },
 }
 
-use routes::{Chart, Editor, GuideGraph, GuideIndex, GuidePage, Home, NotFound, Workbench};
+use routes::{
+    AppendixIndex, AppendixPage, AuthCallback, Chart, Devices, Editor, GuideGraph, GuideIndex,
+    GuidePage, Home, Library, LibraryChart, LibrarySong, NotFound, Workbench,
+};
 
 fn main() {
     #[cfg(target_arch = "wasm32")]
@@ -82,7 +137,73 @@ fn main() {
         std::sync::Arc::new(editor_keyflow::Fences),
     );
 
-    dioxus::launch(App);
+    // The palette ships markdown's catalog, which is the wrong language for
+    // a buffer holding a chart. Same reasoning as the fence registry above:
+    // the editor cannot know what Keyflow is, so Keyflow tells it.
+    editor::editor_view::palette::register_catalog(keyflow_palette::commands());
+
+    dioxus::LaunchBuilder::new()
+        .with_cfg(server_only! {
+            dioxus::server::ServeConfig::builder().incremental(
+                dioxus::server::IncrementalRendererConfig::new()
+                    // `public` beside the executable is where the CLI
+                    // also puts the web bundle, so the pre-rendered
+                    // pages and the assets they reference land in one
+                    // directory — and that directory is what deploys.
+                    .static_dir(
+                        std::env::current_exe()
+                            .expect("the server knows its own path")
+                            .parent()
+                            .expect("an executable has a parent directory")
+                            .join("public"),
+                    )
+                    // Emphatically false. The cache directory is shared
+                    // with the wasm bundle and every asset; clearing it
+                    // per render would delete the site around the pages
+                    // being written into it.
+                    .clear_cache(false),
+            )
+        })
+        .launch(App);
+}
+
+/// The paths `dx build --ssg` should pre-render.
+///
+/// The CLI looks for a server function at exactly this endpoint, calls
+/// it once, and requests every path it returns — which is what writes
+/// them to disk as HTML.
+///
+/// Two sources, and the second is the point. `Route::static_routes()`
+/// gives the routes with no parameters — `/`, `/editor`, `/guide`,
+/// `/guide/graph`. It cannot give the guide's chapters, because
+/// `/guide/:slug` is a *single* parameterised route and only the vault
+/// knows the slugs; so the vault supplies them.
+///
+/// What is deliberately absent is as important. `/learn/:slug` — the
+/// workbench — is a live editor whose whole content is what the reader
+/// types, and `/c/:data` is a chart decoded out of the URL. Neither has
+/// a meaningful pre-rendered form, and both stay ordinary client-side
+/// routes. That is what makes this *partial* static generation.
+#[cfg(feature = "server")]
+#[server(endpoint = "static_routes")]
+async fn static_routes() -> ServerFnResult<Vec<String>> {
+    let mut routes: Vec<String> = Route::static_routes()
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+
+    for route in guide::vault().routes(guide::BASE) {
+        if !routes.contains(&route) {
+            routes.push(route);
+        }
+    }
+    for route in guide::appendix().routes(guide::APPENDIX_BASE) {
+        if !routes.contains(&route) {
+            routes.push(route);
+        }
+    }
+
+    Ok(routes)
 }
 
 #[component]
@@ -90,6 +211,11 @@ fn App() -> Element {
     // Installed above the router so the session survives navigation and
     // is resolved once, not per screen.
     auth::use_auth_provider();
+
+    // Watch the guide's source for edits. Development only: it makes a
+    // saved chapter appear in about a second instead of after a rebuild.
+    #[cfg(all(feature = "dev-guide", target_arch = "wasm32"))]
+    use_hook(guide_live::start_polling);
 
     rsx! {
         // The UI face and its matching mono. A sans and a mono from the

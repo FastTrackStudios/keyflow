@@ -1,0 +1,13 @@
+=INTRO
+(F#BbmEbmDb)
+=VERSE
+(F#BbmEbmDb)x4
+=CHORUS
+(F#BbmEbmDb)x4
+=VERSE 2
+=CHORUS 2
+=BRIDGE
+(F#BbmEbmDb)x3
+=DOUBLE CHORUS
+=OUTRO
+F#BbmEbmDb

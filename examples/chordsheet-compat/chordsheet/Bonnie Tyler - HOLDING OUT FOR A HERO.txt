@@ -1,0 +1,35 @@
+=INTRO
+-BASS
+F,,, Am,,, ,,,, ,,,,
+(Am"BAND IN"_,,, ,,,, Am7/G,,, ,,,,
+F,,, ,,,, Esus4,,, E,,,)x2
+
+=VERSE
+Am,,, ,,,, G,,, ,,,,
+F,,, ,,,, E,,, ,,G,
+Am,,, ,,,, Em,,, ,,,,
+Dm,,, ,,,, E,,, ,,,,
+
+=CHORUS
+(Am,,, ,,,, Em,,, ,,,,
+F,,, ,,,, C,,, G,,,)x2
+=INTRO
+=VERSE 2
+-W/ EXTRA MEASURE OF E
+
+=CHORUS 2
+(Am,,, ,,,, Em,,, ,,,,
+F,,, ,,,, C,,, 1. G,,,2. G,,, ,,,,)x2
+
+=TAG
+Am,,, ,,,, Em,,, ,,,,
+
+=INSTRUMENTAL
+(Am,,, ,,,,)x4
+
+=BRIDGE
+(Am,,, ,,,, F,,, ,,,, 
+Dm,,, E,,, 1.Am,,, ,,,, 
+2. Am,,, Cdim,,, ,,,, ,,,, ,,,,
+Esus4,,, E,,,)x2
+=DOUBLE CHORUS

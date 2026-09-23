@@ -697,7 +697,9 @@ mod tests {
         set_overlays_enabled(true);
         // Two verses + a chorus: the terse `VS`/`CH` markers should be badged
         // with their resolved, chart-numbered names. Two consecutive verses
-        // split into `Verse 1a` / `Verse 1b`.
+        // split into `Verse a` / `Verse b` — `SectionNumberer` drops the
+        // generation number when a type only has one generation, so it is
+        // the split letter that tells them apart, not "Verse 1a".
         let src = "VS\n1 | 5\n\nVS\n4 | 1\n\nCH\n1 | 4\n";
         let badges: Vec<String> = keyflow_decorations(&EditorState::new(src.to_string()))
             .iter()
@@ -711,12 +713,12 @@ mod tests {
             })
             .collect();
         assert!(
-            badges.iter().any(|h| h.contains("Verse 1a")),
-            "first verse should badge as 'Verse 1a'; got {badges:?}"
+            badges.iter().any(|h| h.contains("Verse a")),
+            "first verse should badge as 'Verse a'; got {badges:?}"
         );
         assert!(
-            badges.iter().any(|h| h.contains("Verse 1b")),
-            "second verse should badge as 'Verse 1b'; got {badges:?}"
+            badges.iter().any(|h| h.contains("Verse b")),
+            "second verse should badge as 'Verse b'; got {badges:?}"
         );
         assert!(
             badges.iter().any(|h| h.contains("Chorus")),

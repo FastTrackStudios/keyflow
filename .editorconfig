@@ -1,0 +1,32 @@
+# nvim reads this natively (since 0.9) and maps `max_line_length` onto
+# 'textwidth', so this is what stops an editor re-wrapping prose.
+#
+# It matters more here than in most repos. The guide is rendered by the
+# editor's markdown pass, which draws ONE SOURCE LINE PER RENDERED LINE —
+# so a paragraph hard-wrapped at 80 columns breaks at 80 columns on the
+# published page, stopping short of the column while the chart beside it
+# runs full width.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.md]
+# Paragraphs are one line each. See above — a hard wrap is a visible line
+# break on the site, not a source-formatting choice.
+max_line_length = off
+# Markdown's hard break is two trailing spaces, and `rendering-test.md`
+# tests it.
+trim_trailing_whitespace = false
+
+[*.rs]
+indent_style = space
+indent_size = 4
+
+[*.{nix,toml,yml,yaml,json}]
+indent_style = space
+indent_size = 2

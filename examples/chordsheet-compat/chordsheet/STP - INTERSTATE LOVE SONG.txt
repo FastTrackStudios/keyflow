@@ -1,0 +1,18 @@
+=INTRO
+C#m7 E A G# A E
+=HOOK X2
+=VERSE
+(C#m G#/B C#/B Bbm7b5 A,
+E_F#m11 E,,, E_F#m11 E,,,)x2
+
+=HOOK X1
+=CHORUS
+C#m7 E A G#
+A E A G# A E
+=HOOK X2
+=VERSE
+C#m G#/B C#/B Bbm7b5 A,
+E_F#m11 E,,, A,,,
+E_F#m11 E,,, E_F#m11 E,,,
+=CHORUS
+=HOOK X1

@@ -1,0 +1,38 @@
+:INTRO
+(G,,,)x4
+
+:VERSE 1    INST
+(G,,, ,,,, F,,, ,,,,)x2(G,,,)x2
+
+:CHORUS 1
+(Bb,F, G,,,)x2FGBbC
+
+:INST
+(G,,,)x2
+
+:VERSE 2 (sames as V1)
+
+:CHORUS 2 (same as CH 1
+
+:INST               GUITAR SOLO
+(G,,, G,,, G,,,)(G,,,)x4
+
+:CHORUS 3  GUITAR HARMONIES
+(Bb,F, G,,,)x2FGEbEm
+FGBbC
++
+:INST & SOLO  -    (RIFF)
+(G,,, G,F_<C)x4(G,,, G,<F,)x4 G
+
+:REPEAT THE STONER ROCK SECTION ABOVE x2  
+ -      (RIFF) 
+(G_G,, ,,F_F#G_G,, ,,,,)x2G 
+
+:MORE STONER ROCK
+(G,,, G,F_<C)x4(G,,, G,<F,)x4
+(F,,,)x4
+
+:CHORUS 4
+(Bb,F, G,,,)x2FGBbC
+-     (RIFF ENDING)
+(BbF)x3G

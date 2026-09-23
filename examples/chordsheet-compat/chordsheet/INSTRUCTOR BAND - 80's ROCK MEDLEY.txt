@@ -1,0 +1,89 @@
+=PAGE 1
+=WELCOME TO THE JUNGLE
+=INTRO
+B A G E
+B A E D_A 
+B%(A_G%) 
+=VERSE 1
+(A_G%)(E_D%)
+CD (E_A%)
+=VERSE 2
+-"Same as Verse 1"
+
++PAGE 2
+=LIVIN' ON A PRAYER
+=INTRO
+(Em%)(CDEm%)
+=VERSE 1
+(Em%)CDEm%)
+=PRE-CHORUS
+(C_DD_Em)x3 CD_r4
+=CHORUS
+(Em_CDG_CD)
+=GUITAR SOLO
+C%Em_CD
+G_CDEm_CDG_C
+Em%
+=PRE-CHORUS
+C_DD_Em CD_r4
+
++PAGE 3
+=JUMP
+=INTRO
+(CCCC_F_G)x4
+=VERSE
+(CCCC_F_G)x4
+=PRE-CHORUS
+Am%(F_C/EDm)
+F_C/EG%
+=CHORUS
+(CCCC_F_G)
+=GUITAR SOLO
+(Bbm_F#G#_C#)x4
+(C%)F%G%Bb%
+A7sus4%G#Maj7%G%C%
+
++PAGE 4
+=KICK START MY HEART
+=INTRO
+(G%)x4
+(GFC%)x3
+=VERSE
+(G%)BbFC%)
+(G%)
+=CHORUS
+(GFC%)x3
+GF(Eb%)
+=OUTRO
+-"Starts on the 7"
+(*_*_F_F#G)x3r1G
+
++PAGE 5
+=DON'T STOP BELIEVIN'
+=INTRO
+EBC#m7A EBG#mA
+=VERSE
+(EBC#m7A EBG#mA)
+=GUITAR INTERLUDE
+-"Same as Intro"
+=VERSE 2
+-"Same as Intro"
+=PRE-CHORUS
+(A%E%)x3
+A%B_E B_E_A_*
+=GUITAR SOLO
+-"Same as Intro"
+=CHORUS
+(EBC#m7A EBG#mA)E
++PAGE 6
+=BOHEMIAN RHAPSODY
+(Eb)x3F Bb*_*_Eb_* Bb_*_* *_C#-"2/4"
+Bb*_Eb_*G#(FBb)
+F_BbF_Bb 
+(Eb)x3F F#_C B G# Bb-"Let it Ring Out"
+r1r1r1 Eb
+Bb/DCm G/B_CmG/B_Cm 
+Bb_EB D7 Gm G#EbCmGm
+CmGmCmG# Bbr1Eb Ab/Eb 
+EbEbdim Bb/D Db C Bbdim/C C7 F 
+Bb_F/A G#dim_Gm7 F

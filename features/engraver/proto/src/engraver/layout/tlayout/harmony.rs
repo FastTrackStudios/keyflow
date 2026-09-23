@@ -1045,6 +1045,44 @@ fn format_alteration(alt: &str, symbol_set: SymbolSet) -> String {
     }
 }
 
+/// The length of a Roman-numeral root at the head of `chars`, including a
+/// leading accidental (`bVII`, `#iv`), or `None` if there isn't one.
+///
+/// Case must be consistent across the numeral — the case IS the quality, so a
+/// mixed `Iv` is not a numeral — and the letters must spell a degree in 1–7.
+/// `I` and `V` never begin a note name, so claiming them here cannot shadow
+/// a letter-name chord.
+fn roman_numeral_root_len(chars: &[char]) -> Option<usize> {
+    let mut i = 0;
+    // `b`/`#` count as the degree's accidental only when a numeral follows.
+    // Bare `b` is the note B and `b3` is a flat scale degree, and both must
+    // fall through to the branches below.
+    if matches!(chars.first(), Some('#' | 'b'))
+        && chars.get(1).is_some_and(|c| is_roman_numeral_letter(*c))
+    {
+        i = 1;
+    }
+    let start = i;
+    let upper = chars.get(i)?.is_ascii_uppercase();
+    while chars
+        .get(i)
+        .is_some_and(|c| is_roman_numeral_letter(*c) && c.is_ascii_uppercase() == upper)
+    {
+        i += 1;
+    }
+    let numeral: String = chars[start..i].iter().collect();
+    matches!(
+        numeral.to_ascii_uppercase().as_str(),
+        "I" | "II" | "III" | "IV" | "V" | "VI" | "VII"
+    )
+    .then_some(i)
+}
+
+/// The letters a Roman numeral degree can be spelled with, either case.
+fn is_roman_numeral_letter(c: char) -> bool {
+    matches!(c.to_ascii_uppercase(), 'I' | 'V')
+}
+
 /// Convenience function to create a chord symbol from a string like "Cm7b5".
 ///
 /// Parses common chord symbol formats and returns HarmonyParams.
@@ -1065,7 +1103,18 @@ pub fn parse_chord(chord_str: &str) -> HarmonyParams {
     // `5` as `C5`. For an altered degree the accidental comes *before* the
     // number, so it's kept with the digit as the root (the harmony renderer
     // draws the root string left-to-right, preserving `b3` order).
-    if i < chars.len() && chars[i].is_ascii_uppercase() {
+    // A Roman numeral root is one to three letters, and its CASE carries the
+    // quality — `ii` is the minor two. So it has to be taken whole, and in
+    // the case it was written, before the single-letter branches below get a
+    // look at it. Reading only the first character broke every numeral longer
+    // than one letter: `IV` became root `I` with `V` in the superscript slot,
+    // and a lowercase numeral matched no branch at all, so the root kept its
+    // "C" default and the numeral rendered as an extension — `ii` engraved as
+    // `Cii`. Only `I` and `V` came out right, which is what hid it.
+    if let Some(len) = roman_numeral_root_len(&chars[i..]) {
+        params.root = chars[i..i + len].iter().collect();
+        i += len;
+    } else if i < chars.len() && chars[i].is_ascii_uppercase() {
         params.root = chars[i].to_string();
         i += 1;
         // Note-letter root accidental, drawn after the letter (`C#`, `Bb`).
@@ -1351,6 +1400,44 @@ mod tests {
         assert_eq!(cs.root, "C");
         assert_eq!(cs.root_accidental, "#");
         assert_eq!(cs.quality, "m");
+    }
+
+    #[test]
+    fn test_parse_chord_roman_numeral_roots() {
+        // Regression: the root used to be a single character, so a numeral
+        // longer than one letter lost its tail to the superscript slot — `IV`
+        // engraved as root `I` with `V` raised — and a LOWERCASE numeral
+        // matched no branch at all, leaving the root at its "C" default so
+        // `ii` engraved as `Cii`. Only `I` and `V` came out right, which is
+        // how it survived: the guide's numeral example used `I ii iii IV`.
+        for n in ["I", "II", "III", "IV", "V", "VI", "VII"] {
+            let params = parse_chord(n);
+            assert_eq!(params.root, n, "numeral {n} should be its own root");
+            assert_eq!(params.quality, "", "numeral {n} left a stray quality");
+            assert_eq!(params.extension, "", "numeral {n} left a stray extension");
+        }
+        // The case IS the quality, so it has to survive verbatim.
+        for n in ["i", "ii", "iii", "iv", "v", "vi", "vii"] {
+            let params = parse_chord(n);
+            assert_eq!(params.root, n, "lowercase {n} should be its own root");
+            assert_eq!(params.extension, "", "lowercase {n} left a stray extension");
+        }
+        // Quality and extension still parse off a numeral root.
+        let v7 = parse_chord("V7");
+        assert_eq!(v7.root, "V");
+        assert_eq!(v7.extension, "7");
+        let iv_sus = parse_chord("IVsus4");
+        assert_eq!(iv_sus.root, "IV");
+        // A flat degree keeps its accidental with the numeral.
+        assert_eq!(parse_chord("bVII").root, "bVII");
+        assert_eq!(parse_chord("#iv").root, "#iv");
+        // Mixed case is not a numeral — `I` is the root and `v` falls through.
+        assert_ne!(parse_chord("Iv").root, "Iv");
+        // The accidental branch only fires when a numeral actually follows, so
+        // a flat scale degree is still a degree and letter chords are untouched.
+        assert_eq!(parse_chord("b3").root, "b3");
+        assert_eq!(parse_chord("Bb").root, "B");
+        assert_eq!(parse_chord("Bb").root_accidental, "b");
     }
 
     #[test]

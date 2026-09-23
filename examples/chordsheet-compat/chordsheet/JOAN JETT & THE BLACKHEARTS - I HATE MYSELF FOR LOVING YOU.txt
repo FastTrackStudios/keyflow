@@ -1,0 +1,19 @@
+=INTRO
+r1r1r1r4_*_E
+(E%DE)
+=VERSE
+(E%A%B%)
+=PRE-CHORUS
+GAGAB%
+=CHORUS
+E%A%B%E_r4
+=RE-INTRO
+r4_*_E (E%DE)
+=VERSE
+=PRE-CHORUS
+=CHORUS
+=GUITAR SOLO "Same As Re-Intro"
+=PRE-CHORUS
+=DOUBLE CHORUS "Drums Only First Time Around"
+=OUTRO
+r4_*_E(E%DE)x3

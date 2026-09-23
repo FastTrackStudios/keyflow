@@ -3,6 +3,20 @@
 //! It gates nothing. Signed out it is a "Sign in" button; signed in it
 //! shows who you are and offers a way out. The editor behaves
 //! identically either way — that is the point.
+//!
+//! # There is no form here any more
+//!
+//! There used to be: an email and password panel that dropped out of
+//! this button, with a toggle between signing in and creating an
+//! account, and its own vocabulary of failures ("that password is too
+//! weak"). All of it is gone, along with the password policy it was
+//! quietly restating. Sign-in is now a redirect to
+//! `auth.fasttrackstudio.app`, which is where the social providers live
+//! and where the password rules are actually enforced — see
+//! [`crate::auth`] for why that trade is worth a page navigation.
+//!
+//! What is left is two buttons and a sentence, because that is all a
+//! side door on a site that works without it needs to be.
 
 use dioxus::prelude::*;
 
@@ -10,10 +24,11 @@ use crate::auth::{AuthState, use_auth};
 
 #[component]
 pub fn AccountMenu() -> Element {
-    let auth = use_auth();
+    let mut auth = use_auth();
     let mut open = use_signal(|| false);
 
     let state = (auth.state)();
+    let pending = (auth.pending)();
 
     rsx! {
         div { class: "kf-account",
@@ -27,23 +42,18 @@ pub fn AccountMenu() -> Element {
                 AuthState::SignedOut => rsx! {
                     button {
                         class: "kf-account-button",
+                        disabled: pending,
                         onclick: move |_| open.toggle(),
                         "Sign in"
                     }
                 },
-                AuthState::SignedIn(_) => {
-                    let label = state.user_label().unwrap_or_else(|| "Account".to_owned());
+                AuthState::SignedIn(ref account) => {
+                    let label = account.label();
                     rsx! {
                         span { class: "kf-account-name", "{label}" }
                         button {
                             class: "kf-account-button",
-                            onclick: {
-                                let auth = auth.clone();
-                                move |_| {
-                                    let mut auth = auth.clone();
-                                    spawn(async move { auth.sign_out().await });
-                                }
-                            },
+                            onclick: move |_| auth.sign_out(),
                             "Sign out"
                         }
                     }
@@ -51,79 +61,36 @@ pub fn AccountMenu() -> Element {
             }
 
             if open() && matches!(state, AuthState::SignedOut) {
-                SignInPanel { on_close: move |_| open.set(false) }
+                SignInPanel { on_close: move |()| open.set(false) }
             }
         }
     }
 }
 
-/// Email + password, with a toggle between signing in and creating an
-/// account. One panel rather than two screens: this is a side door on a
-/// site that works without it, not a front gate.
+/// Two doors to the same place.
+///
+/// Both leave for the issuer; the difference is only which of its pages
+/// someone lands on. It stays a panel rather than collapsing into a bare
+/// button because the sentence above the buttons is the point — someone
+/// about to be sent to another domain should have been told so first,
+/// and told that their work is not at risk.
 #[component]
 fn SignInPanel(on_close: EventHandler<()>) -> Element {
-    let auth = use_auth();
-    let mut email = use_signal(String::new);
-    let mut password = use_signal(String::new);
-    let mut creating = use_signal(|| false);
-
+    let mut auth = use_auth();
     let pending = (auth.pending)();
     let error = (auth.error)();
 
-    let submit = {
-        let auth = auth.clone();
-        move |event: FormEvent| {
-            // Keep the browser from navigating; the form is submitted
-            // over fetch.
-            event.prevent_default();
-            let mut auth = auth.clone();
-            let (email, password, creating) = (email(), password(), creating());
-            spawn(async move {
-                if creating {
-                    auth.sign_up(email, password).await;
-                } else {
-                    auth.sign_in(email, password).await;
-                }
-            });
-        }
-    };
-
     rsx! {
         div { class: "kf-account-panel",
-            form {
-                class: "kf-account-form",
-                onsubmit: submit,
-
-                h2 { class: "kf-account-title",
-                    if creating() { "Create an account" } else { "Sign in" }
-                }
+            div { class: "kf-account-form",
+                h2 { class: "kf-account-title", "Sign in" }
                 p { class: "kf-account-note",
                     "The editor works without one. An account keeps your charts."
                 }
-
-                label { r#for: "kf-account-email", "Email" }
-                input {
-                    id: "kf-account-email",
-                    r#type: "email",
-                    autocomplete: "email",
-                    required: true,
-                    value: "{email}",
-                    disabled: pending,
-                    oninput: move |event| email.set(event.value()),
-                }
-
-                label { r#for: "kf-account-password", "Password" }
-                input {
-                    id: "kf-account-password",
-                    r#type: "password",
-                    // Tells a password manager which of the two this is,
-                    // so it offers to fill rather than to save, or the
-                    // reverse.
-                    autocomplete: if creating() { "new-password" } else { "current-password" },
-                    required: true,
-                    value: "{password}",
-                    disabled: pending,
-                    oninput: move |event| password.set(event.value()),
+                p { class: "kf-account-note",
+                    "You finish at auth.fasttrackstudio.app — the same account as the
+                     rest of FastTrackStudio, and where “Continue with GitHub” lives.
+                     Whatever you are working on will still be here when you return."
                 }
 
                 if let Some(message) = error {
@@ -132,23 +99,18 @@ fn SignInPanel(on_close: EventHandler<()>) -> Element {
 
                 div { class: "kf-account-actions",
                     button {
-                        r#type: "submit",
+                        r#type: "button",
                         class: "kf-account-submit",
                         disabled: pending,
-                        if pending {
-                            "Working…"
-                        } else if creating() {
-                            "Create account"
-                        } else {
-                            "Sign in"
-                        }
+                        onclick: move |_| auth.begin_sign_in(),
+                        if pending { "Taking you there…" } else { "Continue" }
                     }
                     button {
                         r#type: "button",
                         class: "kf-account-link",
                         disabled: pending,
-                        onclick: move |_| creating.toggle(),
-                        if creating() { "I already have an account" } else { "Create one instead" }
+                        onclick: move |_| auth.begin_sign_up(),
+                        "Create an account"
                     }
                     button {
                         r#type: "button",

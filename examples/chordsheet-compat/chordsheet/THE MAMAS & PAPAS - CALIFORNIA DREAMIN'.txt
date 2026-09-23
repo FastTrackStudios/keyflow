@@ -1,0 +1,16 @@
+=INTRO
+=CHORUS/VERSE
+(C#_BA_BG#G#_A
+E_G#C#_AG#G#_C#
+(C#_B"8th notes second time around"A_BG#G#_C#)
+=BRIDGE/INSTRUMENTAL
+(C#)x3C#_AE_G#C#_A
+(G#%C#_BA_B)
+G#G#_C#
+=VERSE
+C#_BA_BG#G#_A
+E_G#C#_AG#G#_C#
+C#_BA_BG#G#
+=OUTRO
+(C#_BA_B)x3A%
+C#

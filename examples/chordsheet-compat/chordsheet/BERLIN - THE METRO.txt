@@ -1,0 +1,35 @@
+=INTRO
+Bm%Em_G*_D_A (Em_G*_A)x2
+=VERSE 1
+Em_G*_AEm_Bm_G*_AEm_G
+D_Cm (Em_G*_A) Em_GD_Cm
+Em_G*_CmEm_G*_D_Cm
+=CHORUS 1
+ABmGDABmG%
+ABmGDABm_GBm%
+=PREVERSE
+(Em_G*_A)x2 Em_G*_D_Cm_A
+=VERSE 2
+(Em_G*_A) Em_Bm_G*_Cm
+Em_Bm_G*_AEm_G*_Cm
+Em_GD_CE_Bm_G*_Cm
+Em_GCm
+-"SAME AS THE FIRST ONE."
+=CHORUS 2
+=INTERLUDE/SYNTH SOLO
+Bm%Em_G*_AEm_Bm_GG
+(Em_G*_A)Em_GGEm_G*_A
+Em_G*_D_AEm_G*_A
+=CHORUS 3
+=PREVERSE
+Em_G*_AEm_G*_D_A
+Em_B_G*_AEm_G_Cm
+=VERSE 3
+(Em_G*_A) Em_GD_A 
+Em_G*_AEm_GD_A 
+Em_GD_CmEm_G*_AEm_GG
+=CHORUS
+=OUTRO
+-"LAST CHORD FADES OUT."
+Em_B_G*_AEmDEm_AA
+EmA_B(B)x6

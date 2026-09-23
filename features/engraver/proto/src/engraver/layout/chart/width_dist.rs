@@ -599,11 +599,27 @@ impl ChartLayoutEngine {
     /// cache (Pass 1), which acts as a hard constraint in the spring system.
     /// This eliminates the need for heuristic collision penalties in the weight
     /// calculation.
+    /// What a simile bar asks for, relative to a bar of chords.
+    ///
+    /// One glyph and the air around it. Low enough that a line of similes
+    /// packs, high enough that a lone simile among written bars is not
+    /// squeezed into a sliver.
+    pub(super) const SIMILE_CONTENT_WEIGHT: f64 = 0.45;
+
     pub(super) fn estimate_measure_content_weight(
         &self,
         measure: &crate::chart::types::Measure,
         text_metrics: &TextFontMetrics,
     ) -> f64 {
+        // A simile bar wants the width of one glyph. Its chords are still on
+        // it — that is what makes the mark playable — but none of them are
+        // drawn, so sizing it by them reserves room for ink that never
+        // appears, and the bars around it that do have something to say go
+        // short.
+        if measure.simile && self.config.draw_similes {
+            return Self::SIMILE_CONTENT_WEIGHT;
+        }
+
         // MuseScore-style content weight: derive the measure's "want" from
         // rhythmic density, not from how many chord symbols happen to be
         // printed above the staff. Chord symbols still contribute hard
@@ -947,10 +963,10 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "needs the Lord of the Fight MusicXML fixture, which is not in the repo"]
+    #[ignore = "the reference chart corpus is not in the repo: `features/examples/png-project-charts`. Drop a local copy in and run `cargo test -- --ignored`."]
     fn written_rest_weight_is_sparser_than_visible_chord_content() {
         let mut fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        fixture.push("../../../crates/keyflow");
+        fixture.push("../../../features");
         fixture.push("examples/png-project-charts/02 LORD OF THE FIGHT Master RS.musicxml");
         let chart = keyflow_musicxml::import_file(fixture).expect("LotF should import");
         let measures: Vec<&crate::chart::types::Measure> = chart
@@ -1022,10 +1038,10 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "needs the Lord of the Fight MusicXML fixture, which is not in the repo"]
+    #[ignore = "the reference chart corpus is not in the repo: `features/examples/png-project-charts`. Drop a local copy in and run `cargo test -- --ignored`."]
     fn lotf_default_measures_do_not_shrink_without_same_line_expansion_pressure() {
         let mut fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        fixture.push("../../../crates/keyflow");
+        fixture.push("../../../features");
         fixture.push("examples/png-project-charts/02 LORD OF THE FIGHT Master RS.musicxml");
         let chart = keyflow_musicxml::import_file(fixture).expect("LotF should import");
         let engine = test_engine();
@@ -1059,10 +1075,10 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "needs the Lord of the Fight MusicXML fixture, which is not in the repo"]
+    #[ignore = "the reference chart corpus is not in the repo: `features/examples/png-project-charts`. Drop a local copy in and run `cargo test -- --ignored`."]
     fn lotf_opening_dense_measures_are_capped_against_written_rests() {
         let mut fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        fixture.push("../../../crates/keyflow");
+        fixture.push("../../../features");
         fixture.push("examples/png-project-charts/02 LORD OF THE FIGHT Master RS.musicxml");
         let chart = keyflow_musicxml::import_file(fixture).expect("LotF should import");
         let engine = test_engine();

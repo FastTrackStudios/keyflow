@@ -1,0 +1,28 @@
+:Intro
+(B Bsus4_B)
+B%F#%Emaj7%B%
+
+:Verse
+(B%F#%Emaj7%)x3
+B Bsus4_B
+
+:Chorus
+(Emaj7 G#m_F#)x3 Emaj7 r1
+
+:Re-Intro
+-
+B%F#%Emaj7%B%
+
+:Verse 2
+(B%F#%Emaj7%)
+B Bsus4_B
+
+:Chorus
+
+:Re-Intro
+-
+-
+:Outro
+(B%F#%Emaj7%)
+:First Line of Verse 1
+B%F#m7%Emaj7 ...

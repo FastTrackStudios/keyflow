@@ -1,0 +1,52 @@
+-Audio clip "Is there anybody out there?" start COUNT IN on "IS"
+-
+= INTRO FULL BAND
+Bm,,, ,"SLIDE GUITAR"_,,,
+P1
+= VERSE
+(Bm,,, A,,, G,__Em, Bm,,,)x3
+P2
+=PRE CHORUS
+-BGV'S (There is no pain...)
+(D,,, A,,, D,,, A,,,
+C,,, G,,, C,,, G,,, )x2
+P3
+= CHORUS  
+-BGV'S (I have become ...)
+A,,, C,_G, D,,,
+P2
+= 1ST GUITAR SOLO
+D,,, A,,, D,,, A,,, 
+C,,, G,,, C,,, G,,,
+
+P3
+= CHORUS  
+-BGV'S (I have become ...)
+A,,, C,_G, D,,,
++
+P1
+=VERSE 2
+-"Pin Prick" & "AHHHHH!!!"
+(Bm,,, A,,, G,__Em, Bm,,,)x2
+P2
+=PRE CHORUS
+-BGV'S (There is no pain...)
+(D,,, A,,, D,,, A,,,
+C,,, G,,, C,,, G,,, )x2
+P3
+
+= CHORUS 
+-BGV'S (I have become ...)
+A,,, C,_G, D,,,
+P1
+=OUTRO GUITAR SOLO
+(Bm,,, A,,, G,_Em, Bm,,,)x15
+-
+-
+-2....2W....3....5.
+-
+-2W...1.....3....2H.
+-
+-5....2.....3W...3. Repeats
+-
+-2P...Bends...5 END

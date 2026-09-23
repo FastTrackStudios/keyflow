@@ -1,0 +1,29 @@
+=INTRO
+(Ab%)Eb%
+Ab% Cm%
+Ab%
+=VERSE
+Eb%Ab%
+(GbDb)
+(Eb%Ab%)
+GbDbAbBb
+=PRE-CHORUS
+Cm%AbAb_r1
+=CHORUS
+Eb%Ab%
+Cm%(Ab%)
+=VERSE
+Eb *_*_Eb_* *_*_Ab_*%
+G#_*_*_Db*_*_*_Ab*_*_*_EbBb
+=PRE-CHORUS
+Cm%AbFm*_*_r2_*
+=CHORUS
+Eb%Ab%
+Cm%Ab%
+=BRIDGE
+BbAb%
+=VOCAL SOLO
+(Cm%F%)
+=OUTRO
+Dm*_*_Bbm_*DbDbm
+r1r1BbBC

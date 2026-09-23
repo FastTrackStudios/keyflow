@@ -1,0 +1,40 @@
+=Intro
+C%
+=VERSE 1
+-"All I ever needed..."
+FGC%
+FGEmA
+- Band In
+FGC%
+FGAm_EF
+Fm %
+=CHORUS
+CAmFG
+C% % %
+=VERSE 3
+-Same as VERSE 1
+-"I Dream of our reunion..."
++
+=CHORUS 2
+CAmFG
+CBbAm%
+FG
+=BRIDGE
+(C%G#Fm)x4
+G# %Bb % 
+C % % %
+=VERSE 4
+FGC%
+FGAm_EF
+-DRUM BREAK
+,,,, ,,,,
++
+=ENDING
+-BASS & DRUMS
+CAmF%
+-BAND IN
+CAmFF
+CAmFG
+CBbAm%
+FG
+C

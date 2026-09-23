@@ -7,8 +7,8 @@ the `architect` / `daw` / `vendor` splits before it.
 | repo | holds | consumed as |
 |---|---|---|
 | **keyflow** (here) | the chart language, its formats, the LSP + grammar, Engraver, and the keyflow site | — |
-| [daw](https://github.com/FastTrackStudios/daw) | the DAW platform and shared substrate — including `keyflow-proto` and `keyflow-syntax` | git dep, tag `v0.0.2` |
-| [architect](https://github.com/FastTrackStudios/architect) | the framework (entity/RPC, atom, form, auth, permissions, crdt), `architect-ui` | git dep, tag `v0.0.2` |
+| [daw](https://github.com/FastTrackStudios/daw) | the DAW platform and shared substrate | git dep, tag `v0.0.2` |
+| [architect](https://github.com/FastTrackStudios/architect) | the framework (entity/RPC, atom, form, auth, permissions, crdt), `architect-ui` | git dep, tag `v0.8.2` (same tag task pins) |
 | [session](https://github.com/FastTrackStudios/session) | the musical/production vocabulary and the Session app | consumes this repo |
 | [editor](https://github.com/FastTrackStudios/editor) | the embeddable text/markdown editor — sits BELOW this repo | git dep, tag `v0.1.0` |
 | [task](https://github.com/FastTrackStudios/task) | the Task product and the vault/wiki layer | git dep (`view-knowledge-graph`, site only) |
@@ -30,20 +30,40 @@ Never commit those overrides — the paths are machine-specific.
 
 ## Layout
 
+One directory per feature under `features/`, named for the feature, not
+for the crate: `keyflow-musicxml` lives in `features/musicxml`. Crate
+names keep their `keyflow-` prefix; directory names drop it.
+
 ```
-crates/keyflow/       the language: facade + text/chordpro/midi/musicxml/
-                      musx/live/sync/annotate/orchestra/daw-analysis/ui,
-                      the LSP, the CLI, the tree-sitter grammar
+features/keyflow/     the facade — the public API surface
+features/proto/       the domain model and the musical primitives —
+                      chords, keys, sections, and the time types
+features/syntax/      spans, tokens, the syntax AST, highlighting
+features/text/        the parser and the chart model
+features/chordpro/    ) the formats: import and export
+features/chordsheet/  )
+features/midi/        )
+features/musicxml/    )
+features/musx/        )
+features/live/        ) the rest of the language: live performance,
+features/sync/        ) synced lyrics, annotation, orchestral parts,
+features/annotate/    ) and DAW-session analysis
+features/orchestra/   )
+features/daw-analysis/)
+features/ui/          the Dioxus chart components
+features/lsp/         the language server
+features/tree-sitter/ the grammar
 features/engraver/    the layout + render engine: facade, proto (the
                       layout model and engine), score (import/export)
 features/editor/      this repo's half of the editor integration:
                       editor-keyflow (the fence renderer) and
                       editor-keyflow-lang (decorations, hover, highlight)
+apps/cli/             the `keyflow` command line tool
 apps/web/             keyflow.fasttrackstudio.app — landing page, editor,
                       guide. Wasm; charts render as SVG.
 apps/mobile/          Keyflow for iOS — chart library + the Keyflow
                       keyboard extension
-docs/guides/keyflow/  the language guide — also the source content for
+docs/guides/  the language guide — also the source content for
                       the site's embedded tutorial
 docs/spec/            tracey-tracked spec (score-engraving)
 ```
@@ -60,10 +80,19 @@ docs/spec/            tracey-tracked spec (score-engraving)
   playback signals and the dock. Panels that wire a chart to *app* state
   belong in the app. If you find yourself wanting `session::` in this
   repo, the component is in the wrong repo.
-- **`keyflow-proto` and `keyflow-syntax` live in `daw`, not here.**
-  `expression-editor-core` (which `daw-reaper` hard-depends on) needs
-  them, so they are foundation-layer. Do not try to move them back
-  without also breaking `daw-reaper → expression-editor-*`.
+- **Keyflow owns the musical primitives; nothing here depends on `daw`
+  to say what a bar is.** `keyflow-proto` and `keyflow-syntax` live in
+  `features/proto` and `features/syntax`. `TimeSignature`,
+  `TimePosition`, `MusicalPosition`, `Tempo`, `Position` and `TimeRange`
+  are defined in `features/proto/src/time/primitives/` — they used to be
+  re-exported from `daw-proto`, which meant the notation domain asked the
+  DAW platform what 4/4 meant. Keyflow is the authority on understanding
+  a piece of music; the DAW reads these from us.
+  `daw` still carries its own copies of both crates, and
+  `expression-editor-core` still builds against those. That duplication
+  is deliberate and temporary — daw's copies come out once its consumers
+  are repointed here. Until then, **a change to `features/proto` is not
+  live for `daw` until it is made there too.**
 - **`default-features = false` cannot be applied to a workspace-inherited
   dep.** Put it on the `[workspace.dependencies]` entry, not the consumer.
 - **`include_str!` across a repo boundary does not work.** A git dep has
@@ -141,15 +170,33 @@ just ci              # what CI runs, in CI's order
 just grammar         # regenerate the tree-sitter C parser (gitignored)
 ```
 
-### Known-failing tests on a clean clone
+### The corpus tests are `#[ignore]`d
 
-~31 tests fail on a fresh checkout. Thirty read reference corpora
-(`lord_of_the_fight`, the orchestra corpus) that are not in the repo and
-failed identically in `session` before the split; the thirty-first,
-`editor-keyflow-lang … section_headers_get_resolved_name_badges`, fails
-identically in `task` at the commit those crates moved from. None is
-split damage. Fix them by moving the corpus in or marking them
-`#[ignore]`; do not "fix" them by weakening assertions.
+`just test` is green on a clean clone. Twenty-nine tests that read
+reference corpora are marked `#[ignore]`, because the corpora are not
+where a clean clone's tests can read them:
+
+- `features/examples/mxl` — the orchestral corpus the `keyflow-orchestra`
+  tests read, which is transcriptions of commercial scores. This repo is
+  public; they are not ours to redistribute.
+- `features/examples/png-project-charts` — the reference charts the
+  MusicXML importer and the engraver layout tests measure against.
+- `features/examples/chordsheet/source` (plus `manifest.json` beside it) —
+  our chordsheet.com account backup, which `keyflow-chordsheet`'s corpus
+  tests convert, round-trip and engrave. These charts are ours and ARE
+  committed, at `examples/chordsheet-compat/` — but outside the crate, and a
+  fixture lives inside the crate that reads it, so the tests look for a
+  local copy: `cp -r examples/chordsheet-compat/chordsheet
+  features/examples/chordsheet/source` and the manifest beside it.
+
+Put a local copy at those paths and run `cargo test -- --ignored` to run
+them. Each `#[ignore]` says which corpus it wants.
+
+They used to just fail, all thirty-one of them, and CI had been red on
+every commit for long enough that the job carried no signal — a real
+regression could not be told from the standing noise. If you add a test
+that needs data the repo does not ship, `#[ignore]` it with a reason.
+Never weaken an assertion to make it pass, and never leave it failing.
 
 ## Logging & tracing — wide events, ALWAYS
 

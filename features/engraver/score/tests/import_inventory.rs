@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 fn in_repo_fixture() -> PathBuf {
     let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    p.push("../../../crates/keyflow/examples/png-project-charts");
+    p.push("../../../features/examples/png-project-charts");
     p.push("02 LORD OF THE FIGHT Master RS.musicxml");
     p
 }
@@ -83,6 +83,7 @@ fn check_invariants(path: &Path) {
 }
 
 #[test]
+#[ignore = "the reference chart corpus is not in the repo: `features/examples/png-project-charts`. Drop a local copy in and run `cargo test -- --ignored`."]
 fn lord_of_the_fight_inventory_round_trips() {
     let path = in_repo_fixture();
     check_invariants(&path);

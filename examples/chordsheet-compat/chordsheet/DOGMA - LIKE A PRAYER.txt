@@ -1,0 +1,23 @@
+:ORGAN INTRO
+(Dm,,, C,Gm,)x3
+F,Bb, F,C, ,,,,
+Dm,,, ,,,, ,,,, ,,,,
+:CHORUS
+(F,,, C,,, Bb,,, Am,_Dm,)
+:POST CHORUS
+(Bb,,, F,,, C,,, Dm,,,
+Bb,,, F/A,,, C,,, ,"2X DROP"_,,,)
+
+:CHORUS
+:POST CHORUS
+:HALF CHORUS
+:SOLO OVER CHORUS PROGRESSION
+(F C Bb 1.Am_Dm 2. Am
+:BRIDGE INSTR
+(Dm,,, C/D,,,)x2
++
+:BRIDGE
+(Dm,,, C/D,,, Dm,,, C/D,,,
+Dm,,, C/E,_Bb, F,_Bb, C,,,)x3
+
+:SOLO 2 OVER BRIDGE

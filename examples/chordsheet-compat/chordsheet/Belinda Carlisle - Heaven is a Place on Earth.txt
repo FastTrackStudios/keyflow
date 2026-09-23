@@ -1,0 +1,26 @@
+=Intro
+C#m_A B_C#m*_C#*_r1 C#m_A 
+B_C#m E_A B_r4 E_A 
+-"This chord is on a 2/4 measure."
+E
+=Chorus
+C#m_A B_C#m E_A B_C#m 
+C#m_A B_C#m E_A B
+=Verse
+C#m % (E B A B)
+=Prechorus
+(G A) F#m G Em_F#m G A
+=Chorus
+C#m_A B_C#m E_A B_C#m*_A 
+(B_ C#m E_A) B_C#m E_A B
+=Interlude
+(E % C#m % A % B %)
+=Prechorus
+=Drum Breakdown
+C#m_A B_C#m E_A B_C#m*_A B_C#m E 
+-"2/4"
+E A
+=Chorus
+D#m_B C#_D#m F#_B C#m_D#m*_B 
+C#m_D#m*_B C#_D#m F#m_B C#_D#m 
+(F#_B C#_D#m) x4

@@ -1,0 +1,23 @@
+-"Ring out chord for 4 measures."
+=Intro
+(Ab)x3 (Ab)x2 Ab_Db (Ab)x3
+=Verse
+(Ab)x15 r1 
+=Prechorus
+(r4_Db)
+=Chorus
+(Ab)x3 
+=Verse
+(Ab)x 3 Ab_Db (Ab)x6 Ab_Db Ab_Db 
+(Ab)x2
+=Prechorus
+=Chorus
+(Ab)x3 (Eb)x3
+=Guitar Solo
+(Ab)x7
+-"Play the first verse"
+=Verse
+=Prechorus
+=Chorus/Outro
+(Ab)x2 Ab_r4*_r4_Db_r4 r4_Db 
+(Ab)x3 (Eb)x3 (Ab)x7

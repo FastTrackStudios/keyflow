@@ -1,0 +1,11 @@
+=Intro "Drum Intro 4 Bars"
+(A_G F#m G G_A)x2
+=Verse "Same As Intro" 4X's
+=Chorus
+(A_G F#m G G_A)x2
+A_G F#m E A
+=Bridge
+(D_A)x8 G_F# E D_A 
+% G F# E 
+%
+=Chorus

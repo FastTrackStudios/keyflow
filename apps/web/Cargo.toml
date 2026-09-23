@@ -28,21 +28,56 @@ architect-ui = { workspace = true }
 # Sign-in. Deliberately additive: the editor stays usable signed out
 # (see the module docs in src/main.rs), and an account is for *keeping*
 # charts, not for using the thing.
-auth-http = { workspace = true }
-auth-client = { workspace = true }
+#
+# No auth client crate: the flow is an OIDC redirect (src/auth.rs), which
+# is two form posts and a GET over `window.fetch`. `auth-http` used to be
+# here for the password API and brought reqwest 0.12 with it — a second
+# reqwest major in the wasm bundle, which is the link-time hazard the
+# `web` feature note below describes at length.
+#
+# `sha2` is the `S256` PKCE challenge; the base64url beside it below is
+# the other half, already here for the chart-in-URL codec.
+sha2 = { workspace = true }
 
 # The guide's knowledge graph. Pure and FS-free by design, so the graph is
 # built in the browser from the same markdown the pages are rendered from.
 view-knowledge-graph = { workspace = true }
 
-# The guide is a vault, and it renders through the real editor in
-# read-only mode rather than a bespoke markdown pass. That is what gives
-# it `[[wikilink]]` navigation, folds and the ```kf fence family for free
-# — the editor already understands all of it.
+# The guide is a vault, published as a static site: `ssg-build` renders
+# the notes to HTML at build time — engraving their ```kf fences to
+# inline SVG with the host engraver — and `ssg`/`ssg-ui` are the page
+# model and the components that lay them out.
+#
+# This replaced rendering each note through the *editor* in read-only
+# mode. That gave the guide wikilinks and engraved fences for free, and
+# charged every reader the editor, its state machine, its decoration
+# pipeline and a WebGL2 surface before a paragraph appeared.
+#
+# WITH ssg-ui's `graph` feature (turned on at the workspace entry): it
+# is where `vault_graph` and `local_graph` come from, and `guide.rs`
+# calls them rather than keeping its own copies. That feature was off
+# while this repo's architect tag differed from task's, because it
+# reaches `view-knowledge-graph` and so pulled a second copy of the
+# architect crates — two reqwest majors in one wasm binary, ~100
+# `duplicate symbol: intounderlyingsource_*` errors at link time. Both
+# repos pin architect v0.8.2 now, so there is one copy.
+#
+# What ssg-ui's `graph` does NOT supply is the rail itself. Its
+# `VaultGraph` is static SVG with `<a>` nodes, deliberately: it has to
+# survive hydration, so it cannot pan, zoom or hover. The guide's rail is
+# `view_knowledge_graph::KnowledgeGraphView` — pre-rendered and then
+# hydrated into an interactive map. Same layout, different renderer, so
+# the two are not interchangeable and both stay.
+ssg = { workspace = true }
+ssg-ui = { workspace = true }
+
+# Still here for the workbench (`/learn/:slug`), which is a real editor
+# with a live chart — the interactive half of the guide, and the reason
+# the editor is worth loading when someone actually asks for it.
 editor = { workspace = true }
 editor-state = { workspace = true }
 # Registers the chart renderer into editor-state's fence registry, so
-# ```kf+ fences in the guide engrave instead of showing source.
+# ```kf+ fences in the workbench engrave instead of showing source.
 editor-keyflow = { workspace = true }
 # Keyflow *as a language* inside the editor: syntax decorations, IDE
 # diagnostics, hover, and the resolved-chord overlays (1 -> C in the key
@@ -59,7 +94,20 @@ editor-keyflow-lang = { workspace = true }
 # feature set that wants `dioxus-fullstack` — a package the vendored
 # dioxus git source does not carry, so the Nix image build died in
 # resolution before reaching a compiler.
-dioxus = { workspace = true, features = ["router"] }
+#
+# `launch` sits here rather than on `web` because both halves of the
+# build go through `LaunchBuilder` — the browser one to mount, the
+# server one to render for `dx build --ssg`.
+#
+# `fullstack` is deliberately NOT here; it belongs to the `server`
+# feature alone. See the note there.
+dioxus = { workspace = true, features = ["router", "launch"] }
+
+# Direct, only so the `web` feature can turn on `hydrate` — the client
+# half of static generation, which adopts the pre-rendered DOM instead
+# of throwing it away and re-rendering. `dioxus/fullstack` would enable
+# it too, and cannot be used here; see the `server` feature.
+dioxus-web = { workspace = true, optional = true }
 
 # Chart-in-URL codec: deflate then base64url, so a whole chart fits in a
 # link with no account and no server.
@@ -91,8 +139,26 @@ web-sys = { version = "0.3", features = [
     # whether WebGL2 exists before one is mounted.
     "HtmlCanvasElement",
     "WebGl2RenderingContext",
-    # Remembering what someone chose — see `prefs`.
+    # Remembering what someone chose — see `prefs` — and, under the same
+    # API, the session and the PKCE verifier that outlive a redirect to
+    # the issuer (`auth`, `return_to`).
     "Storage",
+    # PKCE needs unguessable bytes. `crypto.getRandomValues`, never
+    # `Math.random`: a guessable verifier is not a weaker PKCE, it is
+    # none at all.
+    "Crypto",
+    # The dev-guide poll, which calls the server functions by URL rather
+    # than through a generated client — see `guide_live`.
+    "Request",
+    "RequestInit",
+    "Response",
+    "Headers",
+    # The chart library's vox connection to Task: a WebSocket carrying
+    # binary frames, and the open/error/close events the dial awaits.
+    "WebSocket",
+    "BinaryType",
+    "Event",
+    "CloseEvent",
 ] }
 # Pinned exactly, and low: `dx build` refuses to run when the crate version
 # and the wasm-bindgen-cli in the dev shell disagree, and the CLI comes from
@@ -105,11 +171,55 @@ kurbo = { workspace = true }
 
 tracing = { workspace = true }
 
+# The issuer answers in JSON — the token response, `/oauth2/userinfo` —
+# and the session is stored as JSON under one localStorage key, so a
+# half-written session is not a representable state. Not optional any
+# more: it used to be `dev-guide` only, and sign-in needs it in every
+# build. `dev-guide` also carries a rendered vault to the browser with
+# it, which this crate parses by hand because it has no server-function
+# client in wasm.
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# The chart library's wire contract with Task: songs and charts
+# (`ResourcesService`), song lists (`CollectionService`) and the
+# `song:<slug>` references a list holds. Every target takes the types —
+# the host build type-checks the seam and runs its tests — and only the
+# browser build dials anything (see the wasm32 table below). The `vox`
+# feature is what generates the clients.
+resources-proto = { workspace = true, features = ["vox"] }
+collection-proto = { workspace = true, features = ["vox"] }
+links-proto = { workspace = true, features = ["vox"] }
+# The server lane's one call: `ensure_personal_org`, for an account that
+# signed up here and belongs to no workspace yet.
+org-proto = { workspace = true, features = ["vox"] }
+# Named here for `architect::vox::VoxError`, the error every generated
+# client answers with, so the seam can map it once. Already in the graph
+# through the three proto crates; this only puts the name in scope.
+architect = { workspace = true, features = ["vox"] }
+# Editing a library chart together: `open_collab` (vault-proto), the
+# shared Loro document and its presence channel (crdt, whose dioxus
+# hooks drive the session), and the adapter that turns a remote edit
+# into editor changes (editor-crdt).
+vault-proto = { workspace = true, features = ["vox"] }
+crdt = { workspace = true, features = ["dioxus"] }
+editor-crdt = { workspace = true }
+uuid = { version = "1", features = ["v5", "js"] }
+# `vox::Caller`, the connection type the crdt hooks sync over.
+vox = { workspace = true }
+
+# ── dev-guide only ────────────────────────────────────────────────────
+# Re-rendering the guide at runtime needs the same builder `build.rs`
+# uses. Optional: the published build does not carry it.
+ssg-build = { workspace = true, optional = true }
+
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tracing-wasm = "0.2"
+# Awaiting `fetch` in the dev-guide poll.
+wasm-bindgen-futures = "0.4"
 # Not called directly. getrandom 0.3 needs BOTH the `wasm_js` cfg (set for
 # the whole target in .cargo/config.toml) and this feature before it will
 # build for wasm32; the cfg alone is a compile_error. It arrives here
@@ -120,10 +230,75 @@ getrandom = { version = "0.3", features = ["wasm_js"] }
 # not exist in a browser.
 gloo-timers = { version = "0.3", features = ["futures"] }
 console_error_panic_hook = "0.1"
+# The vox client stack the library dials Task with: the initiator
+# handshake and `FromVoxLane` (`vox-core`), the browser WebSocket link
+# (`vox-websocket`), and a oneshot to await the socket opening. Browser
+# only — the host build has no socket to dial, and the native link
+# would want tokio-tungstenite for nothing.
+vox-core = { workspace = true }
+vox-websocket = { workspace = true }
+futures-channel = { workspace = true }
 
 [lints]
 workspace = true
 
+[build-dependencies]
+# Reads docs/guides and codegens the page table.
+ssg-build = { workspace = true }
+# The guide's markdown is rendered by the EDITOR, not by ssg's own pass,
+# so a chapter looks the same published as it does being written —
+# callouts, task lists and every fence the editor knows. See `build.rs`.
+editor-state = { workspace = true }
+# Registers the chart renderer into the editor's fence registry, so `kf`
+# fences engrave during the build the same way they do while typing.
+#
+# `subset` cuts the guide's typefaces down to the glyphs its charts
+# actually draw. It used to be done here, with allsorts and ttf-parser as
+# direct build-dependencies; it moved into `editor_keyflow::font_subset`
+# so the dev server can subset the charts it just re-rendered instead of
+# reusing whatever the last build produced.
+editor-keyflow = { workspace = true, features = ["subset"] }
+
+# The engraver, on the host. `svg` is the no-GPU export path — the build
+# script engraves every ```kf fence in the guide to inline SVG, which is
+# why the site ships charts without shipping a chart renderer.
+# `highlighting` for the chart source shown beside them.
+keyflow = { workspace = true, features = ["text", "svg", "highlighting"] }
+
 [features]
 default = ["web"]
-web = ["dioxus/web", "dioxus/launch"]
+# `dioxus-web/hydrate` rather than `dioxus/fullstack`, which is the
+# usual way to turn it on and cannot be used here.
+#
+# `dioxus/fullstack` carries the server-function *client* transport, and
+# with it a whole HTTP stack the browser build would link and never call:
+# the site invokes no server functions from the page — the vault is baked
+# into the binary at build time. What it actually needs is `hydrate`, to
+# adopt the pre-rendered DOM, and that only pulls
+# `dioxus-fullstack-core`. So the lean route is taken deliberately, not
+# out of necessity.
+#
+# (This note used to say `fullstack` was impossible here, because its
+# reqwest 0.12 against the tree's reqwest 0.13 meant a hundred
+# `duplicate symbol: intounderlyingsource_*` errors out of rust-lld.
+# That is not what the toolchain does: the wasm binary carries both
+# reqwest majors, and both wasm-streams majors, and links clean. The
+# real hazard was two copies of the *same* crate from different git
+# tags — see the architect block in the root manifest.)
+web = ["dioxus/web", "dep:dioxus-web", "dioxus-web/hydrate"]
+# The server half, which exists only for the length of
+# `dx build --ssg` — dx enables it for the server target by name, and
+# never for the wasm one.
+server = ["dioxus/server", "dioxus/fullstack"]
+# Re-render the guide from `docs/guides` on save instead of on
+# rebuild. Development only: it adds a filesystem watcher and a poll, and
+# the published site wants the baked vault. See `guide_live`.
+dev-guide = [
+    "dep:ssg-build",
+    "ssg-build?/watch",
+    # Subset the typefaces for the charts the dev server just drew, so a
+    # new symbol renders in the preview instead of silently missing. Only
+    # here: the browser never subsets anything, and `allsorts` has no
+    # business in the wasm bundle.
+    "editor-keyflow/subset",
+]

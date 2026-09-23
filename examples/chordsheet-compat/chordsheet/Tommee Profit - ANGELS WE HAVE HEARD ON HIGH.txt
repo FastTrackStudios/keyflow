@@ -1,0 +1,13 @@
+:INTRO
+-EBOW OR SWELLS 
+F,,, ,,,,
+:VERSE
+-EBOW OR SWELLS 
+(Fm_<Db Eb_<Fm)x4 r4_ r4_ r4_ r4_
+:CHORUS
+-CHUGGING
+(Fm_<DbM7Cm7_<Fm)x4
+:BRIDGE
+-SWELLS
+Db Gm/Bb Fm Bb
+(Db Eb)x3

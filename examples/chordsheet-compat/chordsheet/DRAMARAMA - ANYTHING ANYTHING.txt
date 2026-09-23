@@ -1,0 +1,33 @@
+-
+-Same Chord Progression throughout entire song
+-
+(Em,,, G,,, C,,, D,,, )
+
+=INTRO   
+-
+-GUITAR x2 
+-FULL BAND x2
+-
+=VERSE x4
+-
+=CHORUS x4
+-
+=INTRO x2
+-
+=VERSE 2 x4
+-
+=CHORUS 2 x5
+-
+= INTRO x2
+-
+=BRIDGE x11    
+-
+- BASS & DRUMS x3 
+- VOCALS x2 
+- GUITAR BUILD x2 
+- FULL BAND x4
+-
+=CHORUS x4
+-
+= OUTRO x8   
+- "ANYTHING, ANYTHING, ANYTHING, ANYTHING.."

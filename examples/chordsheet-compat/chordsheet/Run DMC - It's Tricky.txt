@@ -1,0 +1,21 @@
+=INTRO
+-"5 MEASURES OF JUST THE DRUMS."
+=CHORUS
+Fr1FBbC (F)x2B_F r1 C r1 
+Bb_CF (r1) C(F)x2 Bb(F)x2Bb 
+=VERSE
+(F_r4 r1) F_r4 (r1)x2
+=CHORUS
+(F)r1Fr1 
+=PREVERSE
+-"DRUMS ONLY FOR 6 MEASURES."
+Fr1
+=VERSE
+F_r4 r1FEb_AbFr1FBbr4_Ab
+(r1)x6
+=CHORUS
+FmFr1Bb_AbFmr4_F FBb
+=VERSE
+Fm_F (r1) CFm_F (r1)x2 
+=OUTRO
+FmFFmGm_CFF r1 Bb_FF (r1)x3

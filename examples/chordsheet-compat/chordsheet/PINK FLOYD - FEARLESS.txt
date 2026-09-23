@@ -1,0 +1,12 @@
+:INTRO
+(G,,, ,,,,)x2
+(G_"RIFF 1",,, ,,_">",,)x3
+G,, C_Bb_Bb G,, C_Bb_Bb
+:VERSE
+(G,,,,, C_Bb_Bb)x4 A D
+:DOWN
+(G C)x3 D C
+G,,, ,,,,
+(G_"RIFF 1",,, ,,_">",,)x4 (G_"MELODIC",,, ,,,,)x3
+G,, C_Bb_Bb G,, C_Bb_Bb
+:BACK TO VERSE - DOWN - RIFF A

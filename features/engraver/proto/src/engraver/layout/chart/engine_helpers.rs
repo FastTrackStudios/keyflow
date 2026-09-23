@@ -10,13 +10,14 @@ use peniko::Color;
 
 use crate::Chart;
 use crate::engraver::layout::context::LayoutContext;
+use crate::engraver::layout::text_metrics::TextFontMetrics;
 use crate::engraver::layout::tlayout::{
     BarlineType, ClefType, MarginLabelParams, layout_margin_label,
     rehearsal_mark::RehearsalMarkStyle,
 };
 use crate::engraver::scene::id::{ElementType, SemanticId};
 use crate::engraver::scene::node::SceneNode;
-use crate::engraver::scene::paint::PaintCommand;
+use crate::engraver::scene::paint::{FontStyle, FontWeight, PaintCommand, TextAnchor};
 use crate::sections::SectionType;
 
 use super::{ChartLayoutEngine, count_in_renderer, page_rendering, section_layout};
@@ -62,6 +63,103 @@ impl ChartLayoutEngine {
 
     /// Create a section label scene node.
     #[allow(clippy::too_many_arguments)]
+    /// `x4` over the closing barline of a repeat.
+    ///
+    /// Right-aligned to the barline and sitting above the staff, where
+    /// chordsheet.com and every lead sheet put it.
+    pub(super) fn create_repeat_count_label(
+        &self,
+        passes: usize,
+        barline_x: f64,
+        staff_y: f64,
+        id: u64,
+    ) -> SceneNode {
+        let spatium = self.config.spatium;
+        let font_size = spatium * 2.0;
+        SceneNode::leaf(
+            SemanticId::new(ElementType::RehearsalMark, id),
+            vec![PaintCommand::Text {
+                text: format!("x{passes}"),
+                font_family: "FreeSans".to_string(),
+                font_size,
+                // Clear of the repeat bracket, which reaches the top staff
+                // line and a little above it.
+                position: Point::new(barline_x - spatium * 0.6, staff_y - spatium * 1.9),
+                // The count belongs to the repeat sign, so it wears its colour.
+                color: super::constants::REPEAT_COLOR,
+                anchor: TextAnchor::End,
+                weight: FontWeight::Bold,
+                style: FontStyle::Normal,
+            }],
+        )
+    }
+
+    /// A folded section, drawn as a rule across the page with its name on it.
+    ///
+    /// Stands where the staff would have been: a line the full content width,
+    /// the section's name set into a gap at its centre. The coloured capsule
+    /// in the left margin is drawn as it always is, so the eye finds the
+    /// section the same way it does anywhere else — this only replaces the
+    /// bars, which say nothing the section it repeats did not already say.
+    pub(super) fn draw_section_rule(
+        &self,
+        section: &crate::sections::Section,
+        x: f64,
+        staff_y: f64,
+        width: f64,
+        staff_height: f64,
+        ctx: &LayoutContext<'_>,
+        id: u64,
+    ) -> SceneNode {
+        let spatium = self.config.spatium;
+        let y = staff_y + staff_height / 2.0;
+        let thickness = spatium * 0.16;
+
+        let name = section_layout::section_label(&section.section_type, section.number, None);
+        let font_size = spatium * 1.5;
+        let text_metrics = TextFontMetrics::new(self.text_font_data.clone());
+        let text_width = text_metrics.horizontal_advance(&name, font_size);
+        // A gap for the name to sit in, so the rule reads as one line through
+        // the label rather than as two lines colliding with it.
+        let gap = text_width + spatium * 2.0;
+        let centre = x + width / 2.0;
+        let left_end = (centre - gap / 2.0).max(x);
+        let right_start = (centre + gap / 2.0).min(x + width);
+
+        let mut commands = vec![
+            PaintCommand::line(
+                Point::new(x, y),
+                Point::new(left_end, y),
+                Color::BLACK,
+                thickness,
+            ),
+            PaintCommand::line(
+                Point::new(right_start, y),
+                Point::new(x + width, y),
+                Color::BLACK,
+                thickness,
+            ),
+            PaintCommand::Text {
+                text: name.clone(),
+                font_family: "FreeSans".to_string(),
+                font_size,
+                // Nudged up by roughly half a cap height so the text sits on
+                // the rule rather than hanging from it.
+                position: Point::new(centre, y + font_size * 0.34),
+                color: Color::BLACK,
+                anchor: TextAnchor::Middle,
+                weight: FontWeight::Bold,
+                style: FontStyle::Normal,
+            },
+        ];
+        let _ = ctx;
+        commands.shrink_to_fit();
+
+        let mut node = SceneNode::leaf(SemanticId::new(ElementType::RehearsalMark, id), commands);
+        node.metadata.insert("folded_section".to_string(), name);
+        node
+    }
+
     pub(super) fn create_section_label(
         &self,
         section: &crate::sections::Section,
@@ -96,6 +194,27 @@ impl ChartLayoutEngine {
             return container;
         }
 
+        let (_, label_node) = layout_margin_label(
+            &self.margin_label_params(section, page_x, margin_width, staff_y, staff_height, letter),
+            ctx,
+        );
+        container.add_child(label_node);
+        container
+    }
+
+    /// The capsule parameters for a section's margin label.
+    ///
+    /// Shared with [`Self::section_label_height`] so the height the folded rule
+    /// centres itself on is the height the capsule is actually drawn at.
+    fn margin_label_params(
+        &self,
+        section: &crate::sections::Section,
+        page_x: f64,
+        margin_width: f64,
+        staff_y: f64,
+        staff_height: f64,
+        letter: Option<char>,
+    ) -> MarginLabelParams {
         let (section_type, abbreviation) = self.section_type_to_strings(&section.section_type);
         // The capsule text is assembled by the shared `section_label` helper so
         // it can never drift from `chart_section_timeline`'s label. It equals
@@ -106,25 +225,62 @@ impl ChartLayoutEngine {
             section.number,
             letter,
         ));
-        let (_, label_node) = layout_margin_label(
-            &MarginLabelParams {
-                section_type,
-                abbreviation,
-                number: section.number,
-                letter,
-                comment: section.comment.clone(),
-                label_override,
-                page_x,
-                margin_width,
-                staff_y,
-                staff_height,
-                style: self.get_section_theme(&section.section_type),
-                ..Default::default()
-            },
+        MarginLabelParams {
+            section_type,
+            abbreviation,
+            number: section.number,
+            letter,
+            comment: section.comment.clone(),
+            label_override,
+            page_x,
+            margin_width,
+            staff_y,
+            staff_height,
+            style: self.get_section_theme(&section.section_type),
+            ..Default::default()
+        }
+    }
+
+    /// How tall this section's margin capsule comes out.
+    ///
+    /// A folded row draws its rule through the middle of the capsule, so it
+    /// has to know how far down the middle is before it draws anything.
+    pub(super) fn section_label_height(
+        &self,
+        section: &crate::sections::Section,
+        page_x: f64,
+        margin_width: f64,
+        staff_y: f64,
+        staff_height: f64,
+        letter: Option<char>,
+        ctx: &LayoutContext<'_>,
+    ) -> f64 {
+        if let Some(label_text) = section.metadata.get("repeat_pass.labels") {
+            let pass_gap = repeat_pass_label_gap(staff_height);
+            let mut height = 0.0;
+            for (index, pass_label) in repeat_pass_label_parts(label_text).into_iter().enumerate() {
+                let (layout, _) = self.layout_pass_label(
+                    pass_label,
+                    section,
+                    page_x,
+                    margin_width,
+                    staff_y,
+                    staff_height,
+                    ctx,
+                );
+                height += layout.height;
+                if index > 0 {
+                    height += pass_gap;
+                }
+            }
+            return height;
+        }
+        layout_margin_label(
+            &self.margin_label_params(section, page_x, margin_width, staff_y, staff_height, letter),
             ctx,
-        );
-        container.add_child(label_node);
-        container
+        )
+        .0
+        .height
     }
 
     pub(super) fn repeat_pass_dynamic_slots(

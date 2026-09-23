@@ -1,0 +1,30 @@
+=INTRO  PIANO ONLY
+F#m,, <E_A,, D,, <A,,
+=VERSE 1
+(F#m,, <E_A,, D,, 1.<A,,2.A_E)
+=PRE CHORUS
+F#m,, C#7,, A,, B7,,
+D,,,, Dm,,,,
+=CHORUS
+(F#m,, <E,, DM7,, <C#m7,,
+F#m_E A,, Bm7_A DM7,,)
+=POST CHORUS
+F#m,, <E,,  A,,  <D,,
+F#m_E  A,,  Bm_A D_E
+=VERSE 2
+-
+=PRE CHORUS
+-
+=CHORUS
+-
+=BRIDGE
+Bm,,,, F#m,, <E,, Bm,, A,, 
+Dm,,,, %
+=DOWN CHORUS  SECOND REPEAT, SKIP THE 1
+(F#m,, <E,, DM7,, <C#m7,,
+-BAND IN
+F#m_E A,, Bm7_A DM7,,)
+=POST CHORUS
+F#m,, <E,,  A,,  <D,,
+F#m_E  A,,  Bm_A D_E
+A

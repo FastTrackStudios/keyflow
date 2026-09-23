@@ -1,0 +1,32 @@
+=INTRO
+(Fm_C# Ab_Eb) x4 (Fm_C# Ab_Eb)
+
+=VERSE
+(Fm_C# Ab_Eb Fm_C# Ab_C
+Fm_C# Ab_Eb Cm C  )
+
+=CHORUS
+Fm C# Ab Eb Fm C# Ab C ...
+=INTRO
+(Fm_C# Ab_Eb)
+=VERSE 2 
+-
+=CHORUS 2
+-
+= BRIDGE
+(Fm_Ab C#_Bb_Eb_C Fm_Ab Eb_C_Fm_F)
+
+-
+=SOLO
+C# AbCF_Eb
+C# AbC C C C
+-
+=BRIDGE   JUST BASS & DRUMS
+(Fm_Ab C#_Bb_Eb_C Fm_Ab Eb_C_Fm_Fm)x6
+=   GUITAR COMES IN
+C C C C
+-
+= DOUBLE CHORUS  THEN HOLD C 4 BARS
+-
+=OUTRO 
+(Fm_C# Ab_Eb) x3 Fm_C# Eb_C_Fm_Fm

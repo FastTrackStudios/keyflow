@@ -1,0 +1,20 @@
+= Intro
+C Am F Am
+
+= Verse
+(C Am F Am) x4
+
+= Pre Chorus
+C % % % %
+A# % Fm A#
+
+=Chorus
+(C Am F Am) x3
+
+=Verse x4 
+=Pre Chorus 
+=Chorus x4
+=Bridge 
+(C Am F A) x 2
+r1  "Extra Bar Rest"
+=Chorus x6

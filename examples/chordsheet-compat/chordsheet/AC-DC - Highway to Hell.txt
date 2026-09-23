@@ -1,0 +1,23 @@
+=INTRO
+-"The song starts on the & of 3"
+(*_*_A *_*_D/F#G_*_*_D/F#G_D/F#_G_D/F#A)
+
+=VERSE 1
+(*_*_A *_*_D/F#G_*_*_D/F#G_D/F#_G_D/F#A)x3
+*_*_A *_*_D/F#G_*_*_D/F#G_D/F#_G_D/F#E%
+=CHORUS
+(AD/A_G_D/F#)x3 AD"Let it Ring Out for 6 Beats"%
+
+=VERSE 2
+-"Same as VERSE 1"
+=CHORUS
+=INTERLUDE
+D_D/G_Dr1D_D/G_D%
+=GUITAR SOLO
+(AD/A_G_D/F#)x4
+=DOUBLE CHORUS
+(AD/A_G_D/F#)x3 AD/A_r4_G_D/F#
+(AD/A_G_D/F#)x3 AD"Let it Ring Out for 8 Bars"%
+
+=Outro Swell
+A

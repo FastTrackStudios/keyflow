@@ -1,0 +1,11 @@
+=Intro "15x's"
+C_F_Bb_F 
+=Chorus "13x's"
+C_F_Bb_F
+=Bridge
+Am F Am G
+=Chorus "8x's"
+=Bridge
+=Chorus "4x's"
+=Breakdown "6x's"
+=Chorus "22x's"

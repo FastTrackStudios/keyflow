@@ -1,0 +1,32 @@
+[package]
+name = "keyflow-chordsheet"
+version.workspace = true
+edition = "2021"  # original edition of the dissolved workspace (root is 2024)
+authors.workspace = true
+license.workspace = true
+description = "chordsheet.com (Chord Sheet Maker Online) import — its bar/chord language, and the translation to a keyflow Chart"
+
+[features]
+default = ["manifest"]
+# Reads the `manifest.json` that a chordsheet.com account backup ships
+# alongside `source/*.txt`, so a batch import can recover the title and
+# artist the source text itself never carries.
+manifest = ["dep:serde", "dep:serde_json"]
+
+[dependencies]
+keyflow-proto.workspace = true
+keyflow-syntax.workspace = true
+thiserror = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+
+[dev-dependencies]
+keyflow-text.workspace = true
+# The render smoke test lays the corpus out. A dev-only edge: nothing in this
+# crate's library depends on the engraver.
+engraver = { workspace = true, features = ["svg"] }
+keyflow-proto.workspace = true
+
+[lints]
+workspace = true

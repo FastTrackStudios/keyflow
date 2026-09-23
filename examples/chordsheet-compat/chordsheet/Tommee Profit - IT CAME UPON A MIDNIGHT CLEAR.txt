@@ -1,0 +1,13 @@
+:INTRO
+-PIANO & STRINGS
+(Gm Eb Bb F)x2
+:VERSE
+-PIANO & STRINGS
+Bb Bbmaj7/D Eb F
+Gm Bbmaj7/D Eb_F Bb 
+D/F# Gm F F
+Bb Bbmaj7/D Eb_F Bb 
+Bb
+:CHORUS
+-ADD GUITAR
+(Gm Eb Bb/D F/A)x2

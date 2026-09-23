@@ -3,8 +3,15 @@
 //! [`LayoutContext`]. Includes count-in measure rendering and the
 //! rhythm-expansion helpers used by `auto_rhythm_slashes`.
 
+use crate::engraver::fonts::Glyph;
+use crate::engraver::layout::context::LayoutContext;
 use crate::engraver::layout::tlayout::{ClefType, NoteHeadType};
 use crate::engraver::notation::{Duration, MeasureBuilder, MeasureScene, RhythmEntry};
+use crate::engraver::scene::node::SceneNode;
+use crate::engraver::scene::paint::PaintCommand;
+use crate::engraver::scene::{ElementType, SemanticId};
+use kurbo::Point;
+use peniko::Color;
 use tracing::debug;
 
 use super::rhythm_builder::{self, NoteHeadOverride, RhythmBuildConfig, RhythmSource};
@@ -318,6 +325,17 @@ impl ChartLayoutEngine {
         // Rhythm-slash ties (chord-side, independent of melody ties).
         self.add_slash_ties(&mut result, measure, ctx);
 
+        // A simile bar swaps its ink for the mark, and keeps everything else.
+        //
+        // The segments, widths and tick positions come from the layout above
+        // and stay exactly as they are, so the cursor still tracks through the
+        // bar, playback still knows how long it is, and the system still
+        // spaces it like the measure it is. Only what gets drawn changes —
+        // which is the whole claim a simile makes.
+        if measure.simile && self.config.draw_similes {
+            result.scene = simile_scene(measure_width, ctx, id_base);
+        }
+
         result
     }
 
@@ -385,4 +403,36 @@ impl ChartLayoutEngine {
         }
         expanded
     }
+}
+
+/// The `repeat1Bar` mark, centred in the measure and sitting on the middle
+/// staff line — one glyph where the slashes would have been.
+///
+/// SMuFL puts the glyph's origin on the middle line, which is where the
+/// measure scene's own origin is, so the vertical placement is already right
+/// and only the horizontal centring has to be worked out. The bounding box is
+/// in staff spaces; a missing one (a font without the glyph) falls back to
+/// centring on the advance the mark usually has, which is close enough that
+/// the bar still reads.
+fn simile_scene(measure_width: f64, ctx: &LayoutContext<'_>, id_base: u64) -> SceneNode {
+    const FALLBACK_WIDTH_SPACES: f64 = 4.0;
+
+    let spatium = ctx.spatium();
+    let width_spaces = ctx
+        .font
+        .advance_width(Glyph::Repeat1Bar)
+        .map_or(FALLBACK_WIDTH_SPACES, |w| w.0);
+    let x = (measure_width - width_spaces * spatium) / 2.0;
+
+    let mut node = SceneNode::leaf(
+        SemanticId::new(ElementType::Measure, id_base),
+        vec![PaintCommand::Glyph {
+            codepoint: Glyph::Repeat1Bar.codepoint(),
+            position: Point::new(x.max(0.0), 0.0),
+            size: spatium,
+            color: Color::BLACK,
+        }],
+    );
+    node.metadata.insert("simile".to_string(), "1".to_string());
+    node
 }

@@ -1,0 +1,33 @@
+=CHORUS
+(B,,, B,_E_D G,,_F# E,,,"slide")x2
+B_r4_B_r4 B_r4_A,
+
+=VERSE
+(B,,, ,,_C#_A B,,, B_C#_D_E)x2
+G"quarter notes"_,,, G#,,, G,,, E"break"_,_D,
+
+=CHORUS
+(B,,, B,_E_D G,,_F# 1.E,_B_A 2.D_C#_B_A)x2
+B_r4_B_r4 B_r4_A,
+
+=VERSE 2
+(B,,, ,,_C#_A  B,,, B"shots"_B_B_A)
+G,,, G#,,, G,,, E
+
+=CHORUS
+(B,,, B,_E_D G,,_F# 1.E,_B_A 2.D_C#_B_A)x2
+F#_E_D_Bb
+
+=BRIDGE
+-Bass only
+B,,, ,,,, ,,,, ,,,, 
+G,,, G#,,, E,,, ,,_F#,
+G,,, A,,, Bb,,, Bb"octave"_,,,
+
+=CHORUS
+B,,, B,_r4_r4_AG,,_F# E,_B_A
+B,,, B,_E_D G,,_F# D_C#_B_A
+B,,, B,_E_D G,,_F# E,_B_A
+B,,, B,_E_D G,,_F# D_C#_B_A
+F#_E_D_Bb
+B,,, ,,,_F# ,,,, ,,,_E

@@ -1,0 +1,30 @@
+:INTRO
+(F% Dm C)
+
+:VERSE
+(F% Dm C)
+
+:PRE CHORUS
+(BbCDmC)
+F ...
+
+:CHORUS
+F_Am Bb F_Am Bb_C
+Bb C Bb C
++
+:INTRO
+F% Dm C
+
+:VERSE 2
+
+:PRE CHORUS 2
+(BbCDmC)
+F
+:CHORUS
+
+:BRIDGE
+(Bb%C%)x3
+
+:DOUBLE CHORUS
+
+:OUTRO   SAME AS INTRO

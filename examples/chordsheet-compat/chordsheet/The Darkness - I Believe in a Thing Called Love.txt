@@ -1,0 +1,26 @@
+=Intro
+F#m_A B E_B A
+=Verse
+(F#m_A B E_B A)
+=Prechorus
+(E_F#m F#m) E_F#m A_A# B % 
+=Chorus
+E_A F#m_B EA *_B *_A F#mB C#m D
+=Guitar Solo
+F#m_A B E_B A
+=Verse
+F#m_Am B E_B A F#m B E_BA A 
+=Prechorus
+=Chorus
+=Guitar Solo
+F#m_A B_E*_B A_B F#m_F# B E_B A
+F#m_A B E_B A F#m B E A 
+=Prechorus
+=Drum Break
+A E B_A E A*_E C#m D 
+=Guitar Solo
+EA F#m_B*_A*_E*_A F#m_B E_A F#mB 
+(A F#m_B*_A) x3
+=Outro
+-"Trash Can Ending"
+E

@@ -1,0 +1,17 @@
+=INTRO | FULL BAND
+(C,,, E,_D,)x4
+=VERSE
+(C,,, E,_D,)x4 (C"BAND OUT"_,,, E,_D,)x1
+
+=CHORUS
+(C,,, E,_D,)x4
+=VERSE
+-
+(C"DOWN"_,,, E,_D,)x2 (C"UP"_,,, E,_D,)x2
+(C"BAND OUT"_,,, E,_D,)x1
+=CHORUS
+(C,,, E,_D,)x4
+=DOWN BRIDGE
+(G,,, A,,, Em,,, ,,,,)x2
+=REFRAIN
+(C,,, E,_D,)x2 (C"GUITAR SOLO W/ ADLIB + VERSE 1 TAG"_,,, E,_D,)x6

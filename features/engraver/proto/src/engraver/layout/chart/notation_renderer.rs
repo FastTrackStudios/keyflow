@@ -34,8 +34,8 @@ use crate::engraver::scene::id::{ElementType, SemanticId};
 use crate::engraver::scene::node::SceneNode;
 use crate::engraver::scene::paint::PaintCommand;
 
-const DYNAMIC_COLOR: Color = Color::from_rgb8(220, 38, 38);
-const STAFF_TEXT_COLOR: Color = Color::from_rgb8(220, 38, 38);
+const DYNAMIC_COLOR: Color = super::constants::REPEAT_COLOR;
+const STAFF_TEXT_COLOR: Color = super::constants::REPEAT_COLOR;
 const DYNAMIC_GLYPH_SIZE_SP: f64 = 3.05;
 const STAFF_TEXT_FONT_SIZE_SP: f64 = 2.5;
 
@@ -457,7 +457,13 @@ pub fn render_volta_span(
 ) -> SceneNode {
     let stroke = frame.spatium * 0.16;
     // MuseScore Sid::voltaPosAbove ≈ -3 sp from staff top, hook = 1.9 sp.
-    let bracket_y = frame.staff_top() - frame.spatium * 12.0;
+    //
+    // This is a starting position, not a final one: `autoplace_node` lifts the
+    // bracket clear of the chord symbols and anything else already in the
+    // skyline. It only ever moves things *further* away, though, so starting
+    // twelve spatia up — as this did — put the bracket in the page header and
+    // left it there.
+    let bracket_y = frame.staff_top() - frame.spatium * 3.0;
     let hook_y = bracket_y + frame.spatium * 1.5;
     let x_start = frame.measure_x;
 

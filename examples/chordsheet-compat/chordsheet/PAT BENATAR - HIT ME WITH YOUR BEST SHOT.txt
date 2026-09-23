@@ -1,0 +1,15 @@
+=INTRO
+(E_A C#_B E_A C#_B_A_B)
+=VERSE
+(E_Eb/B C#_A B%)
+=CHORUS
+(E_A C#_B E_A C#_B_A_B)
+=VERSE 2
+=CHORUS 2
+=GUITAR SOLO
+(E_Eb/B C#_A B%)
+(E_A C#_B E_A C#_B_A_B)
+=VERSE 3
+=DOUBLE CHORUS
+=OUTRO
+(E_A C#_B_A_B)x3 E

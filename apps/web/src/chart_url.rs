@@ -32,14 +32,14 @@ use flate2::write::DeflateEncoder;
 ///
 /// Not a hard limit of the codec — a limit of the transport. See the module
 /// docs.
-// The encoder currently has no caller. `/c/:data` still decodes — a link
-// someone already holds keeps working — but the control that produced
-// those links was removed from the editor along with its toolbar row, so
-// nothing in the UI mints one any more.
+// The encoder's callers are browser-only — `crate::routes::library`,
+// which mints a `/c/:data` route when a chart is opened off the shelf
+// and when a sign-in redirect has to carry the chart it was started
+// from — so the host build still sees an unused function.
 //
-// Kept, not deleted: encoding a chart into its URL is this site's whole
-// persistence story until accounts exist, and the round-trip is covered
-// by the tests below. It wants a new home, not a rewrite.
+// It is also still the site's whole persistence story for anyone
+// without an account, which is why the round trip is covered by the
+// tests below rather than only by the screens above it.
 #[allow(dead_code)]
 pub const MAX_URL_CHART_LEN: usize = 1800;
 

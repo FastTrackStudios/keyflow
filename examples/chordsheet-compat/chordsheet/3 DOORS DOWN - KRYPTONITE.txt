@@ -1,0 +1,28 @@
+=INTRO
+-NOTE: G=G6, A=Asus2
+
+(Bm,,, G,_A,)x2
+
+=VERSE 1 & 2
+(Bm,,, G,_A,)x4
+
+-BACK TO TOP
+-
+=CHORUS
+(Bm,,, G,_A, Bm,,, Em_F#m)x2
+
+=INSTRUMENTAL
+(Bm,,, G,_A,)x2
+=VERSE 3
+=CHORUS
+-
+=SOLO OVER CHORUS
+-
+=PRE CHORUS
+(Bm,,, A,_G)x2
+
+=ALT CHORUS | PRE CHORUS PROGRESSION
+-
+=CHORUS
+=OUTRO
+GCDG

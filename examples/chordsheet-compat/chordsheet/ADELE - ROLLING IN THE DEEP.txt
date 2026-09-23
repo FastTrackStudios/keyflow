@@ -1,0 +1,26 @@
+=INTRO: GUITAR
+-PLEASE NOTE: CHORD CHANGES ARE A BEAT "LATE" IN THE VERSES
+Cm,,, ,,,,
+=DOUBLE VERSE 1
+(Cm,,, Gm,,, Bb,,, Gm,Bb,)x4
+=PRECHORUS
+(G#,,, Bb,,, Gm,,, 1.G#,,,2.G7,,,)x2
+=CHORUS
+(Cm,,, Bb,,, G#,,, ,,_Bb,)x2
+=VERSE 2
+(Cm,,, Gm,,, Bb,,, Gm,Bb,)x2
+=PRECHORUS
+(G#,,, Bb,,, Gm,,, 1.G#,,,2.G7,,,)x2
+=CHORUS
+(Cm,,, Bb,,, G#,,, ,,_Bb,)x2
+
+=POST CHORUS
+G#,,, Bb,,, Cm,,, Bb,,,
+G#,,, ,,,, Bb,,, ,,,,
+=ACCUPELLA VERSE
+,,,, ,,,, ,,,, ,,,,
+Cm,,, Cm,,, Cm,,, Cm,,,
+=DOWN BRIDGE CHORUS
+(Cm,,, Bb,,, G#,,, ,,_Bb,)x2
+=DOUBLE CHORUS
+(Cm,,, Bb,,, G#,,, ,,_Bb,)x4

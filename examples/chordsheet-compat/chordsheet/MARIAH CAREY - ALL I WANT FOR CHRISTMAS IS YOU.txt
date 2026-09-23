@@ -1,0 +1,28 @@
+=PIANO INTRO
+GEmCD
+=INTRO
+G%"FREE TIME INTRO"Bm%C%
+Cm6/Eb%G/D*_*_B7_*
+Em*_*_Cm6/Eb_*G/D*_*_E7_*
+Am7 DsusG"PIANO"EmCD"FULL BAND"
+=VERSE
+(G%)C%Eb6%)
+=PRE-CHORUS
+G*_*_B7_*Em*_*_Cm/Eb_*
+G/D E7 Am7 Dsus
+=CHORUS
+GEmAm7D
+=VERSE
+=PRE-CHORUS
+=CHORUS
+=BRIDGE
+(B7%Em%)Cm/Eb%
+G/DE7Am7%Dsus%
+=VERSE
+(G%)C%Eb6%
+=PRE-CHORUS
+G*_*_B7_*Em*_*_Cm/Eb_*
+G/D E7 Am7 Dsusr1D
+=OUTRO
+(GEmAm7D)x6
+"Ends on G"

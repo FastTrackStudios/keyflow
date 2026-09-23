@@ -1,0 +1,24 @@
+=INTRO
+(G#m,_Eb_E_Eb)x3 B_B_G#_B
+-FULL BAND
+(G#m,_Eb_E_Eb)x3 B_B_G#_B
+
+=VERSE
+(G#m,,, ,,,"RIFF"_, G#m,,, ,,,"RIFF"_, 
+G#m,,, Eb_B_G#_Eb_E_Eb G#m,,, 1.,,,"RIFF"_,
+2.,,,, ,,,, ,,,,)
+
+=CHORUS
+(E F# G#m B
+E F# Eb/G G#m)x2
+=INTRO
+=VERSE
+=CHORUS
+=INTRO
+=BRIDGE
+(E,,, F#,,, G#m,,, B,,,,
+E,,, F#,,, Eb/G,,, G#m,,,,)x2
+=CHORUS
+=INTRO
+-
+-DRUMS SHOULD LISTEN AND MAKE NOTES OF STOPS AND SHOTS
