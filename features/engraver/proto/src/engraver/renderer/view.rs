@@ -57,6 +57,19 @@ pub fn points_to_px(scale: f64) -> f64 {
     DPI_SCALE * scale
 }
 
+/// One measure's box on the laid-out chart, in chart points.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MeasureBox {
+    /// Global measure index (0-based, across the whole chart).
+    pub measure: usize,
+    /// Its left and right barlines.
+    pub x0: f64,
+    pub x1: f64,
+    /// Its staff's top line, and the staff's height.
+    pub staff_y: f64,
+    pub staff_height: f64,
+}
+
 /// A laid-out chart, cached until the content or the width class changes.
 pub struct ChartView {
     /// The SAME facade keyflow-ui's own chart renderer builds — see the
@@ -276,6 +289,36 @@ impl ChartView {
             .find(|page| page.number == number)
             .or_else(|| pages.last())?;
         Some((page.x_offset, page.y_offset, page.width, page.height))
+    }
+
+    /// Every measure's box, in chart points: what a caller needs to name
+    /// a spot on the chart musically — this measure, this far through it,
+    /// this high against its staff — and to find that spot again in a
+    /// view laid out, zoomed or panned differently (a collaborator's
+    /// pointer, say). In layout order; a measure that wraps is listed
+    /// once per system it sits on. Empty before the first
+    /// [`ChartView::paint`].
+    #[must_use]
+    pub fn measure_boxes(&self) -> Vec<MeasureBox> {
+        let Some(cached) = self.cached.as_ref() else {
+            return Vec::new();
+        };
+        let mut out: Vec<MeasureBox> = Vec::new();
+        for beat in &cached.layout.beat_positions {
+            let same = out.last().is_some_and(|m: &MeasureBox| {
+                m.measure == beat.measure && m.staff_y == beat.staff_y
+            });
+            if !same {
+                out.push(MeasureBox {
+                    measure: beat.measure,
+                    x0: beat.measure_x0,
+                    x1: beat.measure_x1,
+                    staff_y: beat.staff_y,
+                    staff_height: beat.staff_height,
+                });
+            }
+        }
+        out
     }
 
     /// How many pages the chart laid out to.
