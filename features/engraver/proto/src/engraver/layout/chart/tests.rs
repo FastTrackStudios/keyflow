@@ -182,6 +182,7 @@ fn chord_node_indices_at_chart_position(
 }
 
 #[test]
+#[ignore = "needs the Lord of the Fight MusicXML fixture, which is not in the repo"]
 fn lord_of_the_fight_a_major_seven_at_6_4_renders_triangle_seven() {
     let style = test_style();
     let text_font = Arc::new(Vec::new());
@@ -219,6 +220,7 @@ fn lord_of_the_fight_a_major_seven_at_6_4_renders_triangle_seven() {
 }
 
 #[test]
+#[ignore = "needs the Lord of the Fight MusicXML fixture, which is not in the repo"]
 fn lord_of_the_fight_measure_5_staff_text_uses_expected_placement() {
     let style = test_style();
     let text_font = Arc::new(Vec::new());
@@ -293,6 +295,7 @@ fn lord_of_the_fight_measure_5_staff_text_uses_expected_placement() {
 }
 
 #[test]
+#[ignore = "needs the Lord of the Fight MusicXML fixture, which is not in the repo"]
 fn lord_of_the_fight_measure_5_add_bass_sits_near_measure_end() {
     let style = test_style();
     let text_font = Arc::new(Vec::new());
@@ -358,6 +361,7 @@ fn lord_of_the_fight_measure_5_add_bass_sits_near_measure_end() {
 }
 
 #[test]
+#[ignore = "needs the Lord of the Fight MusicXML fixture, which is not in the repo"]
 fn lord_of_the_fight_a_over_c_sharp_at_10_1_has_no_conflicts() {
     let style = test_style();
     let text_font = Arc::new(Vec::new());
@@ -409,6 +413,7 @@ fn lord_of_the_fight_a_over_c_sharp_at_10_1_has_no_conflicts() {
 }
 
 #[test]
+#[ignore = "needs the Lord of the Fight MusicXML fixture, which is not in the repo"]
 fn lord_of_the_fight_long_endings_start_new_systems() {
     let style = test_style();
     let engine = ChartLayoutEngine::new(style, Arc::new(Vec::new()), Arc::new(Vec::new()));
@@ -452,6 +457,7 @@ fn lord_of_the_fight_long_endings_start_new_systems() {
 }
 
 #[test]
+#[ignore = "needs the Lord of the Fight MusicXML fixture, which is not in the repo"]
 fn lord_of_the_fight_start_of_system_dynamics_sit_under_clef_prefix() {
     let style = test_style();
     let text_font = Arc::new(Vec::new());
@@ -537,6 +543,7 @@ fn lord_of_the_fight_start_of_system_dynamics_sit_under_clef_prefix() {
 }
 
 #[test]
+#[ignore = "needs the Lord of the Fight MusicXML fixture, which is not in the repo"]
 fn lord_of_the_fight_repeat_pass_dynamics_stack_under_section_cards() {
     let style = test_style();
     let text_font = Arc::new(Vec::new());
@@ -707,6 +714,7 @@ fn lord_of_the_fight_has_no_disallowed_visual_collisions() {
 }
 
 #[test]
+#[ignore = "needs the Lord of the Fight MusicXML fixture, which is not in the repo"]
 fn lord_of_the_fight_reports_dead_vertical_space_between_systems() {
     let style = test_style();
     let text_font = Arc::new(Vec::new());

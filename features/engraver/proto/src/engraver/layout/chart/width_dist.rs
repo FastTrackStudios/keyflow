@@ -947,6 +947,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "needs the Lord of the Fight MusicXML fixture, which is not in the repo"]
     fn written_rest_weight_is_sparser_than_visible_chord_content() {
         let mut fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         fixture.push("../../../crates/keyflow");
@@ -1021,6 +1022,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "needs the Lord of the Fight MusicXML fixture, which is not in the repo"]
     fn lotf_default_measures_do_not_shrink_without_same_line_expansion_pressure() {
         let mut fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         fixture.push("../../../crates/keyflow");
@@ -1057,6 +1059,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "needs the Lord of the Fight MusicXML fixture, which is not in the repo"]
     fn lotf_opening_dense_measures_are_capped_against_written_rests() {
         let mut fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         fixture.push("../../../crates/keyflow");
