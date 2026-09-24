@@ -1833,13 +1833,17 @@ impl ChartLayoutEngine {
                                 has_stem,
                                 stem_up: true, // Default to stem up
                                 flag_count,
-                                time_signature,
+                                time_signature: measure_ts,
                             });
                         }
 
-                        // Calculate measure duration in ticks and update cumulative time/ticks
+                        // Advance by THIS measure's length — a bar of 2/4 in a
+                        // 4/4 song is two beats, not four. The chart's opening
+                        // meter here put every beat after the first meter
+                        // change late by the difference, so the cursor sat on
+                        // the previous bar until the old grid caught up.
                         let measure_duration_ticks =
-                            time_signature.0 as i32 * (1920 / time_signature.1 as i32);
+                            measure_ts.0 as i32 * (1920 / measure_ts.1 as i32);
                         cumulative_time += measure_duration_ticks as f64 * seconds_per_tick;
                         cumulative_ticks += measure_duration_ticks as i64;
                         global_measure_index += 1;
@@ -3185,13 +3189,14 @@ impl ChartLayoutEngine {
                                 has_stem,
                                 stem_up: true,
                                 flag_count,
-                                time_signature,
+                                time_signature: measure_ts,
                             });
                         }
 
-                        // Advance song-time cursor by the measure's full duration.
+                        // Advance song-time cursor by the measure's full duration,
+                        // at its own meter (as the paginated path does).
                         let measure_duration_ticks =
-                            time_signature.0 as i32 * (1920 / time_signature.1 as i32);
+                            measure_ts.0 as i32 * (1920 / measure_ts.1 as i32);
                         cumulative_time += measure_duration_ticks as f64 * seconds_per_tick;
                         cumulative_ticks += measure_duration_ticks as i64;
 

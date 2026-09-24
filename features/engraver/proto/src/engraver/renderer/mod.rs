@@ -11,19 +11,24 @@
 
 // region:    --- Modules
 
+#[cfg(feature = "wgpu")]
 pub mod canvas2d;
 #[cfg(feature = "engraver-example")]
 pub mod context;
 pub mod cursor_renderer;
+#[cfg(feature = "wgpu")]
 pub mod primitives;
 pub mod scene_renderer;
+pub mod view;
 
 // endregion: --- Modules
 
 // region:    --- Re-exports
 
+#[cfg(feature = "wgpu")]
 pub use canvas2d::{Canvas2D, Color as Canvas2DColor, Rect as Canvas2DRect, Vertex2D};
 pub use cursor_renderer::render_cursor_commands;
+#[cfg(feature = "wgpu")]
 pub use primitives::{
     BLIT_SHADER_SOURCE, BlitVertex, CameraUniform, SDF_SHADER_SOURCE, SHADER_SOURCE, SdfRectVertex,
     Vertex, create_blit_pipeline, create_blit_texture_bind_group_layout,
@@ -31,6 +36,7 @@ pub use primitives::{
     create_rect, create_sdf_pipeline, create_sdf_rounded_rect, px_to_ndc,
 };
 pub use scene_renderer::{SceneRenderBuilder, SceneRenderConfig, VelloSceneRenderer};
+pub use view::{ChartView, points_to_px};
 
 #[cfg(feature = "engraver-example")]
 pub use context::VelloRenderContext;

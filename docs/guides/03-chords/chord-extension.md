@@ -35,6 +35,14 @@ Quality first, then extension.
 Cm7 Cm9 Cmaj9 Cm11
 ```
 
+## Added tones
+
+`add` puts one tone on without the ones below it: `Cadd9` is a triad and a ninth, no seventh. The added 2nd has the worship-chart shorthand — a bare `2` on a triad (`G2`, `42` for the 4 chord, `4:2`) is `add2`, shown `Gadd2`, `4add2`. An addition can be parenthesised: `5(add4)`.
+
+```kf+
+Cadd9 G2 Dsus(add4) C
+```
+
 See also: [[chord-alteration|Alteration]], [[chord-quality|Quality]], [[chords|Chords]]
 
 ---

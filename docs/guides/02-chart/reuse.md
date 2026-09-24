@@ -31,7 +31,7 @@ CH 4
 
 Verse two and chorus two are the same chords as verse one and chorus one. Nothing to keep in sync, because there is only one copy.
 
-This is on for the section types a song has several of. Intro, Outro, Pre and Post are left out: those are the ones a song usually has exactly one of, and where a second exists it is more often a variation than a repeat, so copying it silently would be a surprise.
+Every section type replays this way — an intro, a pre-chorus or a post-chorus as much as a verse. If a section is written out again with different music (a last chorus with a new ending, say), an empty header after that replays the **most recent** writing.
 
 ## `= OTHER` borrows from a different section
 
@@ -49,7 +49,7 @@ Am F C G
 INST 4 = BR
 ```
 
-The name after `=` is an ordinary section name, so `= [Guitar Solo]` works for a custom one. Because it is explicit, it borrows from any section type, including the four that empty headers leave alone — `IN 8 = IN` is how you say the second intro really is the first one again.
+The name after `=` is an ordinary section name, so `= [Guitar Solo]` works for a custom one. Because it is explicit, it borrows from any section type, and it is how a section takes another one's chords under its own name.
 
 ## `\progression` sets a chart-wide default
 

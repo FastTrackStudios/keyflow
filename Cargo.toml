@@ -99,11 +99,12 @@ engraver-score = { path = "features/engraver/score" }
 # understands the ```kf fence family natively. `editor-keyflow` (here)
 # implements its `fence_renderer` seam so charts engrave; editor-state
 # knows nothing about keyflow, which is what keeps the graph acyclic.
-editor = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.20" }
-editor-state = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.20" }
+editor = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.21" }
+# Not the markdown fences (Typst, Mermaid): nothing here renders them.
+editor-state = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.21", default-features = false }
 # Byte-offset `Changes` ⇄ scalar text ops, at the editor's own tag: what
 # a remote edit to a shared chart becomes on its way into the editor.
-editor-crdt = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.20" }
+editor-crdt = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.21" }
 
 # ── features/editor — this repo's half of the editor integration ──────
 # Both need `editor-state` from below and `keyflow-text`/`engraver` from
@@ -202,15 +203,21 @@ dawfile-reaper = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.
 keyflow-proto = { path = "features/proto" }
 keyflow-syntax = { path = "features/syntax" }
 
-# ── Facet reflection + vox RPC — the rc.5 fleet pins ──────────────────
-facet = { version = "=0.50.0-rc.5", features = ["reflect", "chrono", "uuid"] }
-facet-json = { version = "=0.50.0-rc.5" }
-vox = { version = "=0.10.0-rc.5", default-features = false, features = ["runtime"] }
+# ── Facet reflection + vox RPC — the rc.7 fleet ───────────────────────
+# Caret, not `=`: the version is a FLOOR, and the lockfile holds the exact
+# one. The fleet (task, session, keyflow, fasttrackstudio) moves together
+# because a vox client and server on different rcs fail the handshake
+# ("schema decode consumed N of M bytes"); the rc.7 floor is what keeps
+# this repo from resolving an older one. An `=` pin made every consumer's
+# graph unsolvable the moment one repo moved ahead of another.
+facet = { version = "0.50.0-rc.7", features = ["reflect", "chrono", "uuid"] }
+facet-json = { version = "0.50.0-rc.7" }
+vox = { version = "0.10.0-rc.7", default-features = false, features = ["runtime"] }
 # The client half of vox the site dials Task with: `vox-core` for the
 # initiator handshake and the `FromVoxLane` the generated clients
 # implement, `vox-websocket` for the browser WebSocket link.
-vox-core = "=0.10.0-rc.5"
-vox-websocket = "=0.10.0-rc.5"
+vox-core = "0.10.0-rc.7"
+vox-websocket = "0.10.0-rc.7"
 futures-channel = "0.3"
 
 # ── Architect framework — its own repo since the 2026-08 three-way split
@@ -240,18 +247,18 @@ futures-channel = "0.3"
 # AND 0.13 (iroh, via architect), wasm-streams 0.4 (dioxus-web) AND 0.5
 # (reqwest 0.13), and links clean. Two majors of a crate are fine; two
 # copies of the SAME crate at different sources are what breaks.
-architect = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.8.2" }
+architect = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.9.2" }
 
 # The shared musical vocabulary — section colours and the canonical
 # palettes `keyflow-proto` engraves section cards with.
 music-catalog = { git = "https://github.com/FastTrackStudios/music-convention", tag = "v0.1.0" }
 color-palette = { git = "https://github.com/FastTrackStudios/music-convention", tag = "v0.1.0" }
 # The Dioxus primitive library (was libs/ui/fts-ui, renamed on the split).
-architect-ui = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.8.2" }
+architect-ui = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.9.2" }
 # Loro documents and their sync + presence sessions — the client half of
 # Task's per-file collaboration. Same tag as the rest of architect: two
 # copies of it would not link into one wasm binary.
-crdt = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.8.2" }
+crdt = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.9.2" }
 
 # The FastTrackStudio account. One identity across Task, Session, Signal,
 # Keyflow and Ignition, served by auth.fasttrackstudio.app.
@@ -271,7 +278,7 @@ crdt = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.8.2" }
 # Telemetry. Same tag as everything above — see the note there for why
 # that is not optional. `otel` is inert unless the build bakes
 # TASK_OTLP_ENDPOINT, so dev builds stay telemetry-free.
-architect-telemetry = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.8.2", features = ["otel"] }
+architect-telemetry = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.9.2", features = ["otel"] }
 
 # ── MusicXML parsing (keyflow) ─────────────────────────────────────────
 musicxml = "1.1"
@@ -350,15 +357,24 @@ blitz-shell = { git = "https://github.com/FastTrackStudios/blitz", rev = "c82dd2
 blitz-net = { git = "https://github.com/FastTrackStudios/blitz", rev = "c82dd238000515c44c758845b9a17e9b48eb0087" }
 blitz-html = { git = "https://github.com/FastTrackStudios/blitz", rev = "c82dd238000515c44c758845b9a17e9b48eb0087" }
 
-# The same vendored phon, phon-jit and facet-core Task patches in (see its
-# root manifest for each one's reason), so both ends of a vox call run one
-# codec. They became necessary here with `open_collab`: its reply carries a
-# `Uuid`, an opaque scalar upstream phon rc.5 cannot derive a decoder for —
-# the call failed in the browser with "cannot derive phon from this type".
-# Every earlier library reply happened to be strings and lists.
-phon = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.2.0" }
-phon-jit = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.2.0" }
-facet-core = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.2.0" }
+# The same vendored phon, phon-jit, facet-core and vox-phon Task patches
+# in (see its root manifest, and vendor's README, for each one's reason),
+# so both ends of a vox call run one codec. They became necessary here with
+# `open_collab`: its reply carries a `Uuid`, an opaque scalar upstream phon
+# cannot derive a decoder for — the call failed in the browser with "cannot
+# derive phon from this type". Every earlier library reply happened to be
+# strings and lists. vox-phon: upstream rc.7 fails every real schema
+# exchange with "schema decode consumed N of M bytes".
+#
+# phon and facet-core are SIBLING-CHECKOUT PATHS (../vendor, a clone of
+# FastTrackStudios/vendor): their rc.7 forward-ports are committed there
+# locally but not tagged yet. Replace each with `{ git =
+# "https://github.com/FastTrackStudios/vendor", tag = … }` before this repo
+# is pushed. phon-jit and vox-phon are already at published rc.7 tags.
+phon = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.4.0" }
+phon-jit = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.2.3" }
+facet-core = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.4.0" }
+vox-phon = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.3.0" }
 
 [workspace.lints.rust]
 # Flipped from "allow" 2026-07-28 (task cleanup): the blanket allows are

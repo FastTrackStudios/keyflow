@@ -42,6 +42,18 @@ pub enum CursorStyle {
         /// Corner radius in layout points.
         corner_radius: f64,
     },
+    /// [`Self::MeasureHighlight`], with a thin playhead line inside it at
+    /// the interpolated position — where you are in the bar, not only
+    /// which bar. The line reaches `overhang` points past the staff at
+    /// each end, a fixed amount rather than [`CursorConfig::vertical_extension`]'s
+    /// staff-relative one, so it stays a hairline's worth of overshoot on
+    /// a tall staff.
+    MeasureWithLine {
+        /// Line width in layout points.
+        line_width: f64,
+        /// How far the line reaches above and below the staff, in points.
+        overhang: f64,
+    },
 }
 
 impl Default for CursorStyle {
@@ -74,6 +86,31 @@ pub struct CursorConfig {
     pub glow_alpha: f32,
     /// Whether to show the cursor when playback is stopped.
     pub show_when_stopped: bool,
+}
+
+impl CursorConfig {
+    /// The playback cursor the app's chart panes share — the native Blitz
+    /// panel and the web SVG pane alike: a soft blue wash over the current
+    /// measure with a thin line at the playhead, and no notehead glow.
+    /// Reads at a glance from a music stand without covering the chords
+    /// the way [`CursorStyle::default`]'s thick red line does.
+    ///
+    /// The line draws in `accent_color` as given (alpha 0.9); the wash is
+    /// that times `fill_alpha` (0.18 overall).
+    #[must_use]
+    pub fn playback() -> Self {
+        Self {
+            style: CursorStyle::MeasureWithLine {
+                line_width: 1.5,
+                overhang: 4.0,
+            },
+            accent_color: [59, 130, 246, 230], // blue-500
+            fill_alpha: 0.2,
+            highlight_notehead: false,
+            show_when_stopped: true,
+            ..Self::default()
+        }
+    }
 }
 
 impl Default for CursorConfig {
@@ -226,6 +263,19 @@ impl ChartCursor {
             }
             CursorStyle::BeatBox { corner_radius } => {
                 self.build_beat_box(&mut commands, beat, *corner_radius);
+            }
+            CursorStyle::MeasureWithLine {
+                line_width,
+                overhang,
+            } => {
+                self.build_measure_highlight(&mut commands, beat, layout);
+                commands.push(HighlightCommand::StrokeLine {
+                    x: cursor_x,
+                    y_top: beat.staff_y - overhang,
+                    y_bottom: beat.staff_y + beat.staff_height + overhang,
+                    color: self.config.accent_color,
+                    width: *line_width,
+                });
             }
         }
 
@@ -529,6 +579,38 @@ mod tests {
             // Alpha should be multiplied
             assert!(color[3] < 255);
         }
+    }
+
+    #[test]
+    fn playback_is_a_measure_wash_under_a_playhead_line() {
+        let cursor = ChartCursor::new(CursorConfig::playback());
+        let layout = test_layout();
+
+        // Halfway through the first beat (x=100, width 50).
+        let state = cursor.compute(&layout, 240).unwrap();
+        assert_eq!(state.commands.len(), 2, "wash + line, no notehead glow");
+        let HighlightCommand::FillRect {
+            x, width, color, ..
+        } = &state.commands[0]
+        else {
+            panic!("wash first, so the line draws over it");
+        };
+        assert!((*x - 100.0).abs() < 0.01);
+        assert!((*width - 100.0).abs() < 0.01);
+        assert_eq!(color[3], 46, "0.9 * 0.2 of full alpha");
+        let HighlightCommand::StrokeLine {
+            x,
+            y_top,
+            y_bottom,
+            color,
+            ..
+        } = &state.commands[1]
+        else {
+            panic!("then the line");
+        };
+        assert!((*x - 125.0).abs() < 0.01, "at the playhead, not the bar");
+        assert!((*y_bottom - *y_top - (state.cursor_height + 8.0)).abs() < 0.01);
+        assert_eq!(color[3], 230);
     }
 
     #[test]

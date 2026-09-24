@@ -444,17 +444,14 @@ impl<'a> ChartParser<'a> {
                 .recall_transposed(source, self.current_key.as_ref());
         }
 
-        let own_type_recall = !matches!(
-            section_type,
-            SectionType::Intro | SectionType::Outro | SectionType::Pre(_) | SectionType::Post(_)
-        );
-        if own_type_recall {
-            if let Some(measures) = self
-                .templates
-                .recall_transposed(section_type, self.current_key.as_ref())
-            {
-                return Some(measures);
-            }
+        // A bare header replays its section, whatever the section — an
+        // intro, outro, pre- or post-chorus included — and the most recent
+        // writing of it wins.
+        if let Some(measures) = self
+            .templates
+            .recall_transposed(section_type, self.current_key.as_ref())
+        {
+            return Some(measures);
         }
 
         self.default_progression_measures(section_type, measure_count)

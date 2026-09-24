@@ -164,6 +164,7 @@ A line starting with `\` sets something for the chart. Backslash, not slash: a l
 | `\smart_repeats = true` | group repeated phrases under repeat signs |
 | `\auto_rhythm_slashes = true` | fill long chords with quarter-note slashes |
 | `\push_alters_rhythm = true` | a push changes the notation, not just the symbol |
+| `\chord_memory = true` | a bare root recalls the quality its degree last had |
 | `\progression G B C Cm` | the chords a section falls back to when it names none |
 | `\alias name value` | give a name to a run of chart text |
 

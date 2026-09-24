@@ -589,6 +589,18 @@ impl<'a> ChartParser<'a> {
         measure
     }
 
+    /// Beats a bar holds so far: its chords, and its rests and spaces —
+    /// `r2 4 //` is a full bar.
+    fn measure_beats(measure: &Measure, time_sig: TimeSignature) -> f64 {
+        let chords = measure.chords.iter().map(|c| c.duration);
+        let others = measure.rhythm_elements.iter().filter_map(|e| match e {
+            RhythmElement::Rest(rest) => Some(rest.duration),
+            RhythmElement::Space(space) => Some(space.duration),
+            _ => None,
+        });
+        chords.chain(others).map(|d| d.to_beats(time_sig)).sum()
+    }
+
     /// `%` → 1, `%3` → 3. Anything else is not a simile mark.
     ///
     /// `%` on its own is `%1`: one more measure of what the last one was.
@@ -2678,24 +2690,16 @@ impl<'a> ChartParser<'a> {
                                     // current_measure_beats stale and let the next chord
                                     // wrongly share the measure. Mirrors the dotted-slash
                                     // path above.
-                                    current_measure_beats = current_measure
-                                        .chords
-                                        .iter()
-                                        .map(|c| c.duration.to_beats(time_sig))
-                                        .sum();
+                                    current_measure_beats =
+                                        Self::measure_beats(&current_measure, time_sig);
                                     // Mark that this measure has slash rhythm, so subsequent
                                     // chords can fill remaining beats
                                     measure_has_slash_rhythm = true;
                                 } else if !measures.is_empty() {
                                     // The slash was applied to the previous measure (SET mode).
                                     // Check if it now has room and we should "un-pop" it.
-                                    let prev_measure_beats: f64 = measures
-                                        .last()
-                                        .unwrap()
-                                        .chords
-                                        .iter()
-                                        .map(|c| c.duration.to_beats(time_sig))
-                                        .sum();
+                                    let prev_measure_beats =
+                                        Self::measure_beats(measures.last().unwrap(), time_sig);
 
                                     if prev_measure_beats < beats_per_measure - 0.001 {
                                         // Previous measure now has room - pop it back to current_measure
@@ -3167,11 +3171,47 @@ impl<'a> ChartParser<'a> {
                 }
             }
 
+            // A bare `r` or `s` is a bar of rest or space, the way a bare
+            // chord is a bar of chord (or the carried chord length, when one
+            // is in force). Slashes after it give it its length instead —
+            // `r //` rests two beats. It is rewritten to the lily form the
+            // rest and space parsing below reads; the written text stays the
+            // element's original token.
+            let mut written_token = token_str.to_string();
+            let bare_rest_token = if matches!(*token_str, "r" | "s") {
+                let slashes = tokens_str.get(token_idx + 1).copied().filter(|t| {
+                    let run = t.trim_end_matches('.');
+                    !run.is_empty() && run.chars().all(|c| c == '/') && t.len() - run.len() <= 1
+                });
+                let beats = if let Some(slashes) = slashes {
+                    skip_next_token = true;
+                    written_token = format!("{token_str} {slashes}");
+                    let run = slashes.trim_end_matches('.').len() as f64;
+                    if slashes.ends_with('.') {
+                        run * 1.5
+                    } else {
+                        run
+                    }
+                } else {
+                    chord_length_override
+                        .as_ref()
+                        .map_or(beats_per_measure, |(_, duration)| {
+                            duration.to_beats(time_sig)
+                        })
+                };
+                let length = beats_to_lily_suffix(beats, time_sig)
+                    .unwrap_or_else(|| format!("_{}*{}", time_sig.denominator, time_sig.numerator));
+                Some(format!("{token_str}{length}"))
+            } else {
+                None
+            };
+            let rest_token: &str = bare_rest_token.as_deref().unwrap_or(token_str);
+
             // Check for standalone rest token (r4, r8, r8t, r4t, r2, etc.)
             // These don't have a chord symbol but should be stored as rhythm elements
-            if token_str.starts_with('r') && token_str.len() >= 2 {
+            if rest_token.starts_with('r') && rest_token.len() >= 2 {
                 // Try to parse as a rest
-                let mut lexer = Lexer::new(token_str.to_string());
+                let mut lexer = Lexer::new(rest_token.to_string());
                 let tokens = lexer.tokenize();
                 if let Ok((rhythm, _)) = ChordRhythm::parse(&tokens) {
                     if rhythm.is_rest() {
@@ -3208,7 +3248,7 @@ impl<'a> ChartParser<'a> {
                                 .unwrap_or_else(|_| MusicalPosition::start()),
                                 self.sections.len(),
                             ),
-                            token_str.to_string(),
+                            written_token.clone(),
                         );
 
                         current_measure
@@ -3231,9 +3271,9 @@ impl<'a> ChartParser<'a> {
 
             // Check for standalone space token (s1, s2, s4, s8, etc.)
             // These represent "invisible" duration - the measure will be filled with automatic slashes
-            if token_str.starts_with('s') && token_str.len() >= 2 {
+            if rest_token.starts_with('s') && rest_token.len() >= 2 {
                 // Try to parse as a space
-                let mut lexer = Lexer::new(token_str.to_string());
+                let mut lexer = Lexer::new(rest_token.to_string());
                 let tokens = lexer.tokenize();
                 if let Ok((rhythm, _)) = ChordRhythm::parse(&tokens) {
                     if rhythm.is_space() {
@@ -3270,7 +3310,7 @@ impl<'a> ChartParser<'a> {
                                 .unwrap_or_else(|_| MusicalPosition::start()),
                                 self.sections.len(),
                             ),
-                            token_str.to_string(),
+                            written_token.clone(),
                         );
 
                         // Add to rhythm_elements only (not chords - space is not a chord)
@@ -3605,9 +3645,17 @@ impl<'a> ChartParser<'a> {
             }
         }
 
+        // A one-shot meter change still waiting for its measure when the line
+        // ends is a bar of that meter with no new chord in it — `!T2/4` on a
+        // line of its own is "one bar of 2/4", the breakdown bar of a
+        // structure-only chart. Without this the bar was dropped and the
+        // section fell back to the prevailing meter.
+        let oneshot_bar_pending = oneshot_revert.is_some() && measures.len() == oneshot_measure_idx;
+
         // Add last measure if it has content
         // (If we just processed a separator, the empty measure was already pushed)
-        if !current_measure.chords.is_empty()
+        if oneshot_bar_pending
+            || !current_measure.chords.is_empty()
             || !current_measure.rhythm_elements.is_empty()
             || !current_measure.figured_bass.is_empty()
             || !current_measure.staff_text.is_empty()
@@ -4590,6 +4638,10 @@ impl<'a> ChartParser<'a> {
         // Use ChordMemory to process this chord and get the appropriate full symbol
         // Pass chord_part (which includes quality like "2maj") so it can detect explicit quality
         let current_key = self.current_key.clone();
+        // Off unless the chart asks for it (`\chord_memory = true`): a chord
+        // is what is written. Read here, so a setting anywhere above applies.
+        let memory_on = self.settings.chord_memory();
+        self.chord_memory.set_enabled(memory_on);
         let mut full_symbol = if is_slash_chord_with_just_root {
             // Slash chord with just root - use the normalized symbol, don't recall from memory
             chord.normalized.clone()
@@ -4816,6 +4868,14 @@ mod tests {
             expand_chord_groups("C m{ (D E) } G", c44).unwrap(),
             "C m{ (D E) } G"
         );
+        // A `(` attached to a chord is its addition, not a group; one after
+        // a barline or another group still is a group.
+        assert_eq!(
+            expand_chord_groups("5(add4) // 1", c44).unwrap(),
+            "5(add4) // 1"
+        );
+        assert_eq!(expand_chord_groups("C7(b9) F", c44).unwrap(), "C7(b9) F");
+        assert_eq!(expand_chord_groups("|(C G)|", c44).unwrap(), "|C_2 G_2|");
     }
 
     #[test]
@@ -5611,6 +5671,36 @@ C T2/4 Am T4/4 G
     }
 
     #[test]
+    fn a_oneshot_meter_alone_on_its_line_is_a_bar_of_that_meter() {
+        // A structure-only chart's odd bar: `!T2/4` with no chord after it.
+        let chart = parse_chart("Song\n72bpm 4/4 #D\n\nCH 2\nBreakdown 1\n!T2/4\nVS 2\n")
+            .expect("Should parse");
+        let meters = |i: usize| -> Vec<(u8, u8)> {
+            chart.sections[i]
+                .measures()
+                .iter()
+                .map(|m| m.time_signature)
+                .collect()
+        };
+        assert_eq!(meters(0), vec![(4, 4), (4, 4)]);
+        assert_eq!(meters(1), vec![(2, 4)], "one bar of 2/4");
+        assert_eq!(meters(2), vec![(4, 4), (4, 4)], "and back to 4/4 after it");
+    }
+
+    #[test]
+    fn a_persistent_meter_alone_on_its_line_adds_no_bar() {
+        // `T3/4` switches the meter for what follows; it is not a bar itself.
+        let chart = parse_chart("Song\n120bpm 4/4 #C\n\nVS 2\nT3/4\nC G\n").expect("Should parse");
+        let m = chart.sections[0].measures();
+        assert_eq!(m.len(), 2);
+        assert!(
+            m.iter().all(|m| m.time_signature == (3, 4)),
+            "{:?}",
+            m.iter().map(|m| m.time_signature).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
     fn oneshot_t_prefix_reverts_after_one_measure() {
         // `!T2/4` applies 2/4 to exactly the next measure, then reverts to 4/4.
         // Contrast with persistent `T2/4`, which would keep 2/4 for the rest.
@@ -6168,6 +6258,177 @@ VS
         assert!(f9.push_pull.is_some(), "F9 should have push_pull");
     }
 
+    /// Each bar's chords as `symbol@beat`, the way a chart reads.
+    fn bars_of(section: &crate::chart::ChartSection) -> Vec<String> {
+        section
+            .measures()
+            .iter()
+            .map(|m| {
+                m.chords
+                    .iter()
+                    .filter(|c| c.full_symbol != "s" && c.full_symbol != "r")
+                    .map(|c| format!("{}@{}", c.full_symbol, c.position.total_duration.beat))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            })
+            .collect()
+    }
+
+    /// A parenthesised addition is one chord like any other: the bare chord
+    /// after `5(add4) //` holds its own bar, not the two beats before it.
+    #[test]
+    fn a_parenthesised_addition_does_not_lend_its_length() {
+        let chart =
+            parse_chart("Paren\n72bpm 4/4 #Bb\n\nVS 8\n1 4 // 1 // 6m // 5(add4) // 42 x2\n")
+                .expect("parses");
+        assert_eq!(
+            bars_of(&chart.sections[0]),
+            vec![
+                "1@0",
+                "4@0 1@2",
+                "6m@0 5add4@2",
+                "4add2@0",
+                "1@0",
+                "4@0 1@2",
+                "6m@0 5add4@2",
+                "4add2@0"
+            ]
+        );
+    }
+
+    /// Rests are where they are written: six bars of N.C., then the riff.
+    #[test]
+    fn rests_at_the_start_of_a_line_stay_there() {
+        let chart = parse_chart("Rests\n128bpm 4/4 #E\n\nCH 4\nr r 4 1\n").expect("parses");
+        assert_eq!(bars_of(&chart.sections[0]), vec!["", "", "4@0", "1@0"]);
+    }
+
+    /// Each bar's rests, as their length in beats.
+    fn rests_of(section: &crate::chart::ChartSection) -> Vec<Vec<f64>> {
+        section
+            .measures()
+            .iter()
+            .map(|m| {
+                let (num, den) = m.time_signature;
+                let ts = TimeSignature::new(u32::from(num), u32::from(den));
+                m.rhythm_elements
+                    .iter()
+                    .filter_map(|e| match e {
+                        RhythmElement::Rest(rest) => Some(rest.duration.to_beats(ts)),
+                        _ => None,
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+
+    /// A bare `r` is a bar of rest, the way a bare chord is a bar of chord,
+    /// in whatever the bar's meter is.
+    #[test]
+    fn a_bare_rest_fills_its_bar() {
+        let chart = parse_chart("Rests\n128bpm 4/4 #E\n\nCH 4\nr r 4 1\n").expect("parses");
+        assert_eq!(rests_of(&chart.sections[0])[..2], [vec![4.0], vec![4.0]]);
+
+        let chart = parse_chart("Waltz\n90bpm 3/4 #E\n\nVS 2\nr 1\n").expect("parses");
+        assert_eq!(bars_of(&chart.sections[0]), vec!["", "1@0"]);
+        assert_eq!(rests_of(&chart.sections[0])[0], vec![3.0]);
+    }
+
+    /// Slashes after a bare `r` give it its length, as they do a chord; a
+    /// carried chord length does too.
+    #[test]
+    fn a_bare_rest_takes_slashes_or_the_carried_length() {
+        let chart = parse_chart("Rests\n128bpm 4/4 #E\n\nVS 2\nr // 4 // 1\n").expect("parses");
+        assert_eq!(bars_of(&chart.sections[0]), vec!["4@2", "1@0"]);
+        assert_eq!(rests_of(&chart.sections[0])[0], vec![2.0]);
+
+        let chart = parse_chart("Rests\n128bpm 4/4 #E\n\nVS 2\n1_2 r 4_2 5\n").expect("parses");
+        assert_eq!(bars_of(&chart.sections[0]), vec!["1@0", "4@0 5@2"]);
+        assert_eq!(rests_of(&chart.sections[0])[0], vec![2.0]);
+    }
+
+    /// A bare `s` is a bar of space in its written place.
+    #[test]
+    fn a_bare_space_holds_its_bar() {
+        let chart = parse_chart("Spaces\n128bpm 4/4 #E\n\nCH 4\n4 s 1 5\n").expect("parses");
+        assert_eq!(bars_of(&chart.sections[0]), vec!["4@0", "", "1@0", "5@0"]);
+    }
+
+    /// A chart may open on a pre- or post-chorus with a bar count; the
+    /// header is a header there as much as anywhere else.
+    #[test]
+    fn a_chart_may_open_on_a_counted_pre_or_post() {
+        for (header, want) in [
+            ("PRE 2", SectionType::Pre(Box::new(SectionType::Chorus))),
+            ("Post 2", SectionType::Post(Box::new(SectionType::Chorus))),
+        ] {
+            let chart =
+                parse_chart(&format!("Top\n128bpm 4/4 #E\n\n{header}\n4 5\n")).expect("parses");
+            assert_eq!(chart.sections[0].section.section_type, want, "{header}");
+            assert_eq!(chart.sections[0].section.measure_count, Some(2), "{header}");
+            assert_eq!(bars_of(&chart.sections[0]), vec!["4@0", "5@0"], "{header}");
+        }
+    }
+
+    /// A bare header replays the section, whatever the section: a
+    /// pre-chorus and a post-chorus are sections like any other.
+    #[test]
+    fn a_bare_post_chorus_replays_it() {
+        let chart =
+            parse_chart("Song\n128bpm 4/4 #E\n\nPost 2\n1 4\nVS 2\n1 5\nPost\n").expect("parses");
+        assert_eq!(bars_of(&chart.sections[2]), vec!["1@0", "4@0"]);
+    }
+
+    #[test]
+    fn a_bare_pre_chorus_replays_it() {
+        let chart =
+            parse_chart("Song\n128bpm 4/4 #E\n\nPRE 2\n4 5\nCH 2\n1 1\nPRE\nCH\n").expect("parses");
+        assert_eq!(bars_of(&chart.sections[2]), vec!["4@0", "5@0"]);
+        assert_eq!(bars_of(&chart.sections[3]), vec!["1@0", "1@0"]);
+    }
+
+    /// A section written twice with different music replays the most recent
+    /// one: each time a section is written out, it becomes what its bare
+    /// header plays from then on.
+    #[test]
+    fn a_bare_header_replays_the_most_recent_writing() {
+        let chart =
+            parse_chart("Twice\n128bpm 4/4 #E\n\nCH 2\n1 4\nVS 2\n6m 5\nCH 2\n1 5\nCH\nVS\n")
+                .expect("parses");
+        assert_eq!(bars_of(&chart.sections[3]), vec!["1@0", "5@0"]);
+        assert_eq!(bars_of(&chart.sections[4]), vec!["6m@0", "5@0"]);
+    }
+
+    /// Chord memory is off unless the chart turns it on: a bare `5` after
+    /// a `5sus` is a 5, and a `4` after a `4:6` is a 4.
+    #[test]
+    fn chord_memory_is_off_unless_the_chart_turns_it_on() {
+        let symbols = |memory: &str| {
+            let input = format!("Memory\n72bpm 4/4 #D\n{memory}\nIN 2\n4:6 5sus\nVS 2\n4 5\n");
+            let chart = parse_chart(&input).expect("Should parse");
+            chart.sections[1]
+                .measures()
+                .iter()
+                .flat_map(|m| m.chords.iter().map(|c| c.full_symbol.clone()))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(symbols(""), vec!["4", "5"]);
+        // A suspension is never remembered, memory or not.
+        assert_eq!(symbols("\\chord_memory = true"), vec!["46", "5"]);
+    }
+
+    /// `42` is the 4 chord add2, as worship charts write it.
+    #[test]
+    fn a_number_chord_with_a_two_is_add2() {
+        let chart = parse_chart("Two\n72bpm 4/4 #D\n\nVS 2\n6m7 42\n").expect("Should parse");
+        let chords: Vec<_> = chart.sections[0]
+            .measures()
+            .iter()
+            .flat_map(|m| m.chords.iter().map(|c| c.full_symbol.clone()))
+            .collect();
+        assert_eq!(chords, vec!["6m7", "4add2"]);
+    }
+
     #[test]
     fn test_accent_not_in_chord_memory() {
         use crate::sections::SectionType;
@@ -6180,6 +6441,7 @@ VS
         let input = r#"
 Accent Memory Test
 120bpm 4/4 #C
+\chord_memory = true
 
 VS
 >Cmaj7 | C D E F
@@ -6779,6 +7041,21 @@ fn expand_chord_groups(line: &str, time_sig: TimeSignature) -> Result<String, St
                 i += 1;
             }
             out.push_str(&line[start..i]);
+            continue;
+        }
+
+        // A `(` attached to the token before it is part of that chord —
+        // `5(add4)`, `C7(b9)` — not a rhythm group. Read as a group it
+        // became `add4` with a lily length, and that length carried on to
+        // the chords after it.
+        let attached = line[..i]
+            .chars()
+            .next_back()
+            .is_some_and(|c| c.is_alphanumeric() || matches!(c, '#' | '+' | '^' | '°' | 'ø'));
+        if ch == '(' && attached {
+            let close = line[i..].find(')').map_or(bytes.len(), |at| i + at + 1);
+            out.push_str(&line[i..close]);
+            i = close;
             continue;
         }
 

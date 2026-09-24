@@ -35,6 +35,10 @@ pub enum ChartSetting {
     PushAltersRhythm,
     /// Swing ratio for MIDI playback (0.5 = straight, 0.6667 = triplet swing)
     Swing,
+    /// Chord memory: a bare root recalls the quality its degree last had
+    /// (`4` after `4maj7` is `4maj7`). OFF by default — a chord is what is
+    /// written; `\chord_memory = true` turns it on for a chart.
+    ChordMemory,
 }
 
 /// One writable directive, described once so everything downstream can read
@@ -106,6 +110,12 @@ pub const DIRECTIVES: &[DirectiveSpec] = &[
         summary: "a push changes the notation, not just the symbol",
     },
     DirectiveSpec {
+        key: "chord_memory",
+        label: "Chord memory",
+        example: "\\chord_memory = true",
+        summary: "a bare root recalls the quality its degree last had",
+    },
+    DirectiveSpec {
         key: "alias",
         label: "Alias",
         example: "\\alias name value",
@@ -127,6 +137,7 @@ impl ChartSetting {
             Self::AutoRhythmSlashes => "auto_rhythm_slashes",
             Self::PushAltersRhythm => "push_alters_rhythm",
             Self::Swing => "swing",
+            Self::ChordMemory => "chord_memory",
         }
     }
 
@@ -137,6 +148,7 @@ impl ChartSetting {
         Self::AutoRhythmSlashes,
         Self::PushAltersRhythm,
         Self::Swing,
+        Self::ChordMemory,
     ];
 }
 
@@ -158,6 +170,7 @@ impl ChartSettings {
         settings.insert(ChartSetting::SmartRepeats, SettingValue::Bool(false));
         settings.insert(ChartSetting::AutoRhythmSlashes, SettingValue::Bool(true)); // ON by default
         settings.insert(ChartSetting::PushAltersRhythm, SettingValue::Bool(true)); // ON by default
+        settings.insert(ChartSetting::ChordMemory, SettingValue::Bool(false));
 
         Self {
             settings,
@@ -211,6 +224,11 @@ impl ChartSettings {
                     ChartSetting::AutoRhythmSlashes,
                     SettingValue::Bool(bool_value),
                 );
+                Ok(())
+            }
+            "CHORD_MEMORY" | "CHORD-MEMORY" | "CHORDMEMORY" => {
+                let bool_value = Self::parse_bool(value)?;
+                self.set(ChartSetting::ChordMemory, SettingValue::Bool(bool_value));
                 Ok(())
             }
             "PUSH_ALTERS_RHYTHM" | "PUSHALTERSRHYTHM" => {
@@ -347,6 +365,11 @@ impl ChartSettings {
         self.get_bool(ChartSetting::SmartRepeats)
     }
 
+    /// Whether chord memory is on (default: off). See [`ChartSetting::ChordMemory`].
+    pub fn chord_memory(&self) -> bool {
+        self.get_bool(ChartSetting::ChordMemory)
+    }
+
     /// Check if auto rhythm slashes is enabled (default: true)
     ///
     /// When enabled, whole notes and half notes in rhythm charts are automatically
@@ -425,6 +448,7 @@ impl ChartSetting {
             ChartSetting::AutoRhythmSlashes => "AUTO_RHYTHM_SLASHES",
             ChartSetting::PushAltersRhythm => "PUSH_ALTERS_RHYTHM",
             ChartSetting::Swing => "SWING",
+            ChartSetting::ChordMemory => "CHORD_MEMORY",
         }
     }
 }
@@ -490,6 +514,18 @@ mod tests {
     fn test_default_settings() {
         let settings = ChartSettings::new();
         assert!(!settings.smart_repeats());
+    }
+
+    #[test]
+    fn chord_memory_is_off_until_a_chart_turns_it_on() {
+        let mut settings = ChartSettings::new();
+        assert!(!settings.chord_memory());
+        settings.parse_setting_line("\\CHORD_MEMORY=true").unwrap();
+        assert!(settings.chord_memory());
+        settings
+            .parse_setting_line("\\chord-memory = false")
+            .unwrap();
+        assert!(!settings.chord_memory());
     }
 
     #[test]

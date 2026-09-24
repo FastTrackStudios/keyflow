@@ -22,12 +22,19 @@ svg = [
     "dep:macro_rules_attribute",
 ]
 
+# Paint a laid-out chart (and its cursor) into any `anyrender::PaintScene` —
+# the scene and cursor painters and `ChartView`, without the wgpu pipeline.
+# What an app embeds to draw a live chart inside its own renderer (a Blitz
+# widget, a vello_hybrid canvas on the web).
+paint = ["svg", "dep:anyrender"]
+
 # Live GPU renderer: everything in `svg` plus the wgpu/vello scene renderer,
 # glyph tessellation (lyon), and text shaping (parley). This is the
 # heavyweight, non-wasm-friendly tier — only pull it in when you need to paint
 # to a GPU surface (e.g. the interactive editor preview).
 wgpu = [
     "svg",
+    "paint",
     "dep:wgpu",
     "dep:vello",
     "dep:anyrender",

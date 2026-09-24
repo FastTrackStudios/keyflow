@@ -271,6 +271,20 @@ impl<'a> ChartParser<'a> {
             return false;
         }
 
+        // `pre`/`post` with a bar count (`PRE 2`) take their own path in the
+        // section parser rather than the header parser; recognise them the
+        // same way, or a chart that opens on one loses the header.
+        let lower = marker.to_lowercase();
+        let mut words = lower.split_whitespace();
+        if matches!(words.next(), Some("pre" | "post"))
+            && words
+                .next()
+                .is_some_and(|count| count.parse::<usize>().is_ok())
+            && words.next().is_none()
+        {
+            return true;
+        }
+
         // Defer to the authoritative section-header parser, so sub-labels
         // (`CH 3A 4`), measure expressions, quoted comments, key changes
         // (`BR 8 #G`), and pre-/post- sections are recognised exactly as they

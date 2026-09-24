@@ -1750,13 +1750,12 @@ G D Em
         assert_eq!(symbols(&chart, 3), symbols(&chart, 1));
     }
 
-    /// Intro, Outro, Pre and Post are the sections a song usually has one of,
-    /// so an empty one is left empty rather than silently copying an earlier.
+    /// Every section replays from an empty header, an intro included.
     #[test]
-    fn an_empty_intro_does_not_copy_the_first_one() {
+    fn an_empty_intro_replays_the_first_one() {
         let chart =
             parse_chart("T - A\n4/4\n\nIN 4\nG B C Cm\n\nVS 4\nF F E E\n\nIN 4\n").expect("parse");
-        assert_eq!(symbols(&chart, 2), vec!["-", "-", "-", "-"]);
+        assert_eq!(symbols(&chart, 2), symbols(&chart, 0));
     }
 
     /// `IN 4 = VS` — the intro is the verse, which is how most songs are built.
