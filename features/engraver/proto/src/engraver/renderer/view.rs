@@ -284,6 +284,19 @@ impl ChartView {
         Some(state.page)
     }
 
+    /// Where the playhead is at `playhead_secs` (chart time): the page it
+    /// is on, and the band of that page it covers — `(page, y, height)`,
+    /// the cursor's top and height in chart points. For a panel that fits a
+    /// page to its width and is shorter than the page, so it follows the
+    /// song down the page as well as across the pages.
+    /// `None` as for [`ChartView::page_number_at_time`].
+    #[must_use]
+    pub fn cursor_at_time(&self, playhead_secs: f64) -> Option<(u32, f64, f64)> {
+        let cached = self.cached.as_ref()?;
+        let state = self.cursor.compute_at_time(&cached.layout, playhead_secs)?;
+        Some((state.page, state.cursor_y, state.cursor_height))
+    }
+
     /// Page `number` (1-indexed, as the layout counts them), as
     /// `(x, y, width, height)` in chart points; past the end, the last.
     /// A panel's zoom is its size over the page's, and its scroll is the
