@@ -140,7 +140,7 @@ editor-keyflow-lang = { path = "features/editor/editor-keyflow-lang" }
 # gone from task; if it ever comes back, the symptom is a deploy-only
 # failure (`cargo build` reads the checkout directly and never vendors)
 # and the fix is to pin a rev again, here and on all three ssg entries.
-view-knowledge-graph = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
+view-knowledge-graph = { git = "https://github.com/FastTrackStudios/task", branch = "session-share-cli" }
 
 # features/ssg — a vault (a directory of markdown notes) published as a
 # static site. apps/web's guide is one: `ssg-build` renders it to HTML in
@@ -154,9 +154,9 @@ view-knowledge-graph = { git = "https://github.com/FastTrackStudios/task", branc
 # second copy of the architect crates through it. One tag now, so it is
 # simply on, and apps/web reads those two functions from here instead of
 # keeping its own copies.
-ssg = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
-ssg-ui = { git = "https://github.com/FastTrackStudios/task", branch = "main", features = ["graph"] }
-ssg-build = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
+ssg = { git = "https://github.com/FastTrackStudios/task", branch = "session-share-cli" }
+ssg-ui = { git = "https://github.com/FastTrackStudios/task", branch = "session-share-cli", features = ["graph"] }
+ssg-build = { git = "https://github.com/FastTrackStudios/task", branch = "session-share-cli" }
 
 # The chart library speaks to Task over vox — the same wire contract
 # Task's own web app, CLI and desktop client use — rather than over the
@@ -166,16 +166,16 @@ ssg-build = { git = "https://github.com/FastTrackStudios/task", branch = "main" 
 # three are wasm-clean wire crates: no filesystem, no server. They reach
 # `architect` through task's workspace pin, which is the same tag as
 # this repo's (see the architect block below), so there is one copy.
-resources-proto = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
-collection-proto = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
-links-proto = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
+resources-proto = { git = "https://github.com/FastTrackStudios/task", branch = "session-share-cli" }
+collection-proto = { git = "https://github.com/FastTrackStudios/task", branch = "session-share-cli" }
+links-proto = { git = "https://github.com/FastTrackStudios/task", branch = "session-share-cli" }
 # The server lane, for exactly one call: `ensure_personal_org`. A person
 # who has just signed up belongs to no org, and the library's answer to
 # that must not be "go and open Task first".
-org-proto = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
+org-proto = { git = "https://github.com/FastTrackStudios/task", branch = "session-share-cli" }
 # `VaultSync::open_collab` — how a chart open in the editor joins its
 # live, shared Loro document on Task.
-vault-proto = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
+vault-proto = { git = "https://github.com/FastTrackStudios/task", branch = "session-share-cli" }
 
 # ── apps ──────────────────────────────────────────────────────────────
 # The site. A workspace member so `cargo check --workspace` covers it on
@@ -247,18 +247,18 @@ futures-channel = "0.3"
 # AND 0.13 (iroh, via architect), wasm-streams 0.4 (dioxus-web) AND 0.5
 # (reqwest 0.13), and links clean. Two majors of a crate are fine; two
 # copies of the SAME crate at different sources are what breaks.
-architect = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.8.2" }
+architect = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.9.2" }
 
 # The shared musical vocabulary — section colours and the canonical
 # palettes `keyflow-proto` engraves section cards with.
 music-catalog = { git = "https://github.com/FastTrackStudios/music-convention", tag = "v0.1.0" }
 color-palette = { git = "https://github.com/FastTrackStudios/music-convention", tag = "v0.1.0" }
 # The Dioxus primitive library (was libs/ui/fts-ui, renamed on the split).
-architect-ui = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.8.2" }
+architect-ui = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.9.2" }
 # Loro documents and their sync + presence sessions — the client half of
 # Task's per-file collaboration. Same tag as the rest of architect: two
 # copies of it would not link into one wasm binary.
-crdt = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.8.2" }
+crdt = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.9.2" }
 
 # The FastTrackStudio account. One identity across Task, Session, Signal,
 # Keyflow and Ignition, served by auth.fasttrackstudio.app.
@@ -278,7 +278,7 @@ crdt = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.8.2" }
 # Telemetry. Same tag as everything above — see the note there for why
 # that is not optional. `otel` is inert unless the build bakes
 # TASK_OTLP_ENDPOINT, so dev builds stay telemetry-free.
-architect-telemetry = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.8.2", features = ["otel"] }
+architect-telemetry = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.9.2", features = ["otel"] }
 
 # ── MusicXML parsing (keyflow) ─────────────────────────────────────────
 musicxml = "1.1"
@@ -371,61 +371,10 @@ blitz-html = { git = "https://github.com/FastTrackStudios/blitz", rev = "c82dd23
 # locally but not tagged yet. Replace each with `{ git =
 # "https://github.com/FastTrackStudios/vendor", tag = … }` before this repo
 # is pushed. phon-jit and vox-phon are already at published rc.7 tags.
-phon = { path = "../vendor/phon" }
+phon = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.4.0" }
 phon-jit = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.2.3" }
-facet-core = { path = "../vendor/facet-core" }
+facet-core = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.4.0" }
 vox-phon = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.3.0" }
-
-# SIBLING-CHECKOUT PATCH (../task): the Task crates above are
-# `branch = "main"` git deps, and Task's pushed main still pins the fleet
-# at `=0.50.0-rc.5` / `=0.10.0-rc.5` — against this repo's rc.7 floor the
-# graph has no solution. The local Task checkout carries the same rc.7
-# move. Delete this table once Task's rc.7 commit is on main (or, better,
-# repin those deps to a Task tag carrying it).
-[patch."https://github.com/FastTrackStudios/task"]
-collection-proto = { path = "../task/features/collection/collection-proto" }
-links-proto = { path = "../task/features/links/links-proto" }
-org-proto = { path = "../task/features/org/org-proto" }
-resources-proto = { path = "../task/features/resources/resources-proto" }
-ssg = { path = "../task/features/ssg/ssg" }
-ssg-build = { path = "../task/features/ssg/ssg-build" }
-ssg-ui = { path = "../task/features/ssg/ssg-ui" }
-ssg-vault = { path = "../task/features/ssg/ssg-vault" }
-vault-proto = { path = "../task/features/vault/vault-proto" }
-view-knowledge-graph = { path = "../task/features/view/view-knowledge-graph" }
-
-[patch."https://github.com/FastTrackStudios/architect"]
-# Sibling checkout, branch `fleet` (v0.8.2 + "an argless subscription can
-# introduce itself"): ONE architect for session, daw, keyflow and task while
-# the fleet is updated together. Replace with a tag pin before pushing.
-architect-action-derive = { path = "../architect/crates/architect-action-derive" }
-architect-derive = { path = "../architect/crates/architect-derive" }
-architect-rpc-derive = { path = "../architect/crates/architect-rpc-derive" }
-architect = { path = "../architect/crates/architect" }
-architect-atom = { path = "../architect/features/atom" }
-architect-auth = { path = "../architect/features/auth/architect-auth" }
-auth-client = { path = "../architect/features/auth/auth-client" }
-auth-db = { path = "../architect/features/auth/auth-db" }
-auth-http = { path = "../architect/features/auth/auth-http" }
-auth-proto = { path = "../architect/features/auth/auth-proto" }
-auth = { path = "../architect/features/auth/auth" }
-crdt-derive = { path = "../architect/features/crdt/crdt-derive" }
-crdt-seaorm = { path = "../architect/features/crdt/crdt-seaorm" }
-crdt = { path = "../architect/features/crdt/crdt" }
-architect-form = { path = "../architect/features/form" }
-architect-launcher-core = { path = "../architect/features/launcher/architect-launcher-core" }
-architect-launcher-providers = { path = "../architect/features/launcher/architect-launcher-providers" }
-architect-launcher-ui = { path = "../architect/features/launcher/architect-launcher-ui" }
-architect-permissions = { path = "../architect/features/permissions" }
-architect-permissions-proto = { path = "../architect/features/permissions/proto" }
-architect-story-core = { path = "../architect/features/story/architect-story-core" }
-architect-story-macros = { path = "../architect/features/story/architect-story-macros" }
-architect-story-parity = { path = "../architect/features/story/architect-story-parity" }
-architect-story-runtime = { path = "../architect/features/story/architect-story-runtime" }
-architect-story-shell = { path = "../architect/features/story/architect-story-shell" }
-architect-story-snapshots = { path = "../architect/features/story/architect-story-snapshots" }
-architect-telemetry = { path = "../architect/features/telemetry" }
-architect-ui = { path = "../architect/features/ui/architect-ui" }
 
 [workspace.lints.rust]
 # Flipped from "allow" 2026-07-28 (task cleanup): the blanket allows are
