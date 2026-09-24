@@ -4150,7 +4150,7 @@ dependencies = [
 [[package]]
 name = "editor"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.20#e32a3cbcb0e86df9153a73bae50fb211671e39e1"
+source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.21#01cb65d0e2c293e1e019762a235a8708d306f105"
 dependencies = [
  "dioxus",
  "editor-state",
@@ -4161,7 +4161,7 @@ dependencies = [
 [[package]]
 name = "editor-crdt"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.20#e32a3cbcb0e86df9153a73bae50fb211671e39e1"
+source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.21#01cb65d0e2c293e1e019762a235a8708d306f105"
 dependencies = [
  "editor-state",
  "ropey",
@@ -4191,7 +4191,7 @@ dependencies = [
 [[package]]
 name = "editor-mermaid"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.20#e32a3cbcb0e86df9153a73bae50fb211671e39e1"
+source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.21#01cb65d0e2c293e1e019762a235a8708d306f105"
 dependencies = [
  "mermaid-rs-renderer",
  "thiserror 2.0.20",
@@ -4201,7 +4201,7 @@ dependencies = [
 [[package]]
 name = "editor-state"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.20#e32a3cbcb0e86df9153a73bae50fb211671e39e1"
+source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.21#01cb65d0e2c293e1e019762a235a8708d306f105"
 dependencies = [
  "editor-mermaid",
  "editor-syntax",
@@ -4216,7 +4216,7 @@ dependencies = [
 [[package]]
 name = "editor-syntax"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.20#e32a3cbcb0e86df9153a73bae50fb211671e39e1"
+source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.21#01cb65d0e2c293e1e019762a235a8708d306f105"
 dependencies = [
  "arborium",
  "arborium-theme",
@@ -4226,7 +4226,7 @@ dependencies = [
 [[package]]
 name = "editor-typst"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.20#e32a3cbcb0e86df9153a73bae50fb211671e39e1"
+source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.21#01cb65d0e2c293e1e019762a235a8708d306f105"
 dependencies = [
  "chrono",
  "comemo",
@@ -4245,7 +4245,7 @@ dependencies = [
 [[package]]
 name = "editor-view"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.20#e32a3cbcb0e86df9153a73bae50fb211671e39e1"
+source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.21#01cb65d0e2c293e1e019762a235a8708d306f105"
 dependencies = [
  "dioxus",
  "editor-state",
@@ -4261,7 +4261,7 @@ dependencies = [
 [[package]]
 name = "editor-vim"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.20#e32a3cbcb0e86df9153a73bae50fb211671e39e1"
+source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.21#01cb65d0e2c293e1e019762a235a8708d306f105"
 dependencies = [
  "editor-state",
  "tracing",
@@ -8653,7 +8653,7 @@ dependencies = [
 [[package]]
 name = "mermaid-rs-renderer"
 version = "0.2.2"
-source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.20#e32a3cbcb0e86df9153a73bae50fb211671e39e1"
+source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.21#01cb65d0e2c293e1e019762a235a8708d306f105"
 dependencies = [
  "anyhow",
  "fontdb 0.23.0",
