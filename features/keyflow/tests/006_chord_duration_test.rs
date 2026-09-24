@@ -462,7 +462,7 @@ Gmaj7//// Em7_2 D7_2 Cmaj7////
 fn test_chord_duration_with_memory() {
     let input = r#"Duration Memory Test - Demo
 120bpm 4/4 #G
-/CHORD_MEMORY=true
+\chord_memory = true
 
 intro
 Gmaj13//// C9_2 D_2

@@ -79,7 +79,7 @@ pub struct ChordMemory {
 
     /// Whether bare roots recall what their degree last was. On for the
     /// engine by itself; a chart turns it off unless it asks for it
-    /// (`/CHORD_MEMORY=true`, see [`crate::chart::settings::ChartSetting::ChordMemory`]).
+    /// (`\chord_memory = true`, see [`crate::chart::settings::ChartSetting::ChordMemory`]).
     enabled: bool,
 
     /// Explicit metadata assignments (`Cm = Cm7b5`), by family key. They
