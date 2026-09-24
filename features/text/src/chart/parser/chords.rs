@@ -5673,12 +5673,14 @@ C T2/4 Am T4/4 G
     #[test]
     fn a_oneshot_meter_alone_on_its_line_is_a_bar_of_that_meter() {
         // A structure-only chart's odd bar: `!T2/4` with no chord after it.
-        let chart = parse_chart(
-            "Song\n72bpm 4/4 #D\n\nCH 2\nBreakdown 1\n!T2/4\nVS 2\n",
-        )
-        .expect("Should parse");
+        let chart = parse_chart("Song\n72bpm 4/4 #D\n\nCH 2\nBreakdown 1\n!T2/4\nVS 2\n")
+            .expect("Should parse");
         let meters = |i: usize| -> Vec<(u8, u8)> {
-            chart.sections[i].measures().iter().map(|m| m.time_signature).collect()
+            chart.sections[i]
+                .measures()
+                .iter()
+                .map(|m| m.time_signature)
+                .collect()
         };
         assert_eq!(meters(0), vec![(4, 4), (4, 4)]);
         assert_eq!(meters(1), vec![(2, 4)], "one bar of 2/4");
@@ -5691,7 +5693,11 @@ C T2/4 Am T4/4 G
         let chart = parse_chart("Song\n120bpm 4/4 #C\n\nVS 2\nT3/4\nC G\n").expect("Should parse");
         let m = chart.sections[0].measures();
         assert_eq!(m.len(), 2);
-        assert!(m.iter().all(|m| m.time_signature == (3, 4)), "{:?}", m.iter().map(|m| m.time_signature).collect::<Vec<_>>());
+        assert!(
+            m.iter().all(|m| m.time_signature == (3, 4)),
+            "{:?}",
+            m.iter().map(|m| m.time_signature).collect::<Vec<_>>()
+        );
     }
 
     #[test]

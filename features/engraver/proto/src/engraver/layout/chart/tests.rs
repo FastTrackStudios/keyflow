@@ -2292,7 +2292,11 @@ fn beat_times_follow_each_measures_own_meter() {
         let starts: Vec<f64> = (0..4).map(start_of).collect();
         assert_eq!(starts, vec![0.0, 2.0, 3.0, 5.0], "{mode:?}");
 
-        let the_2_4 = layout.beat_positions.iter().find(|b| b.measure == 1).unwrap();
+        let the_2_4 = layout
+            .beat_positions
+            .iter()
+            .find(|b| b.measure == 1)
+            .unwrap();
         assert_eq!(the_2_4.time_signature, (2, 4), "{mode:?}");
 
         // Just past the 2/4 bar the cursor is on the bar after it.

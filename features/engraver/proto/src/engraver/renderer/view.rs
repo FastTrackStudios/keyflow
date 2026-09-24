@@ -37,8 +37,8 @@ use peniko::{Color, Fill};
 use crate::Chart;
 use crate::api::pipeline::{ChartPipeline, Paper, Preset, PresetOptions};
 use crate::api::style::leak_default_style;
-use crate::engraver::layout::chart::cursor::{ChartCursor, CursorConfig};
 use crate::engraver::layout::chart::ChartLayoutResult;
+use crate::engraver::layout::chart::cursor::{ChartCursor, CursorConfig};
 use crate::engraver::renderer::cursor_renderer::render_cursor_commands;
 use crate::engraver::renderer::scene_renderer::SceneRenderBuilder;
 
@@ -184,7 +184,11 @@ impl ChartView {
             let (mode, config) = ChartPipeline::resolve_preset(Preset::Page, options);
             let spatium = config.spatium;
             let layout = self.pipeline.layout_with_config(chart, &mode, &config);
-            self.cached = Some(Cached { key, layout, spatium });
+            self.cached = Some(Cached {
+                key,
+                layout,
+                spatium,
+            });
         }
         let Some(cached) = &self.cached else {
             return (0.0, 0.0);
@@ -206,7 +210,12 @@ impl ChartView {
         // falls back to the whole scene box as one sheet.
         let page_color = Color::from_rgba8(0xff, 0xff, 0xff, 0xff);
         if cached.layout.pages.is_empty() {
-            let page = Rect::new(0.0, 0.0, cached.layout.total_width, cached.layout.total_height);
+            let page = Rect::new(
+                0.0,
+                0.0,
+                cached.layout.total_width,
+                cached.layout.total_height,
+            );
             scene.fill(Fill::NonZero, transform, page_color, None, &page);
         } else {
             for page in &cached.layout.pages {

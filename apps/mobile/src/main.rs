@@ -45,14 +45,16 @@ fn main() {
         if let Some(guard) = architect_telemetry::init("keyflow") {
             std::mem::forget(guard);
         }
+        // What is logged without RUST_LOG — and what is exported.
+        const LOG_DEFAULT: &str = "info";
         let registry = tracing_subscriber::registry()
             .with(
                 tracing_subscriber::EnvFilter::try_from_default_env()
-                    .unwrap_or_else(|_| "info".into()),
+                    .unwrap_or_else(|_| LOG_DEFAULT.into()),
             )
             .with(tracing_subscriber::fmt::layer())
             .with(architect_telemetry::tracing_layer());
-        match architect_telemetry::otel::init("keyflow") {
+        match architect_telemetry::otel::init("keyflow", LOG_DEFAULT) {
             Some((otel_guard, layers)) => {
                 registry.with(layers).init();
                 std::mem::forget(otel_guard);

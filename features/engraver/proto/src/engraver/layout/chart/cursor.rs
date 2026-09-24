@@ -589,13 +589,22 @@ mod tests {
         // Halfway through the first beat (x=100, width 50).
         let state = cursor.compute(&layout, 240).unwrap();
         assert_eq!(state.commands.len(), 2, "wash + line, no notehead glow");
-        let HighlightCommand::FillRect { x, width, color, .. } = &state.commands[0] else {
+        let HighlightCommand::FillRect {
+            x, width, color, ..
+        } = &state.commands[0]
+        else {
             panic!("wash first, so the line draws over it");
         };
         assert!((*x - 100.0).abs() < 0.01);
         assert!((*width - 100.0).abs() < 0.01);
         assert_eq!(color[3], 46, "0.9 * 0.2 of full alpha");
-        let HighlightCommand::StrokeLine { x, y_top, y_bottom, color, .. } = &state.commands[1]
+        let HighlightCommand::StrokeLine {
+            x,
+            y_top,
+            y_bottom,
+            color,
+            ..
+        } = &state.commands[1]
         else {
             panic!("then the line");
         };
