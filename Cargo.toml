@@ -140,7 +140,7 @@ editor-keyflow-lang = { path = "features/editor/editor-keyflow-lang" }
 # gone from task; if it ever comes back, the symptom is a deploy-only
 # failure (`cargo build` reads the checkout directly and never vendors)
 # and the fix is to pin a rev again, here and on all three ssg entries.
-view-knowledge-graph = { git = "https://github.com/FastTrackStudios/task", branch = "session-share-cli" }
+view-knowledge-graph = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
 
 # features/ssg — a vault (a directory of markdown notes) published as a
 # static site. apps/web's guide is one: `ssg-build` renders it to HTML in
@@ -154,9 +154,9 @@ view-knowledge-graph = { git = "https://github.com/FastTrackStudios/task", branc
 # second copy of the architect crates through it. One tag now, so it is
 # simply on, and apps/web reads those two functions from here instead of
 # keeping its own copies.
-ssg = { git = "https://github.com/FastTrackStudios/task", branch = "session-share-cli" }
-ssg-ui = { git = "https://github.com/FastTrackStudios/task", branch = "session-share-cli", features = ["graph"] }
-ssg-build = { git = "https://github.com/FastTrackStudios/task", branch = "session-share-cli" }
+ssg = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
+ssg-ui = { git = "https://github.com/FastTrackStudios/task", branch = "main", features = ["graph"] }
+ssg-build = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
 
 # The chart library speaks to Task over vox — the same wire contract
 # Task's own web app, CLI and desktop client use — rather than over the
@@ -166,16 +166,16 @@ ssg-build = { git = "https://github.com/FastTrackStudios/task", branch = "sessio
 # three are wasm-clean wire crates: no filesystem, no server. They reach
 # `architect` through task's workspace pin, which is the same tag as
 # this repo's (see the architect block below), so there is one copy.
-resources-proto = { git = "https://github.com/FastTrackStudios/task", branch = "session-share-cli" }
-collection-proto = { git = "https://github.com/FastTrackStudios/task", branch = "session-share-cli" }
-links-proto = { git = "https://github.com/FastTrackStudios/task", branch = "session-share-cli" }
+resources-proto = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
+collection-proto = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
+links-proto = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
 # The server lane, for exactly one call: `ensure_personal_org`. A person
 # who has just signed up belongs to no org, and the library's answer to
 # that must not be "go and open Task first".
-org-proto = { git = "https://github.com/FastTrackStudios/task", branch = "session-share-cli" }
+org-proto = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
 # `VaultSync::open_collab` — how a chart open in the editor joins its
 # live, shared Loro document on Task.
-vault-proto = { git = "https://github.com/FastTrackStudios/task", branch = "session-share-cli" }
+vault-proto = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
 
 # ── apps ──────────────────────────────────────────────────────────────
 # The site. A workspace member so `cargo check --workspace` covers it on
