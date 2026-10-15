@@ -37,13 +37,6 @@ fn edu_duration(dura: i64) -> i64 {
     (dura * DIVISIONS).div_euclid(1024)
 }
 
-fn between(start: Option<&str>, val: &str, end: Option<&str>) -> bool {
-    match (parse_i64(start), parse_i64(Some(val)), parse_i64(end)) {
-        (Some(s), Some(v), Some(e)) => s <= v && v <= e,
-        _ => false,
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Lookups
 // ---------------------------------------------------------------------------
@@ -327,9 +320,23 @@ struct StaffGroup {
     full_name: Option<String>,
     abbrv_name: Option<String>,
     bracket_id: Option<String>,
+    /// The staves from `start_inst` to `end_inst` in SCORE order. Staff
+    /// ids are not ordered: a harp group can run from staff 29 to staff 10,
+    /// and a numeric range would swallow whatever ids fall between.
+    members: Vec<String>,
+}
+
+/// Staff ids in score (top-to-bottom) order: the score's instrument list,
+/// falling back to staffSpec order.
+fn score_order(root: N) -> Vec<String> {
+    score_staff_specs(root)
+        .into_iter()
+        .filter_map(|s| attr(s, "cmper"))
+        .collect()
 }
 
 fn lookup_staff_groups(root: N) -> Vec<StaffGroup> {
+    let order = score_order(root);
     let mut groups = Vec::new();
     for sg in grandchildren(root, "details", "staffGroup") {
         if sg.has_attribute("part") {
@@ -337,9 +344,17 @@ fn lookup_staff_groups(root: N) -> Vec<StaffGroup> {
         }
         let full_id = path_text(sg, &["fullID"]);
         let abbrv_id = path_text(sg, &["abbrvID"]);
+        let start_inst = path_text(sg, &["startInst"]);
+        let end_inst = path_text(sg, &["endInst"]);
+        let pos = |s: &Option<String>| s.as_ref().and_then(|s| order.iter().position(|o| o == s));
+        let members = match (pos(&start_inst), pos(&end_inst)) {
+            (Some(a), Some(b)) if a <= b => order[a..=b].to_vec(),
+            _ => Vec::new(),
+        };
         groups.push(StaffGroup {
-            start_inst: path_text(sg, &["startInst"]),
-            end_inst: path_text(sg, &["endInst"]),
+            members,
+            start_inst,
+            end_inst,
             full_name: full_id.map(|id| lookup_block_text(root, &id)),
             abbrv_name: abbrv_id.map(|id| lookup_block_text(root, &id)),
             bracket_id: path_text(sg, &["bracket", "id"]),
@@ -361,11 +376,7 @@ fn find_staff_group_name(
         } else {
             &group.abbrv_name
         };
-        if between(
-            group.start_inst.as_deref(),
-            staff_spec_cmper,
-            group.end_inst.as_deref(),
-        ) {
+        if group.members.iter().any(|m| m == staff_spec_cmper) {
             if let Some(name) = name {
                 if !name.is_empty() {
                     names.push(name.clone());
@@ -384,14 +395,12 @@ fn get_piano_brace_staff_group<'g>(
     staff_spec_cmper: &str,
     staff_groups: &'g [StaffGroup],
 ) -> Option<&'g StaffGroup> {
+    // A brace over two or three staves is one instrument (piano, harp,
+    // organ); a brace over a whole section is just a bracket style.
     staff_groups.iter().find(|g| {
         g.bracket_id.as_deref() == Some(PIANO_BRACE)
-            && g.start_inst != g.end_inst
-            && between(
-                g.start_inst.as_deref(),
-                staff_spec_cmper,
-                g.end_inst.as_deref(),
-            )
+            && (2..=3).contains(&g.members.len())
+            && g.members.iter().any(|m| m == staff_spec_cmper)
     })
 }
 
@@ -634,17 +643,7 @@ pub fn convert(root: N, meta_root: Option<N>) -> String {
                 let mut staff_id = 1;
                 let mut clef_ids: HashMap<i64, Option<String>> = HashMap::new();
                 let mut prev = false;
-                let piano_staffs: Vec<String> = staff_specs
-                    .iter()
-                    .filter_map(|s| attr(*s, "cmper"))
-                    .filter(|c| {
-                        between(
-                            piano_staff_group.start_inst.as_deref(),
-                            c,
-                            piano_staff_group.end_inst.as_deref(),
-                        )
-                    })
-                    .collect();
+                let piano_staffs: Vec<String> = piano_staff_group.members.clone();
                 for piano_staff_spec_cmper in &piano_staffs {
                     if prev {
                         let backup = sub(&measure, "backup");
@@ -831,13 +830,34 @@ fn today_string() -> String {
     format!("{y:04}-{m:02}-{d:02}")
 }
 
-/// The score's staves in document order (the hidden 32767 staff excluded).
+/// The score's staves top to bottom (the hidden 32767 staff excluded):
+/// in the score's instrument-list order, which is what Finale draws and
+/// what staff-list marks (`staffAssign` -1 = top staff) refer to. Staves
+/// missing from that list follow in id order.
 fn score_staff_specs<'a, 'i>(root: Node<'a, 'i>) -> Vec<Node<'a, 'i>> {
-    grandchildren(root, "others", "staffSpec")
+    let mut specs: Vec<Node<'a, 'i>> = grandchildren(root, "others", "staffSpec")
         .into_iter()
         .filter(|s| !s.has_attribute("part"))
         .filter(|s| attr(*s, "cmper").as_deref().map_or(false, |c| c != "32767"))
-        .collect()
+        .collect();
+    let order: Vec<String> = grandchildren(root, "others", "instUsed")
+        .into_iter()
+        .filter(|n| !n.has_attribute("part") && attr(*n, "cmper").as_deref() == Some("0"))
+        .map(|n| {
+            (
+                parse_i64(attr(n, "inci").as_deref()).unwrap_or(0),
+                path_text(n, &["inst"]).unwrap_or_default(),
+            )
+        })
+        .collect::<std::collections::BTreeMap<_, _>>()
+        .into_values()
+        .collect();
+    // Stable: unlisted staves keep their id order after the listed ones.
+    specs.sort_by_key(|s| {
+        let c = attr(*s, "cmper").unwrap_or_default();
+        order.iter().position(|o| *o == c).unwrap_or(usize::MAX)
+    });
+    specs
 }
 
 /// MusicXML part id for every Finale staff (`staffSpec` cmper → `P{n}`).

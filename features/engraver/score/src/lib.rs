@@ -10,6 +10,7 @@
 pub mod finale;
 pub mod fonts;
 pub mod import;
+pub mod inspect;
 pub mod layout;
 pub mod model;
 pub mod render;

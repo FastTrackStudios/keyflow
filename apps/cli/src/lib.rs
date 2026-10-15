@@ -464,6 +464,10 @@ enum Commands {
         /// in Finale) while keeping page size, headers and numbering.
         #[arg(long, value_enum, default_value = "finale")]
         layout: LayoutSource,
+        /// Report overlapping ink (text, dynamics, ties, slurs…) per part
+        /// instead of writing files.
+        #[arg(long)]
+        check: bool,
     },
     /// Build per-instrument part books in setlist order.
     ///
@@ -2078,6 +2082,7 @@ fn run(cli: Cli) -> Result<(), String> {
             list,
             scale,
             layout,
+            check,
         } => parts::cmd_parts(&parts::PartsArgs {
             input: &input,
             out_dir: out.as_deref(),
@@ -2087,6 +2092,7 @@ fn run(cli: Cli) -> Result<(), String> {
             list,
             scale,
             auto_layout: layout == LayoutSource::Auto,
+            check,
         }),
         Commands::Orchestrate {
             input,

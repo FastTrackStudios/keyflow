@@ -33,6 +33,8 @@ pub struct PartsArgs<'a> {
     /// Ignore the source's system/page layout and pack systems
     /// automatically (keeps its page size, headers and multirests).
     pub auto_layout: bool,
+    /// Report overlapping ink instead of writing files.
+    pub check: bool,
 }
 
 /// `--layout auto`: drop the source's system and page breaks (an unformatted
@@ -216,6 +218,22 @@ pub fn cmd_parts(args: &PartsArgs<'_>) -> Result<(), String> {
             auto_layout(&mut options);
         }
         let layout = layout_part(&source.score, job.part_index, &options);
+        if args.check {
+            let report = engraver_score::inspect::collisions(&layout, fonts);
+            println!("{:<28} {:>4} collision(s)", job.name, report.total());
+            for ((a, b), n) in &report.by_kind {
+                println!("    {n:>4}  {a:?} × {b:?}");
+            }
+            if args.part.is_some() {
+                for c in &report.collisions {
+                    println!(
+                        "      p{} ({:>5.0},{:>5.0})  {:?} {:?}  ×  {:?} {:?}",
+                        c.page, c.at.x, c.at.y, c.a.0, c.a.1, c.b.0, c.b.1
+                    );
+                }
+            }
+            continue;
+        }
         let base = out_dir.join(file_safe(&format!("{} - {}", source.title, job.name)));
         if job.staves > 1 {
             eprintln!(
