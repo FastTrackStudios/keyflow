@@ -49,6 +49,16 @@ pub fn sub_text(parent: &El, tag: &str, text: &str) -> El {
     child
 }
 
+/// First direct child with `tag` — `el.find(tag)`.
+pub fn find_child(parent: &El, tag: &str) -> Option<El> {
+    parent
+        .borrow()
+        .children
+        .iter()
+        .find(|c| c.borrow().tag == tag)
+        .cloned()
+}
+
 /// `el.text = text`.
 pub fn set_text(el: &El, text: &str) {
     el.borrow_mut().text = Some(text.to_string());

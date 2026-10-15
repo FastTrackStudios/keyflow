@@ -68,6 +68,14 @@ struct Expression {
     category_type: String,
     vert_meas_expr_align: Option<String>,
     text: String,
+    /// `showStaffList`: `scoreOnly` / `partsOnly` copies of staff-list marks.
+    show_staff_list: Option<String>,
+    /// `textExprDef` cmper (auto-numbered rehearsal marks count per def).
+    def_id: String,
+    /// `rehearsalMarkStyle` of the def: `letters`, `numbers`, `measNum`.
+    rehearsal_style: Option<String>,
+    /// Enclosure shape (`sides`: 1 = rectangle, 2 = ellipse), when enclosed.
+    enclosure_sides: Option<i64>,
 }
 
 fn lookup_meas_expressions(root: N, meas_spec_cmper: &str) -> Vec<Expression> {
@@ -91,6 +99,23 @@ fn lookup_meas_expressions(root: N, meas_spec_cmper: &str) -> Vec<Expression> {
             continue;
         };
         let vert_meas_expr_align = path_text(text_expr_def, &["vertMeasExprAlign"]);
+        let rehearsal_style = path_text(text_expr_def, &["rehearsalMarkStyle"]);
+        let enclosure_sides = if has_child(text_expr_def, "newEnclosure") {
+            Some(
+                find_by_attr(
+                    root,
+                    "others",
+                    "textExpressionEnclosure",
+                    "cmper",
+                    &text_expr_id,
+                )
+                .and_then(|e| parse_i64(path_text(e, &["sides"]).as_deref()))
+                .unwrap_or(1),
+            )
+        } else {
+            None
+        };
+        let show_staff_list = path_text(mea, &["showStaffList"]);
         let Some(category_id) = path_text(text_expr_def, &["categoryID"]) else {
             continue;
         };
@@ -119,6 +144,10 @@ fn lookup_meas_expressions(root: N, meas_spec_cmper: &str) -> Vec<Expression> {
                 category_type,
                 vert_meas_expr_align,
                 text: text_val,
+                show_staff_list,
+                def_id: text_expr_id,
+                rehearsal_style,
+                enclosure_sides,
             });
         }
     }
@@ -378,6 +407,7 @@ pub fn convert(root: N, meta_root: Option<N>) -> String {
     if let Some(meta_root) = meta_root {
         handle_meta_data(&score_partwise, meta_root);
     }
+    handle_file_info(&score_partwise, root);
     let part_list = sub(&score_partwise, "part-list");
 
     let time_sig_do_abrv_common = find_path(
@@ -393,13 +423,16 @@ pub fn convert(root: N, meta_root: Option<N>) -> String {
 
     let staff_groups = lookup_staff_groups(root);
 
-    let staff_specs: Vec<N> = grandchildren(root, "others", "staffSpec")
-        .into_iter()
-        .filter(|s| attr(*s, "cmper").as_deref().map_or(false, |c| c != "32767"))
-        .collect();
-
-    let mut i = 1;
+    let staff_specs = score_staff_specs(root);
+    // One <part> per id: a grand staff's lower staves ride with its top one.
     let mut part_ids: HashMap<String, String> = HashMap::new();
+    let mut seen_ids = std::collections::HashSet::new();
+    for (cmper, id) in staff_part_ids(root) {
+        if seen_ids.insert(id.clone()) {
+            part_ids.insert(cmper, id);
+        }
+    }
+
     for staff_spec in &staff_specs {
         let staff_spec = *staff_spec;
         let Some(staff_spec_cmper) = attr(staff_spec, "cmper") else {
@@ -416,13 +449,7 @@ pub fn convert(root: N, meta_root: Option<N>) -> String {
             None => find_staff_group_name(false, &staff_spec_cmper, &staff_groups),
         };
 
-        let piano_staff_group = get_piano_brace_staff_group(&staff_spec_cmper, &staff_groups);
-        if piano_staff_group.is_none()
-            || piano_staff_group.unwrap().start_inst.as_deref() == Some(staff_spec_cmper.as_str())
-        {
-            let part_id = format!("P{i}");
-            i += 1;
-            part_ids.insert(staff_spec_cmper.clone(), part_id.clone());
+        if let Some(part_id) = part_ids.get(&staff_spec_cmper).cloned() {
             let score_part = sub_attrs(&part_list, "score-part", &[("id", &part_id)]);
             sub_text(&score_part, "part-name", full_name.as_deref().unwrap_or(""));
             if let Some(abbrv) = abbrv_name.as_deref().filter(|s| !s.is_empty()) {
@@ -452,6 +479,16 @@ pub fn convert(root: N, meta_root: Option<N>) -> String {
         .filter(|m| !m.has_attribute("shared") && !m.has_attribute("part"))
         .collect();
     let nb_measures = meas_specs.len();
+
+    // Staff-list marks (`staffAssign` -1) go on the score's TOP staff: the
+    // first in score order (`instUsed`), which need not be staff 1.
+    let top_staff = grandchildren(root, "others", "instUsed")
+        .into_iter()
+        .filter(|n| !n.has_attribute("part") && attr(*n, "cmper").as_deref() == Some("0"))
+        .min_by_key(|n| parse_i64(attr(*n, "inci").as_deref()).unwrap_or(i64::MAX))
+        .and_then(|n| path_text(n, &["inst"]))
+        .or_else(|| staff_specs.first().and_then(|s| attr(*s, "cmper")))
+        .unwrap_or_default();
 
     for staff_spec in &staff_specs {
         let staff_spec = *staff_spec;
@@ -638,6 +675,7 @@ pub fn convert(root: N, meta_root: Option<N>) -> String {
                         key,
                         transp_key_adjust,
                         transp_interval,
+                        piano_staff_spec_cmper.as_str() == top_staff.as_str(),
                     );
                     clef_ids.insert(staff_id, clef_id);
                     staff_id += 1;
@@ -671,6 +709,7 @@ pub fn convert(root: N, meta_root: Option<N>) -> String {
                     key,
                     transp_key_adjust,
                     transp_interval,
+                    staff_spec_cmper == top_staff,
                 );
                 if clef_id != current_clef_single {
                     attributes = Some(handle_clef_change(
@@ -792,6 +831,48 @@ fn today_string() -> String {
     format!("{y:04}-{m:02}-{d:02}")
 }
 
+/// The score's staves in document order (the hidden 32767 staff excluded).
+fn score_staff_specs<'a, 'i>(root: Node<'a, 'i>) -> Vec<Node<'a, 'i>> {
+    grandchildren(root, "others", "staffSpec")
+        .into_iter()
+        .filter(|s| !s.has_attribute("part"))
+        .filter(|s| attr(*s, "cmper").as_deref().map_or(false, |c| c != "32767"))
+        .collect()
+}
+
+/// MusicXML part id for every Finale staff (`staffSpec` cmper → `P{n}`).
+/// The staves of a piano-braced grand staff share their first staff's id.
+pub(crate) fn staff_part_ids(root: N) -> Vec<(String, String)> {
+    let staff_groups = lookup_staff_groups(root);
+    let mut out = Vec::new();
+    let mut i = 1;
+    let mut current_brace: Option<(String, String)> = None; // (start_inst, part id)
+    for staff_spec in score_staff_specs(root) {
+        let Some(cmper) = attr(staff_spec, "cmper") else {
+            continue;
+        };
+        match get_piano_brace_staff_group(&cmper, &staff_groups) {
+            Some(group) if group.start_inst.as_deref() != Some(cmper.as_str()) => {
+                // Lower staff of a grand staff: same part as its brace's top.
+                if let Some((start, id)) = &current_brace {
+                    if group.start_inst.as_deref() == Some(start.as_str()) {
+                        out.push((cmper, id.clone()));
+                    }
+                }
+            }
+            group => {
+                let id = format!("P{i}");
+                i += 1;
+                if let Some(g) = group {
+                    current_brace = Some((g.start_inst.clone().unwrap_or_default(), id.clone()));
+                }
+                out.push((cmper, id));
+            }
+        }
+    }
+    out
+}
+
 fn add_credit(
     score_partwise: &El,
     page: i32,
@@ -871,6 +952,56 @@ fn handle_meta_data(score_partwise: &El, meta_root: N) {
             "10",
         );
     }
+}
+
+/// Title / composer / arranger / lyricist / copyright from the score's own
+/// `texts/fileInfo` (what Finale's `^title()` page text prints). The
+/// NotationMetadata sidecar only feeds `<credit>`s and is often empty.
+fn handle_file_info(score_partwise: &El, root: N) {
+    let info = |kind: &str| -> Option<String> {
+        grandchildren(root, "texts", "fileInfo")
+            .into_iter()
+            .find(|n| attr(*n, "type").as_deref() == Some(kind))
+            .and_then(text)
+            .map(|t| t.trim().to_string())
+            .filter(|t| !t.is_empty())
+    };
+    if let Some(title) = info("title") {
+        let work = sub(score_partwise, "work");
+        sub_text(&work, "work-title", &title);
+    }
+    let creators: Vec<(&str, String)> = ["composer", "arranger", "lyricist"]
+        .into_iter()
+        .filter_map(|kind| info(kind).map(|v| (kind, v)))
+        .collect();
+    let rights = info("copyright");
+    if !creators.is_empty() || rights.is_some() {
+        let identification = find_child(score_partwise, "identification")
+            .unwrap_or_else(|| sub(score_partwise, "identification"));
+        for (kind, value) in creators {
+            let creator = sub_attrs(&identification, "creator", &[("type", kind)]);
+            set_text(&creator, &value);
+        }
+        if let Some(rights) = rights {
+            sub_text(&identification, "rights", &rights);
+        }
+        reorder_children(
+            &identification,
+            &["creator", "rights", "encoding", "source"],
+        );
+    }
+    reorder_children(
+        score_partwise,
+        &[
+            "work",
+            "movement-number",
+            "movement-title",
+            "identification",
+            "defaults",
+            "credit",
+            "part-list",
+        ],
+    );
 }
 
 fn handle_divisions(measure: &El) -> El {
@@ -1232,6 +1363,9 @@ fn handle_smart_shape_detail(root: N, entry: N, notations: &El) {
 
 struct ArticDetail {
     char_main: Option<String>,
+    /// `autoVertMode`: `aboveEntry` / `belowEntry` pin the mark's side;
+    /// the stem-relative modes leave it to the engraver.
+    vert_mode: Option<String>,
 }
 
 fn lookup_artic_detail(root: N, entnum: &str) -> Vec<ArticDetail> {
@@ -1247,6 +1381,7 @@ fn lookup_artic_detail(root: N, entnum: &str) -> Vec<ArticDetail> {
         {
             details.push(ArticDetail {
                 char_main: path_text(artic_def, &["charMain"]),
+                vert_mode: path_text(artic_def, &["autoVertMode"]),
             });
         }
     }
@@ -1374,6 +1509,7 @@ fn process_gfholds(
     key: Option<i64>,
     transp_key_adjust: i64,
     transp_interval: i64,
+    is_top_staff: bool,
 ) -> Option<String> {
     let mut clef_id: Option<String> = None;
 
@@ -1396,6 +1532,9 @@ fn process_gfholds(
 
     if has_child(meas_spec, "hasExpr") {
         let expressions = lookup_meas_expressions(root, meas_spec_cmper);
+        // A staff can carry the same rehearsal mark twice (its staff-list
+        // copy and a per-staff copy); print it once.
+        let mut rehearsals_done: std::collections::HashSet<String> = Default::default();
         for mut expression in expressions {
             let placement =
                 if expression.vert_meas_expr_align.as_deref() == Some("belowStaffOrEntry") {
@@ -1482,7 +1621,22 @@ fn process_gfholds(
                     sub_text(&metronome, "per-minute", &per_minute);
                 }
             }
-            // rehearsalMarks: not yet handled (matches source `pass`).
+            if expression.category_type == "rehearsalMarks" {
+                // Staff-list marks (`staffAssign` -1) belong to the top staff;
+                // Finale also stores score-only copies on lower staves, which
+                // parts never show.
+                let on_this_staff = if expression.staff_assign.as_deref() == Some("-1") {
+                    is_top_staff
+                } else {
+                    is_this_staff
+                };
+                if on_this_staff
+                    && expression.show_staff_list.as_deref() != Some("scoreOnly")
+                    && rehearsals_done.insert(expression.def_id.clone())
+                {
+                    add_rehearsal_mark(root, measure, meas_spec_cmper, &expression, staff_id);
+                }
+            }
         }
     }
 
@@ -1541,6 +1695,83 @@ fn process_gfholds(
     }
 
     clef_id
+}
+
+/// Emit a Finale rehearsal-mark expression as `<rehearsal>`, resolving
+/// `^rehearsal()` (auto-sequenced letters / numbers / measure numbers) and
+/// carrying the enclosure and font so engravers can box it the same way.
+fn add_rehearsal_mark(
+    root: N,
+    measure: &El,
+    meas_spec_cmper: &str,
+    expression: &Expression,
+    staff_id: Option<i64>,
+) {
+    let parsed = crate::layout::parse_enigma_text(&expression.text, &HashMap::new());
+    let mut text = parsed.literal().trim().to_string();
+    if expression.text.contains("^rehearsal()") {
+        let auto = match expression.rehearsal_style.as_deref() {
+            Some("measNum") => meas_spec_cmper.to_string(),
+            Some("numbers") => {
+                (rehearsal_ordinal(root, &expression.def_id, meas_spec_cmper) + 1).to_string()
+            }
+            _ => rehearsal_letters(rehearsal_ordinal(root, &expression.def_id, meas_spec_cmper)),
+        };
+        text = format!("{text}{auto}");
+    }
+    if text.is_empty() {
+        return;
+    }
+    let direction = sub_attrs(measure, "direction", &[("placement", "above")]);
+    let dt = sub(&direction, "direction-type");
+    let enclosure = match expression.enclosure_sides {
+        Some(2) => "oval",
+        Some(0) | None => "none",
+        Some(_) => "rectangle",
+    };
+    let mut attrs: Vec<(&str, String)> = vec![("enclosure", enclosure.to_string())];
+    if let Some(family) = &parsed.style.family {
+        attrs.push(("font-family", family.clone()));
+    }
+    if let Some(size) = parsed.style.size {
+        attrs.push(("font-size", format!("{size}")));
+    }
+    attrs.push((
+        "font-weight",
+        if parsed.style.bold { "bold" } else { "normal" }.to_string(),
+    ));
+    if parsed.style.italic {
+        attrs.push(("font-style", "italic".to_string()));
+    }
+    let attr_refs: Vec<(&str, &str)> = attrs.iter().map(|(k, v)| (*k, v.as_str())).collect();
+    let rehearsal = sub_attrs(&dt, "rehearsal", &attr_refs);
+    set_text(&rehearsal, &text);
+    if let Some(sid) = staff_id {
+        sub_text(&direction, "staff", &sid.to_string());
+    }
+}
+
+/// How many earlier measures carry the same auto-sequenced rehearsal def
+/// (its 0-based ordinal at `meas_spec_cmper`).
+fn rehearsal_ordinal(root: N, def_id: &str, meas_spec_cmper: &str) -> usize {
+    let here: i64 = meas_spec_cmper.parse().unwrap_or(0);
+    let mut measures: Vec<i64> = grandchildren(root, "others", "measExprAssign")
+        .into_iter()
+        .filter(|m| !m.has_attribute("part"))
+        .filter(|m| path_text(*m, &["textExprID"]).as_deref() == Some(def_id))
+        .filter(|m| path_text(*m, &["showStaffList"]).as_deref() != Some("scoreOnly"))
+        .filter_map(|m| parse_i64(attr(m, "cmper").as_deref()))
+        .filter(|c| *c < here)
+        .collect();
+    measures.sort_unstable();
+    measures.dedup();
+    measures.len()
+}
+
+/// 0 → "A", 25 → "Z", 26 → "AA", 27 → "BB" (Finale's doubling scheme).
+fn rehearsal_letters(ordinal: usize) -> String {
+    let letter = char::from(b'A' + (ordinal % 26) as u8);
+    std::iter::repeat_n(letter, ordinal / 26 + 1).collect()
 }
 
 fn add_direction_offset(direction: &El, horz_edu_off: Option<&str>) {
@@ -1745,6 +1976,11 @@ fn process_entry(
                         let articulation = sub(&articulations, &tag_name);
                         if let Some(ty) = ty {
                             set_attr(&articulation, "type", &ty);
+                        }
+                        match art_detail.vert_mode.as_deref() {
+                            Some("aboveEntry") => set_attr(&articulation, "placement", "above"),
+                            Some("belowEntry") => set_attr(&articulation, "placement", "below"),
+                            _ => {}
                         }
                     }
                 }

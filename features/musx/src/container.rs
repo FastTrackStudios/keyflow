@@ -7,11 +7,11 @@
 use std::io::{Cursor, Read, Write};
 
 use flate2::read::GzDecoder;
-use zip::write::SimpleFileOptions;
 use zip::ZipArchive;
+use zip::write::SimpleFileOptions;
 
-use crate::cipher::decrypt;
 use crate::Error;
+use crate::cipher::decrypt;
 
 /// The decoded pieces of a `.musx` archive.
 pub struct MusxArchive {

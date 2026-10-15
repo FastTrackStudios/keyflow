@@ -61,6 +61,8 @@ fn engraver_articulation(code: i64) -> Option<(&'static str, Option<&'static str
         118 => ("strong-accent", Some("down")),
         46 => ("staccato", None),
         95 => ("tenuto", None),
+        // Maestro's tenuto is the hyphen (Engraver's is the underscore).
+        45 => ("tenuto", None),
         248 => ("detached-legato", None),
         224 => ("staccatissimo", None),
         -1 => ("spiccato", None),

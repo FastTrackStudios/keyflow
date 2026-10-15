@@ -23,10 +23,12 @@ mod cipher;
 mod container;
 mod converter;
 mod helper;
+pub mod layout;
 mod xml_in;
 mod xml_out;
 
 pub use container::save_as_mxl;
+pub use layout::{DocumentLayout, PartLayout, musx_layout};
 
 /// Errors produced while decoding a `.musx` or converting EnigmaXML.
 #[derive(Debug, thiserror::Error)]
@@ -56,6 +58,7 @@ pub fn musx_parts(musx_bytes: &[u8]) -> Result<(Vec<u8>, Vec<u8>), Error> {
 /// Convert EnigmaXML (optionally with `NotationMetadata.xml`) to a MusicXML
 /// document string.
 pub fn enigmaxml_to_musicxml(enigmaxml: &[u8], metadata: Option<&[u8]>) -> Result<String, Error> {
+    xml_in::reset_index();
     let xml = decode_xml(enigmaxml);
     let doc = roxmltree::Document::parse(&xml).map_err(|e| Error::Xml(e.to_string()))?;
 
