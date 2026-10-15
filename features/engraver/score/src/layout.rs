@@ -27,10 +27,9 @@ use engraver_proto::engraver::scene::paint::{FontStyle, FontWeight, PaintCommand
 use kurbo::{Affine, Point, Rect};
 use peniko::Color;
 
-use crate::model::{
-    self, BarStyle, ClefSign, Enclosure, Event, NoteTypeValue, RehearsalMark, Score, Step,
-    WrittenPitch,
-};
+mod vertical;
+
+use crate::model::{self, BarStyle, ClefSign, Event, NoteTypeValue, Score, Step, WrittenPitch};
 
 /// Page + engraving options. Defaults follow the Columbus part books:
 /// US Letter portrait, generous margins, 6.5pt spatium.
@@ -335,6 +334,8 @@ struct NotatedMeasure {
     slur_stops: Vec<bool>,
     /// Per entry: tick onset (for direction anchoring).
     entry_ticks: Vec<u32>,
+    /// Measure length in the same ticks (0 when unknown).
+    len_ticks: u32,
     /// Per entry: articulation tags (staccato, accent, …) and the side the
     /// source pins each to (`Some(true)` = above), if any.
     arts: Vec<Vec<(String, Option<bool>)>>,
@@ -383,6 +384,7 @@ impl NotatedMeasure {
             slur_starts: vec![false],
             slur_stops: vec![false],
             entry_ticks: vec![0],
+            len_ticks: 0,
             arts: vec![Vec::new()],
             directions: Vec::new(),
             clef,
@@ -976,6 +978,7 @@ fn prepare_measures(
             slur_starts,
             slur_stops,
             entry_ticks,
+            len_ticks: measure.len_ticks,
             arts,
             directions,
             clef: state.clef,
@@ -1094,76 +1097,6 @@ fn barline_scene(x: f64, style: BarStyle, spatium: f64) -> Option<SceneNode> {
     Some(SceneNode::anonymous_leaf(cmds))
 }
 
-/// The extent of text drawn above a staff (system coords, y down).
-#[derive(Debug, Clone, Copy)]
-struct TextBox {
-    x1: f64,
-    x2: f64,
-    top: f64,
-}
-
-/// Draw rehearsal marks above the staff, left-aligned at `x` (a measure's
-/// start), several in one measure laid side by side ("79" then "Sax Solo").
-/// Box sizes come from real glyph advances.
-fn draw_rehearsals(
-    sys_node: &mut SceneNode,
-    x: f64,
-    marks: &[&RehearsalMark],
-    family: &str,
-    spatium: f64,
-    occupied: &[TextBox],
-) {
-    let mut cursor = x;
-    for mark in marks {
-        let size = mark.font_size.unwrap_or(12.0);
-        let w = crate::fonts::text_width(&mark.text, size, mark.bold, mark.italic);
-        let enclosed = mark.enclosure != Enclosure::None;
-        let pad = if enclosed { 0.22 * size } else { 0.0 };
-        let box_w = w + 2.0 * pad;
-        // Box bottom sits clear of the staff and of a multirest's count,
-        // and above any staff text already under it.
-        let box_bottom = occupied
-            .iter()
-            .filter(|b| b.x1 < cursor + box_w && b.x2 > cursor)
-            .map(|b| b.top - 2.0)
-            .fold(-2.8 * spatium, f64::min);
-        let baseline = box_bottom - 0.22 * size - pad * 0.7;
-        let box_top = baseline - 0.75 * size - pad * 0.7;
-        let mut cmds = Vec::new();
-        if enclosed {
-            let rect = Rect::new(cursor, box_top, cursor + w + 2.0 * pad, box_bottom);
-            cmds.push(PaintCommand::Rect {
-                rect,
-                fill: None,
-                stroke: Some(Color::BLACK),
-                stroke_width: 0.8,
-                corner_radius: (mark.enclosure == Enclosure::Oval)
-                    .then_some((box_bottom - box_top) / 2.0),
-            });
-        }
-        cmds.push(PaintCommand::Text {
-            text: mark.text.clone(),
-            font_family: family.to_string(),
-            font_size: size,
-            position: Point::new(cursor + pad, baseline),
-            color: Color::BLACK,
-            anchor: TextAnchor::Start,
-            weight: if mark.bold {
-                FontWeight::Bold
-            } else {
-                FontWeight::Normal
-            },
-            style: if mark.italic {
-                FontStyle::Italic
-            } else {
-                FontStyle::Normal
-            },
-        });
-        sys_node.add_child(SceneNode::anonymous_leaf(cmds));
-        cursor += w + 2.0 * pad + 0.5 * size;
-    }
-}
-
 fn styled_text(s: &str, font: &TextFont, pos: Point, anchor: TextAnchor) -> SceneNode {
     SceneNode::anonymous_leaf(vec![PaintCommand::Text {
         text: s.to_string(),
@@ -1190,6 +1123,36 @@ fn styled_text(s: &str, font: &TextFont, pos: Point, anchor: TextAnchor) -> Scen
 struct MeasureAnchors<'a> {
     m: &'a NotatedMeasure,
     entry_x: Vec<f64>,
+    /// Where the measure ends (its closing barline), system x.
+    x_end: f64,
+    /// Per entry: the stem direction the builder chose (`Some(true)` = up).
+    stems: Vec<Option<bool>>,
+}
+
+impl MeasureAnchors<'_> {
+    /// x for a tick: the entry starting there, or — for a direction between
+    /// notes (a dynamic on beat 3 of a whole note) — a point interpolated by
+    /// time between its neighbours, as a segment of its own would sit.
+    fn x_at(&self, tick: u32) -> f64 {
+        let ticks = &self.m.entry_ticks;
+        let first = self.entry_x.first().copied().unwrap_or(0.0);
+        let Some(prev) = ticks.iter().rposition(|t| *t <= tick) else {
+            return first;
+        };
+        let x0 = self.entry_x.get(prev).copied().unwrap_or(first);
+        if ticks[prev] == tick {
+            return x0;
+        }
+        let (t1, x1) = match ticks.get(prev + 1) {
+            Some(t) => (
+                *t,
+                self.entry_x.get(prev + 1).copied().unwrap_or(self.x_end),
+            ),
+            None => (self.m.len_ticks.max(tick + 1), self.x_end - 1.0),
+        };
+        let span = f64::from(t1.saturating_sub(ticks[prev]).max(1));
+        x0 + (x1 - x0) * f64::from(tick - ticks[prev]) / span
+    }
 }
 
 /// Map a MusicXML articulation tag to a tlayout articulation type.
@@ -1231,307 +1194,6 @@ fn dynamic_type(name: &str) -> engraver_proto::engraver::layout::tlayout::Dynami
         "rfz" => D::Rfz,
         "sfp" => D::Sfp,
         _ => D::Other,
-    }
-}
-
-/// Draw dynamics, hairpins, and articulation marks over a laid-out system.
-fn draw_directions(
-    sys_node: &mut SceneNode,
-    anchors: &[MeasureAnchors<'_>],
-    ctx: &LayoutContextOwned,
-    system_width: f64,
-    spatium: f64,
-    words_font: &TextFont,
-    id: &mut u64,
-) -> Vec<TextBox> {
-    use engraver_proto::engraver::layout::tlayout::{
-        DynamicsAlign, DynamicsParams, DynamicsPlacement, layout_dynamic,
-    };
-    let head_w = 1.18 * spatium;
-    // Anchor x for a tick within one measure: last entry at or before it.
-    let anchor_x = |a: &MeasureAnchors<'_>, tick: u32| -> f64 {
-        let mut x = a.entry_x.first().copied().unwrap_or(0.0);
-        for (i, t) in a.m.entry_ticks.iter().enumerate() {
-            if *t <= tick
-                && let Some(ex) = a.entry_x.get(i)
-            {
-                x = *ex;
-            }
-        }
-        x
-    };
-
-    // ── dynamics + hairpins ──
-    let mut wedge_open: Option<(f64, bool)> = None; // (start x, crescendo)
-    // Staff texts placed so far: (x start, x end, row). A text that would
-    // overlap one already on its row moves up a row.
-    let mut placed_words: Vec<(f64, f64, usize)> = Vec::new();
-    let mut word_boxes: Vec<TextBox> = Vec::new();
-    let hairpin_y = 4.0 * spatium + 2.8 * spatium;
-    let draw_wedge = |sys_node: &mut SceneNode, x1: f64, x2: f64, crescendo: bool| {
-        if x2 <= x1 + spatium {
-            return;
-        }
-        let half = 0.55 * spatium;
-        let (open1, open2) = if crescendo { (0.0, half) } else { (half, 0.0) };
-        let mut cmds = Vec::new();
-        for sign in [-1.0, 1.0] {
-            cmds.push(PaintCommand::Line {
-                start: Point::new(x1, hairpin_y + sign * open1),
-                end: Point::new(x2, hairpin_y + sign * open2),
-                width: spatium * 0.12,
-                color: Color::BLACK,
-                line_cap: Default::default(),
-            });
-        }
-        sys_node.add_child(SceneNode::anonymous_leaf(cmds));
-    };
-
-    for a in anchors {
-        for d in &a.m.directions {
-            match &d.kind {
-                model::DirectionKind::Dynamic(name) => {
-                    let (_, node) = layout_dynamic(
-                        &DynamicsParams {
-                            id: *id,
-                            dynamic_type: dynamic_type(name),
-                            custom_text: Some(name.clone()),
-                            placement: DynamicsPlacement::Below,
-                            align: DynamicsAlign::Center,
-                            x: anchor_x(a, d.tick),
-                            note_width: head_w,
-                            center_on_notehead: true,
-                        },
-                        &ctx.as_context(),
-                    );
-                    *id += 1;
-                    let mut container =
-                        SceneNode::group(SemanticId::new(ElementType::Dynamic, *id));
-                    container.transform = Affine::translate((0.0, 4.0 * spatium));
-                    container.add_child(node);
-                    sys_node.add_child(container);
-                }
-                model::DirectionKind::WedgeStart { crescendo } => {
-                    wedge_open = Some((anchor_x(a, d.tick), *crescendo));
-                }
-                model::DirectionKind::WedgeStop => {
-                    if let Some((x1, cresc)) = wedge_open.take() {
-                        draw_wedge(sys_node, x1, anchor_x(a, d.tick) + head_w, cresc);
-                    }
-                }
-                model::DirectionKind::Words(w) => {
-                    // Staff text above the staff (technique / a2 / tempo
-                    // cues), clamped so long strings stay on the page.
-                    let est_w = crate::fonts::text_width(w, words_font.size, false, true);
-                    let x = anchor_x(a, d.tick).min((system_width - est_w).max(0.0));
-                    let gap = 0.3 * words_font.size;
-                    let row = (0..)
-                        .find(|row| {
-                            !placed_words.iter().any(|(x1, x2, r)| {
-                                r == row && x < x2 + gap && x + est_w + gap > *x1
-                            })
-                        })
-                        .unwrap_or(0);
-                    placed_words.push((x, x + est_w, row));
-                    let y = -2.2 * spatium - row as f64 * 1.2 * words_font.size;
-                    word_boxes.push(TextBox {
-                        x1: x,
-                        x2: x + est_w,
-                        top: y - 0.8 * words_font.size,
-                    });
-                    sys_node.add_child(styled_text(
-                        w,
-                        words_font,
-                        Point::new(x, y),
-                        TextAnchor::Start,
-                    ));
-                }
-                // Drawn by `draw_rehearsals`, which also covers multirests.
-                model::DirectionKind::Rehearsal(_) => {}
-            }
-        }
-    }
-    // Hairpin still open at line end: run it to the system edge.
-    if let Some((x1, cresc)) = wedge_open {
-        draw_wedge(sys_node, x1, system_width, cresc);
-    }
-
-    // ── articulation marks ──
-    for a in anchors {
-        for i in 0..a.m.entries.len() {
-            if a.m.arts[i].is_empty() {
-                continue;
-            }
-            let Some((primary_line, _)) = a.m.pitches[i] else {
-                continue;
-            };
-            let ex = a.entry_x.get(i).copied().unwrap_or(0.0);
-            // Stems point down for notes on/above the middle line, so the
-            // mark goes above the notehead (and vice versa).
-            let stem_up = primary_line < 0;
-            let top_line = a.m.stacks[i]
-                .iter()
-                .map(|(l, _)| *l)
-                .chain(std::iter::once(primary_line))
-                .max()
-                .unwrap_or(primary_line);
-            let bottom_line = a.m.stacks[i]
-                .iter()
-                .map(|(l, _)| *l)
-                .chain(std::iter::once(primary_line))
-                .min()
-                .unwrap_or(primary_line);
-            let mut stack_offset = 0.0;
-            for (tag, pinned) in &a.m.arts[i] {
-                let Some(art) = articulation_type(tag) else {
-                    continue;
-                };
-                let above = pinned.unwrap_or(!stem_up);
-                let (glyph, y) = if above {
-                    let y_note = 2.0 * spatium - f64::from(top_line) * spatium / 2.0;
-                    // Pinned above clears the stem (and the staff, as
-                    // Finale's "outside staff" marks do); otherwise the
-                    // mark sits just over the notehead.
-                    let y_mark = if pinned.is_some() && stem_up {
-                        let stem_tip = y_note - 3.5 * spatium;
-                        stem_tip.min(-0.6 * spatium) - 0.9 * spatium
-                    } else {
-                        y_note - 1.1 * spatium
-                    };
-                    (art.smufl_codepoint_above(), y_mark - stack_offset)
-                } else {
-                    let y_note = 2.0 * spatium - f64::from(bottom_line) * spatium / 2.0;
-                    (
-                        art.smufl_codepoint_below(),
-                        y_note + 1.4 * spatium + stack_offset,
-                    )
-                };
-                stack_offset += 1.1 * spatium;
-                // PaintCommand::glyph size is in SPATIUMS (the SVG serializer
-                // multiplies by 4 for the SMuFL em).
-                sys_node.add_child(SceneNode::anonymous_leaf(vec![PaintCommand::glyph(
-                    glyph,
-                    Point::new(ex + head_w / 2.0 - 0.4 * spatium, y),
-                    spatium,
-                    Color::BLACK,
-                )]));
-            }
-        }
-    }
-    word_boxes
-}
-
-/// Draw ties and slurs over a laid-out system.
-///
-/// Anchor conventions follow MuseScore's `SlurTieLayout::adjustX` (clone at
-/// ~/reference/MuseScore, src/engraving/rendering/score/slurtielayout.cpp):
-/// tie start clears the notehead + ~0.2sp padding, end stops the same
-/// padding before the target head; direction is away from the stem (single
-/// voice: notes on/above the middle line stem down → curve up). Ties that
-/// leave the system become half-ties to the line end; incoming stops with
-/// no pending start become half-ties from the line start.
-fn draw_ties_and_slurs(
-    sys_node: &mut SceneNode,
-    anchors: &[MeasureAnchors<'_>],
-    system_width: f64,
-    spatium: f64,
-    id: &mut u64,
-) {
-    use engraver_proto::engraver::layout::tlayout::{
-        SlurDirection, SlurEndpoint, SlurTieConfig, layout_slur, layout_tie,
-    };
-    let cfg = SlurTieConfig::default();
-    let y_of = |line: i32| 2.0 * spatium - f64::from(line) * spatium / 2.0;
-    let head_w = 1.18 * spatium;
-    let pad = 0.2 * spatium;
-
-    // tlayout's `SlurDirection` is inverted for y-down scenes: `Up` lifts
-    // the endpoints but bows the curve DOWN (the chart tie pass compensates
-    // by always passing `Down`). Ask for the bow we want and pre-shift the
-    // endpoints by twice the offset tlayout will apply the wrong way.
-    let endpoint_shift = 2.0 * cfg.endpoint_offset * spatium;
-    let bow = |above: bool| {
-        if above {
-            (SlurDirection::Down, -endpoint_shift)
-        } else {
-            (SlurDirection::Up, endpoint_shift)
-        }
-    };
-
-    let mut draw_tie = |sys_node: &mut SceneNode, line: i32, x1: f64, x2: f64| {
-        // Stems point down on/above the middle line, so the tie bows above.
-        let (dir, shift) = bow(line >= 0);
-        let start = SlurEndpoint {
-            x: x1,
-            y: y_of(line) + shift,
-            stem_up: line < 0,
-        };
-        let end = SlurEndpoint {
-            x: x2.max(x1 + spatium),
-            y: y_of(line) + shift,
-            stem_up: line < 0,
-        };
-        let tie = layout_tie(&start, &end, dir, *id, spatium, &cfg);
-        *id += 1;
-        sys_node.add_child(tie.scene);
-    };
-
-    // ── ties ──
-    let mut pending: Vec<(i32, f64)> = Vec::new();
-    for a in anchors {
-        for i in 0..a.m.entries.len() {
-            let ex = a.entry_x.get(i).copied().unwrap_or(0.0);
-            for line in &a.m.tie_stop_lines[i] {
-                if let Some(pos) = pending.iter().position(|(l, _)| l == line) {
-                    let (l, sx) = pending.remove(pos);
-                    draw_tie(sys_node, l, sx + head_w + pad, ex - pad);
-                } else {
-                    // Tie arriving from the previous system: half tie in.
-                    draw_tie(sys_node, *line, (ex - 3.0 * spatium).max(0.0), ex - pad);
-                }
-            }
-            for line in &a.m.tie_start_lines[i] {
-                pending.push((*line, ex));
-            }
-        }
-    }
-    // Ties leaving the system: half tie out to the line end.
-    for (line, sx) in pending {
-        let x1 = sx + head_w + pad;
-        draw_tie(sys_node, line, x1, (x1 + 3.0 * spatium).min(system_width));
-    }
-
-    // ── slurs ──
-    let mut open: Option<(f64, i32)> = None;
-    for a in anchors {
-        for i in 0..a.m.entries.len() {
-            let ex = a.entry_x.get(i).copied().unwrap_or(0.0);
-            let line = a.m.pitches[i].map(|(l, _)| l).unwrap_or(0);
-            if a.m.slur_stops[i]
-                && let Some((sx, sl)) = open.take()
-            {
-                // Slur above; endpoints just over the noteheads.
-                let (dir, shift) = bow(true);
-                let start = SlurEndpoint {
-                    x: sx + head_w / 2.0,
-                    y: y_of(sl) - 0.8 * spatium + shift,
-                    stem_up: false,
-                };
-                let end = SlurEndpoint {
-                    x: ex + head_w / 2.0,
-                    y: y_of(line) - 0.8 * spatium + shift,
-                    stem_up: false,
-                };
-                if end.x > start.x + spatium {
-                    let slur = layout_slur(&start, &end, dir, *id, spatium, &cfg);
-                    *id += 1;
-                    sys_node.add_child(slur.scene);
-                }
-            }
-            if a.m.slur_starts[i] && open.is_none() {
-                open = Some((ex, line));
-            }
-        }
     }
 }
 
@@ -2122,6 +1784,8 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
                     anchors.push(MeasureAnchors {
                         m,
                         entry_x: vec![x + width / 2.0],
+                        x_end: x + width,
+                        stems: vec![None],
                     });
                     container.transform = Affine::translate((x, 0.0));
                     let glyph_w = 1.13 * spatium;
@@ -2146,7 +1810,12 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
                         .into_iter()
                         .map(|seg_x| x + seg_x)
                         .collect();
-                    anchors.push(MeasureAnchors { m, entry_x });
+                    anchors.push(MeasureAnchors {
+                        m,
+                        entry_x,
+                        x_end: x + width,
+                        stems: scene.entry_stem_up.clone(),
+                    });
                     // MeasureScene notation is authored around the MIDDLE
                     // line (y=0) — same +2sp shift the chart pipeline applies
                     // to its measure containers.
@@ -2170,11 +1839,17 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
             }
         }
 
-        // ── measure numbers ──
+        // ── measure numbers (positions from the number style; placed with
+        // everything else below) ──
+        let mut number_marks: Vec<vertical::NumberMark> = Vec::new();
         for (item_pos, &item_idx) in sys.items.iter().enumerate() {
             let (start, end) = spans[item_pos];
             let item = &prepared[item_idx];
             let is_first_of_piece = item.first_index() == first_measure_index;
+            let number = match item {
+                Prepared::Notated(m) => m.number.clone(),
+                Prepared::MultiRest(r) => r.number.clone(),
+            };
             match numbers.mode {
                 MeasureNumberMode::None => {}
                 MeasureNumberMode::SystemStart => {
@@ -2182,96 +1857,73 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
                     {
                         continue;
                     }
-                    let n = match item {
-                        Prepared::Notated(m) => m.number.clone(),
-                        Prepared::MultiRest(r) => r.number.clone(),
-                    };
-                    sys_node.add_child(styled_text(
-                        &n,
-                        &numbers.font,
-                        Point::new(numbers.offset.0, numbers.offset.1),
-                        TextAnchor::Start,
-                    ));
+                    number_marks.push(vertical::NumberMark {
+                        text: number,
+                        font: numbers.font.clone(),
+                        pos: Point::new(numbers.offset.0, numbers.offset.1),
+                        anchor: TextAnchor::Start,
+                    });
                 }
                 MeasureNumberMode::Every(every) => match item {
                     Prepared::MultiRest(r) if numbers.multirest_ranges => {
-                        sys_node.add_child(styled_text(
-                            &format!("{}-{}", r.number, r.last_number),
-                            &numbers.multirest_font,
-                            Point::new(
+                        number_marks.push(vertical::NumberMark {
+                            text: format!("{}-{}", r.number, r.last_number),
+                            font: numbers.multirest_font.clone(),
+                            pos: Point::new(
                                 (start + end) / 2.0 + numbers.multirest_offset.0,
                                 numbers.multirest_offset.1,
                             ),
-                            TextAnchor::Middle,
-                        ));
+                            anchor: TextAnchor::Middle,
+                        });
                     }
                     _ => {
-                        let n = match item {
-                            Prepared::Notated(m) => m.number.clone(),
-                            Prepared::MultiRest(r) => r.number.clone(),
-                        };
-                        let shown = n.parse::<u32>().is_ok_and(|v| v % every.max(1) == 0)
+                        let shown = number.parse::<u32>().is_ok_and(|v| v % every.max(1) == 0)
                             && !(is_first_of_piece && numbers.exclude_first);
                         if shown {
                             // At the measure's left barline (past the prefix
                             // on a system's first measure).
-                            sys_node.add_child(styled_text(
-                                &n,
-                                &numbers.font,
-                                Point::new(start + numbers.offset.0, numbers.offset.1),
-                                TextAnchor::Middle,
-                            ));
+                            number_marks.push(vertical::NumberMark {
+                                text: number,
+                                font: numbers.font.clone(),
+                                pos: Point::new(start + numbers.offset.0, numbers.offset.1),
+                                anchor: TextAnchor::Middle,
+                            });
                         }
                     }
                 },
             }
         }
 
-        draw_ties_and_slurs(
-            &mut sys_node,
-            &anchors,
-            prefix_w + content_width,
-            spatium,
-            &mut id,
-        );
-        let word_boxes = draw_directions(
-            &mut sys_node,
-            &anchors,
-            ctx,
-            prefix_w + content_width,
-            spatium,
-            &words_font,
-            &mut id,
-        );
-
-        // ── rehearsal marks (notated measures and multirests alike) ──
-        for (item_pos, &item_idx) in sys.items.iter().enumerate() {
-            let marks: Vec<&RehearsalMark> = prepared[item_idx]
-                .directions()
-                .iter()
-                .filter_map(|d| match &d.kind {
-                    model::DirectionKind::Rehearsal(r) => Some(r),
-                    _ => None,
-                })
-                .collect();
-            if marks.is_empty() {
-                continue;
-            }
-            // A system's first cue sits at the staff's left edge, over the
-            // clef; later ones just right of their barline.
-            let mx = if item_pos == 0 {
-                0.0
-            } else {
-                spans[item_pos].0 + 1.5
-            };
-            draw_rehearsals(
-                &mut sys_node,
-                mx,
-                &marks,
-                &opts.text_font,
+        // ── vertical placement: ties, articulations, slurs, dynamics,
+        // staff text, measure numbers, rehearsal marks — each pushed clear
+        // of the staff skyline in MuseScore's order ──
+        let items: Vec<vertical::ItemMarks<'_>> = sys
+            .items
+            .iter()
+            .enumerate()
+            .map(|(item_pos, &item_idx)| vertical::ItemMarks {
+                span: spans[item_pos],
+                first: item_pos == 0,
+                directions: prepared[item_idx].directions(),
+                notated: matches!(prepared[item_idx], Prepared::Notated(_)),
+            })
+            .collect();
+        let placed = vertical::place_system(
+            &sys_node.children,
+            &vertical::SystemInput {
                 spatium,
-                &word_boxes,
-            );
+                width: prefix_w + content_width,
+                anchors: &anchors,
+                items,
+                numbers: number_marks,
+                text_family: &opts.text_font,
+                words_font: &words_font,
+                ctx,
+            },
+            &mut id,
+        );
+        for node in placed.nodes {
+            sys_node.add_child(node);
         }
 
         root.add_child(sys_node);

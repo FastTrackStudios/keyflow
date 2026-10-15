@@ -775,8 +775,26 @@ fn read_page_texts(idx: &Index, fonts: &HashMap<u32, String>, part: Option<u32>)
             .collect(),
         None => Vec::new(),
     };
+    // When the document carries part-scoped page-text records at all, a
+    // part shows only the score texts it has a record for (shared or its
+    // own) — score-only labels stay off the parts. Documents without any
+    // part records share every page text.
+    let part_records: Vec<Node> = match part {
+        Some(p) => idx.for_part("pageTextAssign", Some(p)),
+        None => Vec::new(),
+    };
+    let any_part_records = idx
+        .all("pageTextAssign")
+        .iter()
+        .any(|n| n.attribute("part").is_some());
     let mut out = Vec::new();
     for score_n in score_records {
+        if part.is_some()
+            && any_part_records
+            && !part_records.iter().any(|o| key(*o) == key(score_n))
+        {
+            continue;
+        }
         let n = overrides
             .iter()
             .copied()

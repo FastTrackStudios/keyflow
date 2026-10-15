@@ -9,17 +9,13 @@
 //! This is the regression metric for vertical placement: a change to the
 //! autoplace pass should move these numbers down, never up.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 use engraver_proto::engraver::fonts::ChartFontBundle;
 use engraver_proto::engraver::scene::id::ElementType;
 use engraver_proto::engraver::scene::node::SceneNode;
 use engraver_proto::engraver::scene::paint::{FontStyle, FontWeight, PaintCommand, TextAnchor};
 use kurbo::{Affine, Point, Rect, Shape as _};
-use skrifa::instance::{LocationRef, Size};
-use skrifa::outline::{DrawSettings, OutlinePen};
-use skrifa::raw::TableProvider;
-use skrifa::{FontRef, MetadataProvider};
 
 use crate::layout::PartLayout;
 
@@ -105,197 +101,6 @@ impl Report {
     }
 }
 
-// ───────────────────────── font outline bounds ─────────────────────────
-
-struct BoundsPen {
-    min: Point,
-    max: Point,
-    any: bool,
-}
-
-impl BoundsPen {
-    fn new() -> Self {
-        Self {
-            min: Point::new(f64::MAX, f64::MAX),
-            max: Point::new(f64::MIN, f64::MIN),
-            any: false,
-        }
-    }
-    fn add(&mut self, x: f32, y: f32) {
-        let (x, y) = (f64::from(x), f64::from(y));
-        self.min.x = self.min.x.min(x);
-        self.min.y = self.min.y.min(y);
-        self.max.x = self.max.x.max(x);
-        self.max.y = self.max.y.max(y);
-        self.any = true;
-    }
-}
-
-impl OutlinePen for BoundsPen {
-    fn move_to(&mut self, x: f32, y: f32) {
-        self.add(x, y);
-    }
-    fn line_to(&mut self, x: f32, y: f32) {
-        self.add(x, y);
-    }
-    fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
-        self.add(cx0, cy0);
-        self.add(x, y);
-    }
-    fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
-        self.add(cx0, cy0);
-        self.add(cx1, cy1);
-        self.add(x, y);
-    }
-    fn close(&mut self) {}
-}
-
-/// Per-character ink box and advance, in em units (y up), per font.
-struct Faces {
-    data: Vec<(&'static str, bool, bool, Vec<u8>)>,
-    cache: HashMap<(usize, char), Option<(Rect, f64)>>,
-}
-
-impl Faces {
-    fn new(bundle: &ChartFontBundle) -> Self {
-        let mut data: Vec<(&'static str, bool, bool, Vec<u8>)> = vec![
-            (
-                "Leland",
-                false,
-                false,
-                bundle.symbol_font_data().as_ref().clone(),
-            ),
-            (
-                "Bravura",
-                false,
-                false,
-                bundle.bravura_font_data().as_ref().clone(),
-            ),
-            (
-                "Leland Text",
-                false,
-                false,
-                bundle.leland_text_font_data().as_ref().clone(),
-            ),
-            (
-                "FreeSans",
-                false,
-                false,
-                bundle.freesans_font_data().as_ref().clone(),
-            ),
-            (
-                "Chicago",
-                false,
-                false,
-                bundle.chicago_font_data().as_ref().clone(),
-            ),
-        ];
-        let faces = crate::fonts::serif_faces();
-        for (i, (_, bytes)) in faces.iter().enumerate() {
-            data.push((
-                crate::fonts::SERIF_FAMILY,
-                i == 1 || i == 3,
-                i >= 2,
-                bytes.to_vec(),
-            ));
-        }
-        Self {
-            data,
-            cache: HashMap::new(),
-        }
-    }
-
-    fn face_index(&self, family: &str, bold: bool, italic: bool) -> usize {
-        let family = match family {
-            "LelandText" => "Leland Text",
-            "sans-serif" => "FreeSans",
-            "ChicagoFLF" => "Chicago",
-            f => f,
-        };
-        self.data
-            .iter()
-            .position(|(f, b, i, _)| *f == family && *b == bold && *i == italic)
-            .or_else(|| self.data.iter().position(|(f, _, _, _)| *f == family))
-            .unwrap_or(3)
-    }
-
-    /// (ink box, advance) of one character, em units, y up.
-    fn char_metrics(&mut self, face: usize, c: char) -> Option<(Rect, f64)> {
-        if let Some(hit) = self.cache.get(&(face, c)) {
-            return *hit;
-        }
-        let measured = (|| {
-            let font = FontRef::new(&self.data[face].3).ok()?;
-            let upem = f64::from(font.head().ok()?.units_per_em());
-            let gid = font.charmap().map(c)?;
-            let advance = font
-                .glyph_metrics(Size::unscaled(), LocationRef::default())
-                .advance_width(gid)
-                .map_or(0.0, f64::from)
-                / upem;
-            let outlines = font.outline_glyphs();
-            let mut pen = BoundsPen::new();
-            if let Some(glyph) = outlines.get(gid) {
-                let _ = glyph.draw(
-                    DrawSettings::unhinted(Size::unscaled(), LocationRef::default()),
-                    &mut pen,
-                );
-            }
-            let rect = if pen.any {
-                Rect::new(
-                    pen.min.x / upem,
-                    pen.min.y / upem,
-                    pen.max.x / upem,
-                    pen.max.y / upem,
-                )
-            } else {
-                Rect::ZERO
-            };
-            Some((rect, advance))
-        })();
-        self.cache.insert((face, c), measured);
-        measured
-    }
-
-    /// Ink box of a text run drawn at `pos` (baseline) with `anchor`, in
-    /// y-down scene units.
-    fn text_ink(
-        &mut self,
-        family: &str,
-        size: f64,
-        bold: bool,
-        italic: bool,
-        text: &str,
-        pos: Point,
-        anchor: TextAnchor,
-    ) -> Option<Rect> {
-        let face = self.face_index(family, bold, italic);
-        let mut x = 0.0;
-        let mut ink: Option<Rect> = None;
-        for c in text.chars() {
-            let (r, adv) = self.char_metrics(face, c).unwrap_or((Rect::ZERO, 0.5));
-            if r.area() > 0.0 {
-                let glyph = Rect::new(x + r.x0, -r.y1, x + r.x1, -r.y0);
-                ink = Some(ink.map_or(glyph, |i| i.union(glyph)));
-            }
-            x += adv;
-        }
-        let shift = match anchor {
-            TextAnchor::Middle => -x / 2.0,
-            TextAnchor::End => -x,
-            _ => 0.0,
-        };
-        ink.map(|r| {
-            Rect::new(
-                pos.x + (r.x0 + shift) * size,
-                pos.y + r.y0 * size,
-                pos.x + (r.x1 + shift) * size,
-                pos.y + r.y1 * size,
-            )
-        })
-    }
-}
-
 // ───────────────────────── scene walk ─────────────────────────
 
 fn kind_of(t: ElementType) -> Option<InkKind> {
@@ -325,7 +130,7 @@ fn kind_of(t: ElementType) -> Option<InkKind> {
 }
 
 struct Walker<'f> {
-    faces: &'f mut Faces,
+    faces: &'f mut crate::metrics::Faces,
     out: Vec<Ink>,
     next_owner: u64,
 }
@@ -467,7 +272,7 @@ impl Walker<'_> {
 /// Measure every piece of ink in a laid-out part.
 #[must_use]
 pub fn ink(layout: &PartLayout, fonts: &ChartFontBundle) -> Vec<Ink> {
-    let mut faces = Faces::new(fonts);
+    let mut faces = crate::metrics::Faces::new(fonts);
     let mut walker = Walker {
         faces: &mut faces,
         out: Vec::new(),

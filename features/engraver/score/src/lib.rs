@@ -12,8 +12,10 @@ pub mod fonts;
 pub mod import;
 pub mod inspect;
 pub mod layout;
+pub mod metrics;
 pub mod model;
 pub mod render;
+pub mod skyline;
 
 pub use import::{ImportError, import_bytes, import_file};
 pub use model::Score;

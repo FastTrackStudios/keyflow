@@ -1555,6 +1555,7 @@ fn process_gfholds(
         // A staff can carry the same rehearsal mark twice (its staff-list
         // copy and a per-staff copy); print it once.
         let mut rehearsals_done: std::collections::HashSet<String> = Default::default();
+        let mut tempos_done: std::collections::HashSet<String> = Default::default();
         for mut expression in expressions {
             let placement =
                 if expression.vert_meas_expr_align.as_deref() == Some("belowStaffOrEntry") {
@@ -1618,7 +1619,15 @@ fn process_gfholds(
                 }
                 let words = sub_text(&dt, "words", &remove_styling_tags(&expression.text));
                 set_attr(&words, "font-style", "italic");
-            } else if expression.category_type == "tempoMarks" {
+            } else if expression.category_type == "tempoMarks"
+                // Staff-list tempo marks (-1) show in every part; per-staff
+                // copies only on their own staff; score-only copies never.
+                // Finale often stores one copy per staff as well as the
+                // staff-list one: print each mark once.
+                && (expression.staff_assign.as_deref() == Some("-1") || is_this_staff)
+                && expression.show_staff_list.as_deref() != Some("scoreOnly")
+                && tempos_done.insert(expression.def_id.clone())
+            {
                 let marks = translate_tempo_marks(&expression.text);
                 let direction = sub_attrs(measure, "direction", &[("placement", placement)]);
                 if let Some(words) = marks.words.as_deref().filter(|w| !w.is_empty()) {

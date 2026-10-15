@@ -737,13 +737,20 @@ impl MeasureBuilder {
                             tie: false,
                         });
                     }
+                    // Resolve Auto here (not inside layout_chord) so the
+                    // direction drawn is the direction reported.
+                    let line_sum: i32 = chord_notes.iter().map(|n| n.line).sum();
+                    let chord_stem_dir = stem_dir.resolve_for_head_type(
+                        f64::from(line_sum) / chord_notes.len().max(1) as f64,
+                        note_head_type,
+                    );
                     let (_, chord_node) = layout_chord(
                         &ChordParams {
                             id,
                             duration: dur.to_note_duration(),
                             head_type: note_head_type,
                             notes: chord_notes,
-                            stem_direction: stem_dir,
+                            stem_direction: chord_stem_dir,
                             dots: dur.dots(),
                             beamed: false,
                             stemless: note_stemless,
@@ -756,7 +763,7 @@ impl MeasureBuilder {
                         node: chord_node,
                         tick: current_tick,
                         rhythm_index,
-                        stem_direction: stem_dir,
+                        stem_direction: chord_stem_dir,
                         stemless: note_stemless,
                     });
                 }
@@ -972,11 +979,30 @@ impl MeasureBuilder {
             })
             .collect();
 
+        // The stem direction each rhythm entry actually got (beam groups
+        // decide together), so overlays — ties, slurs, articulations — can
+        // read it instead of guessing from the note's line.
+        let mut entry_stem_up: Vec<Option<bool>> = vec![None; self.rhythm.len()];
+        for element in &scene_elements {
+            if let SceneElement::Chord {
+                rhythm_index,
+                stem_direction,
+                stemless,
+                ..
+            } = element
+                && !*stemless
+                && let Some(slot) = entry_stem_up.get_mut(*rhythm_index)
+            {
+                *slot = Some(!matches!(stem_direction, StemDirection::Down));
+            }
+        }
+
         MeasureScene {
             scene,
             width: spacing_result.total_width,
             segments,
             note_line_stacks,
+            entry_stem_up,
             internal_push_positions: Vec::new(), // Set by chart layout when needed
             spillback_positions: Vec::new(),     // Set by chart layout when needed
         }
@@ -1518,6 +1544,9 @@ pub struct MeasureScene {
     /// Used by chart layout to keep chord symbols clear of noteheads and
     /// ledger lines while preserving beat alignment.
     pub note_line_stacks: Vec<Option<(i32, i32)>>,
+    /// Per-rhythm-entry stem direction as built (`Some(true)` = up; `None`
+    /// for rests and stemless notes).
+    pub entry_stem_up: Vec<Option<bool>>,
     /// Internal push positions: maps chord_idx to segment_idx for pushed chords
     /// (for chords that push back within the same measure, not spillbacks)
     pub internal_push_positions: Vec<(usize, usize)>,

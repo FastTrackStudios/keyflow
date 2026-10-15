@@ -208,7 +208,14 @@ fn import_part(
                 }
 
                 MeasureElement::Direction(dir) => {
-                    let tick = cursor.max(0) as u32;
+                    // `<offset>` moves the direction off the cursor (Finale
+                    // writes a dynamic's beat position this way).
+                    let offset = dir
+                        .content
+                        .offset
+                        .as_ref()
+                        .map_or(0, |o| i64::from(*o.content));
+                    let tick = (cursor + offset).max(0) as u32;
                     for dt in &dir.content.direction_type {
                         import_direction_type(dt, tick, &mut measure.directions);
                     }
