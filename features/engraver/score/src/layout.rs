@@ -1410,6 +1410,90 @@ fn draw_page_texts(
     }
 }
 
+/// Final (page, staff top) of every system.
+///
+/// MuseScore's `SystemLayout::minDistance`: a system goes no closer to the
+/// one above than its north skyline allows against that system's south
+/// skyline, plus `minVerticalDistance` (0.5 sp). With a source layout the
+/// planned positions are kept unless content collides — then the page's
+/// later systems move down, as long as the last one still fits on the page.
+/// Automatic layout re-flows pages with the real heights.
+fn stack_systems(
+    systems: &[SystemPlan],
+    rendered: &[(SceneNode, crate::skyline::Skyline)],
+    opts: &LayoutOptions,
+    page_texts: &[PageText],
+    explicit: bool,
+) -> Vec<(usize, f64)> {
+    let margins = opts.margins();
+    // Music stays above the bottom margin and above any footer text on the
+    // page (a copyright line, a "Rev." stamp).
+    let bottom_limit_of = |page: usize| -> f64 {
+        let number = page + 1;
+        page_texts
+            .iter()
+            .filter(|t| t.v_align == VAlign::Bottom)
+            .filter(|t| number >= t.first_page && t.last_page.is_none_or(|l| number <= l))
+            .map(|t| opts.page_height - margins.bottom + t.y - 1.1 * t.font.size)
+            .fold(opts.page_height - margins.bottom, f64::min)
+    };
+    let needed = |above: usize, below: usize| -> f64 {
+        let sp = systems[below].spatium;
+        let d = rendered[above]
+            .1
+            .min_distance_to(&rendered[below].1, 0.25 * sp);
+        let floor = 4.0 * sp + 0.5 * sp;
+        if d.is_finite() {
+            (d + 0.5 * sp).max(floor)
+        } else {
+            floor
+        }
+    };
+    let mut out: Vec<(usize, f64)> = systems.iter().map(|s| (s.page, s.staff_top)).collect();
+    if explicit {
+        let mut i = 0;
+        while i < systems.len() {
+            let page = systems[i].page;
+            let end = (i..systems.len())
+                .find(|j| systems[*j].page != page)
+                .unwrap_or(systems.len());
+            let mut tops: Vec<f64> = systems[i..end].iter().map(|s| s.staff_top).collect();
+            for k in 1..tops.len() {
+                tops[k] = tops[k].max(tops[k - 1] + needed(i + k - 1, i + k));
+            }
+            let last = end - 1;
+            let fits = tops.last().copied().unwrap_or(0.0) + rendered[last].1.south_extent()
+                <= bottom_limit_of(page) + 1e-6;
+            if fits {
+                for (k, t) in tops.into_iter().enumerate() {
+                    out[i + k].1 = t;
+                }
+            }
+            i = end;
+        }
+        return out;
+    }
+    // Automatic: re-flow with the measured heights.
+    let mut page = 0usize;
+    for i in 0..systems.len() {
+        let sp = systems[i].spatium;
+        let sky = &rendered[i].1;
+        let mut top = if i == 0 {
+            systems[0]
+                .staff_top
+                .max(margins.top - sky.north_extent() + 0.5 * sp)
+        } else {
+            out[i - 1].1 + needed(i - 1, i).max(opts.system_gap)
+        };
+        if i > 0 && top + sky.south_extent() > bottom_limit_of(page) {
+            page += 1;
+            top = margins.top + (-sky.north_extent()).max(2.0 * sp) + 0.5 * sp;
+        }
+        out[i] = (page, top);
+    }
+    out
+}
+
 /// Lay out one part into pages.
 #[must_use]
 pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> PartLayout {
@@ -1628,27 +1712,14 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
             .collect()
     };
 
-    // ── pages ──
-    let page_count = systems.iter().map(|s| s.page + 1).max().unwrap_or(1);
-    let pages: Vec<PageRect> = (0..page_count)
-        .map(|i| PageRect {
-            x_offset: 0.0,
-            y_offset: i as f64 * (opts.page_height + 24.0),
-            width: opts.page_width,
-            height: opts.page_height,
-        })
-        .collect();
-
+    let page_y = |page: usize| page as f64 * (opts.page_height + 24.0);
     let mut root = SceneNode::group(SemanticId::new(ElementType::System, 0));
     let page_texts = opts
         .page_texts
         .clone()
         .unwrap_or_else(|| default_page_texts(score, &part.name));
-    {
-        let mut block = SceneNode::group(SemanticId::new(ElementType::Text, 1));
-        draw_page_texts(&mut block, &pages, &page_texts, opts);
-        root.add_child(block);
-    }
+    // Systems are drawn first (each with its skyline), then stacked.
+    let mut rendered: Vec<(SceneNode, crate::skyline::Skyline)> = Vec::new();
 
     let words_font = TextFont {
         family: opts.text_font.clone(),
@@ -1670,11 +1741,8 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
             sys_ctx = context_for(spatium);
             &sys_ctx
         };
-        let page_origin_y = pages[sys.page.min(pages.len() - 1)].y_offset;
-
         let mut sys_node =
             SceneNode::group(SemanticId::new(ElementType::System, sys_idx as u64 + 1));
-        sys_node.transform = Affine::translate((sys.left, page_origin_y + sys.staff_top));
 
         // Prefix from the first item's attribute state.
         let (first_clef, first_key, first_time, show_time) = match &prepared[sys.items[0]] {
@@ -1926,7 +1994,30 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
             sys_node.add_child(node);
         }
 
-        root.add_child(sys_node);
+        rendered.push((sys_node, placed.skyline));
+    }
+
+    // ── stack systems: each clears the one above by its skylines ──
+    let placements = stack_systems(&systems, &rendered, opts, &page_texts, explicit.is_some());
+    let page_count = placements.iter().map(|(p, _)| p + 1).max().unwrap_or(1);
+    let pages: Vec<PageRect> = (0..page_count)
+        .map(|i| PageRect {
+            x_offset: 0.0,
+            y_offset: page_y(i),
+            width: opts.page_width,
+            height: opts.page_height,
+        })
+        .collect();
+    {
+        let mut block = SceneNode::group(SemanticId::new(ElementType::Text, 1));
+        draw_page_texts(&mut block, &pages, &page_texts, opts);
+        root.add_child(block);
+    }
+    for ((mut node, _), (sys, (page, top))) in
+        rendered.into_iter().zip(systems.iter().zip(placements))
+    {
+        node.transform = Affine::translate((sys.left, page_y(page) + top));
+        root.add_child(node);
     }
 
     PartLayout {

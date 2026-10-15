@@ -332,6 +332,10 @@ fn place_ties(
             if r.y1 < band.0 || r.y0 > band.1 || r.width() > 2.0 * sp {
                 continue;
             }
+            // Barlines span the staff and ties cross them by design.
+            if r.height() >= 3.5 * sp && r.width() < 0.6 * sp {
+                continue;
+            }
             if let Some(h2) = x_head2
                 && r.x1 <= h2 + 0.05 * sp
                 && r.x0 > x1
@@ -339,8 +343,10 @@ fn place_ties(
             {
                 x2 = x2.min(r.x0 - 0.2 * sp);
             }
+            // Right of the start head: dots, a flag, or — for a tie on the
+            // stem side — the stem itself (it starts at the head's edge).
             if let Some(h1) = x_head1
-                && r.x0 >= h1 + head_w - 0.05 * sp
+                && r.x0 >= h1 + 0.7 * head_w
                 && r.x0 < x2
                 && r.x0 < x1 + 2.0 * sp
             {
@@ -960,21 +966,37 @@ fn place_staff_text(
         }
     }
     for (x, w) in words {
-        let Some(r0) = metrics::text_ink(
-            &font.family,
-            font.size,
-            font.bold,
-            font.italic,
-            w,
-            Point::ZERO,
-            TextAnchor::Start,
-        ) else {
+        // A cue may hold several lines ("Sul ponticello" over "Start trill
+        // slowly…"): stack them, last line on the baseline.
+        let lines: Vec<&str> = w.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+        let leading = 1.15 * font.size;
+        let n = lines.len();
+        let mut block: Vec<(f64, &str, Rect)> = Vec::new(); // (line offset, text, ink)
+        for (k, line) in lines.iter().enumerate() {
+            let Some(r) = metrics::text_ink(
+                &font.family,
+                font.size,
+                font.bold,
+                font.italic,
+                line,
+                Point::ZERO,
+                TextAnchor::Start,
+            ) else {
+                continue;
+            };
+            let off = -((n - 1 - k) as f64) * leading;
+            block.push((off, line, r + Vec2::new(0.0, off)));
+        }
+        let Some(extent) = block.iter().map(|(_, _, r)| *r).reduce(|a, b| a.union(b)) else {
             continue;
         };
         // Keep long strings on the page.
-        let x = x.min((input.width - r0.width()).max(0.0));
+        let x = x.min((input.width - extent.width()).max(0.0));
         let mut base = -style::STAFF_TEXT_POS_ABOVE * sp;
-        let shape = [r0 + Vec2::new(x, base)];
+        let shape: Vec<Rect> = block
+            .iter()
+            .map(|(_, _, r)| *r + Vec2::new(x, base))
+            .collect();
         base += sky.distance_to_move(
             &shape,
             true,
@@ -983,9 +1005,16 @@ fn place_staff_text(
             |_, _| false,
         );
         let owner = owners.next();
-        sky.add(r0 + Vec2::new(x, base), SkyKind::StaffText, owner);
         let mut node = SceneNode::group(SemanticId::new(ElementType::Text, owner));
-        node.add_child(styled_text(w, font, Point::new(x, base), TextAnchor::Start));
+        for (off, line, r) in &block {
+            sky.add(*r + Vec2::new(x, base), SkyKind::StaffText, owner);
+            node.add_child(styled_text(
+                line,
+                font,
+                Point::new(x, base + off),
+                TextAnchor::Start,
+            ));
+        }
         nodes.push(node);
     }
 }
