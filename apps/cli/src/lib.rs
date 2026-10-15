@@ -13,11 +13,14 @@
 use std::io::Read;
 use std::path::PathBuf;
 
+mod book;
 mod docs;
 mod orchestra;
+mod parts;
 mod sync;
 
 use clap::{Parser, Subcommand, ValueEnum};
+use keyflow::Chart;
 use keyflow::engraver::api::pipeline::{ChartPipeline, Preset, PresetOptions};
 use keyflow::engraver::export::pdf::PdfSerializer;
 use keyflow::engraver::export::svg::{SvgExportConfig, SvgSerializer};
@@ -26,7 +29,6 @@ use keyflow::engraver::layout::chart::{
     Breakpoint, ChartLayoutConfig, ChartLayoutEngine, ChartLayoutResult, LayoutMode,
 };
 use keyflow::engraver::style::MStyle;
-use keyflow::Chart;
 
 /// How much folding and fitting to do — see `engraver`'s `ChartMode`.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum)]
@@ -431,6 +433,71 @@ enum Commands {
         /// Path to a .musicxml or .mxl file.
         input: PathBuf,
     },
+    /// Extract every instrument part from a score as print-ready pages.
+    ///
+    /// A Finale `.musx` keeps the layout its arranger gave each linked part:
+    /// system breaks, page turns, multirests, page headers and measure
+    /// numbers. MusicXML input gets automatic layout and a default title
+    /// block. Writes "<Title> - <Part>.pdf" per part.
+    Parts {
+        /// Path to a .musx, .musicxml or .mxl file.
+        input: PathBuf,
+        /// Output directory (default: a folder named after the title).
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+        /// Only parts whose name contains this substring.
+        #[arg(long)]
+        part: Option<String>,
+        #[arg(long, value_enum, default_value = "pdf")]
+        format: parts::PartsFormat,
+        /// Text for the "Rev." date stamp (default: the file's modified date).
+        #[arg(long)]
+        date: Option<String>,
+        /// List the parts and their layout instead of writing them.
+        #[arg(long)]
+        list: bool,
+        /// PNG pixels per point (2.0 ≈ 144 dpi).
+        #[arg(long, default_value = "2.0")]
+        scale: f32,
+        /// `finale`: the system/page breaks stored with each linked part.
+        /// `auto`: pack systems automatically (for parts never formatted
+        /// in Finale) while keeping page size, headers and numbering.
+        #[arg(long, value_enum, default_value = "finale")]
+        layout: LayoutSource,
+    },
+    /// Build per-instrument part books in setlist order.
+    ///
+    /// The setlist is a text file, one song per line (numbering optional,
+    /// `title: ...` header, `=== Intermission ===` breaks, `[tacet]` marks,
+    /// `Shown = Library Folder` aliases). Each song engraves from its .musx
+    /// in the library, or uses an existing part PDF; every chair gets a
+    /// cover with the program and a TACET page where it sits out.
+    Book {
+        /// Setlist text file.
+        setlist: PathBuf,
+        /// Song library: one folder per song holding its .musx files.
+        #[arg(long)]
+        library: PathBuf,
+        /// Folder of existing part PDFs ("Song - Instrument.pdf") for
+        /// songs without a usable .musx.
+        #[arg(long)]
+        pdf_parts: Option<PathBuf>,
+        /// Output directory (default: the setlist title).
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+        /// Only books whose chair contains this text ("viola", "horn").
+        #[arg(long)]
+        chair: Option<String>,
+        /// Use existing part PDFs even when a .musx is available.
+        #[arg(long)]
+        prefer_pdf: bool,
+        /// Resolve songs and list the books without writing anything.
+        #[arg(long)]
+        dry_run: bool,
+        /// See `kf parts --layout`.
+        #[arg(long, value_enum, default_value = "finale")]
+        layout: LayoutSource,
+    },
     /// Run the CSS orchestrator engine on a score (articulated MIDI summary).
     Orchestrate {
         /// Path to a .musicxml or .mxl file.
@@ -443,6 +510,13 @@ enum Commands {
         #[arg(long)]
         profile: Option<String>,
     },
+}
+
+/// Where `kf parts` / `kf book` take system and page breaks from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum LayoutSource {
+    Finale,
+    Auto,
 }
 
 /// ASR engine for `kf transcribe`.
@@ -1067,9 +1141,11 @@ fn render_variant_pngs(
         false,
     );
     let svgs: Vec<String> = if layout.pages.is_empty() {
-        vec![pipeline
-            .export_svg_continuous(&layout)
-            .ok_or_else(|| "continuous layout produced no SVG".to_string())?]
+        vec![
+            pipeline
+                .export_svg_continuous(&layout)
+                .ok_or_else(|| "continuous layout produced no SVG".to_string())?,
+        ]
     } else {
         pipeline.export_svg_pages(&layout)
     };
@@ -1759,9 +1835,11 @@ fn run(cli: Cli) -> Result<(), String> {
 
             // ContinuousScroll has no `pages`; render the whole scene as one image.
             let svgs: Vec<String> = if layout.pages.is_empty() {
-                vec![pipeline
-                    .export_svg_continuous(&layout)
-                    .ok_or_else(|| "continuous layout produced no SVG".to_string())?]
+                vec![
+                    pipeline
+                        .export_svg_continuous(&layout)
+                        .ok_or_else(|| "continuous layout produced no SVG".to_string())?,
+                ]
             } else {
                 pipeline.export_svg_pages(&layout)
             };
@@ -1972,6 +2050,44 @@ fn run(cli: Cli) -> Result<(), String> {
             ModelsAction::Pull { id } => sync::cmd_models_pull(&id),
         },
         Commands::Score { input } => orchestra::score_report(&input),
+        Commands::Book {
+            setlist,
+            library,
+            pdf_parts,
+            out,
+            chair,
+            prefer_pdf,
+            dry_run,
+            layout,
+        } => book::cmd_book(&book::BookArgs {
+            setlist: &setlist,
+            library: &library,
+            pdf_parts: pdf_parts.as_deref(),
+            out_dir: out.as_deref(),
+            chair: chair.as_deref(),
+            prefer_pdf,
+            dry_run,
+            auto_layout: layout == LayoutSource::Auto,
+        }),
+        Commands::Parts {
+            input,
+            out,
+            part,
+            format,
+            date,
+            list,
+            scale,
+            layout,
+        } => parts::cmd_parts(&parts::PartsArgs {
+            input: &input,
+            out_dir: out.as_deref(),
+            part: part.as_deref(),
+            format,
+            date: date.as_deref(),
+            list,
+            scale,
+            auto_layout: layout == LayoutSource::Auto,
+        }),
         Commands::Orchestrate {
             input,
             part,

@@ -1,7 +1,7 @@
 [package]
 name = "keyflow-cli"
 version.workspace = true
-edition = "2021"  # original edition of the dissolved workspace (root is 2024)
+edition.workspace = true
 license.workspace = true
 description = "The kf CLI surface for parsing and rendering Keyflow charts (lib + thin `kf` bin)"
 
@@ -37,6 +37,11 @@ keyflow = { workspace = true, features = ["text", "midi", "engraver", "pdf", "hi
 keyflow-chordsheet = { workspace = true }
 keyflow-musicxml = { workspace = true }
 keyflow-orchestra.workspace = true
+# `kf parts`: score/part engraving (Finale layouts, PDF export).
+engraver-score = { workspace = true, features = ["pdf"] }
+# `kf book`: concatenating part PDFs into instrument books (same lopdf
+# engraver-proto's PDF export uses).
+lopdf = "0.36"
 keyflow-sync.workspace = true
 
 clap = { version = "4", features = ["derive"] }
