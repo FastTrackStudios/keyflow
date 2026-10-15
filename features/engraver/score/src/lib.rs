@@ -7,6 +7,8 @@
 //! extracted parts. Playback flattening lives in `keyflow-orchestra`; chart
 //! conversion lives in `keyflow-musicxml`.
 
+pub mod finale;
+pub mod fonts;
 pub mod import;
 pub mod layout;
 pub mod model;

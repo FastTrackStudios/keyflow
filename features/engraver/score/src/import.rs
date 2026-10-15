@@ -17,8 +17,9 @@ use keyflow_musicxml::raw::{
 };
 
 use crate::model::{
-    AttrChange, Chord, Clef, ClefSign, Direction, DirectionKind, Event, Measure, Note,
-    NoteTypeValue, Part, Rest, Score, Step, Transposition, WrittenDuration, WrittenPitch,
+    AttrChange, BarStyle, Chord, Clef, ClefSign, Direction, DirectionKind, Enclosure, Event,
+    Measure, Note, NoteTypeValue, Part, RehearsalMark, Rest, Score, Step, Transposition,
+    WrittenDuration, WrittenPitch,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -102,6 +103,13 @@ pub fn score_from_partwise(score: &ScorePartwise) -> Score {
         composer: creators.get("composer").cloned(),
         arranger: creators.get("arranger").cloned(),
         lyricist: creators.get("lyricist").cloned(),
+        rights: score
+            .content
+            .identification
+            .as_ref()
+            .and_then(|i| i.content.rights.first())
+            .map(|r| decode_entities(&r.content))
+            .filter(|r| !r.trim().is_empty()),
         parts,
     }
 }
@@ -203,6 +211,15 @@ fn import_part(
                     let tick = cursor.max(0) as u32;
                     for dt in &dir.content.direction_type {
                         import_direction_type(dt, tick, &mut measure.directions);
+                    }
+                }
+
+                MeasureElement::Barline(bar) => {
+                    use musicxml::datatypes::RightLeftMiddle;
+                    let right =
+                        matches!(bar.attributes.location, None | Some(RightLeftMiddle::Right));
+                    if right && let Some(style) = &bar.content.bar_style {
+                        measure.barline = convert_bar_style(&style.content);
                     }
                 }
 
@@ -430,7 +447,12 @@ fn push_pitched(
         return;
     }
 
-    let (articulations, slur_start, slur_stop) = read_notations(note, shape.cue);
+    let NotationInfo {
+        articulations,
+        above: articulation_above,
+        slur_start,
+        slur_stop,
+    } = read_notations(note, shape.cue);
     measure.events.push(Event::Chord(Chord {
         tick,
         duration: shape.duration,
@@ -442,6 +464,7 @@ fn push_pitched(
         slur_start,
         slur_stop,
         articulations,
+        articulation_above,
     }));
 }
 
@@ -489,13 +512,36 @@ fn import_direction_type(
             }
         }
         DirectionTypeContents::Rehearsal(rehs) => {
+            use musicxml::datatypes::{EnclosureShape, FontSize, FontStyle, FontWeight};
             for r in rehs {
-                if !r.content.is_empty() {
-                    out.push(Direction {
-                        tick,
-                        kind: DirectionKind::Rehearsal(decode_entities(&r.content)),
-                    });
+                let text = decode_entities(&r.content);
+                if text.trim().is_empty() {
+                    continue;
                 }
+                let a = &r.attributes;
+                let enclosure = match a.enclosure {
+                    // MusicXML's default rehearsal enclosure is a square box.
+                    None | Some(EnclosureShape::Rectangle) | Some(EnclosureShape::Square) => {
+                        Enclosure::Rectangle
+                    }
+                    Some(EnclosureShape::Oval) | Some(EnclosureShape::Circle) => Enclosure::Oval,
+                    Some(EnclosureShape::None) => Enclosure::None,
+                    Some(_) => Enclosure::Rectangle,
+                };
+                out.push(Direction {
+                    tick,
+                    kind: DirectionKind::Rehearsal(RehearsalMark {
+                        text: text.trim().to_string(),
+                        enclosure,
+                        font_size: match &a.font_size {
+                            Some(FontSize::Decimal(pt)) => Some(f64::from(*pt)),
+                            _ => None,
+                        },
+                        // Rehearsal marks default to bold when unstated.
+                        bold: !matches!(a.font_weight, Some(FontWeight::Normal)),
+                        italic: matches!(a.font_style, Some(FontStyle::Italic)),
+                    }),
+                });
             }
         }
         _ => {}
@@ -503,7 +549,42 @@ fn import_direction_type(
 }
 
 /// Collect articulation tags + slur flags from `<notations>`.
-fn read_notations(note: &XmlNote, cue: bool) -> (std::collections::BTreeSet<String>, bool, bool) {
+/// An articulation's `placement` (true = above), when the file pins it.
+fn articulation_placement(a: &musicxml::elements::ArticulationsType) -> Option<bool> {
+    use musicxml::datatypes::AboveBelow;
+    use musicxml::elements::ArticulationsType as A;
+    let placement = match a {
+        A::Accent(e) => &e.attributes.placement,
+        A::StrongAccent(e) => &e.attributes.placement,
+        A::Staccato(e) => &e.attributes.placement,
+        A::Tenuto(e) => &e.attributes.placement,
+        A::DetachedLegato(e) => &e.attributes.placement,
+        A::Staccatissimo(e) => &e.attributes.placement,
+        A::Spiccato(e) => &e.attributes.placement,
+        A::Scoop(e) => &e.attributes.placement,
+        A::Plop(e) => &e.attributes.placement,
+        A::Doit(e) => &e.attributes.placement,
+        A::Falloff(e) => &e.attributes.placement,
+        A::BreathMark(e) => &e.attributes.placement,
+        A::Caesura(e) => &e.attributes.placement,
+        A::Stress(e) => &e.attributes.placement,
+        A::Unstress(e) => &e.attributes.placement,
+        A::SoftAccent(e) => &e.attributes.placement,
+        A::OtherArticulation(e) => &e.attributes.placement,
+    };
+    placement.as_ref().map(|p| matches!(p, AboveBelow::Above))
+}
+
+/// Articulation tags, their pinned sides, and slur flags from `<notations>`.
+struct NotationInfo {
+    articulations: std::collections::BTreeSet<String>,
+    above: std::collections::BTreeMap<String, bool>,
+    slur_start: bool,
+    slur_stop: bool,
+}
+
+fn read_notations(note: &XmlNote, cue: bool) -> NotationInfo {
+    let mut above = std::collections::BTreeMap::new();
     let mut art = std::collections::BTreeSet::new();
     if cue {
         art.insert("cue".to_string());
@@ -515,7 +596,11 @@ fn read_notations(note: &XmlNote, cue: bool) -> (std::collections::BTreeSet<Stri
             match item {
                 NotationContentTypes::Articulations(arts) => {
                     for a in &arts.content {
-                        art.insert(articulation_tag(a).to_string());
+                        let tag = articulation_tag(a).to_string();
+                        if let Some(up) = articulation_placement(a) {
+                            above.insert(tag.clone(), up);
+                        }
+                        art.insert(tag);
                     }
                 }
                 NotationContentTypes::Fermata(_) => {
@@ -542,7 +627,24 @@ fn read_notations(note: &XmlNote, cue: bool) -> (std::collections::BTreeSet<Stri
             }
         }
     }
-    (art, slur_start, slur_stop)
+    NotationInfo {
+        articulations: art,
+        above,
+        slur_start,
+        slur_stop,
+    }
+}
+
+fn convert_bar_style(style: &musicxml::datatypes::BarStyle) -> BarStyle {
+    use musicxml::datatypes::BarStyle as X;
+    match style {
+        X::LightLight => BarStyle::LightLight,
+        X::LightHeavy => BarStyle::LightHeavy,
+        X::HeavyLight => BarStyle::HeavyLight,
+        X::Dashed | X::Dotted => BarStyle::Dashed,
+        X::None => BarStyle::None,
+        _ => BarStyle::Regular,
+    }
 }
 
 fn convert_clef(clef: &musicxml::elements::Clef) -> Clef {

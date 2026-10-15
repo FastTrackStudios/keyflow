@@ -27,10 +27,19 @@ use engraver_proto::engraver::scene::paint::{FontStyle, FontWeight, PaintCommand
 use kurbo::{Affine, Point, Rect};
 use peniko::Color;
 
-use crate::model::{self, ClefSign, Event, NoteTypeValue, Part, Score, Step, WrittenPitch};
+use crate::model::{
+    self, BarStyle, ClefSign, Enclosure, Event, NoteTypeValue, RehearsalMark, Score, Step,
+    WrittenPitch,
+};
 
 /// Page + engraving options. Defaults follow the Columbus part books:
 /// US Letter portrait, generous margins, 6.5pt spatium.
+///
+/// Everything here is engraver-native (points, measure indices). A source
+/// that knows its own layout — Finale's linked parts — fills
+/// [`LayoutOptions::explicit`] and [`LayoutOptions::page_texts`] so the part
+/// comes out with the arranger's system breaks, page turns and headers;
+/// without them the engine packs systems itself.
 #[derive(Debug, Clone)]
 pub struct LayoutOptions {
     pub page_width: f64,
@@ -44,6 +53,37 @@ pub struct LayoutOptions {
     pub title_block_height: f64,
     /// Minimum measures a rest run needs to collapse into a multirest.
     pub multirest_min: usize,
+    /// Family for all page and staff text (title, cues, measure numbers).
+    pub text_font: String,
+    pub measure_numbers: MeasureNumbers,
+    /// Page headers/footers. `None` draws the default title block (part
+    /// name, title, composer on page 1).
+    pub page_texts: Option<Vec<PageText>>,
+    /// Source-supplied system/page/multirest layout.
+    pub explicit: Option<ExplicitLayout>,
+    /// Per-side margins; `None` = `margin` on every side.
+    pub margins: Option<Margins>,
+}
+
+/// Page margins in points.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Margins {
+    pub top: f64,
+    pub right: f64,
+    pub bottom: f64,
+    pub left: f64,
+}
+
+impl LayoutOptions {
+    #[must_use]
+    pub fn margins(&self) -> Margins {
+        self.margins.unwrap_or(Margins {
+            top: self.margin,
+            right: self.margin,
+            bottom: self.margin,
+            left: self.margin,
+        })
+    }
 }
 
 impl Default for LayoutOptions {
@@ -56,8 +96,155 @@ impl Default for LayoutOptions {
             system_gap: 74.0,
             title_block_height: 84.0,
             multirest_min: 2,
+            text_font: crate::fonts::SERIF_FAMILY.to_string(),
+            measure_numbers: MeasureNumbers::default(),
+            page_texts: None,
+            explicit: None,
+            margins: None,
         }
     }
+}
+
+/// A text face: family, point size, weight and slant.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TextFont {
+    pub family: String,
+    pub size: f64,
+    pub bold: bool,
+    pub italic: bool,
+}
+
+impl TextFont {
+    #[must_use]
+    pub fn serif(size: f64) -> Self {
+        Self {
+            family: crate::fonts::SERIF_FAMILY.to_string(),
+            size,
+            bold: false,
+            italic: false,
+        }
+    }
+
+    #[must_use]
+    pub fn bold(mut self) -> Self {
+        self.bold = true;
+        self
+    }
+
+    #[must_use]
+    pub fn italic(mut self) -> Self {
+        self.italic = true;
+        self
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HAlign {
+    #[default]
+    Left,
+    Center,
+    Right,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum VAlign {
+    #[default]
+    Top,
+    Center,
+    Bottom,
+}
+
+/// Text placed on a range of pages (title, running header, footer).
+///
+/// `text` may contain `{page}` and `{pages}`, filled per page. The anchor
+/// is the margin box edge chosen by `h_align`/`v_align`; `x` moves right
+/// and `y` moves DOWN from it (to the text's top edge).
+#[derive(Debug, Clone, PartialEq)]
+pub struct PageText {
+    pub text: String,
+    pub font: TextFont,
+    /// 1-based.
+    pub first_page: usize,
+    /// 1-based, inclusive; `None` = through the last page.
+    pub last_page: Option<usize>,
+    pub h_align: HAlign,
+    pub v_align: VAlign,
+    pub x: f64,
+    pub y: f64,
+}
+
+/// Where measure numbers print.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MeasureNumberMode {
+    None,
+    /// Above the first measure of each system.
+    SystemStart,
+    /// Every `n` measures (and at system starts).
+    Every(u32),
+}
+
+/// Measure-number style for a part.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MeasureNumbers {
+    pub mode: MeasureNumberMode,
+    /// Skip the piece's first measure.
+    pub exclude_first: bool,
+    /// Print "11-14" under a multimeasure rest.
+    pub multirest_ranges: bool,
+    pub font: TextFont,
+    pub multirest_font: TextFont,
+    /// Offset from a measure's left barline at the top staff line
+    /// (x right, y down), points.
+    pub offset: (f64, f64),
+    /// Offset from a multirest's center at the top staff line.
+    pub multirest_offset: (f64, f64),
+}
+
+impl Default for MeasureNumbers {
+    fn default() -> Self {
+        Self {
+            mode: MeasureNumberMode::SystemStart,
+            exclude_first: false,
+            multirest_ranges: false,
+            font: TextFont::serif(9.0).italic(),
+            multirest_font: TextFont::serif(9.0).italic(),
+            offset: (0.0, -8.0),
+            multirest_offset: (0.0, 38.0),
+        }
+    }
+}
+
+/// System, page and multirest layout dictated by the source.
+///
+/// Measure indices are positions in [`crate::model::Part::measures`].
+#[derive(Debug, Clone, Default)]
+pub struct ExplicitLayout {
+    pub systems: Vec<ExplicitSystem>,
+    pub multirests: Vec<ExplicitMultiRest>,
+    /// Relative width (spring) per measure index; `None` = engine weight.
+    pub measure_widths: Vec<Option<f64>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExplicitSystem {
+    /// Measure indices, end exclusive.
+    pub measures: std::ops::Range<usize>,
+    /// 0-based page.
+    pub page: usize,
+    /// Top staff line, points from the page top.
+    pub staff_top: f64,
+    /// Staff start and end, points from the page's left edge.
+    pub left: f64,
+    pub right: f64,
+    pub spatium: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExplicitMultiRest {
+    /// Measure indices, end exclusive.
+    pub measures: std::ops::Range<usize>,
+    /// Relative width (same scale as `measure_widths`).
+    pub width: f64,
 }
 
 /// One exported page's crop box within the shared scene.
@@ -82,18 +269,59 @@ pub struct PartLayout {
 /// A prepared measure ready for `MeasureBuilder`, or a multirest run.
 enum Prepared {
     Notated(Box<NotatedMeasure>),
-    /// `count` consecutive resting measures collapsed into one H-bar block.
-    MultiRest {
-        count: usize,
-        number: String,
-        clef: ClefType,
-        key_fifths: i8,
-        time: (u32, u32),
-    },
+    /// Consecutive resting measures collapsed into one H-bar block.
+    MultiRest(MultiRestBlock),
+}
+
+struct MultiRestBlock {
+    /// Index of the first measure in [`Part::measures`].
+    first: usize,
+    count: usize,
+    number: String,
+    last_number: String,
+    clef: ClefType,
+    key_fifths: i8,
+    time: (u32, u32),
+    /// Cues and texts on the first measure (rehearsal marks, tempo).
+    directions: Vec<model::Direction>,
+    barline: BarStyle,
+}
+
+impl Prepared {
+    fn first_index(&self) -> usize {
+        match self {
+            Prepared::Notated(m) => m.index,
+            Prepared::MultiRest(r) => r.first,
+        }
+    }
+
+    fn barline(&self) -> BarStyle {
+        match self {
+            Prepared::Notated(m) => m.barline,
+            Prepared::MultiRest(r) => r.barline,
+        }
+    }
+
+    fn key_fifths(&self) -> i8 {
+        match self {
+            Prepared::Notated(m) => m.key_fifths,
+            Prepared::MultiRest(r) => r.key_fifths,
+        }
+    }
+
+    fn directions(&self) -> &[model::Direction] {
+        match self {
+            Prepared::Notated(m) => &m.directions,
+            Prepared::MultiRest(r) => &r.directions,
+        }
+    }
 }
 
 struct NotatedMeasure {
+    /// Index in [`Part::measures`].
+    index: usize,
     number: String,
+    barline: BarStyle,
     entries: Vec<RhythmEntry>,
     pitches: Vec<Option<(i32, Accidental)>>,
     stacks: Vec<Vec<(i32, Accidental)>>,
@@ -107,8 +335,9 @@ struct NotatedMeasure {
     slur_stops: Vec<bool>,
     /// Per entry: tick onset (for direction anchoring).
     entry_ticks: Vec<u32>,
-    /// Per entry: articulation tags (staccato, accent, …).
-    arts: Vec<Vec<String>>,
+    /// Per entry: articulation tags (staccato, accent, …) and the side the
+    /// source pins each to (`Some(true)` = above), if any.
+    arts: Vec<Vec<(String, Option<bool>)>>,
     /// Directions in this measure (dynamics, hairpins, texts).
     directions: Vec<model::Direction>,
     /// Clef change taking effect at this measure (drawn in-measure when
@@ -122,10 +351,29 @@ struct NotatedMeasure {
 }
 
 impl NotatedMeasure {
+    /// Nothing but one whole-bar rest (and nothing drawn in the bar that
+    /// would need the measure builder: no clef/key/time change).
+    fn is_bar_rest(&self) -> bool {
+        matches!(
+            self.entries.as_slice(),
+            [RhythmEntry::Rest(d)] if d.kind == DurationKind::Whole && d.dots == 0
+        ) && !self.clef_changed
+            && !self.key_changed
+            && !self.time_changed
+    }
+
     /// A whole-bar-rest measure with the given attribute state.
-    fn rest_bar(number: String, clef: ClefType, key_fifths: i8, time: (u32, u32)) -> Self {
+    fn rest_bar(
+        index: usize,
+        number: String,
+        clef: ClefType,
+        key_fifths: i8,
+        time: (u32, u32),
+    ) -> Self {
         Self {
+            index,
             number,
+            barline: BarStyle::Regular,
             entries: vec![RhythmEntry::Rest(Duration::Whole)],
             pitches: vec![None],
             stacks: vec![Vec::new()],
@@ -328,52 +576,120 @@ fn primary_voice(measure: &model::Measure) -> Option<u32> {
         .map(|(v, _)| v)
 }
 
-fn prepare_measures(part: &Part, opts: &LayoutOptions, dropped: &mut usize) -> Vec<Prepared> {
+/// The directions a part shows at measure `index`: its own, with rehearsal
+/// marks taken from the score (top part) so every part gets the cues.
+fn part_directions(score: &Score, part_index: usize, index: usize) -> Vec<model::Direction> {
+    let mut out: Vec<model::Direction> = score.parts[part_index]
+        .measures
+        .get(index)
+        .map(|m| {
+            m.directions
+                .iter()
+                .filter(|d| !matches!(d.kind, model::DirectionKind::Rehearsal(_)))
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default();
+    for (tick, mark) in score.rehearsals_for_part(part_index, index) {
+        out.push(model::Direction {
+            tick,
+            kind: model::DirectionKind::Rehearsal(mark),
+        });
+    }
+    out
+}
+
+/// A cue a multirest must not swallow: a rehearsal mark or staff text.
+fn breaks_multirest(directions: &[model::Direction]) -> bool {
+    directions.iter().any(|d| {
+        matches!(
+            d.kind,
+            model::DirectionKind::Rehearsal(_) | model::DirectionKind::Words(_)
+        )
+    })
+}
+
+fn prepare_measures(
+    score: &Score,
+    part_index: usize,
+    opts: &LayoutOptions,
+    dropped: &mut usize,
+) -> Vec<Prepared> {
+    let part = &score.parts[part_index];
     let mut state = AttrState {
         clef: ClefType::Treble,
         key_fifths: 0,
         time: (4, 4),
     };
-    // Seed from the first measure's attributes so the initial prefix is right
-    // even before the loop applies them.
     let mut prepared = Vec::new();
-    // Pending resting measures: (number, clef, key, time) captured at walk time.
-    type RestInfo = (String, ClefType, i8, (u32, u32));
+
+    /// A resting measure waiting to be grouped.
+    struct RestInfo {
+        index: usize,
+        number: String,
+        clef: ClefType,
+        key_fifths: i8,
+        time: (u32, u32),
+        directions: Vec<model::Direction>,
+        barline: BarStyle,
+    }
     let mut rest_run: Vec<RestInfo> = Vec::new();
 
-    let flush_rests = |run: &mut Vec<RestInfo>, out: &mut Vec<Prepared>, opts: &LayoutOptions| {
+    let rest_bar = |r: RestInfo| -> Prepared {
+        let mut bar = NotatedMeasure::rest_bar(r.index, r.number, r.clef, r.key_fifths, r.time);
+        bar.directions = r.directions;
+        bar.barline = r.barline;
+        Prepared::Notated(Box::new(bar))
+    };
+    let flush_rests = |run: &mut Vec<RestInfo>, out: &mut Vec<Prepared>, min: usize| {
         if run.is_empty() {
             return;
         }
-        if run.len() >= opts.multirest_min {
-            let (number, clef, key_fifths, time) = run[0].clone();
-            out.push(Prepared::MultiRest {
-                count: run.len(),
-                number,
-                clef,
-                key_fifths,
-                time,
-            });
+        if run.len() >= min.max(2) {
+            let count = run.len();
+            let mut drained = run.drain(..);
+            let first = drained.next().expect("non-empty run");
+            let last = drained.next_back();
+            let (last_number, barline) = match &last {
+                Some(l) => (l.number.clone(), l.barline),
+                None => (first.number.clone(), first.barline),
+            };
+            out.push(Prepared::MultiRest(MultiRestBlock {
+                first: first.index,
+                count,
+                number: first.number,
+                last_number,
+                clef: first.clef,
+                key_fifths: first.key_fifths,
+                time: first.time,
+                directions: first.directions,
+                barline,
+            }));
         } else {
-            for (number, clef, key_fifths, time) in run.iter() {
-                out.push(Prepared::Notated(Box::new(NotatedMeasure::rest_bar(
-                    number.clone(),
-                    *clef,
-                    *key_fifths,
-                    *time,
-                ))));
+            for r in run.drain(..) {
+                out.push(rest_bar(r));
             }
         }
-        run.clear();
     };
 
-    for measure in &part.measures {
+    // Source-dictated multirests: start index → end index (exclusive).
+    let explicit_rests: Option<std::collections::HashMap<usize, usize>> =
+        opts.explicit.as_ref().map(|e| {
+            e.multirests
+                .iter()
+                .filter(|r| r.measures.len() >= 2)
+                .map(|r| (r.measures.start, r.measures.end.min(part.measures.len())))
+                .collect()
+        });
+    // Explicit multirest still being consumed: its end index.
+    let mut in_explicit_rest: Option<usize> = None;
+
+    for (index, measure) in part.measures.iter().enumerate() {
         let mut clef_changed = false;
         let mut key_changed = false;
         let mut time_changed = false;
         for change in &measure.attributes {
-            if let Some((staff, clef)) = change.clefs.iter().find(|(s, _)| *s == 1) {
-                let _ = staff;
+            if let Some((_, clef)) = change.clefs.iter().find(|(s, _)| *s == 1) {
                 let ct = clef_type(clef);
                 if ct != state.clef {
                     state.clef = ct;
@@ -393,26 +709,74 @@ fn prepare_measures(part: &Part, opts: &LayoutOptions, dropped: &mut usize) -> V
                 time_changed = true;
             }
         }
+        let directions = part_directions(score, part_index, index);
 
-        if is_resting(measure) && !clef_changed && !key_changed && !time_changed {
-            rest_run.push((
-                measure.number.clone(),
-                state.clef,
-                state.key_fifths,
-                state.time,
-            ));
+        if let Some(end) = in_explicit_rest {
+            if index < end {
+                continue;
+            }
+            in_explicit_rest = None;
+        }
+        if let Some(rests) = &explicit_rests {
+            if let Some(&end) = rests.get(&index)
+                && end > index + 1
+            {
+                let last = &part.measures[end - 1];
+                prepared.push(Prepared::MultiRest(MultiRestBlock {
+                    first: index,
+                    count: end - index,
+                    number: measure.number.clone(),
+                    last_number: last.number.clone(),
+                    clef: state.clef,
+                    key_fifths: state.key_fifths,
+                    time: state.time,
+                    directions,
+                    barline: last.barline,
+                }));
+                in_explicit_rest = Some(end);
+                continue;
+            }
+        }
+
+        let attrs_changed = clef_changed || key_changed || time_changed;
+        if is_resting(measure) && !attrs_changed {
+            let info = RestInfo {
+                index,
+                number: measure.number.clone(),
+                clef: state.clef,
+                key_fifths: state.key_fifths,
+                time: state.time,
+                directions,
+                barline: measure.barline,
+            };
+            if explicit_rests.is_some() {
+                // The source decided which rests group; a lone one is a bar.
+                prepared.push(rest_bar(info));
+                continue;
+            }
+            if breaks_multirest(&info.directions) {
+                flush_rests(&mut rest_run, &mut prepared, opts.multirest_min);
+            }
+            let section_end = info.barline.is_section_end();
+            rest_run.push(info);
+            if section_end {
+                flush_rests(&mut rest_run, &mut prepared, opts.multirest_min);
+            }
             continue;
         }
-        flush_rests(&mut rest_run, &mut prepared, opts);
+        flush_rests(&mut rest_run, &mut prepared, opts.multirest_min);
 
         let Some(voice) = primary_voice(measure) else {
             // Rests only but with attribute changes: render a whole-rest bar.
             let mut bar = NotatedMeasure::rest_bar(
+                index,
                 measure.number.clone(),
                 state.clef,
                 state.key_fifths,
                 state.time,
             );
+            bar.directions = directions;
+            bar.barline = measure.barline;
             bar.clef_changed = clef_changed;
             bar.key_changed = key_changed;
             bar.time_changed = time_changed;
@@ -439,7 +803,7 @@ fn prepare_measures(part: &Part, opts: &LayoutOptions, dropped: &mut usize) -> V
         let mut slur_starts: Vec<bool> = Vec::new();
         let mut slur_stops: Vec<bool> = Vec::new();
         let mut entry_ticks: Vec<u32> = Vec::new();
-        let mut arts: Vec<Vec<String>> = Vec::new();
+        let mut arts: Vec<Vec<(String, Option<bool>)>> = Vec::new();
 
         // Chords of the merged voice, keyed by (tick, duration).
         let partner_chords: std::collections::HashMap<(u32, u32), &model::Chord> = merged_voice
@@ -529,7 +893,13 @@ fn prepare_measures(part: &Part, opts: &LayoutOptions, dropped: &mut usize) -> V
                     slur_starts.push(chord.slur_start);
                     slur_stops.push(chord.slur_stop);
                     entry_ticks.push(chord.tick);
-                    arts.push(chord.articulations.iter().cloned().collect());
+                    arts.push(
+                        chord
+                            .articulations
+                            .iter()
+                            .map(|t| (t.clone(), chord.articulation_above.get(t).copied()))
+                            .collect(),
+                    );
                 }
                 Event::Rest(rest) => {
                     let duration = if rest.measure_rest || rest.duration >= measure.len_ticks {
@@ -594,7 +964,9 @@ fn prepare_measures(part: &Part, opts: &LayoutOptions, dropped: &mut usize) -> V
         }
 
         prepared.push(Prepared::Notated(Box::new(NotatedMeasure {
+            index,
             number: measure.number.clone(),
+            barline: measure.barline,
             entries,
             pitches,
             stacks,
@@ -605,7 +977,7 @@ fn prepare_measures(part: &Part, opts: &LayoutOptions, dropped: &mut usize) -> V
             slur_stops,
             entry_ticks,
             arts,
-            directions: measure.directions.clone(),
+            directions,
             clef: state.clef,
             clef_changed,
             key_fifths: state.key_fifths,
@@ -614,7 +986,7 @@ fn prepare_measures(part: &Part, opts: &LayoutOptions, dropped: &mut usize) -> V
             time_changed,
         })));
     }
-    flush_rests(&mut rest_run, &mut prepared, opts);
+    flush_rests(&mut rest_run, &mut prepared, opts.multirest_min);
     prepared
 }
 
@@ -692,14 +1064,124 @@ fn build_measure(
     builder.build(&ctx.as_context())
 }
 
-/// A full-height barline at `x` in staff coords (top line = 0).
-fn barline(x: f64, spatium: f64) -> SceneNode {
-    SceneNode::anonymous_leaf(vec![PaintCommand::Line {
-        start: Point::new(x, 0.0),
-        end: Point::new(x, 4.0 * spatium),
-        width: spatium * 0.16,
+/// A barline of `style` ending at `x` in staff coords (top line = 0).
+/// Thick strokes sit inside the measure so a final barline ends flush with
+/// the staff.
+fn barline_scene(x: f64, style: BarStyle, spatium: f64) -> Option<SceneNode> {
+    let thin = spatium * 0.16;
+    let thick = spatium * 0.5;
+    let gap = spatium * 0.4;
+    let line = |cx: f64, w: f64| PaintCommand::Line {
+        start: Point::new(cx, 0.0),
+        end: Point::new(cx, 4.0 * spatium),
+        width: w,
         color: Color::BLACK,
         line_cap: Default::default(),
+    };
+    let cmds = match style {
+        BarStyle::None => return None,
+        BarStyle::Regular | BarStyle::Dashed => vec![line(x - thin / 2.0, thin)],
+        BarStyle::LightLight => vec![line(x - thin * 1.5 - gap, thin), line(x - thin / 2.0, thin)],
+        BarStyle::LightHeavy => vec![
+            line(x - thick - gap - thin / 2.0, thin),
+            line(x - thick / 2.0, thick),
+        ],
+        BarStyle::HeavyLight => vec![
+            line(x - thin - gap - thick / 2.0, thick),
+            line(x - thin / 2.0, thin),
+        ],
+    };
+    Some(SceneNode::anonymous_leaf(cmds))
+}
+
+/// The extent of text drawn above a staff (system coords, y down).
+#[derive(Debug, Clone, Copy)]
+struct TextBox {
+    x1: f64,
+    x2: f64,
+    top: f64,
+}
+
+/// Draw rehearsal marks above the staff, left-aligned at `x` (a measure's
+/// start), several in one measure laid side by side ("79" then "Sax Solo").
+/// Box sizes come from real glyph advances.
+fn draw_rehearsals(
+    sys_node: &mut SceneNode,
+    x: f64,
+    marks: &[&RehearsalMark],
+    family: &str,
+    spatium: f64,
+    occupied: &[TextBox],
+) {
+    let mut cursor = x;
+    for mark in marks {
+        let size = mark.font_size.unwrap_or(12.0);
+        let w = crate::fonts::text_width(&mark.text, size, mark.bold, mark.italic);
+        let enclosed = mark.enclosure != Enclosure::None;
+        let pad = if enclosed { 0.22 * size } else { 0.0 };
+        let box_w = w + 2.0 * pad;
+        // Box bottom sits clear of the staff and of a multirest's count,
+        // and above any staff text already under it.
+        let box_bottom = occupied
+            .iter()
+            .filter(|b| b.x1 < cursor + box_w && b.x2 > cursor)
+            .map(|b| b.top - 2.0)
+            .fold(-2.8 * spatium, f64::min);
+        let baseline = box_bottom - 0.22 * size - pad * 0.7;
+        let box_top = baseline - 0.75 * size - pad * 0.7;
+        let mut cmds = Vec::new();
+        if enclosed {
+            let rect = Rect::new(cursor, box_top, cursor + w + 2.0 * pad, box_bottom);
+            cmds.push(PaintCommand::Rect {
+                rect,
+                fill: None,
+                stroke: Some(Color::BLACK),
+                stroke_width: 0.8,
+                corner_radius: (mark.enclosure == Enclosure::Oval)
+                    .then_some((box_bottom - box_top) / 2.0),
+            });
+        }
+        cmds.push(PaintCommand::Text {
+            text: mark.text.clone(),
+            font_family: family.to_string(),
+            font_size: size,
+            position: Point::new(cursor + pad, baseline),
+            color: Color::BLACK,
+            anchor: TextAnchor::Start,
+            weight: if mark.bold {
+                FontWeight::Bold
+            } else {
+                FontWeight::Normal
+            },
+            style: if mark.italic {
+                FontStyle::Italic
+            } else {
+                FontStyle::Normal
+            },
+        });
+        sys_node.add_child(SceneNode::anonymous_leaf(cmds));
+        cursor += w + 2.0 * pad + 0.5 * size;
+    }
+}
+
+fn styled_text(s: &str, font: &TextFont, pos: Point, anchor: TextAnchor) -> SceneNode {
+    SceneNode::anonymous_leaf(vec![PaintCommand::Text {
+        text: s.to_string(),
+        font_family: font.family.clone(),
+        font_size: font.size,
+        position: pos,
+        color: Color::BLACK,
+        anchor,
+        weight: if font.bold {
+            FontWeight::Bold
+        } else {
+            FontWeight::Normal
+        },
+        style: if font.italic {
+            FontStyle::Italic
+        } else {
+            FontStyle::Normal
+        },
     }])
 }
 
@@ -759,8 +1241,9 @@ fn draw_directions(
     ctx: &LayoutContextOwned,
     system_width: f64,
     spatium: f64,
+    words_font: &TextFont,
     id: &mut u64,
-) {
+) -> Vec<TextBox> {
     use engraver_proto::engraver::layout::tlayout::{
         DynamicsAlign, DynamicsParams, DynamicsPlacement, layout_dynamic,
     };
@@ -780,6 +1263,10 @@ fn draw_directions(
 
     // ── dynamics + hairpins ──
     let mut wedge_open: Option<(f64, bool)> = None; // (start x, crescendo)
+    // Staff texts placed so far: (x start, x end, row). A text that would
+    // overlap one already on its row moves up a row.
+    let mut placed_words: Vec<(f64, f64, usize)> = Vec::new();
+    let mut word_boxes: Vec<TextBox> = Vec::new();
     let hairpin_y = 4.0 * spatium + 2.8 * spatium;
     let draw_wedge = |sys_node: &mut SceneNode, x1: f64, x2: f64, crescendo: bool| {
         if x2 <= x1 + spatium {
@@ -833,44 +1320,34 @@ fn draw_directions(
                     }
                 }
                 model::DirectionKind::Words(w) => {
-                    // Staff text above the staff (tempo/technique cues),
-                    // clamped so long strings stay on the page.
-                    let est_w = 9.0 * 0.55 * w.chars().count() as f64;
+                    // Staff text above the staff (technique / a2 / tempo
+                    // cues), clamped so long strings stay on the page.
+                    let est_w = crate::fonts::text_width(w, words_font.size, false, true);
                     let x = anchor_x(a, d.tick).min((system_width - est_w).max(0.0));
-                    sys_node.add_child(text(
+                    let gap = 0.3 * words_font.size;
+                    let row = (0..)
+                        .find(|row| {
+                            !placed_words.iter().any(|(x1, x2, r)| {
+                                r == row && x < x2 + gap && x + est_w + gap > *x1
+                            })
+                        })
+                        .unwrap_or(0);
+                    placed_words.push((x, x + est_w, row));
+                    let y = -2.2 * spatium - row as f64 * 1.2 * words_font.size;
+                    word_boxes.push(TextBox {
+                        x1: x,
+                        x2: x + est_w,
+                        top: y - 0.8 * words_font.size,
+                    });
+                    sys_node.add_child(styled_text(
                         w,
-                        "FreeSans",
-                        9.0,
-                        Point::new(x, -3.4 * spatium),
+                        words_font,
+                        Point::new(x, y),
                         TextAnchor::Start,
-                        FontWeight::Normal,
                     ));
                 }
-                model::DirectionKind::Rehearsal(r) => {
-                    // Boxed rehearsal mark (the Columbus-book "VS 1" style).
-                    let x = anchor_x(a, d.tick);
-                    let size = 11.0;
-                    let w_est = size * 0.62 * r.len() as f64 + 8.0;
-                    let y_top = -6.2 * spatium;
-                    let mut cmds = vec![PaintCommand::Rect {
-                        rect: Rect::new(x - 4.0, y_top, x + w_est - 4.0, y_top + size + 6.0),
-                        fill: None,
-                        stroke: Some(Color::BLACK),
-                        stroke_width: 1.1,
-                        corner_radius: None,
-                    }];
-                    cmds.push(PaintCommand::Text {
-                        text: r.clone(),
-                        font_family: "FreeSans".to_string(),
-                        font_size: size,
-                        position: Point::new(x, y_top + size + 1.0),
-                        color: Color::BLACK,
-                        anchor: TextAnchor::Start,
-                        weight: FontWeight::Bold,
-                        style: FontStyle::Normal,
-                    });
-                    sys_node.add_child(SceneNode::anonymous_leaf(cmds));
-                }
+                // Drawn by `draw_rehearsals`, which also covers multirests.
+                model::DirectionKind::Rehearsal(_) => {}
             }
         }
     }
@@ -905,17 +1382,23 @@ fn draw_directions(
                 .min()
                 .unwrap_or(primary_line);
             let mut stack_offset = 0.0;
-            for tag in &a.m.arts[i] {
+            for (tag, pinned) in &a.m.arts[i] {
                 let Some(art) = articulation_type(tag) else {
                     continue;
                 };
-                let above = !stem_up;
+                let above = pinned.unwrap_or(!stem_up);
                 let (glyph, y) = if above {
                     let y_note = 2.0 * spatium - f64::from(top_line) * spatium / 2.0;
-                    (
-                        art.smufl_codepoint_above(),
-                        y_note - 1.1 * spatium - stack_offset,
-                    )
+                    // Pinned above clears the stem (and the staff, as
+                    // Finale's "outside staff" marks do); otherwise the
+                    // mark sits just over the notehead.
+                    let y_mark = if pinned.is_some() && stem_up {
+                        let stem_tip = y_note - 3.5 * spatium;
+                        stem_tip.min(-0.6 * spatium) - 0.9 * spatium
+                    } else {
+                        y_note - 1.1 * spatium
+                    };
+                    (art.smufl_codepoint_above(), y_mark - stack_offset)
                 } else {
                     let y_note = 2.0 * spatium - f64::from(bottom_line) * spatium / 2.0;
                     (
@@ -935,6 +1418,7 @@ fn draw_directions(
             }
         }
     }
+    word_boxes
 }
 
 /// Draw ties and slurs over a laid-out system.
@@ -961,20 +1445,30 @@ fn draw_ties_and_slurs(
     let head_w = 1.18 * spatium;
     let pad = 0.2 * spatium;
 
-    let mut draw_tie = |sys_node: &mut SceneNode, line: i32, x1: f64, x2: f64| {
-        let dir = if line >= 0 {
-            SlurDirection::Up
+    // tlayout's `SlurDirection` is inverted for y-down scenes: `Up` lifts
+    // the endpoints but bows the curve DOWN (the chart tie pass compensates
+    // by always passing `Down`). Ask for the bow we want and pre-shift the
+    // endpoints by twice the offset tlayout will apply the wrong way.
+    let endpoint_shift = 2.0 * cfg.endpoint_offset * spatium;
+    let bow = |above: bool| {
+        if above {
+            (SlurDirection::Down, -endpoint_shift)
         } else {
-            SlurDirection::Down
-        };
+            (SlurDirection::Up, endpoint_shift)
+        }
+    };
+
+    let mut draw_tie = |sys_node: &mut SceneNode, line: i32, x1: f64, x2: f64| {
+        // Stems point down on/above the middle line, so the tie bows above.
+        let (dir, shift) = bow(line >= 0);
         let start = SlurEndpoint {
             x: x1,
-            y: y_of(line),
+            y: y_of(line) + shift,
             stem_up: line < 0,
         };
         let end = SlurEndpoint {
             x: x2.max(x1 + spatium),
-            y: y_of(line),
+            y: y_of(line) + shift,
             stem_up: line < 0,
         };
         let tie = layout_tie(&start, &end, dir, *id, spatium, &cfg);
@@ -1017,18 +1511,19 @@ fn draw_ties_and_slurs(
                 && let Some((sx, sl)) = open.take()
             {
                 // Slur above; endpoints just over the noteheads.
+                let (dir, shift) = bow(true);
                 let start = SlurEndpoint {
                     x: sx + head_w / 2.0,
-                    y: y_of(sl) - 0.8 * spatium,
+                    y: y_of(sl) - 0.8 * spatium + shift,
                     stem_up: false,
                 };
                 let end = SlurEndpoint {
                     x: ex + head_w / 2.0,
-                    y: y_of(line) - 0.8 * spatium,
+                    y: y_of(line) - 0.8 * spatium + shift,
                     stem_up: false,
                 };
                 if end.x > start.x + spatium {
-                    let slur = layout_slur(&start, &end, SlurDirection::Up, *id, spatium, &cfg);
+                    let slur = layout_slur(&start, &end, dir, *id, spatium, &cfg);
                     *id += 1;
                     sys_node.add_child(slur.scene);
                 }
@@ -1083,14 +1578,6 @@ fn multirest_scene(count: usize, width: f64, spatium: f64, id: u64) -> SceneNode
         weight: FontWeight::Normal,
         style: FontStyle::Normal,
     });
-    // Closing barline
-    cmds.push(PaintCommand::Line {
-        start: Point::new(width, 0.0),
-        end: Point::new(width, 4.0 * spatium),
-        width: spatium * 0.16,
-        color: Color::BLACK,
-        line_cap: Default::default(),
-    });
     node.add_child(SceneNode::anonymous_leaf(cmds));
     node
 }
@@ -1110,36 +1597,165 @@ fn staff_lines(width: f64, spatium: f64) -> SceneNode {
     SceneNode::anonymous_leaf(cmds)
 }
 
-fn text(
-    s: &str,
-    family: &str,
-    size: f64,
-    pos: Point,
-    anchor: TextAnchor,
-    weight: FontWeight,
-) -> SceneNode {
-    SceneNode::anonymous_leaf(vec![PaintCommand::Text {
-        text: s.to_string(),
-        font_family: family.to_string(),
-        font_size: size,
-        position: pos,
-        color: Color::BLACK,
-        anchor,
-        weight,
-        style: FontStyle::Normal,
-    }])
+/// A layout context whose style spatium matches the staff being drawn —
+/// the measure builder sizes noteheads and stems from the style, so it must
+/// agree with the staff lines.
+fn context_for(spatium: f64) -> LayoutContextOwned {
+    use engraver_proto::engraver::style::{MStyle, Sid, StyleValue};
+    let mut style = MStyle::lead_sheet();
+    style.set(Sid::Spatium, StyleValue::Real(spatium as f32));
+    LayoutContextOwned::new_minimal_arc(std::sync::Arc::new(style))
+}
+
+/// Distribute `total` across items in proportion to `weights`, never below
+/// each item's minimum (items pinned at their minimum drop out and the rest
+/// re-share what is left).
+fn proportional_widths(weights: &[f64], mins: &[f64], total: f64) -> Vec<f64> {
+    let n = weights.len();
+    let mut pinned = vec![false; n];
+    loop {
+        let pinned_sum: f64 = (0..n).filter(|i| pinned[*i]).map(|i| mins[i]).sum();
+        let free_weight: f64 = (0..n).filter(|i| !pinned[*i]).map(|i| weights[i]).sum();
+        if free_weight <= 0.0 {
+            return mins.to_vec();
+        }
+        let k = (total - pinned_sum).max(0.0) / free_weight;
+        let mut changed = false;
+        for i in 0..n {
+            if !pinned[i] && weights[i] * k < mins[i] {
+                pinned[i] = true;
+                changed = true;
+            }
+        }
+        if !changed {
+            return (0..n)
+                .map(|i| if pinned[i] { mins[i] } else { weights[i] * k })
+                .collect();
+        }
+    }
+}
+
+/// One system: which prepared items it holds and where it sits.
+struct SystemPlan {
+    items: Vec<usize>,
+    page: usize,
+    /// Top staff line, from the page top.
+    staff_top: f64,
+    left: f64,
+    right: f64,
+    spatium: f64,
+}
+
+/// The title block a part gets when the source supplies no page text:
+/// part name left, title centred, composer right on page 1, and a running
+/// "Title - Part - Pg. N" header after it.
+#[must_use]
+pub fn default_page_texts(score: &Score, part_name: &str) -> Vec<PageText> {
+    let title = score
+        .work_title
+        .clone()
+        .or_else(|| score.movement_title.clone())
+        .unwrap_or_default();
+    let mut texts = vec![
+        PageText {
+            text: part_name.to_string(),
+            font: TextFont::serif(14.0),
+            first_page: 1,
+            last_page: Some(1),
+            h_align: HAlign::Left,
+            v_align: VAlign::Top,
+            x: 0.0,
+            y: -14.0,
+        },
+        PageText {
+            text: title.clone(),
+            font: TextFont::serif(24.0).bold(),
+            first_page: 1,
+            last_page: Some(1),
+            h_align: HAlign::Center,
+            v_align: VAlign::Top,
+            x: 0.0,
+            y: -17.0,
+        },
+    ];
+    if let Some(composer) = score.composer.clone().or_else(|| score.arranger.clone()) {
+        texts.push(PageText {
+            text: composer,
+            font: TextFont::serif(12.0).bold(),
+            first_page: 1,
+            last_page: Some(1),
+            h_align: HAlign::Right,
+            v_align: VAlign::Top,
+            x: 0.0,
+            y: -6.0,
+        });
+    }
+    if !title.is_empty() {
+        texts.push(PageText {
+            text: format!("{title} - {part_name} - Pg. {{page}}"),
+            font: TextFont::serif(12.0),
+            first_page: 2,
+            last_page: None,
+            h_align: HAlign::Center,
+            v_align: VAlign::Top,
+            x: 0.0,
+            y: -12.0,
+        });
+    }
+    texts
+}
+
+fn draw_page_texts(
+    root: &mut SceneNode,
+    pages: &[PageRect],
+    texts: &[PageText],
+    opts: &LayoutOptions,
+) {
+    let margins = opts.margins();
+    let total = pages.len();
+    for (i, page) in pages.iter().enumerate() {
+        let number = i + 1;
+        for t in texts {
+            if number < t.first_page || t.last_page.is_some_and(|last| number > last) {
+                continue;
+            }
+            let content = t
+                .text
+                .replace("{page}", &number.to_string())
+                .replace("{pages}", &total.to_string());
+            if content.trim().is_empty() {
+                continue;
+            }
+            let (x, anchor) = match t.h_align {
+                HAlign::Left => (margins.left + t.x, TextAnchor::Start),
+                HAlign::Center => (page.width / 2.0 + t.x, TextAnchor::Middle),
+                HAlign::Right => (page.width - margins.right + t.x, TextAnchor::End),
+            };
+            // `y` positions the text's top edge (Top) or its descender line
+            // (Bottom); the baseline follows from the face's metrics.
+            let baseline = match t.v_align {
+                VAlign::Top => margins.top + t.y + 0.8 * t.font.size,
+                VAlign::Center => page.height / 2.0 + t.y + 0.3 * t.font.size,
+                VAlign::Bottom => page.height - margins.bottom + t.y - 0.22 * t.font.size,
+            };
+            root.add_child(styled_text(
+                &content,
+                &t.font,
+                Point::new(x, page.y_offset + baseline),
+                anchor,
+            ));
+        }
+    }
 }
 
 /// Lay out one part into pages.
 #[must_use]
 pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> PartLayout {
     let part = &score.parts[part_index];
-    let style = engraver_proto::api::style::leak_lead_sheet_style();
-    let ctx = LayoutContextOwned::new_minimal_arc(std::sync::Arc::new(style.clone()));
-    let spatium = opts.spatium;
+    let margins = opts.margins();
 
     let mut dropped = 0usize;
-    let prepared = prepare_measures(part, opts, &mut dropped);
+    let prepared = prepare_measures(score, part_index, opts, &mut dropped);
     if dropped > 0 {
         tracing::info!(
             part = part.name,
@@ -1148,9 +1764,12 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
         );
     }
 
-    let avail_width = opts.page_width - 2.0 * opts.margin;
-    let mut root = SceneNode::group(SemanticId::new(ElementType::System, 0));
-    let mut pages = Vec::new();
+    let base_spatium = opts
+        .explicit
+        .as_ref()
+        .and_then(|e| e.systems.first())
+        .map_or(opts.spatium, |s| s.spatium);
+    let ctx = context_for(base_spatium);
 
     // ── measure metrics: min width (compact build) + content weight ──
     //
@@ -1158,6 +1777,7 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
     // from rhythmic density via `chart_spacing::duration_stretch`, minimum
     // widths from a compact pre-build, and the per-system distribution is the
     // same spring physics (`measure_layout::distribute_measure_widths_spring`).
+    // A source with its own measure widths (Finale) replaces the weights.
     const SLOPE: f64 = chart_spacing::DEFAULT_SPACING_SLOPE;
     const DENSITY: f64 = chart_spacing::DEFAULT_SPACING_DENSITY;
 
@@ -1168,7 +1788,21 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
     struct MeasureMetrics {
         min_width: f64,
         weight: f64,
+        /// The source's own width for this item, when it gave one.
+        source_width: Option<f64>,
     }
+    let explicit = opts.explicit.as_ref();
+    let source_width_of = |item: &Prepared| -> Option<f64> {
+        let e = explicit?;
+        match item {
+            Prepared::Notated(m) => e.measure_widths.get(m.index).copied().flatten(),
+            Prepared::MultiRest(r) => e
+                .multirests
+                .iter()
+                .find(|mr| mr.measures.start == r.first)
+                .map(|mr| mr.width),
+        }
+    };
     let metrics: Vec<MeasureMetrics> = prepared
         .iter()
         .map(|item| match item {
@@ -1207,48 +1841,103 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
                 MeasureMetrics {
                     min_width,
                     weight: (duration_weight + tuplet_bonus).max(0.5),
+                    source_width: source_width_of(item),
                 }
             }
-            Prepared::MultiRest { time, .. } => MeasureMetrics {
-                min_width: MULTIREST_WIDTH_SP * spatium,
+            Prepared::MultiRest(r) => MeasureMetrics {
+                min_width: MULTIREST_WIDTH_SP * base_spatium,
                 weight: chart_spacing::duration_stretch(
-                    measure_ticks_of(*time),
+                    measure_ticks_of(r.time),
                     constants::TICKS_PER_QUARTER,
                     SLOPE,
                 ),
+                source_width: source_width_of(item),
             },
         })
         .collect();
 
-    // ── system packing: min-width constrained, capped per system ──
+    // ── systems: the source's breaks, or min-width packing ──
     const MAX_MEASURES_PER_SYSTEM: usize = 6;
-    struct SystemPlan {
-        items: Vec<usize>, // indices into `prepared`
-    }
     let mut systems: Vec<SystemPlan> = Vec::new();
-    {
-        let mut current = SystemPlan { items: Vec::new() };
-        let mut used = 0.0;
-        for idx in 0..prepared.len() {
-            let key_fifths = match &prepared[idx] {
-                Prepared::Notated(m) => m.key_fifths,
-                Prepared::MultiRest { key_fifths, .. } => *key_fifths,
-            };
-            let (_, _, _, prefix_w) =
-                calculate_prefix_width(spatium, true, true, key_fifths, current.items.is_empty());
-            let w = metrics[idx].min_width;
-            let full = current.items.len() >= MAX_MEASURES_PER_SYSTEM
-                || (!current.items.is_empty() && used + w > avail_width - prefix_w);
-            if full {
-                systems.push(current);
-                current = SystemPlan { items: Vec::new() };
-                used = 0.0;
+    match explicit.filter(|e| !e.systems.is_empty()) {
+        Some(e) => {
+            for es in &e.systems {
+                systems.push(SystemPlan {
+                    items: Vec::new(),
+                    page: es.page,
+                    staff_top: es.staff_top,
+                    left: es.left,
+                    right: es.right,
+                    spatium: es.spatium,
+                });
             }
-            current.items.push(idx);
-            used += w;
+            for (idx, item) in prepared.iter().enumerate() {
+                let first = item.first_index();
+                // The system holding this item's first measure (or the last
+                // system that starts before it, for measures past the end).
+                let sys = e
+                    .systems
+                    .iter()
+                    .rposition(|s| s.measures.start <= first)
+                    .unwrap_or(0);
+                systems[sys].items.push(idx);
+            }
+            systems.retain(|s| !s.items.is_empty());
         }
-        if !current.items.is_empty() {
-            systems.push(current);
+        None => {
+            let avail_width = opts.page_width - margins.left - margins.right;
+            let mut current: Vec<usize> = Vec::new();
+            let mut used = 0.0;
+            let mut packed: Vec<Vec<usize>> = Vec::new();
+            for idx in 0..prepared.len() {
+                let (_, _, _, prefix_w) = calculate_prefix_width(
+                    base_spatium,
+                    true,
+                    true,
+                    prepared[idx].key_fifths(),
+                    current.is_empty(),
+                );
+                let w = metrics[idx].min_width;
+                let full = current.len() >= MAX_MEASURES_PER_SYSTEM
+                    || (!current.is_empty() && used + w > avail_width - prefix_w);
+                if full {
+                    packed.push(std::mem::take(&mut current));
+                    used = 0.0;
+                }
+                current.push(idx);
+                used += w;
+            }
+            if !current.is_empty() {
+                packed.push(current);
+            }
+            // Vertical flow: fill each page top to bottom, starting below
+            // page 1's top-anchored text (a three-line title block needs
+            // more than the default title height) plus room for cues.
+            let system_height = 4.0 * base_spatium;
+            let mut page = 0usize;
+            let title_bottom = opts
+                .page_texts
+                .iter()
+                .flatten()
+                .filter(|t| t.first_page == 1 && t.v_align == VAlign::Top)
+                .map(|t| margins.top + t.y + 1.15 * t.font.size)
+                .fold(0.0, f64::max);
+            let mut y = (margins.top + opts.title_block_height).max(title_bottom + 46.0);
+            for items in packed {
+                if y + system_height > opts.page_height - margins.bottom {
+                    page += 1;
+                    y = margins.top + 30.0;
+                }
+                systems.push(SystemPlan {
+                    items,
+                    page,
+                    staff_top: y,
+                    left: margins.left,
+                    right: opts.page_width - margins.right,
+                    spatium: base_spatium,
+                });
+                y += opts.system_gap;
+            }
         }
     }
 
@@ -1277,88 +1966,78 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
             .collect()
     };
 
-    // ── render systems onto pages ──
-    let mut id: u64 = 10;
-    let mut page_index = 0usize;
-    let mut y = opts.margin + opts.title_block_height;
-
-    let new_page = |pages: &mut Vec<PageRect>, page_index: &mut usize| -> f64 {
-        let y_off = *page_index as f64 * (opts.page_height + 24.0);
-        pages.push(PageRect {
+    // ── pages ──
+    let page_count = systems.iter().map(|s| s.page + 1).max().unwrap_or(1);
+    let pages: Vec<PageRect> = (0..page_count)
+        .map(|i| PageRect {
             x_offset: 0.0,
-            y_offset: y_off,
+            y_offset: i as f64 * (opts.page_height + 24.0),
             width: opts.page_width,
             height: opts.page_height,
-        });
-        *page_index += 1;
-        y_off
-    };
-    let mut page_origin_y = new_page(&mut pages, &mut page_index);
+        })
+        .collect();
 
-    // Title block (page 1).
+    let mut root = SceneNode::group(SemanticId::new(ElementType::System, 0));
+    let page_texts = opts
+        .page_texts
+        .clone()
+        .unwrap_or_else(|| default_page_texts(score, &part.name));
     {
-        let title = score
-            .work_title
-            .clone()
-            .or_else(|| score.movement_title.clone())
-            .unwrap_or_default();
         let mut block = SceneNode::group(SemanticId::new(ElementType::Text, 1));
-        block.add_child(text(
-            &part.name,
-            "FreeSans",
-            12.0,
-            Point::new(opts.margin, page_origin_y + opts.margin + 4.0),
-            TextAnchor::Start,
-            FontWeight::Bold,
-        ));
-        block.add_child(text(
-            &title,
-            "Chicago",
-            26.0,
-            Point::new(opts.page_width / 2.0, page_origin_y + opts.margin + 24.0),
-            TextAnchor::Middle,
-            FontWeight::Bold,
-        ));
-        if let Some(composer) = score.composer.clone().or_else(|| score.arranger.clone()) {
-            block.add_child(text(
-                &composer,
-                "FreeSans",
-                10.0,
-                Point::new(
-                    opts.page_width - opts.margin,
-                    page_origin_y + opts.margin + 44.0,
-                ),
-                TextAnchor::End,
-                FontWeight::Normal,
-            ));
-        }
+        draw_page_texts(&mut block, &pages, &page_texts, opts);
         root.add_child(block);
     }
 
-    let system_height = 4.0 * spatium;
+    let words_font = TextFont {
+        family: opts.text_font.clone(),
+        size: 11.0,
+        bold: false,
+        italic: true,
+    };
+    let numbers = &opts.measure_numbers;
+    let first_measure_index = 0usize;
+
+    // ── render systems ──
+    let mut id: u64 = 10;
     for (sys_idx, sys) in systems.iter().enumerate() {
-        if y + system_height > opts.page_height - opts.margin {
-            page_origin_y = new_page(&mut pages, &mut page_index);
-            y = opts.margin + 30.0;
-        }
-        let staff_y = page_origin_y + y;
+        let spatium = sys.spatium;
+        let sys_ctx;
+        let ctx = if (spatium - base_spatium).abs() < 1e-6 {
+            &ctx
+        } else {
+            sys_ctx = context_for(spatium);
+            &sys_ctx
+        };
+        let page_origin_y = pages[sys.page.min(pages.len() - 1)].y_offset;
 
         let mut sys_node =
             SceneNode::group(SemanticId::new(ElementType::System, sys_idx as u64 + 1));
-        sys_node.transform = Affine::translate((opts.margin, staff_y));
+        sys_node.transform = Affine::translate((sys.left, page_origin_y + sys.staff_top));
 
         // Prefix from the first item's attribute state.
         let (first_clef, first_key, first_time, show_time) = match &prepared[sys.items[0]] {
             Prepared::Notated(m) => (m.clef, m.key_fifths, m.time, sys_idx == 0 || m.time_changed),
-            Prepared::MultiRest {
-                clef,
-                key_fifths,
-                time,
-                ..
-            } => (*clef, *key_fifths, *time, sys_idx == 0),
+            Prepared::MultiRest(r) => (r.clef, r.key_fifths, r.time, sys_idx == 0),
         };
-        let (clef_w, key_w, time_w, _) =
+        let (_, key_w, time_w, _) =
             calculate_prefix_width(spatium, true, true, first_key, show_time);
+        // The chart helper leaves 0.5 sp after a key signature; a part's
+        // time signature wants a full space.
+        let key_w = if key_w > 0.0 {
+            key_w + 0.5 * spatium
+        } else {
+            0.0
+        };
+        // The chart helper sizes every clef as a treble clef, and the
+        // tlayout table under-sizes the C clef (2.2 sp; Bravura's cClef
+        // advance is 2.8): use the glyph advances, then a 1 sp gap so a
+        // viola part's 4/4 does not touch its clef.
+        let clef_advance = match first_clef {
+            ClefType::Alto | ClefType::Tenor => 2.8,
+            ClefType::Bass => 2.76,
+            other => other.width(),
+        };
+        let clef_w = (clef_advance + 1.0) * spatium;
         let prefix = render_system_prefix(
             &PrefixRenderContext {
                 x: 0.0,
@@ -1382,52 +2061,81 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
         id = prefix.next_id + 100;
         let prefix_w = prefix.total_width;
 
-        // Spring-based width distribution (same engine as chart layout).
-        let weights: Vec<f64> = sys.items.iter().map(|&i| metrics[i].weight).collect();
+        let measures_area = (sys.right - sys.left) - prefix_w;
         let min_widths: Vec<f64> = sys.items.iter().map(|&i| metrics[i].min_width).collect();
-        let measures_area = avail_width - prefix_w;
-        let base_measure_width = measures_area / MAX_MEASURES_PER_SYSTEM as f64;
-        let is_last_system = sys_idx + 1 == systems.len();
-        let min_sum: f64 = min_widths.iter().sum();
-        // Every system justifies to the full line except a sparse final one.
-        let total_to_distribute = if is_last_system
-            && sys.items.len() < MAX_MEASURES_PER_SYSTEM
-            && min_sum < measures_area * 0.7
-        {
-            (sys.items.len() as f64 * base_measure_width).max(min_sum)
-        } else {
-            measures_area
+        let source_widths: Option<Vec<f64>> =
+            sys.items.iter().map(|&i| metrics[i].source_width).collect();
+        let widths = match source_widths {
+            // The source's springs: Finale justifies each system by scaling
+            // its measure widths uniformly.
+            Some(sw) => proportional_widths(&sw, &min_widths, measures_area),
+            None => {
+                let weights: Vec<f64> = sys.items.iter().map(|&i| metrics[i].weight).collect();
+                let base_measure_width = measures_area / MAX_MEASURES_PER_SYSTEM as f64;
+                let is_last_system = sys_idx + 1 == systems.len();
+                let min_sum: f64 = min_widths.iter().sum();
+                // Every system justifies to the full line except a sparse
+                // final one (auto layout only — a source's breaks are kept).
+                let total_to_distribute = if explicit.is_none()
+                    && is_last_system
+                    && sys.items.len() < MAX_MEASURES_PER_SYSTEM
+                    && min_sum < measures_area * 0.7
+                {
+                    (sys.items.len() as f64 * base_measure_width).max(min_sum)
+                } else {
+                    measures_area
+                };
+                let stretches = expansion_stretches(&weights, &min_widths, base_measure_width);
+                measure_layout::distribute_measure_widths_spring(
+                    &stretches,
+                    0,
+                    total_to_distribute,
+                    0.4,
+                    base_measure_width,
+                    &min_widths,
+                    spatium,
+                    SLOPE,
+                    DENSITY,
+                )
+            }
         };
-        let stretches = expansion_stretches(&weights, &min_widths, base_measure_width);
-        let widths = measure_layout::distribute_measure_widths_spring(
-            &stretches,
-            0,
-            total_to_distribute,
-            0.4,
-            base_measure_width,
-            &min_widths,
-            spatium,
-            SLOPE,
-            DENSITY,
-        );
 
         let content_width: f64 = widths.iter().sum();
         sys_node.add_child(staff_lines(prefix_w + content_width, spatium));
-
         for node in prefix.nodes {
             sys_node.add_child(node);
         }
 
         let mut anchors: Vec<MeasureAnchors<'_>> = Vec::new();
+        // Per item: (x start, x end) in system coords.
+        let mut spans: Vec<(f64, f64)> = Vec::new();
 
         let mut x = prefix_w;
         for (item_pos, &item_idx) in sys.items.iter().enumerate() {
             let width = widths[item_pos];
+            let mut container =
+                SceneNode::group(SemanticId::new(ElementType::Measure, item_idx as u64 + 1));
             match &prepared[item_idx] {
+                Prepared::Notated(m) if m.is_bar_rest() => {
+                    // A whole-bar rest is centred in its bar, hanging from
+                    // the second line — not set at the first beat.
+                    anchors.push(MeasureAnchors {
+                        m,
+                        entry_x: vec![x + width / 2.0],
+                    });
+                    container.transform = Affine::translate((x, 0.0));
+                    let glyph_w = 1.13 * spatium;
+                    container.add_child(SceneNode::anonymous_leaf(vec![PaintCommand::glyph(
+                        engraver_proto::engraver::layout::tlayout::rest::glyphs::REST_WHOLE,
+                        Point::new((width - glyph_w) / 2.0, spatium),
+                        spatium,
+                        Color::BLACK,
+                    )]));
+                }
                 Prepared::Notated(m) => {
                     let scene = build_measure(
                         m,
-                        &ctx,
+                        ctx,
                         Some(width / spatium),
                         m.clef_changed && item_pos > 0,
                         m.time_changed && !(item_pos == 0 && show_time),
@@ -1439,57 +2147,83 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
                         .map(|seg_x| x + seg_x)
                         .collect();
                     anchors.push(MeasureAnchors { m, entry_x });
-                    let mut container = SceneNode::group(SemanticId::new(
-                        ElementType::Measure,
-                        item_idx as u64 + 1,
-                    ));
                     // MeasureScene notation is authored around the MIDDLE
                     // line (y=0) — same +2sp shift the chart pipeline applies
                     // to its measure containers.
                     container.transform = Affine::translate((x, 2.0 * spatium));
                     container.add_child(scene.scene.clone());
-                    // Measure number over the first measure of each system.
-                    if item_pos == 0 {
-                        container.add_child(text(
-                            &m.number,
-                            "FreeSans",
-                            8.0,
-                            Point::new(0.0, -4.6 * spatium),
-                            TextAnchor::Start,
-                            FontWeight::Normal,
-                        ));
-                    }
-                    sys_node.add_child(container);
-                    // Advance by the ALLOCATED width (chart does the same):
-                    // any spring-justification shortfall stays inside this
-                    // measure's slot instead of accumulating as a gap at the
-                    // end of the line.
-                    x += width;
-                    // Builder barlines are suppressed (mixed y-convention);
-                    // draw the measure's closing barline in staff coords.
-                    sys_node.add_child(barline(x, spatium));
                 }
-                Prepared::MultiRest { count, number, .. } => {
-                    let mut container = SceneNode::group(SemanticId::new(
-                        ElementType::Measure,
-                        item_idx as u64 + 1,
-                    ));
+                Prepared::MultiRest(r) => {
                     container.transform = Affine::translate((x, 0.0));
-                    container.add_child(multirest_scene(*count, width, spatium, id));
+                    container.add_child(multirest_scene(r.count, width, spatium, id));
                     id += 10;
-                    if item_pos == 0 {
-                        container.add_child(text(
-                            number,
-                            "FreeSans",
-                            8.0,
-                            Point::new(0.0, -2.6 * spatium),
-                            TextAnchor::Start,
-                            FontWeight::Normal,
+                }
+            }
+            sys_node.add_child(container);
+            spans.push((x, x + width));
+            // Advance by the ALLOCATED width (chart does the same): any
+            // spring-justification shortfall stays inside this measure's
+            // slot instead of accumulating as a gap at the end of the line.
+            x += width;
+            if let Some(bar) = barline_scene(x, prepared[item_idx].barline(), spatium) {
+                sys_node.add_child(bar);
+            }
+        }
+
+        // ── measure numbers ──
+        for (item_pos, &item_idx) in sys.items.iter().enumerate() {
+            let (start, end) = spans[item_pos];
+            let item = &prepared[item_idx];
+            let is_first_of_piece = item.first_index() == first_measure_index;
+            match numbers.mode {
+                MeasureNumberMode::None => {}
+                MeasureNumberMode::SystemStart => {
+                    if item_pos != 0 || (is_first_of_piece && numbers.exclude_first) || sys_idx == 0
+                    {
+                        continue;
+                    }
+                    let n = match item {
+                        Prepared::Notated(m) => m.number.clone(),
+                        Prepared::MultiRest(r) => r.number.clone(),
+                    };
+                    sys_node.add_child(styled_text(
+                        &n,
+                        &numbers.font,
+                        Point::new(numbers.offset.0, numbers.offset.1),
+                        TextAnchor::Start,
+                    ));
+                }
+                MeasureNumberMode::Every(every) => match item {
+                    Prepared::MultiRest(r) if numbers.multirest_ranges => {
+                        sys_node.add_child(styled_text(
+                            &format!("{}-{}", r.number, r.last_number),
+                            &numbers.multirest_font,
+                            Point::new(
+                                (start + end) / 2.0 + numbers.multirest_offset.0,
+                                numbers.multirest_offset.1,
+                            ),
+                            TextAnchor::Middle,
                         ));
                     }
-                    sys_node.add_child(container);
-                    x += width;
-                }
+                    _ => {
+                        let n = match item {
+                            Prepared::Notated(m) => m.number.clone(),
+                            Prepared::MultiRest(r) => r.number.clone(),
+                        };
+                        let shown = n.parse::<u32>().is_ok_and(|v| v % every.max(1) == 0)
+                            && !(is_first_of_piece && numbers.exclude_first);
+                        if shown {
+                            // At the measure's left barline (past the prefix
+                            // on a system's first measure).
+                            sys_node.add_child(styled_text(
+                                &n,
+                                &numbers.font,
+                                Point::new(start + numbers.offset.0, numbers.offset.1),
+                                TextAnchor::Middle,
+                            ));
+                        }
+                    }
+                },
             }
         }
 
@@ -1500,22 +2234,73 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
             spatium,
             &mut id,
         );
-        draw_directions(
+        let word_boxes = draw_directions(
             &mut sys_node,
             &anchors,
-            &ctx,
+            ctx,
             prefix_w + content_width,
             spatium,
+            &words_font,
             &mut id,
         );
 
+        // ── rehearsal marks (notated measures and multirests alike) ──
+        for (item_pos, &item_idx) in sys.items.iter().enumerate() {
+            let marks: Vec<&RehearsalMark> = prepared[item_idx]
+                .directions()
+                .iter()
+                .filter_map(|d| match &d.kind {
+                    model::DirectionKind::Rehearsal(r) => Some(r),
+                    _ => None,
+                })
+                .collect();
+            if marks.is_empty() {
+                continue;
+            }
+            // A system's first cue sits at the staff's left edge, over the
+            // clef; later ones just right of their barline.
+            let mx = if item_pos == 0 {
+                0.0
+            } else {
+                spans[item_pos].0 + 1.5
+            };
+            draw_rehearsals(
+                &mut sys_node,
+                mx,
+                &marks,
+                &opts.text_font,
+                spatium,
+                &word_boxes,
+            );
+        }
+
         root.add_child(sys_node);
-        y += opts.system_gap;
     }
 
     PartLayout {
         scene: root,
         pages,
         dropped_voice_events: dropped,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn proportional_widths_scale_uniformly() {
+        let w = proportional_widths(&[252.0, 378.0, 252.0, 252.0], &[10.0; 4], 1134.0);
+        let k = w[0] / 252.0;
+        assert!((w[1] / 378.0 - k).abs() < 1e-9);
+        assert!((w.iter().sum::<f64>() - 1134.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn proportional_widths_respect_minimums() {
+        let w = proportional_widths(&[1.0, 1.0, 10.0], &[50.0, 5.0, 5.0], 120.0);
+        assert!((w[0] - 50.0).abs() < 1e-9, "{w:?}");
+        assert!((w.iter().sum::<f64>() - 120.0).abs() < 1e-9);
+        assert!((w[2] / w[1] - 10.0).abs() < 1e-9);
     }
 }

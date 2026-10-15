@@ -17,7 +17,47 @@ pub struct Score {
     pub composer: Option<String>,
     pub arranger: Option<String>,
     pub lyricist: Option<String>,
+    /// `<rights>` (copyright line).
+    pub rights: Option<String>,
     pub parts: Vec<Part>,
+}
+
+impl Score {
+    /// Rehearsal marks at measure `index` that every extracted part shows:
+    /// the score's top part carries them (MusicXML's convention, and what
+    /// Finale's staff lists export), plus any `part` has of its own.
+    #[must_use]
+    pub fn rehearsals_for_part(&self, part: usize, index: usize) -> Vec<(u32, RehearsalMark)> {
+        let of = |p: usize| -> Vec<(u32, RehearsalMark)> {
+            self.parts
+                .get(p)
+                .and_then(|p| p.measures.get(index))
+                .map(|m| {
+                    m.directions
+                        .iter()
+                        .filter_map(|d| match &d.kind {
+                            DirectionKind::Rehearsal(r) => Some((d.tick, r.clone())),
+                            _ => None,
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let mut marks: Vec<(u32, RehearsalMark)> = Vec::new();
+        for m in of(0) {
+            if !marks.iter().any(|(_, k)| k.text == m.1.text) {
+                marks.push(m);
+            }
+        }
+        if part != 0 {
+            for own in of(part) {
+                if !marks.iter().any(|(_, m)| m.text == own.1.text) {
+                    marks.push(own);
+                }
+            }
+        }
+        marks
+    }
 }
 
 /// One instrument part (may span multiple staves, e.g. piano/harp = 2).
@@ -63,6 +103,30 @@ pub struct Measure {
     /// Measure length in ticks (from the inherited meter; content may
     /// overflow on malformed input — layout clamps).
     pub len_ticks: u32,
+    /// Closing barline style (`<barline location="right">`).
+    pub barline: BarStyle,
+}
+
+/// Barline drawn at a measure's end.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BarStyle {
+    #[default]
+    Regular,
+    /// Double thin (section end).
+    LightLight,
+    /// Final barline.
+    LightHeavy,
+    HeavyLight,
+    Dashed,
+    None,
+}
+
+impl BarStyle {
+    /// A section-ending barline: multirests break after it.
+    #[must_use]
+    pub fn is_section_end(self) -> bool {
+        !matches!(self, BarStyle::Regular | BarStyle::Dashed | BarStyle::None)
+    }
 }
 
 /// A `<direction>` at a tick position within its measure.
@@ -72,7 +136,7 @@ pub struct Direction {
     pub kind: DirectionKind,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum DirectionKind {
     /// Dynamic mark by conventional name ("p", "mf", "sfz", …).
     Dynamic(String),
@@ -82,8 +146,41 @@ pub enum DirectionKind {
     WedgeStop,
     /// Free staff text (`<words>`).
     Words(String),
-    /// Boxed rehearsal mark.
-    Rehearsal(String),
+    /// Rehearsal mark / section cue ("Verse 1", "B", "79").
+    Rehearsal(RehearsalMark),
+}
+
+/// A rehearsal mark with the enclosure and font the source gave it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RehearsalMark {
+    pub text: String,
+    pub enclosure: Enclosure,
+    /// Point size, when the source states one.
+    pub font_size: Option<f64>,
+    pub bold: bool,
+    pub italic: bool,
+}
+
+impl RehearsalMark {
+    /// A plain boxed mark (MusicXML's default rehearsal look).
+    #[must_use]
+    pub fn boxed(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            enclosure: Enclosure::Rectangle,
+            font_size: None,
+            bold: true,
+            italic: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Enclosure {
+    #[default]
+    Rectangle,
+    Oval,
+    None,
 }
 
 /// A mid-stream attribute change (clef/key/time/divisions/staves).
@@ -174,6 +271,9 @@ pub struct Chord {
     /// Open articulation tag set (staccato, accent, fermata, …), MusicXML
     /// kebab-case child names.
     pub articulations: BTreeSet<String>,
+    /// Articulations the source pins to a side (`placement`): tag → above.
+    /// Unlisted marks follow the stem rule.
+    pub articulation_above: std::collections::BTreeMap<String, bool>,
 }
 
 #[derive(Debug, Clone)]
