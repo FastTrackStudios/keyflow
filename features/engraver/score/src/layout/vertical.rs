@@ -33,9 +33,7 @@ use engraver_proto::engraver::scene::paint::{FontStyle, FontWeight, PaintCommand
 use kurbo::{Affine, BezPath, CubicBez, ParamCurve, Point, Rect, Vec2};
 use peniko::Color;
 
-use super::{
-    InkPart, MeasureAnchors, TextFont, articulation_type, dynamic_type, styled_text, styled_text_in,
-};
+use super::{InkPart, MeasureAnchors, TextFont, articulation_type, dynamic_type, styled_text_in};
 use crate::metrics;
 use crate::model::{self, Enclosure, RehearsalMark};
 use crate::section_marks::{self, MarkClass, MarkStyle, TextRole};
@@ -91,6 +89,7 @@ pub(super) struct NumberMark {
     /// Default baseline position (system coords) from the number style.
     pub pos: Point,
     pub anchor: TextAnchor,
+    pub color: Color,
 }
 
 pub(super) struct SystemInput<'a, 'm> {
@@ -1652,11 +1651,12 @@ fn place_measure_numbers(
         let owner = owners.next();
         sky.add(r + Vec2::new(0.0, dy), SkyKind::MeasureNumber, owner);
         let mut node = SceneNode::group(SemanticId::new(ElementType::MeasureNumber, owner));
-        node.add_child(styled_text(
+        node.add_child(styled_text_in(
             &n.text,
             &n.font,
             Point::new(n.pos.x, n.pos.y + dy),
             n.anchor,
+            n.color,
         ));
         nodes.push(node);
     }

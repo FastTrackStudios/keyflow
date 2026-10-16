@@ -1507,6 +1507,9 @@ fn proportional_widths(weights: &[f64], mins: &[f64], total: f64) -> Vec<f64> {
     }
 }
 
+/// The master rhythm chart's measure-number grey.
+const CHART_NUMBER_GREY: Color = Color::from_rgb8(100, 100, 100);
+
 /// Staff left edge (points from the paper edge) that leaves room for a
 /// section badge: a sixth-inch printable edge, a 48pt badge, a 4pt gap.
 const SECTION_GUTTER: f64 = 64.0;
@@ -2419,6 +2422,27 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
                 Prepared::Notated(m) => m.number.clone(),
                 Prepared::MultiRest(r) => r.number.clone(),
             };
+            // Keyflow style numbers bars the master rhythm chart's way
+            // (`create_measure_number`): every system's first bar, small
+            // grey FreeSans, left-aligned at the staff's start two spaces
+            // above it.
+            if keyflow {
+                if item_pos == 0 {
+                    number_marks.push(vertical::NumberMark {
+                        text: number,
+                        font: TextFont {
+                            family: "FreeSans".to_string(),
+                            size: 1.6 * spatium,
+                            bold: false,
+                            italic: false,
+                        },
+                        pos: Point::new(0.0, -2.0 * spatium),
+                        anchor: TextAnchor::Start,
+                        color: CHART_NUMBER_GREY,
+                    });
+                }
+                continue;
+            }
             match numbers.mode {
                 MeasureNumberMode::None => {}
                 MeasureNumberMode::SystemStart => {
@@ -2431,6 +2455,7 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
                         font: numbers.font.clone(),
                         pos: Point::new(numbers.offset.0, numbers.offset.1),
                         anchor: TextAnchor::Start,
+                        color: Color::BLACK,
                     });
                 }
                 MeasureNumberMode::Every(every) => match item {
@@ -2443,6 +2468,7 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
                                 numbers.multirest_offset.1,
                             ),
                             anchor: TextAnchor::Middle,
+                            color: Color::BLACK,
                         });
                     }
                     _ => {
@@ -2456,6 +2482,7 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
                                 font: numbers.font.clone(),
                                 pos: Point::new(start + numbers.offset.0, numbers.offset.1),
                                 anchor: TextAnchor::Middle,
+                                color: Color::BLACK,
                             });
                         }
                     }
