@@ -1527,18 +1527,51 @@ fn place_rehearsals(
         // later ones just right of their barline. Several in one measure
         // ("79" then "Sax Solo") side by side, all at one height.
         let mut cursor = if item.first { 0.0 } else { item.span.0 + 1.5 };
-        let mut boxes: Vec<(Rect, &RehearsalMark, f64, f64)> = Vec::new(); // (box, mark, text x, pad)
+        // Each mark: its frame (baseline of its last line at 0), its face,
+        // and its lines with their baselines.
+        struct MarkBox<'m> {
+            frame: Rect,
+            mark: &'m RehearsalMark,
+            family: String,
+            lines: Vec<(String, f64, f64)>, // (text, x, baseline)
+        }
+        let mut boxes: Vec<MarkBox<'_>> = Vec::new();
         for mark in &marks {
             let size = mark.font_size.unwrap_or(12.0);
-            let Some(t) = metrics::text_ink(
-                input.text_family,
-                size,
-                mark.bold,
-                mark.italic,
-                &mark.text,
-                Point::ZERO,
-                TextAnchor::Start,
-            ) else {
+            // A sans face when the source asks for one (Finale's Arial
+            // cues), otherwise the part's serif.
+            let family = match mark.font_family.as_deref().map(str::to_lowercase) {
+                Some(f) if ["arial", "helvetica", "sans"].iter().any(|s| f.contains(s)) => {
+                    "FreeSans".to_string()
+                }
+                _ => input.text_family.to_string(),
+            };
+            let lines: Vec<&str> = mark
+                .text
+                .lines()
+                .map(str::trim)
+                .filter(|l| !l.is_empty())
+                .collect();
+            let leading = 1.15 * size;
+            let n = lines.len();
+            let mut ink: Option<Rect> = None;
+            let mut laid: Vec<(String, f64)> = Vec::new();
+            for (k, line) in lines.iter().enumerate() {
+                let base = -((n - 1 - k) as f64) * leading;
+                if let Some(r) = metrics::text_ink(
+                    &family,
+                    size,
+                    mark.bold,
+                    mark.italic,
+                    line,
+                    Point::new(0.0, base),
+                    TextAnchor::Start,
+                ) {
+                    ink = Some(ink.map_or(r, |i| i.union(r)));
+                }
+                laid.push((line.to_string(), base));
+            }
+            let Some(t) = ink else {
                 continue;
             };
             let enclosed = mark.enclosure != Enclosure::None;
@@ -1547,25 +1580,29 @@ fn place_rehearsals(
             } else {
                 0.0
             };
-            // Box around the ink (baseline 0), text starting at `cursor+pad`.
-            let b = Rect::new(
+            let frame = Rect::new(
                 cursor,
                 t.y0 - pad,
                 cursor + t.x1 + 2.0 * pad,
                 t.y1.max(0.0) + pad,
             );
-            boxes.push((b, mark, cursor + pad, pad));
-            cursor = b.x1 + 0.5 * size;
+            boxes.push(MarkBox {
+                frame,
+                mark,
+                family,
+                lines: laid
+                    .into_iter()
+                    .map(|(l, b)| (l, cursor + pad, b))
+                    .collect(),
+            });
+            cursor = frame.x1 + 0.5 * size;
         }
-        // Default: box bottoms just above the staff; then push clear.
-        let Some(bottom) = boxes.iter().map(|(b, ..)| b.y1).reduce(f64::max) else {
+        // Default: frame bottoms just above the staff; then push clear.
+        let Some(bottom) = boxes.iter().map(|b| b.frame.y1).reduce(f64::max) else {
             continue;
         };
         let mut dy = -style::REHEARSAL_POS_ABOVE * sp - bottom;
-        let shape: Vec<Rect> = boxes
-            .iter()
-            .map(|(b, ..)| *b + Vec2::new(0.0, dy))
-            .collect();
+        let shape: Vec<Rect> = boxes.iter().map(|b| b.frame + Vec2::new(0.0, dy)).collect();
         dy += sky.distance_to_move(
             &shape,
             true,
@@ -1575,38 +1612,41 @@ fn place_rehearsals(
         );
         let owner = owners.next();
         let mut node = SceneNode::group(SemanticId::new(ElementType::RehearsalMark, owner));
-        for (b, mark, text_x, _) in boxes {
-            let b = b + Vec2::new(0.0, dy);
-            sky.add(b, SkyKind::Rehearsal, owner);
-            let size = mark.font_size.unwrap_or(12.0);
+        for b in boxes {
+            let frame = b.frame + Vec2::new(0.0, dy);
+            sky.add(frame, SkyKind::Rehearsal, owner);
+            let size = b.mark.font_size.unwrap_or(12.0);
             let mut cmds = Vec::new();
-            if mark.enclosure != Enclosure::None {
+            if b.mark.enclosure != Enclosure::None {
                 cmds.push(PaintCommand::Rect {
-                    rect: b,
+                    rect: frame,
                     fill: None,
                     stroke: Some(Color::BLACK),
                     stroke_width: 0.16 * sp,
-                    corner_radius: (mark.enclosure == Enclosure::Oval).then_some(b.height() / 2.0),
+                    corner_radius: (b.mark.enclosure == Enclosure::Oval)
+                        .then_some(frame.height() / 2.0),
                 });
             }
-            cmds.push(PaintCommand::Text {
-                text: mark.text.clone(),
-                font_family: input.text_family.to_string(),
-                font_size: size,
-                position: Point::new(text_x, dy),
-                color: Color::BLACK,
-                anchor: TextAnchor::Start,
-                weight: if mark.bold {
-                    FontWeight::Bold
-                } else {
-                    FontWeight::Normal
-                },
-                style: if mark.italic {
-                    FontStyle::Italic
-                } else {
-                    FontStyle::Normal
-                },
-            });
+            for (text, x, base) in b.lines {
+                cmds.push(PaintCommand::Text {
+                    text,
+                    font_family: b.family.clone(),
+                    font_size: size,
+                    position: Point::new(x, base + dy),
+                    color: Color::BLACK,
+                    anchor: TextAnchor::Start,
+                    weight: if b.mark.bold {
+                        FontWeight::Bold
+                    } else {
+                        FontWeight::Normal
+                    },
+                    style: if b.mark.italic {
+                        FontStyle::Italic
+                    } else {
+                        FontStyle::Normal
+                    },
+                });
+            }
             node.add_child(SceneNode::anonymous_leaf(cmds));
         }
         nodes.push(node);

@@ -113,6 +113,9 @@ fn escape_text(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
+        // A line break as a character reference: some MusicXML parsers
+        // (ours included) drop raw newlines from text.
+        .replace('\n', "&#10;")
 }
 
 fn escape_attr(s: &str) -> String {

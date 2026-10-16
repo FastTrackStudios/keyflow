@@ -109,18 +109,51 @@ pub fn decode_entities(s: &str) -> String {
         if !cur.contains('&') {
             break;
         }
-        let next = cur
-            .replace("&amp;", "&")
-            .replace("&lt;", "<")
-            .replace("&gt;", ">")
-            .replace("&quot;", "\"")
-            .replace("&apos;", "'");
+        let next = decode_char_refs(
+            &cur.replace("&lt;", "<")
+                .replace("&gt;", ">")
+                .replace("&quot;", "\"")
+                .replace("&apos;", "'"),
+        )
+        .replace("&amp;", "&");
         if next == cur {
             break;
         }
         cur = next;
     }
     cur
+}
+
+/// Decode numeric character references (`&#10;`, `&#xA;`). The MusicXML
+/// parser drops raw line breaks from text, so a multi-line cue survives
+/// only as `&#10;`.
+fn decode_char_refs(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(start) = rest.find("&#") {
+        out.push_str(&rest[..start]);
+        let tail = &rest[start + 2..];
+        let decoded = tail.find(';').and_then(|end| {
+            let body = &tail[..end];
+            let code = match body.strip_prefix(['x', 'X']) {
+                Some(hex) => u32::from_str_radix(hex, 16).ok()?,
+                None => body.parse::<u32>().ok()?,
+            };
+            Some((char::from_u32(code)?, end))
+        });
+        match decoded {
+            Some((c, end)) => {
+                out.push(c);
+                rest = &tail[end + 1..];
+            }
+            None => {
+                out.push_str("&#");
+                rest = tail;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 /// Whether a note's `<tie>` elements start and/or stop a tie.
@@ -201,6 +234,14 @@ pub fn articulation_tag(a: &ArticulationsType) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn decodes_numeric_character_references() {
+        assert_eq!(decode_entities("VS 1a&#10;VS 1b"), "VS 1a\nVS 1b");
+        assert_eq!(decode_entities("a&#xA;b"), "a\nb");
+        assert_eq!(decode_entities("&amp;#10;"), "\n"); // double-encoded
+        assert_eq!(decode_entities("bad &#zz; ok"), "bad &#zz; ok");
+    }
 
     #[test]
     fn decodes_the_five_predefined_entities() {

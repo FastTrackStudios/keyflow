@@ -204,6 +204,24 @@ pub struct EnigmaLine {
 }
 
 impl EnigmaText {
+    /// Plain text with every insert dropped, lines joined by `\n`.
+    #[must_use]
+    pub fn literal_lines(&self) -> String {
+        self.lines
+            .iter()
+            .map(|l| {
+                l.pieces
+                    .iter()
+                    .filter_map(|p| match p {
+                        TextPiece::Literal(s) => Some(s.as_str()),
+                        _ => None,
+                    })
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     /// Plain text with every insert dropped.
     #[must_use]
     pub fn literal(&self) -> String {

@@ -675,8 +675,13 @@ fn prepare_measures(
     };
 
     // Source-dictated multirests: start index → end index (exclusive).
-    let explicit_rests: Option<std::collections::HashMap<usize, usize>> =
-        opts.explicit.as_ref().map(|e| {
+    // A part Finale never formatted stores no multirests at all; then the
+    // engine groups rests itself.
+    let explicit_rests: Option<std::collections::HashMap<usize, usize>> = opts
+        .explicit
+        .as_ref()
+        .filter(|e| !e.multirests.is_empty())
+        .map(|e| {
             e.multirests
                 .iter()
                 .filter(|r| r.measures.len() >= 2)
@@ -1449,6 +1454,14 @@ fn context_for(spatium: f64) -> LayoutContextOwned {
 /// re-share what is left).
 fn proportional_widths(weights: &[f64], mins: &[f64], total: f64) -> Vec<f64> {
     let n = weights.len();
+    // More music than line: squeeze every measure by the same factor
+    // rather than run off the page (a source system can hold more than our
+    // spacing's comfortable minimum).
+    let min_sum: f64 = mins.iter().sum();
+    if min_sum >= total && min_sum > 0.0 {
+        let k = total / min_sum;
+        return mins.iter().map(|m| m * k).collect();
+    }
     let mut pinned = vec![false; n];
     loop {
         let pinned_sum: f64 = (0..n).filter(|i| pinned[*i]).map(|i| mins[i]).sum();
@@ -1612,6 +1625,16 @@ fn stack_systems(
             .map(|t| opts.page_height - margins.bottom + t.y - 1.1 * t.font.size)
             .fold(opts.page_height - margins.bottom, f64::min)
     };
+    // ...and below any header text at the top of the page.
+    let top_limit_of = |page: usize| -> f64 {
+        let number = page + 1;
+        page_texts
+            .iter()
+            .filter(|t| t.v_align == VAlign::Top)
+            .filter(|t| number >= t.first_page && t.last_page.is_none_or(|l| number <= l))
+            .map(|t| margins.top + t.y + 1.15 * t.font.size)
+            .fold(margins.top, f64::max)
+    };
     let needed = |above: usize, below: usize| -> f64 {
         let sp = systems[below].spatium;
         let d = rendered[above]
@@ -1633,6 +1656,11 @@ fn stack_systems(
                 .find(|j| systems[*j].page != page)
                 .unwrap_or(systems.len());
             let mut tops: Vec<f64> = systems[i..end].iter().map(|s| s.staff_top).collect();
+            if let Some(first) = tops.first_mut() {
+                let sp = systems[i].spatium;
+                let clear = top_limit_of(page) - rendered[i].1.north_extent() + 0.5 * sp;
+                *first = first.max(clear);
+            }
             for k in 1..tops.len() {
                 tops[k] = tops[k].max(tops[k - 1] + needed(i + k - 1, i + k));
             }
@@ -1653,16 +1681,16 @@ fn stack_systems(
     for i in 0..systems.len() {
         let sp = systems[i].spatium;
         let sky = &rendered[i].1;
+        let clear_header =
+            |page: usize| top_limit_of(page) + (-sky.north_extent()).max(2.0 * sp) + 0.5 * sp;
         let mut top = if i == 0 {
-            systems[0]
-                .staff_top
-                .max(margins.top - sky.north_extent() + 0.5 * sp)
+            systems[0].staff_top.max(clear_header(0))
         } else {
             out[i - 1].1 + needed(i - 1, i).max(opts.system_gap)
         };
         if i > 0 && top + sky.south_extent() > bottom_limit_of(page) {
             page += 1;
-            top = margins.top + (-sky.north_extent()).max(2.0 * sp) + 0.5 * sp;
+            top = clear_header(page);
         }
         out[i] = (page, top);
     }
@@ -1780,7 +1808,45 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
     // ── systems: the source's breaks, or min-width packing ──
     const MAX_MEASURES_PER_SYSTEM: usize = 6;
     let mut systems: Vec<SystemPlan> = Vec::new();
-    match explicit.filter(|e| !e.systems.is_empty()) {
+    // Finale re-lays parts out when they are opened; a part never opened
+    // since its music changed keeps stale system breaks. If any stored
+    // system needs well over its width at our minimum spacing, re-break the
+    // part (page format, headers, multirests and numbering still apply).
+    let explicit_systems = explicit.filter(|e| !e.systems.is_empty()).filter(|e| {
+        let first_of = |idx: usize| prepared[idx].first_index();
+        // The stored systems must reach the end of the music; measures
+        // past the last one would all pile into it.
+        let covered_to = e.systems.iter().map(|s| s.measures.end).max().unwrap_or(0);
+        let last_needed = prepared.last().map_or(0, |p| p.first_index() + 1);
+        if covered_to < last_needed {
+            tracing::info!(
+                part = part.name,
+                covered_to,
+                last_needed,
+                "stored systems end before the music; re-breaking the part"
+            );
+            return false;
+        }
+        e.systems.iter().all(|es| {
+            let (_, _, _, prefix) = calculate_prefix_width(es.spatium, true, true, 0, false);
+            let demand: f64 = (0..prepared.len())
+                .filter(|&k| es.measures.contains(&first_of(k)))
+                .map(|k| metrics[k].min_width)
+                .sum();
+            let fits = demand <= 1.15 * (es.right - es.left - prefix);
+            if !fits {
+                tracing::info!(
+                    part = part.name,
+                    system_start = es.measures.start,
+                    demand,
+                    width = es.right - es.left,
+                    "stored system layout is stale; re-breaking the part"
+                );
+            }
+            fits
+        })
+    });
+    match explicit_systems {
         Some(e) => {
             for es in &e.systems {
                 systems.push(SystemPlan {
@@ -1981,7 +2047,7 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
                 let min_sum: f64 = min_widths.iter().sum();
                 // Every system justifies to the full line except a sparse
                 // final one (auto layout only — a source's breaks are kept).
-                let total_to_distribute = if explicit.is_none()
+                let total_to_distribute = if explicit_systems.is_none()
                     && is_last_system
                     && sys.items.len() < MAX_MEASURES_PER_SYSTEM
                     && min_sum < measures_area * 0.7
@@ -2033,12 +2099,16 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
                     });
                     container.transform = Affine::translate((x, 0.0));
                     let glyph_w = 1.13 * spatium;
-                    container.add_child(SceneNode::anonymous_leaf(vec![PaintCommand::glyph(
-                        engraver_proto::engraver::layout::tlayout::rest::glyphs::REST_WHOLE,
-                        Point::new((width - glyph_w) / 2.0, spatium),
-                        spatium,
-                        Color::BLACK,
-                    )]));
+                    container.add_child(SceneNode::leaf(
+                        SemanticId::new(ElementType::Rest, id),
+                        vec![PaintCommand::glyph(
+                            engraver_proto::engraver::layout::tlayout::rest::glyphs::REST_WHOLE,
+                            Point::new((width - glyph_w) / 2.0, spatium),
+                            spatium,
+                            Color::BLACK,
+                        )],
+                    ));
+                    id += 1;
                 }
                 Prepared::Notated(m) => {
                     let scene = build_measure(
@@ -2189,7 +2259,13 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
     }
 
     // ── stack systems: each clears the one above by its skylines ──
-    let placements = stack_systems(&systems, &rendered, opts, &page_texts, explicit.is_some());
+    let placements = stack_systems(
+        &systems,
+        &rendered,
+        opts,
+        &page_texts,
+        explicit_systems.is_some(),
+    );
     let page_count = placements.iter().map(|(p, _)| p + 1).max().unwrap_or(1);
     let pages: Vec<PageRect> = (0..page_count)
         .map(|i| PageRect {
@@ -2228,6 +2304,13 @@ mod tests {
         let k = w[0] / 252.0;
         assert!((w[1] / 378.0 - k).abs() < 1e-9);
         assert!((w.iter().sum::<f64>() - 1134.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn proportional_widths_squeeze_to_fit() {
+        let w = proportional_widths(&[1.0, 1.0], &[80.0, 120.0], 100.0);
+        assert!((w.iter().sum::<f64>() - 100.0).abs() < 1e-9, "{w:?}");
+        assert!((w[1] / w[0] - 1.5).abs() < 1e-9);
     }
 
     #[test]

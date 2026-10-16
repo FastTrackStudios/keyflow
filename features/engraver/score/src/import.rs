@@ -547,6 +547,7 @@ fn import_direction_type(
                         // Rehearsal marks default to bold when unstated.
                         bold: !matches!(a.font_weight, Some(FontWeight::Normal)),
                         italic: matches!(a.font_style, Some(FontStyle::Italic)),
+                        font_family: a.font_family.as_ref().and_then(|f| f.first().cloned()),
                     }),
                 });
             }

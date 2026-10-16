@@ -224,7 +224,7 @@ pub fn cmd_parts(args: &PartsArgs<'_>) -> Result<(), String> {
             for ((a, b), n) in &report.by_kind {
                 println!("    {n:>4}  {a:?} × {b:?}");
             }
-            if args.part.is_some() {
+            {
                 for c in &report.collisions {
                     println!(
                         "      p{} ({:>5.0},{:>5.0})  {:?} {:?}  ×  {:?} {:?}",

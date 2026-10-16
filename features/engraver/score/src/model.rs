@@ -159,6 +159,8 @@ pub struct RehearsalMark {
     pub font_size: Option<f64>,
     pub bold: bool,
     pub italic: bool,
+    /// Source font family, when stated ("Arial Bold", "Times New Roman").
+    pub font_family: Option<String>,
 }
 
 impl RehearsalMark {
@@ -171,6 +173,7 @@ impl RehearsalMark {
             font_size: None,
             bold: true,
             italic: false,
+            font_family: None,
         }
     }
 }

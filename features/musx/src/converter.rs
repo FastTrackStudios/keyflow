@@ -1739,7 +1739,8 @@ fn add_rehearsal_mark(
     staff_id: Option<i64>,
 ) {
     let parsed = crate::layout::parse_enigma_text(&expression.text, &HashMap::new());
-    let mut text = parsed.literal().trim().to_string();
+    // Keep line breaks: a two-line cue ("VS 1a" over "VS 1b") is one mark.
+    let mut text = parsed.literal_lines().trim().to_string();
     if expression.text.contains("^rehearsal()") {
         let auto = match expression.rehearsal_style.as_deref() {
             Some("measNum") => meas_spec_cmper.to_string(),
