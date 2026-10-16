@@ -619,7 +619,15 @@ fn part_directions(score: &Score, part_index: usize, index: usize) -> Vec<model:
             kind: model::DirectionKind::Rehearsal(mark),
         });
     }
-    out
+    // A grand staff carries an expression once per staff ("Tempo RUBATO"
+    // over both harp staves); the merged measure shows it once.
+    let mut unique: Vec<model::Direction> = Vec::with_capacity(out.len());
+    for d in out {
+        if !unique.contains(&d) {
+            unique.push(d);
+        }
+    }
+    unique
 }
 
 /// A cue a multirest must not swallow: a rehearsal mark or staff text.

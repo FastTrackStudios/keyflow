@@ -130,7 +130,7 @@ impl BarStyle {
 }
 
 /// A `<direction>` at a tick position within its measure.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Direction {
     pub tick: u32,
     pub kind: DirectionKind,
