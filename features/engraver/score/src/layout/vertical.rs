@@ -33,11 +33,14 @@ use engraver_proto::engraver::scene::paint::{FontStyle, FontWeight, PaintCommand
 use kurbo::{Affine, BezPath, CubicBez, ParamCurve, Point, Rect, Vec2};
 use peniko::Color;
 
-use super::{InkPart, MeasureAnchors, TextFont, articulation_type, dynamic_type, styled_text};
+use super::{
+    InkPart, MeasureAnchors, TextFont, articulation_type, dynamic_type, styled_text, styled_text_in,
+};
 use crate::metrics;
 use crate::model::{self, Enclosure, RehearsalMark};
 use crate::section_marks::{self, MarkClass, MarkStyle};
 use crate::skyline::{SkyKind, Skyline};
+use engraver_proto::engraver::layout::chart::constants::REPEAT_COLOR;
 use engraver_proto::engraver::layout::chart::section_layout::get_section_theme;
 use engraver_proto::engraver::layout::tlayout::{
     MarginLabelParams, RehearsalMarkStyle, layout_margin_label, rehearsal_themes,
@@ -1401,6 +1404,14 @@ fn place_staff_text(
 ) {
     let sp = input.spatium;
     let font = input.words_font;
+    // Text for the player is red, as on the master rhythm chart (where
+    // staff text, dynamics and repeats share one red); black for a mono
+    // printer and in Finale's own look.
+    let text_color = if input.marks == MarkStyle::Color {
+        REPEAT_COLOR
+    } else {
+        Color::BLACK
+    };
     let mut words: Vec<(f64, &str)> = Vec::new();
     for a in input.anchors {
         for d in &a.m.directions {
@@ -1460,11 +1471,12 @@ fn place_staff_text(
         let mut node = SceneNode::group(SemanticId::new(ElementType::Text, owner));
         for (off, line, r) in &block {
             sky.add(*r + Vec2::new(x, base), SkyKind::StaffText, owner);
-            node.add_child(styled_text(
+            node.add_child(styled_text_in(
                 line,
                 font,
                 Point::new(x, base + off),
                 TextAnchor::Start,
+                text_color,
             ));
         }
         nodes.push(node);
@@ -1525,8 +1537,8 @@ mod marker {
     pub const BADGE_TEXT: f64 = 0.7;
     /// Mid-line badges are the margin badge a step smaller.
     pub const MIDLINE_SCALE: f64 = 0.82;
-    /// Callout text size.
-    pub const CALLOUT_SIZE: f64 = 1.55;
+    /// Remark text size.
+    pub const CALLOUT_SIZE: f64 = 1.45;
 }
 
 /// The master rhythm chart's colours for a section (`get_section_theme`),
@@ -1821,25 +1833,27 @@ fn place_rehearsals(
     }
 }
 
-/// A cue: an accent bar, a tint behind the text, bold sans. Multi-line
-/// cues keep their lines (`raw`); `flat` is the fallback single line.
+/// A remark — what the rest of the band is doing ("Perc. Loop", "Band
+/// Enters"), not an instruction to this player. Set quieter than anything
+/// the player acts on: regular-weight sans on a pale tint with a thin
+/// accent bar, Finale's `*cue:` / `[ cue ]` decoration stripped.
 fn callout_piece(raw: &str, flat: &str, x: f64, sp: f64, style: MarkStyle) -> RowPiece {
     let paint = section_marks::callout_paint(style);
     let size = marker::CALLOUT_SIZE * sp;
-    let mut lines: Vec<&str> = raw
+    let mut lines: Vec<String> = raw
         .lines()
-        .map(str::trim)
+        .map(section_marks::remark_text)
         .filter(|l| !l.is_empty())
         .collect();
     if lines.is_empty() {
-        lines.push(flat);
+        lines.push(section_marks::remark_text(flat));
     }
-    let leading = 1.18 * size;
+    let leading = 1.22 * size;
     let n = lines.len();
-    let bar_w = 0.3 * sp;
-    let pad_l = bar_w + 0.4 * sp;
-    let pad_r = 0.45 * sp;
-    let pad_v = 0.3 * sp;
+    let bar_w = 0.2 * sp;
+    let pad_l = bar_w + 0.45 * sp;
+    let pad_r = 0.5 * sp;
+    let pad_v = 0.35 * sp;
     let mut ink: Option<Rect> = None;
     let mut texts = Vec::new();
     for (k, line) in lines.iter().enumerate() {
@@ -1847,7 +1861,7 @@ fn callout_piece(raw: &str, flat: &str, x: f64, sp: f64, style: MarkStyle) -> Ro
         let r = metrics::text_ink(
             MARKER_FAMILY,
             size,
-            true,
+            false,
             false,
             line,
             Point::new(x + pad_l, base),
@@ -1860,7 +1874,7 @@ fn callout_piece(raw: &str, flat: &str, x: f64, sp: f64, style: MarkStyle) -> Ro
             base,
         ));
         ink = Some(ink.map_or(r, |i| i.union(r)));
-        texts.push((line.to_string(), base));
+        texts.push((line.clone(), base));
     }
     let ink = ink.unwrap_or_default();
     // Cap height to baseline, not the ink's descenders: rows of callouts
@@ -1878,7 +1892,7 @@ fn callout_piece(raw: &str, flat: &str, x: f64, sp: f64, style: MarkStyle) -> Ro
             fill: Some(tint),
             stroke: None,
             stroke_width: 0.0,
-            corner_radius: Some(0.3 * sp),
+            corner_radius: Some(0.25 * sp),
         });
     }
     cmds.push(PaintCommand::Rect {
@@ -1896,7 +1910,7 @@ fn callout_piece(raw: &str, flat: &str, x: f64, sp: f64, style: MarkStyle) -> Ro
             paint.text,
             TextAnchor::Start,
             MARKER_FAMILY,
-            true,
+            false,
             false,
         ));
     }

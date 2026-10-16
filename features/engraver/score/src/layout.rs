@@ -1117,12 +1117,22 @@ fn barline_scene(x: f64, style: BarStyle, spatium: f64) -> Option<SceneNode> {
 }
 
 fn styled_text(s: &str, font: &TextFont, pos: Point, anchor: TextAnchor) -> SceneNode {
+    styled_text_in(s, font, pos, anchor, Color::BLACK)
+}
+
+fn styled_text_in(
+    s: &str,
+    font: &TextFont,
+    pos: Point,
+    anchor: TextAnchor,
+    color: Color,
+) -> SceneNode {
     SceneNode::anonymous_leaf(vec![PaintCommand::Text {
         text: s.to_string(),
         font_family: font.family.clone(),
         font_size: font.size,
         position: pos,
-        color: Color::BLACK,
+        color,
         anchor,
         weight: if font.bold {
             FontWeight::Bold

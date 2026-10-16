@@ -227,12 +227,13 @@ pub struct CalloutPaint {
 #[must_use]
 pub fn callout_paint(style: MarkStyle) -> CalloutPaint {
     match style {
-        // Amber: reads as "attention" and is distinct from every section
-        // colour a marker beside it could carry.
+        // Amber bar on amber-50, stone-700 type: findable at a glance, but
+        // quieter than the red the player's own text is set in and distinct
+        // from every section colour beside it.
         MarkStyle::Color | MarkStyle::Classic => CalloutPaint {
-            bar: Color::from_rgb8(0xd9, 0x77, 0x06),
-            tint: Some(Color::from_rgb8(0xfe, 0xf3, 0xc7)),
-            text: Color::from_rgb8(0x78, 0x35, 0x0f),
+            bar: Color::from_rgb8(0xf5, 0x9e, 0x0b),
+            tint: Some(Color::from_rgb8(0xff, 0xfb, 0xeb)),
+            text: Color::from_rgb8(0x44, 0x40, 0x3c),
         },
         // A grey tint prints as a dither that muddies small type; a solid
         // bar does not.
@@ -244,8 +245,32 @@ pub fn callout_paint(style: MarkStyle) -> CalloutPaint {
     }
 }
 
+/// A remark line without Finale's cue decoration: `*Band In:` → `Band In`,
+/// `[ Guitars ]` → `Guitars`, `*VS*` → `VS`. Quotes and ellipses stay.
+#[must_use]
+pub fn remark_text(line: &str) -> String {
+    let mut t = line.trim();
+    if let Some(inner) = t.strip_prefix('[').and_then(|r| r.strip_suffix(']')) {
+        t = inner.trim();
+    }
+    let t = t
+        .trim_start_matches('*')
+        .trim_end_matches([':', '*'])
+        .trim();
+    t.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn remarks_lose_cue_decoration() {
+        assert_eq!(super::remark_text("*Band In:"), "Band In");
+        assert_eq!(super::remark_text("[ Guitars ]"), "Guitars");
+        assert_eq!(super::remark_text("***CUE TRACK***"), "CUE TRACK");
+        assert_eq!(super::remark_text("Rall..."), "Rall...");
+        assert_eq!(super::remark_text("\"The Raven\""), "\"The Raven\"");
+    }
+
     use super::*;
 
     fn sec(text: &str) -> (String, Option<String>) {
