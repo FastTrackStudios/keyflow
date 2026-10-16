@@ -1722,13 +1722,38 @@ fn place_rehearsals(
         // marker over a mid-line barline centres itself on it.
         let mut cursor: Option<f64> = item.first.then_some(0.0);
         let mut badge_used = false;
-        for mark in &marks {
-            let key = section_marks::text_key(&mark.text);
-            let role = input
+        let role_of = |mark: &RehearsalMark| {
+            input
                 .roles
-                .get(&key)
+                .get(&section_marks::text_key(&mark.text))
                 .copied()
-                .unwrap_or_else(|| TextRole::default_for_rehearsal(&mark.text));
+                .unwrap_or_else(|| TextRole::default_for_rehearsal(&mark.text))
+        };
+        let is_letter = |mark: &RehearsalMark| {
+            role_of(mark) == TextRole::Section
+                && matches!(section_marks::classify(&mark.text), MarkClass::Letter(_))
+        };
+        // A rehearsal letter or bar number at the same bar as a section
+        // (`A` beside `VS 1`) rides on the section's badge instead of
+        // getting one of its own.
+        let has_section = marks
+            .iter()
+            .any(|m| role_of(m) == TextRole::Section && !is_letter(m));
+        let mut letters: Vec<String> = if has_section {
+            marks
+                .iter()
+                .filter(|m| is_letter(m))
+                .map(|m| section_marks::text_key(&m.text))
+                .collect()
+        } else {
+            Vec::new()
+        };
+        for mark in &marks {
+            if has_section && is_letter(mark) {
+                continue;
+            }
+            let key = section_marks::text_key(&mark.text);
+            let role = role_of(mark);
             let x = cursor.unwrap_or(item.span.0 + 0.5 * sp);
             let (label, note, kind) = match (role, section_marks::classify(&mark.text)) {
                 (TextRole::Remark, _) => {
@@ -1749,6 +1774,8 @@ fn place_rehearsals(
                 // medley): a neutral badge with its own name.
                 (TextRole::Section, MarkClass::Callout(_)) => (key.clone(), None, None),
             };
+            // The first section takes the bar's letters.
+            let letters = std::mem::take(&mut letters);
             let theme = section_theme(kind.as_ref(), look);
             // A section that opens a system: the master rhythm chart's own
             // margin badge, drawn by the chart's layout function so the two
@@ -1760,6 +1787,13 @@ fn place_rehearsals(
                 && let Some(room) = badge_room
             {
                 badge_used = true;
+                // In the margin the letter goes on its own line, as the
+                // chart sets its section letters (`CH 1` over `B`).
+                let label = if letters.is_empty() {
+                    label
+                } else {
+                    format!("{label}\n{}", letters.join(" "))
+                };
                 let params = MarginLabelParams {
                     label_override: Some(label),
                     page_x: -room - 4.0,
@@ -1809,6 +1843,11 @@ fn place_rehearsals(
             // measure): the chart's capsule — same face, weight and corner
             // — with its type a step down, so a player finds sections by the
             // same shape wherever they start.
+            let label = if letters.is_empty() {
+                label
+            } else {
+                format!("{label} · {}", letters.join(" · "))
+            };
             let size = marker::MIDLINE_SCALE * marker::BADGE_TEXT * 4.0 * sp;
             let pad_v = marker::MIDLINE_SCALE * 3.0;
             let pill_h = size + 2.0 * pad_v;
