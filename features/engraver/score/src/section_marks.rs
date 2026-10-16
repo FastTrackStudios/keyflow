@@ -4,10 +4,10 @@
 //! differently, and Finale stores them all as one kind of text:
 //!
 //! - **sections** of the song form — `VS 1`, `CH 2a`, `Sax Solo`,
-//!   `Re-INTRO`, `Tag #7 FINAL` — which keyflow draws in the colours the
-//!   master rhythm chart uses (the [`keyflow_proto`] section palette), as a
-//!   round avatar in the left margin when the section starts a system and a
-//!   small pill over the barline when it starts mid-line;
+//!   `Re-INTRO`, `Tag #7 FINAL` — which keyflow draws the way the master
+//!   rhythm chart does: the chart's own margin badge when the section starts
+//!   a system, and a small pill in the chart's colours over the barline when
+//!   it starts mid-line;
 //! - **letters and bar numbers** — `A`, `79` — the classical rehearsal
 //!   marks, drawn the same way in a neutral colour;
 //! - **callouts** — `*Band In:`, `Drums Enter`, `Big Rall>>>` — cues, set
@@ -18,9 +18,10 @@
 //! Every marker also has a monochrome rendering for black-and-white
 //! printers: solid black with white type, so it reads without colour and
 //! survives a cheap laser printer. The colour rendering is not derived from
-//! it — each is drawn the way it reads best.
+//! it — each is drawn the way it reads best. (The drawing lives in
+//! `layout::vertical`.)
 
-use keyflow_proto::sections::{SectionType, colors_for_section_type};
+use keyflow_proto::sections::SectionType;
 use peniko::Color;
 
 /// How a part draws its rehearsal marks.
@@ -215,83 +216,6 @@ fn section(kind: SectionType, re: bool, after: &[&str], before: &[&str]) -> Mark
     })
 }
 
-/// The colours one marker is drawn in.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct MarkPaint {
-    /// The avatar/pill fill.
-    pub fill: Color,
-    /// The label on the fill.
-    pub label: Color,
-    /// Text set beside the marker (its note), on white paper.
-    pub ink: Color,
-}
-
-fn hex(s: &str) -> Option<(u8, u8, u8)> {
-    let s = s.strip_prefix('#')?;
-    let v = u32::from_str_radix(s.get(..6)?, 16).ok()?;
-    Some(((v >> 16) as u8, (v >> 8) as u8, v as u8))
-}
-
-/// WCAG relative luminance of an sRGB colour.
-fn luminance((r, g, b): (u8, u8, u8)) -> f64 {
-    let lin = |c: u8| {
-        let c = f64::from(c) / 255.0;
-        if c <= 0.039_28 {
-            c / 12.92
-        } else {
-            ((c + 0.055) / 1.055).powf(2.4)
-        }
-    };
-    0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
-}
-
-fn rgb((r, g, b): (u8, u8, u8)) -> Color {
-    Color::from_rgb8(r, g, b)
-}
-
-/// Neutral marker colours (letters, bar numbers, unknown sections):
-/// slate-600 with white type.
-const NEUTRAL: MarkPaint = MarkPaint {
-    fill: Color::from_rgb8(0x47, 0x55, 0x69),
-    label: Color::WHITE,
-    ink: Color::from_rgb8(0x33, 0x41, 0x55),
-};
-
-const MONO: MarkPaint = MarkPaint {
-    fill: Color::BLACK,
-    label: Color::WHITE,
-    ink: Color::BLACK,
-};
-
-/// The paint for a section marker.
-#[must_use]
-pub fn section_paint(kind: Option<&SectionType>, style: MarkStyle) -> MarkPaint {
-    if style == MarkStyle::Mono {
-        return MONO;
-    }
-    let Some(kind) = kind.filter(|k| !matches!(k, SectionType::Custom(_))) else {
-        return NEUTRAL;
-    };
-    let colors = colors_for_section_type(kind);
-    let (Some(bright), Some(text)) = (hex(&colors.bright_hex()), hex(&colors.text_hex())) else {
-        return NEUTRAL;
-    };
-    // The chart's bright shade is the fill. White type where it has the
-    // contrast (blues, purples), the palette's dark text shade where the
-    // fill is light (the verse green, the intro amber).
-    let white_contrast = 1.05 / (luminance(bright) + 0.05);
-    let label = if white_contrast >= 3.0 {
-        Color::WHITE
-    } else {
-        rgb(text)
-    };
-    MarkPaint {
-        fill: rgb(bright),
-        label,
-        ink: rgb(text),
-    }
-}
-
 /// Callout colours: an accent bar, a tint behind the text, the text.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CalloutPaint {
@@ -404,21 +328,5 @@ mod tests {
                 classify(cue)
             );
         }
-    }
-
-    #[test]
-    fn mono_is_black_on_white() {
-        let p = section_paint(Some(&SectionType::Verse), MarkStyle::Mono);
-        assert_eq!(p.fill, Color::BLACK);
-        assert_eq!(p.label, Color::WHITE);
-    }
-
-    #[test]
-    fn colour_labels_keep_contrast() {
-        // Verse green is light: dark label. Chorus blue is dark: white.
-        let vs = section_paint(Some(&SectionType::Verse), MarkStyle::Color);
-        assert_ne!(vs.label, Color::WHITE);
-        let ch = section_paint(Some(&SectionType::Chorus), MarkStyle::Color);
-        assert_eq!(ch.label, Color::WHITE);
     }
 }

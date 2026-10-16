@@ -1489,6 +1489,10 @@ fn proportional_widths(weights: &[f64], mins: &[f64], total: f64) -> Vec<f64> {
     }
 }
 
+/// Staff left edge (points from the paper edge) that leaves room for a
+/// section badge: a sixth-inch printable edge, a 48pt badge, a 4pt gap.
+const SECTION_GUTTER: f64 = 64.0;
+
 /// One system: which prepared items it holds and where it sits.
 struct SystemPlan {
     items: Vec<usize>,
@@ -1829,6 +1833,13 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
 
     // ── systems: the source's breaks, or min-width packing ──
     const MAX_MEASURES_PER_SYSTEM: usize = 6;
+    // Keyflow section badges sit in the left margin at the master rhythm
+    // chart's proportions; staves start far enough in to hold one.
+    let content_left = if opts.marks == crate::section_marks::MarkStyle::Classic {
+        margins.left
+    } else {
+        margins.left.max(SECTION_GUTTER)
+    };
     let mut systems: Vec<SystemPlan> = Vec::new();
     // Finale re-lays parts out when they are opened; a part never opened
     // since its music changed keeps stale system breaks. If any stored
@@ -1894,7 +1905,7 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
             systems.retain(|s| !s.items.is_empty());
         }
         None => {
-            let avail_width = opts.page_width - margins.left - margins.right;
+            let avail_width = opts.page_width - content_left - margins.right;
             let mut current: Vec<usize> = Vec::new();
             let mut used = 0.0;
             let mut packed: Vec<Vec<usize>> = Vec::new();
@@ -1941,13 +1952,17 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
                     items,
                     page,
                     staff_top: y,
-                    left: margins.left,
+                    left: content_left,
                     right: opts.page_width - margins.right,
                     spatium: base_spatium,
                 });
                 y += opts.system_gap;
             }
         }
+    }
+
+    for sys in &mut systems {
+        sys.left = sys.left.max(content_left);
     }
 
     // Expansion gating, verbatim from the chart engine's width_dist.rs

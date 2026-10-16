@@ -38,6 +38,11 @@ use crate::metrics;
 use crate::model::{self, Enclosure, RehearsalMark};
 use crate::section_marks::{self, MarkClass, MarkStyle};
 use crate::skyline::{SkyKind, Skyline};
+use engraver_proto::engraver::layout::chart::section_layout::get_section_theme;
+use engraver_proto::engraver::layout::tlayout::{
+    MarginLabelParams, RehearsalMarkStyle, layout_margin_label, rehearsal_themes,
+};
+use keyflow_proto::sections::SectionType;
 
 /// MuseScore style defaults (styledef.cpp), in spatiums.
 mod style {
@@ -1512,16 +1517,32 @@ fn place_measure_numbers(
 
 /// Keyflow marker geometry, in spatiums.
 mod marker {
-    /// Avatar diameter when the margin has room.
-    pub const AVATAR: f64 = 3.4;
-    /// Smallest avatar worth drawing; below this the mark becomes a pill.
-    pub const AVATAR_MIN: f64 = 2.4;
-    /// Gap between the avatar and the staff's left end.
-    pub const AVATAR_GAP: f64 = 0.7;
-    /// Pill height.
-    pub const PILL: f64 = 2.3;
+    /// Narrowest margin (points) a badge is drawn in; below this the mark
+    /// becomes a pill over the clef.
+    pub const BADGE_MIN_ROOM: f64 = 20.0;
+    /// The chart badge's type size, as a fraction of the staff height
+    /// (`layout_margin_label`'s base size).
+    pub const BADGE_TEXT: f64 = 0.7;
+    /// Mid-line badges are the margin badge a step smaller.
+    pub const MIDLINE_SCALE: f64 = 0.82;
     /// Callout text size.
     pub const CALLOUT_SIZE: f64 = 1.55;
+}
+
+/// The master rhythm chart's colours for a section (`get_section_theme`),
+/// or solid black with white type for a black-and-white printer. Letters,
+/// bar numbers and unrecognised sections take the chart's custom style.
+fn section_theme(kind: Option<&SectionType>, look: MarkStyle) -> RehearsalMarkStyle {
+    match (look, kind) {
+        (MarkStyle::Mono, _) => RehearsalMarkStyle {
+            background_color: Color::BLACK,
+            text_color: Color::WHITE,
+            border_color: None,
+            ..Default::default()
+        },
+        (_, Some(kind)) => get_section_theme(kind),
+        (_, None) => rehearsal_themes::custom(),
+    }
 }
 
 /// The sans the markers are set in (FreeSans Bold, see `fonts`).
@@ -1558,11 +1579,11 @@ fn marker_text(
 }
 
 /// Baseline that centres `text`'s ink on `center_y`, and its ink width.
-fn centred_baseline(text: &str, size: f64, center_y: f64) -> (f64, f64) {
+fn centred_baseline(text: &str, size: f64, center_y: f64, bold: bool) -> (f64, f64) {
     metrics::text_ink(
         MARKER_FAMILY,
         size,
-        true,
+        bold,
         false,
         text,
         Point::ZERO,
@@ -1634,14 +1655,9 @@ fn place_rehearsals(
     }
     let sp = input.spatium;
     let look = input.marks;
-    let pill_h = marker::PILL * sp;
-    let label_size = 0.62 * pill_h;
-    // The avatar, if the margin fits one.
-    let avatar = {
-        let room = input.margin_room - marker::AVATAR_GAP * sp;
-        let d = (marker::AVATAR * sp).min(room);
-        (d >= marker::AVATAR_MIN * sp).then_some(d)
-    };
+    // The margin badge needs a printable strip left of the staff; the
+    // chart's badge sizes its text to whatever width it gets.
+    let badge_room = (input.margin_room >= marker::BADGE_MIN_ROOM).then_some(input.margin_room);
     for item in &input.items {
         let marks: Vec<&RehearsalMark> = item
             .directions
@@ -1660,7 +1676,7 @@ fn place_rehearsals(
         // Left edge of the next piece in the row; `None` until the first
         // marker over a mid-line barline centres itself on it.
         let mut cursor: Option<f64> = item.first.then_some(0.0);
-        let mut avatar_used = false;
+        let mut badge_used = false;
         for mark in marks {
             let (label, note, kind) = match section_marks::classify(&mark.text) {
                 MarkClass::Section(s) => (s.label, s.note, Some(s.kind)),
@@ -1673,83 +1689,71 @@ fn place_rehearsals(
                     continue;
                 }
             };
-            let paint = section_marks::section_paint(kind.as_ref(), look);
-            // A section that opens a system: an avatar in the left margin,
-            // centred on the staff.
+            let theme = section_theme(kind.as_ref(), look);
+            // A section that opens a system: the master rhythm chart's own
+            // margin badge, drawn by the chart's layout function so the two
+            // can never drift apart. It spans the margin from the printable
+            // edge to the staff, top-aligned with the staff, and carries
+            // the section's note (`Sax`, `midway`) beneath it in caps.
             if item.first
-                && !avatar_used
-                && let Some(d) = avatar
+                && !badge_used
+                && let Some(room) = badge_room
             {
-                avatar_used = true;
-                let center = Point::new(-marker::AVATAR_GAP * sp - d / 2.0, 2.0 * sp);
-                let mut cmds = vec![PaintCommand::Circle {
-                    center,
-                    radius: d / 2.0,
-                    fill: Some(paint.fill),
-                    stroke: None,
-                    stroke_width: 0.0,
-                }];
-                // `VS 1` stacks as VS over 1: two short lines set larger
-                // in a circle than one long one.
-                let lines: Vec<&str> = match label.split_once(' ') {
-                    Some((a, b)) => vec![a, b],
-                    None => vec![label.as_str()],
+                badge_used = true;
+                let params = MarginLabelParams {
+                    label_override: Some(label),
+                    page_x: -room - 4.0,
+                    margin_width: room + 4.0,
+                    staff_y: 0.0,
+                    staff_height: 4.0 * sp,
+                    style: theme,
+                    ..Default::default()
                 };
-                // The number is what a player scans for: a size up.
-                let scale: &[f64] = if lines.len() == 2 {
-                    &[1.0, 1.3]
-                } else {
-                    &[1.0]
-                };
-                let widest = lines
-                    .iter()
-                    .zip(scale)
-                    .map(|(l, k)| k * centred_baseline(l, 1.0, 0.0).1)
-                    .fold(1e-6, f64::max);
-                let (cap_k, fit) = if lines.len() == 2 {
-                    (0.27, 0.66)
-                } else {
-                    (0.4, 0.8)
-                };
-                let size = (cap_k * d).min(fit * d / widest);
-                let caps: Vec<f64> = scale.iter().map(|k| 0.72 * k * size).collect();
-                let gap = 0.22 * size;
-                let block = caps.iter().sum::<f64>() + (lines.len() - 1) as f64 * gap;
-                let mut top = center.y - block / 2.0;
-                for (k, line) in lines.iter().enumerate() {
-                    let base = top + caps[k];
-                    top = base + gap;
-                    cmds.push(marker_text(
-                        line,
-                        scale[k] * size,
-                        Point::new(center.x, base),
-                        paint.label,
+                let (capsule, mut badge) = layout_margin_label(&params, &input.ctx.as_context());
+                // The chart names generic families (`sans-serif`, its
+                // `section-comment` style), which a part's PDF font
+                // database does not resolve: name the face.
+                for cmd in &mut badge.commands {
+                    if let PaintCommand::Text { font_family, .. } = cmd
+                        && matches!(font_family.as_str(), "sans-serif" | "section-comment")
+                    {
+                        *font_family = MARKER_FAMILY.to_string();
+                    }
+                }
+                // The note goes beneath in caps, as the chart's comment
+                // does — but a part's margin is narrower than a chart's, so
+                // it shrinks to the badge's width instead of running into
+                // the clef ("ORCHESTRA" from "Orchestra Bridge").
+                if let Some(note) = note {
+                    let note = note.to_uppercase();
+                    let full = 0.75 * marker::BADGE_TEXT * 4.0 * sp;
+                    let (_, w1) = centred_baseline(&note, 1.0, 0.0, false);
+                    let size = full.min(capsule.bounds.width() / w1.max(1e-6));
+                    let base = capsule.bounds.y1 + 3.0 + 0.75 * size;
+                    badge.add_command(marker_text(
+                        &note,
+                        size,
+                        Point::new(capsule.bounds.center().x, base),
+                        Color::BLACK,
                         TextAnchor::Middle,
                         MARKER_FAMILY,
-                        true,
+                        false,
                         false,
                     ));
                 }
-                group.add_child(SceneNode::anonymous_leaf(cmds));
-                if let Some(note) = note {
-                    let x = cursor.unwrap_or(0.0);
-                    let piece = note_piece(
-                        &note,
-                        x,
-                        -pill_h / 2.0,
-                        1.1 * label_size,
-                        paint.ink,
-                        input.text_family,
-                    );
-                    cursor = Some(piece.frame.x1 + 0.6 * sp);
-                    row.push(piece);
-                }
+                group.add_child(badge);
                 continue;
             }
-            // Otherwise a pill: over the barline mid-line, at the row's
-            // cursor when several marks share a measure.
-            let (base, w) = centred_baseline(&label, label_size, -pill_h / 2.0);
-            let width = (w + 0.9 * pill_h).max(1.6 * pill_h);
+            // Otherwise the margin badge's smaller sibling over the barline
+            // mid-line (at the row's cursor when several marks share a
+            // measure): the chart's capsule — same face, weight and corner
+            // — with its type a step down, so a player finds sections by the
+            // same shape wherever they start.
+            let size = marker::MIDLINE_SCALE * marker::BADGE_TEXT * 4.0 * sp;
+            let pad_v = marker::MIDLINE_SCALE * 3.0;
+            let pill_h = size + 2.0 * pad_v;
+            let (base, w) = centred_baseline(&label, size, -pill_h / 2.0, false);
+            let width = (w + 1.1 * size).max(pill_h * 1.5);
             let x0 = cursor.unwrap_or(item.span.0 - width / 2.0);
             let frame = Rect::new(x0, -pill_h, x0 + width, 0.0);
             row.push(RowPiece {
@@ -1757,19 +1761,20 @@ fn place_rehearsals(
                 cmds: vec![
                     PaintCommand::Rect {
                         rect: frame,
-                        fill: Some(paint.fill),
-                        stroke: None,
-                        stroke_width: 0.0,
-                        corner_radius: Some(pill_h / 2.0),
+                        fill: Some(theme.background_color),
+                        stroke: theme.border_color,
+                        stroke_width: theme.border_width.min(0.12 * sp),
+                        // The chart capsule's single-line radius.
+                        corner_radius: Some(pill_h / 4.0),
                     },
                     marker_text(
                         &label,
-                        label_size,
+                        size,
                         Point::new(frame.center().x, base),
-                        paint.label,
+                        theme.text_color,
                         TextAnchor::Middle,
                         MARKER_FAMILY,
-                        true,
+                        false,
                         false,
                     ),
                 ],
@@ -1780,8 +1785,8 @@ fn place_rehearsals(
                     &note,
                     frame.x1 + 0.4 * sp,
                     -pill_h / 2.0,
-                    1.1 * label_size,
-                    paint.ink,
+                    0.8 * size,
+                    Color::BLACK,
                     input.text_family,
                 );
                 cursor = Some(piece.frame.x1 + 0.6 * sp);
