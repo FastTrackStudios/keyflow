@@ -581,7 +581,9 @@ pub fn translate_tempo_marks(text: &str) -> TempoMarks {
             tracing::warn!("Could not parse tempo markings : {text}");
         }
         TempoMarks {
-            words: Some(text_without_tags),
+            // A metric relation in a music font ("Swing ♪♪ = ♩ ³♪"), or
+            // plain words: read the font runs.
+            words: Some(expression_words(text)),
             beat_unit: None,
             has_dot: false,
             per_minute: None,
@@ -666,6 +668,117 @@ static STYLING_TAG_RE: LazyLock<Regex> = LazyLock::new(|| {
 
 pub fn remove_styling_tags(text: &str) -> String {
     STYLING_TAG_RE.replace_all(text, "").trim().to_string()
+}
+
+/// The face a run of Finale text is set in, as far as reading it goes.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RunFont {
+    Text,
+    /// Maestro / MaestroTimes / Maestro Percussion: Mac-encoded music
+    /// symbols among ordinary letters.
+    Maestro,
+    /// JazzText: ³ and ¶ are spacing, · an end mark.
+    JazzText,
+    /// A font missing from the file (`Font0`): its glyphs mean nothing.
+    Missing,
+}
+
+fn run_font(name: &str) -> RunFont {
+    let n = name.trim().to_ascii_lowercase();
+    if n.starts_with("maestro") {
+        RunFont::Maestro
+    } else if n == "jazztext" {
+        RunFont::JazzText
+    } else if n == "font0" {
+        RunFont::Missing
+    } else {
+        RunFont::Text
+    }
+}
+
+/// A Maestro symbol as SMuFL. The legacy fonts put symbols on MacRoman
+/// bytes; the table was read off the glyphs themselves (MaestroTimes
+/// rendered beside Finale Maestro). Single notes use the metronome-mark
+/// set, so a "♩ = ♪" mark sets like a tempo mark.
+fn maestro_symbol(c: char) -> Option<&'static str> {
+    Some(match c {
+        'Œ' => "\u{ECA5}", // quarter note
+        '‰' => "\u{ECA7}", // eighth note
+        'Ó' => "\u{ECA3}", // half note
+        // A beam-and-note that joins the note before it into two beamed
+        // eighths; set as a second eighth (see `expression_words`).
+        'Â' => "\u{ECA7}",
+        'Ç' => "\u{E1FF}", // tuplet 3
+        _ => return None,
+    })
+}
+
+/// An expression's words with Finale's font runs read: Maestro symbols as
+/// SMuFL (`(‰ = Œ)` → `(♪ = ♩)`), JazzText's spacing characters dropped
+/// (`¶B¶A¶N¶D IN·` → `BAND IN`), glyphs of a missing font dropped, then
+/// the styling tags removed.
+#[must_use]
+pub fn expression_words(text: &str) -> String {
+    static FONT_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"\^(?:font|Font|fontMus|fontTxt|fontNum)\(([^,)]*)[^)]*\)")
+            .expect("valid font regex")
+    });
+    let mut out = String::new();
+    let mut font = RunFont::Text;
+    let mut last = 0;
+    let mut runs: Vec<(RunFont, &str)> = Vec::new();
+    for m in FONT_RE.captures_iter(text) {
+        let whole = m.get(0).expect("match");
+        runs.push((font, &text[last..whole.start()]));
+        font = run_font(&m[1]);
+        last = whole.end();
+    }
+    runs.push((font, &text[last..]));
+    for (font, run) in runs {
+        // Other styling tags inside the run pass through untouched.
+        let mut chars = run.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c == '^' {
+                // Copy the tag verbatim (`^size(14)`).
+                out.push(c);
+                for t in chars.by_ref() {
+                    out.push(t);
+                    if t == ')' {
+                        break;
+                    }
+                }
+                continue;
+            }
+            match font {
+                RunFont::Text => out.push(c),
+                RunFont::Maestro => match maestro_symbol(c) {
+                    // `ŒÂ`: the beam joins the quarter before it, which
+                    // was really the first of two eighths.
+                    Some(sym) if c == 'Â' && out.ends_with('\u{ECA5}') => {
+                        out.truncate(out.len() - '\u{ECA5}'.len_utf8());
+                        out.push('\u{ECA7}');
+                        out.push_str(sym);
+                    }
+                    Some(sym) => out.push_str(sym),
+                    None if c.is_ascii() => out.push(c),
+                    // A symbol the table does not know: nothing rather
+                    // than a stray accented letter.
+                    None => {}
+                },
+                RunFont::JazzText => {
+                    if !matches!(c, '³' | '¶' | '·') {
+                        out.push(c);
+                    }
+                }
+                RunFont::Missing => {
+                    if c.is_whitespace() {
+                        out.push(c);
+                    }
+                }
+            }
+        }
+    }
+    remove_styling_tags(&out)
 }
 
 pub fn replace_music_symbols(text: &str) -> String {
@@ -761,5 +874,33 @@ pub fn find_nth_syllabic(lyrics: &str, n: i64) -> (String, String, bool) {
     } else {
         tracing::warn!("No {n}th syllabic found for {lyrics}");
         ("???".to_string(), "single".to_string(), false)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn expression_words_reads_font_runs() {
+        assert_eq!(
+            expression_words("^font(MaestroTimes,8192)^size(14)^nfx(0)(^nfx(1)‰ = Œ^nfx(0))"),
+            "(\u{ECA7} = \u{ECA5})"
+        );
+        assert_eq!(
+            expression_words(
+                "^font(Times New Roman,4096)^size(14)^nfx(1)Shuffle:^font(Maestro Percussion,8191)^size(16)^nfx(0) ^font(MaestroTimes,8192)ŒÂ ^size(14)=^size(16) Œ Ç‰"
+            ),
+            "Shuffle: \u{ECA7}\u{ECA7} = \u{ECA5} \u{E1FF}\u{ECA7}"
+        );
+        assert_eq!(
+            expression_words("^font(JazzText,8191)^size(16)^nfx(1) ¶B¶A¶N¶D IN·"),
+            "BAND IN"
+        );
+        assert_eq!(expression_words("^font(Font0,0)^size(24)^nfx(0)Ã"), "");
+        assert_eq!(
+            expression_words("^fontTxt(Arial,4096)^size(14)^nfx(2)*Eb major scale:"),
+            "*Eb major scale:"
+        );
     }
 }

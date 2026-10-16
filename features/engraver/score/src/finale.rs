@@ -417,6 +417,7 @@ mod tests {
             name: "Viola".into(),
             staves: vec![34],
             part_ids: vec!["P24".into()],
+            score_staves: vec![1],
             extract: true,
             pages: vec![
                 fl::PageSpec {

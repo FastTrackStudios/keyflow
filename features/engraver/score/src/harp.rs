@@ -4,8 +4,17 @@
 //! underneath — `--‡--‡--‡----|--‡--------‡--‡--‡` over
 //! `D--C--B---|--E--F#--G-A` — and both arrive as plain text: the diagram
 //! as rows of dashes and daggers that mean nothing outside that font, the
-//! names padded with dashes to sit under it. A harpist reads the names
-//! alone, set the standard way: `D C B | E F♯ G A` (left foot, then right).
+//! names padded with dashes to sit under it. The names are exact, so the
+//! diagram is redrawn from them in SMuFL's harp pedal glyphs (left foot
+//! D C B, divider, right foot E F G A), which the staff text sets in the
+//! music font.
+
+/// SMuFL harp pedal glyphs (`harpPedalRaised`, `…Centered`, `…Lowered`,
+/// `…Divider`).
+pub const HARP_FLAT: char = '\u{E680}';
+pub const HARP_NATURAL: char = '\u{E681}';
+pub const HARP_SHARP: char = '\u{E682}';
+pub const HARP_DIVIDER: char = '\u{E683}';
 
 /// A line drawn in the pedal font, or carrying the pedal names.
 fn is_pedal_line(line: &str) -> bool {
@@ -69,11 +78,20 @@ pub fn clean_pedal_text(text: &str) -> String {
             }
             continue;
         }
-        let (left, right): (Vec<&str>, Vec<&str>) = (
-            names[..3].iter().map(|n| n.2.as_str()).collect(),
-            names[3..7].iter().map(|n| n.2.as_str()).collect(),
-        );
-        let mut set = format!("{} | {}", left.join(" "), right.join(" "));
+        // The diagram itself, in SMuFL: a pedal up (flat), level
+        // (natural) or down (sharp) per string, left foot D C B, the
+        // divider, right foot E F G A.
+        let mut set = String::new();
+        for (k, (_, _, name)) in names[..7].iter().enumerate() {
+            if k == 3 {
+                set.push(HARP_DIVIDER);
+            }
+            set.push(match name.chars().nth(1) {
+                Some('♭') => HARP_FLAT,
+                Some('♯') => HARP_SHARP,
+                _ => HARP_NATURAL,
+            });
+        }
         // A remark after the names ("*change Bb to B#*") stays.
         let tail = line[names[6].1..].trim().trim_matches('-').trim();
         if tail.chars().any(char::is_alphabetic) {
@@ -95,7 +113,7 @@ mod tests {
             clean_pedal_text(
                 "G major scale:\n--‡--‡--‡----|--‡--------‡--‡--‡\nD--C--B---|--E--F#--G-A"
             ),
-            "G major scale:\nD C B | E F♯ G A"
+            "G major scale:\n\u{E681}\u{E681}\u{E681}\u{E683}\u{E681}\u{E682}\u{E681}\u{E681}"
         );
     }
 
@@ -103,7 +121,7 @@ mod tests {
     fn diagram_and_names_on_one_line() {
         assert_eq!(
             clean_pedal_text("‡ ‡ -‡-‡-----|----‡--‡--‡-D-C-Bb---Eb-F--G--A"),
-            "D C B♭ | E♭ F G A"
+            "\u{E681}\u{E681}\u{E680}\u{E683}\u{E680}\u{E681}\u{E681}\u{E681}"
         );
     }
 
@@ -111,7 +129,7 @@ mod tests {
     fn trailing_remark_is_kept() {
         assert_eq!(
             clean_pedal_text("--‡-‡--------‡ D-C-B#--E#-F-G-A *change Bb to B#*"),
-            "D C B♯ | E♯ F G A  *change Bb to B#*"
+            "\u{E681}\u{E681}\u{E682}\u{E683}\u{E682}\u{E681}\u{E681}\u{E681}  *change Bb to B#*"
         );
     }
 

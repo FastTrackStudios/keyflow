@@ -1603,7 +1603,7 @@ fn process_gfholds(
                     if let Some(sid) = staff_id {
                         sub_text(&direction, "staff", &sid.to_string());
                     }
-                    let words = sub_text(&dt, "words", &remove_styling_tags(&expression.text));
+                    let words = sub_text(&dt, "words", &expression_words(&expression.text));
                     set_attr(&words, "font-style", "italic");
                 }
             }
@@ -1626,7 +1626,7 @@ fn process_gfholds(
                 if let Some(sid) = staff_id {
                     sub_text(&direction, "staff", &sid.to_string());
                 }
-                let words = sub_text(&dt, "words", &remove_styling_tags(&expression.text));
+                let words = sub_text(&dt, "words", &expression_words(&expression.text));
                 set_attr(&words, "font-style", "italic");
             } else if expression.category_type == "expressiveText" && is_this_staff {
                 let direction = sub_attrs(measure, "direction", &[("placement", placement)]);
@@ -1635,7 +1635,7 @@ fn process_gfholds(
                 if let Some(sid) = staff_id {
                     sub_text(&direction, "staff", &sid.to_string());
                 }
-                let words = sub_text(&dt, "words", &remove_styling_tags(&expression.text));
+                let words = sub_text(&dt, "words", &expression_words(&expression.text));
                 set_attr(&words, "font-style", "italic");
             } else if expression.category_type == "techniqueText" && is_this_staff {
                 let direction = sub_attrs(measure, "direction", &[("placement", placement)]);
@@ -1644,7 +1644,7 @@ fn process_gfholds(
                 if let Some(sid) = staff_id {
                     sub_text(&direction, "staff", &sid.to_string());
                 }
-                let words = sub_text(&dt, "words", &remove_styling_tags(&expression.text));
+                let words = sub_text(&dt, "words", &expression_words(&expression.text));
                 set_attr(&words, "font-style", "italic");
             } else if expression.category_type == "tempoMarks"
                 // Staff-list tempo marks (-1) show in every part; per-staff

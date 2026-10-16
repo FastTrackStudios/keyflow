@@ -1419,6 +1419,97 @@ fn direction_x(input: &SystemInput<'_, '_>, a: &MeasureAnchors<'_>, tick: u32) -
     a.x_at(tick)
 }
 
+/// Which face a character of staff text is set in.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RunFace {
+    Text,
+    /// A SMuFL symbol meant to sit in text (a metronome note): Leland
+    /// Text at the text's size.
+    MusicText,
+    /// A SMuFL symbol drawn at staff scale (a harp pedal diagram): Leland.
+    Music,
+}
+
+fn run_face(c: char) -> RunFace {
+    match c {
+        '\u{E680}'..='\u{E68F}' => RunFace::Music,
+        '\u{E000}'..='\u{F8FF}' => RunFace::MusicText,
+        _ => RunFace::Text,
+    }
+}
+
+/// One line of staff text, which may mix text with SMuFL symbols, laid out
+/// left to right from the origin (baseline y = 0). Returns its commands and
+/// its ink.
+fn rich_line(
+    line: &str,
+    font: &TextFont,
+    sp: f64,
+    color: Color,
+) -> (Vec<PaintCommand>, Option<Rect>) {
+    let mut runs: Vec<(RunFace, String)> = Vec::new();
+    for c in line.chars() {
+        let face = run_face(c);
+        match runs.last_mut() {
+            Some((f, s)) if *f == face => s.push(c),
+            _ => runs.push((face, c.to_string())),
+        }
+    }
+    let mut x = 0.0;
+    let mut cmds = Vec::new();
+    let mut ink: Option<Rect> = None;
+    let space = 0.28 * font.size;
+    for (face, text) in runs {
+        let (family, size, bold, italic, dy) = match face {
+            RunFace::Text => (font.family.as_str(), font.size, font.bold, font.italic, 0.0),
+            RunFace::MusicText => ("Leland Text", font.size, false, false, 0.0),
+            RunFace::Music => ("Leland", 4.0 * sp, false, false, 0.0),
+        };
+        let lead = text.len() - text.trim_start().len();
+        if lead > 0 && x > 0.0 {
+            x += space;
+        }
+        let shown = text.trim();
+        if shown.is_empty() {
+            x += space;
+            continue;
+        }
+        let r = metrics::text_ink(
+            family,
+            size,
+            bold,
+            italic,
+            shown,
+            Point::new(x, dy),
+            TextAnchor::Start,
+        )
+        .unwrap_or(Rect::new(
+            x,
+            dy - 0.7 * size,
+            x + 0.5 * size * shown.chars().count() as f64,
+            dy,
+        ));
+        ink = Some(ink.map_or(r, |i| i.union(r)));
+        cmds.push(marker_text(
+            shown,
+            size,
+            Point::new(x, dy),
+            color,
+            TextAnchor::Start,
+            family,
+            bold,
+            italic,
+        ));
+        x = r.x1
+            + if text.ends_with(' ') {
+                space
+            } else {
+                0.12 * font.size
+            };
+    }
+    (cmds, ink)
+}
+
 // ───────────────────────── 5a. tempo marks ─────────────────────────
 
 /// SMuFL metronome note for a MusicXML beat unit (`metNote…Up`).
@@ -1595,21 +1686,26 @@ fn place_staff_text(
         let lines: Vec<&str> = w.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
         let leading = 1.15 * font.size;
         let n = lines.len();
-        let mut block: Vec<(f64, &str, Rect)> = Vec::new(); // (line offset, text, ink)
-        for (k, line) in lines.iter().enumerate() {
-            let Some(r) = metrics::text_ink(
-                &font.family,
-                font.size,
-                font.bold,
-                font.italic,
-                line,
-                Point::ZERO,
-                TextAnchor::Start,
-            ) else {
+        // (line offset, its commands at the origin, ink). Lines stack up
+        // from the last one's baseline, each clear of the one below by its
+        // real ink (a pedal diagram is taller than a line of text), never
+        // closer than the text's leading.
+        let _ = n;
+        let mut block: Vec<(f64, Vec<PaintCommand>, Rect)> = Vec::new();
+        let mut below: Option<(f64, Rect)> = None; // (offset, ink at offset)
+        for line in lines.iter().rev() {
+            let (cmds, ink) = rich_line(line, font, sp, text_color);
+            let Some(r) = ink else {
                 continue;
             };
-            let off = -((n - 1 - k) as f64) * leading;
-            block.push((off, line, r + Vec2::new(0.0, off)));
+            let off = match below {
+                None => 0.0,
+                Some((off_below, ink_below)) => {
+                    (off_below - leading).min(ink_below.y0 - 0.25 * font.size - r.y1)
+                }
+            };
+            below = Some((off, r + Vec2::new(0.0, off)));
+            block.push((off, cmds, r + Vec2::new(0.0, off)));
         }
         let Some(extent) = block.iter().map(|(_, _, r)| *r).reduce(|a, b| a.union(b)) else {
             continue;
@@ -1630,15 +1726,11 @@ fn place_staff_text(
         );
         let owner = owners.next();
         let mut node = SceneNode::group(SemanticId::new(ElementType::Text, owner));
-        for (off, line, r) in &block {
-            sky.add(*r + Vec2::new(x, base), SkyKind::StaffText, owner);
-            node.add_child(styled_text_in(
-                line,
-                font,
-                Point::new(x, base + off),
-                TextAnchor::Start,
-                text_color,
-            ));
+        for (off, cmds, r) in block {
+            sky.add(r + Vec2::new(x, base), SkyKind::StaffText, owner);
+            node.add_child(
+                SceneNode::anonymous_leaf(cmds).with_transform(Affine::translate((x, base + off))),
+            );
         }
         nodes.push(node);
     }
