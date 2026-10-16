@@ -26,6 +26,7 @@ pub enum SectionType {
     Refrain, // Refrain section (recurring hook, common in worship charts)
     Tag,     // Tag — a short repeat of a closing line, often several in a row (worship charts)
     Turnaround, // Turnaround — short instrumental link/transition back into a section
+    Transition, // Transition — a passage bridging two parts of a medley or suite
     Pre(Box<SectionType>), // Pre-Chorus, Pre-Verse, etc.
     Post(Box<SectionType>), // Post-Chorus, Post-Verse, etc.
     Custom(String), // Custom section types
@@ -155,6 +156,7 @@ impl SectionType {
             SectionType::Refrain => "refrain".to_string(),
             SectionType::Tag => "tag".to_string(),
             SectionType::Turnaround => "turnaround".to_string(),
+            SectionType::Transition => "transition".to_string(),
             SectionType::Pre(inner) => format!("pre_{}", inner.key()),
             SectionType::Post(inner) => format!("post_{}", inner.key()),
             SectionType::Custom(name) => {
@@ -192,6 +194,7 @@ impl SectionType {
             SectionType::Refrain => "Refrain".to_string(),
             SectionType::Tag => "Tag".to_string(),
             SectionType::Turnaround => "Turnaround".to_string(),
+            SectionType::Transition => "Transition".to_string(),
             SectionType::Pre(inner) => format!("Pre-{}", inner.full_name()),
             SectionType::Post(inner) => format!("Post-{}", inner.full_name()),
             SectionType::Custom(name) => name.clone(),
@@ -218,6 +221,7 @@ impl SectionType {
             SectionType::Refrain => "REF".to_string(),
             SectionType::Tag => "TAG".to_string(),
             SectionType::Turnaround => "TURN".to_string(),
+            SectionType::Transition => "TRANS".to_string(),
             SectionType::Pre(inner) => format!("PRE-{}", inner.abbreviation()),
             SectionType::Post(inner) => format!("POST-{}", inner.abbreviation()),
             SectionType::Custom(name) => name.clone(), // Custom sections use their full name
@@ -239,7 +243,8 @@ impl SectionType {
             | SectionType::Vamp
             | SectionType::Refrain
             | SectionType::Tag
-            | SectionType::Turnaround => false,
+            | SectionType::Turnaround
+            | SectionType::Transition => false,
             SectionType::Pre(_) | SectionType::Post(_) => false,
             SectionType::Custom(_) => false, // Custom sections don't get numbered
             _ => true,
@@ -289,6 +294,9 @@ impl SectionType {
             "vamp" | "vmp" => return Ok(SectionType::Vamp),
             "refrain" | "ref" => return Ok(SectionType::Refrain),
             "turnaround" | "turn" => return Ok(SectionType::Turnaround),
+            "transition" | "trans" => return Ok(SectionType::Transition),
+            // A bare "Pre" is the pre-chorus.
+            "pre" => return Ok(SectionType::Pre(Box::new(SectionType::Chorus))),
             _ => {}
         }
 
@@ -611,6 +619,7 @@ fn base_section_type(token: &str) -> Option<SectionType> {
         "vamp" | "vmp" => Some(SectionType::Vamp),
         "refrain" | "ref" => Some(SectionType::Refrain),
         "turnaround" | "turn" => Some(SectionType::Turnaround),
+        "transition" | "trans" => Some(SectionType::Transition),
         _ => None,
     }
 }

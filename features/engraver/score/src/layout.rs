@@ -62,6 +62,9 @@ pub struct LayoutOptions {
     pub explicit: Option<ExplicitLayout>,
     /// Per-side margins; `None` = `margin` on every side.
     pub margins: Option<Margins>,
+    /// Rehearsal-mark style: keyflow colour (default), monochrome, or the
+    /// source's own boxes.
+    pub marks: crate::section_marks::MarkStyle,
 }
 
 /// Page margins in points.
@@ -100,6 +103,7 @@ impl Default for LayoutOptions {
             page_texts: None,
             explicit: None,
             margins: None,
+            marks: crate::section_marks::MarkStyle::default(),
         }
     }
 }
@@ -2266,6 +2270,10 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
                 text_family: &opts.text_font,
                 words_font: &words_font,
                 ctx,
+                marks: opts.marks,
+                // Keep the avatar a sixth of an inch inside the paper
+                // edge, where printers still print.
+                margin_room: sys.left - 12.0,
             },
             &mut id,
         );

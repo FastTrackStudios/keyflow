@@ -33,6 +33,7 @@ pub struct PartsArgs<'a> {
     /// Ignore the source's system/page layout and pack systems
     /// automatically (keeps its page size, headers and multirests).
     pub auto_layout: bool,
+    pub marks: engraver_score::section_marks::MarkStyle,
     /// Report overlapping ink instead of writing files.
     pub check: bool,
 }
@@ -136,7 +137,7 @@ fn svg_to_png(svg: &str, scale: f32) -> Result<Vec<u8>, String> {
     fontdb.load_font_data(fonts.leland_text_font_data().as_ref().clone());
     fontdb.load_font_data(fonts.freesans_font_data().as_ref().clone());
     fontdb.load_font_data(fonts.chicago_font_data().as_ref().clone());
-    for (_, face) in engraver_score::fonts::serif_faces() {
+    for (_, face) in engraver_score::fonts::text_faces() {
         fontdb.load_font_data(face.to_vec());
     }
     let mut options = usvg::Options::default();
@@ -214,6 +215,7 @@ pub fn cmd_parts(args: &PartsArgs<'_>) -> Result<(), String> {
 
     for job in jobs {
         let mut options = job.options.clone();
+        options.marks = args.marks;
         if args.auto_layout {
             auto_layout(&mut options);
         }

@@ -157,6 +157,7 @@ fn section_header(section: &keyflow_proto::ChartSection, count: usize) -> String
         SectionType::Vamp => format!("vamp {count}"),
         SectionType::Refrain => format!("refrain {count}"),
         SectionType::Turnaround => format!("turnaround {count}"),
+        SectionType::Transition => format!("transition {count}"),
         SectionType::Breakdown => format!("breakdown {count}"),
         SectionType::Hits => format!("hits {count}"),
         // A custom name goes in brackets. Bare, only single well-known words

@@ -20,6 +20,9 @@ static REGULAR: &[u8] = include_bytes!("../fonts/FreeSerif.ttf");
 static BOLD: &[u8] = include_bytes!("../fonts/FreeSerifBold.ttf");
 static ITALIC: &[u8] = include_bytes!("../fonts/FreeSerifItalic.ttf");
 static BOLD_ITALIC: &[u8] = include_bytes!("../fonts/FreeSerifBoldItalic.ttf");
+/// FreeSans Bold (same FreeFont release and subset), for section markers.
+/// The regular FreeSans comes with the chart bundle.
+pub static SANS_BOLD: &[u8] = include_bytes!("../fonts/FreeSansBold.ttf");
 
 /// Every serif face, for loading into a font database (PDF export).
 #[must_use]
@@ -30,6 +33,14 @@ pub fn serif_faces() -> [(&'static str, &'static [u8]); 4] {
         ("FreeSerif Italic", ITALIC),
         ("FreeSerif Bold Italic", BOLD_ITALIC),
     ]
+}
+
+/// Every face a part's text can use beyond the chart bundle: the serif
+/// family plus FreeSans Bold. Load these into a PDF/PNG font database.
+#[must_use]
+pub fn text_faces() -> [(&'static str, &'static [u8]); 5] {
+    let [a, b, c, d] = serif_faces();
+    [a, b, c, d, ("FreeSans Bold", SANS_BOLD)]
 }
 
 /// The regular face (what an SVG preview embeds).

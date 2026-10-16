@@ -15,6 +15,7 @@ pub mod layout;
 pub mod metrics;
 pub mod model;
 pub mod render;
+pub mod section_marks;
 pub mod skyline;
 
 pub use import::{ImportError, import_bytes, import_file};

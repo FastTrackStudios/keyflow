@@ -82,7 +82,12 @@ pub fn section_type_midi_note(section_type: &SectionType) -> Option<u8> {
         SectionType::Tag => Some(94),         // A#6 — the guide's "Tag" sample
         SectionType::Turnaround => Some(101), // F7 — transitional link
         SectionType::Custom(name) => custom_section_midi_note(name),
-        SectionType::CountIn | SectionType::Opening | SectionType::End | SectionType::Hits => None,
+        // No guide sample for a transition yet.
+        SectionType::CountIn
+        | SectionType::Opening
+        | SectionType::End
+        | SectionType::Hits
+        | SectionType::Transition => None,
     }
 }
 

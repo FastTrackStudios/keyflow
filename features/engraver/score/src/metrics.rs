@@ -107,6 +107,7 @@ impl Faces {
                 bytes.to_vec(),
             ));
         }
+        data.push(("FreeSans", true, false, crate::fonts::SANS_BOLD.to_vec()));
         Self {
             data,
             cache: HashMap::new(),

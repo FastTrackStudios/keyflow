@@ -482,7 +482,7 @@ fn text_page(width: f64, height: f64, lines: &[(f64, f64, f64, bool, &str)]) -> 
 
 fn svg_pdf(pages: &[String]) -> Result<Vec<u8>, String> {
     use keyflow::engraver::export::pdf::PdfSerializer;
-    let faces: Vec<(&str, &[u8])> = engraver_score::fonts::serif_faces().to_vec();
+    let faces: Vec<(&str, &[u8])> = engraver_score::fonts::text_faces().to_vec();
     PdfSerializer::serialize_from_svg(pages, &faces).map_err(|e| e.to_string())
 }
 
@@ -565,6 +565,7 @@ pub struct BookArgs<'a> {
     pub dry_run: bool,
     /// See [`crate::parts::auto_layout`].
     pub auto_layout: bool,
+    pub marks: engraver_score::section_marks::MarkStyle,
 }
 
 pub fn cmd_book(args: &BookArgs<'_>) -> Result<(), String> {
@@ -624,6 +625,7 @@ pub fn cmd_book(args: &BookArgs<'_>) -> Result<(), String> {
                     } else {
                         page_size.get_or_insert((job.options.page_width, job.options.page_height));
                         let mut options = job.options.clone();
+                        options.marks = args.marks;
                         if args.auto_layout {
                             crate::parts::auto_layout(&mut options);
                         }

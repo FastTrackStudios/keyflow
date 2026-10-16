@@ -251,6 +251,8 @@ impl Walker<'_> {
                 // A stroked box is a rehearsal enclosure; a filled bar is a
                 // multirest's H-bar.
                 let kind = match (fill, stroke) {
+                    // Keyflow markers fill their pills and callout tints.
+                    (Some(_), _) if kind == Some(InkKind::Rehearsal) => InkKind::Rehearsal,
                     (Some(_), _) => InkKind::MultiRest,
                     _ => kind.unwrap_or(InkKind::Rehearsal),
                 };

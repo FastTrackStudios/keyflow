@@ -4354,6 +4354,7 @@ dependencies = [
  "engraver-proto",
  "keyflow-musicxml",
  "keyflow-musx",
+ "keyflow-proto",
  "kurbo 0.13.1",
  "musicxml",
  "peniko 0.6.1",

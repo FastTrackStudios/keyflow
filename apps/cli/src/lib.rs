@@ -464,6 +464,10 @@ enum Commands {
         /// in Finale) while keeping page size, headers and numbering.
         #[arg(long, value_enum, default_value = "finale")]
         layout: LayoutSource,
+        /// Rehearsal marks: keyflow section markers in colour, the same
+        /// for a black-and-white printer, or Finale's own boxes.
+        #[arg(long, value_enum, default_value = "color")]
+        marks: MarksArg,
         /// Report overlapping ink (text, dynamics, ties, slurs…) per part
         /// instead of writing files.
         #[arg(long)]
@@ -501,6 +505,9 @@ enum Commands {
         /// See `kf parts --layout`.
         #[arg(long, value_enum, default_value = "finale")]
         layout: LayoutSource,
+        /// See `kf parts --marks`.
+        #[arg(long, value_enum, default_value = "color")]
+        marks: MarksArg,
     },
     /// Run the CSS orchestrator engine on a score (articulated MIDI summary).
     Orchestrate {
@@ -514,6 +521,27 @@ enum Commands {
         #[arg(long)]
         profile: Option<String>,
     },
+}
+
+/// How `kf parts` / `kf book` draw rehearsal marks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum MarksArg {
+    /// Section avatars and pills in the master chart's section colours.
+    Color,
+    /// The same markers in black and white, for a mono printer.
+    Mono,
+    /// The source's own rehearsal boxes, as Finale printed them.
+    Classic,
+}
+
+impl From<MarksArg> for engraver_score::section_marks::MarkStyle {
+    fn from(m: MarksArg) -> Self {
+        match m {
+            MarksArg::Color => Self::Color,
+            MarksArg::Mono => Self::Mono,
+            MarksArg::Classic => Self::Classic,
+        }
+    }
 }
 
 /// Where `kf parts` / `kf book` take system and page breaks from.
@@ -2063,6 +2091,7 @@ fn run(cli: Cli) -> Result<(), String> {
             prefer_pdf,
             dry_run,
             layout,
+            marks,
         } => book::cmd_book(&book::BookArgs {
             setlist: &setlist,
             library: &library,
@@ -2072,6 +2101,7 @@ fn run(cli: Cli) -> Result<(), String> {
             prefer_pdf,
             dry_run,
             auto_layout: layout == LayoutSource::Auto,
+            marks: marks.into(),
         }),
         Commands::Parts {
             input,
@@ -2082,6 +2112,7 @@ fn run(cli: Cli) -> Result<(), String> {
             list,
             scale,
             layout,
+            marks,
             check,
         } => parts::cmd_parts(&parts::PartsArgs {
             input: &input,
@@ -2092,6 +2123,7 @@ fn run(cli: Cli) -> Result<(), String> {
             list,
             scale,
             auto_layout: layout == LayoutSource::Auto,
+            marks: marks.into(),
             check,
         }),
         Commands::Orchestrate {

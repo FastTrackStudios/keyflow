@@ -26,6 +26,9 @@ kurbo = { workspace = true }
 # same skrifa engraver-proto already builds.
 skrifa = "0.26"
 peniko = { workspace = true }
+# The section palette and vocabulary the master rhythm chart uses, for
+# keyflow-style rehearsal markers.
+keyflow-proto = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]

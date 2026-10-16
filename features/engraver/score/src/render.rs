@@ -57,6 +57,6 @@ pub fn pdf(layout: &PartLayout, fonts: &ChartFontBundle) -> Result<Vec<u8>, Stri
         ("FreeSans", freesans.as_slice()),
         ("ChicagoFLF", chicago.as_slice()),
     ];
-    faces.extend(crate::fonts::serif_faces());
+    faces.extend(crate::fonts::text_faces());
     PdfSerializer::serialize_from_svg(&pages, &faces).map_err(|e| e.to_string())
 }

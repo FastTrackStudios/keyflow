@@ -65,6 +65,9 @@ pub fn colors_for_section_type(section_type: &SectionType) -> SectionColors {
         // Turnaround - a short transitional instrumental link (reads like a vamp).
         SectionType::Turnaround => VAMP,
 
+        // Transition - a link between movements of a medley; interlude-family.
+        SectionType::Transition => INTERLUDE,
+
         // Tag - the catalog's TAG colour (purple-300, a lighter bridge);
         // the UI palettes have no tag set of their own yet.
         SectionType::Tag => TAG,

@@ -36,6 +36,7 @@ use peniko::Color;
 use super::{InkPart, MeasureAnchors, TextFont, articulation_type, dynamic_type, styled_text};
 use crate::metrics;
 use crate::model::{self, Enclosure, RehearsalMark};
+use crate::section_marks::{self, MarkClass, MarkStyle};
 use crate::skyline::{SkyKind, Skyline};
 
 /// MuseScore style defaults (styledef.cpp), in spatiums.
@@ -96,6 +97,11 @@ pub(super) struct SystemInput<'a, 'm> {
     pub text_family: &'a str,
     pub words_font: &'a TextFont,
     pub ctx: &'a LayoutContextOwned,
+    /// How rehearsal marks are drawn.
+    pub marks: MarkStyle,
+    /// Room left of the staff for a section avatar (staff left edge to the
+    /// printable page edge), points.
+    pub margin_room: f64,
 }
 
 /// The placed markings of one system, and its finished skyline.
@@ -1504,7 +1510,396 @@ fn place_measure_numbers(
 
 // ───────────────────────── 7. rehearsal marks ─────────────────────────
 
+/// Keyflow marker geometry, in spatiums.
+mod marker {
+    /// Avatar diameter when the margin has room.
+    pub const AVATAR: f64 = 3.4;
+    /// Smallest avatar worth drawing; below this the mark becomes a pill.
+    pub const AVATAR_MIN: f64 = 2.4;
+    /// Gap between the avatar and the staff's left end.
+    pub const AVATAR_GAP: f64 = 0.7;
+    /// Pill height.
+    pub const PILL: f64 = 2.3;
+    /// Callout text size.
+    pub const CALLOUT_SIZE: f64 = 1.55;
+}
+
+/// The sans the markers are set in (FreeSans Bold, see `fonts`).
+const MARKER_FAMILY: &str = "FreeSans";
+
+fn marker_text(
+    text: &str,
+    size: f64,
+    at: Point,
+    color: Color,
+    anchor: TextAnchor,
+    family: &str,
+    bold: bool,
+    italic: bool,
+) -> PaintCommand {
+    PaintCommand::Text {
+        text: text.to_string(),
+        font_family: family.to_string(),
+        font_size: size,
+        position: at,
+        color,
+        anchor,
+        weight: if bold {
+            FontWeight::Bold
+        } else {
+            FontWeight::Normal
+        },
+        style: if italic {
+            FontStyle::Italic
+        } else {
+            FontStyle::Normal
+        },
+    }
+}
+
+/// Baseline that centres `text`'s ink on `center_y`, and its ink width.
+fn centred_baseline(text: &str, size: f64, center_y: f64) -> (f64, f64) {
+    metrics::text_ink(
+        MARKER_FAMILY,
+        size,
+        true,
+        false,
+        text,
+        Point::ZERO,
+        TextAnchor::Start,
+    )
+    .map_or(
+        (center_y + 0.35 * size, 0.6 * size * text.len() as f64),
+        |r| (center_y - (r.y0 + r.y1) / 2.0, r.width()),
+    )
+}
+
+/// One piece of a row of marks above the staff, in row coordinates
+/// (y = 0 at the row's bottom).
+struct RowPiece {
+    frame: Rect,
+    cmds: Vec<PaintCommand>,
+}
+
+/// A section's note (`Sax`, `midway`) beside its marker, centred on the
+/// marker's middle.
+fn note_piece(
+    note: &str,
+    x: f64,
+    center_y: f64,
+    size: f64,
+    color: Color,
+    family: &str,
+) -> RowPiece {
+    let r = metrics::text_ink(
+        family,
+        size,
+        true,
+        true,
+        note,
+        Point::ZERO,
+        TextAnchor::Start,
+    )
+    .unwrap_or(Rect::new(
+        0.0,
+        -0.7 * size,
+        0.5 * size * note.len() as f64,
+        0.0,
+    ));
+    let base = center_y - (r.y0 + r.y1) / 2.0;
+    RowPiece {
+        frame: r + Vec2::new(x, base),
+        cmds: vec![marker_text(
+            note,
+            size,
+            Point::new(x, base),
+            color,
+            TextAnchor::Start,
+            family,
+            true,
+            true,
+        )],
+    }
+}
+
 fn place_rehearsals(
+    input: &SystemInput<'_, '_>,
+    sky: &mut Skyline,
+    owners: &mut Ids,
+    nodes: &mut Vec<SceneNode>,
+) {
+    if input.marks == MarkStyle::Classic {
+        place_rehearsals_classic(input, sky, owners, nodes);
+        return;
+    }
+    let sp = input.spatium;
+    let look = input.marks;
+    let pill_h = marker::PILL * sp;
+    let label_size = 0.62 * pill_h;
+    // The avatar, if the margin fits one.
+    let avatar = {
+        let room = input.margin_room - marker::AVATAR_GAP * sp;
+        let d = (marker::AVATAR * sp).min(room);
+        (d >= marker::AVATAR_MIN * sp).then_some(d)
+    };
+    for item in &input.items {
+        let marks: Vec<&RehearsalMark> = item
+            .directions
+            .iter()
+            .filter_map(|d| match &d.kind {
+                model::DirectionKind::Rehearsal(r) => Some(r),
+                _ => None,
+            })
+            .collect();
+        if marks.is_empty() {
+            continue;
+        }
+        let owner = owners.next();
+        let mut group = SceneNode::group(SemanticId::new(ElementType::RehearsalMark, owner));
+        let mut row: Vec<RowPiece> = Vec::new();
+        // Left edge of the next piece in the row; `None` until the first
+        // marker over a mid-line barline centres itself on it.
+        let mut cursor: Option<f64> = item.first.then_some(0.0);
+        let mut avatar_used = false;
+        for mark in marks {
+            let (label, note, kind) = match section_marks::classify(&mark.text) {
+                MarkClass::Section(s) => (s.label, s.note, Some(s.kind)),
+                MarkClass::Letter(l) => (l, None, None),
+                MarkClass::Callout(text) => {
+                    let x = cursor.unwrap_or(item.span.0 + 0.5 * sp);
+                    let piece = callout_piece(&mark.text, &text, x, sp, look);
+                    cursor = Some(piece.frame.x1 + 0.6 * sp);
+                    row.push(piece);
+                    continue;
+                }
+            };
+            let paint = section_marks::section_paint(kind.as_ref(), look);
+            // A section that opens a system: an avatar in the left margin,
+            // centred on the staff.
+            if item.first
+                && !avatar_used
+                && let Some(d) = avatar
+            {
+                avatar_used = true;
+                let center = Point::new(-marker::AVATAR_GAP * sp - d / 2.0, 2.0 * sp);
+                let mut cmds = vec![PaintCommand::Circle {
+                    center,
+                    radius: d / 2.0,
+                    fill: Some(paint.fill),
+                    stroke: None,
+                    stroke_width: 0.0,
+                }];
+                // `VS 1` stacks as VS over 1: two short lines set larger
+                // in a circle than one long one.
+                let lines: Vec<&str> = match label.split_once(' ') {
+                    Some((a, b)) => vec![a, b],
+                    None => vec![label.as_str()],
+                };
+                // The number is what a player scans for: a size up.
+                let scale: &[f64] = if lines.len() == 2 {
+                    &[1.0, 1.3]
+                } else {
+                    &[1.0]
+                };
+                let widest = lines
+                    .iter()
+                    .zip(scale)
+                    .map(|(l, k)| k * centred_baseline(l, 1.0, 0.0).1)
+                    .fold(1e-6, f64::max);
+                let (cap_k, fit) = if lines.len() == 2 {
+                    (0.27, 0.66)
+                } else {
+                    (0.4, 0.8)
+                };
+                let size = (cap_k * d).min(fit * d / widest);
+                let caps: Vec<f64> = scale.iter().map(|k| 0.72 * k * size).collect();
+                let gap = 0.22 * size;
+                let block = caps.iter().sum::<f64>() + (lines.len() - 1) as f64 * gap;
+                let mut top = center.y - block / 2.0;
+                for (k, line) in lines.iter().enumerate() {
+                    let base = top + caps[k];
+                    top = base + gap;
+                    cmds.push(marker_text(
+                        line,
+                        scale[k] * size,
+                        Point::new(center.x, base),
+                        paint.label,
+                        TextAnchor::Middle,
+                        MARKER_FAMILY,
+                        true,
+                        false,
+                    ));
+                }
+                group.add_child(SceneNode::anonymous_leaf(cmds));
+                if let Some(note) = note {
+                    let x = cursor.unwrap_or(0.0);
+                    let piece = note_piece(
+                        &note,
+                        x,
+                        -pill_h / 2.0,
+                        1.1 * label_size,
+                        paint.ink,
+                        input.text_family,
+                    );
+                    cursor = Some(piece.frame.x1 + 0.6 * sp);
+                    row.push(piece);
+                }
+                continue;
+            }
+            // Otherwise a pill: over the barline mid-line, at the row's
+            // cursor when several marks share a measure.
+            let (base, w) = centred_baseline(&label, label_size, -pill_h / 2.0);
+            let width = (w + 0.9 * pill_h).max(1.6 * pill_h);
+            let x0 = cursor.unwrap_or(item.span.0 - width / 2.0);
+            let frame = Rect::new(x0, -pill_h, x0 + width, 0.0);
+            row.push(RowPiece {
+                frame,
+                cmds: vec![
+                    PaintCommand::Rect {
+                        rect: frame,
+                        fill: Some(paint.fill),
+                        stroke: None,
+                        stroke_width: 0.0,
+                        corner_radius: Some(pill_h / 2.0),
+                    },
+                    marker_text(
+                        &label,
+                        label_size,
+                        Point::new(frame.center().x, base),
+                        paint.label,
+                        TextAnchor::Middle,
+                        MARKER_FAMILY,
+                        true,
+                        false,
+                    ),
+                ],
+            });
+            cursor = Some(frame.x1 + 0.4 * sp);
+            if let Some(note) = note {
+                let piece = note_piece(
+                    &note,
+                    frame.x1 + 0.4 * sp,
+                    -pill_h / 2.0,
+                    1.1 * label_size,
+                    paint.ink,
+                    input.text_family,
+                );
+                cursor = Some(piece.frame.x1 + 0.6 * sp);
+                row.push(piece);
+            }
+        }
+        if !row.is_empty() {
+            // The row sits just above the staff, then clears the skyline.
+            let base_dy = -style::REHEARSAL_POS_ABOVE * sp;
+            let shape: Vec<Rect> = row
+                .iter()
+                .map(|p| p.frame + Vec2::new(0.0, base_dy))
+                .collect();
+            let dy = base_dy
+                + sky.distance_to_move(
+                    &shape,
+                    true,
+                    style::REHEARSAL_MIN_DISTANCE * sp,
+                    style::SKYLINE_H_CLEARANCE * sp,
+                    |_, _| false,
+                );
+            let mut leaf = Vec::new();
+            for p in row {
+                sky.add(p.frame + Vec2::new(0.0, dy), SkyKind::Rehearsal, owner);
+                leaf.extend(p.cmds);
+            }
+            group.add_child(
+                SceneNode::anonymous_leaf(leaf).with_transform(Affine::translate((0.0, dy))),
+            );
+        }
+        nodes.push(group);
+    }
+}
+
+/// A cue: an accent bar, a tint behind the text, bold sans. Multi-line
+/// cues keep their lines (`raw`); `flat` is the fallback single line.
+fn callout_piece(raw: &str, flat: &str, x: f64, sp: f64, style: MarkStyle) -> RowPiece {
+    let paint = section_marks::callout_paint(style);
+    let size = marker::CALLOUT_SIZE * sp;
+    let mut lines: Vec<&str> = raw
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect();
+    if lines.is_empty() {
+        lines.push(flat);
+    }
+    let leading = 1.18 * size;
+    let n = lines.len();
+    let bar_w = 0.3 * sp;
+    let pad_l = bar_w + 0.4 * sp;
+    let pad_r = 0.45 * sp;
+    let pad_v = 0.3 * sp;
+    let mut ink: Option<Rect> = None;
+    let mut texts = Vec::new();
+    for (k, line) in lines.iter().enumerate() {
+        let base = -((n - 1 - k) as f64) * leading;
+        let r = metrics::text_ink(
+            MARKER_FAMILY,
+            size,
+            true,
+            false,
+            line,
+            Point::new(x + pad_l, base),
+            TextAnchor::Start,
+        )
+        .unwrap_or(Rect::new(
+            x + pad_l,
+            base - 0.7 * size,
+            x + pad_l + 0.5 * size * line.len() as f64,
+            base,
+        ));
+        ink = Some(ink.map_or(r, |i| i.union(r)));
+        texts.push((line.to_string(), base));
+    }
+    let ink = ink.unwrap_or_default();
+    // Cap height to baseline, not the ink's descenders: rows of callouts
+    // line up on their text, and a "g" does not make its box taller.
+    let top = ink.y0 - pad_v;
+    let bottom = 0.0f64.max(ink.y1) + pad_v;
+    let frame = Rect::new(x, top, ink.x1 + pad_r, bottom);
+    // Shift so the frame's bottom is the row's bottom (y = 0).
+    let shift = -bottom;
+    let frame = frame + Vec2::new(0.0, shift);
+    let mut cmds = Vec::new();
+    if let Some(tint) = paint.tint {
+        cmds.push(PaintCommand::Rect {
+            rect: frame,
+            fill: Some(tint),
+            stroke: None,
+            stroke_width: 0.0,
+            corner_radius: Some(0.3 * sp),
+        });
+    }
+    cmds.push(PaintCommand::Rect {
+        rect: Rect::new(frame.x0, frame.y0, frame.x0 + bar_w, frame.y1),
+        fill: Some(paint.bar),
+        stroke: None,
+        stroke_width: 0.0,
+        corner_radius: Some(0.5 * bar_w),
+    });
+    for (text, base) in texts {
+        cmds.push(marker_text(
+            &text,
+            size,
+            Point::new(x + pad_l, base + shift),
+            paint.text,
+            TextAnchor::Start,
+            MARKER_FAMILY,
+            true,
+            false,
+        ));
+    }
+    RowPiece { frame, cmds }
+}
+
+/// The source's own rehearsal boxes, as Finale printed them.
+fn place_rehearsals_classic(
     input: &SystemInput<'_, '_>,
     sky: &mut Skyline,
     owners: &mut Ids,
