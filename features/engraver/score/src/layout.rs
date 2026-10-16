@@ -874,7 +874,14 @@ fn prepare_measures(
                             n.pitch.alter,
                         );
                         let line = p.staff_position() - middle;
-                        let acc = acc_state.resolve(&n.pitch, state.key_fifths);
+                        // A tied-over note never repeats its accidental,
+                        // and does not establish one for the bar either: a
+                        // later untied note of that pitch still shows it.
+                        let acc = if n.tie_stop {
+                            Accidental::None
+                        } else {
+                            acc_state.resolve(&n.pitch, state.key_fifths)
+                        };
                         if !lines.iter().any(|(l, _)| *l == line) {
                             lines.push((line, acc));
                         }
@@ -1041,6 +1048,8 @@ fn build_measure(
     id_base: u64,
 ) -> engraver_proto::engraver::notation::MeasureScene {
     let mut builder = MeasureBuilder::new()
+        // Parts follow engraving convention: a middle-line note stems down.
+        .middle_line_stem_down(true)
         .id_base(id_base)
         .entries(m.entries.clone())
         .note_pitches(m.pitches.clone())
@@ -1118,6 +1127,169 @@ fn styled_text(s: &str, font: &TextFont, pos: Point, anchor: TextAnchor) -> Scen
     }])
 }
 
+/// What a piece of a chord's ink is (for tie clearance rules).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InkPart {
+    /// A notehead, with its staff line.
+    Head(i32),
+    Stem,
+    Flag,
+    Ledger,
+    Dot,
+    Accidental,
+    Other,
+}
+
+/// The ink of one built chord, in system coordinates.
+#[derive(Debug, Clone, Default)]
+struct EntryInk {
+    parts: Vec<(Rect, InkPart)>,
+}
+
+impl EntryInk {
+    fn head(&self, line: i32) -> Option<Rect> {
+        self.parts
+            .iter()
+            .find(|(_, p)| *p == InkPart::Head(line))
+            .map(|(r, _)| *r)
+    }
+
+    fn has_stem(&self) -> bool {
+        self.parts.iter().any(|(_, p)| *p == InkPart::Stem)
+    }
+}
+
+/// Classify a paint command inside a chord: SMuFL ranges for heads
+/// (U+E0A0–E0FF), flags (U+E240–E24F), dots (U+E1E7) and accidentals
+/// (U+E260–E2FF); lines are ledgers inside a note, the stem outside.
+fn ink_part(cmd: &PaintCommand, in_note: Option<i32>) -> InkPart {
+    let glyph = match cmd {
+        PaintCommand::Text { text, .. } => text.chars().next(),
+        PaintCommand::Glyph { codepoint, .. } => Some(*codepoint),
+        PaintCommand::Line { .. } => {
+            return if in_note.is_some() {
+                InkPart::Ledger
+            } else {
+                InkPart::Stem
+            };
+        }
+        _ => None,
+    };
+    let Some(c) = glyph.map(u32::from) else {
+        return InkPart::Other;
+    };
+    match c {
+        0xE0A0..=0xE0FF => in_note.map_or(InkPart::Other, InkPart::Head),
+        0xE240..=0xE24F => InkPart::Flag,
+        0xE1E7 => InkPart::Dot,
+        0xE260..=0xE2FF => InkPart::Accidental,
+        _ => InkPart::Other,
+    }
+}
+
+/// Per entry (chords and rests in scene order), the ink of a built
+/// measure; `None` for rests. `origin` places the measure in the system.
+///
+/// Unbeamed chords are `Chord` groups holding their notes, stem and flag.
+/// Beamed notes are bare `Note` groups, their stems and beams drawn after
+/// them as loose lines and paths; each loose stem is given to the note
+/// whose head it touches.
+fn entry_inks(scene: &SceneNode, origin: Affine) -> Vec<Option<EntryInk>> {
+    fn collect(node: &SceneNode, t: Affine, in_note: Option<i32>, out: &mut EntryInk) {
+        let t = t * node.transform;
+        let note_line = node
+            .get_metadata("pitch-line")
+            .and_then(|l| l.parse::<i32>().ok())
+            .or(in_note);
+        crate::metrics::with_faces(|faces| {
+            for cmd in &node.commands {
+                if let Some(r) = crate::metrics::command_ink(faces, cmd, t) {
+                    out.parts.push((r, ink_part(cmd, note_line)));
+                }
+            }
+        });
+        for child in &node.children {
+            collect(child, t, note_line, out);
+        }
+    }
+    fn visit(
+        node: &SceneNode,
+        t: Affine,
+        out: &mut Vec<Option<EntryInk>>,
+        loose: &mut Vec<(Rect, InkPart)>,
+        last_note_x: &mut Option<f64>,
+    ) {
+        let t = t * node.transform;
+        let kind = node.id.as_ref().map(|id| id.element_type);
+        if kind != Some(ElementType::Note) && kind.is_some() {
+            *last_note_x = None;
+        }
+        match kind {
+            Some(ElementType::Chord | ElementType::Note) => {
+                let mut ink = EntryInk::default();
+                crate::metrics::with_faces(|faces| {
+                    for cmd in &node.commands {
+                        if let Some(r) = crate::metrics::command_ink(faces, cmd, t) {
+                            let line = node
+                                .get_metadata("pitch-line")
+                                .and_then(|l| l.parse::<i32>().ok());
+                            ink.parts.push((r, ink_part(cmd, line)));
+                        }
+                    }
+                });
+                for child in &node.children {
+                    collect(child, t, None, &mut ink);
+                }
+                // A beamed chord draws one Note group per head, all at the
+                // chord's x: they are one entry.
+                let x = t.translation().x;
+                let same_chord = kind == Some(ElementType::Note)
+                    && last_note_x.is_some_and(|lx| (lx - x).abs() < 0.5);
+                match (same_chord, out.last_mut()) {
+                    (true, Some(Some(prev))) => prev.parts.extend(ink.parts),
+                    _ => out.push(Some(ink)),
+                }
+                *last_note_x = (kind == Some(ElementType::Note)).then_some(x);
+            }
+            Some(ElementType::Rest) => out.push(None),
+            _ => {
+                crate::metrics::with_faces(|faces| {
+                    for cmd in &node.commands {
+                        if let Some(r) = crate::metrics::command_ink(faces, cmd, t) {
+                            loose.push((r, ink_part(cmd, None)));
+                        }
+                    }
+                });
+                for child in &node.children {
+                    visit(child, t, out, loose, last_note_x);
+                }
+            }
+        }
+    }
+    let mut out = Vec::new();
+    let mut loose = Vec::new();
+    visit(scene, origin, &mut out, &mut loose, &mut None);
+    // Loose stems (beamed groups) join the entry whose head they touch.
+    for (r, part) in loose {
+        if part != InkPart::Stem || r.width() > 1.0 {
+            continue;
+        }
+        let owner = out.iter_mut().flatten().find(|ink| {
+            ink.parts.iter().any(|(h, p)| {
+                matches!(p, InkPart::Head(_))
+                    && r.x0 >= h.x0 - 1.0
+                    && r.x1 <= h.x1 + 1.0
+                    && r.y0 <= h.y1
+                    && r.y1 >= h.y0
+            })
+        });
+        if let Some(ink) = owner {
+            ink.parts.push((r, InkPart::Stem));
+        }
+    }
+    out
+}
+
 /// Anchors for the tie/slur overlay: one notated measure with the
 /// system-local x of each ChordRest segment, in entry order.
 struct MeasureAnchors<'a> {
@@ -1127,6 +1299,8 @@ struct MeasureAnchors<'a> {
     x_end: f64,
     /// Per entry: the stem direction the builder chose (`Some(true)` = up).
     stems: Vec<Option<bool>>,
+    /// Per entry: the chord's ink (empty when it could not be matched).
+    inks: Vec<Option<EntryInk>>,
 }
 
 impl MeasureAnchors<'_> {
@@ -1854,6 +2028,7 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
                         entry_x: vec![x + width / 2.0],
                         x_end: x + width,
                         stems: vec![None],
+                        inks: Vec::new(),
                     });
                     container.transform = Affine::translate((x, 0.0));
                     let glyph_w = 1.13 * spatium;
@@ -1878,11 +2053,25 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
                         .into_iter()
                         .map(|seg_x| x + seg_x)
                         .collect();
+                    // Chords and rests in scene order map onto entries
+                    // one to one; if they do not, drop the ink rather
+                    // than misattribute it.
+                    let mut inks = entry_inks(&scene.scene, Affine::translate((x, 2.0 * spatium)));
+                    if inks.len() != m.entries.len() {
+                        tracing::debug!(
+                            inks = inks.len(),
+                            entries = m.entries.len(),
+                            number = m.number,
+                            "entry ink mismatch"
+                        );
+                        inks.clear();
+                    }
                     anchors.push(MeasureAnchors {
                         m,
                         entry_x,
                         x_end: x + width,
                         stems: scene.entry_stem_up.clone(),
+                        inks,
                     });
                     // MeasureScene notation is authored around the MIDDLE
                     // line (y=0) — same +2sp shift the chart pipeline applies
@@ -1981,6 +2170,7 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
             &vertical::SystemInput {
                 spatium,
                 width: prefix_w + content_width,
+                content_start: prefix_w,
                 anchors: &anchors,
                 items,
                 numbers: number_marks,

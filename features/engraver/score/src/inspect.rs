@@ -323,14 +323,17 @@ pub fn collisions(layout: &PartLayout, fonts: &ChartFontBundle) -> Report {
                 if !solid {
                     return None;
                 }
-                let n = c.samples.len();
-                // The ends sit against their own noteheads by design.
+                // The ends sit on their own noteheads by design (a tie
+                // starts over its head): skip ~1 staff space at each end.
+                let (Some(first), Some(last)) = (c.samples.first(), c.samples.last()) else {
+                    return None;
+                };
+                let end_zone = 6.0;
                 let r = other.rect.inset(-TOLERANCE);
                 c.samples
                     .iter()
-                    .enumerate()
-                    .filter(|(i, _)| *i > n / 8 && *i < n - n / 8)
-                    .map(|(_, p)| *p)
+                    .filter(|p| (p.x - first.x).abs() > end_zone && (last.x - p.x).abs() > end_zone)
+                    .copied()
                     .find(|p| r.contains(*p))
             };
             let hit = match (

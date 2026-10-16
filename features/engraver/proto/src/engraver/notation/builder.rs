@@ -154,6 +154,11 @@ pub struct MeasureBuilder {
     /// at every beat/pulse boundary); `JazzHalfBar` and `FullBar` widen the
     /// pulse windows — see [`TimeSignature::beam_pulses`].
     beam_grouping: BeamGroupingMode,
+    /// Stem direction for notes whose weight sits exactly on the middle
+    /// line: `false` (default) stems them up — the lead-sheet convention the
+    /// chart pipeline uses; `true` stems them down, the engraving rule
+    /// orchestral parts (and MuseScore) follow.
+    middle_line_stem_down: bool,
 }
 
 impl Default for MeasureBuilder {
@@ -188,7 +193,15 @@ impl MeasureBuilder {
             note_pitches: Vec::new(),
             note_pitch_stacks: Vec::new(),
             beam_grouping: BeamGroupingMode::default(),
+            middle_line_stem_down: false,
         }
+    }
+
+    /// Stem middle-line notes down (engraving convention) instead of up.
+    #[must_use]
+    pub fn middle_line_stem_down(mut self, down: bool) -> Self {
+        self.middle_line_stem_down = down;
+        self
     }
 
     /// Set the beam-grouping strategy for flagged notes (default `Standard`).
@@ -740,10 +753,18 @@ impl MeasureBuilder {
                     // Resolve Auto here (not inside layout_chord) so the
                     // direction drawn is the direction reported.
                     let line_sum: i32 = chord_notes.iter().map(|n| n.line).sum();
-                    let chord_stem_dir = stem_dir.resolve_for_head_type(
-                        f64::from(line_sum) / chord_notes.len().max(1) as f64,
-                        note_head_type,
-                    );
+                    let chord_stem_dir = if self.middle_line_stem_down
+                        && line_sum == 0
+                        && stem_dir == StemDirection::Auto
+                        && note_head_type != NoteHeadType::Slash
+                    {
+                        StemDirection::Down
+                    } else {
+                        stem_dir.resolve_for_head_type(
+                            f64::from(line_sum) / chord_notes.len().max(1) as f64,
+                            note_head_type,
+                        )
+                    };
                     let (_, chord_node) = layout_chord(
                         &ChordParams {
                             id,
@@ -813,7 +834,8 @@ impl MeasureBuilder {
                     .iter()
                     .map(|n| n.line + n.extras.iter().map(|(l, _)| *l).sum::<i32>())
                     .sum();
-                let auto_stem_dir = if line_sum > 0 {
+                let auto_stem_dir = if line_sum > 0 || (self.middle_line_stem_down && line_sum == 0)
+                {
                     StemDirection::Down
                 } else {
                     StemDirection::Up

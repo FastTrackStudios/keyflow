@@ -33,7 +33,7 @@ use engraver_proto::engraver::scene::paint::{FontStyle, FontWeight, PaintCommand
 use kurbo::{Affine, BezPath, CubicBez, ParamCurve, Point, Rect, Vec2};
 use peniko::Color;
 
-use super::{MeasureAnchors, TextFont, articulation_type, dynamic_type, styled_text};
+use super::{InkPart, MeasureAnchors, TextFont, articulation_type, dynamic_type, styled_text};
 use crate::metrics;
 use crate::model::{self, Enclosure, RehearsalMark};
 use crate::skyline::{SkyKind, Skyline};
@@ -88,6 +88,8 @@ pub(super) struct SystemInput<'a, 'm> {
     pub spatium: f64,
     /// Staff length (prefix + measures).
     pub width: f64,
+    /// Where the measures start (after the clef/key/time prefix).
+    pub content_start: f64,
     pub anchors: &'a [MeasureAnchors<'m>],
     pub items: Vec<ItemMarks<'a>>,
     pub numbers: Vec<NumberMark>,
@@ -251,6 +253,11 @@ fn bow_controls(p1: Point, p2: Point, shoulder: f64, w: f64) -> (Point, Point) {
 }
 
 // ───────────────────────── 1. ties ─────────────────────────
+//
+// Port of MuseScore's tie layout (SlurTieLayout::layoutTieFor/Back,
+// calculateDirection, computeDefaultStartOrEndPoint, adjustX, adjustY,
+// adjustYforLedgerLines, computeBezier(TieSegment), computeMidThickness,
+// resolveVerticalTieCollisions), working on the built chords' real ink.
 
 struct PlacedTie {
     rects: Vec<Rect>,
@@ -259,190 +266,491 @@ struct PlacedTie {
     entries: Vec<(usize, usize)>, // (anchor index, entry index)
 }
 
+/// One end of a tie: which entry, which note.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct TieEnd {
+    ai: usize,
+    i: usize,
+    line: i32,
+}
+
+/// A tie being laid out (one system's segment).
+struct TieGeom {
+    start: Option<TieEnd>,
+    end: Option<TieEnd>,
+    up: bool,
+    p1: Point,
+    p2: Point,
+    /// Extra shoulder height (MuseScore's shoulder offset), y-down sign.
+    shoulder_off: f64,
+}
+
+/// Every notehead line of entry `i`.
+fn chord_lines(a: &MeasureAnchors<'_>, i: usize) -> Vec<i32> {
+    a.m.pitches[i]
+        .iter()
+        .map(|(l, _)| *l)
+        .chain(a.m.stacks[i].iter().map(|(l, _)| *l))
+        .collect()
+}
+
+/// `calculateDirection`: single notes opposite the stem (mixed stems → up);
+/// chords pivot on a single second/unison among tied notes, otherwise the
+/// tie follows which side holds more ties (or notes), dead centre opposite
+/// the stem. Lines here are y-up (higher line = higher note).
+fn tie_up(input: &SystemInput<'_, '_>, start: Option<TieEnd>, end: Option<TieEnd>) -> bool {
+    let Some(primary) = start.or(end) else {
+        return true;
+    };
+    let a = &input.anchors[primary.ai];
+    let stem_of = |e: TieEnd| {
+        let an = &input.anchors[e.ai];
+        an.stem_up_at(e.i, an.m.pitches[e.i].map_or(e.line, |(l, _)| l))
+    };
+    let notes = chord_lines(a, primary.i);
+    if notes.len() <= 1 {
+        if let (Some(s), Some(e)) = (start, end)
+            && stem_of(s) != stem_of(e)
+        {
+            return true;
+        }
+        return !stem_of(primary);
+    }
+    let tied: Vec<i32> = if start.is_some() {
+        a.m.tie_start_lines[primary.i].clone()
+    } else {
+        a.m.tie_stop_lines[primary.i].clone()
+    };
+    // Pivot: the lower note of the only second/unison between tied notes.
+    let mut pivot: Option<i32> = None;
+    let mut multiple = false;
+    for (x, &l1) in tied.iter().enumerate() {
+        for &l2 in &tied[x + 1..] {
+            if (l1 - l2).abs() <= 1 && !multiple {
+                if pivot.is_some() {
+                    multiple = true;
+                    pivot = None;
+                } else {
+                    pivot = Some(l1.min(l2));
+                }
+            }
+        }
+    }
+    let line = primary.line;
+    match pivot {
+        Some(p) if p == line => false,
+        Some(p) => line >= p,
+        None => {
+            let above = notes.iter().filter(|l| **l > line).count();
+            let below = notes.iter().filter(|l| **l < line).count();
+            let ties_above = tied.iter().filter(|l| **l > line).count();
+            let ties_below = tied.iter().filter(|l| **l < line).count();
+            let unison = tied
+                .iter()
+                .filter(|l| **l == line)
+                .count()
+                .saturating_sub(1);
+            if ties_above == 0 && ties_below == 0 && unison == 0 {
+                if above == below {
+                    !stem_of(primary)
+                } else {
+                    above < below
+                }
+            } else if ties_above == ties_below {
+                !stem_of(primary)
+            } else {
+                ties_above < ties_below
+            }
+        }
+    }
+}
+
+/// The notehead box of a tie end (built ink, or the 1.18 sp estimate).
+fn head_rect(input: &SystemInput<'_, '_>, e: TieEnd) -> Rect {
+    let sp = input.spatium;
+    let a = &input.anchors[e.ai];
+    if let Some(r) = a
+        .inks
+        .get(e.i)
+        .and_then(|ink| ink.as_ref())
+        .and_then(|ink| ink.head(e.line))
+    {
+        return r;
+    }
+    let x = a.entry_x.get(e.i).copied().unwrap_or(0.0);
+    let y = y_of(e.line, sp);
+    Rect::new(x, y - 0.5 * sp, x + HEAD_W_SP * sp, y + 0.5 * sp)
+}
+
+/// `isOuterTieOfChord`: the top note tied upward or the bottom one down.
+fn is_outer(input: &SystemInput<'_, '_>, e: TieEnd, up: bool) -> bool {
+    let lines = chord_lines(&input.anchors[e.ai], e.i);
+    if up {
+        lines.iter().all(|l| *l <= e.line)
+    } else {
+        lines.iter().all(|l| *l >= e.line)
+    }
+}
+
+/// `computeDefaultStartOrEndPoint`: x at the head's optical centre inset
+/// 0.1 sp toward the other end (0.45 sp when another head sits straight
+/// above/below on the tie side), y just beyond the head on the tie side.
+fn tie_default_point(input: &SystemInput<'_, '_>, e: TieEnd, up: bool, start: bool) -> Point {
+    let sp = input.spatium;
+    let head = head_rect(input, e);
+    let up_sign = if up { -1.0 } else { 1.0 };
+    let lr_sign = if start { 1.0 } else { -1.0 };
+    let neighbour = if up { e.line + 1 } else { e.line - 1 };
+    let stacked = input.anchors[e.ai]
+        .inks
+        .get(e.i)
+        .and_then(|ink| ink.as_ref())
+        .and_then(|ink| ink.head(neighbour))
+        .is_some_and(|r| (r.center().x - head.center().x).abs() < 0.3 * sp);
+    let inset = if stacked { 0.45 } else { 0.1 } * sp;
+    Point::new(
+        head.center().x + inset * lr_sign,
+        head.center().y + up_sign * head.height() / 2.0 + 0.2 * sp * up_sign,
+    )
+}
+
+/// `adjustX`: clear the chord's own ink (stem on the tie side, dots, other
+/// heads, accidentals) at the tie's height; hooks and ledger lines ignored.
+fn tie_adjust_x(input: &SystemInput<'_, '_>, e: TieEnd, up: bool, start: bool, point: &mut Point) {
+    let sp = input.spatium;
+    let a = &input.anchors[e.ai];
+    let Some(ink) = a.inks.get(e.i).and_then(|ink| ink.as_ref()) else {
+        return;
+    };
+    let padding = 0.2 * sp * if start { 1.0 } else { -1.0 };
+    let outer = is_outer(input, e, up);
+    let stem_up = a.stem_up_at(e.i, a.m.pitches[e.i].map_or(e.line, |(l, _)| l));
+    let avoid_stem = ink.has_stem() && stem_up == up;
+    if outer && !avoid_stem {
+        return;
+    }
+    let (arc_margin, point_margin) = (0.3 * sp, 0.15 * sp);
+    let y_lo = point.y - if up { arc_margin } else { point_margin };
+    let y_hi = point.y + if up { point_margin } else { arc_margin };
+    let head = head_rect(input, e);
+    let mut edge: Option<f64> = None;
+    for (r, part) in &ink.parts {
+        let ignored = match part {
+            InkPart::Head(l) => *l == e.line,
+            // MuseScore ignores hooks; a tie leaving a flagged note on the
+            // stem side then grazes the flag, so the start clears it too.
+            InkPart::Flag => !start,
+            InkPart::Ledger => true,
+            InkPart::Dot => start && outer,
+            // An outer tie arriving at its note ignores an accidental on
+            // the inward side.
+            InkPart::Accidental => !start && outer,
+            _ => false,
+        };
+        if ignored || r.y1 < y_lo || r.y0 > y_hi {
+            continue;
+        }
+        // Only ink on the tie's side of the head.
+        if start && r.x1 <= head.x0 || !start && r.x0 >= head.x1 {
+            continue;
+        }
+        edge = Some(match (edge, start) {
+            (None, true) => r.x1,
+            (None, false) => r.x0,
+            (Some(x), true) => x.max(r.x1),
+            (Some(x), false) => x.min(r.x0),
+        });
+    }
+    if let Some(edge) = edge {
+        let target = edge + padding;
+        point.x = if start {
+            point.x.max(target)
+        } else {
+            point.x.min(target)
+        };
+    }
+}
+
+/// `adjustYforLedgerLines`: keep the tie end 0.4 sp clear of a ledger line
+/// on its side.
+fn tie_adjust_y_ledgers(input: &SystemInput<'_, '_>, e: TieEnd, up: bool, g: &mut TieGeom) {
+    let sp = input.spatium;
+    let Some(ink) = input.anchors[e.ai].inks.get(e.i).and_then(|i| i.as_ref()) else {
+        return;
+    };
+    let up_sign = if up { -1.0 } else { 1.0 };
+    let margin = 0.4 * sp;
+    let y = if g.start == Some(e) { g.p1.y } else { g.p2.y };
+    for (r, part) in &ink.parts {
+        if *part != InkPart::Ledger {
+            continue;
+        }
+        let y_diff = up_sign * (r.center().y - y);
+        if y_diff > 0.0 && y_diff < margin {
+            let dy = -up_sign * (margin - y_diff);
+            g.p1.y += dy;
+            g.p2.y += dy;
+            return;
+        }
+    }
+}
+
+/// Tie thickness at the apex (`computeMidThickness`): full for ties over
+/// 4 sp, thinning toward 0.15 sp at the minimum tie length.
+fn tie_mid_thickness(len_sp: f64, sp: f64) -> f64 {
+    let end_w = style::SLUR_END_WIDTH * sp;
+    let normal = style::SLUR_MID_WIDTH * sp - end_w;
+    let min_t = 0.15 * sp - end_w;
+    let (min_len, short_limit) = (1.0, 4.0);
+    if len_sp > short_limit {
+        return normal;
+    }
+    let a = 1.0 / (short_limit - min_len);
+    let b = normal - min_t;
+    let c = short_limit * min_t - min_len * normal;
+    (a * (b * len_sp + c)).clamp(0.0, normal)
+}
+
+/// The tie's centre-line bezier (`computeBezier(TieSegment)`).
+fn tie_curve(g: &TieGeom, sp: f64) -> CubicBez {
+    let len_sp = (g.p2 - g.p1).hypot() / sp;
+    let shoulder = (style::TIE_MIN_SHOULDER * sp + 0.3 * sp * (len_sp - 1.0).abs().sqrt())
+        .clamp(style::TIE_MIN_SHOULDER * sp, style::TIE_MAX_SHOULDER * sp)
+        + g.shoulder_off;
+    let sign = if g.up { -1.0 } else { 1.0 };
+    let (c1, c2) = bow_controls(g.p1, g.p2, sign * shoulder, 0.6);
+    CubicBez::new(g.p1, c1, c2, g.p2)
+}
+
+/// Outer and inner apex y of a tie (for staff-line and stacking checks).
+fn tie_apex(g: &TieGeom, sp: f64) -> (f64, f64, f64) {
+    let curve = tie_curve(g, sp);
+    let mid = curve.eval(0.5).y;
+    let thick = tie_mid_thickness((g.p2.x - g.p1.x) / sp, sp);
+    let sign = if g.up { -1.0 } else { 1.0 };
+    // (outer, inner, height)
+    (
+        mid + sign * thick,
+        mid - sign * thick,
+        (mid - g.p1.y).abs() + thick,
+    )
+}
+
+/// `adjustY`: keep the end points off staff lines, then the arc's apex.
+fn tie_adjust_y(g: &mut TieGeom, sp: f64, outer_start: bool, single_inner_small_ok: bool) {
+    let up_sign = if g.up { -1.0 } else { 1.0 };
+    let line_w = 0.1 * sp;
+    let half_line = 0.5 * line_w * up_sign;
+    // 1. End points protruding onto a line (inside the staff).
+    let y = g.p1.y;
+    let closest = if g.up {
+        (y / sp).floor()
+    } else {
+        (y / sp).ceil()
+    };
+    let inside = (0.0..=4.0).contains(&closest);
+    let protrusion = (y - (closest * sp - half_line)).abs();
+    let limit = 0.15 * sp;
+    if protrusion < limit && (inside || !outer_start) {
+        let corrected = closest * sp + half_line + limit * up_sign;
+        g.p2.y += corrected - y;
+        g.p1.y = corrected;
+    }
+    // 2. The arc's apex sitting on a line.
+    let (outer_y, inner_y, height) = tie_apex(g, sp);
+    let mid_y = 0.5 * (outer_y + inner_y);
+    let line = (mid_y / sp).round();
+    if !(0.0..=4.0).contains(&line) {
+        return;
+    }
+    let outward = -up_sign * (outer_y - (line * sp - half_line));
+    let inward = up_sign * (inner_y - (line * sp + half_line));
+    let length = g.p2.x - g.p1.x;
+    let arc_limit = if length < 3.0 * sp {
+        0.1 * sp
+    } else {
+        0.15 * sp
+    };
+    let increase = outward - 0.5 * arc_limit < inward;
+    let mut out_fix = inward < arc_limit && increase;
+    let in_fix = outward < arc_limit && !increase;
+    if !in_fix && !out_fix {
+        return;
+    }
+    let small = length < 2.0 * sp && height < 0.7 * sp;
+    if small {
+        if single_inner_small_ok {
+            // Small ties move whole into the staff space.
+            let dy = -up_sign * (arc_limit - outward);
+            g.p1.y += dy;
+            g.p2.y += dy;
+            return;
+        }
+        out_fix = true;
+    }
+    let mut correction = if out_fix {
+        arc_limit - inward
+    } else {
+        arc_limit - outward
+    };
+    let max_corr = 0.75 * height;
+    let rest = (correction - max_corr).max(0.0);
+    correction = correction.min(max_corr);
+    if out_fix {
+        if rest > 0.0 {
+            g.p1.y += rest * up_sign;
+            g.p2.y += rest * up_sign;
+        }
+        g.shoulder_off += correction;
+    } else {
+        g.shoulder_off -= correction;
+    }
+}
+
 fn place_ties(
     input: &SystemInput<'_, '_>,
-    obstacles: &[Rect],
+    _obstacles: &[Rect],
     sky: &mut Skyline,
-    owners: &mut Ids,
+    _owners: &mut Ids,
     nodes: &mut Vec<SceneNode>,
     id: &mut u64,
 ) -> Vec<PlacedTie> {
     let sp = input.spatium;
-    let head_w = HEAD_W_SP * sp;
-    let mut out = Vec::new();
+    // Pair tie starts with their stops, by note line, in order.
+    let mut specs: Vec<(Option<TieEnd>, Option<TieEnd>)> = Vec::new();
+    let mut pending: Vec<TieEnd> = Vec::new();
+    for (ai, a) in input.anchors.iter().enumerate() {
+        for i in 0..a.m.entries.len() {
+            for &line in &a.m.tie_stop_lines[i] {
+                let end = TieEnd { ai, i, line };
+                match pending.iter().position(|p| p.line == line) {
+                    Some(pos) => specs.push((Some(pending.remove(pos)), Some(end))),
+                    None => specs.push((None, Some(end))), // from the system before
+                }
+            }
+            for &line in &a.m.tie_start_lines[i] {
+                pending.push(TieEnd { ai, i, line });
+            }
+        }
+    }
+    specs.extend(pending.into_iter().map(|p| (Some(p), None))); // into the next system
 
-    // Which way a tie on `line` of a chord bows: a single note opposite its
-    // stem; in a chord the upper half up, the lower half down.
-    let direction = |line: i32, chord: &[i32], up_stem: bool| -> bool {
-        if chord.len() <= 1 {
-            return !up_stem;
+    let mut geoms: Vec<TieGeom> = Vec::new();
+    for (start, end) in specs {
+        let up = tie_up(input, start, end);
+        let mut p1 = start.map(|s| tie_default_point(input, s, up, true));
+        let mut p2 = end.map(|e| tie_default_point(input, e, up, false));
+        if let (Some(s), Some(p)) = (start, p1.as_mut()) {
+            tie_adjust_x(input, s, up, true, p);
         }
-        let mut sorted = chord.to_vec();
-        sorted.sort_unstable();
-        let rank = sorted.iter().position(|l| *l == line).unwrap_or(0);
-        rank * 2 >= sorted.len()
-    };
-
-    // (line, start x of the head, above, (anchor, entry))
-    let mut pending: Vec<(i32, f64, bool, (usize, usize))> = Vec::new();
-    let emit = |line: i32,
-                x_head1: Option<f64>,
-                x_head2: Option<f64>,
-                above: bool,
-                entries: Vec<(usize, usize)>,
-                sky: &mut Skyline,
-                nodes: &mut Vec<SceneNode>,
-                out: &mut Vec<PlacedTie>,
-                id: &mut u64| {
-        let sign = if above { -1.0 } else { 1.0 };
-        let y_note = y_of(line, sp);
-        // Outside placement: endpoints just beyond the heads, x inset from
-        // the head centres (computeDefaultStartOrEndPoint).
-        let mut y_end = y_note + sign * 0.7 * sp;
-        // adjustY: keep the tips off a staff line.
-        let rel = y_end / (0.5 * sp);
-        let nearest = rel.round() * 0.5 * sp;
-        let on_line = (rel.round() as i64) % 2 == 0 && (0.0..=4.0 * sp).contains(&nearest);
-        if on_line && (y_end - nearest).abs() < 0.15 * sp {
-            y_end = nearest + sign * 0.2 * sp;
+        if let (Some(e), Some(p)) = (end, p2.as_mut()) {
+            tie_adjust_x(input, e, up, false, p);
         }
-        let mut x1 = x_head1.map_or(0.0, |x| x + 0.65 * head_w);
-        let mut x2 = x_head2.map_or(input.width, |x| x + 0.35 * head_w);
-        if x_head1.is_none() {
-            x1 = (x2 - 3.0 * sp).max(0.0);
-        }
-        if x_head2.is_none() {
-            x2 = (x1 + 3.0 * sp).min(input.width);
-        }
-        // adjustX: clear accidentals before the end head and dots/flags
-        // after the start head, within the height band the tie's arc will
-        // sweep (a tie bowing toward its own flag must start past it).
-        let shoulder_of = |len: f64| {
-            (style::TIE_MIN_SHOULDER + 0.3 * (len / sp - 1.0).abs().sqrt() * 0.6)
-                .clamp(style::TIE_MIN_SHOULDER, style::TIE_MAX_SHOULDER.min(1.2))
-                * sp
+        // Segments across a system break: to the staff end, or from just
+        // before the system's first note.
+        let (p1, p2) = match (p1, p2) {
+            (Some(a), Some(b)) => (a, b),
+            (Some(a), None) => (a, Point::new(input.width - 0.25 * sp, a.y)),
+            (None, Some(b)) => (
+                Point::new((b.x - 3.0 * sp).max(input.content_start), b.y),
+                b,
+            ),
+            (None, None) => continue,
         };
-        let reach = shoulder_of(x2 - x1) * 0.75;
-        let band = if above {
-            (y_end - reach - 0.2 * sp, y_end + 0.35 * sp)
+        let p2 = if p2.x - p1.x < 0.8 * sp {
+            Point::new(p1.x + 0.8 * sp, p2.y)
         } else {
-            (y_end - 0.35 * sp, y_end + reach + 0.2 * sp)
+            p2
         };
-        for r in obstacles {
-            if r.y1 < band.0 || r.y0 > band.1 || r.width() > 2.0 * sp {
-                continue;
-            }
-            // Barlines span the staff and ties cross them by design.
-            if r.height() >= 3.5 * sp && r.width() < 0.6 * sp {
-                continue;
-            }
-            if let Some(h2) = x_head2
-                && r.x1 <= h2 + 0.05 * sp
-                && r.x0 > x1
-                && r.x1 > x2 - 2.5 * sp
-            {
-                x2 = x2.min(r.x0 - 0.2 * sp);
-            }
-            // Right of the start head: dots, a flag, or — for a tie on the
-            // stem side — the stem itself (it starts at the head's edge).
-            if let Some(h1) = x_head1
-                && r.x0 >= h1 + 0.7 * head_w
-                && r.x0 < x2
-                && r.x0 < x1 + 2.0 * sp
-            {
-                x1 = x1.max(r.x1 + 0.2 * sp);
-            }
-        }
-        if x2 - x1 < sp {
-            x2 = x1 + sp;
-        }
-        let p1 = Point::new(x1, y_end);
-        let p2 = Point::new(x2, y_end);
-        let shoulder = shoulder_of(x2 - x1);
-        let (c1, c2) = bow_controls(p1, p2, sign * shoulder, 0.6);
-        let curve = CubicBez::new(p1, c1, c2, p2);
-        let path = crescent(
+        let mut g = TieGeom {
+            start,
+            end,
+            up,
             p1,
-            c1,
-            c2,
             p2,
-            style::SLUR_END_WIDTH * sp,
-            style::SLUR_MID_WIDTH * sp,
-            above,
+            shoulder_off: 0.0,
+        };
+        if let Some(e) = start.or(end) {
+            tie_adjust_y_ledgers(input, e, up, &mut g);
+        }
+        let outer_start = start.is_some_and(|s| is_outer(input, s, up));
+        let single = start.is_some_and(|s| chord_lines(&input.anchors[s.ai], s.i).len() <= 1);
+        tie_adjust_y(&mut g, sp, outer_start, single);
+        geoms.push(g);
+    }
+
+    // `resolveVerticalTieCollisions`: ties stacked on one chord keep
+    // 0.15 sp between one's outer edge and the next one's inner edge.
+    let clearance = 0.15 * sp;
+    let mut groups: HashMap<(usize, usize, bool), Vec<usize>> = HashMap::new();
+    for (k, g) in geoms.iter().enumerate() {
+        if let Some(s) = g.start {
+            groups.entry((s.ai, s.i, g.up)).or_default().push(k);
+        }
+    }
+    for ((_, _, up), mut members) in groups {
+        if members.len() < 2 {
+            continue;
+        }
+        // Innermost first: for upward ties the lowest, downward the highest.
+        members.sort_by(|a, b| {
+            let (ya, yb) = (geoms[*a].p1.y, geoms[*b].p1.y);
+            if up {
+                yb.total_cmp(&ya)
+            } else {
+                ya.total_cmp(&yb)
+            }
+        });
+        let up_sign = if up { -1.0 } else { 1.0 };
+        for w in members.windows(2) {
+            let (this_outer, ..) = tie_apex(&geoms[w[0]], sp);
+            let (_, next_inner, _) = tie_apex(&geoms[w[1]], sp);
+            if up_sign * (next_inner - this_outer) >= clearance {
+                continue;
+            }
+            let mut mid = 0.5 * (this_outer + next_inner);
+            let half = 0.5 * sp;
+            let line = (mid / half).round();
+            if (-1.0..=9.0).contains(&line) {
+                mid = line * half;
+            }
+            let this_fix = mid - up_sign * 0.5 * clearance - this_outer;
+            let next_fix = mid + up_sign * 0.5 * clearance - next_inner;
+            geoms[w[0]].shoulder_off += -up_sign * this_fix;
+            geoms[w[1]].shoulder_off += -up_sign * next_fix;
+        }
+    }
+
+    let mut out = Vec::new();
+    for g in geoms {
+        let curve = tie_curve(&g, sp);
+        let thick = tie_mid_thickness((g.p2.x - g.p1.x) / sp, sp);
+        let end_w = style::SLUR_END_WIDTH * sp;
+        let path = crescent(
+            curve.p0,
+            curve.p1,
+            curve.p2,
+            curve.p3,
+            end_w,
+            1.5 * thick + end_w,
+            g.up,
         );
         *id += 1;
         nodes.push(curve_node(ElementType::Tie, *id, path));
-        let rects = curve_rects(&curve, style::SLUR_MID_WIDTH * sp, 16);
+        let n = ((g.p2.x - g.p1.x) / sp * 5.0).round().clamp(20.0, 50.0) as usize;
+        let rects = curve_rects(&curve, 2.0 * thick, n);
         sky.add_all(&rects, SkyKind::Tie, *id);
         out.push(PlacedTie {
             rects,
-            above,
-            entries,
-        });
-    };
-
-    for (ai, a) in input.anchors.iter().enumerate() {
-        for i in 0..a.m.entries.len() {
-            let ex = a.entry_x.get(i).copied().unwrap_or(0.0);
-            let chord: Vec<i32> = a.m.pitches[i]
+            above: g.up,
+            entries: g
+                .start
                 .iter()
-                .map(|(l, _)| *l)
-                .chain(a.m.stacks[i].iter().map(|(l, _)| *l))
-                .collect();
-            for line in &a.m.tie_stop_lines[i] {
-                if let Some(pos) = pending.iter().position(|(l, ..)| l == line) {
-                    let (l, sx, above, from) = pending.remove(pos);
-                    emit(
-                        l,
-                        Some(sx),
-                        Some(ex),
-                        above,
-                        vec![from, (ai, i)],
-                        sky,
-                        nodes,
-                        &mut out,
-                        id,
-                    );
-                } else {
-                    // Arriving from the previous system: half tie in.
-                    let above = direction(*line, &chord, a.stem_up_at(i, *line));
-                    emit(
-                        *line,
-                        None,
-                        Some(ex),
-                        above,
-                        vec![(ai, i)],
-                        sky,
-                        nodes,
-                        &mut out,
-                        id,
-                    );
-                }
-            }
-            for line in &a.m.tie_start_lines[i] {
-                pending.push((
-                    *line,
-                    ex,
-                    direction(*line, &chord, a.stem_up_at(i, *line)),
-                    (ai, i),
-                ));
-            }
-        }
+                .chain(g.end.iter())
+                .map(|e| (e.ai, e.i))
+                .collect(),
+        });
     }
-    for (line, sx, above, from) in pending {
-        emit(
-            line,
-            Some(sx),
-            None,
-            above,
-            vec![from],
-            sky,
-            nodes,
-            &mut out,
-            id,
-        );
-    }
-    let _ = owners;
     out
 }
 
