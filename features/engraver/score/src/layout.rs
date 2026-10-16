@@ -2013,7 +2013,24 @@ fn stack_systems(
             }
             i = end;
         }
-        return out;
+        // A source page left mostly empty before the last (a page of two
+        // lone multirests from a layout Finale never refreshed) is no page
+        // turn worth keeping: re-flow the pages instead, keeping the
+        // source's line breaks.
+        let pages = out.iter().map(|(p, _)| p + 1).max().unwrap_or(1);
+        let underfilled = (0..pages.saturating_sub(1)).any(|page| {
+            let on: Vec<usize> = (0..systems.len()).filter(|&k| out[k].0 == page).collect();
+            let (Some(&first), Some(&last)) = (on.first(), on.last()) else {
+                return true;
+            };
+            let used = out[last].1 + rendered[last].1.south_extent()
+                - (out[first].1 + rendered[first].1.north_extent());
+            let room = bottom_limit_of(page) - top_limit_of(page);
+            used < 0.5 * room
+        });
+        if !underfilled {
+            return out;
+        }
     }
     // Automatic: re-flow with the measured heights.
     let mut page = 0usize;
