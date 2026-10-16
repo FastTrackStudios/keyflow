@@ -708,10 +708,20 @@ fn maestro_symbol(c: char) -> Option<&'static str> {
         // A beam-and-note that joins the note before it into two beamed
         // eighths; set as a second eighth (see `expression_words`).
         'Â' => "\u{ECA7}",
-        'Ç' => "\u{E1FF}", // tuplet 3
+        // A "⌐3¬" bracket over the note before it and the note after it;
+        // `expression_words` brackets the pair (start / number / end).
+        'Ç' => "\u{E1FF}",
         _ => return None,
     })
 }
+
+/// SMuFL's text tuplet bracket start, the number 3, and the bracket end
+/// (`textTupletBracketStartShortStem`, `textTuplet3ShortStem`,
+/// `textTupletBracketEndShortStem`). In expression words they enclose the
+/// notes a tuplet bracket spans; the renderer draws the bracket over them.
+pub const TUPLET_START: char = '\u{E1FE}';
+pub const TUPLET_NUMBER_3: char = '\u{E1FF}';
+pub const TUPLET_END: char = '\u{E200}';
 
 /// An expression's words with Finale's font runs read: Maestro symbols as
 /// SMuFL (`(‰ = Œ)` → `(♪ = ♩)`), JazzText's spacing characters dropped
@@ -719,11 +729,22 @@ fn maestro_symbol(c: char) -> Option<&'static str> {
 /// the styling tags removed.
 #[must_use]
 pub fn expression_words(text: &str) -> String {
+    remove_styling_tags(&translate_font_runs(text))
+}
+
+/// [`expression_words`] with the styling tags kept, for text that is
+/// parsed further (a rehearsal mark's `^rehearsal()` and font).
+#[must_use]
+pub fn translate_font_runs(text: &str) -> String {
     static FONT_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"\^(?:font|Font|fontMus|fontTxt|fontNum)\(([^,)]*)[^)]*\)")
             .expect("valid font regex")
     });
     let mut out = String::new();
+    // A tuplet bracket opened over the previous note, closed after the
+    // next one.
+    let mut tuplet_open = false;
+    let is_note = |c: char| matches!(c, '\u{ECA3}' | '\u{ECA5}' | '\u{ECA7}');
     let mut font = RunFont::Text;
     let mut last = 0;
     let mut runs: Vec<(RunFont, &str)> = Vec::new();
@@ -731,7 +752,8 @@ pub fn expression_words(text: &str) -> String {
         let whole = m.get(0).expect("match");
         runs.push((font, &text[last..whole.start()]));
         font = run_font(&m[1]);
-        last = whole.end();
+        // The tag opens the next run, which copies it through.
+        last = whole.start();
     }
     runs.push((font, &text[last..]));
     for (font, run) in runs {
@@ -759,7 +781,25 @@ pub fn expression_words(text: &str) -> String {
                         out.push('\u{ECA7}');
                         out.push_str(sym);
                     }
-                    Some(sym) => out.push_str(sym),
+                    // The bracket: start before the note it reaches back
+                    // over, the number, and an end after the next note.
+                    Some(_) if c == 'Ç' => {
+                        if let Some((i, _)) = out.char_indices().rev().find(|(_, ch)| is_note(*ch))
+                        {
+                            out.insert(i, TUPLET_START);
+                        } else {
+                            out.push(TUPLET_START);
+                        }
+                        out.push(TUPLET_NUMBER_3);
+                        tuplet_open = true;
+                    }
+                    Some(sym) => {
+                        out.push_str(sym);
+                        if tuplet_open && sym.chars().any(is_note) {
+                            out.push(TUPLET_END);
+                            tuplet_open = false;
+                        }
+                    }
                     None if c.is_ascii() => out.push(c),
                     // A symbol the table does not know: nothing rather
                     // than a stray accented letter.
@@ -778,7 +818,7 @@ pub fn expression_words(text: &str) -> String {
             }
         }
     }
-    remove_styling_tags(&out)
+    out
 }
 
 pub fn replace_music_symbols(text: &str) -> String {
@@ -882,6 +922,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn font_runs_keep_tags_for_further_parsing() {
+        // A rehearsal mark's text is parsed again (font, ^rehearsal()):
+        // the symbols are read, the tags stay.
+        assert_eq!(
+            translate_font_runs(
+                "^font(Arial,4096)^size(12)Swing ^font(MaestroTimes,8192)Œ = ‰^rehearsal()"
+            ),
+            "^font(Arial,4096)^size(12)Swing ^font(MaestroTimes,8192)\u{ECA5} = \u{ECA7}^rehearsal()"
+        );
+    }
+
+    #[test]
     fn expression_words_reads_font_runs() {
         assert_eq!(
             expression_words("^font(MaestroTimes,8192)^size(14)^nfx(0)(^nfx(1)‰ = Œ^nfx(0))"),
@@ -891,7 +943,7 @@ mod tests {
             expression_words(
                 "^font(Times New Roman,4096)^size(14)^nfx(1)Shuffle:^font(Maestro Percussion,8191)^size(16)^nfx(0) ^font(MaestroTimes,8192)ŒÂ ^size(14)=^size(16) Œ Ç‰"
             ),
-            "Shuffle: \u{ECA7}\u{ECA7} = \u{ECA5} \u{E1FF}\u{ECA7}"
+            "Shuffle: \u{ECA7}\u{ECA7} = \u{E1FE}\u{ECA5} \u{E1FF}\u{ECA7}\u{E200}"
         );
         assert_eq!(
             expression_words("^font(JazzText,8191)^size(16)^nfx(1) ¶B¶A¶N¶D IN·"),

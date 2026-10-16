@@ -1763,7 +1763,9 @@ fn add_rehearsal_mark(
     expression: &Expression,
     staff_id: Option<i64>,
 ) {
-    let parsed = crate::layout::parse_enigma_text(&expression.text, &HashMap::new());
+    // Music-font runs read first (a cue like "♩ = ♪" set in Maestro).
+    let parsed =
+        crate::layout::parse_enigma_text(&translate_font_runs(&expression.text), &HashMap::new());
     // Keep line breaks: a two-line cue ("VS 1a" over "VS 1b") is one mark.
     let mut text = parsed.literal_lines().trim().to_string();
     if expression.text.contains("^rehearsal()") {

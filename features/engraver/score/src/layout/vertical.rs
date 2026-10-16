@@ -1447,19 +1447,58 @@ fn rich_line(
     sp: f64,
     color: Color,
 ) -> (Vec<PaintCommand>, Option<Rect>) {
-    let mut runs: Vec<(RunFace, String)> = Vec::new();
+    // Runs of one face; a tuplet's bracket marks split runs and are carried
+    // as `Mark`s (drawn as a bracket over the notes they enclose).
+    enum Piece {
+        Run(RunFace, String),
+        Mark(char),
+    }
+    let mut pieces: Vec<Piece> = Vec::new();
     for c in line.chars() {
+        if matches!(c, '\u{E1FE}' | '\u{E1FF}' | '\u{E200}') {
+            pieces.push(Piece::Mark(c));
+            continue;
+        }
         let face = run_face(c);
-        match runs.last_mut() {
-            Some((f, s)) if *f == face => s.push(c),
-            _ => runs.push((face, c.to_string())),
+        match pieces.last_mut() {
+            Some(Piece::Run(f, s)) if *f == face => s.push(c),
+            _ => pieces.push(Piece::Run(face, c.to_string())),
         }
     }
     let mut x = 0.0;
     let mut cmds = Vec::new();
     let mut ink: Option<Rect> = None;
     let space = 0.28 * font.size;
-    for (face, text) in runs {
+    // Open tuplet: (index of its first run's ink, number shown).
+    let mut tuplet: Option<(usize, Option<&str>)> = None;
+    let mut run_inks: Vec<Rect> = Vec::new();
+    for piece in pieces {
+        let (face, text) = match piece {
+            Piece::Run(face, text) => (face, text),
+            Piece::Mark('\u{E1FE}') => {
+                // Room for the bracket's hook before its first note.
+                x += 0.25 * font.size;
+                tuplet = Some((run_inks.len(), None));
+                continue;
+            }
+            Piece::Mark('\u{E1FF}') => {
+                if let Some((_, n)) = &mut tuplet {
+                    *n = Some("3");
+                }
+                continue;
+            }
+            Piece::Mark(_) => {
+                if let Some((first, number)) = tuplet.take()
+                    && let Some(span) = run_inks[first..].iter().copied().reduce(|a, b| a.union(b))
+                {
+                    let (bracket, b_ink) = tuplet_bracket(span, number, font, color);
+                    cmds.extend(bracket);
+                    ink = Some(ink.map_or(b_ink, |i| i.union(b_ink)));
+                    x = x.max(b_ink.x1 + 0.12 * font.size);
+                }
+                continue;
+            }
+        };
         let (family, size, bold, italic, dy) = match face {
             RunFace::Text => (font.family.as_str(), font.size, font.bold, font.italic, 0.0),
             RunFace::MusicText => ("Leland Text", font.size, false, false, 0.0),
@@ -1471,7 +1510,9 @@ fn rich_line(
         }
         let shown = text.trim();
         if shown.is_empty() {
-            x += space;
+            // Notes under a tuplet bracket stand further apart, as the
+            // bracket's number sits between them.
+            x += if tuplet.is_some() { 1.8 * space } else { space };
             continue;
         }
         let r = metrics::text_ink(
@@ -1490,6 +1531,7 @@ fn rich_line(
             dy,
         ));
         ink = Some(ink.map_or(r, |i| i.union(r)));
+        run_inks.push(r);
         cmds.push(marker_text(
             shown,
             size,
@@ -1507,6 +1549,61 @@ fn rich_line(
                 0.12 * font.size
             };
     }
+    (cmds, ink)
+}
+
+/// A tuplet bracket over `span` (the enclosed notes' ink): a line clear of
+/// their stems with hooks down at each end, broken by the number.
+fn tuplet_bracket(
+    span: Rect,
+    number: Option<&str>,
+    font: &TextFont,
+    color: Color,
+) -> (Vec<PaintCommand>, Rect) {
+    let size = font.size;
+    let y = span.y0 - 0.3 * size;
+    let hook = 0.3 * size;
+    let width = 0.06 * size;
+    let (x0, x1) = (span.x0 - 0.12 * size, span.x1 + 0.12 * size);
+    let mid = (x0 + x1) / 2.0;
+    let num_size = 0.7 * size;
+    let mut cmds = Vec::new();
+    let mut gap = (mid, mid);
+    if let Some(n) = number {
+        let r = metrics::text_ink(
+            &font.family,
+            num_size,
+            false,
+            true,
+            n,
+            Point::ZERO,
+            TextAnchor::Middle,
+        )
+        .unwrap_or(Rect::new(
+            -0.25 * num_size,
+            -0.7 * num_size,
+            0.25 * num_size,
+            0.0,
+        ));
+        let base = y - (r.y0 + r.y1) / 2.0;
+        gap = (mid + r.x0 - 0.15 * size, mid + r.x1 + 0.15 * size);
+        cmds.push(marker_text(
+            n,
+            num_size,
+            Point::new(mid, base),
+            color,
+            TextAnchor::Middle,
+            &font.family,
+            false,
+            true,
+        ));
+    }
+    let line = |a: Point, b: Point| PaintCommand::line(a, b, color, width);
+    cmds.push(line(Point::new(x0, y + hook), Point::new(x0, y)));
+    cmds.push(line(Point::new(x0, y), Point::new(gap.0, y)));
+    cmds.push(line(Point::new(gap.1, y), Point::new(x1, y)));
+    cmds.push(line(Point::new(x1, y), Point::new(x1, y + hook)));
+    let ink = Rect::new(x0, y - 0.5 * num_size, x1, y + hook);
     (cmds, ink)
 }
 
@@ -1989,7 +2086,7 @@ fn place_rehearsals(
                     continue;
                 }
                 (TextRole::Instruction, _) => {
-                    let piece = instruction_piece(&mark.text, x, input.words_font, look);
+                    let piece = instruction_piece(&mark.text, x, input.words_font, sp, look);
                     cursor = Some(piece.frame.x1 + 0.6 * sp);
                     row.push(piece);
                     continue;
@@ -2154,15 +2251,14 @@ fn is_section_text(input: &SystemInput<'_, '_>, text: &str) -> bool {
 
 /// The player's own instruction, written where a cue would sit: the staff
 /// text face in the chart's red (black for mono), lines kept.
-fn instruction_piece(raw: &str, x: f64, font: &TextFont, look: MarkStyle) -> RowPiece {
+fn instruction_piece(raw: &str, x: f64, font: &TextFont, sp: f64, look: MarkStyle) -> RowPiece {
     let color = instruction_color(look);
     // As written: the player's text keeps its own punctuation, like staff
-    // text does.
-    let lines: Vec<String> = raw
+    // text does; music symbols in it are set in the music font.
+    let lines: Vec<&str> = raw
         .lines()
         .map(str::trim)
         .filter(|l| !l.is_empty())
-        .map(str::to_string)
         .collect();
     let leading = 1.15 * font.size;
     let n = lines.len();
@@ -2170,44 +2266,66 @@ fn instruction_piece(raw: &str, x: f64, font: &TextFont, look: MarkStyle) -> Row
     let mut cmds = Vec::new();
     for (k, line) in lines.iter().enumerate() {
         let base = -((n - 1 - k) as f64) * leading;
-        let r = metrics::text_ink(
-            &font.family,
-            font.size,
-            font.bold,
-            font.italic,
-            line,
-            Point::new(x, base),
-            TextAnchor::Start,
-        )
-        .unwrap_or(Rect::new(
-            x,
-            base - 0.7 * font.size,
-            x + 0.5 * font.size * line.len() as f64,
-            base,
-        ));
-        frame = Some(frame.map_or(r, |f| f.union(r)));
-        cmds.push(marker_text(
-            line,
-            font.size,
-            Point::new(x, base),
-            color,
-            TextAnchor::Start,
-            &font.family,
-            font.bold,
-            font.italic,
-        ));
+        let (line_cmds, ink) = rich_line(line, font, sp, color);
+        let Some(r) = ink else {
+            continue;
+        };
+        let shift = Affine::translate((x, base));
+        frame = Some(frame.map_or(shift.transform_rect_bbox(r), |f| {
+            f.union(shift.transform_rect_bbox(r))
+        }));
+        cmds.extend(line_cmds.into_iter().map(|c| translate_command(c, x, base)));
     }
     let frame = frame.unwrap_or(Rect::new(x, -font.size, x, 0.0));
     // Bottom of the row at y = 0.
     let shift = -frame.y1.max(0.0);
-    for c in &mut cmds {
-        if let PaintCommand::Text { position, .. } = c {
-            position.y += shift;
-        }
-    }
     RowPiece {
         frame: frame + Vec2::new(0.0, shift),
-        cmds,
+        cmds: cmds
+            .into_iter()
+            .map(|c| translate_command(c, 0.0, shift))
+            .collect(),
+    }
+}
+
+/// A paint command moved by (dx, dy) (text and lines, which is what
+/// `rich_line` draws).
+fn translate_command(cmd: PaintCommand, dx: f64, dy: f64) -> PaintCommand {
+    let d = Vec2::new(dx, dy);
+    match cmd {
+        PaintCommand::Text {
+            text,
+            font_family,
+            font_size,
+            position,
+            color,
+            anchor,
+            weight,
+            style,
+        } => PaintCommand::Text {
+            text,
+            font_family,
+            font_size,
+            position: position + d,
+            color,
+            anchor,
+            weight,
+            style,
+        },
+        PaintCommand::Line {
+            start,
+            end,
+            width,
+            color,
+            line_cap,
+        } => PaintCommand::Line {
+            start: start + d,
+            end: end + d,
+            width,
+            color,
+            line_cap,
+        },
+        other => other,
     }
 }
 
@@ -2241,27 +2359,29 @@ fn callout_piece(raw: &str, flat: &str, x: f64, sp: f64, style: MarkStyle) -> Ro
     let pad_l = bar_w + 0.45 * sp;
     let pad_r = 0.5 * sp;
     let pad_v = 0.35 * sp;
+    let face = TextFont {
+        family: MARKER_FAMILY.to_string(),
+        size,
+        bold: false,
+        italic: false,
+    };
     let mut ink: Option<Rect> = None;
-    let mut texts = Vec::new();
+    // Each line's commands, already at its place (music symbols in a
+    // remark set in the music font).
+    let mut texts: Vec<PaintCommand> = Vec::new();
     for (k, line) in lines.iter().enumerate() {
         let base = -((n - 1 - k) as f64) * leading;
-        let r = metrics::text_ink(
-            MARKER_FAMILY,
-            size,
-            false,
-            false,
-            line,
-            Point::new(x + pad_l, base),
-            TextAnchor::Start,
-        )
-        .unwrap_or(Rect::new(
-            x + pad_l,
-            base - 0.7 * size,
-            x + pad_l + 0.5 * size * line.len() as f64,
-            base,
-        ));
+        let (line_cmds, line_ink) = rich_line(line, &face, sp, paint.text);
+        let r = line_ink.map_or(
+            Rect::new(x + pad_l, base - 0.7 * size, x + pad_l, base),
+            |r| r + Vec2::new(x + pad_l, base),
+        );
         ink = Some(ink.map_or(r, |i| i.union(r)));
-        texts.push((line.clone(), base));
+        texts.extend(
+            line_cmds
+                .into_iter()
+                .map(|c| translate_command(c, x + pad_l, base)),
+        );
     }
     let ink = ink.unwrap_or_default();
     // Cap height to baseline, not the ink's descenders: rows of callouts
@@ -2289,18 +2409,7 @@ fn callout_piece(raw: &str, flat: &str, x: f64, sp: f64, style: MarkStyle) -> Ro
         stroke_width: 0.0,
         corner_radius: Some(0.5 * bar_w),
     });
-    for (text, base) in texts {
-        cmds.push(marker_text(
-            &text,
-            size,
-            Point::new(x + pad_l, base + shift),
-            paint.text,
-            TextAnchor::Start,
-            MARKER_FAMILY,
-            false,
-            false,
-        ));
-    }
+    cmds.extend(texts.into_iter().map(|c| translate_command(c, 0.0, shift)));
     RowPiece { frame, cmds }
 }
 
