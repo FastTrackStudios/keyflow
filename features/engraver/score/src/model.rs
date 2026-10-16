@@ -148,6 +148,22 @@ pub enum DirectionKind {
     Words(String),
     /// Rehearsal mark / section cue ("Verse 1", "B", "79").
     Rehearsal(RehearsalMark),
+    /// Tempo mark: `Allegro ♩ = 120`, `♩ = 63 BPM`.
+    Tempo(TempoMark),
+}
+
+/// A metronome mark with the words around it in the same direction.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TempoMark {
+    /// Words before the note ("Allegro", "New Tempo:").
+    pub text: Option<String>,
+    /// MusicXML note type of the beat ("quarter", "eighth", "half").
+    pub beat_unit: String,
+    pub dots: u8,
+    /// Beats per minute as written ("63", "120-126").
+    pub per_minute: String,
+    /// Words after the number ("BPM").
+    pub suffix: Option<String>,
 }
 
 /// A rehearsal mark with the enclosure and font the source gave it.

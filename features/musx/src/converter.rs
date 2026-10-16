@@ -1558,6 +1558,8 @@ fn process_gfholds(
         // copy and a per-staff copy); print it once.
         let mut rehearsals_done: std::collections::HashSet<String> = Default::default();
         let mut tempos_done: std::collections::HashSet<String> = Default::default();
+        let mut staff_done: std::collections::HashSet<(String, Option<String>)> =
+            Default::default();
         for mut expression in expressions {
             let placement =
                 if expression.vert_meas_expr_align.as_deref() == Some("belowStaffOrEntry") {
@@ -1567,6 +1569,19 @@ fn process_gfholds(
                 };
 
             let is_this_staff = expression.staff_assign.as_deref() == Some(staff_spec_cmper);
+
+            // The same expression can be assigned to one staff twice (a
+            // dynamic stored once per layer, or copied with its staff
+            // list): it prints once.
+            if is_this_staff
+                && !matches!(
+                    expression.category_type.as_str(),
+                    "tempoMarks" | "rehearsalMarks"
+                )
+                && !staff_done.insert((expression.def_id.clone(), expression.horz_edu_off.clone()))
+            {
+                continue;
+            }
 
             if expression.category_type == "misc" && is_this_staff {
                 if translate_dynamics(&expression.text).is_some() {

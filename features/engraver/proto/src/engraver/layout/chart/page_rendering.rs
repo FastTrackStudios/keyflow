@@ -474,7 +474,7 @@ pub fn add_title_header_with_count_in(
     let part_start_y = if title_needs_own_row {
         let mut y = title_y + small_font_size + 4.0;
         if has_subtitle_meta {
-            y += subtitle_font_size_ref + 2.0;
+            y += 0.22 * title_font_size + subtitle_font_size_ref + 1.0;
         }
         y
     } else {
@@ -607,8 +607,11 @@ pub fn add_title_header_with_count_in(
 
     // Composer/Artist - right aligned
     let mut commands = Vec::new();
+    let mut right_column_bottom = 0.0_f64;
     if let Some(composer) = composer_text {
         let artists: Vec<&str> = composer.split(',').map(|s| s.trim()).collect();
+        right_column_bottom =
+            part_start_y + (artists.len().saturating_sub(1) as f64 * (small_font_size + 2.0));
         for (i, artist) in artists.iter().enumerate() {
             let line_y = part_start_y + (i as f64 * (small_font_size + 2.0));
             commands.push(PaintCommand::Text {
@@ -633,7 +636,9 @@ pub fn add_title_header_with_count_in(
         .map(|s| s.to_string());
     let has_subtitle = subtitle_text.is_some();
     let subtitle_font_size = 12.0;
-    let subtitle_y = title_y + subtitle_font_size + 2.0;
+    // Below the title's descenders (≈0.22 em), not just its baseline: a
+    // "g" or "y" in the title otherwise sits on the subtitle's caps.
+    let subtitle_y = title_y + 0.22 * title_font_size + subtitle_font_size + 1.0;
 
     if let Some(subtitle_text) = subtitle_text.as_ref() {
         commands.push(PaintCommand::Text {
@@ -660,6 +665,9 @@ pub fn add_title_header_with_count_in(
     } else {
         version_y + small_font_size
     };
+    // The writers' column can run longer than the left one (three
+    // writers and an arranger): the music starts below whichever is lower.
+    let left_column_bottom = left_column_bottom.max(right_column_bottom);
     let current_y = if has_subtitle {
         subtitle_y.max(left_column_bottom)
     } else {

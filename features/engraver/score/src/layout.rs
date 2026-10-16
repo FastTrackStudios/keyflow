@@ -1608,6 +1608,85 @@ fn chart_header(
     height
 }
 
+/// Space the running header takes at the top of pages 2+ (points below
+/// the top margin, including its gap to the music).
+const RUNNING_HEADER_HEIGHT: f64 = 30.0;
+
+/// Pages 2+: the part name on the left, the title and page number on the
+/// right — the chart header's faces, so a loose page still says whose and
+/// which it is.
+fn running_header(
+    root: &mut SceneNode,
+    page: &PageRect,
+    opts: &LayoutOptions,
+    margins: &engraver_proto::engraver::layout::orchestrator::PageMargins,
+    meta: &keyflow_proto::SongMetadata,
+) {
+    let base = page.y_offset + margins.top + 12.0;
+    let right = opts.page_width - margins.right;
+    let number = format!(
+        "{}",
+        (page.y_offset / (opts.page_height + 24.0)).round() as usize + 1
+    );
+    let number_size = 14.0;
+    let number_w = crate::metrics::text_ink(
+        "FreeSans",
+        number_size,
+        true,
+        false,
+        &number,
+        Point::ZERO,
+        TextAnchor::Start,
+    )
+    .map_or(number_size * 0.6 * number.len() as f64, |r| r.x1);
+    let text = |s: String, size: f64, x: f64, anchor: TextAnchor, bold: bool, color: Color| {
+        PaintCommand::Text {
+            text: s,
+            font_family: "FreeSans".to_string(),
+            font_size: size,
+            position: Point::new(x, base),
+            color,
+            anchor,
+            weight: if bold {
+                FontWeight::Bold
+            } else {
+                FontWeight::Normal
+            },
+            style: FontStyle::Normal,
+        }
+    };
+    let grey = Color::from_rgb8(90, 90, 90);
+    let mut cmds = vec![text(
+        number,
+        number_size,
+        right,
+        TextAnchor::End,
+        true,
+        Color::BLACK,
+    )];
+    if let Some(title) = &meta.title {
+        cmds.push(text(
+            format!("\"{title}\""),
+            11.0,
+            right - number_w - 10.0,
+            TextAnchor::End,
+            false,
+            grey,
+        ));
+    }
+    if let Some(part) = &meta.part_name {
+        cmds.push(text(
+            part.to_uppercase(),
+            11.0,
+            margins.left,
+            TextAnchor::Start,
+            true,
+            Color::BLACK,
+        ));
+    }
+    root.add_child(SceneNode::anonymous_leaf(cmds));
+}
+
 /// The chart names generic families (`sans-serif`) that a part's PDF font
 /// database does not resolve; name the face it means.
 fn name_generic_fonts(node: &mut SceneNode) {
@@ -2095,6 +2174,17 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
                     x: 0.0,
                     y: height - 1.15 - 12.0,
                 },
+                // Pages 2+: the running header's foot.
+                PageText {
+                    text: String::new(),
+                    font: TextFont::serif(1.0),
+                    first_page: 2,
+                    last_page: None,
+                    h_align: HAlign::Left,
+                    v_align: VAlign::Top,
+                    x: 0.0,
+                    y: RUNNING_HEADER_HEIGHT - 1.15,
+                },
                 PageText {
                     text: String::new(),
                     font: TextFont::serif(1.0),
@@ -2443,6 +2533,9 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
                     meta,
                     base_spatium,
                 );
+                for page in pages.iter().skip(1) {
+                    running_header(&mut block, page, opts, &chart_margins, meta);
+                }
                 for page in &pages {
                     engraver_proto::engraver::layout::chart::page_rendering::add_page_footer(
                         &mut block,

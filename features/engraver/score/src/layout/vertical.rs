@@ -183,6 +183,7 @@ pub(super) fn place_system(
         id,
     );
     place_dynamics(input, &mut sky, &mut owners, &mut out.nodes, id);
+    place_tempos(input, &mut sky, &mut owners, &mut out.nodes);
     place_staff_text(input, &mut sky, &mut owners, &mut out.nodes);
     place_measure_numbers(input, &mut sky, &mut owners, &mut out.nodes);
     place_rehearsals(input, &mut sky, &mut owners, &mut out.nodes);
@@ -1393,6 +1394,114 @@ fn place_dynamics(
     for d in dynamics {
         sky.add(d.rect, SkyKind::Dynamic, d.owner);
         nodes.push(d.node);
+    }
+}
+
+// ───────────────────────── 5a. tempo marks ─────────────────────────
+
+/// SMuFL metronome note for a MusicXML beat unit (`metNote…Up`).
+fn metronome_note(beat_unit: &str) -> char {
+    match beat_unit {
+        "whole" => '\u{ECA2}',
+        "half" => '\u{ECA3}',
+        "eighth" => '\u{ECA7}',
+        "16th" => '\u{ECA9}',
+        _ => '\u{ECA5}',
+    }
+}
+
+/// Tempo marks — `Allegro ♩ = 120`, `♩ = 63 BPM` — bold, black (they are
+/// the conductor's, not a colour family), above the staff where staff text
+/// goes; the note is Leland Text's metronome glyph at the text's size.
+fn place_tempos(
+    input: &SystemInput<'_, '_>,
+    sky: &mut Skyline,
+    owners: &mut Ids,
+    nodes: &mut Vec<SceneNode>,
+) {
+    let sp = input.spatium;
+    let size = 12.0;
+    let mut marks: Vec<(f64, &model::TempoMark)> = Vec::new();
+    for a in input.anchors {
+        for d in &a.m.directions {
+            if let model::DirectionKind::Tempo(t) = &d.kind {
+                marks.push((a.x_at(d.tick), t));
+            }
+        }
+    }
+    for item in input.items.iter().filter(|i| !i.notated) {
+        for d in item.directions {
+            if let model::DirectionKind::Tempo(t) = &d.kind {
+                marks.push((item.span.0 + 0.5 * sp, t));
+            }
+        }
+    }
+    for (x, t) in marks {
+        // (text, family, bold) pieces, set left to right.
+        let mut pieces: Vec<(String, &str, bool)> = Vec::new();
+        if let Some(text) = &t.text {
+            pieces.push((text.clone(), input.text_family, true));
+        }
+        let mut note = metronome_note(&t.beat_unit).to_string();
+        for _ in 0..t.dots {
+            note.push('\u{ECB7}'); // metAugmentationDot
+        }
+        pieces.push((note, "Leland Text", false));
+        pieces.push((format!("= {}", t.per_minute), input.text_family, true));
+        if let Some(suffix) = &t.suffix {
+            pieces.push((suffix.clone(), input.text_family, true));
+        }
+        let mut cursor = 0.0;
+        let mut cmds = Vec::new();
+        let mut ink: Option<Rect> = None;
+        for (text, family, bold) in &pieces {
+            let r = metrics::text_ink(
+                family,
+                size,
+                *bold,
+                false,
+                text,
+                Point::new(cursor, 0.0),
+                TextAnchor::Start,
+            )
+            .unwrap_or(Rect::new(
+                cursor,
+                -0.7 * size,
+                cursor + 0.5 * size * text.len() as f64,
+                0.0,
+            ));
+            ink = Some(ink.map_or(r, |i| i.union(r)));
+            cmds.push(marker_text(
+                text,
+                size,
+                Point::new(cursor, 0.0),
+                Color::BLACK,
+                TextAnchor::Start,
+                family,
+                *bold,
+                false,
+            ));
+            cursor = r.x1 + 0.28 * size;
+        }
+        let Some(ink) = ink else {
+            continue;
+        };
+        let x = x.min((input.width - ink.width()).max(0.0));
+        let base = -style::STAFF_TEXT_POS_ABOVE * sp;
+        let at = |dy: f64| ink + Vec2::new(x, dy);
+        let dy = base
+            + sky.distance_to_move(
+                &[at(base)],
+                true,
+                style::STAFF_TEXT_MIN_DISTANCE * sp,
+                style::SKYLINE_H_CLEARANCE * sp,
+                |_, _| false,
+            );
+        let owner = owners.next();
+        sky.add(at(dy), SkyKind::StaffText, owner);
+        let mut node = SceneNode::group(SemanticId::new(ElementType::Tempo, owner));
+        node.add_child(SceneNode::anonymous_leaf(cmds).with_transform(Affine::translate((x, dy))));
+        nodes.push(node);
     }
 }
 

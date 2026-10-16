@@ -18,7 +18,7 @@ use keyflow_musicxml::raw::{
 
 use crate::model::{
     AttrChange, BarStyle, Chord, Clef, ClefSign, Direction, DirectionKind, Enclosure, Event,
-    Measure, Note, NoteTypeValue, Part, RehearsalMark, Rest, Score, Step, Transposition,
+    Measure, Note, NoteTypeValue, Part, RehearsalMark, Rest, Score, Step, TempoMark, Transposition,
     WrittenDuration, WrittenPitch,
 };
 
@@ -216,6 +216,16 @@ fn import_part(
                         .as_ref()
                         .map_or(0, |o| i64::from(*o.content));
                     let tick = (cursor + offset).max(0) as u32;
+                    // A metronome mark takes the direction's words with it
+                    // (Finale's "♩ = 63 BPM" arrives as words "BPM" plus a
+                    // <metronome>); otherwise each type stands alone.
+                    if let Some(tempo) = tempo_mark(&dir.content.direction_type) {
+                        measure.directions.push(Direction {
+                            tick,
+                            kind: DirectionKind::Tempo(tempo),
+                        });
+                        continue;
+                    }
                     for dt in &dir.content.direction_type {
                         import_direction_type(dt, tick, &mut measure.directions);
                     }
@@ -473,6 +483,47 @@ fn push_pitched(
         articulations,
         articulation_above,
     }));
+}
+
+/// The tempo mark a `<direction>` spells, if it has a beats-per-minute
+/// `<metronome>`. Its words go before the note, except a trailing unit
+/// ("BPM") which follows the number.
+fn tempo_mark(types: &[musicxml::elements::DirectionType]) -> Option<TempoMark> {
+    use musicxml::elements::{BeatEquation, DirectionTypeContents, MetronomeContents};
+    let mut mark: Option<TempoMark> = None;
+    let mut words: Vec<String> = Vec::new();
+    for dt in types {
+        match &dt.content {
+            DirectionTypeContents::Metronome(m) => {
+                if let MetronomeContents::BeatBased(b) = &m.content
+                    && let BeatEquation::BPM(pm) = &b.equals
+                {
+                    mark = Some(TempoMark {
+                        text: None,
+                        beat_unit: format!("{:?}", b.beat_unit.content).to_lowercase(),
+                        dots: b.beat_unit_dot.len() as u8,
+                        per_minute: pm.content.trim().to_string(),
+                        suffix: None,
+                    });
+                }
+            }
+            DirectionTypeContents::Words(ws) => {
+                for w in ws {
+                    let t = decode_entities(&w.content).trim().to_string();
+                    if !t.is_empty() {
+                        words.push(t);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut mark = mark?;
+    let is_unit = |w: &str| w.trim_matches(['(', ')', '.']).eq_ignore_ascii_case("bpm");
+    let (suffix, text): (Vec<String>, Vec<String>) = words.into_iter().partition(|w| is_unit(w));
+    mark.text = (!text.is_empty()).then(|| text.join(" "));
+    mark.suffix = suffix.into_iter().next();
+    Some(mark)
 }
 
 /// Import one `<direction-type>` into the measure's direction list.
