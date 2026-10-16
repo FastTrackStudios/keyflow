@@ -566,6 +566,9 @@ pub struct BookArgs<'a> {
     /// See [`crate::parts::auto_layout`].
     pub auto_layout: bool,
     pub marks: engraver_score::section_marks::MarkStyle,
+    /// Per-song `.roles` files, named for the song's folder in the library
+    /// (`Don't Answer Me.roles`).
+    pub roles_dir: Option<&'a Path>,
 }
 
 pub fn cmd_book(args: &BookArgs<'_>) -> Result<(), String> {
@@ -616,6 +619,20 @@ pub fn cmd_book(args: &BookArgs<'_>) -> Result<(), String> {
                         .to_string_lossy()
                         .into_owned(),
                 };
+                let roles = match args.roles_dir {
+                    Some(rd) => {
+                        let file = rd.join(format!(
+                            "{}.roles",
+                            dir.file_name().unwrap_or_default().to_string_lossy()
+                        ));
+                        if file.exists() {
+                            crate::parts::read_roles(&file)?
+                        } else {
+                            engraver_score::section_marks::TextRoles::default()
+                        }
+                    }
+                    None => engraver_score::section_marks::TextRoles::default(),
+                };
                 for job in doc.parts(&print) {
                     let Some(role) = part_role(&job.name) else {
                         continue;
@@ -626,6 +643,7 @@ pub fn cmd_book(args: &BookArgs<'_>) -> Result<(), String> {
                         page_size.get_or_insert((job.options.page_width, job.options.page_height));
                         let mut options = job.options.clone();
                         options.marks = args.marks;
+                        options.text_roles = roles.for_part(&job.name);
                         if args.auto_layout {
                             crate::parts::auto_layout(&mut options);
                         }

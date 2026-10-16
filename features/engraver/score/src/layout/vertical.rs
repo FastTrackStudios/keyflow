@@ -38,7 +38,7 @@ use super::{
 };
 use crate::metrics;
 use crate::model::{self, Enclosure, RehearsalMark};
-use crate::section_marks::{self, MarkClass, MarkStyle};
+use crate::section_marks::{self, MarkClass, MarkStyle, TextRole};
 use crate::skyline::{SkyKind, Skyline};
 use engraver_proto::engraver::layout::chart::constants::REPEAT_COLOR;
 use engraver_proto::engraver::layout::chart::section_layout::get_section_theme;
@@ -107,6 +107,8 @@ pub(super) struct SystemInput<'a, 'm> {
     pub ctx: &'a LayoutContextOwned,
     /// How rehearsal marks are drawn.
     pub marks: MarkStyle,
+    /// Per-song text decisions, by [`section_marks::text_key`].
+    pub roles: &'a HashMap<String, TextRole>,
     /// Room left of the staff for a section avatar (staff left edge to the
     /// printable page edge), points.
     pub margin_room: f64,
@@ -1407,15 +1409,13 @@ fn place_staff_text(
     // Text for the player is red, as on the master rhythm chart (where
     // staff text, dynamics and repeats share one red); black for a mono
     // printer and in Finale's own look.
-    let text_color = if input.marks == MarkStyle::Color {
-        REPEAT_COLOR
-    } else {
-        Color::BLACK
-    };
+    let text_color = instruction_color(input.marks);
     let mut words: Vec<(f64, &str)> = Vec::new();
     for a in input.anchors {
         for d in &a.m.directions {
-            if let model::DirectionKind::Words(w) = &d.kind {
+            if let model::DirectionKind::Words(w) = &d.kind
+                && !is_section_text(input, w)
+            {
                 words.push((a.x_at(d.tick), w));
             }
         }
@@ -1423,12 +1423,40 @@ fn place_staff_text(
     // Staff text on rests/multirests (tempo changes, cues).
     for item in input.items.iter().filter(|i| !i.notated) {
         for d in item.directions {
-            if let model::DirectionKind::Words(w) = &d.kind {
+            if let model::DirectionKind::Words(w) = &d.kind
+                && !is_section_text(input, w)
+            {
                 words.push((item.span.0 + 0.5 * sp, w));
             }
         }
     }
     for (x, w) in words {
+        // A staff text the song's decisions call a remark ("Band in" typed
+        // as staff text) is drawn as one, in the staff text's place.
+        if input.marks != MarkStyle::Classic
+            && input.roles.get(&section_marks::text_key(w)) == Some(&TextRole::Remark)
+        {
+            let piece = callout_piece(w, &section_marks::text_key(w), x, sp, input.marks);
+            let x = x.min((input.width - piece.frame.width()).max(0.0)) - x;
+            let base = -style::STAFF_TEXT_POS_ABOVE * sp;
+            let at = |dy: f64| piece.frame + Vec2::new(x, dy);
+            let dy = base
+                + sky.distance_to_move(
+                    &[at(base)],
+                    true,
+                    style::STAFF_TEXT_MIN_DISTANCE * sp,
+                    style::SKYLINE_H_CLEARANCE * sp,
+                    |_, _| false,
+                );
+            let owner = owners.next();
+            sky.add(at(dy), SkyKind::StaffText, owner);
+            let mut node = SceneNode::group(SemanticId::new(ElementType::Text, owner));
+            node.add_child(
+                SceneNode::anonymous_leaf(piece.cmds).with_transform(Affine::translate((x, dy))),
+            );
+            nodes.push(node);
+            continue;
+        }
         // A cue may hold several lines ("Sul ponticello" over "Start trill
         // slowly…"): stack them, last line on the baseline.
         let lines: Vec<&str> = w.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
@@ -1671,11 +1699,16 @@ fn place_rehearsals(
     // chart's badge sizes its text to whatever width it gets.
     let badge_room = (input.margin_room >= marker::BADGE_MIN_ROOM).then_some(input.margin_room);
     for item in &input.items {
-        let marks: Vec<&RehearsalMark> = item
+        // Rehearsal marks, plus staff text the song's decisions call a
+        // section (some arrangers type `VS 1` as plain text).
+        let marks: Vec<RehearsalMark> = item
             .directions
             .iter()
             .filter_map(|d| match &d.kind {
-                model::DirectionKind::Rehearsal(r) => Some(r),
+                model::DirectionKind::Rehearsal(r) => Some(r.clone()),
+                model::DirectionKind::Words(w) if is_section_text(input, w) => {
+                    Some(RehearsalMark::boxed(w.clone()))
+                }
                 _ => None,
             })
             .collect();
@@ -1689,17 +1722,32 @@ fn place_rehearsals(
         // marker over a mid-line barline centres itself on it.
         let mut cursor: Option<f64> = item.first.then_some(0.0);
         let mut badge_used = false;
-        for mark in marks {
-            let (label, note, kind) = match section_marks::classify(&mark.text) {
-                MarkClass::Section(s) => (s.label, s.note, Some(s.kind)),
-                MarkClass::Letter(l) => (l, None, None),
-                MarkClass::Callout(text) => {
-                    let x = cursor.unwrap_or(item.span.0 + 0.5 * sp);
-                    let piece = callout_piece(&mark.text, &text, x, sp, look);
+        for mark in &marks {
+            let key = section_marks::text_key(&mark.text);
+            let role = input
+                .roles
+                .get(&key)
+                .copied()
+                .unwrap_or_else(|| TextRole::default_for_rehearsal(&mark.text));
+            let x = cursor.unwrap_or(item.span.0 + 0.5 * sp);
+            let (label, note, kind) = match (role, section_marks::classify(&mark.text)) {
+                (TextRole::Remark, _) => {
+                    let piece = callout_piece(&mark.text, &key, x, sp, look);
                     cursor = Some(piece.frame.x1 + 0.6 * sp);
                     row.push(piece);
                     continue;
                 }
+                (TextRole::Instruction, _) => {
+                    let piece = instruction_piece(&mark.text, x, input.words_font, look);
+                    cursor = Some(piece.frame.x1 + 0.6 * sp);
+                    row.push(piece);
+                    continue;
+                }
+                (TextRole::Section, MarkClass::Section(s)) => (s.label, s.note, Some(s.kind)),
+                (TextRole::Section, MarkClass::Letter(l)) => (l, None, None),
+                // A section the vocabulary does not know ("Freedom" #1 in a
+                // medley): a neutral badge with its own name.
+                (TextRole::Section, MarkClass::Callout(_)) => (key.clone(), None, None),
             };
             let theme = section_theme(kind.as_ref(), look);
             // A section that opens a system: the master rhythm chart's own
@@ -1830,6 +1878,80 @@ fn place_rehearsals(
             );
         }
         nodes.push(group);
+    }
+}
+
+/// Staff text the song's decisions make a section badge.
+fn is_section_text(input: &SystemInput<'_, '_>, text: &str) -> bool {
+    input.marks != MarkStyle::Classic
+        && input.roles.get(&section_marks::text_key(text)) == Some(&TextRole::Section)
+}
+
+/// The player's own instruction, written where a cue would sit: the staff
+/// text face in the chart's red (black for mono), lines kept.
+fn instruction_piece(raw: &str, x: f64, font: &TextFont, look: MarkStyle) -> RowPiece {
+    let color = instruction_color(look);
+    // As written: the player's text keeps its own punctuation, like staff
+    // text does.
+    let lines: Vec<String> = raw
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .map(str::to_string)
+        .collect();
+    let leading = 1.15 * font.size;
+    let n = lines.len();
+    let mut frame: Option<Rect> = None;
+    let mut cmds = Vec::new();
+    for (k, line) in lines.iter().enumerate() {
+        let base = -((n - 1 - k) as f64) * leading;
+        let r = metrics::text_ink(
+            &font.family,
+            font.size,
+            font.bold,
+            font.italic,
+            line,
+            Point::new(x, base),
+            TextAnchor::Start,
+        )
+        .unwrap_or(Rect::new(
+            x,
+            base - 0.7 * font.size,
+            x + 0.5 * font.size * line.len() as f64,
+            base,
+        ));
+        frame = Some(frame.map_or(r, |f| f.union(r)));
+        cmds.push(marker_text(
+            line,
+            font.size,
+            Point::new(x, base),
+            color,
+            TextAnchor::Start,
+            &font.family,
+            font.bold,
+            font.italic,
+        ));
+    }
+    let frame = frame.unwrap_or(Rect::new(x, -font.size, x, 0.0));
+    // Bottom of the row at y = 0.
+    let shift = -frame.y1.max(0.0);
+    for c in &mut cmds {
+        if let PaintCommand::Text { position, .. } = c {
+            position.y += shift;
+        }
+    }
+    RowPiece {
+        frame: frame + Vec2::new(0.0, shift),
+        cmds,
+    }
+}
+
+/// Red for the player's text on the colour page, as the master chart has it.
+fn instruction_color(look: MarkStyle) -> Color {
+    if look == MarkStyle::Color {
+        REPEAT_COLOR
+    } else {
+        Color::BLACK
     }
 }
 

@@ -65,6 +65,10 @@ pub struct LayoutOptions {
     /// Rehearsal-mark style: keyflow colour (default), monochrome, or the
     /// source's own boxes.
     pub marks: crate::section_marks::MarkStyle,
+    /// Per-song text decisions for this part (see
+    /// [`crate::section_marks::TextRoles::for_part`]); texts not listed keep
+    /// their default role.
+    pub text_roles: std::collections::HashMap<String, crate::section_marks::TextRole>,
 }
 
 /// Page margins in points.
@@ -104,6 +108,7 @@ impl Default for LayoutOptions {
             explicit: None,
             margins: None,
             marks: crate::section_marks::MarkStyle::default(),
+            text_roles: std::collections::HashMap::new(),
         }
     }
 }
@@ -2296,6 +2301,7 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
                 words_font: &words_font,
                 ctx,
                 marks: opts.marks,
+                roles: &opts.text_roles,
                 // Keep the avatar a sixth of an inch inside the paper
                 // edge, where printers still print.
                 margin_room: sys.left - 12.0,

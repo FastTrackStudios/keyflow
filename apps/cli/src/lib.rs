@@ -468,6 +468,15 @@ enum Commands {
         /// for a black-and-white printer, or Finale's own boxes.
         #[arg(long, value_enum, default_value = "color")]
         marks: MarksArg,
+        /// The song's text decisions: which marks are sections, remarks
+        /// about the band, or this player's instructions (a `.roles` file;
+        /// `--texts` prints one to start from).
+        #[arg(long)]
+        roles: Option<PathBuf>,
+        /// Print every rehearsal mark and staff text with its role, as a
+        /// `.roles` file, instead of writing parts.
+        #[arg(long)]
+        texts: bool,
         /// Report overlapping ink (text, dynamics, ties, slurs…) per part
         /// instead of writing files.
         #[arg(long)]
@@ -508,6 +517,10 @@ enum Commands {
         /// See `kf parts --marks`.
         #[arg(long, value_enum, default_value = "color")]
         marks: MarksArg,
+        /// Folder of per-song `.roles` files, each named for the song's
+        /// folder in the library (see `kf parts --roles`).
+        #[arg(long)]
+        roles_dir: Option<PathBuf>,
     },
     /// Run the CSS orchestrator engine on a score (articulated MIDI summary).
     Orchestrate {
@@ -2092,6 +2105,7 @@ fn run(cli: Cli) -> Result<(), String> {
             dry_run,
             layout,
             marks,
+            roles_dir,
         } => book::cmd_book(&book::BookArgs {
             setlist: &setlist,
             library: &library,
@@ -2102,6 +2116,7 @@ fn run(cli: Cli) -> Result<(), String> {
             dry_run,
             auto_layout: layout == LayoutSource::Auto,
             marks: marks.into(),
+            roles_dir: roles_dir.as_deref(),
         }),
         Commands::Parts {
             input,
@@ -2113,6 +2128,8 @@ fn run(cli: Cli) -> Result<(), String> {
             scale,
             layout,
             marks,
+            roles,
+            texts,
             check,
         } => parts::cmd_parts(&parts::PartsArgs {
             input: &input,
@@ -2124,6 +2141,8 @@ fn run(cli: Cli) -> Result<(), String> {
             scale,
             auto_layout: layout == LayoutSource::Auto,
             marks: marks.into(),
+            roles: roles.as_deref(),
+            texts,
             check,
         }),
         Commands::Orchestrate {

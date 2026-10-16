@@ -10,7 +10,9 @@ use std::path::{Path, PathBuf};
 
 use engraver_score::finale::{FinaleDocument, PartJob, PrintInfo};
 use engraver_score::layout::{LayoutOptions, layout_part};
+use engraver_score::model::DirectionKind;
 use engraver_score::model::Score;
+use engraver_score::section_marks::{TextRole, TextRoles, text_key};
 use keyflow::engraver::fonts::ChartFontBundle;
 
 /// Output format for `kf parts`.
@@ -34,8 +36,86 @@ pub struct PartsArgs<'a> {
     /// automatically (keeps its page size, headers and multirests).
     pub auto_layout: bool,
     pub marks: engraver_score::section_marks::MarkStyle,
+    /// The song's text decisions (a `.roles` file).
+    pub roles: Option<&'a Path>,
+    /// Print every rehearsal mark and staff text with its role, as a
+    /// `.roles` file to start editing from.
+    pub texts: bool,
     /// Report overlapping ink instead of writing files.
     pub check: bool,
+}
+
+/// Read a song's `.roles` file.
+pub(crate) fn read_roles(path: &Path) -> Result<TextRoles, String> {
+    let src = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    TextRoles::parse(&src).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// Every rehearsal mark and staff text in the extracted parts, with the
+/// role it is drawn in, written as a `.roles` file: a comment saying where
+/// the text appears, then its `role: text` line.
+fn texts_inventory(title: &str, score: &Score, jobs: &[&PartJob], roles: &TextRoles) -> String {
+    use std::fmt::Write as _;
+    // key → (is rehearsal, part names), in first-seen order.
+    let mut seen: Vec<(String, bool, Vec<String>)> = Vec::new();
+    let mut note = |key: String, rehearsal: bool, part: &str| match seen
+        .iter_mut()
+        .find(|(k, r, _)| *k == key && *r == rehearsal)
+    {
+        Some((_, _, parts)) => {
+            if !parts.iter().any(|p| p == part) {
+                parts.push(part.to_string());
+            }
+        }
+        None => seen.push((key, rehearsal, vec![part.to_string()])),
+    };
+    for job in jobs {
+        let Some(part) = score.parts.get(job.part_index) else {
+            continue;
+        };
+        for (i, m) in part.measures.iter().enumerate() {
+            for (_, r) in score.rehearsals_for_part(job.part_index, i) {
+                note(text_key(&r.text), true, &job.name);
+            }
+            for d in &m.directions {
+                if let DirectionKind::Words(w) = &d.kind {
+                    note(text_key(w), false, &job.name);
+                }
+            }
+        }
+    }
+    let mut out = format!("# {title} — text roles (section | remark | instruction)\n");
+    for (key, rehearsal, parts) in seen {
+        let default = if rehearsal {
+            TextRole::default_for_rehearsal(&key)
+        } else {
+            TextRole::Instruction
+        };
+        let decided = jobs
+            .iter()
+            .filter_map(|j| roles.for_part(&j.name).get(&key).copied())
+            .next();
+        let role = decided.unwrap_or(default);
+        let whose = if parts.len() == jobs.len() {
+            "every part".to_string()
+        } else if parts.len() <= 4 {
+            parts.join(", ")
+        } else {
+            format!("{} parts", parts.len())
+        };
+        let kind = if rehearsal {
+            "rehearsal mark"
+        } else {
+            "staff text"
+        };
+        let _ = writeln!(
+            out,
+            "# {kind} · {whose}{}",
+            if decided.is_some() { " · decided" } else { "" }
+        );
+        let _ = writeln!(out, "{}: {key}", role.name());
+    }
+    out
 }
 
 /// `--layout auto`: drop the source's system and page breaks (an unformatted
@@ -187,6 +267,18 @@ pub fn cmd_parts(args: &PartsArgs<'_>) -> Result<(), String> {
         return Err(format!("no part matches; parts: {}", names.join(", ")));
     }
 
+    let roles = match args.roles {
+        Some(path) => read_roles(path)?,
+        None => TextRoles::default(),
+    };
+    if args.texts {
+        print!(
+            "{}",
+            texts_inventory(&source.title, &source.score, &jobs, &roles)
+        );
+        return Ok(());
+    }
+
     if args.list {
         println!("{} — {} part(s)", source.title, jobs.len());
         for j in &jobs {
@@ -216,6 +308,7 @@ pub fn cmd_parts(args: &PartsArgs<'_>) -> Result<(), String> {
     for job in jobs {
         let mut options = job.options.clone();
         options.marks = args.marks;
+        options.text_roles = roles.for_part(&job.name);
         if args.auto_layout {
             auto_layout(&mut options);
         }

@@ -21,6 +21,8 @@
 //! it — each is drawn the way it reads best. (The drawing lives in
 //! `layout::vertical`.)
 
+use std::collections::HashMap;
+
 use keyflow_proto::sections::SectionType;
 use peniko::Color;
 
@@ -245,6 +247,136 @@ pub fn callout_paint(style: MarkStyle) -> CalloutPaint {
     }
 }
 
+/// What a piece of text on a part is for, which decides how it is drawn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TextRole {
+    /// A section of the song form: a badge.
+    Section,
+    /// A remark about the rest of the band ("Perc. Loop"): a quiet callout.
+    Remark,
+    /// Something this player does ("cresc.", "Violins fade in"): red text.
+    Instruction,
+}
+
+impl TextRole {
+    #[must_use]
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "section" => Some(Self::Section),
+            "remark" => Some(Self::Remark),
+            "instruction" => Some(Self::Instruction),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Section => "section",
+            Self::Remark => "remark",
+            Self::Instruction => "instruction",
+        }
+    }
+
+    /// A rehearsal mark's role when nothing says otherwise.
+    #[must_use]
+    pub fn default_for_rehearsal(text: &str) -> Self {
+        match classify(text) {
+            MarkClass::Section(_) | MarkClass::Letter(_) => Self::Section,
+            MarkClass::Callout(_) => Self::Remark,
+        }
+    }
+}
+
+/// The key a role is looked up by: the text on one line, whitespace
+/// collapsed, so a two-line mark is written `RE-INTRO` or `Drum Loop`.
+#[must_use]
+pub fn text_key(text: &str) -> String {
+    flatten(text)
+}
+
+/// One decision: `role: text`, for every part or only the named ones.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RoleRule {
+    pub role: TextRole,
+    pub text: String,
+    /// Part names (case-insensitive prefixes); empty = every part.
+    pub parts: Vec<String>,
+}
+
+/// A song's text decisions — which marks are sections, remarks, or the
+/// player's own instructions — as read from a `.roles` file:
+///
+/// ```text
+/// # I Can't Get There From Here
+/// instruction: *Violins fade in: @ Violin
+/// remark: Band In
+/// section: Orchestra Bridge
+/// ```
+///
+/// A rule's text is matched against the mark on one line ([`text_key`]).
+/// `@ Violin, Viola` limits a rule to parts whose name starts with one of
+/// those; for any other part the text keeps its default role. Later rules
+/// win.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TextRoles {
+    pub rules: Vec<RoleRule>,
+}
+
+impl TextRoles {
+    /// Parse a `.roles` file.
+    ///
+    /// # Errors
+    /// A line that is not `role: text [@ parts]`, naming its line number.
+    pub fn parse(src: &str) -> Result<Self, String> {
+        let mut rules = Vec::new();
+        for (n, line) in src.lines().enumerate() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            let (role, rest) = line
+                .split_once(':')
+                .ok_or_else(|| format!("line {}: expected `role: text`", n + 1))?;
+            let role = TextRole::parse(role).ok_or_else(|| {
+                format!(
+                    "line {}: unknown role {role:?} (section, remark, instruction)",
+                    n + 1
+                )
+            })?;
+            let (text, parts) = match rest.rsplit_once(" @ ") {
+                Some((t, p)) => (
+                    t,
+                    p.split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect(),
+                ),
+                None => (rest, Vec::new()),
+            };
+            let text = text_key(text);
+            if text.is_empty() {
+                return Err(format!("line {}: no text", n + 1));
+            }
+            rules.push(RoleRule { role, text, parts });
+        }
+        Ok(Self { rules })
+    }
+
+    /// The decisions that apply to one part, by [`text_key`].
+    #[must_use]
+    pub fn for_part(&self, part: &str) -> HashMap<String, TextRole> {
+        let part = part.to_lowercase();
+        let mut out = HashMap::new();
+        for r in &self.rules {
+            if r.parts.is_empty() || r.parts.iter().any(|p| part.starts_with(&p.to_lowercase())) {
+                out.insert(r.text.clone(), r.role);
+            }
+        }
+        out
+    }
+}
+
 /// A remark line without Finale's cue decoration: `*Band In:` → `Band In`,
 /// `[ Guitars ]` → `Guitars`, `*VS*` → `VS`. Quotes and ellipses stay.
 #[must_use]
@@ -262,6 +394,23 @@ pub fn remark_text(line: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn roles_file() {
+        let roles = super::TextRoles::parse(
+            "# song\ninstruction: *Violins fade in: @ Violin, Viola\nremark: Band In\n\nsection: RE-\n",
+        )
+        .unwrap();
+        let vln = roles.for_part("Violin 1");
+        assert_eq!(
+            vln.get("*Violins fade in:"),
+            Some(&super::TextRole::Instruction)
+        );
+        assert_eq!(vln.get("Band In"), Some(&super::TextRole::Remark));
+        let fl = roles.for_part("Flute");
+        assert_eq!(fl.get("*Violins fade in:"), None);
+        assert!(super::TextRoles::parse("loud: x").is_err());
+    }
+
     #[test]
     fn remarks_lose_cue_decoration() {
         assert_eq!(super::remark_text("*Band In:"), "Band In");
