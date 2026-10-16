@@ -491,9 +491,9 @@ fn tie_adjust_x(input: &SystemInput<'_, '_>, e: TieEnd, up: bool, start: bool, p
             InkPart::Flag => !start,
             InkPart::Ledger => true,
             InkPart::Dot => start && outer,
-            // An outer tie arriving at its note ignores an accidental on
-            // the inward side.
-            InkPart::Accidental => !start && outer,
+            // MuseScore lets an outer tie arriving at its note pass over
+            // an accidental; a flat's stem reaches up into the arc there,
+            // so the tie stops short of it like any other ink in its band.
             _ => false,
         };
         if ignored || r.y1 < y_lo || r.y0 > y_hi {
