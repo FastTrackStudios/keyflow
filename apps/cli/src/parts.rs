@@ -352,9 +352,22 @@ pub fn cmd_parts(args: &PartsArgs<'_>) -> Result<(), String> {
             continue;
         }
         let base = out_dir.join(file_safe(&format!("{} - {}", source.title, job.name)));
-        if job.staves > 1 {
+        // A grand staff is engraved whole; a Finale part that gathers
+        // several instruments (a "Percussion" part of four players) still
+        // engraves only the first.
+        let engraved = job.options.staves.as_ref().map_or_else(
+            || {
+                source
+                    .score
+                    .parts
+                    .get(job.part_index)
+                    .map_or(1, |p| usize::from(p.staves.max(1)))
+            },
+            Vec::len,
+        );
+        if job.staves > engraved {
             eprintln!(
-                "  note: {} has {} staves; only the top staff is engraved yet",
+                "  note: {} gathers {} staves; only its first instrument is engraved yet",
                 job.name, job.staves
             );
         }

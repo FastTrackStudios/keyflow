@@ -71,6 +71,13 @@ pub struct LayoutOptions {
     pub text_roles: std::collections::HashMap<String, crate::section_marks::TextRole>,
     /// Corrections to the keyflow header read from the page texts.
     pub header: crate::header::HeaderOverrides,
+    /// Which staves of the score part to engrave (1-based, top to bottom);
+    /// `None` = all of them. A one-staff part of a merged choir group is
+    /// `[2]`.
+    pub staves: Option<Vec<u8>>,
+    /// The part's printed name (Finale's part name); `None` = the score
+    /// part's.
+    pub part_name: Option<String>,
 }
 
 /// Page margins in points.
@@ -112,6 +119,8 @@ impl Default for LayoutOptions {
             marks: crate::section_marks::MarkStyle::default(),
             text_roles: std::collections::HashMap::new(),
             header: crate::header::HeaderOverrides::default(),
+            staves: None,
+            part_name: None,
         }
     }
 }
@@ -623,11 +632,156 @@ fn breaks_multirest(directions: &[model::Direction]) -> bool {
     })
 }
 
+/// One staff's measures across a system, drawn at the shared widths.
+struct StaffRow<'m> {
+    nodes: Vec<SceneNode>,
+    anchors: Vec<MeasureAnchors<'m>>,
+    /// Per item: (x start, x end) in system coords.
+    spans: Vec<(f64, f64)>,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn draw_staff_row<'m>(
+    prepared: &'m [Prepared],
+    items: &[usize],
+    widths: &[f64],
+    prefix_w: f64,
+    ctx: &LayoutContextOwned,
+    spatium: f64,
+    show_time: bool,
+    id: &mut u64,
+) -> StaffRow<'m> {
+    let mut nodes: Vec<SceneNode> = Vec::new();
+    let mut anchors: Vec<MeasureAnchors<'m>> = Vec::new();
+    // Per item: (x start, x end) in system coords.
+    let mut spans: Vec<(f64, f64)> = Vec::new();
+
+    let mut x = prefix_w;
+    for (item_pos, &item_idx) in items.iter().enumerate() {
+        let width = widths[item_pos];
+        let mut container =
+            SceneNode::group(SemanticId::new(ElementType::Measure, item_idx as u64 + 1));
+        match &prepared[item_idx] {
+            Prepared::Notated(m) if m.is_bar_rest() => {
+                // A whole-bar rest is centred in its bar, hanging from
+                // the second line — not set at the first beat.
+                anchors.push(MeasureAnchors {
+                    m,
+                    entry_x: vec![x + width / 2.0],
+                    x_end: x + width,
+                    stems: vec![None],
+                    inks: Vec::new(),
+                });
+                container.transform = Affine::translate((x, 0.0));
+                let glyph_w = 1.13 * spatium;
+                container.add_child(SceneNode::leaf(
+                    SemanticId::new(ElementType::Rest, *id),
+                    vec![PaintCommand::glyph(
+                        engraver_proto::engraver::layout::tlayout::rest::glyphs::REST_WHOLE,
+                        Point::new((width - glyph_w) / 2.0, spatium),
+                        spatium,
+                        Color::BLACK,
+                    )],
+                ));
+                *id += 1;
+            }
+            Prepared::Notated(m) => {
+                let scene = build_measure(
+                    m,
+                    ctx,
+                    Some(width / spatium),
+                    m.clef_changed && item_pos > 0,
+                    m.time_changed && !(item_pos == 0 && show_time),
+                    *id,
+                );
+                *id += 1000;
+                let entry_x = engraver_proto::engraver::layout::chart::chord_layout::get_chord_rest_positions(&scene)
+                    .into_iter()
+                    .map(|seg_x| x + seg_x)
+                    .collect();
+                // Chords and rests in scene order map onto entries
+                // one to one; if they do not, drop the ink rather
+                // than misattribute it.
+                let mut inks = entry_inks(&scene.scene, Affine::translate((x, 2.0 * spatium)));
+                if inks.len() != m.entries.len() {
+                    tracing::debug!(
+                        inks = inks.len(),
+                        entries = m.entries.len(),
+                        number = m.number,
+                        "entry ink mismatch"
+                    );
+                    inks.clear();
+                }
+                anchors.push(MeasureAnchors {
+                    m,
+                    entry_x,
+                    x_end: x + width,
+                    stems: scene.entry_stem_up.clone(),
+                    inks,
+                });
+                // MeasureScene notation is authored around the MIDDLE
+                // line (y=0) — same +2sp shift the chart pipeline applies
+                // to its measure containers.
+                container.transform = Affine::translate((x, 2.0 * spatium));
+                container.add_child(scene.scene.clone());
+            }
+            Prepared::MultiRest(r) => {
+                container.transform = Affine::translate((x, 0.0));
+                container.add_child(multirest_scene(r.count, width, spatium, *id));
+                *id += 10;
+            }
+        }
+        nodes.push(container);
+        spans.push((x, x + width));
+        // Advance by the ALLOCATED width (chart does the same): any
+        // spring-justification shortfall stays inside this measure's
+        // slot instead of accumulating as a gap at the end of the line.
+        x += width;
+        if let Some(bar) = barline_scene(x, prepared[item_idx].barline(), spatium) {
+            nodes.push(bar);
+        }
+    }
+    StaffRow {
+        nodes,
+        anchors,
+        spans,
+    }
+}
+
+/// One staff of a multi-staff part as a single-staff part: its events and
+/// clefs renumbered to staff 1, the part's directions kept (the caller
+/// decides which staff draws them).
+fn staff_part(part: &model::Part, staff: u8) -> model::Part {
+    let mut out = part.clone();
+    out.staves = 1;
+    for m in &mut out.measures {
+        m.events.retain_mut(|e| {
+            let s = match e {
+                Event::Chord(c) => &mut c.staff,
+                Event::Rest(r) => &mut r.staff,
+            };
+            let keep = *s == staff;
+            *s = 1;
+            keep
+        });
+        for change in &mut m.attributes {
+            change.clefs.retain(|(s, _)| *s == staff);
+            for (s, _) in &mut change.clefs {
+                *s = 1;
+            }
+        }
+    }
+    out
+}
+
 fn prepare_measures(
     score: &Score,
     part_index: usize,
     opts: &LayoutOptions,
     dropped: &mut usize,
+    // Per measure: whether every staff of the part rests (multi-staff parts
+    // group rests only where all their staves do).
+    resting: Option<&[bool]>,
 ) -> Vec<Prepared> {
     let part = &score.parts[part_index];
     let mut state = AttrState {
@@ -758,7 +912,11 @@ fn prepare_measures(
         }
 
         let attrs_changed = clef_changed || key_changed || time_changed;
-        if is_resting(measure) && !attrs_changed {
+        let rests = resting.map_or_else(
+            || is_resting(measure),
+            |r| r.get(index).copied().unwrap_or(false),
+        );
+        if rests && !attrs_changed {
             let info = RestInfo {
                 index,
                 number: measure.number.clone(),
@@ -1510,6 +1668,13 @@ fn proportional_widths(weights: &[f64], mins: &[f64], total: f64) -> Vec<f64> {
 /// The master rhythm chart's measure-number grey.
 const CHART_NUMBER_GREY: Color = Color::from_rgb8(100, 100, 100);
 
+/// A grand staff's top-line-to-top-line distance, in spaces.
+const GRAND_STAFF_DISTANCE_SP: f64 = 10.0;
+
+/// Room the brace takes left of a grand staff (brace + its gap + a little
+/// air before the margin badge), in spaces.
+const BRACE_ROOM_SP: f64 = 2.2;
+
 /// Staff left edge (points from the paper edge) that leaves room for a
 /// section badge: a sixth-inch printable edge, a 48pt badge, a 4pt gap.
 const SECTION_GUTTER: f64 = 64.0;
@@ -1875,10 +2040,69 @@ fn stack_systems(
 #[must_use]
 pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> PartLayout {
     let part = &score.parts[part_index];
+    let part_name = opts.part_name.as_deref().unwrap_or(&part.name);
     let margins = opts.margins();
 
     let mut dropped = 0usize;
-    let prepared = prepare_measures(score, part_index, opts, &mut dropped);
+    // A grand staff (harp, keyboard) is laid out staff by staff from
+    // single-staff copies sharing one rest grouping, one set of system
+    // breaks and one set of measure widths; the staves below the first draw
+    // no marks of their own (dynamics and cues belong to the system).
+    let staves: Vec<u8> = opts
+        .staves
+        .clone()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| (1..=part.staves.max(1)).collect());
+    // Rests group where every engraved staff rests.
+    let resting: Vec<bool> = staves.iter().map(|&st| staff_part(part, st)).fold(
+        vec![true; part.measures.len()],
+        |acc, sp| {
+            acc.iter()
+                .zip(&sp.measures)
+                .map(|(a, m)| *a && is_resting(m))
+                .collect()
+        },
+    );
+    let staff_score = |staff: u8| -> Score {
+        let mut sc = score.clone();
+        sc.parts[part_index] = staff_part(part, staff);
+        sc
+    };
+    let single_whole = staves.len() == 1 && staves[0] == 1 && part.staves <= 1;
+    let (prepared, lower): (Vec<Prepared>, Vec<Vec<Prepared>>) = if !single_whole {
+        let first = prepare_measures(
+            &staff_score(staves[0]),
+            part_index,
+            opts,
+            &mut dropped,
+            Some(&resting),
+        );
+        let lower = staves[1..]
+            .iter()
+            .map(|&st| {
+                let mut prep = prepare_measures(
+                    &staff_score(st),
+                    part_index,
+                    opts,
+                    &mut dropped,
+                    Some(&resting),
+                );
+                for item in &mut prep {
+                    match item {
+                        Prepared::Notated(m) => m.directions.clear(),
+                        Prepared::MultiRest(r) => r.directions.clear(),
+                    }
+                }
+                prep
+            })
+            .collect();
+        (first, lower)
+    } else {
+        (
+            prepare_measures(score, part_index, opts, &mut dropped, None),
+            Vec::new(),
+        )
+    };
     if dropped > 0 {
         tracing::info!(
             part = part.name,
@@ -1926,58 +2150,60 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
                 .map(|mr| mr.width),
         }
     };
-    let metrics: Vec<MeasureMetrics> = prepared
-        .iter()
-        .map(|item| match item {
-            Prepared::Notated(m) => {
-                let min_width = build_measure(m, &ctx, None, false, false, 1).width;
-                let measure_ticks = measure_ticks_of(m.time);
-                let note_ticks: Vec<f64> = m
-                    .entries
+    let metric_of = |item: &Prepared| match item {
+        Prepared::Notated(m) => {
+            let min_width = build_measure(m, &ctx, None, false, false, 1).width;
+            let measure_ticks = measure_ticks_of(m.time);
+            let note_ticks: Vec<f64> = m
+                .entries
+                .iter()
+                .filter_map(|e| match e {
+                    RhythmEntry::Note(d) => Some(f64::from(d.ticks())),
+                    RhythmEntry::Rest(_) => None,
+                })
+                .collect();
+            let shortest = note_ticks.iter().copied().fold(f64::INFINITY, f64::min);
+            let dense = note_ticks.len() >= 4 || shortest <= constants::TICKS_PER_QUARTER / 2.0;
+            let duration_weight = if note_ticks.is_empty() || !dense {
+                chart_spacing::duration_stretch(measure_ticks, constants::TICKS_PER_QUARTER, SLOPE)
+            } else {
+                note_ticks
                     .iter()
-                    .filter_map(|e| match e {
-                        RhythmEntry::Note(d) => Some(f64::from(d.ticks())),
-                        RhythmEntry::Rest(_) => None,
+                    .map(|t| {
+                        chart_spacing::duration_stretch(*t, constants::TICKS_PER_QUARTER, SLOPE)
                     })
-                    .collect();
-                let shortest = note_ticks.iter().copied().fold(f64::INFINITY, f64::min);
-                let dense = note_ticks.len() >= 4 || shortest <= constants::TICKS_PER_QUARTER / 2.0;
-                let duration_weight = if note_ticks.is_empty() || !dense {
-                    chart_spacing::duration_stretch(
-                        measure_ticks,
-                        constants::TICKS_PER_QUARTER,
-                        SLOPE,
-                    )
-                } else {
-                    note_ticks
-                        .iter()
-                        .map(|t| {
-                            chart_spacing::duration_stretch(*t, constants::TICKS_PER_QUARTER, SLOPE)
-                        })
-                        .sum()
-                };
-                let tuplet_bonus: f64 = m
-                    .tuplets
-                    .iter()
-                    .map(|(start, end, _)| (end - start) as f64 * 0.08)
-                    .sum();
-                MeasureMetrics {
-                    min_width,
-                    weight: (duration_weight + tuplet_bonus).max(0.5),
-                    source_width: source_width_of(item),
-                }
-            }
-            Prepared::MultiRest(r) => MeasureMetrics {
-                min_width: MULTIREST_WIDTH_SP * base_spatium,
-                weight: chart_spacing::duration_stretch(
-                    measure_ticks_of(r.time),
-                    constants::TICKS_PER_QUARTER,
-                    SLOPE,
-                ),
+                    .sum()
+            };
+            let tuplet_bonus: f64 = m
+                .tuplets
+                .iter()
+                .map(|(start, end, _)| (end - start) as f64 * 0.08)
+                .sum();
+            MeasureMetrics {
+                min_width,
+                weight: (duration_weight + tuplet_bonus).max(0.5),
                 source_width: source_width_of(item),
-            },
-        })
-        .collect();
+            }
+        }
+        Prepared::MultiRest(r) => MeasureMetrics {
+            min_width: MULTIREST_WIDTH_SP * base_spatium,
+            weight: chart_spacing::duration_stretch(
+                measure_ticks_of(r.time),
+                constants::TICKS_PER_QUARTER,
+                SLOPE,
+            ),
+            source_width: source_width_of(item),
+        },
+    };
+    let mut metrics: Vec<MeasureMetrics> = prepared.iter().map(metric_of).collect();
+    // A grand staff's bar is as wide as its widest staff needs.
+    for staff in &lower {
+        for (m, item) in metrics.iter_mut().zip(staff) {
+            let other = metric_of(item);
+            m.min_width = m.min_width.max(other.min_width);
+            m.weight = m.weight.max(other.weight);
+        }
+    }
 
     // ── systems: the source's breaks, or min-width packing ──
     const MAX_MEASURES_PER_SYSTEM: usize = 6;
@@ -2143,16 +2369,16 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
     let source_texts = opts
         .page_texts
         .clone()
-        .unwrap_or_else(|| default_page_texts(score, &part.name));
+        .unwrap_or_else(|| default_page_texts(score, part_name));
     // Keyflow style: the master rhythm chart's header on page 1 and its
     // footer on every page, in place of the source's page texts. The header
     // is laid out once up front to learn its height; the systems stack
     // between it and the footer.
     let keyflow = opts.marks != crate::section_marks::MarkStyle::Classic;
     let header_meta = keyflow.then(|| {
-        let mut h = crate::header::PartHeader::from_page_texts(&source_texts, &part.name);
+        let mut h = crate::header::PartHeader::from_page_texts(&source_texts, part_name);
         h.apply(&opts.header);
-        h.metadata(&part.name)
+        h.metadata(part_name)
     });
     let chart_margins = engraver_proto::engraver::layout::orchestrator::PageMargins {
         top: margins.top,
@@ -2247,11 +2473,20 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
         // tlayout table under-sizes the C clef (2.2 sp; Bravura's cClef
         // advance is 2.8): use the glyph advances, then a 1 sp gap so a
         // viola part's 4/4 does not touch its clef.
-        let clef_advance = match first_clef {
+        let advance_of = |clef: ClefType| match clef {
             ClefType::Alto | ClefType::Tenor => 2.8,
             ClefType::Bass => 2.76,
             other => other.width(),
         };
+        let clef_of = |item: &Prepared| match item {
+            Prepared::Notated(m) => m.clef,
+            Prepared::MultiRest(r) => r.clef,
+        };
+        // A grand staff's prefixes line up: room for the widest clef.
+        let clef_advance = lower
+            .iter()
+            .map(|staff| advance_of(clef_of(&staff[sys.items[0]])))
+            .fold(advance_of(first_clef), f64::max);
         let clef_w = (clef_advance + 1.0) * spatium;
         let prefix = render_system_prefix(
             &PrefixRenderContext {
@@ -2321,95 +2556,14 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
             sys_node.add_child(node);
         }
 
-        let mut anchors: Vec<MeasureAnchors<'_>> = Vec::new();
-        // Per item: (x start, x end) in system coords.
-        let mut spans: Vec<(f64, f64)> = Vec::new();
-
-        let mut x = prefix_w;
-        for (item_pos, &item_idx) in sys.items.iter().enumerate() {
-            let width = widths[item_pos];
-            let mut container =
-                SceneNode::group(SemanticId::new(ElementType::Measure, item_idx as u64 + 1));
-            match &prepared[item_idx] {
-                Prepared::Notated(m) if m.is_bar_rest() => {
-                    // A whole-bar rest is centred in its bar, hanging from
-                    // the second line — not set at the first beat.
-                    anchors.push(MeasureAnchors {
-                        m,
-                        entry_x: vec![x + width / 2.0],
-                        x_end: x + width,
-                        stems: vec![None],
-                        inks: Vec::new(),
-                    });
-                    container.transform = Affine::translate((x, 0.0));
-                    let glyph_w = 1.13 * spatium;
-                    container.add_child(SceneNode::leaf(
-                        SemanticId::new(ElementType::Rest, id),
-                        vec![PaintCommand::glyph(
-                            engraver_proto::engraver::layout::tlayout::rest::glyphs::REST_WHOLE,
-                            Point::new((width - glyph_w) / 2.0, spatium),
-                            spatium,
-                            Color::BLACK,
-                        )],
-                    ));
-                    id += 1;
-                }
-                Prepared::Notated(m) => {
-                    let scene = build_measure(
-                        m,
-                        ctx,
-                        Some(width / spatium),
-                        m.clef_changed && item_pos > 0,
-                        m.time_changed && !(item_pos == 0 && show_time),
-                        id,
-                    );
-                    id += 1000;
-                    let entry_x = engraver_proto::engraver::layout::chart::chord_layout::get_chord_rest_positions(&scene)
-                        .into_iter()
-                        .map(|seg_x| x + seg_x)
-                        .collect();
-                    // Chords and rests in scene order map onto entries
-                    // one to one; if they do not, drop the ink rather
-                    // than misattribute it.
-                    let mut inks = entry_inks(&scene.scene, Affine::translate((x, 2.0 * spatium)));
-                    if inks.len() != m.entries.len() {
-                        tracing::debug!(
-                            inks = inks.len(),
-                            entries = m.entries.len(),
-                            number = m.number,
-                            "entry ink mismatch"
-                        );
-                        inks.clear();
-                    }
-                    anchors.push(MeasureAnchors {
-                        m,
-                        entry_x,
-                        x_end: x + width,
-                        stems: scene.entry_stem_up.clone(),
-                        inks,
-                    });
-                    // MeasureScene notation is authored around the MIDDLE
-                    // line (y=0) — same +2sp shift the chart pipeline applies
-                    // to its measure containers.
-                    container.transform = Affine::translate((x, 2.0 * spatium));
-                    container.add_child(scene.scene.clone());
-                }
-                Prepared::MultiRest(r) => {
-                    container.transform = Affine::translate((x, 0.0));
-                    container.add_child(multirest_scene(r.count, width, spatium, id));
-                    id += 10;
-                }
-            }
-            sys_node.add_child(container);
-            spans.push((x, x + width));
-            // Advance by the ALLOCATED width (chart does the same): any
-            // spring-justification shortfall stays inside this measure's
-            // slot instead of accumulating as a gap at the end of the line.
-            x += width;
-            if let Some(bar) = barline_scene(x, prepared[item_idx].barline(), spatium) {
-                sys_node.add_child(bar);
-            }
+        let row = draw_staff_row(
+            &prepared, &sys.items, &widths, prefix_w, ctx, spatium, show_time, &mut id,
+        );
+        for node in row.nodes {
+            sys_node.add_child(node);
         }
+        let anchors = row.anchors;
+        let spans = row.spans;
 
         // ── measure numbers (positions from the number style; placed with
         // everything else below) ──
@@ -2490,6 +2644,47 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
             }
         }
 
+        // A grand staff's lower staves are drawn now — their notes anchor
+        // the system's dynamics where the top staff rests — and placed
+        // below once the top staff's marks are in.
+        let mut lower_rows: Vec<(SceneNode, Vec<MeasureAnchors<'_>>, Vec<(f64, f64)>)> = Vec::new();
+        for staff_prep in &lower {
+            let prefix_s = render_system_prefix(
+                &PrefixRenderContext {
+                    x: 0.0,
+                    staff_y: 0.0,
+                    spatium,
+                    include_clef: true,
+                    clef_type: clef_of(&staff_prep[sys.items[0]]),
+                    include_key_sig: true,
+                    include_time_sig: show_time,
+                    key_signature: first_key,
+                    key_sig_color: None,
+                    time_signature: (first_time.0 as u8, first_time.1 as u8),
+                    clef_width: clef_w,
+                    key_sig_width: key_w,
+                    time_sig_width: time_w,
+                    page_number: None,
+                },
+                id,
+                &ctx.as_context(),
+            );
+            id = prefix_s.next_id + 100;
+            let mut staff_node = SceneNode::group(SemanticId::new(ElementType::Staff, id));
+            id += 1;
+            staff_node.add_child(staff_lines(prefix_w + content_width, spatium));
+            for node in prefix_s.nodes {
+                staff_node.add_child(node);
+            }
+            let row = draw_staff_row(
+                staff_prep, &sys.items, &widths, prefix_w, ctx, spatium, show_time, &mut id,
+            );
+            for node in row.nodes {
+                staff_node.add_child(node);
+            }
+            lower_rows.push((staff_node, row.anchors, row.spans));
+        }
+
         // ── vertical placement: ties, articulations, slurs, dynamics,
         // staff text, measure numbers, rehearsal marks — each pushed clear
         // of the staff skyline in MuseScore's order ──
@@ -2521,6 +2716,12 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
                 // Keep the avatar a sixth of an inch inside the paper
                 // edge, where printers still print.
                 margin_room: sys.left - 12.0,
+                badge_inset: if lower.is_empty() {
+                    0.0
+                } else {
+                    BRACE_ROOM_SP * spatium
+                },
+                others: lower_rows.iter().map(|(_, a, _)| a.as_slice()).collect(),
             },
             &mut id,
         );
@@ -2528,7 +2729,106 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
             sys_node.add_child(node);
         }
 
-        rendered.push((sys_node, placed.skyline));
+        let mut skyline = placed.skyline;
+
+        // ── lower staves of a grand staff, each below the one above by
+        // its skylines; then the brace and the barlines through the gaps ──
+        if !lower.is_empty() {
+            let mut last_top = 0.0;
+            for (staff_prep, (mut staff_node, anchors_s, spans_s)) in lower.iter().zip(lower_rows) {
+                let items_s: Vec<vertical::ItemMarks<'_>> = sys
+                    .items
+                    .iter()
+                    .enumerate()
+                    .map(|(item_pos, &item_idx)| vertical::ItemMarks {
+                        span: spans_s[item_pos],
+                        first: item_pos == 0,
+                        directions: staff_prep[item_idx].directions(),
+                        notated: matches!(staff_prep[item_idx], Prepared::Notated(_)),
+                    })
+                    .collect();
+                let placed_s = vertical::place_system(
+                    &staff_node.children,
+                    &vertical::SystemInput {
+                        spatium,
+                        width: prefix_w + content_width,
+                        content_start: prefix_w,
+                        anchors: &anchors_s,
+                        items: items_s,
+                        numbers: Vec::new(),
+                        text_family: &opts.text_font,
+                        words_font: &words_font,
+                        ctx,
+                        marks: opts.marks,
+                        roles: &opts.text_roles,
+                        margin_room: 0.0,
+                        badge_inset: 0.0,
+                        others: Vec::new(),
+                    },
+                    &mut id,
+                );
+                for node in placed_s.nodes {
+                    staff_node.add_child(node);
+                }
+                // Top line to top line: at least a grand staff's usual
+                // distance, more if the ink between needs it.
+                let needed = skyline.min_distance_to(&placed_s.skyline, 0.25 * spatium);
+                let floor = last_top + GRAND_STAFF_DISTANCE_SP * spatium;
+                let offset = if needed.is_finite() {
+                    floor.max(needed + spatium)
+                } else {
+                    floor
+                };
+                staff_node.transform = Affine::translate((0.0, offset));
+                sys_node.add_child(staff_node);
+                skyline = skyline.stacked(&placed_s.skyline, offset);
+                last_top = offset;
+            }
+            let bottom = last_top + 4.0 * spatium;
+            use engraver_proto::engraver::layout::tlayout::brackets::{
+                BracketConfig, BracketInput, BracketType, layout_bracket,
+            };
+            // The path brace: the glyph one is drawn at a single staff's
+            // size, not stretched to the system.
+            let config = BracketConfig {
+                use_path_brace: true,
+                ..BracketConfig::default()
+            };
+            let brace = layout_bracket(
+                &BracketInput::new(
+                    BracketType::Brace,
+                    // The bracket sets itself its own width left of `x`.
+                    0.0,
+                    0.0,
+                    bottom,
+                    lower.len() + 1,
+                ),
+                spatium,
+                &config,
+            );
+            let mut lines = vec![PaintCommand::line(
+                Point::new(0.0, 0.0),
+                Point::new(0.0, bottom),
+                Color::BLACK,
+                0.16 * spatium,
+            )];
+            // Barlines run through the gaps between the staves.
+            for (_, end) in &spans {
+                lines.push(PaintCommand::line(
+                    Point::new(end - 0.08 * spatium, 4.0 * spatium),
+                    Point::new(end - 0.08 * spatium, last_top),
+                    Color::BLACK,
+                    0.16 * spatium,
+                ));
+            }
+            let mut grand = SceneNode::group(SemanticId::new(ElementType::Clef, id));
+            id += 1;
+            grand.add_child(brace.scene);
+            grand.add_child(SceneNode::anonymous_leaf(lines));
+            sys_node.add_child(grand);
+        }
+
+        rendered.push((sys_node, skyline));
     }
 
     // ── stack systems: each clears the one above by its skylines ──

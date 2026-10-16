@@ -454,7 +454,6 @@ fn layout_brace_path(
     let path = create_brace_path(width, height + 2.0 * extension);
 
     let x = input.x - bracket_width;
-    let center_y = input.first_staff_y + height / 2.0;
 
     let bbox = Rect::new(
         x,
@@ -463,8 +462,11 @@ fn layout_brace_path(
         input.last_staff_y + extension,
     );
 
-    // Translate path to position
-    let translated_path = kurbo::Affine::translate((x + width, center_y)) * path.clone();
+    // `create_brace_path` draws in [0, width] × [0, height]: put that box
+    // on the bbox (it was translated as if centred, landing the brace half
+    // its height low and a width to the right).
+    let translated_path =
+        kurbo::Affine::translate((x, input.first_staff_y - extension)) * path.clone();
 
     let commands = vec![PaintCommand::filled_path(
         translated_path.clone(),

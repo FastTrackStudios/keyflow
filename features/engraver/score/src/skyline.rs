@@ -129,6 +129,21 @@ impl Skyline {
         if above { -push } else { push }
     }
 
+    /// A grand staff's skyline: this staff's north line over `below`'s
+    /// south line, `below` sitting `offset` lower (top line to top line).
+    #[must_use]
+    pub fn stacked(&self, below: &Skyline, offset: f64) -> Skyline {
+        let shift = |k: &SkyRect| SkyRect {
+            rect: k.rect + kurbo::Vec2::new(0.0, offset),
+            ..*k
+        };
+        Skyline {
+            north: self.north.clone(),
+            south: below.south.iter().map(shift).collect(),
+            staff_height: offset + below.staff_height,
+        }
+    }
+
     /// Outermost ink above the staff (most negative y), if any.
     #[must_use]
     pub fn north_extent(&self) -> f64 {

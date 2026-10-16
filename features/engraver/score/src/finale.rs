@@ -385,6 +385,8 @@ pub fn part_options(
     let mut opts = LayoutOptions {
         page_texts: Some(page_texts(layout, part, print)),
         measure_numbers: measure_numbers(&layout.measure_numbers, part),
+        staves: (!part.score_staves.is_empty()).then(|| part.score_staves.clone()),
+        part_name: Some(part.name.clone()),
         ..LayoutOptions::default()
     };
     if let Some((explicit, page)) = explicit_layout(part, measure_count) {

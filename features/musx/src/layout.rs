@@ -64,6 +64,11 @@ pub struct PartLayout {
     /// The MusicXML part ids (`P{n}`, as [`crate::musx_to_musicxml`] emits
     /// them) these staves convert to, deduplicated, in staff order.
     pub part_ids: Vec<String>,
+    /// Which staves (1-based) of the first converted part this part shows.
+    /// A braced group the converter merges into one part (a choir's S-A
+    /// over T-B) is two Finale parts of one staff each: the T-B part is
+    /// staff 2 of the merged part.
+    pub score_staves: Vec<u8>,
     /// Whether Finale marks this part for extraction/printing.
     pub extract: bool,
     pub pages: Vec<PageSpec>,
@@ -431,10 +436,27 @@ fn read_layout(root: Node) -> DocumentLayout {
     };
 
     let staff_names = staff_full_names(&idx, &fonts);
-    let id_of_staff: HashMap<u32, String> = crate::converter::staff_part_ids(root)
+    let staff_ids: Vec<(u32, String)> = crate::converter::staff_part_ids(root)
         .into_iter()
         .filter_map(|(c, id)| Some((c.parse().ok()?, id)))
         .collect();
+    let id_of_staff: HashMap<u32, String> = staff_ids.iter().cloned().collect();
+    // A part's staves as staff numbers of its first converted part.
+    let score_staves_of = |staves: &[u32]| -> Vec<u8> {
+        let Some(first) = staves.iter().find_map(|s| id_of_staff.get(s)) else {
+            return Vec::new();
+        };
+        let order: Vec<u32> = staff_ids
+            .iter()
+            .filter(|(_, id)| id == first)
+            .map(|(c, _)| *c)
+            .collect();
+        staves
+            .iter()
+            .filter_map(|s| order.iter().position(|c| c == s))
+            .map(|i| i as u8 + 1)
+            .collect()
+    };
     let part_ids_of = |staves: &[u32]| -> Vec<String> {
         let mut ids: Vec<String> = Vec::new();
         for s in staves {
@@ -480,6 +502,7 @@ fn read_layout(root: Node) -> DocumentLayout {
             hide_measure_numbers: !staves.is_empty()
                 && staves.iter().all(|s| hidden_numbers.contains(s)),
             part_ids: part_ids_of(&staves),
+            score_staves: score_staves_of(&staves),
             page_texts: read_page_texts(&idx, &fonts, layout_part),
             staves,
         };
@@ -496,6 +519,7 @@ fn read_layout(root: Node) -> DocumentLayout {
         order: 0,
         name: "Score".to_string(),
         part_ids: part_ids_of(&score_staves),
+        score_staves: score_staves_of(&score_staves),
         page_texts: read_page_texts(&idx, &fonts, None),
         staves: score_staves,
         extract: true,

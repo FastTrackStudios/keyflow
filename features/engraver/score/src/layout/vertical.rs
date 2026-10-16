@@ -111,6 +111,12 @@ pub(super) struct SystemInput<'a, 'm> {
     /// Room left of the staff for a section avatar (staff left edge to the
     /// printable page edge), points.
     pub margin_room: f64,
+    /// Space the margin badge leaves before the staff (a grand staff's
+    /// brace), points.
+    pub badge_inset: f64,
+    /// A grand staff's other staves, for anchoring a direction at a beat
+    /// where only they have a note.
+    pub others: Vec<&'a [MeasureAnchors<'m>]>,
 }
 
 /// The placed markings of one system, and its finished skyline.
@@ -1237,7 +1243,7 @@ fn place_dynamics(
     };
     let sp = input.spatium;
     let head_w = HEAD_W_SP * sp;
-    let anchor_x = |a: &MeasureAnchors<'_>, tick: u32| -> f64 { a.x_at(tick) };
+    let anchor_x = |a: &MeasureAnchors<'_>, tick: u32| -> f64 { direction_x(input, a, tick) };
     let ignore_dyn = |k: SkyKind, _| matches!(k, SkyKind::Dynamic | SkyKind::Hairpin);
 
     // Dynamics, each pushed clear of the skyline (not of each other).
@@ -1396,6 +1402,23 @@ fn place_dynamics(
     }
 }
 
+/// Where a direction at `tick` sits: on this staff's note there, or — on a
+/// grand staff — on another staff's note when only it has one (the harp's
+/// left hand under a right-hand rest); otherwise interpolated here.
+fn direction_x(input: &SystemInput<'_, '_>, a: &MeasureAnchors<'_>, tick: u32) -> f64 {
+    if a.m.entry_ticks.contains(&tick) {
+        return a.x_at(tick);
+    }
+    for staff in &input.others {
+        if let Some(o) = staff.iter().find(|o| o.m.index == a.m.index)
+            && o.m.entry_ticks.contains(&tick)
+        {
+            return o.x_at(tick);
+        }
+    }
+    a.x_at(tick)
+}
+
 // ───────────────────────── 5a. tempo marks ─────────────────────────
 
 /// SMuFL metronome note for a MusicXML beat unit (`metNote…Up`).
@@ -1424,7 +1447,7 @@ fn place_tempos(
     for a in input.anchors {
         for d in &a.m.directions {
             if let model::DirectionKind::Tempo(t) = &d.kind {
-                marks.push((a.x_at(d.tick), t));
+                marks.push((direction_x(input, a, d.tick), t));
             }
         }
     }
@@ -1524,7 +1547,7 @@ fn place_staff_text(
             if let model::DirectionKind::Words(w) = &d.kind
                 && !is_section_text(input, w)
             {
-                words.push((a.x_at(d.tick), w));
+                words.push((direction_x(input, a, d.tick), w));
             }
         }
     }
@@ -1539,6 +1562,8 @@ fn place_staff_text(
         }
     }
     for (x, w) in words {
+        let cleaned = crate::harp::clean_pedal_text(w);
+        let w = cleaned.as_str();
         // A staff text the song's decisions call a remark ("Band in" typed
         // as staff text) is drawn as one, in the staff text's place.
         if input.marks != MarkStyle::Classic
@@ -1906,7 +1931,7 @@ fn place_rehearsals(
                 let params = MarginLabelParams {
                     label_override: Some(label),
                     page_x: -room - 4.0,
-                    margin_width: room + 4.0,
+                    margin_width: room + 4.0 - input.badge_inset,
                     staff_y: 0.0,
                     staff_height: 4.0 * sp,
                     style: theme,
