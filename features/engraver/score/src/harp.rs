@@ -68,7 +68,13 @@ pub fn clean_pedal_text(text: &str) -> String {
             out.push(line.to_string());
             continue;
         }
-        let names = pedal_names(line);
+        // Names come after the diagram starts: a label sharing the line
+        // ("C major scale: D--C--…") is not a pedal.
+        let start = line.find(':').map_or(0, |i| i + 1);
+        let names: Vec<(usize, usize, String)> = pedal_names(&line[start..])
+            .into_iter()
+            .map(|(a, b, n)| (a + start, b + start, n))
+            .collect();
         if names.len() < 7 {
             // A diagram row (the names are on their own line) goes; any
             // other text with dashes in it ("C major scale: -- 17 --")
@@ -130,6 +136,14 @@ mod tests {
         assert_eq!(
             clean_pedal_text("--‡-‡--------‡ D-C-B#--E#-F-G-A *change Bb to B#*"),
             "\u{E681}\u{E681}\u{E682}\u{E683}\u{E682}\u{E681}\u{E681}\u{E681}  *change Bb to B#*"
+        );
+    }
+
+    #[test]
+    fn label_on_the_names_line_is_not_a_pedal() {
+        assert_eq!(
+            clean_pedal_text("C major scale: --‡-- D--C--B---|---E---F--G---A"),
+            "\u{E681}\u{E681}\u{E681}\u{E683}\u{E681}\u{E681}\u{E681}\u{E681}"
         );
     }
 
