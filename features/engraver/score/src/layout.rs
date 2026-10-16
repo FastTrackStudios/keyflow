@@ -1964,6 +1964,7 @@ fn stack_systems(
     };
     let mut out: Vec<(usize, f64)> = systems.iter().map(|s| (s.page, s.staff_top)).collect();
     if explicit {
+        let mut overflow = false;
         let mut i = 0;
         while i < systems.len() {
             let page = systems[i].page;
@@ -2009,6 +2010,10 @@ fn stack_systems(
                     for (k, t) in compact.into_iter().enumerate() {
                         out[i + k].1 = t + slack * k as f64 / gaps;
                     }
+                } else {
+                    // Even packed tight the page overflows: its systems
+                    // would overlap. Re-paginate instead.
+                    overflow = true;
                 }
             }
             i = end;
@@ -2028,7 +2033,7 @@ fn stack_systems(
             let room = bottom_limit_of(page) - top_limit_of(page);
             used < 0.5 * room
         });
-        if !underfilled {
+        if !underfilled && !overflow {
             return out;
         }
     }
