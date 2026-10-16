@@ -1671,6 +1671,24 @@ fn stack_systems(
                 for (k, t) in tops.into_iter().enumerate() {
                     out[i + k].1 = t;
                 }
+            } else {
+                // Pushing down overflows the page: try the compact stack
+                // (every system as close as its skylines allow) from the
+                // planned first position, and share the slack evenly.
+                let mut compact = vec![tops[0]];
+                for k in 1..(end - i) {
+                    let prev = compact[k - 1];
+                    compact.push(prev + needed(i + k - 1, i + k));
+                }
+                let bottom =
+                    compact.last().copied().unwrap_or(0.0) + rendered[last].1.south_extent();
+                let slack = bottom_limit_of(page) - bottom;
+                if slack >= 0.0 {
+                    let gaps = (end - i).saturating_sub(1).max(1) as f64;
+                    for (k, t) in compact.into_iter().enumerate() {
+                        out[i + k].1 = t + slack * k as f64 / gaps;
+                    }
+                }
             }
             i = end;
         }
