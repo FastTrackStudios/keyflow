@@ -959,7 +959,8 @@ fn prepare_measures(
                 }
                 (Some((start, r)), _) => {
                     if idx - start >= 2 {
-                        tuplets.push((start, idx - 1, r));
+                        // `tuplet_group` takes an exclusive end.
+                        tuplets.push((start, idx, r));
                     }
                     run_start = mark.as_ref().map(|m| (idx, *m));
                 }
@@ -969,7 +970,7 @@ fn prepare_measures(
         if let Some((start, r)) = run_start
             && tuplet_marks.len() - start >= 2
         {
-            tuplets.push((start, tuplet_marks.len() - 1, r));
+            tuplets.push((start, tuplet_marks.len(), r));
         }
 
         prepared.push(Prepared::Notated(Box::new(NotatedMeasure {

@@ -156,8 +156,16 @@ pub(super) fn place_system(
     let ties = place_ties(input, &obstacles, &mut sky, &mut owners, &mut out.nodes, id);
     let artic = place_articulations(input, &ties, &mut sky, &mut owners, &mut out.nodes);
     obstacles.extend(ties.iter().flat_map(|t| t.rects.iter().copied()));
-    obstacles.extend(artic.iter().copied());
-    place_slurs(input, &obstacles, &mut sky, &mut owners, &mut out.nodes, id);
+    obstacles.extend(artic.iter().map(|a| a.rect));
+    place_slurs(
+        input,
+        &obstacles,
+        &artic,
+        &mut sky,
+        &mut owners,
+        &mut out.nodes,
+        id,
+    );
     place_dynamics(input, &mut sky, &mut owners, &mut out.nodes, id);
     place_staff_text(input, &mut sky, &mut owners, &mut out.nodes);
     place_measure_numbers(input, &mut sky, &mut owners, &mut out.nodes);
@@ -181,8 +189,27 @@ fn stem_up(primary_line: i32) -> bool {
 }
 
 impl MeasureAnchors<'_> {
-    /// The stem direction the measure builder actually drew for entry `i`.
+    /// The stem direction actually drawn for entry `i`: read off the ink
+    /// (stem above or below its heads) — beamed notes carry no builder
+    /// direction — then the builder's report, then the line rule.
     fn stem_up_at(&self, i: usize, primary_line: i32) -> bool {
+        if let Some(ink) = self.inks.get(i).and_then(|k| k.as_ref()) {
+            let stem = ink
+                .parts
+                .iter()
+                .filter(|(_, p)| *p == InkPart::Stem)
+                .map(|(r, _)| *r)
+                .reduce(|a, b| a.union(b));
+            let heads = ink
+                .parts
+                .iter()
+                .filter(|(_, p)| matches!(p, InkPart::Head(_)))
+                .map(|(r, _)| *r)
+                .reduce(|a, b| a.union(b));
+            if let (Some(stem), Some(heads)) = (stem, heads) {
+                return stem.center().y < heads.center().y;
+            }
+        }
         self.stems
             .get(i)
             .copied()
@@ -771,7 +798,7 @@ fn place_articulations(
     sky: &mut Skyline,
     owners: &mut Ids,
     nodes: &mut Vec<SceneNode>,
-) -> Vec<Rect> {
+) -> Vec<PlacedArtic> {
     let sp = input.spatium;
     let head_w = HEAD_W_SP * sp;
     let mut placed = Vec::new();
@@ -878,7 +905,13 @@ fn place_articulations(
                     extra + g.height() + style::ARTICULATION_MIN_DISTANCE * sp,
                 );
                 sky.add(rect, SkyKind::Articulation, owner);
-                placed.push(rect);
+                placed.push(PlacedArtic {
+                    ai,
+                    i,
+                    above,
+                    close: is_close(tag) && pinned.is_none(),
+                    rect,
+                });
                 let mut node = SceneNode::group(SemanticId::new(ElementType::Articulation, owner));
                 node.add_command(PaintCommand::glyph(glyph, pos, sp, Color::BLACK));
                 nodes.push(node);
@@ -889,56 +922,170 @@ fn place_articulations(
 }
 
 // ───────────────────────── 3. slurs ─────────────────────────
+//
+// Port of MuseScore's `SlurTieLayout::slurPos` anchors, `computeUp`, and
+// (simplified) `avoidCollisions`, on the built chords' ink.
+
+/// An articulation as placed (slur ends move out over close ones).
+pub(super) struct PlacedArtic {
+    ai: usize,
+    i: usize,
+    above: bool,
+    close: bool,
+    rect: Rect,
+}
+
+/// One slur end: the outer note's head, and the stem tip if it has one.
+struct SlurEndInk {
+    head: Rect,
+    stem: Option<Rect>,
+    stem_up: bool,
+    flag: bool,
+    beamed: bool,
+    ink: Vec<Rect>,
+}
+
+fn slur_end_ink(input: &SystemInput<'_, '_>, ai: usize, i: usize, above: bool) -> SlurEndInk {
+    let sp = input.spatium;
+    let a = &input.anchors[ai];
+    let lines = chord_lines(a, i);
+    let line = if above {
+        *lines.iter().max().unwrap_or(&0)
+    } else {
+        *lines.iter().min().unwrap_or(&0)
+    };
+    let primary = a.m.pitches[i].map_or(line, |(l, _)| l);
+    let stem_up = a.stem_up_at(i, primary);
+    let ink = a.inks.get(i).and_then(|x| x.as_ref());
+    let head = ink.and_then(|k| k.head(line)).unwrap_or_else(|| {
+        let x = a.entry_x.get(i).copied().unwrap_or(0.0);
+        let y = y_of(line, sp);
+        Rect::new(x, y - 0.5 * sp, x + HEAD_W_SP * sp, y + 0.5 * sp)
+    });
+    let stem = ink.and_then(|k| {
+        k.parts
+            .iter()
+            .filter(|(_, p)| *p == InkPart::Stem)
+            .map(|(r, _)| *r)
+            .reduce(|a, b| a.union(b))
+    });
+    let flag = ink.is_some_and(|k| k.parts.iter().any(|(_, p)| *p == InkPart::Flag));
+    // Beamed: a stem but no flag on an eighth-or-shorter is beam-joined;
+    // the builder draws beamed notes without Chord groups, which is what
+    // `stems` reflect, so approximate by "stem, no flag, short value".
+    let short = matches!(
+        a.m.entries.get(i),
+        Some(engraver_proto::engraver::notation::RhythmEntry::Note(d)) if d.ticks() < 480
+    );
+    SlurEndInk {
+        head,
+        stem,
+        stem_up,
+        flag,
+        beamed: stem.is_some() && !flag && short,
+        ink: ink
+            .map(|k| k.parts.iter().map(|(r, _)| *r).collect())
+            .unwrap_or_default(),
+    }
+}
 
 fn place_slurs(
     input: &SystemInput<'_, '_>,
     obstacles: &[Rect],
+    artics: &[PlacedArtic],
     sky: &mut Skyline,
     owners: &mut Ids,
     nodes: &mut Vec<SceneNode>,
     id: &mut u64,
 ) {
     let sp = input.spatium;
-    let head_w = HEAD_W_SP * sp;
-    // (x of head, primary line, stem up)
-    let mut open: Option<(f64, i32, bool)> = None;
-    for a in input.anchors {
+    let mut open: Option<(usize, usize)> = None;
+    for (ai, a) in input.anchors.iter().enumerate() {
         for i in 0..a.m.entries.len() {
-            let ex = a.entry_x.get(i).copied().unwrap_or(0.0);
-            let line = a.m.pitches[i].map(|(l, _)| l).unwrap_or(0);
-            let lines: Vec<i32> = a.m.pitches[i]
-                .iter()
-                .map(|(l, _)| *l)
-                .chain(a.m.stacks[i].iter().map(|(l, _)| *l))
-                .collect();
             if a.m.slur_stops[i]
-                && let Some((sx, sl, s_up)) = open.take()
+                && let Some((sai, si)) = open.take()
             {
-                let e_up = a.stem_up_at(i, line);
+                let s_line = input.anchors[sai].m.pitches[si].map_or(0, |(l, _)| l);
+                let e_line = a.m.pitches[i].map_or(0, |(l, _)| l);
+                let s_up = input.anchors[sai].stem_up_at(si, s_line);
+                let e_up = a.stem_up_at(i, e_line);
                 // computeUp: opposite the stem; mixed stems → above.
                 let above = if s_up == e_up { !s_up } else { true };
-                let end_line = if above {
-                    *lines.iter().max().unwrap_or(&line)
-                } else {
-                    *lines.iter().min().unwrap_or(&line)
+                let start = slur_end_ink(input, sai, si, above);
+                let end = slur_end_ink(input, ai, i, above);
+                let up_sign = if above { -1.0 } else { 1.0 };
+
+                // slurPos anchors.
+                let stem_anchor_start = start.stem.is_some()
+                    && ((start.flag && start.stem_up == above)
+                        || (s_up == e_up && s_up == above && !start.beamed));
+                let stem_anchor_end = end.stem.is_some() && s_up == e_up && e_up == above;
+                let tip = |e: &SlurEndInk| -> (f64, f64) {
+                    let st = e.stem.unwrap_or(e.head);
+                    (st.center().x, if above { st.y0 } else { st.y1 })
                 };
+                let default_point = |e: &SlurEndInk| -> Point {
+                    Point::new(e.head.center().x, e.head.center().y + 0.9 * sp * up_sign)
+                };
+                let mut p1 = if stem_anchor_start {
+                    let (x, y) = tip(&start);
+                    Point::new(x + 0.35 * sp, y - 0.5 * sp * up_sign)
+                } else if start.beamed && start.stem_up == above {
+                    // Beamed start on the stem side: clear the beam.
+                    let (x, y) = tip(&start);
+                    Point::new(x + 0.15 * sp, y + up_sign * (0.25 + 0.35) * sp)
+                } else {
+                    default_point(&start)
+                };
+                let mut p2 = if stem_anchor_end {
+                    let (x, y) = tip(&end);
+                    let inset = if end.beamed { -0.75 } else { 0.5 };
+                    Point::new(x - 0.35 * sp, y - inset * sp * up_sign)
+                } else {
+                    default_point(&end)
+                };
+                // fixArticulations: over/under a close articulation on the
+                // slur's side, nudged 0.1 sp inward.
+                for (pt, (eai, ei), inward) in [(&mut p1, (sai, si), 1.0), (&mut p2, (ai, i), -1.0)]
+                {
+                    for art in artics
+                        .iter()
+                        .filter(|x| x.ai == eai && x.i == ei && x.close && x.above == above)
+                    {
+                        pt.x = art.rect.center().x + 0.1 * sp * inward;
+                        let edge =
+                            if above { art.rect.y0 } else { art.rect.y1 } + 0.5 * sp * up_sign;
+                        pt.y = if above {
+                            pt.y.min(edge)
+                        } else {
+                            pt.y.max(edge)
+                        };
+                    }
+                }
+                if p2.x - p1.x < sp {
+                    p2.x = p1.x + sp;
+                }
+                // Obstacles: everything between, minus the end chords' own
+                // ink and articulations (MuseScore's getSegmentShapes).
+                let own: Vec<Rect> = start.ink.iter().chain(end.ink.iter()).copied().collect();
+                let own_artics: Vec<Rect> = artics
+                    .iter()
+                    .filter(|x| (x.ai, x.i) == (sai, si) || (x.ai, x.i) == (ai, i))
+                    .map(|x| x.rect)
+                    .collect();
+                let local: Vec<Rect> = obstacles
+                    .iter()
+                    .filter(|r| r.x1 > p1.x && r.x0 < p2.x)
+                    .filter(|r| !own.iter().chain(own_artics.iter()).any(|o| o == *r))
+                    .copied()
+                    .collect();
                 *id += 1;
                 let owner = owners.next();
-                let path_rects = shape_slur(
-                    (sx, sl),
-                    (ex, end_line),
-                    above,
-                    sp,
-                    head_w,
-                    obstacles,
-                    nodes,
-                    *id,
-                );
-                sky.add_all(&path_rects, SkyKind::Slur, owner);
+                let rects = shape_slur(p1, p2, above, sp, &local, nodes, *id);
+                sky.add_all(&rects, SkyKind::Slur, owner);
             }
             if a.m.slur_starts[i] && open.is_none() {
-                let start_line = line;
-                open = Some((ex, start_line, a.stem_up_at(i, line)));
+                open = Some((ai, i));
             }
         }
     }
@@ -948,23 +1095,16 @@ fn place_slurs(
 /// default bezier, then alternately raise the shoulder over the colliding
 /// third and move the endpoints outward, until the curve (plus its arc
 /// clearance) clears every obstacle between the ends — at most 30 rounds.
-#[allow(clippy::too_many_arguments)]
 fn shape_slur(
-    start: (f64, i32),
-    end: (f64, i32),
+    mut p1: Point,
+    mut p2: Point,
     above: bool,
     sp: f64,
-    head_w: f64,
     obstacles: &[Rect],
     nodes: &mut Vec<SceneNode>,
     id: u64,
 ) -> Vec<Rect> {
     let sign = if above { -1.0 } else { 1.0 };
-    let mut p1 = Point::new(start.0 + head_w / 2.0, y_of(start.1, sp) + sign * 0.9 * sp);
-    let mut p2 = Point::new(end.0 + head_w / 2.0, y_of(end.1, sp) + sign * 0.9 * sp);
-    if p2.x - p1.x < sp {
-        p2.x = p1.x + sp;
-    }
     let d = (p2 - p1).hypot() / sp;
     let w = if d < 2.0 {
         0.6
@@ -975,28 +1115,24 @@ fn shape_slur(
     } else {
         0.7
     };
-    let mut shoulder = (d / 4.0).sqrt() * sp;
-    // Obstacles strictly between the end chords, padded toward the slur.
-    let lo = p1.x + 0.6 * head_w;
-    let hi = p2.x - 0.6 * head_w;
+    let shoulder = (d / 4.0).sqrt() * sp;
+    // addMinClearanceToShapes: pad obstacles toward the slur.
     let local: Vec<Rect> = obstacles
         .iter()
-        .filter(|r| r.x1 > lo && r.x0 < hi)
         .map(|r| r.inflate(0.1 * sp, 0.3 * sp))
         .collect();
     let clearance = (0.04 * d).clamp(0.1, 0.5) * sp;
     let step = (0.3 * sp * if d > 16.0 { d / 16.0 } else { 1.0 }).min(1.5 * sp);
     let mut lift = [0.0_f64; 3]; // extra shoulder per third (left, mid, right)
 
-    let build = |p1: Point, p2: Point, shoulder: f64, lift: &[f64; 3]| -> CubicBez {
+    let build = |p1: Point, p2: Point, lift: &[f64; 3]| -> CubicBez {
         let (mut c1, mut c2) = bow_controls(p1, p2, sign * shoulder, w);
         c1.y += sign * (lift[0] + lift[1]);
         c2.y += sign * (lift[2] + lift[1]);
         CubicBez::new(p1, c1, c2, p2)
     };
-    let mut curve = build(p1, p2, shoulder, &lift);
+    let mut curve = build(p1, p2, &lift);
     for iter in 0..30 {
-        // Sample the curve pushed out by the arc clearance.
         let test = CubicBez::new(
             curve.p0,
             curve.p1 + Vec2::new(0.0, sign * clearance),
@@ -1020,7 +1156,6 @@ fn shape_slur(
                 }
             }
         } else {
-            // Move the ends outward, favouring the colliding side.
             if hit[0] || hit[1] {
                 p1.y += sign * step * 0.4;
             }
@@ -1028,13 +1163,11 @@ fn shape_slur(
                 p2.y += sign * step * 0.4;
             }
         }
-        // Shoulder never taller than the slur is long.
         let len = (p2 - p1).hypot();
-        shoulder = shoulder.min(len);
         for l in &mut lift {
             *l = l.min(len);
         }
-        curve = build(p1, p2, shoulder, &lift);
+        curve = build(p1, p2, &lift);
     }
     let path = crescent(
         curve.p0,

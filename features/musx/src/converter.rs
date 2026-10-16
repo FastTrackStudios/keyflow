@@ -13,7 +13,9 @@ use crate::helper::*;
 use crate::xml_in::*;
 use crate::xml_out::*;
 
-const DIVISIONS: i64 = 16; // nb divisions per quarter note
+// Divisions per quarter note: 960 divides evenly by 2, 3, 4, 5, 6 and 8, so
+// tuplet durations (a triplet eighth = 320) stay whole numbers.
+const DIVISIONS: i64 = 960;
 
 // Finale bracket style
 const PIANO_BRACE: &str = "3";
@@ -1862,6 +1864,16 @@ fn apply_tuplets(note: &El, notations: &El, dura: i64, tuplet_attributes: &mut V
         }
     }
     tuplet_attributes.retain(|a| !finished.contains(&a.number));
+
+    // Finale stores a tuplet note's nominal length; MusicXML's <duration>
+    // is the time it actually takes (× normal / actual).
+    if let Some(duration) = find_child(note, "duration") {
+        let nominal = edu_duration(dura);
+        set_text(
+            &duration,
+            &((nominal * normal_notes) / actual_notes.max(1)).to_string(),
+        );
+    }
 
     let time_modification = sub(note, "time-modification");
     sub_text(

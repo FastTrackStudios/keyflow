@@ -266,9 +266,19 @@ pub fn layout_tuplet(
     let number_x = (p1.x + p2.x) / 2.0;
     let number_y = (p1.y + p2.y) / 2.0;
 
-    // Get number text
-    let number_text = ratio.to_display_string(config.number_type);
-    let number_width = number_text.len() as f64 * config.number_size * spatium * 0.6;
+    // Get number text, as SMuFL tuplet digits (U+E880–E889, colon U+E88A)
+    // in the music font every pipeline embeds — a generic "serif" text
+    // family resolved to nothing in PDF/PNG export.
+    let number_text: String = ratio
+        .to_display_string(config.number_type)
+        .chars()
+        .map(|c| match c {
+            '0'..='9' => char::from_u32(0xE880 + (c as u32 - '0' as u32)).unwrap_or(c),
+            ':' => '\u{E88A}',
+            other => other,
+        })
+        .collect();
+    let number_width = number_text.chars().count() as f64 * spatium * 0.95;
     let _number_height = config.number_size * spatium;
 
     // Gap in bracket for number
@@ -319,9 +329,12 @@ pub fn layout_tuplet(
         // The actual font rendering will be handled by the renderer
         commands.push(PaintCommand::Text {
             text: number_text,
-            font_family: "serif".to_string(),
-            font_size: config.number_size * spatium,
-            position: Point::new(number_x, number_y),
+            font_family: "Leland".to_string(),
+            // The SMuFL em is four staff spaces; tuplet digits are drawn
+            // at the em, scaled by the style's number size.
+            font_size: 4.0 * spatium * (config.number_size / 1.1),
+            // Digits sit centred on the bracket line.
+            position: Point::new(number_x, number_y + 0.62 * spatium),
             color: Color::BLACK,
             anchor: TextAnchor::Middle,
             weight: FontWeight::Normal,
