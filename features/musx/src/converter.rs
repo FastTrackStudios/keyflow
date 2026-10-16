@@ -519,6 +519,15 @@ pub fn convert(root: N, meta_root: Option<N>) -> String {
         let transp_interval =
             parse_i64(path_text(staff_spec, &["transposition", "keysig", "interval"]).as_deref())
                 .unwrap_or(0);
+        // "Set to clef": in the transposed view a part prints, this staff
+        // reads in `transposedClef` (treble when unstated) whatever clef the
+        // concert-pitch score shows — the bass clarinet's treble clef.
+        let transposed_clef: Option<String> =
+            find_path(staff_spec, &["transposition", "setToClef"])
+                .is_some()
+                .then(|| {
+                    path_text(staff_spec, &["transposedClef"]).unwrap_or_else(|| "0".to_string())
+                });
 
         let mut current_key: Option<i64> = Some(-1);
         let mut current_beats: Option<String> = None;
@@ -678,7 +687,7 @@ pub fn convert(root: N, meta_root: Option<N>) -> String {
                         transp_interval,
                         piano_staff_spec_cmper.as_str() == top_staff.as_str(),
                     );
-                    clef_ids.insert(staff_id, clef_id);
+                    clef_ids.insert(staff_id, transposed_clef.clone().or(clef_id));
                     staff_id += 1;
                     prev = true;
                 }
@@ -712,6 +721,7 @@ pub fn convert(root: N, meta_root: Option<N>) -> String {
                     transp_interval,
                     staff_spec_cmper == top_staff,
                 );
+                let clef_id = transposed_clef.clone().or(clef_id);
                 if clef_id != current_clef_single {
                     attributes = Some(handle_clef_change(
                         root,
