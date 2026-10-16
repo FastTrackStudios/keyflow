@@ -338,6 +338,14 @@ impl TextRoles {
             let (role, rest) = line
                 .split_once(':')
                 .ok_or_else(|| format!("line {}: expected `role: text`", n + 1))?;
+            // The same file carries the song's header corrections
+            // (`crate::header::HeaderOverrides`).
+            if matches!(
+                role.trim().to_ascii_lowercase().as_str(),
+                "title" | "subtitle" | "writers" | "arranger"
+            ) {
+                continue;
+            }
             let role = TextRole::parse(role).ok_or_else(|| {
                 format!(
                     "line {}: unknown role {role:?} (section, remark, instruction)",

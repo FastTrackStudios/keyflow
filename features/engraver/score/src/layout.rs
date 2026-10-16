@@ -69,6 +69,8 @@ pub struct LayoutOptions {
     /// [`crate::section_marks::TextRoles::for_part`]); texts not listed keep
     /// their default role.
     pub text_roles: std::collections::HashMap<String, crate::section_marks::TextRole>,
+    /// Corrections to the keyflow header read from the page texts.
+    pub header: crate::header::HeaderOverrides,
 }
 
 /// Page margins in points.
@@ -109,6 +111,7 @@ impl Default for LayoutOptions {
             margins: None,
             marks: crate::section_marks::MarkStyle::default(),
             text_roles: std::collections::HashMap::new(),
+            header: crate::header::HeaderOverrides::default(),
         }
     }
 }
@@ -1578,6 +1581,48 @@ pub fn default_page_texts(score: &Score, part_name: &str) -> Vec<PageText> {
     texts
 }
 
+/// The master rhythm chart's title header, drawn by the chart's own
+/// function, at the top of the page at `page_y`. Returns its height.
+fn chart_header(
+    root: &mut SceneNode,
+    page_y: f64,
+    opts: &LayoutOptions,
+    margins: &engraver_proto::engraver::layout::orchestrator::PageMargins,
+    meta: &keyflow_proto::SongMetadata,
+    spatium: f64,
+) -> f64 {
+    use engraver_proto::engraver::layout::chart::page_rendering::{
+        TitleHeaderParams, add_title_header_with_count_in,
+    };
+    let (height, _) = add_title_header_with_count_in(TitleHeaderParams {
+        root,
+        page_x: 0.0,
+        page_y,
+        page_width: opts.page_width,
+        margins,
+        spatium,
+        metadata: meta,
+        tempo: None,
+        count_in: None,
+    });
+    height
+}
+
+/// The chart names generic families (`sans-serif`) that a part's PDF font
+/// database does not resolve; name the face it means.
+fn name_generic_fonts(node: &mut SceneNode) {
+    for cmd in &mut node.commands {
+        if let PaintCommand::Text { font_family, .. } = cmd
+            && matches!(font_family.as_str(), "sans-serif" | "section-comment")
+        {
+            *font_family = "FreeSans".to_string();
+        }
+    }
+    for child in &mut node.children {
+        name_generic_fonts(child);
+    }
+}
+
 fn draw_page_texts(
     root: &mut SceneNode,
     pages: &[PageRect],
@@ -1679,10 +1724,16 @@ fn stack_systems(
                 .find(|j| systems[*j].page != page)
                 .unwrap_or(systems.len());
             let mut tops: Vec<f64> = systems[i..end].iter().map(|s| s.staff_top).collect();
-            if let Some(first) = tops.first_mut() {
+            // A header taller than the source's title area moves the whole
+            // page down together, keeping the source's spacing between its
+            // systems (the compact stack below catches an overflow).
+            if let Some(&first) = tops.first() {
                 let sp = systems[i].spatium;
                 let clear = top_limit_of(page) - rendered[i].1.north_extent() + 0.5 * sp;
-                *first = first.max(clear);
+                let delta = (clear - first).max(0.0);
+                for t in &mut tops {
+                    *t += delta;
+                }
             }
             for k in 1..tops.len() {
                 tops[k] = tops[k].max(tops[k - 1] + needed(i + k - 1, i + k));
@@ -2007,10 +2058,58 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
 
     let page_y = |page: usize| page as f64 * (opts.page_height + 24.0);
     let mut root = SceneNode::group(SemanticId::new(ElementType::System, 0));
-    let page_texts = opts
+    let source_texts = opts
         .page_texts
         .clone()
         .unwrap_or_else(|| default_page_texts(score, &part.name));
+    // Keyflow style: the master rhythm chart's header on page 1 and its
+    // footer on every page, in place of the source's page texts. The header
+    // is laid out once up front to learn its height; the systems stack
+    // between it and the footer.
+    let keyflow = opts.marks != crate::section_marks::MarkStyle::Classic;
+    let header_meta = keyflow.then(|| {
+        let mut h = crate::header::PartHeader::from_page_texts(&source_texts, &part.name);
+        h.apply(&opts.header);
+        h.metadata(&part.name)
+    });
+    let chart_margins = engraver_proto::engraver::layout::orchestrator::PageMargins {
+        top: margins.top,
+        right: margins.right,
+        bottom: margins.bottom,
+        left: content_left,
+    };
+    let page_texts: Vec<PageText> = match &header_meta {
+        Some(meta) => {
+            let mut scratch = SceneNode::group(SemanticId::new(ElementType::Text, 0));
+            let height = chart_header(&mut scratch, 0.0, opts, &chart_margins, meta, base_spatium);
+            // Limits only (empty text draws nothing): the header's foot on
+            // page 1, the footer's top on every page.
+            vec![
+                PageText {
+                    text: String::new(),
+                    font: TextFont::serif(1.0),
+                    first_page: 1,
+                    last_page: Some(1),
+                    h_align: HAlign::Left,
+                    v_align: VAlign::Top,
+                    x: 0.0,
+                    y: height - 1.15 - 12.0,
+                },
+                PageText {
+                    text: String::new(),
+                    font: TextFont::serif(1.0),
+                    first_page: 1,
+                    last_page: None,
+                    h_align: HAlign::Left,
+                    v_align: VAlign::Bottom,
+                    x: 0.0,
+                    // Footer baseline 15pt from the paper edge, 8pt type.
+                    y: (margins.bottom - 30.0).min(0.0) + 1.1,
+                },
+            ]
+        }
+        None => source_texts,
+    };
     // Systems are drawn first (each with its skyline), then stacked.
     let mut rendered: Vec<(SceneNode, crate::skyline::Skyline)> = Vec::new();
 
@@ -2334,7 +2433,29 @@ pub fn layout_part(score: &Score, part_index: usize, opts: &LayoutOptions) -> Pa
         .collect();
     {
         let mut block = SceneNode::group(SemanticId::new(ElementType::Text, 1));
-        draw_page_texts(&mut block, &pages, &page_texts, opts);
+        match &header_meta {
+            Some(meta) => {
+                chart_header(
+                    &mut block,
+                    page_y(0),
+                    opts,
+                    &chart_margins,
+                    meta,
+                    base_spatium,
+                );
+                for page in &pages {
+                    engraver_proto::engraver::layout::chart::page_rendering::add_page_footer(
+                        &mut block,
+                        page.x_offset,
+                        page.y_offset,
+                        page.width,
+                        page.height,
+                    );
+                }
+                name_generic_fonts(&mut block);
+            }
+            None => draw_page_texts(&mut block, &pages, &page_texts, opts),
+        }
         root.add_child(block);
     }
     for ((mut node, _), (sys, (page, top))) in

@@ -9,6 +9,7 @@
 
 pub mod finale;
 pub mod fonts;
+pub mod header;
 pub mod import;
 pub mod inspect;
 pub mod layout;

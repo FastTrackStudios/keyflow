@@ -9,6 +9,7 @@
 use std::path::{Path, PathBuf};
 
 use engraver_score::finale::{FinaleDocument, PartJob, PrintInfo};
+use engraver_score::header::HeaderOverrides;
 use engraver_score::layout::{LayoutOptions, layout_part};
 use engraver_score::model::DirectionKind;
 use engraver_score::model::Score;
@@ -45,16 +46,23 @@ pub struct PartsArgs<'a> {
     pub check: bool,
 }
 
-/// Read a song's `.roles` file.
-pub(crate) fn read_roles(path: &Path) -> Result<TextRoles, String> {
+/// Read a song's decisions file: its text roles and header corrections.
+pub(crate) fn read_roles(path: &Path) -> Result<(TextRoles, HeaderOverrides), String> {
     let src = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    TextRoles::parse(&src).map_err(|e| format!("{}: {e}", path.display()))
+    let roles = TextRoles::parse(&src).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok((roles, HeaderOverrides::parse(&src)))
 }
 
 /// Every rehearsal mark and staff text in the extracted parts, with the
 /// role it is drawn in, written as a `.roles` file: a comment saying where
 /// the text appears, then its `role: text` line.
-fn texts_inventory(title: &str, score: &Score, jobs: &[&PartJob], roles: &TextRoles) -> String {
+fn texts_inventory(
+    title: &str,
+    score: &Score,
+    jobs: &[&PartJob],
+    roles: &TextRoles,
+    header: &HeaderOverrides,
+) -> String {
     use std::fmt::Write as _;
     // key → (is rehearsal, part names), in first-seen order.
     let mut seen: Vec<(String, bool, Vec<String>)> = Vec::new();
@@ -85,6 +93,19 @@ fn texts_inventory(title: &str, score: &Score, jobs: &[&PartJob], roles: &TextRo
         }
     }
     let mut out = format!("# {title} — text roles (section | remark | instruction)\n");
+    // The keyflow header as read from Finale's page 1; uncomment a line to
+    // correct it.
+    if let Some(job) = jobs.first() {
+        let mut h = engraver_score::header::PartHeader::from_page_texts(
+            job.options.page_texts.as_deref().unwrap_or_default(),
+            &job.name,
+        );
+        h.apply(header);
+        let _ = writeln!(out, "# title: {}", h.title.unwrap_or_default());
+        let _ = writeln!(out, "# subtitle: {}", h.subtitle.unwrap_or_default());
+        let _ = writeln!(out, "# writers: {}", h.writers.join(", "));
+        let _ = writeln!(out, "# arranger: {}", h.arranger.unwrap_or_default());
+    }
     for (key, rehearsal, parts) in seen {
         let default = if rehearsal {
             TextRole::default_for_rehearsal(&key)
@@ -267,14 +288,14 @@ pub fn cmd_parts(args: &PartsArgs<'_>) -> Result<(), String> {
         return Err(format!("no part matches; parts: {}", names.join(", ")));
     }
 
-    let roles = match args.roles {
+    let (roles, header) = match args.roles {
         Some(path) => read_roles(path)?,
-        None => TextRoles::default(),
+        None => Default::default(),
     };
     if args.texts {
         print!(
             "{}",
-            texts_inventory(&source.title, &source.score, &jobs, &roles)
+            texts_inventory(&source.title, &source.score, &jobs, &roles, &header)
         );
         return Ok(());
     }
@@ -309,6 +330,7 @@ pub fn cmd_parts(args: &PartsArgs<'_>) -> Result<(), String> {
         let mut options = job.options.clone();
         options.marks = args.marks;
         options.text_roles = roles.for_part(&job.name);
+        options.header = header.clone();
         if args.auto_layout {
             auto_layout(&mut options);
         }

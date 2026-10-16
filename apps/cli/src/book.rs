@@ -619,7 +619,7 @@ pub fn cmd_book(args: &BookArgs<'_>) -> Result<(), String> {
                         .to_string_lossy()
                         .into_owned(),
                 };
-                let roles = match args.roles_dir {
+                let (roles, header) = match args.roles_dir {
                     Some(rd) => {
                         let file = rd.join(format!(
                             "{}.roles",
@@ -628,10 +628,10 @@ pub fn cmd_book(args: &BookArgs<'_>) -> Result<(), String> {
                         if file.exists() {
                             crate::parts::read_roles(&file)?
                         } else {
-                            engraver_score::section_marks::TextRoles::default()
+                            Default::default()
                         }
                     }
-                    None => engraver_score::section_marks::TextRoles::default(),
+                    None => Default::default(),
                 };
                 for job in doc.parts(&print) {
                     let Some(role) = part_role(&job.name) else {
@@ -644,6 +644,7 @@ pub fn cmd_book(args: &BookArgs<'_>) -> Result<(), String> {
                         let mut options = job.options.clone();
                         options.marks = args.marks;
                         options.text_roles = roles.for_part(&job.name);
+                        options.header = header.clone();
                         if args.auto_layout {
                             crate::parts::auto_layout(&mut options);
                         }
