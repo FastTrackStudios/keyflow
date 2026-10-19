@@ -108,14 +108,7 @@
         src = ftsSrc;
         inherit cargoVendorDir;
         strictDeps = true;
-        # mold: the repo's `.cargo/config.toml` pins
-        # `-C link-arg=-fuse-ld=mold` for x86_64-linux (see the comment
-        # there). That flag applies to nix builds too, and the sandbox has
-        # no devshell — without mold on PATH, gcc's collect2 dies with
-        # "cannot find 'ld'" on the very first build script. Ship the
-        # linker the flag asks for rather than fighting the flag.
-        nativeBuildInputs = with pkgs; [ pkg-config ]
-          ++ lib.optional stdenv.isLinux mold;
+        nativeBuildInputs = with pkgs; [ pkg-config ];
         buildInputs = with pkgs; [ openssl ];
       };
 
