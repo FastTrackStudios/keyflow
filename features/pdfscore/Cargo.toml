@@ -1,0 +1,17 @@
+[package]
+name = "keyflow-pdfscore"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Read engraved sheet music out of vector PDFs: positioned music glyphs, lines and shapes, recognised into a score"
+
+[dependencies]
+# PDF object model and content-stream decoding (the same version `kf book`
+# merges part PDFs with).
+lopdf = "0.36"
+kurbo = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[lints]
+workspace = true

@@ -7633,6 +7633,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "keyflow-pdfscore"
+version = "0.0.1-alpha"
+dependencies = [
+ "kurbo 0.13.1",
+ "lopdf 0.36.0",
+ "thiserror 2.0.20",
+ "tracing",
+]
+
+[[package]]
 name = "keyflow-proto"
 version = "0.1.0"
 dependencies = [

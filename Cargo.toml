@@ -30,6 +30,7 @@ members = [
     "features/midi",
     "features/musicxml",
     "features/musx",
+    "features/pdfscore",
     "features/orchestra",
     "features/sync",
     "features/text",
@@ -201,6 +202,7 @@ daw-proto = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.7" }
 daw-module = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.7" }
 dawfile-reaper = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.7" }
 keyflow-proto = { path = "features/proto" }
+keyflow-pdfscore = { path = "features/pdfscore" }
 keyflow-syntax = { path = "features/syntax" }
 
 # ── Facet reflection + vox RPC — the rc.7 fleet ───────────────────────
