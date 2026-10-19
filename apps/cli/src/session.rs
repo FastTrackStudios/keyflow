@@ -127,15 +127,27 @@ fn build_rpp(spec: &Spec, tl: &Timeline) -> String {
         .sample_rate(44100)
         .tempo_envelope(|mut env| {
             env = env.point_with_time_sig(0.0, first_bpm, first.num, first.den);
+            // A point only where the tempo or meter changes: a song played to
+            // a click is one tempo, and should read as one in REAPER.
+            // A point is skipped only when the running tempo already lands
+            // this bar within a millisecond, so the grid can never drift.
             let mut sig = (first.num, first.den);
+            let (mut last_bpm, mut last_t, mut q_since) = (first_bpm, 0.0, 0.0);
             for (i, bar) in spec.bars.iter().enumerate() {
                 let bpm = bpm_of(i);
+                let predicted = last_t + q_since * 60.0 / last_bpm;
                 if (bar.num, bar.den) != sig || i == 0 {
                     env = env.point_with_time_sig(tl.bar_times[i], bpm, bar.num, bar.den);
                     sig = (bar.num, bar.den);
-                } else {
+                } else if (predicted - tl.bar_times[i]).abs() > 0.001
+                    || (bpm - last_bpm).abs() > 0.05
+                {
                     env = env.point(tl.bar_times[i], bpm);
+                } else {
+                    q_since += bar.quarters;
+                    continue;
                 }
+                (last_bpm, last_t, q_since) = (bpm, tl.bar_times[i], bar.quarters);
             }
             env
         })

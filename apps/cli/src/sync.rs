@@ -60,12 +60,56 @@ pub(crate) fn store_delta_encoded(
     for (t, _, mut e) in abs {
         e.delta_ticks = (t - prev) as u32;
         prev = t;
+        // REAPER reads meta events (lyrics, text) only as `<X delta 0>`
+        // blocks with a base64 `FF type text` payload; an `E ff 05 …` line
+        // is silently dropped.
+        if e.bytes.first() == Some(&0xFF) {
+            stream.push(MidiSourceEvent::Extended(
+                dawfile_reaper::types::item::MidiExtendedEvent {
+                    selected: false,
+                    fields: vec![e.delta_ticks.to_string(), "0".into()],
+                    data_lines: vec![base64(&e.bytes)],
+                },
+            ));
+            continue;
+        }
         stream.push(MidiSourceEvent::Midi(e.clone()));
         events_out.push(e);
     }
     src.events = events_out;
     src.event_stream = stream;
     src.has_data = true;
+}
+
+#[cfg(feature = "reaper")]
+/// Standard base64 with padding, as REAPER writes `<X>` payloads.
+fn base64(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let n = chunk.iter().enumerate().fold(0u32, |n, (i, b)| n | u32::from(*b) << (16 - 8 * i));
+        for i in 0..4 {
+            if i <= chunk.len() {
+                out.push(ALPHABET[(n >> (18 - 6 * i) & 63) as usize] as char);
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
+}
+
+#[cfg(all(test, feature = "reaper"))]
+mod base64_tests {
+    #[test]
+    fn matches_reaper_payloads() {
+        // From a REAPER notation event: FF 0F "TRAC dynamic pp".
+        let mut b = vec![0xFF, 0x0F];
+        b.extend_from_slice(b"TRAC dynamic pp");
+        assert_eq!(super::base64(&b), "/w9UUkFDIGR5bmFtaWMgcHA=");
+        assert_eq!(super::base64(b"\xff\x05Hol"), "/wVIb2w=");
+    }
 }
 
 /// Notated duration of a melody note in quarter-note beats.
