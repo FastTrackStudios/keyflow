@@ -230,7 +230,7 @@ pub(crate) fn file_safe(s: &str) -> String {
         .to_string()
 }
 
-fn svg_to_png(svg: &str, scale: f32) -> Result<Vec<u8>, String> {
+pub(crate) fn svg_to_png(svg: &str, scale: f32) -> Result<Vec<u8>, String> {
     let fonts = ChartFontBundle::shared()?;
     let mut fontdb = usvg::fontdb::Database::new();
     fontdb.load_font_data(fonts.symbol_font_data().as_ref().clone());

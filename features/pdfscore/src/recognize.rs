@@ -1,0 +1,1174 @@
+//! Recognition: a page's glyphs and lines, read back into a score.
+//!
+//! Exact, not statistical — everything is measured from the page:
+//!
+//! 1. **Staves**: runs of five evenly spaced full-width horizontal lines.
+//!    The gap is the staff space (`sp`); every other tolerance is in `sp`.
+//! 2. **Systems**: staves joined by a barline that crosses between them
+//!    (a grand staff); otherwise each staff is its own system.
+//! 3. **Barlines**: vertical lines running exactly from a staff's top line
+//!    to a (possibly lower) staff's bottom line, grouped by x into thin,
+//!    double, final and repeat barlines (repeat dots beside them).
+//! 4. **Measures**: the spans between barlines. A span at a system's start
+//!    with no notes or rests is its prelude — clef, key and time.
+//! 5. **Notes**: noteheads take stems (verticals touching their left or
+//!    right edge), stems take beams (straight fills crossing the stem's far
+//!    end) and flags; together with the notehead's shape and its dots that
+//!    is the written duration. Pitch is the staff position read through the
+//!    clef, the key signature and the measure's accidentals.
+//! 6. **Text**: chord symbols (the engraver's chord font) become harmony;
+//!    other words above a system become staff text; the title is the
+//!    largest line at the top; a `♩ = 166` in the text font is the tempo.
+//!
+//! The font tables are for Sibelius's Helsinki/Opus family (the Maestro
+//! character layout) — the first engraver this reads. Another engraver is
+//! another table, not another recogniser.
+
+use std::collections::BTreeMap;
+
+use engraver_score::model::{
+    AttrChange, BarStyle, Chord, Clef, ClefSign, Direction, DirectionKind, Event, Measure, Note,
+    NoteTypeValue, Part, Rest, Score, Step, TempoMark, WrittenDuration, WrittenPitch,
+};
+use kurbo::{Point, Shape};
+
+use crate::extract::{Glyph, Page, as_segment};
+
+/// Ticks per quarter note in the recognised score.
+pub const DIVISIONS: u32 = 480;
+
+/// What recognition produced, and what it could not account for.
+#[derive(Debug, Clone)]
+pub struct Recognized {
+    pub score: Score,
+    pub report: Report,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Report {
+    pub staves: usize,
+    pub systems: usize,
+    pub measures: usize,
+    pub notes: usize,
+    pub rests: usize,
+    /// Repeats as (measure index, start?) — the score model has no repeat
+    /// barlines yet, so they ride here.
+    pub repeats: Vec<(usize, bool)>,
+    /// Measures whose content does not add up to the meter, and glyphs
+    /// nothing claimed.
+    pub warnings: Vec<String>,
+}
+
+// ───────────────────────── font tables ─────────────────────────
+
+/// What a music-font character is (Maestro layout: Helsinki, Opus).
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Sym {
+    Clef(ClefSign),
+    Head(Head),
+    Rest(RestKind),
+    Flag(u8),
+    Accidental(i8),
+    Dot,
+    Digit(u32),
+    Staccato,
+    Brace,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Head {
+    Black,
+    Half,
+    Whole,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum RestKind {
+    Measure,
+    Of(NoteTypeValue),
+}
+
+fn is_music_font(font: &str) -> bool {
+    let f = font.to_ascii_lowercase();
+    // The music fonts, not their text companions (HelsinkiText carries the
+    // metronome mark's note and is read as text).
+    (f.contains("helsinki") || f.contains("opus") || f.contains("maestro"))
+        && !f.contains("text")
+        && !f.contains("chord")
+}
+
+fn is_chord_font(font: &str) -> bool {
+    font.to_ascii_lowercase().contains("chord")
+}
+
+fn classify(g: &Glyph) -> Option<Sym> {
+    if !is_music_font(&g.font) {
+        return None;
+    }
+    let special = g.font.to_ascii_lowercase().contains("special");
+    Some(match (special, g.ch) {
+        (true, '{') => Sym::Brace,
+        (true, '™') | (false, 'k') => Sym::Dot,
+        (_, '&') => Sym::Clef(ClefSign::G),
+        (_, '?') => Sym::Clef(ClefSign::F),
+        (_, 'B') => Sym::Clef(ClefSign::C),
+        (_, 'œ') => Sym::Head(Head::Black),
+        (_, '˙') => Sym::Head(Head::Half),
+        (_, 'w') => Sym::Head(Head::Whole),
+        (_, '∑') => Sym::Rest(RestKind::Measure),
+        (_, 'Ó') => Sym::Rest(RestKind::Of(NoteTypeValue::Half)),
+        (_, 'Œ') => Sym::Rest(RestKind::Of(NoteTypeValue::Quarter)),
+        (_, '‰') => Sym::Rest(RestKind::Of(NoteTypeValue::Eighth)),
+        (_, '≈') => Sym::Rest(RestKind::Of(NoteTypeValue::Sixteenth)),
+        (_, '®') => Sym::Rest(RestKind::Of(NoteTypeValue::ThirtySecond)),
+        (_, 'j' | 'J') => Sym::Flag(1),
+        (_, 'r' | 'R') => Sym::Flag(2),
+        (_, 'x' | 'X') => Sym::Flag(3),
+        (_, '#') => Sym::Accidental(1),
+        (_, 'b') => Sym::Accidental(-1),
+        (_, 'n') => Sym::Accidental(0),
+        (_, 'Ü') => Sym::Accidental(2),
+        (_, 'º') => Sym::Accidental(-2),
+        (_, '.') => Sym::Staccato,
+        (_, c @ '0'..='9') => Sym::Digit(c as u32 - '0' as u32),
+        _ => return None,
+    })
+}
+
+/// Opus Chords: the legacy characters its ToUnicode map gives for chord
+/// suffix pieces, back to plain chord text.
+fn chord_char(c: char) -> &'static str {
+    match c {
+        '‹' | 'Œ' => "m",
+        '„' => "a",
+        'Š' => "j",
+        '©' => "#",
+        '¨' => "b",
+        '“' => "sus",
+        'ˆ' => "d",
+        _ => "",
+    }
+}
+
+// ───────────────────────── geometry ─────────────────────────
+
+#[derive(Debug, Clone, Copy)]
+struct Staff {
+    /// y of the top line; lines go down by `sp`.
+    top: f64,
+    sp: f64,
+    x0: f64,
+    x1: f64,
+}
+
+impl Staff {
+    fn bottom(&self) -> f64 {
+        self.top + 4.0 * self.sp
+    }
+    fn mid(&self) -> f64 {
+        self.top + 2.0 * self.sp
+    }
+    /// Half-spaces above the bottom line (0 = bottom line, 8 = top line).
+    fn position(&self, y: f64) -> i32 {
+        ((self.bottom() - y) / (self.sp / 2.0)).round() as i32
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct VLine {
+    x: f64,
+    y0: f64,
+    y1: f64,
+    width: f64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Beam {
+    x0: f64,
+    x1: f64,
+    /// Centre-line y at x0 and x1.
+    y0: f64,
+    y1: f64,
+}
+
+impl Beam {
+    fn y_at(&self, x: f64) -> f64 {
+        if (self.x1 - self.x0).abs() < 1e-6 {
+            self.y0
+        } else {
+            self.y0 + (self.y1 - self.y0) * (x - self.x0) / (self.x1 - self.x0)
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct BarGroup {
+    x0: f64,
+    x1: f64,
+    thick: Vec<bool>,
+    dots_left: bool,
+    dots_right: bool,
+}
+
+impl BarGroup {
+    fn style(&self) -> BarStyle {
+        match self.thick.as_slice() {
+            [false] => BarStyle::Regular,
+            [false, false] => BarStyle::LightLight,
+            [false, true] => BarStyle::LightHeavy,
+            [true, false] => BarStyle::HeavyLight,
+            [true] => BarStyle::LightHeavy,
+            _ => BarStyle::Regular,
+        }
+    }
+}
+
+/// A word of text: glyphs of one font on one baseline, closely spaced.
+#[derive(Debug, Clone)]
+struct Word {
+    text: String,
+    font: String,
+    x0: f64,
+    x1: f64,
+    y: f64,
+    size: f64,
+}
+
+fn staves_of(page: &Page) -> Vec<Staff> {
+    let mut lines: Vec<(f64, f64, f64)> = page
+        .strokes
+        .iter()
+        .filter_map(|s| as_segment(&s.path))
+        .filter(|(a, b)| (a.y - b.y).abs() < 0.05 && (b.x - a.x).abs() > 50.0)
+        .map(|(a, b)| (a.y, a.x.min(b.x), a.x.max(b.x)))
+        .collect();
+    lines.sort_by(|a, b| a.0.total_cmp(&b.0));
+    lines.dedup_by(|a, b| (a.0 - b.0).abs() < 0.05 && (a.1 - b.1).abs() < 1.0);
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i + 4 < lines.len() {
+        let w = &lines[i..i + 5];
+        let gap = w[1].0 - w[0].0;
+        let even = w.windows(2).all(|p| ((p[1].0 - p[0].0) - gap).abs() < 0.08 * gap);
+        let aligned = w.iter().all(|l| (l.1 - w[0].1).abs() < 2.0 && (l.2 - w[0].2).abs() < 2.0);
+        if even && aligned && gap > 2.0 && gap < 20.0 {
+            out.push(Staff {
+                top: w[0].0,
+                sp: gap,
+                x0: w[0].1,
+                x1: w[0].2,
+            });
+            i += 5;
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
+fn vlines(page: &Page) -> Vec<VLine> {
+    page.strokes
+        .iter()
+        .filter_map(|s| as_segment(&s.path).map(|seg| (seg, s.width)))
+        .filter(|((a, b), _)| (a.x - b.x).abs() < 0.05 && (a.y - b.y).abs() > 1.0)
+        .map(|((a, b), w)| VLine {
+            x: a.x,
+            y0: a.y.min(b.y),
+            y1: a.y.max(b.y),
+            width: w,
+        })
+        .collect()
+}
+
+fn beams_of(page: &Page, sp: f64) -> Vec<Beam> {
+    page.fills
+        .iter()
+        .filter_map(|f| {
+            let els = f.path.elements();
+            let curved = els.iter().any(|e| {
+                matches!(e, kurbo::PathEl::CurveTo(..) | kurbo::PathEl::QuadTo(..))
+            });
+            let b = f.path.bounding_box();
+            if curved || els.len() > 7 || b.width() < 1.2 * sp {
+                return None;
+            }
+            // The parallelogram's left and right edges: mid-heights there.
+            let pts: Vec<Point> = els
+                .iter()
+                .filter_map(|e| match e {
+                    kurbo::PathEl::MoveTo(p) | kurbo::PathEl::LineTo(p) => Some(*p),
+                    _ => None,
+                })
+                .collect();
+            let left: Vec<&Point> = pts.iter().filter(|p| (p.x - b.x0).abs() < 0.3).collect();
+            let right: Vec<&Point> = pts.iter().filter(|p| (p.x - b.x1).abs() < 0.3).collect();
+            if left.len() < 2 || right.len() < 2 {
+                return None;
+            }
+            let mid = |v: &[&Point]| v.iter().map(|p| p.y).sum::<f64>() / v.len() as f64;
+            let thick = (left.iter().map(|p| p.y).fold(f64::MIN, f64::max)
+                - left.iter().map(|p| p.y).fold(f64::MAX, f64::min))
+            .abs();
+            (thick > 0.25 * sp && thick < 1.0 * sp).then(|| Beam {
+                x0: b.x0,
+                x1: b.x1,
+                y0: mid(&left),
+                y1: mid(&right),
+            })
+        })
+        .collect()
+}
+
+fn words_of(glyphs: &[&Glyph]) -> Vec<Word> {
+    let mut gs: Vec<&&Glyph> = glyphs.iter().collect();
+    gs.sort_by(|a, b| {
+        (a.origin.y.round() as i64, a.origin.x.total_cmp(&b.origin.x))
+            .partial_cmp(&(b.origin.y.round() as i64, std::cmp::Ordering::Equal))
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a.origin.x.total_cmp(&b.origin.x))
+    });
+    let mut words: Vec<Word> = Vec::new();
+    for g in gs {
+        let adv = if g.advance > 0.0 { g.advance } else { 0.5 * g.size };
+        if let Some(w) = words.last_mut()
+            && (w.y - g.origin.y).abs() < 0.3 * g.size
+            && g.origin.x - w.x1 < 0.35 * g.size
+            && g.origin.x >= w.x0
+            && w.font == g.font
+        {
+            w.text.push(g.ch);
+            w.x1 = w.x1.max(g.origin.x + adv);
+            continue;
+        }
+        words.push(Word {
+            text: g.ch.to_string(),
+            font: g.font.clone(),
+            x0: g.origin.x,
+            x1: g.origin.x + adv,
+            y: g.origin.y,
+            size: g.size,
+        });
+    }
+    words
+}
+
+/// Words on one baseline joined into lines (a space where the gap is a
+/// word space, nothing where it is kerning).
+fn lines_of(mut words: Vec<Word>) -> Vec<Word> {
+    words.sort_by(|a, b| a.y.total_cmp(&b.y).then(a.x0.total_cmp(&b.x0)));
+    let mut out: Vec<Word> = Vec::new();
+    for w in words {
+        if let Some(l) = out.last_mut()
+            && (l.y - w.y).abs() < 0.3 * w.size
+            && w.x0 >= l.x0
+            && w.x0 - l.x1 < 1.2 * w.size
+            && !is_chord_font(&l.font)
+            && !is_chord_font(&w.font)
+        {
+            if w.x0 - l.x1 > 0.12 * w.size && !l.text.ends_with(' ') {
+                l.text.push(' ');
+            }
+            l.text.push_str(&w.text);
+            l.x1 = l.x1.max(w.x1);
+            l.size = l.size.max(w.size);
+            continue;
+        }
+        out.push(w);
+    }
+    for l in &mut out {
+        l.text = l.text.split_whitespace().collect::<Vec<_>>().join(" ");
+    }
+    out.retain(|l| !l.text.is_empty());
+    out
+}
+
+// ───────────────────────── recognition ─────────────────────────
+
+#[derive(Debug, Clone)]
+struct Item {
+    g: Glyph,
+    sym: Sym,
+    staff: usize,
+    used: bool,
+}
+
+/// A note or rest event before ticks are assigned.
+#[derive(Debug, Clone)]
+struct Ev {
+    x: f64,
+    staff_in_system: u8,
+    /// Stem direction (None: no stem, or a rest).
+    up: Option<bool>,
+    /// Vertical centre, for placing rests in a voice.
+    y: f64,
+    kind: EvKind,
+}
+
+#[derive(Debug, Clone)]
+enum EvKind {
+    Chord {
+        heads: Vec<(f64, f64)>, // (x, y) of each notehead
+        written: WrittenDuration,
+        accidentals: Vec<Option<i8>>,
+        staccato: bool,
+    },
+    Rest {
+        written: WrittenDuration,
+        measure: bool,
+    },
+}
+
+fn quarters_of(t: NoteTypeValue) -> f64 {
+    match t {
+        NoteTypeValue::Whole => 4.0,
+        NoteTypeValue::Half => 2.0,
+        NoteTypeValue::Quarter => 1.0,
+        NoteTypeValue::Eighth => 0.5,
+        NoteTypeValue::Sixteenth => 0.25,
+        NoteTypeValue::ThirtySecond => 0.125,
+        NoteTypeValue::SixtyFourth => 0.0625,
+        NoteTypeValue::Breve => 8.0,
+        _ => 0.0,
+    }
+}
+
+fn ticks_of(w: &WrittenDuration) -> u32 {
+    let base = w.note_type.map_or(0.0, quarters_of);
+    let dotted = match w.dots {
+        0 => base,
+        1 => base * 1.5,
+        2 => base * 1.75,
+        _ => base * 1.875,
+    };
+    let tup = w.tuplet.map_or(1.0, |(a, n)| f64::from(n) / f64::from(a));
+    (dotted * tup * f64::from(DIVISIONS)).round() as u32
+}
+
+fn shorter(t: NoteTypeValue, by: u8) -> NoteTypeValue {
+    const ORDER: [NoteTypeValue; 7] = [
+        NoteTypeValue::Whole,
+        NoteTypeValue::Half,
+        NoteTypeValue::Quarter,
+        NoteTypeValue::Eighth,
+        NoteTypeValue::Sixteenth,
+        NoteTypeValue::ThirtySecond,
+        NoteTypeValue::SixtyFourth,
+    ];
+    let i = ORDER.iter().position(|o| *o == t).unwrap_or(2);
+    ORDER[(i + usize::from(by)).min(ORDER.len() - 1)]
+}
+
+/// Bottom-line diatonic number (C0 = 0) for a clef.
+fn bottom_line(clef: ClefSign) -> i32 {
+    match clef {
+        ClefSign::F => 2 * 7 + 4, // G2
+        ClefSign::C => 3 * 7 + 3, // F3 (alto)
+        _ => 4 * 7 + 2,           // E4
+    }
+}
+
+fn step_of(d: i32) -> Step {
+    [Step::C, Step::D, Step::E, Step::F, Step::G, Step::A, Step::B][d.rem_euclid(7) as usize]
+}
+
+/// Key-signature alteration per step for a circle-of-fifths count.
+fn key_alter(fifths: i8, step: Step) -> i8 {
+    const SHARPS: [Step; 7] = [Step::F, Step::C, Step::G, Step::D, Step::A, Step::E, Step::B];
+    const FLATS: [Step; 7] = [Step::B, Step::E, Step::A, Step::D, Step::G, Step::C, Step::F];
+    if fifths > 0 {
+        i8::from(SHARPS[..fifths as usize].contains(&step))
+    } else if fifths < 0 {
+        -i8::from(FLATS[..(-fifths) as usize].contains(&step))
+    } else {
+        0
+    }
+}
+
+/// Read every page into one score (one part; a grand staff is one part of
+/// two staves).
+#[must_use]
+pub fn recognize(pages: &[Page]) -> Recognized {
+    let mut report = Report::default();
+    let mut measures: Vec<Measure> = Vec::new();
+    let mut title: Option<String> = None;
+    let mut part_staves: u8 = 1;
+    // Running state across systems and pages.
+    let mut clefs: Vec<ClefSign> = Vec::new();
+    let mut key: Option<i8> = None;
+    let mut time: Option<(u32, u32)> = None;
+
+    for page in pages {
+        let staves = staves_of(page);
+        if staves.is_empty() {
+            continue;
+        }
+        report.staves += staves.len();
+        let sp = staves[0].sp;
+        let vl = vlines(page);
+        let beams = beams_of(page, sp);
+
+        // Barlines: from some staff's top to some staff's bottom.
+        let at_line = |y: f64, line: f64| (y - line).abs() < 0.3 * sp;
+        let mut barlines: Vec<(VLine, usize, usize)> = Vec::new();
+        let mut stems: Vec<VLine> = Vec::new();
+        for v in &vl {
+            let top = staves.iter().position(|s| at_line(v.y0, s.top));
+            let bot = staves.iter().rposition(|s| at_line(v.y1, s.bottom()));
+            match (top, bot) {
+                (Some(t), Some(b)) if b >= t => barlines.push((*v, t, b)),
+                _ if v.width < 0.25 * sp && v.y1 - v.y0 > 2.0 * sp => stems.push(*v),
+                _ => {}
+            }
+        }
+        // Systems: staves joined by a barline crossing between them.
+        let mut sys_of: Vec<usize> = (0..staves.len()).collect();
+        for (_, t, b) in &barlines {
+            for k in *t..=*b {
+                sys_of[k] = sys_of[*t];
+            }
+        }
+        let mut systems: Vec<Vec<usize>> = Vec::new();
+        for (i, s) in sys_of.iter().enumerate() {
+            if i == 0 || *s != sys_of[i - 1] {
+                systems.push(vec![i]);
+            } else if let Some(last) = systems.last_mut() {
+                last.push(i);
+            }
+        }
+        report.systems += systems.len();
+        part_staves = part_staves.max(systems.iter().map(Vec::len).max().unwrap_or(1) as u8);
+
+        // Music glyphs, each assigned to its nearest staff.
+        let mut items: Vec<Item> = page
+            .glyphs
+            .iter()
+            .filter_map(|g| {
+                let sym = classify(g)?;
+                let staff = staves
+                    .iter()
+                    .enumerate()
+                    .min_by(|a, b| {
+                        (a.1.mid() - g.origin.y).abs().total_cmp(&(b.1.mid() - g.origin.y).abs())
+                    })?
+                    .0;
+                Some(Item {
+                    g: g.clone(),
+                    sym,
+                    staff,
+                    used: false,
+                })
+            })
+            .collect();
+
+        // Text: chord symbols and words.
+        let chord_glyphs: Vec<&Glyph> = page.glyphs.iter().filter(|g| is_chord_font(&g.font)).collect();
+        let mut chords: Vec<Word> = words_of(&chord_glyphs);
+        for c in &mut chords {
+            c.text = c
+                .text
+                .chars()
+                .map(|ch| {
+                    let m = chord_char(ch);
+                    if m.is_empty() { ch.to_string() } else { m.to_string() }
+                })
+                .collect();
+        }
+        // Overprinted duplicates (Opus draws some pieces twice).
+        chords.dedup_by(|a, b| a.text == b.text && (a.x0 - b.x0).abs() < 0.5 && (a.y - b.y).abs() < 0.5);
+        let text_glyphs: Vec<&Glyph> = page
+            .glyphs
+            .iter()
+            .filter(|g| !is_music_font(&g.font) && !is_chord_font(&g.font))
+            .collect();
+        let lines = lines_of(words_of(&text_glyphs));
+        let first_top = staves[0].top;
+        if title.is_none() {
+            title = lines
+                .iter()
+                .filter(|l| l.y < first_top)
+                .max_by(|a, b| a.size.total_cmp(&b.size))
+                .map(|l| l.text.clone());
+        }
+
+        for sys in &systems {
+            let first = staves[sys[0]];
+            if clefs.len() < sys.len() {
+                clefs.resize(sys.len(), ClefSign::G);
+            }
+            // Bar groups for this system.
+            let mut xs: Vec<(f64, f64)> = barlines
+                .iter()
+                .filter(|(_, t, b)| sys.contains(t) && sys.contains(b))
+                .map(|(v, _, _)| (v.x, v.width))
+                .collect();
+            xs.sort_by(|a, b| a.0.total_cmp(&b.0));
+            let mut groups: Vec<BarGroup> = Vec::new();
+            for (x, w) in xs {
+                let thick = w > 1.5 * 0.78f64.max(0.15 * sp);
+                if let Some(g) = groups.last_mut()
+                    && x - g.x1 < 1.2 * sp
+                {
+                    if (x - g.x1).abs() > 0.05 {
+                        g.thick.push(thick);
+                    }
+                    g.x1 = x;
+                    continue;
+                }
+                groups.push(BarGroup {
+                    x0: x,
+                    x1: x,
+                    thick: vec![thick],
+                    dots_left: false,
+                    dots_right: false,
+                });
+            }
+            // The system's opening line is not a measure boundary.
+            groups.retain(|g| g.x1 - first.x0 > 0.5 * sp || g.thick.len() > 1);
+            for it in items.iter_mut().filter(|i| sys.contains(&i.staff) && i.sym == Sym::Dot) {
+                for g in &mut groups {
+                    if it.g.origin.x > g.x1 && it.g.origin.x - g.x1 < 1.5 * sp {
+                        g.dots_right = true;
+                        it.used = true;
+                    } else if it.g.origin.x < g.x0 && g.x0 - it.g.origin.x < 1.5 * sp {
+                        g.dots_left = true;
+                        it.used = true;
+                    }
+                }
+            }
+
+            // Clefs, key and time at the system start (and wherever they
+            // change).
+            for (k, &si) in sys.iter().enumerate() {
+                if let Some(c) = items
+                    .iter_mut()
+                    .filter(|i| i.staff == si && matches!(i.sym, Sym::Clef(_)))
+                    .min_by(|a, b| a.g.origin.x.total_cmp(&b.g.origin.x))
+                {
+                    if let Sym::Clef(sign) = c.sym {
+                        clefs[k] = sign;
+                    }
+                    c.used = true;
+                }
+            }
+            let first_event_x = items
+                .iter()
+                .filter(|i| sys.contains(&i.staff) && matches!(i.sym, Sym::Head(_) | Sym::Rest(_)))
+                .map(|i| i.g.origin.x)
+                .fold(f64::MAX, f64::min);
+            // Key signature: accidentals before the first event of the top
+            // staff that no notehead claims.
+            let key_accs: Vec<i8> = items
+                .iter()
+                .filter(|i| i.staff == sys[0] && i.g.origin.x < first_event_x)
+                .filter_map(|i| match i.sym {
+                    Sym::Accidental(a) if a != 0 => Some(a),
+                    _ => None,
+                })
+                .collect();
+            for it in items
+                .iter_mut()
+                .filter(|i| sys.contains(&i.staff) && i.g.origin.x < first_event_x)
+                .filter(|i| matches!(i.sym, Sym::Accidental(_)))
+            {
+                it.used = true;
+            }
+            if !key_accs.is_empty() || key.is_none() {
+                key = Some(key_accs.iter().map(|a| a.signum()).sum::<i8>());
+            }
+            // Time signature: digits stacked on the top staff.
+            let digits: Vec<(f64, f64, u32)> = items
+                .iter()
+                .filter(|i| i.staff == sys[0])
+                .filter_map(|i| match i.sym {
+                    Sym::Digit(d) => Some((i.g.origin.x, i.g.origin.y, d)),
+                    _ => None,
+                })
+                .collect();
+            let mut new_time = None;
+            if !digits.is_empty() {
+                let mid = first.mid();
+                let num: String = digits.iter().filter(|d| d.1 < mid).map(|d| char::from_digit(d.2, 10).unwrap_or('4')).collect();
+                let den: String = digits.iter().filter(|d| d.1 >= mid).map(|d| char::from_digit(d.2, 10).unwrap_or('4')).collect();
+                if let (Ok(n), Ok(d)) = (num.parse::<u32>(), den.parse::<u32>()) {
+                    new_time = Some((n, d));
+                }
+                for it in items.iter_mut().filter(|i| sys.contains(&i.staff) && matches!(i.sym, Sym::Digit(_))) {
+                    it.used = true;
+                }
+            }
+
+            // Measure spans: system start, then between bar groups.
+            let mut bounds: Vec<(f64, Option<BarGroup>)> = vec![(first.x0, None)];
+            for g in &groups {
+                bounds.push((g.x1, Some(g.clone())));
+            }
+            if bounds.last().is_some_and(|(x, _)| (first.x1 - x).abs() > sp) {
+                bounds.push((first.x1, None));
+            }
+            let mut first_in_system = true;
+            for w in bounds.windows(2) {
+                let (x0, ref open) = w[0];
+                let (x1, ref close) = w[1];
+                let inside = |x: f64| x > x0 && x < x1;
+                let has_events = items.iter().any(|i| {
+                    sys.contains(&i.staff) && matches!(i.sym, Sym::Head(_) | Sym::Rest(_)) && inside(i.g.origin.x)
+                });
+                if !has_events {
+                    continue; // the prelude
+                }
+                let index = measures.len();
+                // The first measure of a system also owns the text printed
+                // over the system's prelude.
+                let span_start = if first_in_system { first.x0 } else { x0 };
+                if open.as_ref().is_some_and(|g| g.dots_right) {
+                    report.repeats.push((index, true));
+                }
+                if close.as_ref().is_some_and(|g| g.dots_left) {
+                    report.repeats.push((index, false));
+                }
+                let mut m = Measure {
+                    number: (index + 1).to_string(),
+                    divisions: DIVISIONS,
+                    barline: close.as_ref().map_or(BarStyle::Regular, BarGroup::style),
+                    ..Measure::default()
+                };
+                if index == 0 || first_in_system {
+                    let mut a = AttrChange {
+                        tick: 0,
+                        ..AttrChange::default()
+                    };
+                    if index == 0 {
+                        a.divisions = Some(DIVISIONS);
+                        a.staves = Some(sys.len() as u8);
+                        a.key_fifths = key;
+                        a.time = new_time.or(Some((4, 4)));
+                        a.clefs = clefs
+                            .iter()
+                            .take(sys.len())
+                            .enumerate()
+                            .map(|(k, s)| {
+                                (k as u8 + 1, Clef { sign: *s, line: None, octave_change: 0 })
+                            })
+                            .collect();
+                        time = a.time;
+                    } else if new_time.is_some() && new_time != time {
+                        a.time = new_time;
+                        time = new_time;
+                    }
+                    if a.divisions.is_some() || a.time.is_some() {
+                        m.attributes.push(a);
+                    }
+                }
+                first_in_system = false;
+                let (tn, td) = time.unwrap_or((4, 4));
+                m.len_ticks = DIVISIONS * 4 * tn / td;
+
+                // Events per staff.
+                let mut events: Vec<Ev> = Vec::new();
+                for (k, &si) in sys.iter().enumerate() {
+                    let staff = staves[si];
+                    let in_m: Vec<usize> = (0..items.len())
+                        .filter(|&i| items[i].staff == si && inside(items[i].g.origin.x))
+                        .collect();
+                    let head_w = 1.2 * sp;
+                    // Stems near this staff in this measure.
+                    let my_stems: Vec<VLine> = stems
+                        .iter()
+                        .filter(|s| inside(s.x) && s.y1 > staff.top - 5.0 * sp && s.y0 < staff.bottom() + 5.0 * sp)
+                        .copied()
+                        .collect();
+                    // Group noteheads by stem.
+                    let mut by_stem: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+                    let mut stemless: Vec<usize> = Vec::new();
+                    for &i in &in_m {
+                        let Sym::Head(h) = items[i].sym else { continue };
+                        let g = &items[i].g;
+                        let hw = if g.advance > 0.0 { g.advance } else { head_w };
+                        let found = my_stems.iter().position(|s| {
+                            let at_edge = (s.x - g.origin.x).abs() < 0.35 * sp
+                                || (s.x - (g.origin.x + hw)).abs() < 0.45 * sp;
+                            at_edge && g.origin.y > s.y0 - 0.7 * sp && g.origin.y < s.y1 + 0.7 * sp
+                        });
+                        match (h, found) {
+                            (Head::Whole, _) | (_, None) => stemless.push(i),
+                            (_, Some(s)) => by_stem.entry(s).or_default().push(i),
+                        }
+                    }
+                    let make_chord = |heads: Vec<usize>, stem: Option<VLine>, items: &mut Vec<Item>| {
+                        let head = match items[heads[0]].sym {
+                            Sym::Head(h) => h,
+                            _ => Head::Black,
+                        };
+                        let mut stem_up = None;
+                        let mut note_type = match head {
+                            Head::Whole => NoteTypeValue::Whole,
+                            Head::Half => NoteTypeValue::Half,
+                            Head::Black => NoteTypeValue::Quarter,
+                        };
+                        if let Some(s) = stem {
+                            // The stem's far end: away from its noteheads.
+                            let hy: f64 = heads.iter().map(|&i| items[i].g.origin.y).sum::<f64>() / heads.len() as f64;
+                            let up = (s.y0 - hy).abs() > (s.y1 - hy).abs();
+                            stem_up = Some(up);
+                            let tip = if up { s.y0 } else { s.y1 };
+                            let n_beams = beams
+                                .iter()
+                                .filter(|b| s.x > b.x0 - 0.3 && s.x < b.x1 + 0.3)
+                                .filter(|b| {
+                                    let y = b.y_at(s.x);
+                                    y > s.y0 - 0.6 * sp && y < s.y1 + 0.6 * sp && (y - tip).abs() < 2.5 * sp
+                                })
+                                .count();
+                            let mut n_flags = 0;
+                            for it in items.iter_mut() {
+                                if let Sym::Flag(n) = it.sym
+                                    && !it.used
+                                    && (it.g.origin.x - s.x).abs() < 0.6 * sp
+                                    && (it.g.origin.y - tip).abs() < 1.6 * sp
+                                {
+                                    n_flags += n;
+                                    it.used = true;
+                                }
+                            }
+                            note_type = shorter(note_type, n_beams as u8 + n_flags);
+                        }
+                        // Dots right of the rightmost notehead.
+                        let rx = heads.iter().map(|&i| items[i].g.origin.x).fold(f64::MIN, f64::max) + head_w;
+                        let head_ys: Vec<f64> = heads.iter().map(|&i| items[i].g.origin.y).collect();
+                        // Every notehead of a dotted chord carries its own
+                        // dot: count dot COLUMNS, not dots.
+                        let mut dot_xs: Vec<f64> = Vec::new();
+                        for it in items.iter_mut() {
+                            if it.sym == Sym::Dot
+                                && !it.used
+                                && it.g.origin.x > rx - 0.2 * sp
+                                && it.g.origin.x < rx + 1.4 * sp
+                                && head_ys.iter().any(|hy| (hy - it.g.origin.y).abs() < 0.8 * sp)
+                            {
+                                if !dot_xs.iter().any(|x| (x - it.g.origin.x).abs() < 0.4 * sp) {
+                                    dot_xs.push(it.g.origin.x);
+                                }
+                                it.used = true;
+                            }
+                        }
+                        let dots = dot_xs.len().min(3) as u8;
+                        let mut hs: Vec<(f64, f64)> = heads.iter().map(|&i| (items[i].g.origin.x, items[i].g.origin.y)).collect();
+                        hs.sort_by(|a, b| b.1.total_cmp(&a.1));
+                        let mut accidentals = vec![None; hs.len()];
+                        for (n, (hx, hy)) in hs.iter().enumerate() {
+                            for it in items.iter_mut() {
+                                if let Sym::Accidental(a) = it.sym
+                                    && !it.used
+                                    && it.g.origin.x < *hx
+                                    && *hx - it.g.origin.x < 3.0 * sp
+                                    && (it.g.origin.y - hy).abs() < 0.3 * sp
+                                {
+                                    accidentals[n] = Some(a);
+                                    it.used = true;
+                                }
+                            }
+                        }
+                        let x = hs.iter().map(|h| h.0).fold(f64::MAX, f64::min);
+                        let mut staccato = false;
+                        for it in items.iter_mut() {
+                            if it.sym == Sym::Staccato && !it.used && (it.g.origin.x - x).abs() < 1.0 * sp {
+                                if hs.iter().any(|h| (h.1 - it.g.origin.y).abs() < 2.5 * sp) {
+                                    staccato = true;
+                                    it.used = true;
+                                }
+                            }
+                        }
+                        for &i in &heads {
+                            items[i].used = true;
+                        }
+                        let y = hs.iter().map(|h| h.1).sum::<f64>() / hs.len() as f64;
+                        Ev {
+                            x,
+                            staff_in_system: k as u8 + 1,
+                            up: stem_up,
+                            y,
+                            kind: EvKind::Chord {
+                                heads: hs,
+                                written: WrittenDuration { note_type: Some(note_type), dots, tuplet: None },
+                                accidentals,
+                                staccato,
+                            },
+                        }
+                    };
+                    for (s, heads) in by_stem {
+                        let stem = my_stems[s];
+                        events.push(make_chord(heads, Some(stem), &mut items));
+                    }
+                    // Stemless noteheads (whole notes) stacked at one x are
+                    // one chord.
+                    stemless.sort_by(|a, b| items[*a].g.origin.x.total_cmp(&items[*b].g.origin.x));
+                    let mut stacks: Vec<Vec<usize>> = Vec::new();
+                    for i in stemless {
+                        match stacks.last_mut() {
+                            Some(st) if (items[st[0]].g.origin.x - items[i].g.origin.x).abs() < 0.8 * sp => st.push(i),
+                            _ => stacks.push(vec![i]),
+                        }
+                    }
+                    for st in stacks {
+                        events.push(make_chord(st, None, &mut items));
+                    }
+                    // Rests.
+                    for &i in &in_m {
+                        let Sym::Rest(kind) = items[i].sym else { continue };
+                        let g = items[i].g.clone();
+                        let mut dots = 0u8;
+                        for it in items.iter_mut() {
+                            if it.sym == Sym::Dot
+                                && !it.used
+                                && it.g.origin.x > g.origin.x
+                                && it.g.origin.x - g.origin.x < 2.0 * sp
+                                && (it.g.origin.y - g.origin.y).abs() < 1.5 * sp
+                            {
+                                dots += 1;
+                                it.used = true;
+                            }
+                        }
+                        items[i].used = true;
+                        events.push(Ev {
+                            x: g.origin.x,
+                            staff_in_system: k as u8 + 1,
+                            up: None,
+                            y: g.origin.y,
+                            kind: match kind {
+                                RestKind::Measure => EvKind::Rest {
+                                    written: WrittenDuration { note_type: Some(NoteTypeValue::Whole), dots: 0, tuplet: None },
+                                    measure: true,
+                                },
+                                RestKind::Of(t) => EvKind::Rest {
+                                    written: WrittenDuration { note_type: Some(t), dots, tuplet: None },
+                                    measure: false,
+                                },
+                            },
+                        });
+                    }
+                }
+
+                // Ticks, pitches, per staff; the top staff's (x, tick) pairs
+                // place the text.
+                let mut onsets: Vec<(f64, u32)> = Vec::new();
+                let mut alters: BTreeMap<(u8, i32), i8> = BTreeMap::new();
+                for k in 1..=sys.len() as u8 {
+                    let staff = staves[sys[usize::from(k) - 1]];
+                    let clef = clefs[usize::from(k) - 1];
+                    let mut evs: Vec<&Ev> = events.iter().filter(|e| e.staff_in_system == k).collect();
+                    evs.sort_by(|a, b| a.x.total_cmp(&b.x));
+                    let voices = split_voices(&evs, m.len_ticks, staff.mid());
+                    for (v, evs) in voices.into_iter().enumerate() {
+                    let voice = (u32::from(k) - 1) * 4 + v as u32 + 1;
+                    let mut tick = 0u32;
+                    for e in evs {
+                        if k == 1 {
+                            onsets.push((e.x, tick));
+                        }
+                        match &e.kind {
+                            EvKind::Rest { written, measure } => {
+                                let dur = if *measure { m.len_ticks } else { ticks_of(written) };
+                                m.events.push(Event::Rest(Rest {
+                                    tick,
+                                    duration: dur,
+                                    voice,
+                                    staff: k,
+                                    written: *written,
+                                    measure_rest: *measure,
+                                }));
+                                report.rests += 1;
+                                tick += dur;
+                            }
+                            EvKind::Chord { heads, written, accidentals, staccato } => {
+                                let dur = ticks_of(written);
+                                let notes = heads
+                                    .iter()
+                                    .zip(accidentals)
+                                    .map(|((_, y), acc)| {
+                                        let d = bottom_line(clef) + staff.position(*y);
+                                        if let Some(a) = acc {
+                                            alters.insert((k, d), *a);
+                                        }
+                                        let step = step_of(d);
+                                        let alter = alters
+                                            .get(&(k, d))
+                                            .copied()
+                                            .unwrap_or_else(|| key_alter(key.unwrap_or(0), step));
+                                        Note {
+                                            pitch: WrittenPitch { step, alter, octave: d.div_euclid(7) as i8 },
+                                            tie_start: false,
+                                            tie_stop: false,
+                                            accidental: acc.map(|a| {
+                                                match a {
+                                                    2 => "double-sharp",
+                                                    1 => "sharp",
+                                                    0 => "natural",
+                                                    -1 => "flat",
+                                                    _ => "flat-flat",
+                                                }
+                                                .to_string()
+                                            }),
+                                        }
+                                    })
+                                    .collect::<Vec<_>>();
+                                report.notes += notes.len();
+                                let mut articulations = std::collections::BTreeSet::new();
+                                if *staccato {
+                                    articulations.insert("staccato".to_string());
+                                }
+                                m.events.push(Event::Chord(Chord {
+                                    tick,
+                                    duration: dur,
+                                    voice,
+                                    staff: k,
+                                    written: *written,
+                                    grace: false,
+                                    notes,
+                                    slur_start: false,
+                                    slur_stop: false,
+                                    articulations,
+                                    articulation_above: BTreeMap::new(),
+                                }));
+                                tick += dur;
+                            }
+                        }
+                    }
+                    if tick != m.len_ticks && tick != 0 {
+                        report.warnings.push(format!(
+                            "measure {} staff {k} voice {}: content {} quarters, meter {}",
+                            index + 1,
+                            v + 1,
+                            f64::from(tick) / f64::from(DIVISIONS),
+                            f64::from(m.len_ticks) / f64::from(DIVISIONS)
+                        ));
+                    }
+                    }
+                }
+
+                let tick_at = |x: f64| -> u32 {
+                    onsets
+                        .iter()
+                        .min_by(|a, b| (a.0 - x).abs().total_cmp(&(b.0 - x).abs()))
+                        .map_or(0, |o| o.1)
+                };
+                // Text belongs to the measure whose span holds its left
+                // edge (the first measure also takes text over its
+                // prelude), between this system and the one above.
+                let above_limit = first.top - 14.0 * sp;
+                let in_span = |x: f64| x >= span_start && x < x1;
+                // By the text's centre: a cue set just left of a barline
+                // still belongs to the bar it is centred over.
+                let centre = |w: &Word| (w.x0 + w.x1) / 2.0;
+                for c in chords.iter().filter(|c| c.y < first.top && c.y > above_limit && in_span(centre(c))) {
+                    m.directions.push(Direction { tick: tick_at(c.x0), kind: DirectionKind::Harmony(c.text.clone()) });
+                }
+                for l in lines.iter().filter(|l| l.y < first.top && l.y > above_limit && in_span(centre(l))) {
+                    if title.as_deref() == Some(l.text.as_str()) {
+                        continue;
+                    }
+                    // A measure number over the system start.
+                    if l.text.chars().all(|c| c.is_ascii_digit()) && (l.x0 - first.x0).abs() < 2.0 * sp {
+                        continue;
+                    }
+                    if let Some(t) = tempo_of(l) {
+                        m.directions.push(Direction { tick: 0, kind: DirectionKind::Tempo(t) });
+                        continue;
+                    }
+                    m.directions.push(Direction { tick: tick_at(l.x0), kind: DirectionKind::Words(l.text.clone()) });
+                }
+                measures.push(m);
+            }
+        }
+        for it in items.iter().filter(|i| !i.used && !matches!(i.sym, Sym::Brace | Sym::Clef(_))) {
+            report.warnings.push(format!(
+                "unclaimed {:?} '{}' at ({:.1}, {:.1}) page {}",
+                it.sym, it.g.ch, it.g.origin.x, it.g.origin.y, page.number
+            ));
+        }
+    }
+    report.measures = measures.len();
+    let score = Score {
+        work_title: title,
+        parts: vec![Part {
+            id: "P1".into(),
+            name: if part_staves > 1 { "Keys".into() } else { "Part".into() },
+            abbreviation: None,
+            staves: part_staves,
+            transpose: None,
+            measures,
+        }],
+        ..Score::default()
+    };
+    Recognized { score, report }
+}
+
+fn ev_ticks(e: &Ev, len: u32) -> u32 {
+    match &e.kind {
+        EvKind::Rest { measure: true, .. } => len,
+        EvKind::Rest { written, .. } | EvKind::Chord { written, .. } => ticks_of(written),
+    }
+}
+
+/// One voice when the staff's events fill the bar; otherwise two — stems
+/// up above, stems down below, stemless chords to whichever voice has room
+/// and rests by height — kept only if both voices then fill the bar.
+fn split_voices<'e>(evs: &[&'e Ev], len: u32, mid: f64) -> Vec<Vec<&'e Ev>> {
+    let total: u32 = evs.iter().map(|e| ev_ticks(e, len)).sum();
+    if total <= len || !evs.iter().any(|e| e.up.is_some()) {
+        return vec![evs.to_vec()];
+    }
+    let (mut upper, mut lower): (Vec<&Ev>, Vec<&Ev>) = (Vec::new(), Vec::new());
+    let mut floating: Vec<&Ev> = Vec::new();
+    for e in evs {
+        match (e.up, &e.kind) {
+            (Some(true), _) => upper.push(e),
+            (Some(false), _) => lower.push(e),
+            (None, EvKind::Rest { .. }) => {
+                if e.y < mid { upper.push(e) } else { lower.push(e) }
+            }
+            (None, _) => floating.push(e),
+        }
+    }
+    let sum = |v: &[&Ev]| v.iter().map(|e| ev_ticks(e, len)).sum::<u32>();
+    for e in floating {
+        if sum(&lower) + ev_ticks(e, len) <= len && (sum(&upper) + ev_ticks(e, len) > len || e.y >= mid) {
+            lower.push(e);
+        } else {
+            upper.push(e);
+        }
+    }
+    upper.sort_by(|a, b| a.x.total_cmp(&b.x));
+    lower.sort_by(|a, b| a.x.total_cmp(&b.x));
+    if sum(&upper) == len && sum(&lower) == len {
+        vec![upper, lower]
+    } else {
+        vec![evs.to_vec()]
+    }
+}
+
+/// `q = 166` in a music text font: the note glyph, then the number.
+fn tempo_of(l: &Word) -> Option<TempoMark> {
+    let f = l.font.to_ascii_lowercase();
+    if !(f.contains("text") && (f.contains("helsinki") || f.contains("opus"))) {
+        return None;
+    }
+    let t = l.text.replace(' ', "");
+    let (note, rest) = t.split_once('=')?;
+    let (beat_unit, dots) = match note {
+        "q" => ("quarter", 0),
+        "q." => ("quarter", 1),
+        "h" => ("half", 0),
+        "h." => ("half", 1),
+        "e" => ("eighth", 0),
+        "e." => ("eighth", 1),
+        _ => return None,
+    };
+    let per_minute: String = rest.chars().take_while(|c| c.is_ascii_digit() || *c == '-').collect();
+    (!per_minute.is_empty()).then(|| TempoMark {
+        text: None,
+        beat_unit: beat_unit.into(),
+        dots,
+        per_minute,
+        suffix: None,
+    })
+}

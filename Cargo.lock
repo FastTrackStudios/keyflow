@@ -7521,6 +7521,7 @@ dependencies = [
  "keyflow-chordsheet",
  "keyflow-musicxml",
  "keyflow-orchestra",
+ "keyflow-pdfscore",
  "keyflow-sync",
  "lopdf 0.36.0",
  "png 0.17.16",
@@ -7638,6 +7639,7 @@ dependencies = [
 name = "keyflow-pdfscore"
 version = "0.0.1-alpha"
 dependencies = [
+ "engraver-score",
  "kurbo 0.13.1",
  "lopdf 0.36.0",
  "thiserror 2.0.20",

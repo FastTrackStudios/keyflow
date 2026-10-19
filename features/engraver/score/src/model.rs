@@ -150,6 +150,9 @@ pub enum DirectionKind {
     Rehearsal(RehearsalMark),
     /// Tempo mark: `Allegro ♩ = 120`, `♩ = 63 BPM`.
     Tempo(TempoMark),
+    /// Chord symbol as written ("Bm", "F#m7", "Asus4"), drawn above the
+    /// staff at its tick.
+    Harmony(String),
 }
 
 /// A metronome mark with the words around it in the same direction.

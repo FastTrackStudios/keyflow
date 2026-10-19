@@ -39,6 +39,7 @@ keyflow-musicxml = { workspace = true }
 keyflow-orchestra.workspace = true
 # `kf parts`: score/part engraving (Finale layouts, PDF export).
 engraver-score = { workspace = true, features = ["pdf"] }
+keyflow-pdfscore = { workspace = true }
 # `kf book`: concatenating part PDFs into instrument books (same lopdf
 # engraver-proto's PDF export uses).
 lopdf = "0.36"

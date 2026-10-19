@@ -189,6 +189,7 @@ pub(super) fn place_system(
     );
     place_dynamics(input, &mut sky, &mut owners, &mut out.nodes, id);
     place_tempos(input, &mut sky, &mut owners, &mut out.nodes);
+    place_harmony(input, &mut sky, &mut owners, &mut out.nodes);
     place_staff_text(input, &mut sky, &mut owners, &mut out.nodes);
     place_measure_numbers(input, &mut sky, &mut owners, &mut out.nodes);
     place_rehearsals(input, &mut sky, &mut owners, &mut out.nodes);
@@ -1710,6 +1711,61 @@ fn place_tempos(
         let owner = owners.next();
         sky.add(at(dy), SkyKind::StaffText, owner);
         let mut node = SceneNode::group(SemanticId::new(ElementType::Tempo, owner));
+        node.add_child(SceneNode::anonymous_leaf(cmds).with_transform(Affine::translate((x, dy))));
+        nodes.push(node);
+    }
+}
+
+// ──────────────────────── 5a. chord symbols ────────────────────────
+
+/// Chord symbols: black, a size up from staff text, set on one line just
+/// clear of the notes so they read across the system; cues stack above.
+fn place_harmony(
+    input: &SystemInput<'_, '_>,
+    sky: &mut Skyline,
+    owners: &mut Ids,
+    nodes: &mut Vec<SceneNode>,
+) {
+    let sp = input.spatium;
+    let font = TextFont {
+        size: input.words_font.size * 1.3,
+        bold: false,
+        italic: false,
+        ..input.words_font.clone()
+    };
+    let mut chords: Vec<(f64, Vec<PaintCommand>, Rect)> = Vec::new();
+    for a in input.anchors {
+        for d in &a.m.directions {
+            if let model::DirectionKind::Harmony(text) = &d.kind {
+                let (cmds, ink) = rich_line(text, &font, sp, Color::BLACK);
+                if let Some(r) = ink {
+                    chords.push((direction_x(input, a, d.tick), cmds, r));
+                }
+            }
+        }
+    }
+    if chords.is_empty() {
+        return;
+    }
+    // One baseline for the whole system: the highest any chord needs.
+    let base = -style::STAFF_TEXT_POS_ABOVE * sp;
+    let mut dy = base;
+    for (x, _, r) in &chords {
+        let need = base
+            + sky.distance_to_move(
+                &[*r + Vec2::new(*x, base)],
+                true,
+                style::STAFF_TEXT_MIN_DISTANCE * sp,
+                style::SKYLINE_H_CLEARANCE * sp,
+                |_, _| false,
+            );
+        dy = dy.min(need);
+    }
+    for (x, cmds, r) in chords {
+        let x = x.min((input.width - r.width()).max(0.0));
+        let owner = owners.next();
+        sky.add(r + Vec2::new(x, dy), SkyKind::StaffText, owner);
+        let mut node = SceneNode::group(SemanticId::new(ElementType::Text, owner));
         node.add_child(SceneNode::anonymous_leaf(cmds).with_transform(Affine::translate((x, dy))));
         nodes.push(node);
     }

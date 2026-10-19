@@ -18,8 +18,10 @@
 //!    and text, into a score.
 
 pub mod extract;
+pub mod recognize;
 
 pub use extract::{Fill, Glyph, Image, Page, Stroke, read_pdf};
+pub use recognize::{Recognized, Report, recognize};
 
 /// What can go wrong reading a PDF.
 #[derive(Debug, thiserror::Error)]

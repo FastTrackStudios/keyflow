@@ -17,6 +17,7 @@ mod book;
 mod docs;
 mod orchestra;
 mod parts;
+mod pdfscore;
 mod session;
 mod sync;
 
@@ -533,6 +534,37 @@ enum Commands {
         /// The song folder to write into.
         #[arg(long, short)]
         out: PathBuf,
+    },
+    /// Read an engraved PDF (vector, from notation software) back into a
+    /// score and engrave it again at any page size — Letter by default,
+    /// `--phone` for a phone screen. Prints what was recognised and
+    /// anything that did not add up.
+    PdfScore {
+        /// The PDF to read.
+        input: PathBuf,
+        /// Output directory (default: a folder named after the PDF).
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+        #[arg(long, value_enum, default_value = "png")]
+        format: pdfscore::Format,
+        /// Page width in points.
+        #[arg(long, default_value = "612")]
+        width: f64,
+        /// Page height in points.
+        #[arg(long, default_value = "792")]
+        height: f64,
+        /// Staff space in points (6.5 = a printed part).
+        #[arg(long, default_value = "6.5")]
+        spatium: f64,
+        /// Page margin in points.
+        #[arg(long, default_value = "44")]
+        margin: f64,
+        /// A phone screen: 390×844 pt, a larger staff, slim margins.
+        #[arg(long)]
+        phone: bool,
+        /// PNG pixels per point.
+        #[arg(long, default_value = "2.0")]
+        scale: f32,
     },
     /// Run the CSS orchestrator engine on a score (articulated MIDI summary).
     Orchestrate {
@@ -2161,6 +2193,30 @@ fn run(cli: Cli) -> Result<(), String> {
             spec: &spec,
             out_dir: &out,
         }),
+        Commands::PdfScore {
+            input,
+            out,
+            format,
+            width,
+            height,
+            spatium,
+            margin,
+            phone,
+            scale,
+        } => {
+            let (width, height, spatium, margin) =
+                if phone { (390.0, 844.0, 5.5, 14.0) } else { (width, height, spatium, margin) };
+            pdfscore::cmd_pdf_score(&pdfscore::Args {
+                input: &input,
+                out_dir: out.as_deref(),
+                format,
+                width,
+                height,
+                spatium,
+                margin,
+                scale,
+            })
+        }
         Commands::Orchestrate {
             input,
             part,

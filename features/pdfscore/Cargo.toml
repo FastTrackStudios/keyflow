@@ -11,6 +11,9 @@ description = "Read engraved sheet music out of vector PDFs: positioned music gl
 lopdf = "0.36"
 kurbo = { workspace = true }
 thiserror = { workspace = true }
+# The score model recognition reads into — the same one MusicXML and Finale
+# import into, so a recognised chart engraves through the same path.
+engraver-score = { workspace = true }
 tracing = { workspace = true }
 
 [lints]
