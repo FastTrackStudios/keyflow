@@ -17,6 +17,7 @@ mod book;
 mod docs;
 mod orchestra;
 mod parts;
+mod session;
 mod sync;
 
 use clap::{Parser, Subcommand, ValueEnum};
@@ -521,6 +522,17 @@ enum Commands {
         /// folder in the library (see `kf parts --roles`).
         #[arg(long)]
         roles_dir: Option<PathBuf>,
+    },
+    /// Build a song folder for the Session app from a JSON spec: a REAPER
+    /// project whose grid follows the recording bar by bar (count-in,
+    /// tempo per bar, SONGSTART/SONGEND, section regions, lyrics MIDI) and a
+    /// structure chart beside it. The .RPP needs the `reaper` feature.
+    Session {
+        /// The session spec (title, audio, bars, sections, lyrics).
+        spec: PathBuf,
+        /// The song folder to write into.
+        #[arg(long, short)]
+        out: PathBuf,
     },
     /// Run the CSS orchestrator engine on a score (articulated MIDI summary).
     Orchestrate {
@@ -2144,6 +2156,10 @@ fn run(cli: Cli) -> Result<(), String> {
             roles: roles.as_deref(),
             texts,
             check,
+        }),
+        Commands::Session { spec, out } => session::cmd_session(&session::SessionOpts {
+            spec: &spec,
+            out_dir: &out,
         }),
         Commands::Orchestrate {
             input,

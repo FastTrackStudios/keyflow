@@ -17,11 +17,11 @@ use keyflow_sync::pipeline::SectionLyrics;
 /// The middle field orders events that land on the same tick: lyrics are
 /// pushed as `0` and notes as `1`, so a lyric at a tie precedes the note
 /// it belongs to.
-type AbsEvent = (u64, u8, dawfile_reaper::types::item::MidiEvent);
+pub(crate) type AbsEvent = (u64, u8, dawfile_reaper::types::item::MidiEvent);
 
 #[cfg(feature = "reaper")]
 /// Expand a MIDI source's delta-encoded stream to absolute ticks.
-fn absolute_events(src: &dawfile_reaper::types::item::MidiSource) -> Vec<AbsEvent> {
+pub(crate) fn absolute_events(src: &dawfile_reaper::types::item::MidiSource) -> Vec<AbsEvent> {
     use dawfile_reaper::types::item::MidiSourceEvent;
 
     let mut abs = Vec::new();
@@ -37,7 +37,7 @@ fn absolute_events(src: &dawfile_reaper::types::item::MidiSource) -> Vec<AbsEven
 
 #[cfg(feature = "reaper")]
 /// A `FF 05` lyric meta-event carrying `text`.
-fn lyric_meta_event(text: &str) -> dawfile_reaper::types::item::MidiEvent {
+pub(crate) fn lyric_meta_event(text: &str) -> dawfile_reaper::types::item::MidiEvent {
     let mut bytes = vec![0xFF, 0x05];
     bytes.extend_from_slice(text.as_bytes());
     dawfile_reaper::types::item::MidiEvent {
@@ -48,7 +48,10 @@ fn lyric_meta_event(text: &str) -> dawfile_reaper::types::item::MidiEvent {
 
 #[cfg(feature = "reaper")]
 /// Sort absolute events, delta-encode them, and store them back on `src`.
-fn store_delta_encoded(src: &mut dawfile_reaper::types::item::MidiSource, mut abs: Vec<AbsEvent>) {
+pub(crate) fn store_delta_encoded(
+    src: &mut dawfile_reaper::types::item::MidiSource,
+    mut abs: Vec<AbsEvent>,
+) {
     use dawfile_reaper::types::item::MidiSourceEvent;
 
     abs.sort_by_key(|(t, ord, _)| (*t, *ord));
