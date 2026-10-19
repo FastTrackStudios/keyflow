@@ -3963,8 +3963,13 @@ impl<'a> ChartParser<'a> {
         default_melody_duration: Option<String>,
         default_melody_octave: Option<u8>,
     ) -> Result<Vec<Measure>, String> {
+        let separated = Self::separate_parallel_blocks(line);
+        let line = separated.as_str();
         let trimmed_line = line.trim();
-        if trimmed_line.starts_with("<<") && trimmed_line.ends_with(">>") {
+        if trimmed_line.starts_with("<<")
+            && trimmed_line.ends_with(">>")
+            && Self::top_level_blocks(trimmed_line) == 1
+        {
             let trim_left = line.len() - line.trim_start().len();
             let mut measures = self.parse_parallel_sequence(
                 trimmed_line,
@@ -4006,6 +4011,15 @@ impl<'a> ChartParser<'a> {
                     default_melody_octave,
                 )?);
             } else {
+                // Handing a bar that still holds a block back to the line
+                // parser would land here again, forever.
+                if trimmed.contains("<<") && trimmed.contains(">>") {
+                    return Err(format!(
+                        "a `<< … >>` block is a bar of its own: separate it from \
+                         `{}` with `|`",
+                        trimmed
+                    ));
+                }
                 let parsed = self.parse_chord_line_inner(
                     trimmed,
                     section_type,
@@ -4030,6 +4044,132 @@ impl<'a> ChartParser<'a> {
         }
 
         Ok(measures)
+    }
+
+    /// Top-level `<< … >>` blocks in `line` (quotes skipped).
+    fn top_level_blocks(line: &str) -> usize {
+        let b = line.as_bytes();
+        let (mut depth, mut count, mut in_quote, mut i) = (0usize, 0usize, false, 0usize);
+        while i < b.len() {
+            match b[i] {
+                b'"' => in_quote = !in_quote,
+                b'<' if !in_quote && b.get(i + 1) == Some(&b'<') => {
+                    if depth == 0 {
+                        count += 1;
+                    }
+                    depth += 1;
+                    i += 1;
+                }
+                b'>' if !in_quote && b.get(i + 1) == Some(&b'>') => {
+                    depth = depth.saturating_sub(1);
+                    i += 1;
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+        count
+    }
+
+    /// The two natural ways to write blocks without bar lines, spelled the
+    /// way the parser reads them: back-to-back blocks (`<< … >> << … >>`)
+    /// are separate bars, and staff text written just before a block
+    /// (`^"Band In" << … >>`) goes inside it, on its chord lane. Positions
+    /// shift only where a rewrite happened; spans in those lines are
+    /// approximate.
+    fn separate_parallel_blocks(line: &str) -> String {
+        if Self::top_level_blocks(line) == 0 {
+            return line.to_string();
+        }
+        // Split into top-level pieces: blocks and the text between them.
+        let b = line.as_bytes();
+        let mut pieces: Vec<(bool, String)> = Vec::new();
+        let (mut depth, mut in_quote, mut start, mut i) = (0usize, false, 0usize, 0usize);
+        while i < b.len() {
+            match b[i] {
+                b'"' => in_quote = !in_quote,
+                b'<' if !in_quote && b.get(i + 1) == Some(&b'<') => {
+                    if depth == 0 {
+                        pieces.push((false, line[start..i].to_string()));
+                        start = i;
+                    }
+                    depth += 1;
+                    i += 1;
+                }
+                b'>' if !in_quote && b.get(i + 1) == Some(&b'>') => {
+                    depth = depth.saturating_sub(1);
+                    i += 1;
+                    if depth == 0 {
+                        pieces.push((true, line[start..=i].to_string()));
+                        start = i + 1;
+                    }
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+        pieces.push((false, line[start..].to_string()));
+        // Nothing but quoted notes: `^"Band In"`, `"quiet" ^"Build"`.
+        let is_annotation = |t: &str| {
+            let mut rest = t.trim();
+            if rest.is_empty() {
+                return false;
+            }
+            while !rest.is_empty() {
+                rest = rest.strip_prefix('^').unwrap_or(rest);
+                let Some(body) = rest.strip_prefix('"') else {
+                    return false;
+                };
+                let Some(end) = body.find('"') else {
+                    return false;
+                };
+                rest = body[end + 1..].trim_start();
+            }
+            true
+        };
+        let mut out = String::new();
+        let mut changed = false;
+        let mut pending_text: Option<String> = None;
+        let mut last_was_block = false;
+        for (k, (block, text)) in pieces.iter().enumerate() {
+            if *block {
+                if last_was_block {
+                    out.push_str(" | ");
+                    changed = true;
+                }
+                match pending_text.take() {
+                    Some(note) => {
+                        out.push_str("<< ");
+                        out.push_str(note.trim());
+                        out.push(' ');
+                        out.push_str(text.trim_start_matches("<<").trim_start());
+                    }
+                    None => out.push_str(text),
+                }
+                last_was_block = true;
+            } else if is_annotation(text)
+                && pieces.get(k + 1).is_some_and(|(b, _)| *b)
+            {
+                pending_text = Some(text.clone());
+                changed = true;
+                if last_was_block {
+                    out.push_str(" | ");
+                    last_was_block = false;
+                } else {
+                    // leading space stays out; the block takes the note
+                }
+            } else {
+                if !text.trim().is_empty() {
+                    last_was_block = false;
+                }
+                out.push_str(text);
+            }
+        }
+        if !changed {
+            // Untouched lines keep their exact bytes, so spans stay exact.
+            return line.to_string();
+        }
+        out.split_whitespace().collect::<Vec<_>>().join(" ")
     }
 
     fn parse_parallel_sequence(
@@ -6008,6 +6148,19 @@ CH 4:
             .expect("F7 span");
         assert_eq!(&line[c_span.as_range()], "C7");
         assert_eq!(&line[f_span.as_range()], "F7");
+    }
+
+    #[test]
+    fn back_to_back_blocks_and_leading_text_parse() {
+        // Each of these used to recurse until the stack overflowed.
+        let two = parse_line("<< A ; m{ a8 b8 r4 r2 } >> << A ; m{ a8 b8 r4 r2 } >>");
+        assert_eq!(two.len(), 2);
+        let noted = parse_line("^\"Band In\" << A ; m{ a8 b8 r4 r2 } >>");
+        assert_eq!(noted.len(), 1);
+        assert_eq!(
+            Chart::separate_parallel_blocks("^\"Keys\" << A ; m{ a4 } >> << B ; m{ b4 } >>"),
+            "<< ^\"Keys\" A ; m{ a4 } >> | << B ; m{ b4 } >>"
+        );
     }
 
     #[test]
