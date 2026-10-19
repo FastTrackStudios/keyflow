@@ -112,12 +112,14 @@ fn build_rpp(spec: &Spec, tl: &Timeline) -> String {
     let bpm_of = |i: usize| -> f64 {
         let len = tl.bar_times[i + 1] - tl.bar_times[i];
         if len > 0.0 {
-            spec.bars[i].quarters * 60.0 / len
+            // To a thousandth of a bpm: a fitted 174 reads as 174, not
+            // 174.0000435, and the rounding moves a bar by under a µs.
+            (spec.bars[i].quarters * 60.0 / len * 1000.0).round() / 1000.0
         } else {
             spec.tempo.unwrap_or(120.0)
         }
     };
-    let first_bpm = first.quarters * 60.0 / tl.first_bar_len;
+    let first_bpm = (first.quarters * 60.0 / tl.first_bar_len * 1000.0).round() / 1000.0;
     let song_start = tl.bar_times[0];
     let song_end = *tl.bar_times.last().expect("end");
     let audio_end = tl.audio_pos + spec.audio_duration;
