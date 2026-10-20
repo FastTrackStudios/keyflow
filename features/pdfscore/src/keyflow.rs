@@ -666,6 +666,8 @@ fn melody(m: &Measure, staff: u8) -> String {
                     ("tenuto", "--"),
                     ("strong-accent", "-^"),
                     ("staccatissimo", "-!"),
+                    ("falloff", "-fall"),
+                    ("fermata", "-fermata"),
                 ]
                 .iter()
                 .filter(|(name, _)| c.articulations.contains(*name))

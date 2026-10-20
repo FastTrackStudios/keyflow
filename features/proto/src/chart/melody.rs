@@ -118,7 +118,8 @@ pub struct MelodyNote {
     #[facet(default)]
     pub slur_stop: bool,
     /// Articulations, by name: `staccato` (`-.`), `accent` (`->`),
-    /// `tenuto` (`--`), `marcato` (`-^`), `staccatissimo` (`-!`).
+    /// `tenuto` (`--`), `marcato` (`-^`), `staccatissimo` (`-!`),
+    /// `fall` (`-fall`), `fermata` (`-fermata`).
     #[facet(default)]
     pub articulations: Vec<String>,
 
@@ -794,7 +795,9 @@ fn write_chord_note(note: &MelodyNote, f: &mut fmt::Formatter<'_>) -> fmt::Resul
 }
 
 /// The articulation marks a note may carry after it, LilyPond's spellings.
-const ARTICULATION_MARKS: [(&str, &str); 5] = [
+const ARTICULATION_MARKS: [(&str, &str); 7] = [
+    ("-fermata", "fermata"),
+    ("-fall", "fall"),
     ("-.", "staccato"),
     ("->", "accent"),
     ("--", "tenuto"),

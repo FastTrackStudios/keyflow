@@ -1061,11 +1061,20 @@ pub fn melody_note_extent(
 
     // Extra space above: notes above line +4 (top staff line)
     // Add 0.5 spatium padding for notehead clearance
-    let extra_above = if max_line > 5 {
+    let mut extra_above = if max_line > 5 {
         (max_line - 4) as f64 * half_sp + spatium * 0.5
     } else {
         0.0
     };
+    // A slur arches over its notes and a fermata stands above the staff:
+    // the chord symbols above must clear them too.
+    let segs = &melody_data.segments;
+    if segs.iter().any(|s| s.slur_start || s.slur_stop) {
+        extra_above = extra_above.max((max_line - 4).max(0) as f64 * half_sp) + 1.8 * spatium;
+    }
+    if segs.iter().any(|s| s.articulations.iter().any(|a| a == "fermata")) {
+        extra_above = extra_above.max(2.5 * spatium);
+    }
 
     // Extra space below: notes below line -4 (bottom staff line)
     // Add 0.5 spatium padding for notehead clearance

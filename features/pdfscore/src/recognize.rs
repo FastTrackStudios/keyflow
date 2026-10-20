@@ -74,6 +74,9 @@ enum Sym {
     Dot,
     Digit(u32),
     Staccato,
+    /// An articulation other than staccato, by its MusicXML name
+    /// (`accent`, `strong-accent`, `tenuto`, `fermata`, `falloff`).
+    Mark(&'static str),
     Brace,
 }
 
@@ -114,6 +117,8 @@ fn classify(g: &Glyph) -> Option<Sym> {
         (true, '{') => Sym::Brace,
         (true, '™') | (false, 'k') => Sym::Dot,
         (true, 'V') => Sym::Head(Head::Slash),
+        // A fall (the line dropping away after a note).
+        (true, 'û') => Sym::Mark("falloff"),
         (_, '&') => Sym::Clef(ClefSign::G),
         (_, '?') => Sym::Clef(ClefSign::F),
         (_, 'B') => Sym::Clef(ClefSign::C),
@@ -137,6 +142,10 @@ fn classify(g: &Glyph) -> Option<Sym> {
         (_, 'Ü') => Sym::Accidental(2),
         (_, 'º') => Sym::Accidental(-2),
         (_, '.') => Sym::Staccato,
+        (false, '>') => Sym::Mark("accent"),
+        (false, '^') => Sym::Mark("strong-accent"),
+        (false, '-') => Sym::Mark("tenuto"),
+        (false, 'U' | 'u') => Sym::Mark("fermata"),
         (_, c @ '0'..='9') => Sym::Digit(c as u32 - '0' as u32),
         _ => return None,
     })
@@ -546,6 +555,8 @@ enum EvKind {
         staccato: bool,
         /// A rhythm slash: an attack with no pitch of its own.
         slash: bool,
+        /// Articulations besides staccato, by MusicXML name.
+        marks: Vec<&'static str>,
     },
     Rest {
         written: WrittenDuration,
@@ -1046,6 +1057,29 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                                 }
                             }
                         }
+                        // Other marks: over or under the chord, or — a fall —
+                        // just right of a head at its height.
+                        let mut marks: Vec<&'static str> = Vec::new();
+                        let rightmost = hs.iter().map(|h| h.0).fold(f64::MIN, f64::max);
+                        for it in items.iter_mut() {
+                            let Sym::Mark(name) = it.sym else { continue };
+                            if it.used {
+                                continue;
+                            }
+                            let hit = if name == "falloff" {
+                                let dx = it.g.origin.x - rightmost;
+                                // The glyph's origin is where the line ends,
+                                // about 1.5 sp below the head it leaves.
+                                dx > 0.3 * sp && dx < 3.0 * sp && hs.iter().any(|h| (h.1 - it.g.origin.y).abs() < 2.2 * sp)
+                            } else {
+                                (it.g.origin.x - x).abs() < 1.2 * sp
+                                    && hs.iter().any(|h| (h.1 - it.g.origin.y).abs() < 4.5 * sp)
+                            };
+                            if hit {
+                                marks.push(name);
+                                it.used = true;
+                            }
+                        }
                         for &i in &heads {
                             items[i].used = true;
                         }
@@ -1061,6 +1095,7 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                                 accidentals,
                                 staccato,
                                 slash: head == Head::Slash,
+                                marks,
                             },
                         }
                     };
@@ -1191,7 +1226,7 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                                 report.rests += 1;
                                 tick += dur;
                             }
-                            EvKind::Chord { heads, written, accidentals, staccato, slash } => {
+                            EvKind::Chord { heads, written, accidentals, staccato, slash, marks } => {
                                 let dur = ticks_of(written);
                                 let notes = heads
                                     .iter()
@@ -1240,6 +1275,9 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                                 // Read by the chart writer: an attack, not a pitch.
                                 if *slash {
                                     articulations.insert("rhythm-slash".to_string());
+                                }
+                                for mark in marks {
+                                    articulations.insert((*mark).to_string());
                                 }
                                 m.events.push(Event::Chord(Chord {
                                     tick,
@@ -1625,6 +1663,7 @@ mod tests {
                 accidentals: vec![None],
                 staccato: false,
                 slash: false,
+                marks: Vec::new(),
             },
         }
     }

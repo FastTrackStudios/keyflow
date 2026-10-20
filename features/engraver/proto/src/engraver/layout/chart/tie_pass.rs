@@ -393,6 +393,25 @@ impl ChartLayoutEngine {
             let mut names: Vec<&String> = seg.articulations.iter().collect();
             names.sort_by_key(|n| !matches!(n.as_str(), "staccato" | "staccatissimo" | "tenuto"));
             for (k, name) in names.into_iter().enumerate() {
+                // A fall drops away from the notehead's right; a fermata
+                // stands over the note, above the staff.
+                if name == "fall" || name == "fermata" {
+                    let (glyph, at) = if name == "fall" {
+                        // brassFallSmoothShort
+                        ('\u{E5DA}', kurbo::Point::new(x + 1.0 * spatium, main))
+                    } else {
+                        // fermataAbove, over the stem tip when the stem is up.
+                        let reach = if stem_up { top - 3.5 * spatium } else { top };
+                        ('\u{E4C0}', kurbo::Point::new(x, reach.min(-2.0 * spatium) - 1.2 * spatium))
+                    };
+                    measure_result.scene.add_child(SceneNode::anonymous_leaf(vec![PaintCommand::glyph(
+                        glyph,
+                        at,
+                        spatium * config.scale,
+                        peniko::Color::BLACK,
+                    )]));
+                    continue;
+                }
                 let kind = match name.as_str() {
                     "staccato" => ArticulationType::Staccato,
                     "staccatissimo" => ArticulationType::Staccatissimo,
