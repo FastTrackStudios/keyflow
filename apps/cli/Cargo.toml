@@ -38,7 +38,7 @@ keyflow-lang = { workspace = true, features = ["manifest", "musicxml", "orchestr
 # `kf parts`: score/part engraving (Finale layouts, PDF export).
 engraver = { workspace = true, features = ["pdf", "pdfscore"] }
 # `kf book`: concatenating part PDFs into instrument books (same lopdf
-# engraver-proto's PDF export uses).
+# engraver's PDF export uses).
 lopdf = "0.36"
 
 clap = { version = "4", features = ["derive"] }

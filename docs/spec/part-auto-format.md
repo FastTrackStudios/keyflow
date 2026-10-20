@@ -155,7 +155,7 @@ assemble pages + LayoutReport
 
 ## Data model
 
-All new types live in `features/engraver/score/src/` in new modules
+All new types live in `features/engraver/src/score/` in new modules
 `timing.rs`, `breaking.rs`, `paginate.rs`, `vspace.rs`, `report.rs`.
 
 ```rust
@@ -666,7 +666,7 @@ in the repo (the library is not in the repo).
 - `vspace.rs`: equalisation never drops a gap below `needed`; final-page
   ragged rule.
 - Fixtures are synthetic `Score`s built in code, under
-  `features/engraver/score/tests/fixtures/` when they are files. The APLP
+  `features/engraver/tests/fixtures/` when they are files. The APLP
   scores are commercial and the repo is public, so a golden `--turns
   --tsv` over a real song is an `#[ignore]`d test that reads a local copy
   (as the other corpus tests do), never a committed file.

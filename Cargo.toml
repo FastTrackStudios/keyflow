@@ -8,10 +8,13 @@
 # signal -> FastTrackStudio. Intra-repo dependencies are path deps in the
 # table below; cross-repo dependencies are git deps pinned to a tag.
 #
-# `keyflow-proto` and `keyflow-syntax` deliberately live in the `daw`
-# repo, not here: `expression-editor-core` (which `daw-reaper` hard-
-# depends on) needs them, so they are foundation-layer. A wire contract
-# plus a syntax parser below the domain is accepted, not a mistake.
+# A crate is a domain, not a format: proto -> lang -> engraver -> keyflow,
+# each old crate a module of one of those, its optional parts behind a
+# Cargo feature of the module's name. See CLAUDE.md "Layout".
+#
+# `daw` still carries its own copies of `keyflow-proto` and `keyflow-syntax`
+# (`expression-editor-core`, which `daw-reaper` hard-depends on, builds
+# against them). The copies here are the authority.
 
 [workspace]
 resolver = "3"
@@ -45,11 +48,11 @@ repository = "https://github.com/FastTrackStudios/keyflow"
 
 [workspace.dependencies]
 # ── Internal — the notation domain, path declared ONCE here ───────────
-# `keyflow` and `engraver` are the facades; keyflow-{text,midi,live,…}
-# and engraver-proto are INTERNAL to the domain. Consumers outside this
-# repo go through the two facades.
-# Defaults OFF at the root: the facade's default pulls `engraver` (wgpu +
-# vello), which the wasm site does not want (it renders through
+# `keyflow` and `engraver` are the facades; `keyflow-lang` is the
+# language crate beneath them, for formats the facade does not re-export.
+# Defaults OFF at the root for all three: `keyflow-lang` and `engraver`
+# default to every native feature (sync, lsp, pdf, …) so their own tests
+# cover them, and the facade's default pulls `engraver` (wgpu + vello), which the wasm site does not want (it renders through
 # vello_hybrid) and the iOS build cannot take (printpdf's azul dep does not
 # build for iOS). Every consumer names the features it needs.
 keyflow = { path = "features/keyflow", default-features = false }
@@ -83,8 +86,8 @@ editor-state = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1
 editor-crdt = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.24" }
 
 # ── features/editor — this repo's half of the editor integration ──────
-# Both need `editor-state` from below and `keyflow-text`/`engraver` from
-# here, so this is the only repo where they can live.
+# It needs `editor-state` from below and `keyflow-lang`/`engraver` from
+# here, so this is the only repo where it can live.
 editor-keyflow = { path = "features/editor" }
 
 # ── task — the vault / knowledge-graph layer ──────────────────────────
@@ -286,7 +289,7 @@ dioxus-web = { git = "https://github.com/DioxusLabs/dioxus", rev = "f717a8e184a5
 dioxus-native = { git = "https://github.com/DioxusLabs/dioxus", rev = "f717a8e184a522d078b70bb4b4d62a5f9a99ddfc", features = ["prelude", "system-fonts", "svg", "autofocus", "incremental", "data-uri", "vello"] }
 lucide-dioxus = { git = "https://github.com/FastTrackStudios/lucide", branch = "main", features = ["all-icons"] }
 anyrender_vello = "0.12"
-# keyflow-ui / engraver-proto renderer stack (paired with dioxus-native
+# keyflow-ui / engraver renderer stack (paired with dioxus-native
 # 0.7.9 from crates.io). NOTE: keyflow-ui pins anyrender_vello 0.10.1 and
 # dioxus-native 0.7.9 INLINE in its own manifest — they collide with the
 # root's anyrender_vello 0.11 / blitz-git dioxus-native pins above, and

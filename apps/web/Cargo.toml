@@ -6,7 +6,7 @@ license.workspace = true
 description = "keyflow.fasttrackstudio.app — the Keyflow landing page, live editor, and guide"
 
 [dependencies]
-# The language. `text` for the parser; the site never touches keyflow-text
+# The language. `text` for the parser; the site never touches keyflow-lang
 # directly (facade rule).
 keyflow = { workspace = true, features = ["text", "highlighting"] }
 

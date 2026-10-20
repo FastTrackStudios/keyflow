@@ -5,7 +5,7 @@
 [ChordPro 6.07](https://www.chordpro.org/) lyric blocks.
 
 This grammar is the **structural / highlighting** path. The
-[`keyflow_text::ide`](../keyflow-text) engine remains the source of truth
+[`keyflow_lang::text::ide`](../lang) engine remains the source of truth
 for diagnostics, completion, and hover; the LSP server in
 [`keyflow-lsp`](../keyflow-lsp) provides those over the network. Editors
 that prefer tree-sitter for fast incremental highlighting (Zed, GitHub
@@ -83,7 +83,7 @@ languages.toml block.
             │     (this crate)
             │
             └─► keyflow-lsp ──► editor diagnostics / completion / hover
-                  └► keyflow-text::ide ◄── (single source of truth)
+                  └► keyflow_lang::text::ide ◄── (single source of truth)
                          └► keyflow_chordpro::parse for `--- chordpro ---`
 ```
 

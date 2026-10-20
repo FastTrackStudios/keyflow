@@ -32,35 +32,29 @@ or PDF.
 
 ```
 features/
-  keyflow            the facade — the only public API surface
-  keyflow-text       the .kf parser and exporter
-  keyflow-chordpro   ChordPro parsing, merged into charts as lyric tracks
-  keyflow-midi       MIDI import/export
-  keyflow-musicxml   MusicXML import/export
-  keyflow-musx       Finale .musx import
-  keyflow-live       live chart following (position, cursor, section state)
-  keyflow-sync       chart sync between processes and devices
-  keyflow-annotate   performance annotations over a chart
-  keyflow-orchestra  orchestral articulation vocabulary and realization
-  keyflow-daw-analysis  reading harmony back out of a DAW project
-  keyflow-ui         Dioxus components — editor, renderer mount, signals
-  keyflow-lsp        the language server
-  cli                the `keyflow` CLI
-  tree-sitter-keyflow   the grammar (syntax highlighting, structural edits)
-
-features/engraver/
-  engraver           the facade — svg / wgpu / pdf behind cargo features
-  proto              layout model and the layout engine itself
-  score              score-level import/export and the inventory harness
+  proto          keyflow-proto — the domain model, musical primitives, syntax
+  lang           keyflow-lang — the .kf parser and exporter, ChordPro; and as
+                 features: midi, live, musicxml, musx (Finale), orchestra,
+                 chordsheet, sync (synced lyrics), lsp (the language server)
+  engraver       engraver — layout + render; svg / paint / wgpu / pdf tiers,
+                 score (part import + page layout), pdfscore (PDF reading)
+  keyflow        keyflow — the facade: proto, `keyflow::text`, `keyflow::engraver`
+  annotate       keyflow-annotate — articulation model (no_std, shared with Signal)
+  daw-analysis   keyflow-daw-analysis — reading harmony back out of a DAW project
+  ui             keyflow-ui — Dioxus components: renderer mount, signals
+  editor         editor-keyflow — .kf fences and language support in the Editor
+  tree-sitter    tree-sitter-keyflow — the grammar
 
 apps/
-  web                keyflow.fasttrackstudio.app — landing page, editor, guide
-  mobile             Keyflow for iOS — chart library + the Keyflow keyboard
+  cli            the `kf` command line tool
+  web            keyflow.fasttrackstudio.app — landing page, editor, guide
+  mobile         Keyflow for iOS — chart library + the Keyflow keyboard
 ```
 
-`keyflow` and `engraver` are the **facades**. Everything else is internal
-to the domain — consumers outside this repo depend on those two, not on
-`keyflow-text` or `engraver-proto` directly.
+A crate is a domain, not a format: each crate's parts are modules, and
+the optional ones sit behind a Cargo feature of the same name.
+`keyflow` and `engraver` are the **facades**; reach for `keyflow-lang`
+only for a format the facade does not re-export.
 
 ## Where this sits
 
@@ -89,10 +83,10 @@ daw = { path = "../daw/crates/daw/daw" }
 
 Never commit those overrides — the paths are machine-specific.
 
-`keyflow-proto` and `keyflow-syntax` deliberately live in the **daw**
-repo, not here: `expression-editor-core`, which `daw-reaper` hard-depends
-on, needs them, which makes a wire contract plus a syntax parser
-foundation-layer. That is accepted, not an accident.
+`daw` still carries its own copies of `keyflow-proto` and `keyflow-syntax`:
+`expression-editor-core`, which `daw-reaper` hard-depends on, builds
+against them. Keyflow's own `keyflow-proto` (with `syntax` folded in) is
+the authority; daw's copies come out once its consumers are repointed.
 
 ## The site
 

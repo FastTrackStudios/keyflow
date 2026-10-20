@@ -16,9 +16,9 @@ editor-state = { workspace = true }
 # the wgpu/vello GPU stack and the PDF deps, leaving a pure-Rust path
 # (kurbo/peniko/skrifa/smufl) that compiles for wasm32.
 engraver = { workspace = true, default-features = false, features = ["svg"], optional = true }
-# Keyflow syntax highlighter (re-exported through keyflow-text's
-# wasm-clean `highlighting` feature — keyflow-syntax only, no facade/
-# tokio). Powers `highlight_html` for source-visible fences.
+# The parser and its highlighter (keyflow-lang's wasm-clean `highlighting`
+# feature — no facade, no tokio). Powers `lang`, and `highlight_html` for
+# source-visible fences.
 keyflow-lang = { workspace = true, features = ["highlighting"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }
