@@ -82,6 +82,8 @@ enum Head {
     Black,
     Half,
     Whole,
+    /// A rhythm slash (strum): its length comes from the bar.
+    Slash,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -111,10 +113,13 @@ fn classify(g: &Glyph) -> Option<Sym> {
     Some(match (special, g.ch) {
         (true, '{') => Sym::Brace,
         (true, '™') | (false, 'k') => Sym::Dot,
+        (true, 'V') => Sym::Head(Head::Slash),
         (_, '&') => Sym::Clef(ClefSign::G),
         (_, '?') => Sym::Clef(ClefSign::F),
         (_, 'B') => Sym::Clef(ClefSign::C),
         (_, 'œ') => Sym::Head(Head::Black),
+        // × notehead (dead / muted note): a black head for rhythm and pitch.
+        (_, '¿') => Sym::Head(Head::Black),
         (_, '˙') => Sym::Head(Head::Half),
         (_, 'w') => Sym::Head(Head::Whole),
         (_, '∑') => Sym::Rest(RestKind::Measure),
@@ -503,6 +508,8 @@ enum EvKind {
         written: WrittenDuration,
         accidentals: Vec<Option<i8>>,
         staccato: bool,
+        /// A rhythm slash: an attack with no pitch of its own.
+        slash: bool,
     },
     Rest {
         written: WrittenDuration,
@@ -604,7 +611,9 @@ pub fn recognize(pages: &[Page]) -> Recognized {
         let (tie_starts, tie_stops) = ties_of(page, &staves, sp);
 
         // Barlines: from some staff's top to some staff's bottom.
-        let at_line = |y: f64, line: f64| (y - line).abs() < 0.3 * sp;
+        // A barline ends on the staff lines; a stem that happens to end
+        // a quarter-space off them is still a stem.
+        let at_line = |y: f64, line: f64| (y - line).abs() < 0.2 * sp;
         let mut barlines: Vec<(VLine, usize, usize)> = Vec::new();
         let mut stems: Vec<VLine> = Vec::new();
         for v in &vl {
@@ -702,9 +711,23 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                 clefs.resize(sys.len(), ClefSign::G);
             }
             // Bar groups for this system.
-            let mut xs: Vec<(f64, f64)> = barlines
+            // A barline crosses every staff of its system — as one line or a
+            // line per staff at one x. A line on one staff of a grand staff
+            // with nothing at that x on the other is a stem.
+            let in_sys: Vec<&(VLine, usize, usize)> = barlines
                 .iter()
                 .filter(|(_, t, b)| sys.contains(t) && sys.contains(b))
+                .collect();
+            let covered = |x: f64| -> bool {
+                sys.iter().all(|si| {
+                    in_sys
+                        .iter()
+                        .any(|(v, t, b)| (v.x - x).abs() < 0.6 * sp && t <= si && si <= b)
+                })
+            };
+            let mut xs: Vec<(f64, f64)> = in_sys
+                .iter()
+                .filter(|(v, _, _)| covered(v.x))
                 .map(|(v, _, _)| (v.x, v.width))
                 .collect();
             xs.sort_by(|a, b| a.0.total_cmp(&b.0));
@@ -802,7 +825,6 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                     it.used = true;
                 }
             }
-
             // Measure spans: system start, then between bar groups.
             let mut bounds: Vec<(f64, Option<BarGroup>)> = vec![(first.x0, None)];
             for g in &groups {
@@ -913,7 +935,7 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                         let mut note_type = match head {
                             Head::Whole => NoteTypeValue::Whole,
                             Head::Half => NoteTypeValue::Half,
-                            Head::Black => NoteTypeValue::Quarter,
+                            Head::Black | Head::Slash => NoteTypeValue::Quarter,
                         };
                         if let Some(s) = stem {
                             // The stem's far end: away from its noteheads.
@@ -1002,6 +1024,7 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                                 written: WrittenDuration { note_type: Some(note_type), dots, tuplet: None },
                                 accidentals,
                                 staccato,
+                                slash: head == Head::Slash,
                             },
                         }
                     };
@@ -1058,6 +1081,40 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                     }
                 }
 
+                // Rhythm slashes carry no length of their own: the bar's
+                // time left after its notes and rests, shared equally — when
+                // that comes out to a written value (six slashes and two
+                // eighth rests in 4/4 are eighths).
+                for k in 1..=sys.len() as u8 {
+                    let is_slash = |e: &Ev| matches!(&e.kind, EvKind::Chord { slash: true, .. });
+                    let count = events.iter().filter(|e| e.staff_in_system == k && is_slash(e)).count() as u32;
+                    if count == 0 {
+                        continue;
+                    }
+                    let other: u32 = events
+                        .iter()
+                        .filter(|e| e.staff_in_system == k && !is_slash(e))
+                        .map(|e| ev_ticks(e, m.len_ticks))
+                        .sum();
+                    let left = m.len_ticks.saturating_sub(other);
+                    let each = if left % count == 0 { left / count } else { 0 };
+                    let value = match each {
+                        x if x == DIVISIONS * 4 => Some(NoteTypeValue::Whole),
+                        x if x == DIVISIONS * 2 => Some(NoteTypeValue::Half),
+                        x if x == DIVISIONS => Some(NoteTypeValue::Quarter),
+                        x if x == DIVISIONS / 2 => Some(NoteTypeValue::Eighth),
+                        x if x == DIVISIONS / 4 => Some(NoteTypeValue::Sixteenth),
+                        _ => None,
+                    };
+                    if let Some(v) = value {
+                        for e in events.iter_mut().filter(|e| e.staff_in_system == k) {
+                            if let EvKind::Chord { slash: true, written, .. } = &mut e.kind {
+                                written.note_type = Some(v);
+                            }
+                        }
+                    }
+                }
+
                 // Ticks, pitches, per staff; the top staff's (x, tick) pairs
                 // place the text.
                 let mut onsets: Vec<(f64, u32)> = Vec::new();
@@ -1070,11 +1127,14 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                     let clef = clefs[usize::from(k) - 1];
                     let mut evs: Vec<&Ev> = events.iter().filter(|e| e.staff_in_system == k).collect();
                     evs.sort_by(|a, b| a.x.total_cmp(&b.x));
-                    let voices = split_voices(&evs, m.len_ticks, staff.mid());
+                    let voices = split_voices(&evs, m.len_ticks, staff.mid(), sp);
                     for (v, evs) in voices.into_iter().enumerate() {
                     let voice = (u32::from(k) - 1) * 4 + v as u32 + 1;
                     let mut tick = 0u32;
-                    for e in evs {
+                    for (e, start) in evs {
+                        // A late-entering second voice starts where the
+                        // split put it, not at the barline.
+                        tick = tick.max(start);
                         // Every staff's onsets place the text: when the top
                         // staff rests, the bass carries the rhythm. A
                         // whole-bar rest is centred, not on a beat.
@@ -1095,7 +1155,7 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                                 report.rests += 1;
                                 tick += dur;
                             }
-                            EvKind::Chord { heads, written, accidentals, staccato } => {
+                            EvKind::Chord { heads, written, accidentals, staccato, slash } => {
                                 let dur = ticks_of(written);
                                 let notes = heads
                                     .iter()
@@ -1141,6 +1201,10 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                                 if *staccato {
                                     articulations.insert("staccato".to_string());
                                 }
+                                // Read by the chart writer: an attack, not a pitch.
+                                if *slash {
+                                    articulations.insert("rhythm-slash".to_string());
+                                }
                                 m.events.push(Event::Chord(Chord {
                                     tick,
                                     duration: dur,
@@ -1158,7 +1222,13 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                             }
                         }
                     }
-                    if tick != m.len_ticks && tick != 0 {
+                    // A second voice may stop short (Sibelius hides its
+                    // rests); any voice running long was misread.
+                    // A voice of nothing but rests says "silent" however it
+                    // is spelled (a lone half rest for the bar).
+                    let only_rests = m.events.iter().filter(|e| e.voice() == voice).all(|e| matches!(e, Event::Rest(_)));
+                    let wrong = !only_rests && if v == 0 { tick != m.len_ticks } else { tick > m.len_ticks };
+                    if wrong && tick != 0 {
                         report.warnings.push(format!(
                             "measure {} staff {k} voice {}: content {} quarters, meter {}",
                             index + 1,
@@ -1280,40 +1350,140 @@ fn ev_ticks(e: &Ev, len: u32) -> u32 {
     }
 }
 
-/// One voice when the staff's events fill the bar; otherwise two — stems
-/// up above, stems down below, stemless chords to whichever voice has room
-/// and rests by height — kept only if both voices then fill the bar.
-fn split_voices<'e>(evs: &[&'e Ev], len: u32, mid: f64) -> Vec<Vec<&'e Ev>> {
+/// One voice when the staff's events fill the bar; otherwise the best
+/// split into two. Engraved time runs left to right, so a split must keep
+/// it: events stacked at one x start together and so sit in different
+/// voices, and an event further right never starts earlier. Among splits
+/// where the first voice fills the bar (the second may stop short — its
+/// rests are often hidden), prefer one stem direction per voice, the
+/// second voice filling the bar too, and the upper voice on top.
+fn split_voices<'e>(evs: &[&'e Ev], len: u32, mid: f64, sp: f64) -> Vec<Vec<(&'e Ev, u32)>> {
+    // One voice, each event starting where the last ended.
+    let single = || {
+        let mut t = 0u32;
+        vec![
+            evs.iter()
+                .map(|e| {
+                    let at = t;
+                    t += ev_ticks(e, len);
+                    (*e, at)
+                })
+                .collect::<Vec<_>>(),
+        ]
+    };
     let total: u32 = evs.iter().map(|e| ev_ticks(e, len)).sum();
-    if total <= len || !evs.iter().any(|e| e.up.is_some()) {
-        return vec![evs.to_vec()];
+    if total <= len || evs.len() > 22 {
+        return single();
     }
-    let (mut upper, mut lower): (Vec<&Ev>, Vec<&Ev>) = (Vec::new(), Vec::new());
-    let mut floating: Vec<&Ev> = Vec::new();
-    for e in evs {
-        match (e.up, &e.kind) {
-            (Some(true), _) => upper.push(e),
-            (Some(false), _) => lower.push(e),
-            (None, EvKind::Rest { .. }) => {
-                if e.y < mid { upper.push(e) } else { lower.push(e) }
+    struct Search<'a, 'e> {
+        evs: &'a [&'e Ev],
+        len: u32,
+        sp: f64,
+        assign: Vec<u8>,
+        onset: Vec<u32>,
+        best: Option<(i64, Vec<u8>, Vec<u32>)>,
+        mid: f64,
+    }
+    impl Search<'_, '_> {
+        fn score(&self, sums: [u32; 2]) -> i64 {
+            let mut score = 0i64;
+            for v in 0..2u8 {
+                let ups: Vec<bool> = (0..self.evs.len())
+                    .filter(|&i| self.assign[i] == v)
+                    .filter_map(|i| self.evs[i].up)
+                    .collect();
+                if ups.iter().any(|u| *u) && ups.iter().any(|u| !*u) {
+                    score -= 10;
+                }
             }
-            (None, _) => floating.push(e),
+            if sums[1] == self.len {
+                score += 20;
+            }
+            // The first voice above the second.
+            let avg = |v: u8| {
+                let ys: Vec<f64> = (0..self.evs.len())
+                    .filter(|&i| self.assign[i] == v)
+                    .map(|i| self.evs[i].y)
+                    .collect();
+                if ys.is_empty() { self.mid } else { ys.iter().sum::<f64>() / ys.len() as f64 }
+            };
+            if avg(0) <= avg(1) {
+                score += 5;
+            }
+            score
+        }
+        fn go(&mut self, i: usize, sums: [u32; 2]) {
+            if i == self.evs.len() {
+                if sums[0] == self.len && sums[1] > 0 {
+                    let sc = self.score(sums);
+                    if self.best.as_ref().is_none_or(|(b, _, _)| sc > *b) {
+                        self.best = Some((sc, self.assign.clone(), self.onset.clone()));
+                    }
+                }
+                return;
+            }
+            let e = self.evs[i];
+            let d = ev_ticks(e, self.len);
+            for v in 0..2u8 {
+                let mut start = sums[usize::from(v)];
+                // The second voice may come in late (its rests hidden): it
+                // starts with whatever it stands over in the first voice.
+                if v == 1
+                    && let Some(j) = (0..i).find(|&j| {
+                        self.assign[j] == 0 && (e.x - self.evs[j].x).abs() < 0.4 * self.sp
+                    })
+                {
+                    start = start.max(self.onset[j]);
+                }
+                if start + d > self.len {
+                    continue;
+                }
+                // Consistent with every event already placed in the other
+                // voice: same x, same start; further left, no later start.
+                let ok = (0..i).all(|j| {
+                    if self.assign[j] == v {
+                        return true;
+                    }
+                    let dx = e.x - self.evs[j].x;
+                    if dx.abs() < 0.4 * self.sp {
+                        self.onset[j] == start
+                    } else if dx > 0.0 {
+                        self.onset[j] <= start
+                    } else {
+                        self.onset[j] >= start
+                    }
+                });
+                // Two events at one x cannot share a voice.
+                let clash = (0..i).any(|j| self.assign[j] == v && (e.x - self.evs[j].x).abs() < 0.4 * self.sp);
+                if !ok || clash {
+                    continue;
+                }
+                self.assign[i] = v;
+                self.onset[i] = start;
+                let mut next = sums;
+                next[usize::from(v)] = start + d;
+                self.go(i + 1, next);
+            }
         }
     }
-    let sum = |v: &[&Ev]| v.iter().map(|e| ev_ticks(e, len)).sum::<u32>();
-    for e in floating {
-        if sum(&lower) + ev_ticks(e, len) <= len && (sum(&upper) + ev_ticks(e, len) > len || e.y >= mid) {
-            lower.push(e);
-        } else {
-            upper.push(e);
+    let mut search = Search {
+        evs,
+        len,
+        sp,
+        assign: vec![0; evs.len()],
+        onset: vec![0; evs.len()],
+        best: None,
+        mid,
+    };
+    search.go(0, [0, 0]);
+    match search.best {
+        Some((_, assign, onset)) => {
+            let pick = |v: u8| -> Vec<(&'e Ev, u32)> {
+                (0..evs.len()).filter(|&i| assign[i] == v).map(|i| (evs[i], onset[i])).collect()
+            };
+            vec![pick(0), pick(1)]
         }
-    }
-    upper.sort_by(|a, b| a.x.total_cmp(&b.x));
-    lower.sort_by(|a, b| a.x.total_cmp(&b.x));
-    if sum(&upper) == len && sum(&lower) == len {
-        vec![upper, lower]
-    } else {
-        vec![evs.to_vec()]
+        None => single(),
     }
 }
 
@@ -1401,4 +1571,71 @@ fn tempo_of(l: &Word) -> Option<TempoMark> {
         per_minute,
         suffix: None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn note(x: f64, y: f64, up: Option<bool>, t: NoteTypeValue) -> Ev {
+        Ev {
+            x,
+            staff_in_system: 1,
+            up,
+            y,
+            kind: EvKind::Chord {
+                heads: vec![(x, y)],
+                written: WrittenDuration { note_type: Some(t), dots: 0, tuplet: None },
+                accidentals: vec![None],
+                staccato: false,
+                slash: false,
+            },
+        }
+    }
+
+    fn rest(x: f64, y: f64, t: NoteTypeValue) -> Ev {
+        Ev {
+            x,
+            staff_in_system: 1,
+            up: None,
+            y,
+            kind: EvKind::Rest {
+                written: WrittenDuration { note_type: Some(t), dots: 0, tuplet: None },
+                measure: false,
+            },
+        }
+    }
+
+    #[test]
+    fn a_held_chord_under_a_line_is_two_voices() {
+        // Can't Stop the Feeling, bar 1: a quarter rest over a whole-note
+        // chord at one x, then six eighths — every stem down.
+        let mut evs = vec![rest(90.0, 158.0, NoteTypeValue::Quarter), note(90.0, 180.0, None, NoteTypeValue::Whole)];
+        for k in 0..6 {
+            evs.push(note(126.0 + 18.0 * f64::from(k), 156.0, Some(false), NoteTypeValue::Eighth));
+        }
+        let refs: Vec<&Ev> = evs.iter().collect();
+        let voices = split_voices(&refs, 4 * DIVISIONS, 168.0, 5.0);
+        assert_eq!(voices.len(), 2);
+        let len = |v: &[(&Ev, u32)]| v.iter().map(|(e, _)| ev_ticks(e, 4 * DIVISIONS)).sum::<u32>();
+        assert_eq!(len(&voices[0]), 4 * DIVISIONS);
+        assert_eq!(len(&voices[1]), 4 * DIVISIONS);
+    }
+
+    #[test]
+    fn a_second_voice_can_come_in_late() {
+        // Bass bar: a full bar of eighths and quarters, and at the last beat
+        // a second voice's quarter under it (its earlier rests hidden).
+        let mut evs = Vec::new();
+        for k in 0..6 {
+            evs.push(note(100.0 + 20.0 * f64::from(k), 234.0, Some(true), NoteTypeValue::Eighth));
+        }
+        evs.push(note(230.0, 215.0, Some(false), NoteTypeValue::Quarter));
+        evs.push(rest(230.0, 202.0, NoteTypeValue::Quarter));
+        let refs: Vec<&Ev> = evs.iter().collect();
+        let voices = split_voices(&refs, 4 * DIVISIONS, 230.0, 5.0);
+        assert_eq!(voices.len(), 2);
+        let late = voices.iter().find(|v| v.len() == 1).expect("a one-event voice");
+        assert_eq!(late[0].1, 3 * DIVISIONS, "it starts on beat 4");
+    }
 }

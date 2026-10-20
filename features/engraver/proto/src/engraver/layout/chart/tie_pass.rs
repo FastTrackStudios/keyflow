@@ -118,12 +118,19 @@ impl ChartLayoutEngine {
             }
             let line = line_of(i);
             let note_y = line.map_or(2.0 * spatium, |l| -(l as f64) * spatium / 2.0);
-            // Stems go up below the middle line, so the tie goes under.
-            let direction = if line.is_some_and(|l| l >= 0) {
-                SlurDirection::Up
-            } else {
-                SlurDirection::Down
-            };
+            // Away from the stem: the stem the note was actually drawn with
+            // (a beam can turn a high note's stem up), and for a stemless
+            // note the side its stem would take.
+            let stem_up = measure_result
+                .entry_stem_up
+                .get(i)
+                .copied()
+                .flatten()
+                .unwrap_or_else(|| line.is_some_and(|l| l < 0));
+            let direction = if stem_up { SlurDirection::Down } else { SlurDirection::Up };
+            // A tie sits off the heads on its side (y grows downward), not
+            // through their middles.
+            let tie_y = note_y + if stem_up { 0.55 * spatium } else { -0.55 * spatium };
             let Some(seg) = chord_segments.get(i) else {
                 continue;
             };
@@ -143,13 +150,13 @@ impl ChartLayoutEngine {
                 };
                 if let Some(end_x) = end_x {
                     let start = SlurEndpoint {
-                        x: note_x + spatium,
-                        y: note_y,
+                        x: note_x + 1.1 * spatium,
+                        y: tie_y,
                         stem_up: false,
                     };
                     let end = SlurEndpoint {
-                        x: end_x,
-                        y: note_y,
+                        x: end_x - 0.1 * spatium,
+                        y: tie_y,
                         stem_up: false,
                     };
                     let tie_layout =
@@ -165,12 +172,12 @@ impl ChartLayoutEngine {
             if segment.tie_from_previous && i == 0 && across_barlines {
                 let start = SlurEndpoint {
                     x: -spatium * 0.5,
-                    y: note_y,
+                    y: tie_y,
                     stem_up: false,
                 };
                 let end = SlurEndpoint {
-                    x: note_x,
-                    y: note_y,
+                    x: note_x - 0.1 * spatium,
+                    y: tie_y,
                     stem_up: false,
                 };
                 let tie_layout =

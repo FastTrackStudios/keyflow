@@ -468,7 +468,11 @@ fn comp_rhythm(
             Event::Rest(_) => None,
         })
         .collect();
-    let stacked = attacks.iter().filter(|c| c.notes.len() > 1).count();
+    // A voicing or a rhythm slash: comping, not a line.
+    let stacked = attacks
+        .iter()
+        .filter(|c| c.notes.len() > 1 || c.articulations.contains("rhythm-slash"))
+        .count();
     let comping = !attacks.is_empty() && stacked * 3 >= attacks.len() * 2;
     let fits = voice_ticks(m, staff) == m.len_ticks;
     let wanted = match style {
@@ -588,7 +592,11 @@ fn is_line(m: &Measure, staff: u8, style: Style) -> bool {
             Event::Rest(_) => None,
         })
         .collect();
-    let stacked = attacks.iter().filter(|c| c.notes.len() > 1).count();
+    // A voicing or a rhythm slash: comping, not a line.
+    let stacked = attacks
+        .iter()
+        .filter(|c| c.notes.len() > 1 || c.articulations.contains("rhythm-slash"))
+        .count();
     !attacks.is_empty() && (style == Style::Notation || stacked * 3 < attacks.len() * 2)
 }
 
