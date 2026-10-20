@@ -1038,8 +1038,14 @@ pub fn melody_note_extent(
         }
         if let Some(oct) = seg.octave {
             let (line, _) = melody_pitch_to_line_for_clef(&seg.pitch, oct, clef);
-            max_line = max_line.max(line);
-            min_line = min_line.min(line);
+            // The ink, not just the notehead: below the middle line the stem
+            // goes up, three and a half spaces (seven lines) past the head,
+            // and a beam sits on its tip. Whole notes have no stem.
+            let stem_up = line < 0 && seg.beats < 4.0;
+            let top = if stem_up { line + 8 } else { line };
+            let bottom = if !stem_up && line >= 0 && seg.beats < 4.0 { line - 8 } else { line };
+            max_line = max_line.max(top);
+            min_line = min_line.min(bottom);
         }
     }
 

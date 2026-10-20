@@ -315,6 +315,20 @@ pub mod pipeline {
     ///
     /// The default reading implies nothing: no simile marks, no repeat signs,
     /// no folded sections — every bar the player plays is a bar on the page.
+    /// Whether any bar carries written notes (not just rhythm or spaces) —
+    /// such a chart reads at print size on a screen
+    /// ([`ChartLayoutConfig::for_notation`]).
+    #[must_use]
+    pub fn has_notation(chart: &Chart) -> bool {
+        chart.sections.iter().any(|s| {
+            s.measures().iter().any(|m| {
+                m.melodies
+                    .iter()
+                    .any(|mel| mel.notes.iter().any(|n| !n.is_space() && !n.is_rest()))
+            })
+        })
+    }
+
     fn expanded(chart: &Chart) -> Chart {
         let mut expanded = chart.clone();
         keyflow_proto::chart::expand_repeats(&mut expanded);
@@ -477,6 +491,13 @@ pub mod pipeline {
             options: PresetOptions,
         ) -> ChartLayoutResult {
             let (layout_mode, config) = Self::resolve_preset(preset, options);
+            // Screen sizes are for chord symbols; a chart of written notes
+            // reads at print size.
+            let config = if matches!(preset, Preset::Responsive) && has_notation(chart) {
+                config.for_notation()
+            } else {
+                config
+            };
             match options.mode {
                 ChartMode::Default => {
                     self.layout_with_config(&expanded(chart), &layout_mode, &config)

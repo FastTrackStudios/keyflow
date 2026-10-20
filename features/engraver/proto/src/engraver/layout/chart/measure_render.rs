@@ -124,7 +124,14 @@ impl ChartLayoutEngine {
             has_explicit_chord_rhythm
         );
 
-        let source = if has_explicit_chord_rhythm {
+        // Written notes win over chord durations: `G_2 Am_4. F_8` with a
+        // melody says where the symbols go, while the notes are what the
+        // player reads. Drawing slashes would hide the notes.
+        let has_written_notes =
+            melody_data.is_some_and(|d| d.segments.iter().any(|seg| !seg.is_rest));
+        let source = if has_written_notes {
+            RhythmSource::MelodyData(melody_data.expect("checked above"))
+        } else if has_explicit_chord_rhythm {
             // Explicit rhythm takes priority - it already encodes the full rhythm including rests
             RhythmSource::ExplicitRhythm {
                 elements: &measure.rhythm_elements,
@@ -264,8 +271,9 @@ impl ChartLayoutEngine {
 
         // Use rhythmic (slash) notation when:
         // - We have explicit chord rhythms (these should render as slashes with stems)
+        //   and no written notes to show instead
         // - We don't have melodies (pure slash notation)
-        if has_explicit_chord_rhythm || !has_melodies {
+        if (has_explicit_chord_rhythm && !has_written_notes) || !has_melodies {
             builder = builder.rhythmic();
 
             // Stemless behavior:

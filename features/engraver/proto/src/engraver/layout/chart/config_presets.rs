@@ -244,6 +244,30 @@ impl ChartLayoutConfig {
         self
     }
 
+    /// Sizes for a chart that carries written notes. The screen presets size
+    /// the staff for chord symbols read at arm's length — a 12pt space on a
+    /// phone — and at that size a bar of eighths takes a line to itself.
+    /// Notation reads at print size (a 6pt space is a printed part's staff,
+    /// on a phone held nearer than a stand), so the staff is capped there and the
+    /// spacing and chord symbols scale with it. The left margin keeps its
+    /// room for the section badges, and the top margin clears the first
+    /// row's chord symbols at their new size.
+    #[must_use]
+    pub fn for_notation(self) -> Self {
+        const NOTATION_SPATIUM: f64 = 6.0;
+        if self.spatium <= NOTATION_SPATIUM {
+            return self;
+        }
+        let f = NOTATION_SPATIUM / self.spatium;
+        let root = (self.harmony_style.root_size * f).max(20.0);
+        let left = self.margins.left;
+        let mut c = self.with_scale(f);
+        c.harmony_style = c.harmony_style.with_root_size(root);
+        c.margins.left = left;
+        c.margins.top = (root + 14.0).max(c.margins.top);
+        c
+    }
+
     /// Apply a uniform scale factor to spatium, spacing, gaps, and margins.
     ///
     /// `factor` is clamped to `[0.1, 10.0]` and ignored if non-finite. Use

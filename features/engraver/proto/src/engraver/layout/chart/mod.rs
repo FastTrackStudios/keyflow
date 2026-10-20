@@ -3597,13 +3597,34 @@ impl ChartLayoutEngine {
         let mut current_width = 0.0f64;
 
         let text_metrics = TextFontMetrics::new(self.text_font_data.clone());
+        // A bar asks for the wider of what its chord symbols and its notes
+        // need: a bar of beamed eighths is not as narrow as its one symbol.
         let widths: Vec<f64> = measures
             .iter()
-            .map(|m| self.chord_symbol_width_needed(m, &text_metrics))
+            .map(|m| {
+                self.chord_symbol_width_needed(m, &text_metrics)
+                    .max(self.melody_width_needed(m))
+            })
             .collect();
         // A system always holds at least one measure, however wide it is —
         // better one cramped bar than an empty line and the same cramped bar.
         let usable = content_width.max(1.0);
+
+        // A section of written notes keeps one grid: as many bars a line as
+        // its widest bar allows, every line. Greedy packing would set one
+        // bar here and two there, and a chart is read by counting bars.
+        if measures.iter().any(|m| self.melody_width_needed(m) > 0.0)
+            && !measures.iter().any(|m| m.volta_start.is_some())
+        {
+            let widest = widths.iter().copied().fold(0.0f64, f64::max).max(1.0);
+            let per_line = ((usable / widest).floor() as usize)
+                .clamp(1, self.config.max_measures_per_system.max(1));
+            return (0..measures.len())
+                .collect::<Vec<_>>()
+                .chunks(per_line)
+                .map(<[usize]>::to_vec)
+                .collect();
+        }
 
         // A section one bar past the cap goes on one line, when asked. Two
         // lines for five bars costs a system of height to print a single bar,
@@ -3671,6 +3692,35 @@ impl ChartLayoutEngine {
 
         rescue_orphan_bar(&mut systems, &widths, usable, measures);
         systems
+    }
+
+    /// The width a bar of written notes needs at this staff size: each note
+    /// a share by its value (a quarter under three spaces, an eighth a little
+    /// over two), plus room for the barline padding. Zero for
+    /// a bar with no notes, so slash bars still pack by their symbols.
+    fn melody_width_needed(&self, measure: &crate::chart::types::Measure) -> f64 {
+        let sp = self.config.spatium;
+        let notes: f64 = measure
+            .melodies
+            .iter()
+            .flat_map(|m| &m.notes)
+            .filter(|n| !n.is_space())
+            .map(|n| {
+                // Measured against engraved charts: Sibelius sets four bars
+                // of eight eighths across a 540pt line at a 5pt space.
+                let share = match n.duration {
+                    1 => 4.0,
+                    2 => 3.3,
+                    4 => 2.8,
+                    8 => 2.2,
+                    16 => 1.8,
+                    _ => 1.5,
+                };
+                if n.dotted { share + 0.5 } else { share }
+            })
+            .sum::<f64>()
+            * sp;
+        if notes > 0.0 { notes + 2.0 * sp } else { 0.0 }
     }
 
     /// The width this measure's chord symbols need, laid end to end.

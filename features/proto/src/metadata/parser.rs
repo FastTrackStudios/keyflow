@@ -40,6 +40,12 @@ impl SongMetadata {
         // Now extract subtitle from parentheses in the title part
         // e.g., "Amazing Grace (Hymn)" -> title="Amazing Grace", subtitle="Hymn"
         let (title, subtitle) = Self::extract_subtitle_from_parentheses(&title_part);
+        // A quoted title is how a chart writes one that would otherwise read
+        // as music — `"1901" - Phoenix` — and the quotes are not its name.
+        let title = match title.strip_prefix('"').and_then(|t| t.strip_suffix('"')) {
+            Some(inner) if !inner.is_empty() => inner.to_string(),
+            _ => title,
+        };
 
         (
             if title.is_empty() { None } else { Some(title) },
@@ -87,6 +93,14 @@ impl SongMetadata {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn quoted_title_drops_its_quotes() {
+        let (title, artist, _) =
+            super::SongMetadata::parse_title_artist_subtitle("\"1901\" - Phoenix");
+        assert_eq!(title.as_deref(), Some("1901"));
+        assert_eq!(artist.as_deref(), Some("Phoenix"));
+    }
+
     use super::*;
 
     #[test]
