@@ -22,7 +22,7 @@ pub mod keyflow;
 pub mod recognize;
 
 pub use extract::{Fill, Glyph, Image, Page, Stroke, read_pdf};
-pub use keyflow::to_keyflow;
+pub use keyflow::{Style, to_keyflow, to_keyflow_with};
 pub use recognize::{Recognized, Report, recognize};
 
 /// What can go wrong reading a PDF.

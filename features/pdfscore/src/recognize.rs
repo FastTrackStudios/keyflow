@@ -1091,8 +1091,13 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                 // By the text's centre: a cue set just left of a barline
                 // still belongs to the bar it is centred over.
                 let centre = |w: &Word| (w.x0 + w.x1) / 2.0;
-                for c in chords.iter().filter(|c| c.y < first.top && c.y > above_limit && in_span(centre(c))) {
-                    m.directions.push(Direction { tick: tick_at(c.x0), kind: DirectionKind::Harmony(c.text.clone()) });
+                // A chord symbol is left-aligned with its note (a cue is
+                // centred over its spot, hence `centre` for the bar above).
+                for c in chords.iter().filter(|c| c.y < first.top && c.y > above_limit && in_span(c.x0 + 0.5 * sp)) {
+                    m.directions.push(Direction {
+                        tick: tick_at(c.x0 + 0.3 * sp),
+                        kind: DirectionKind::Harmony(c.text.clone()),
+                    });
                 }
                 for l in lines.iter().filter(|l| l.y < first.top && l.y > above_limit && in_span(centre(l))) {
                     if title.as_deref() == Some(l.text.as_str()) {

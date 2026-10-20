@@ -80,6 +80,7 @@ use crate::engraver::style::MStyle;
 use crate::key::KeySpelling;
 use crate::sections::SectionType;
 use kurbo::{Affine, Rect};
+use crate::time::MusicalPositionExt as _;
 use tracing::debug;
 
 fn key_signature_fifths(chart: &Chart) -> i8 {
@@ -1184,7 +1185,23 @@ impl ChartLayoutEngine {
             let systems = if section_folded {
                 vec![Vec::new()]
             } else {
-                self.group_measures_into_systems(chart_section.measures(), content_width)
+                {
+                    // The measuring pass's minimums: what each bar's printed
+                    // symbols really take, which the grouping's own estimate
+                    // can undercount.
+                    let measured: Vec<f64> = (0..chart_section.measures().len())
+                        .map(|i| {
+                            chart_measurements
+                                .get(global_section_measure_offset + i)
+                                .map_or(0.0, |m| m.min_width)
+                        })
+                        .collect();
+                    self.group_measures_into_systems(
+                        chart_section.measures(),
+                        content_width,
+                        &measured,
+                    )
+                }
             };
 
             for (sys_idx, measure_indices) in systems.iter().enumerate() {
@@ -1429,10 +1446,15 @@ impl ChartLayoutEngine {
 
                         // Min width from pre-measured chord widths (Pass 1)
                         let global_idx = global_section_measure_offset + idx;
+                        // A written rhythm or line of notes has a floor of
+                        // its own: the room its attacks need (the same
+                        // estimate the line breaking used), not just its
+                        // chord symbols'.
                         let min_width = chart_measurements
                             .get(global_idx)
                             .map(|m| m.min_width)
-                            .unwrap_or(0.0);
+                            .unwrap_or(0.0)
+                            .max(self.melody_width_needed(m));
 
                         (weight, min_width)
                     })
@@ -2747,7 +2769,23 @@ impl ChartLayoutEngine {
             let systems = if section_folded {
                 vec![Vec::new()]
             } else {
-                self.group_measures_into_systems(chart_section.measures(), content_width)
+                {
+                    // The measuring pass's minimums: what each bar's printed
+                    // symbols really take, which the grouping's own estimate
+                    // can undercount.
+                    let measured: Vec<f64> = (0..chart_section.measures().len())
+                        .map(|i| {
+                            chart_measurements
+                                .get(global_section_measure_offset + i)
+                                .map_or(0.0, |m| m.min_width)
+                        })
+                        .collect();
+                    self.group_measures_into_systems(
+                        chart_section.measures(),
+                        content_width,
+                        &measured,
+                    )
+                }
             };
 
             for (sys_idx, measure_indices) in systems.iter().enumerate() {
@@ -2867,10 +2905,15 @@ impl ChartLayoutEngine {
 
                         // Min width from pre-measured chord widths (Pass 1)
                         let global_idx = global_section_measure_offset + idx;
+                        // A written rhythm or line of notes has a floor of
+                        // its own: the room its attacks need (the same
+                        // estimate the line breaking used), not just its
+                        // chord symbols'.
                         let min_width = chart_measurements
                             .get(global_idx)
                             .map(|m| m.min_width)
-                            .unwrap_or(0.0);
+                            .unwrap_or(0.0)
+                            .max(self.melody_width_needed(m));
 
                         (weight, min_width)
                     })
@@ -3591,6 +3634,7 @@ impl ChartLayoutEngine {
         &self,
         measures: &[crate::chart::types::Measure],
         content_width: f64,
+        measured_min: &[f64],
     ) -> Vec<Vec<usize>> {
         let mut systems = Vec::new();
         let mut current_system: Vec<usize> = Vec::new();
@@ -3613,10 +3657,15 @@ impl ChartLayoutEngine {
         // A section of written notes keeps one grid: as many bars a line as
         // its widest bar allows, every line. Greedy packing would set one
         // bar here and two there, and a chart is read by counting bars.
-        if measures.iter().any(|m| self.melody_width_needed(m) > 0.0)
+        if measures.iter().any(|m| self.melody_width_needed(m) > 0.0 || is_dense_rhythm(m))
             && !measures.iter().any(|m| m.volta_start.is_some())
         {
-            let widest = widths.iter().copied().fold(0.0f64, f64::max).max(1.0);
+            let widest = widths
+                .iter()
+                .zip(measured_min.iter().chain(std::iter::repeat(&0.0)))
+                .map(|(w, m)| w.max(*m))
+                .fold(0.0f64, f64::max)
+                .max(1.0);
             let per_line = ((usable / widest).floor() as usize)
                 .clamp(1, self.config.max_measures_per_system.max(1));
             return (0..measures.len())
@@ -3700,6 +3749,27 @@ impl ChartLayoutEngine {
     /// a bar with no notes, so slash bars still pack by their symbols.
     fn melody_width_needed(&self, measure: &crate::chart::types::Measure) -> f64 {
         let sp = self.config.spatium;
+        // A written chord rhythm (`G#m_8 G#m_8 r8 …`) needs room the same
+        // way: each attack, rest or space a share by its value.
+        if measure.melodies.iter().all(|m| m.notes.is_empty()) && is_dense_rhythm(measure) {
+            let ts = crate::time::TimeSignature::new(
+                measure.time_signature.0.into(),
+                measure.time_signature.1.into(),
+            );
+            let shares: f64 = measure
+                .chords
+                .iter()
+                .map(|c| match c.duration.to_beats(ts) {
+                    b if b >= 4.0 => 4.0,
+                    b if b >= 2.0 => 3.3,
+                    b if b >= 1.0 => 2.8,
+                    b if b >= 0.5 => 2.2,
+                    b if b >= 0.25 => 1.8,
+                    _ => 1.5,
+                })
+                .sum();
+            return shares * sp + 2.0 * sp;
+        }
         let notes: f64 = measure
             .melodies
             .iter()
@@ -3740,6 +3810,7 @@ impl ChartLayoutEngine {
             .chords
             .iter()
             .filter(|c| !c.full_symbol.is_empty() && c.full_symbol != "s")
+            .filter(|c| printed_symbol(measure, c))
             .map(|c| text_metrics.horizontal_advance(&c.full_symbol, font_size) + gap)
             .sum();
         symbols.max(self.config.min_measure_width)
@@ -3765,6 +3836,7 @@ impl ChartLayoutEngine {
             .chords
             .iter()
             .filter(|c| !c.full_symbol.is_empty() && c.full_symbol != "s")
+            .filter(|c| printed_symbol(measure, c))
             .map(|c| text_metrics.horizontal_advance(&c.full_symbol, font_size) + gap)
             .sum();
         // Four slashes and the space they need to read as four.
@@ -3831,6 +3903,38 @@ fn rescue_orphan_bar(
 
     previous.pop();
     last.insert(0, moved);
+}
+
+/// A bar whose written chord rhythm has attacks shorter than a beat — a
+/// comp figure, not a chord held under slashes. It needs room like notes
+/// do, and its section keeps one grid.
+/// Whether `chord`'s symbol prints in its bar: a `.` repeat and a repeat of
+/// the bar's previous symbol print nothing, so they ask no room for one.
+fn printed_symbol(
+    measure: &crate::chart::types::Measure,
+    chord: &crate::chart::types::ChordInstance,
+) -> bool {
+    if chord.original_token == "." {
+        return false;
+    }
+    let idx = measure.chords.iter().position(|c| std::ptr::eq(c, chord));
+    !idx.is_some_and(|i| {
+        measure.chords[..i]
+            .iter()
+            .rev()
+            .find(|c| c.full_symbol != "r" && c.full_symbol != "s")
+            .is_some_and(|prev| prev.full_symbol == chord.full_symbol)
+    })
+}
+
+pub(crate) fn is_dense_rhythm(measure: &crate::chart::types::Measure) -> bool {
+    let ts = crate::time::TimeSignature::new(
+        measure.time_signature.0.into(),
+        measure.time_signature.1.into(),
+    );
+    // Rests and spaces are chord entries too (`r8`, `s4`), each with its
+    // length; a bar written as one chord has one entry of a whole bar.
+    measure.chords.len() > 1 && measure.chords.iter().any(|c| c.duration.to_beats(ts) < 1.0)
 }
 
 fn starts_long_volta(measure: &crate::chart::types::Measure) -> bool {

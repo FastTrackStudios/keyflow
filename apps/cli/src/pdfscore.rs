@@ -6,6 +6,27 @@ use std::path::{Path, PathBuf};
 use engraver_score::layout::{LayoutOptions, layout_part};
 use keyflow::engraver::fonts::ChartFontBundle;
 
+/// How each bar goes on the chart staff (`--style`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum ChartStyle {
+    /// Comping as rhythmic slashes, single-note lines as notes.
+    Auto,
+    /// Every bar as chord names over rhythmic slashes.
+    Rhythm,
+    /// Every bar's notes written out.
+    Notation,
+}
+
+impl From<ChartStyle> for keyflow_pdfscore::Style {
+    fn from(s: ChartStyle) -> Self {
+        match s {
+            ChartStyle::Auto => Self::Auto,
+            ChartStyle::Rhythm => Self::Rhythm,
+            ChartStyle::Notation => Self::Notation,
+        }
+    }
+}
+
 /// Output format for `kf pdf-score`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum Format {
@@ -28,6 +49,7 @@ pub struct Args<'a> {
     /// Also write the chart as keyflow text (`<stem>.kf`).
     pub kf: bool,
     pub artist: Option<&'a str>,
+    pub style: ChartStyle,
 }
 
 pub fn cmd_pdf_score(args: &Args<'_>) -> Result<(), String> {
@@ -64,7 +86,7 @@ pub fn cmd_pdf_score(args: &Args<'_>) -> Result<(), String> {
 
     if args.kf {
         let path = out_dir.join(format!("{stem}.kf"));
-        std::fs::write(&path, keyflow_pdfscore::to_keyflow(&rec.score, args.artist))
+        std::fs::write(&path, keyflow_pdfscore::to_keyflow_with(&rec.score, args.artist, args.style.into()))
             .map_err(|e| e.to_string())?;
         println!("{}", path.display());
     }

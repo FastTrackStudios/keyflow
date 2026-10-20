@@ -315,7 +315,7 @@ pub mod pipeline {
     ///
     /// The default reading implies nothing: no simile marks, no repeat signs,
     /// no folded sections — every bar the player plays is a bar on the page.
-    /// Whether any bar carries written notes (not just rhythm or spaces) —
+    /// Whether any bar carries written notes or a written comp rhythm —
     /// such a chart reads at print size on a screen
     /// ([`ChartLayoutConfig::for_notation`]).
     #[must_use]
@@ -325,6 +325,7 @@ pub mod pipeline {
                 m.melodies
                     .iter()
                     .any(|mel| mel.notes.iter().any(|n| !n.is_space() && !n.is_rest()))
+                    || crate::engraver::layout::chart::is_dense_rhythm(m)
             })
         })
     }

@@ -1080,6 +1080,8 @@ pub fn render_chord_symbols(
     let mut nodes = Vec::new();
     let mut chord_bounds_info: Vec<ChordBoundsInfo> = Vec::new();
     let mut last_chord_symbol = previous_chord_symbol.map(String::from);
+    // The symbol last printed in this bar.
+    let mut same_bar_symbol: Option<String> = None;
 
     let is_boundary = is_at_boundary(ctx.measure_idx, ctx.local_measure_idx);
     let is_hits = ctx.section_name.eq_ignore_ascii_case("hits");
@@ -1212,6 +1214,26 @@ pub fn render_chord_symbols(
             }
             continue;
         }
+
+        // `.` is "that chord again": it never restates the symbol (a new
+        // line restates it — the previous symbol resets there).
+        if chord.original_token == "."
+            && last_chord_symbol.as_deref() == Some(current_symbol.as_str())
+        {
+            same_bar_symbol = Some(current_symbol.clone());
+            continue;
+        }
+
+        // Within a bar the harmony is named once, in every preset: a comp
+        // rhythm on one chord (`G#m_8 G#m_8 r8 G#m_8`) is attacks, not new
+        // chords, however short they are. (Screen presets that restate
+        // repeated chords do it across barlines, below.)
+        if !is_hits && same_bar_symbol.as_deref() == Some(current_symbol.as_str())
+        {
+            last_chord_symbol = Some(current_symbol.clone());
+            continue;
+        }
+        same_bar_symbol = Some(current_symbol.clone());
 
         // Check if duplicate (skip for Hits — first-chord logic handles it)
         if !is_hits

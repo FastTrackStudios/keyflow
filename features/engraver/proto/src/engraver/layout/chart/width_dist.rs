@@ -147,7 +147,7 @@ impl ChartLayoutEngine {
             }
 
             let systems =
-                temp_engine.group_measures_into_systems(chart_section.measures(), content_width);
+                temp_engine.group_measures_into_systems(chart_section.measures(), content_width, &[]);
 
             for (system_idx, measure_indices) in systems.iter().enumerate() {
                 let include_time_sig = global_system_index == 0;
@@ -438,6 +438,7 @@ impl ChartLayoutEngine {
         // not from the rhythm_elements array index.
         let mut seen_real_chord = false;
         let mut cumulative_beats = 0usize;
+        let mut last_symbol: Option<String> = None;
         let visible_chords: Vec<_> = measure
             .rhythm_elements
             .iter()
@@ -462,6 +463,14 @@ impl ChartLayoutEngine {
                     if !is_visible {
                         return None;
                     }
+                    // A `.` repeat, or the symbol already printed in this
+                    // bar, draws nothing and needs no room for a symbol.
+                    if chord.original_token == "."
+                        || last_symbol.as_deref() == Some(chord.full_symbol.as_str())
+                    {
+                        return None;
+                    }
+                    last_symbol = Some(chord.full_symbol.clone());
 
                     // Check if this is a pushed spillback chord (first real chord that's pushed).
                     // Spillback chords render in the PREVIOUS measure. However, at boundaries
@@ -669,6 +678,25 @@ impl ChartLayoutEngine {
             .any(|melody| !melody.notes.is_empty())
         {
             melody_density_weight(measure, slope)
+        } else if super::is_dense_rhythm(measure) {
+            use crate::time::MusicalPositionExt as _;
+            // A written comp rhythm (`G#m_8 . . . …`) is spaced like notes:
+            // each attack, rest or space by its own value, so a bar of eight
+            // eighths is wider than a bar of one chord and a figure.
+            let ts = crate::time::TimeSignature::new(
+                measure.time_signature.0.into(),
+                measure.time_signature.1.into(),
+            );
+            let per_beat =
+                constants::TICKS_PER_QUARTER * 4.0 / f64::from(measure.time_signature.1.max(1));
+            measure
+                .chords
+                .iter()
+                .map(|c| {
+                    let ticks = c.duration.to_beats(ts) * per_beat;
+                    spacing::duration_stretch(ticks, constants::TICKS_PER_QUARTER, slope)
+                })
+                .sum()
         } else {
             // Chord-only (slash) bar: size it by the whole-measure duration, not
             // by summing per-chord slash durations. Summing makes a 2+1+1 bar

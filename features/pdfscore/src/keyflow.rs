@@ -9,13 +9,33 @@
 use std::fmt::Write as _;
 
 use engraver_score::model::{
-    ClefSign, DirectionKind, Event, Measure, NoteTypeValue, Score, Step, WrittenDuration,
+    Chord, ClefSign, DirectionKind, Event, Measure, NoteTypeValue, Score, Step, WrittenDuration,
     WrittenPitch,
 };
 
-/// The chart text for `score`'s first part.
+/// How a bar's music goes on the one chart staff.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Style {
+    /// Per bar: comping (stacked chords voicing the symbols) as rhythmic
+    /// slashes under the chord names, a single-note line as its notes. The
+    /// original is always there for the voicings.
+    #[default]
+    Auto,
+    /// Every bar as chord names over rhythmic slashes.
+    Rhythm,
+    /// Every bar's notes written out.
+    Notation,
+}
+
+/// The chart text for `score`'s first part, bars chosen by [`Style::Auto`].
 #[must_use]
 pub fn to_keyflow(score: &Score, artist: Option<&str>) -> String {
+    to_keyflow_with(score, artist, Style::Auto)
+}
+
+/// The chart text for `score`'s first part.
+#[must_use]
+pub fn to_keyflow_with(score: &Score, artist: Option<&str>, style: Style) -> String {
     let Some(part) = score.parts.first() else {
         return String::new();
     };
@@ -61,8 +81,10 @@ pub fn to_keyflow(score: &Score, artist: Option<&str>) -> String {
 
     let _ = writeln!(out, "[Hook] {}", part.measures.len());
     let mut bars: Vec<String> = Vec::new();
+    let mut last_chord: Option<String> = None;
+    let mut last_attack: Option<String> = None;
     for m in &part.measures {
-        bars.push(bar_text(m, 1));
+        bars.push(bar_text(m, 1, style, &mut last_chord, &mut last_attack));
     }
     // Four bars to a line, as the chart reads.
     for line in bars.chunks(4) {
@@ -90,7 +112,13 @@ fn key_name(fifths: i8) -> &'static str {
 }
 
 /// One bar: staff text, the chord symbols, then the staff's first voice.
-fn bar_text(m: &Measure, staff: u8) -> String {
+fn bar_text(
+    m: &Measure,
+    staff: u8,
+    style: Style,
+    last_chord: &mut Option<String>,
+    last_attack: &mut Option<String>,
+) -> String {
     let mut s = String::new();
     // A bar's cues read as one line ("(D) Keys Start"), not a stack: the
     // lowest line first, as the eye meets them coming down the page.
@@ -106,6 +134,11 @@ fn bar_text(m: &Measure, staff: u8) -> String {
     if !words.is_empty() {
         let _ = write!(s, "^\"{}\" ", words.join(" ").replace('"', "'"));
     }
+    if let Some(rhythm) = comp_rhythm(m, staff, style, last_chord, last_attack) {
+        s.push_str(&rhythm);
+        return s;
+    }
+    *last_attack = None;
     let mut chords: Vec<(u32, String)> = m
         .directions
         .iter()
@@ -260,6 +293,108 @@ fn pitch(p: &WrittenPitch) -> String {
         _ => "",
     };
     format!("{step}{acc}:{}", p.octave)
+}
+
+/// The bar as chord names over rhythmic slashes — one chord token per
+/// attack at its written value, rests as rests — when it is comping: at
+/// least two thirds of its attacks stacked chords (or always, in
+/// [`Style::Rhythm`]). `None` keeps the bar's notes. `last_chord` carries
+/// the harmony across barlines, for attacks before the bar's first symbol.
+///
+/// An attack repeating the previous one — same chord, same value — is `.`,
+/// so the symbol is printed where the harmony changes and the slashes carry
+/// the rhythm. `last_attack` carries the last token across the barline;
+/// a rest ends the run.
+fn comp_rhythm(
+    m: &Measure,
+    staff: u8,
+    style: Style,
+    last_chord: &mut Option<String>,
+    last_attack: &mut Option<String>,
+) -> Option<String> {
+    let mut symbols: Vec<(u32, String)> = m
+        .directions
+        .iter()
+        .filter_map(|d| match &d.kind {
+            DirectionKind::Harmony(h) => Some((d.tick, chord_name(h))),
+            _ => None,
+        })
+        .collect();
+    symbols.sort_by_key(|c| c.0);
+    let evs = first_voice(m, staff);
+    let attacks: Vec<&Chord> = evs
+        .iter()
+        .filter_map(|e| match e {
+            Event::Chord(c) => Some(c),
+            Event::Rest(_) => None,
+        })
+        .collect();
+    let stacked = attacks.iter().filter(|c| c.notes.len() > 1).count();
+    let comping = !attacks.is_empty() && stacked * 3 >= attacks.len() * 2;
+    let fits = voice_ticks(m, staff) == m.len_ticks;
+    let wanted = match style {
+        Style::Notation => false,
+        Style::Rhythm => true,
+        Style::Auto => comping,
+    };
+    // Whatever the bar becomes, its last symbol is the harmony going on.
+    let end_chord = symbols.last().map(|c| c.1.clone()).or_else(|| last_chord.clone());
+    if !wanted || !fits || attacks.is_empty() {
+        *last_chord = end_chord;
+        return None;
+    }
+    let mut out = Vec::new();
+    for e in evs {
+        match e {
+            Event::Rest(r) => {
+                let v = if r.measure_rest {
+                    pieces(m.len_ticks, m.divisions).join(" r")
+                } else {
+                    note_value(&r.written)
+                };
+                out.push(format!("r{v}"));
+                *last_attack = None;
+            }
+            Event::Chord(c) => {
+                let name = symbols
+                    .iter()
+                    .rev()
+                    .find(|(t, _)| *t <= c.tick)
+                    .map(|(_, n)| n.clone())
+                    .or_else(|| last_chord.clone())
+                    .or_else(|| symbols.first().map(|(_, n)| n.clone()));
+                let Some(name) = name else {
+                    *last_chord = end_chord;
+                    return None;
+                };
+                let token = format!("{name}_{}", note_value(&c.written));
+                if last_attack.as_deref() == Some(token.as_str()) {
+                    out.push(".".to_string());
+                } else {
+                    out.push(token.clone());
+                }
+                *last_attack = Some(token);
+            }
+        }
+    }
+    *last_chord = end_chord;
+    Some(out.join(" "))
+}
+
+/// `staff`'s first voice, in time order.
+fn first_voice(m: &Measure, staff: u8) -> Vec<&Event> {
+    let voice = m
+        .events
+        .iter()
+        .filter_map(|e| match e {
+            Event::Chord(c) if c.staff == staff => Some(c.voice),
+            Event::Rest(r) if r.staff == staff => Some(r.voice),
+            _ => None,
+        })
+        .min();
+    let mut evs: Vec<&Event> = m.events.iter().filter(|e| Some(e.voice()) == voice).collect();
+    evs.sort_by_key(|e| e.tick());
+    evs
 }
 
 /// Length of `staff`'s first voice in ticks.

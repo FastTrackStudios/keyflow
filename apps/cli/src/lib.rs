@@ -572,6 +572,11 @@ enum Commands {
         /// Artist for the chart header.
         #[arg(long)]
         artist: Option<String>,
+        /// How bars go on the chart staff: `auto` writes comping as
+        /// rhythmic slashes under the chord names and single-note lines as
+        /// notes (the original PDF has the voicings).
+        #[arg(long, value_enum, default_value = "auto")]
+        style: pdfscore::ChartStyle,
     },
     /// Run the CSS orchestrator engine on a score (articulated MIDI summary).
     Orchestrate {
@@ -2221,6 +2226,7 @@ fn run(cli: Cli) -> Result<(), String> {
             scale,
             kf,
             artist,
+            style,
         } => {
             let (width, height, spatium, margin) =
                 if phone { (390.0, 844.0, 5.5, 14.0) } else { (width, height, spatium, margin) };
@@ -2235,6 +2241,7 @@ fn run(cli: Cli) -> Result<(), String> {
                 scale,
                 kf,
                 artist: artist.as_deref(),
+                style,
             })
         }
         Commands::Orchestrate {

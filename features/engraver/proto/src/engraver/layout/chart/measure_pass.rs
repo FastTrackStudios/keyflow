@@ -460,8 +460,17 @@ pub fn measure_measure_with_config(
     // Track if we've seen a real (non-placeholder) chord yet
     let mut seen_real_chord = false;
 
+    // The symbol last printed in this bar: a `.` repeat, or the same symbol
+    // again, prints nothing and needs no room (a bar of eight `G#m` attacks
+    // is one label, not eight).
+    let mut last_printed: Option<&str> = None;
     for (chord_idx, chord) in measure.chords.iter().enumerate() {
-        let is_visible = !is_placeholder(&chord.full_symbol);
+        let hidden_repeat = chord.original_token == "."
+            || last_printed == Some(chord.full_symbol.as_str());
+        let is_visible = !is_placeholder(&chord.full_symbol) && !hidden_repeat;
+        if is_visible {
+            last_printed = Some(chord.full_symbol.as_str());
+        }
 
         // Check if this is a pushed chord that will spill back to the previous measure.
         // Pushed chords that are the first real chord in a measure render as spillbacks
