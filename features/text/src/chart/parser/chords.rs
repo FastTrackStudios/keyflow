@@ -538,9 +538,15 @@ impl<'a> ChartParser<'a> {
         token.contains('_') || token.contains("//") || token.ends_with("/.") || token.ends_with('/')
     }
 
+    /// `[1]`, `[1, 2]`, and with a length in bars after a colon, `[1:2]`
+    /// (a first ending two bars long).
     fn parse_volta_token(token: &str) -> Option<Volta> {
         let token = token.split_once('_').map_or(token, |(base, _)| base);
         let inner = token.strip_prefix('[')?.strip_suffix(']')?;
+        let (inner, length) = match inner.split_once(':') {
+            Some((nums, len)) => (nums, len.trim().parse::<u16>().ok().filter(|l| *l >= 1)?),
+            None => (inner, 1),
+        };
         let numbers = inner
             .split(',')
             .filter_map(|part| part.trim().parse::<u8>().ok())
@@ -559,7 +565,7 @@ impl<'a> ChartParser<'a> {
                     .join(", ")
             ),
             numbers,
-            length_measures: 1,
+            length_measures: length,
         })
     }
 
@@ -7297,6 +7303,17 @@ mod span_helper_tests {
 
 #[cfg(test)]
 mod inline_melody_tie_tests {
+    #[test]
+    fn volta_with_a_length() {
+        let text = "T - X\n#A 120bpm 4/4\n\n[Hook] 4\n|: A | [1:2] Bm | E :| [2] A |\n";
+        let chart = crate::chart::parse_chart(text).expect("parse");
+        let ms = chart.sections[0].measures();
+        let first = ms[1].volta_start.as_ref().expect("first ending");
+        assert_eq!((first.numbers.clone(), first.length_measures), (vec![1], 2));
+        let second = ms[3].volta_start.as_ref().expect("second ending");
+        assert_eq!((second.numbers.clone(), second.length_measures), (vec![2], 1));
+    }
+
     #[test]
     fn inline_melody_keeps_ties() {
         let text = "T - X\n#A 120bpm 4/4 treble\n\n[Hook] 2\n| A m{ A:44 B:48~ ~B:48 C#:52 } | Bm m{ D:51 } |\n";

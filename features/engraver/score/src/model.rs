@@ -105,6 +105,13 @@ pub struct Measure {
     pub len_ticks: u32,
     /// Closing barline style (`<barline location="right">`).
     pub barline: BarStyle,
+    /// A repeat begins at this measure (`|:` before it).
+    pub repeat_start: bool,
+    /// A repeat ends with this measure (`:|` after it).
+    pub repeat_end: bool,
+    /// The ending (volta) that begins at this measure, by its label
+    /// ("1.", "2.", "1., 2.").
+    pub ending: Option<String>,
 }
 
 /// Barline drawn at a measure's end.

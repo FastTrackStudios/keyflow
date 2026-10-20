@@ -323,7 +323,11 @@ fn measure_notation_to_keyflow(
                 .map(u8::to_string)
                 .collect::<Vec<_>>()
                 .join(", ");
-            parts.push(format!("[{numbers}]"));
+            if volta.length_measures > 1 {
+                parts.push(format!("[{numbers}:{}]", volta.length_measures));
+            } else {
+                parts.push(format!("[{numbers}]"));
+            }
         }
     }
 

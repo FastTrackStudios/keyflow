@@ -205,6 +205,11 @@ pub mod pipeline {
         /// Every bar as written. What Keyflow has always done.
         #[default]
         Default,
+        /// The chart exactly as its text writes it: repeat signs and
+        /// endings kept (not unrolled), and nothing folded that the text
+        /// did not fold. For a chart that already says how it repeats —
+        /// one read from an engraved part, say.
+        Written,
         /// Fold repeated bars into simile marks.
         ///
         /// Shorter, and often much shorter, without losing anything: a
@@ -503,6 +508,7 @@ pub mod pipeline {
                 ChartMode::Default => {
                     self.layout_with_config(&expanded(chart), &layout_mode, &config)
                 }
+                ChartMode::Written => self.layout_with_config(chart, &layout_mode, &config),
                 ChartMode::Folded => {
                     // Same grid as Default. A folded chart still has to look
                     // like a chart — four bars to a line, so the eye can count

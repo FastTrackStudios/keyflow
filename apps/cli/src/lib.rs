@@ -38,6 +38,9 @@ enum ChartModeArg {
     /// Every bar as written.
     #[default]
     Default,
+    /// The chart text's own repeats and endings, neither unrolled nor
+    /// folded further.
+    Written,
     /// Fold repeated bars into simile marks.
     Folded,
     /// Fold, then widen and shrink until the chart fits one page.
@@ -46,7 +49,7 @@ enum ChartModeArg {
 
 impl ChartModeArg {
     fn folds(self) -> bool {
-        !matches!(self, Self::Default)
+        matches!(self, Self::Folded | Self::Compact)
     }
 }
 
@@ -1015,7 +1018,9 @@ impl LayoutPipeline {
         // so they happen here rather than inside the engine. Either way the
         // chords stay on every bar — what changes is what gets drawn.
         let mut prepared = chart.clone();
-        if chart_mode.folds() {
+        if matches!(chart_mode, ChartModeArg::Written) {
+            // As the text writes it.
+        } else if chart_mode.folds() {
             keyflow::chart::fold_similes(&mut prepared);
             keyflow::chart::fold_sections(&mut prepared);
         } else {
@@ -1034,7 +1039,9 @@ impl LayoutPipeline {
         };
         config.tight_system_spacing |= tight_spacing;
         match chart_mode {
-            ChartModeArg::Default => self.engine.layout_chart_with_config(chart, &mode, &config),
+            ChartModeArg::Default | ChartModeArg::Written => {
+                self.engine.layout_chart_with_config(chart, &mode, &config)
+            }
             ChartModeArg::Folded => {
                 let mut config = config;
                 config.fold_sections = true;

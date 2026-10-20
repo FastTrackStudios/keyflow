@@ -79,16 +79,49 @@ pub fn to_keyflow_with(score: &Score, artist: Option<&str>, style: Style) -> Str
     let _ = writeln!(out, "{num}/{den} {clef}");
     out.push('\n');
 
-    let _ = writeln!(out, "[Hook] {}", part.measures.len());
+    // A `|:` that nothing closes is not a repeat (the closing sign was not
+    // read, or the part ends first); a lone `:|` is — it repeats from the
+    // top, as engravers write it.
+    let mut measures = part.measures.clone();
+    for i in 0..measures.len() {
+        if measures[i].repeat_start {
+            let closed = measures[i..]
+                .iter()
+                .enumerate()
+                .find(|(k, m)| m.repeat_end || (*k > 0 && m.repeat_start))
+                .is_some_and(|(_, m)| m.repeat_end);
+            if !closed {
+                measures[i].repeat_start = false;
+            }
+        }
+    }
+    let part = &engraver_score::model::Part { measures, ..part.clone() };
+    let sections = sections_of(&part.measures);
     let mut bars: Vec<String> = Vec::new();
     let mut last_chord: Option<String> = None;
     let mut last_attack: Option<String> = None;
-    for m in &part.measures {
+    for (i, m) in part.measures.iter().enumerate() {
+        // A section (and a repeat) opens with its chord named: `.` there
+        // would point back across the boundary.
+        if sections.iter().any(|r| r.start == i) || m.repeat_start || m.ending.is_some() {
+            last_attack = None;
+        }
         bars.push(bar_text(m, 1, style, &mut last_chord, &mut last_attack));
     }
-    // Four bars to a line, as the chart reads.
-    for line in bars.chunks(4) {
-        let _ = writeln!(out, "| {} |", line.join(" | "));
+    let named = sections.len() > 1;
+    for (k, range) in sections.iter().enumerate() {
+        let name = if named {
+            char::from(b'A' + (k % 26) as u8).to_string()
+        } else {
+            "Hook".to_string()
+        };
+        let _ = writeln!(out, "[{name}] {}", range.len());
+        // Four bars to a line, as the chart reads.
+        let idx: Vec<usize> = range.clone().collect();
+        for line in idx.chunks(4) {
+            let _ = writeln!(out, "{}", bar_line(&part.measures, &bars, line));
+        }
+        out.push('\n');
     }
     out
 }
@@ -99,6 +132,84 @@ pub fn to_keyflow_with(score: &Score, artist: Option<&str>, style: Style) -> Str
 fn chart_bpm(t: &engraver_score::model::TempoMark) -> Option<u32> {
     let per: f64 = t.per_minute.split('-').next()?.trim().parse().ok()?;
     Some(per.round() as u32)
+}
+
+/// Where the chart's sections begin: at a repeat sign, after a double or
+/// section barline, and after a repeat closes (unless an ending follows,
+/// which belongs to the repeat).
+fn sections_of(ms: &[Measure]) -> Vec<std::ops::Range<usize>> {
+    let mut starts = vec![0];
+    for i in 1..ms.len() {
+        let prev = &ms[i - 1];
+        let starts_here = ms[i].repeat_start
+            || prev.barline.is_section_end() && ms[i].ending.is_none()
+            || prev.repeat_end && ms[i].ending.is_none();
+        if starts_here {
+            starts.push(i);
+        }
+    }
+    starts.dedup();
+    starts
+        .iter()
+        .zip(starts.iter().skip(1).chain(std::iter::once(&ms.len())))
+        .map(|(a, b)| *a..*b)
+        .filter(|r| !r.is_empty())
+        .collect()
+}
+
+/// One line of bars with their repeat signs and endings:
+/// `|: A | Bm | [1:2] E | A :| [2] D |`.
+fn bar_line(ms: &[Measure], bars: &[String], line: &[usize]) -> String {
+    let mut s = String::new();
+    for (k, &i) in line.iter().enumerate() {
+        let m = &ms[i];
+        if k == 0 {
+            s.push_str(if m.repeat_start { "|: " } else { "| " });
+        }
+        if let Some(label) = &m.ending {
+            let _ = write!(s, "[{}] ", ending_token(label, ending_length(ms, i)));
+        }
+        s.push_str(&bars[i]);
+        let next = line.get(k + 1).map(|&j| &ms[j]);
+        s.push_str(match (m.repeat_end, next.is_some_and(|n| n.repeat_start), next.is_some()) {
+            (true, true, _) => " :| |: ",
+            (true, false, true) => " :| ",
+            (false, true, _) => " |: ",
+            (false, false, true) => " | ",
+            (true, _, false) => " :|",
+            (false, _, false) => " |",
+        });
+    }
+    s
+}
+
+/// `1.` / `1., 2.` as a chart ending: `1` / `1, 2`, with `:n` for an ending
+/// longer than a bar.
+fn ending_token(label: &str, length: usize) -> String {
+    let nums: Vec<&str> = label
+        .split(',')
+        .map(|p| p.trim().trim_end_matches('.'))
+        .filter(|p| !p.is_empty())
+        .collect();
+    if length > 1 {
+        format!("{}:{length}", nums.join(", "))
+    } else {
+        nums.join(", ")
+    }
+}
+
+/// An ending runs to the repeat sign that closes it (a first ending of two
+/// bars), or is one bar.
+fn ending_length(ms: &[Measure], i: usize) -> usize {
+    for (j, m) in ms.iter().enumerate().skip(i) {
+        if j > i && m.ending.is_some() {
+            break;
+        }
+        if m.repeat_end {
+            return j - i + 1;
+        }
+    }
+    1
 }
 
 fn key_name(fifths: i8) -> &'static str {

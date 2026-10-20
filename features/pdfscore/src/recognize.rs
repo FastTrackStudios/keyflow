@@ -807,15 +807,19 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                 // The first measure of a system also owns the text printed
                 // over the system's prelude.
                 let span_start = if first_in_system { first.x0 } else { x0 };
-                if open.as_ref().is_some_and(|g| g.dots_right) {
+                let repeat_start = open.as_ref().is_some_and(|g| g.dots_right);
+                let repeat_end = close.as_ref().is_some_and(|g| g.dots_left);
+                if repeat_start {
                     report.repeats.push((index, true));
                 }
-                if close.as_ref().is_some_and(|g| g.dots_left) {
+                if repeat_end {
                     report.repeats.push((index, false));
                 }
                 let mut m = Measure {
                     number: (index + 1).to_string(),
                     divisions: DIVISIONS,
+                    repeat_start,
+                    repeat_end,
                     barline: close.as_ref().map_or(BarStyle::Regular, BarGroup::style),
                     ..Measure::default()
                 };
@@ -1176,14 +1180,27 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                 let centre = |w: &Word| (w.x0 + w.x1) / 2.0;
                 // A chord symbol is left-aligned with its note (a cue is
                 // centred over its spot, hence `centre` for the bar above).
-                for c in chords.iter().filter(|c| c.y < first.top && c.y > above_limit && in_span(c.x0 + 0.5 * sp)) {
+                for c in chords.iter().filter(|c| c.y < first.top && c.y > above_limit && in_span(c.x0 + 1.0 * sp)) {
                     m.directions.push(Direction {
                         tick: tick_at(c.x0 + 0.3 * sp),
                         kind: DirectionKind::Harmony(c.text.clone()),
                     });
                 }
-                for l in lines.iter().filter(|l| l.y < first.top && l.y > above_limit && in_span(centre(l))) {
+                // Ending labels hang inside their bracket, a little below
+                // the top line; other text stays above the staff.
+                let above = |l: &Word| {
+                    l.y < first.top || (is_ending_label(&l.text) && l.y < first.top + 1.5 * sp)
+                };
+                for l in lines.iter().filter(|l| above(l) && l.y > above_limit && in_span(centre(l))) {
                     if title.as_deref() == Some(l.text.as_str()) {
+                        continue;
+                    }
+                    // A credit beside the title, not a cue for the band.
+                    let lower = l.text.to_ascii_lowercase();
+                    if ["arranged by", "arr.", "arr ", "transcribed by", "composed by", "words and music", "copyright"]
+                        .iter()
+                        .any(|p| lower.starts_with(p))
+                    {
                         continue;
                     }
                     // A measure number over the system start.
@@ -1192,6 +1209,11 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                     }
                     if let Some(t) = tempo_of(l) {
                         m.directions.push(Direction { tick: 0, kind: DirectionKind::Tempo(t) });
+                        continue;
+                    }
+                    // "1." / "2." over a bracket: an ending, not a cue.
+                    if is_ending_label(&l.text) {
+                        m.ending = Some(l.text.replace(' ', ""));
                         continue;
                     }
                     m.directions.push(Direction { tick: tick_at(l.x0), kind: DirectionKind::Words(l.text.clone()) });
@@ -1265,6 +1287,15 @@ fn split_voices<'e>(evs: &[&'e Ev], len: u32, mid: f64) -> Vec<Vec<&'e Ev>> {
     } else {
         vec![evs.to_vec()]
     }
+}
+
+/// An ending's label: numbers each followed by a dot ("1.", "2.", "1., 2.").
+fn is_ending_label(text: &str) -> bool {
+    let t = text.replace(' ', "");
+    !t.is_empty()
+        && t.split(',').all(|p| {
+            p.strip_suffix('.').is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+        })
 }
 
 /// `q = 166` in a music text font: the note glyph, then the number.
