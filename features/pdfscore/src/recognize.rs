@@ -330,7 +330,13 @@ fn words_of(glyphs: &[&Glyph]) -> Vec<Word> {
     let mut words: Vec<Word> = Vec::new();
     for g in gs {
         let adv = if g.advance > 0.0 { g.advance } else { 0.5 * g.size };
+        // In a chord font a capital A-G not after '/' is a new chord's
+        // root, however tight the spacing ("F#add2" then "G#m").
+        let new_root = is_chord_font(&g.font)
+            && ('A'..='G').contains(&g.ch)
+            && words.last().is_some_and(|w| !w.text.ends_with('/'));
         if let Some(w) = words.last_mut()
+            && !new_root
             && (w.y - g.origin.y).abs() < 0.3 * g.size
             && g.origin.x - w.x1 < 0.35 * g.size
             && g.origin.x >= w.x0
@@ -561,7 +567,17 @@ pub fn recognize(pages: &[Page]) -> Recognized {
             .collect();
 
         // Text: chord symbols and words.
-        let chord_glyphs: Vec<&Glyph> = page.glyphs.iter().filter(|g| is_chord_font(&g.font)).collect();
+        // Opus overprints some chord glyphs (drawn twice on one spot): keep
+        // one of each.
+        let mut chord_glyphs: Vec<&Glyph> = Vec::new();
+        for g in page.glyphs.iter().filter(|g| is_chord_font(&g.font)) {
+            let twin = chord_glyphs.iter().any(|h| {
+                h.ch == g.ch && (h.origin.x - g.origin.x).abs() < 0.3 && (h.origin.y - g.origin.y).abs() < 0.3
+            });
+            if !twin {
+                chord_glyphs.push(g);
+            }
+        }
         let mut chords: Vec<Word> = words_of(&chord_glyphs);
         for c in &mut chords {
             c.text = c
@@ -962,7 +978,10 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                     let voice = (u32::from(k) - 1) * 4 + v as u32 + 1;
                     let mut tick = 0u32;
                     for e in evs {
-                        if k == 1 {
+                        // Every staff's onsets place the text: when the top
+                        // staff rests, the bass carries the rhythm. A
+                        // whole-bar rest is centred, not on a beat.
+                        if !matches!(e.kind, EvKind::Rest { measure: true, .. }) {
                             onsets.push((e.x, tick));
                         }
                         match &e.kind {
@@ -1045,11 +1064,24 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                     }
                 }
 
+                // The nearest onset; with none near (a bar of rests under
+                // a chord change), the x position through the bar, to the
+                // eighth.
+                let bar_len = m.len_ticks;
                 let tick_at = |x: f64| -> u32 {
-                    onsets
+                    let near = onsets
                         .iter()
                         .min_by(|a, b| (a.0 - x).abs().total_cmp(&(b.0 - x).abs()))
-                        .map_or(0, |o| o.1)
+                        .filter(|o| (o.0 - x).abs() < 2.5 * sp);
+                    match near {
+                        Some(o) => o.1,
+                        None => {
+                            let frac = ((x - x0) / (x1 - x0).max(1.0)).clamp(0.0, 0.999);
+                            let eighth = DIVISIONS / 2;
+                            ((frac * f64::from(bar_len) / f64::from(eighth)).round() as u32 * eighth)
+                                .min(bar_len.saturating_sub(eighth))
+                        }
+                    }
                 };
                 // Text belongs to the measure whose span holds its left
                 // edge (the first measure also takes text over its

@@ -18,9 +18,11 @@
 //!    and text, into a score.
 
 pub mod extract;
+pub mod keyflow;
 pub mod recognize;
 
 pub use extract::{Fill, Glyph, Image, Page, Stroke, read_pdf};
+pub use keyflow::to_keyflow;
 pub use recognize::{Recognized, Report, recognize};
 
 /// What can go wrong reading a PDF.

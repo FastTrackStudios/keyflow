@@ -25,6 +25,9 @@ pub struct Args<'a> {
     pub spatium: f64,
     pub margin: f64,
     pub scale: f32,
+    /// Also write the chart as keyflow text (`<stem>.kf`).
+    pub kf: bool,
+    pub artist: Option<&'a str>,
 }
 
 pub fn cmd_pdf_score(args: &Args<'_>) -> Result<(), String> {
@@ -58,6 +61,13 @@ pub fn cmd_pdf_score(args: &Args<'_>) -> Result<(), String> {
         .out_dir
         .map_or_else(|| PathBuf::from(&stem), Path::to_path_buf);
     std::fs::create_dir_all(&out_dir).map_err(|e| e.to_string())?;
+
+    if args.kf {
+        let path = out_dir.join(format!("{stem}.kf"));
+        std::fs::write(&path, keyflow_pdfscore::to_keyflow(&rec.score, args.artist))
+            .map_err(|e| e.to_string())?;
+        println!("{}", path.display());
+    }
 
     let options = LayoutOptions {
         page_width: args.width,

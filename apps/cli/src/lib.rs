@@ -565,6 +565,13 @@ enum Commands {
         /// PNG pixels per point.
         #[arg(long, default_value = "2.0")]
         scale: f32,
+        /// Also write a keyflow Master Rhythm chart (`<name>.kf`) — render
+        /// it with `kf png` in page, snippet or responsive mode.
+        #[arg(long)]
+        kf: bool,
+        /// Artist for the chart header.
+        #[arg(long)]
+        artist: Option<String>,
     },
     /// Run the CSS orchestrator engine on a score (articulated MIDI summary).
     Orchestrate {
@@ -1013,7 +1020,13 @@ impl LayoutPipeline {
         }
         let chart = &prepared;
 
-        let mut config = config;
+        let mut config = if matches!(preset, PresetMode::Responsive)
+            && keyflow::engraver::api::pipeline::has_notation(chart)
+        {
+            config.for_notation()
+        } else {
+            config
+        };
         config.tight_system_spacing |= tight_spacing;
         match chart_mode {
             ChartModeArg::Default => self.engine.layout_chart_with_config(chart, &mode, &config),
@@ -1923,7 +1936,10 @@ fn run(cli: Cli) -> Result<(), String> {
             );
 
             // ContinuousScroll has no `pages`; render the whole scene as one image.
-            let svgs: Vec<String> = if layout.pages.is_empty() {
+            // A snippet is sized to its content, not to its (unbounded) page.
+            let svgs: Vec<String> = if matches!(mode, PresetMode::Snippet) {
+                vec![ChartPipeline::shared().map_err(|e| e.to_string())?.export_svg_snippet_embedded(&layout, 8.0)]
+            } else if layout.pages.is_empty() {
                 vec![
                     pipeline
                         .export_svg_continuous(&layout)
@@ -2203,6 +2219,8 @@ fn run(cli: Cli) -> Result<(), String> {
             margin,
             phone,
             scale,
+            kf,
+            artist,
         } => {
             let (width, height, spatium, margin) =
                 if phone { (390.0, 844.0, 5.5, 14.0) } else { (width, height, spatium, margin) };
@@ -2215,6 +2233,8 @@ fn run(cli: Cli) -> Result<(), String> {
                 spatium,
                 margin,
                 scale,
+                kf,
+                artist: artist.as_deref(),
             })
         }
         Commands::Orchestrate {
