@@ -106,7 +106,7 @@ impl FontUsage {
         let Ok(used) = self.used.lock() else {
             return Ok(String::new());
         };
-        let pipeline = crate::pipeline()?;
+        let pipeline = crate::fence::pipeline()?;
         let mut out = String::new();
 
         for (family, bytes) in pipeline.fonts().embeddable_fonts() {

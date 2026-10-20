@@ -4181,14 +4181,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "editor-keyflow-lang"
-version = "0.0.1-alpha"
-dependencies = [
- "editor-state",
- "keyflow-lang",
-]
-
-[[package]]
 name = "editor-mermaid"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/editor?tag=v0.1.24#c56621ee70bb33bccff9a0101812c6702ea45683"
@@ -7602,7 +7594,6 @@ dependencies = [
  "editor",
  "editor-crdt",
  "editor-keyflow",
- "editor-keyflow-lang",
  "editor-state",
  "flate2",
  "futures-channel",

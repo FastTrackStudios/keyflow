@@ -26,7 +26,7 @@ use keyflow_lang::text::ide::{self, Severity};
 
 /// Re-export so callers can pick a palette for [`highlight_css`] without taking
 /// a direct `keyflow-text` dependency:
-/// `editor_keyflow_lang::HighlightTheme::default_dark()`.
+/// `editor_keyflow::lang::HighlightTheme::default_dark()`.
 pub use keyflow_lang::text::highlighting::Theme as HighlightTheme;
 
 /// Build the keyflow decoration set for the current document.

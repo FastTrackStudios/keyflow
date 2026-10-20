@@ -22,14 +22,6 @@
 //! themselves are `include_bytes!`-baked into `engraver`, so no
 //! filesystem access is needed at runtime.
 
-/// Subset `@font-face` rules for the charts a page actually draws.
-///
-/// Behind the `subset` feature: `allsorts` is large and nothing in a
-/// browser needs it. Turned on by the site's build script and by its
-/// dev server.
-#[cfg(feature = "subset")]
-pub mod font_subset;
-
 use engraver::api::pipeline::ChartPipeline;
 use engraver::layout::chart::LayoutMode;
 use thiserror::Error;
@@ -138,7 +130,7 @@ pub fn font_face_css() -> Result<String, RenderError> {
 /// keyflow-cli's exporter". Three crates mirrored each other that way
 /// and one of them drifted, which is how chord symbols came to render in
 /// a system sans. There is one list now, on the font bundle.
-fn pipeline() -> Result<&'static ChartPipeline, RenderError> {
+pub(crate) fn pipeline() -> Result<&'static ChartPipeline, RenderError> {
     ChartPipeline::shared().map_err(|e| RenderError::Render(e.to_string()))
 }
 

@@ -1,6 +1,6 @@
 [package]
 name = "editor-keyflow"
-description = "Keyflow (.kf) chart → inline SVG for the Editor. Wraps engraver's CPU-only `svg` tier (no wgpu/vello/PDF) with a small wasm-friendly render_svg API, matching the shape of editor-mermaid / editor-typst."
+description = "Keyflow for the Editor: .kf fences to inline SVG (engraver's CPU-only svg tier, wasm-friendly), and highlighting + live IDE diagnostics as editor decorations."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -15,7 +15,7 @@ editor-state = { workspace = true }
 # CPU-only layout + SVG export from keyflow's engraver. `svg` drops
 # the wgpu/vello GPU stack and the PDF deps, leaving a pure-Rust path
 # (kurbo/peniko/skrifa/smufl) that compiles for wasm32.
-engraver = { workspace = true, default-features = false, features = ["svg"] }
+engraver = { workspace = true, default-features = false, features = ["svg"], optional = true }
 # Keyflow syntax highlighter (re-exported through keyflow-text's
 # wasm-clean `highlighting` feature — keyflow-syntax only, no facade/
 # tokio). Powers `highlight_html` for source-visible fences.
@@ -35,11 +35,13 @@ allsorts = { version = "0.16", optional = true }
 ttf-parser = { version = "0.25", optional = true }
 
 [features]
-default = []
+default = ["render"]
+# `.kf` fences → inline SVG.
+render = ["dep:engraver"]
 # Subset `@font-face` rules for a page of charts — see `font_subset`.
 # `allsorts` is a large dependency and nothing in a browser needs it, so
 # only the site's build script and its dev server turn this on.
-subset = ["dep:allsorts", "dep:ttf-parser"]
+subset = ["render", "dep:allsorts", "dep:ttf-parser"]
 
 [lints]
 workspace = true

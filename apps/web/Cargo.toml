@@ -79,11 +79,10 @@ editor-state = { workspace = true }
 # Registers the chart renderer into editor-state's fence registry, so
 # ```kf+ fences in the workbench engrave instead of showing source.
 editor-keyflow = { workspace = true }
-# Keyflow *as a language* inside the editor: syntax decorations, IDE
-# diagnostics, hover, and the resolved-chord overlays (1 -> C in the key
-# of C). This is what makes the workbench a Keyflow editor rather than a
-# textarea that happens to hold Keyflow.
-editor-keyflow-lang = { workspace = true }
+# (Its `lang` module is Keyflow *as a language* inside the editor: syntax
+# decorations, IDE diagnostics, hover, and the resolved-chord overlays —
+# 1 -> C in the key of C. That is what makes the workbench a Keyflow
+# editor rather than a textarea that happens to hold Keyflow.)
 # The workspace dep carries no platform features (`default-features =
 # false, features = ["lib"]` at the root); this crate's `default =
 # ["web"]` turns on `dioxus/web` + `dioxus/launch`. That is

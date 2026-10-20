@@ -20,7 +20,7 @@ use dioxus::prelude::*;
 use crate::collab::{COLLAB_STYLE, ChartCollab};
 use crate::prefs;
 use editor::{Editor, EditorState, editor_view};
-use editor_keyflow_lang::{HighlightTheme, highlight_css, keyflow_decorations, keyflow_hover};
+use editor_keyflow::lang::{HighlightTheme, highlight_css, keyflow_decorations, keyflow_hover};
 
 /// An editable Keyflow buffer.
 ///
