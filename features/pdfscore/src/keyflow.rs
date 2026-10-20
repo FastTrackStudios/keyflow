@@ -97,6 +97,30 @@ pub fn to_keyflow_with(score: &Score, artist: Option<&str>, style: Style) -> Str
     }
     let part = &engraver_score::model::Part { measures, ..part.clone() };
     let sections = sections_of(&part.measures);
+    // One staff: each bar shows the top staff when it plays, else the bass
+    // staff ("bass line below"). A section whose written lines all come
+    // from the bass is set in the bass clef; one that mixes top and bass
+    // lines keeps the top's clef and gives the bass bars as rhythm.
+    let mut plan: Vec<(u8, Style)> = part
+        .measures
+        .iter()
+        .map(|m| (if plays(m, 1) || !plays(m, 2) { 1 } else { 2 }, style))
+        .collect();
+    let mut bass_sections: Vec<bool> = Vec::new();
+    for range in &sections {
+        let line_from = |staff: u8| {
+            range.clone().any(|i| plan[i].0 == staff && is_line(&part.measures[i], staff, style))
+        };
+        let (top, bass) = (line_from(1), line_from(2));
+        bass_sections.push(bass && !top);
+        if bass && top {
+            for i in range.clone() {
+                if plan[i].0 == 2 {
+                    plan[i].1 = Style::Rhythm;
+                }
+            }
+        }
+    }
     let mut bars: Vec<String> = Vec::new();
     let mut last_chord: Option<String> = None;
     let mut last_attack: Option<String> = None;
@@ -106,7 +130,8 @@ pub fn to_keyflow_with(score: &Score, artist: Option<&str>, style: Style) -> Str
         if sections.iter().any(|r| r.start == i) || m.repeat_start || m.ending.is_some() {
             last_attack = None;
         }
-        bars.push(bar_text(m, 1, style, &mut last_chord, &mut last_attack));
+        let (staff, bar_style) = plan[i];
+        bars.push(bar_text(m, staff, bar_style, &mut last_chord, &mut last_attack));
     }
     let named = sections.len() > 1;
     for (k, range) in sections.iter().enumerate() {
@@ -116,6 +141,9 @@ pub fn to_keyflow_with(score: &Score, artist: Option<&str>, style: Style) -> Str
             "Hook".to_string()
         };
         let _ = writeln!(out, "[{name}] {}", range.len());
+        if bass_sections[k] && clef != "bass" {
+            let _ = writeln!(out, "\\clef bass");
+        }
         // Four bars to a line, as the chart reads.
         let idx: Vec<usize> = range.clone().collect();
         for line in idx.chunks(4) {
@@ -540,6 +568,28 @@ fn first_voice(m: &Measure, staff: u8) -> Vec<&Event> {
     let mut evs: Vec<&Event> = m.events.iter().filter(|e| Some(e.voice()) == voice).collect();
     evs.sort_by_key(|e| e.tick());
     evs
+}
+
+/// Whether `staff` sounds in this bar (any note, not just rests).
+fn plays(m: &Measure, staff: u8) -> bool {
+    m.events.iter().any(|e| matches!(e, Event::Chord(c) if c.staff == staff))
+}
+
+/// Whether the bar's `staff` is a written line (single notes), which the
+/// chart writes as notes rather than rhythm slashes.
+fn is_line(m: &Measure, staff: u8, style: Style) -> bool {
+    if style == Style::Rhythm {
+        return false;
+    }
+    let attacks: Vec<&Chord> = first_voice(m, staff)
+        .into_iter()
+        .filter_map(|e| match e {
+            Event::Chord(c) => Some(c),
+            Event::Rest(_) => None,
+        })
+        .collect();
+    let stacked = attacks.iter().filter(|c| c.notes.len() > 1).count();
+    !attacks.is_empty() && (style == Style::Notation || stacked * 3 < attacks.len() * 2)
 }
 
 /// Length of `staff`'s first voice in ticks.

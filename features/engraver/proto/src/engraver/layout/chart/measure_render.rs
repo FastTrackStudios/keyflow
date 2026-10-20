@@ -218,8 +218,20 @@ impl ChartLayoutEngine {
 
         // Compute minimum segment widths based on actual chord symbol layout bounds
         // This ensures segments are wide enough to prevent chord symbol collisions
-        let chord_min_widths =
+        let mut chord_min_widths =
             self.compute_chord_min_widths(measure, num_segments, measure_width, ctx, is_boundary);
+        // A note tied to the next one in the bar needs room for the arc:
+        // two sixteenths set head to head leave a tie nobody can see.
+        if has_written_notes && let Some(data) = melody_data {
+            for (i, seg) in data.segments.iter().enumerate() {
+                if seg.tie_to_next
+                    && data.segments.get(i + 1).is_some_and(|n| n.tie_from_previous)
+                    && let Some(w) = chord_min_widths.get_mut(i)
+                {
+                    *w = w.max(2.6 * self.config.spatium);
+                }
+            }
+        }
 
         // Apply auto_rhythm_slashes: expand whole/half notes to quarter slashes
         // This makes master rhythm charts easier to read by showing consistent quarter slashes

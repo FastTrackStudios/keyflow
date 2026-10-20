@@ -371,6 +371,32 @@ impl ChartLayoutEngine {
         }
     }
 
+    /// The clef a section is drawn in: its own (`\clef` inside it), else
+    /// the chart's.
+    pub(super) fn section_proto_clef(
+        &self,
+        chart: &Chart,
+        section: &crate::chart::types::ChartSection,
+    ) -> crate::chart::ChartClef {
+        section.clef.unwrap_or_else(|| self.chart_proto_clef_for(chart))
+    }
+
+    /// [`Self::section_proto_clef`] as the engraver's clef type.
+    pub(super) fn section_clef_for(
+        &self,
+        chart: &Chart,
+        section: &crate::chart::types::ChartSection,
+    ) -> ClefType {
+        use crate::chart::ChartClef;
+        match section.clef {
+            Some(ChartClef::Bass) => ClefType::Bass,
+            Some(ChartClef::Alto) => ClefType::Alto,
+            Some(ChartClef::Tenor) => ClefType::Tenor,
+            Some(ChartClef::Treble | ChartClef::Percussion) => ClefType::Treble,
+            None => self.chart_clef_for(chart),
+        }
+    }
+
     /// Proto-side clef (untranslated) for callers that need to feed
     /// `melody_pitch_to_line_for_clef` or other pitch-mapping code.
     pub(super) fn chart_proto_clef_for(&self, chart: &Chart) -> crate::chart::ChartClef {
@@ -388,13 +414,16 @@ impl ChartLayoutEngine {
     pub(super) fn expanded_melody_data(
         &self,
         chart: &Chart,
-        measures: &[crate::chart::types::Measure],
+        section: &crate::chart::types::ChartSection,
         beats_per_measure: f64,
     ) -> std::collections::HashMap<usize, super::types::MeasureMelodyData> {
         let key_signature = super::key_signature_fifths(chart);
-        let mut melody_data_map =
-            super::expand_melodies_across_measures(measures, beats_per_measure, key_signature);
-        let chart_proto_clef = self.chart_proto_clef_for(chart);
+        let mut melody_data_map = super::expand_melodies_across_measures(
+            section.measures(),
+            beats_per_measure,
+            key_signature,
+        );
+        let chart_proto_clef = self.section_proto_clef(chart, section);
         for md in melody_data_map.values_mut() {
             md.clef = chart_proto_clef;
         }

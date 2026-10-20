@@ -412,7 +412,7 @@ fn ties_of(page: &Page, staves: &[Staff], sp: f64) -> (Vec<(f64, f64)>, Vec<(f64
             .filter(|e| matches!(e, kurbo::PathEl::CurveTo(..)))
             .count();
         let b = f.path.bounding_box();
-        if curved < 2 || b.width() < 0.8 * sp || b.height() > 1.6 * sp {
+        if curved < 2 || b.width() < 0.5 * sp || b.height() > 1.6 * sp {
             continue;
         }
         let mid_y = (b.y0 + b.y1) / 2.0;
@@ -426,7 +426,13 @@ fn ties_of(page: &Page, staves: &[Staff], sp: f64) -> (Vec<(f64, f64)>, Vec<(f64
                 .collect()
         };
         let lefts = near(b.x0);
-        let rights = near(b.x1);
+        // The right end sits over its head, or (Sibelius draws a tie into
+        // a chord in pieces) stops just short of it.
+        let rights: Vec<(f64, f64)> = heads
+            .iter()
+            .copied()
+            .filter(|h| h.0 > b.x1 - 1.6 * sp && h.0 < b.x1 + 0.8 * sp && (h.1 - mid_y).abs() < 2.2 * sp)
+            .collect();
         let pair = lefts
             .iter()
             .flat_map(|l| rights.iter().map(move |r| (*l, *r)))
@@ -434,6 +440,20 @@ fn ties_of(page: &Page, staves: &[Staff], sp: f64) -> (Vec<(f64, f64)>, Vec<(f64
             .min_by(|a, b| (a.0.1 - mid_y).abs().total_cmp(&(b.0.1 - mid_y).abs()));
         if let Some((l, r)) = pair {
             starts.push(l);
+            stops.push(r);
+            continue;
+        }
+        // A short piece ending just before a head is the end of a tie drawn
+        // in pieces: the head it reaches is tied from the note before (the
+        // pairing pass finds which).
+        if b.width() < 2.5 * sp
+            && let Some(r) = heads
+                .iter()
+                .copied()
+                .filter(|h| h.0 >= b.x1 - 0.2 * sp && h.0 < b.x1 + 0.8 * sp)
+                .min_by(|a, c| (a.1 - mid_y).abs().total_cmp(&(c.1 - mid_y).abs()))
+            && (r.1 - mid_y).abs() < 1.6 * sp
+        {
             stops.push(r);
             continue;
         }
@@ -582,7 +602,6 @@ pub fn recognize(pages: &[Page]) -> Recognized {
         let vl = vlines(page);
         let beams = beams_of(page, sp);
         let (tie_starts, tie_stops) = ties_of(page, &staves, sp);
-        report.ties += tie_starts.len();
 
         // Barlines: from some staff's top to some staff's bottom.
         let at_line = |y: f64, line: f64| (y - line).abs() < 0.3 * sp;
@@ -1229,6 +1248,15 @@ pub fn recognize(pages: &[Page]) -> Recognized {
             ));
         }
     }
+    pair_ties(&mut measures);
+    report.ties = measures
+        .iter()
+        .flat_map(|m| &m.events)
+        .filter_map(|e| match e {
+            Event::Chord(c) => Some(c.notes.iter().filter(|n| n.tie_start).count()),
+            Event::Rest(_) => None,
+        })
+        .sum();
     report.measures = measures.len();
     let score = Score {
         work_title: title,
@@ -1286,6 +1314,56 @@ fn split_voices<'e>(evs: &[&'e Ev], len: u32, mid: f64) -> Vec<Vec<&'e Ev>> {
         vec![upper, lower]
     } else {
         vec![evs.to_vec()]
+    }
+}
+
+/// Give every tie both ends: a note tied into (`tie_stop`) makes the same
+/// pitch in the voice's previous chord start the tie, and a tie that starts
+/// makes the same pitch in the next chord end it — within the bar or over
+/// the barline. A tie read in pieces, or over a system break, is often seen
+/// at one end only.
+fn pair_ties(measures: &mut [Measure]) {
+    // (measure, event) of every chord, per voice, in time order.
+    let mut by_voice: BTreeMap<u32, Vec<(usize, usize)>> = BTreeMap::new();
+    for (mi, m) in measures.iter().enumerate() {
+        let mut idx: Vec<usize> = (0..m.events.len())
+            .filter(|&e| matches!(m.events[e], Event::Chord(_)))
+            .collect();
+        idx.sort_by_key(|&e| m.events[e].tick());
+        for e in idx {
+            by_voice.entry(m.events[e].voice()).or_default().push((mi, e));
+        }
+    }
+    for chords in by_voice.values() {
+        for w in chords.windows(2) {
+            let ((ma, ea), (mb, eb)) = (w[0], w[1]);
+            let pitches = |mi: usize, ei: usize| -> Vec<(WrittenPitch, bool, bool)> {
+                match &measures[mi].events[ei] {
+                    Event::Chord(c) => c.notes.iter().map(|n| (n.pitch, n.tie_start, n.tie_stop)).collect(),
+                    Event::Rest(_) => Vec::new(),
+                }
+            };
+            let (a, b) = (pitches(ma, ea), pitches(mb, eb));
+            let same = |p: &WrittenPitch, q: &WrittenPitch| p.step == q.step && p.octave == q.octave;
+            let starts: Vec<WrittenPitch> = a
+                .iter()
+                .filter(|(p, start, _)| *start || b.iter().any(|(q, _, stop)| *stop && same(p, q)))
+                .map(|(p, _, _)| *p)
+                .filter(|p| b.iter().any(|(q, _, _)| same(p, q)))
+                .collect();
+            for p in &starts {
+                if let Event::Chord(c) = &mut measures[ma].events[ea] {
+                    for n in c.notes.iter_mut().filter(|n| same(&n.pitch, p)) {
+                        n.tie_start = true;
+                    }
+                }
+                if let Event::Chord(c) = &mut measures[mb].events[eb] {
+                    for n in c.notes.iter_mut().filter(|n| same(&n.pitch, p)) {
+                        n.tie_stop = true;
+                    }
+                }
+            }
+        }
     }
 }
 

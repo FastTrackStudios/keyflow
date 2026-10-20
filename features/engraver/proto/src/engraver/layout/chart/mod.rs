@@ -1112,7 +1112,7 @@ impl ChartLayoutEngine {
             // Preprocess melodies to handle cross-measure spillover
             let beats_per_measure = time_signature.0 as f64;
             let mut melody_data_map =
-                self.expanded_melody_data(chart, chart_section.measures(), beats_per_measure);
+                self.expanded_melody_data(chart, chart_section, beats_per_measure);
 
             // Detect push spillbacks (chords from next measure that push back)
             let mut push_spillback_map = detect_push_spillbacks(chart_section.measures());
@@ -1217,7 +1217,7 @@ impl ChartLayoutEngine {
                         let (above, below) = melody_note_extent(
                             md,
                             self.config.spatium,
-                            self.chart_proto_clef_for(chart),
+                            self.section_proto_clef(chart, chart_section),
                         );
                         melody_extra_above = melody_extra_above.max(above);
                         melody_extra_below = melody_extra_below.max(below);
@@ -1619,7 +1619,7 @@ impl ChartLayoutEngine {
                     key_sig_color: system_starts_with_key_change.then(change_highlight_color),
                     time_signature: ts,
                     clef_width,
-                    clef_type: self.chart_clef_for(chart),
+                    clef_type: self.section_clef_for(chart, chart_section),
                     key_sig_width,
                     time_sig_width,
                     page_number: Some(page_number),
@@ -1663,7 +1663,7 @@ impl ChartLayoutEngine {
                                 melody_note_extent(
                                     md,
                                     self.config.spatium,
-                                    self.chart_proto_clef_for(chart),
+                                    self.section_proto_clef(chart, chart_section),
                                 )
                                 .0
                             })
@@ -1717,7 +1717,7 @@ impl ChartLayoutEngine {
                             include_time_sig: ts_changed,
                             time_signature: measure_ts,
                             time_sig_color: highlight.then(change_highlight_color),
-                            clef: self.chart_proto_clef_for(chart),
+                            clef: self.section_proto_clef(chart, chart_section),
                             ctx: &ctx,
                             id_base: id_counter,
                             is_boundary: is_section_boundary,
@@ -2709,7 +2709,7 @@ impl ChartLayoutEngine {
             // Preprocess melodies to handle cross-measure spillover
             let beats_per_measure = time_signature.0 as f64;
             let mut melody_data_map =
-                self.expanded_melody_data(chart, chart_section.measures(), beats_per_measure);
+                self.expanded_melody_data(chart, chart_section, beats_per_measure);
 
             // Detect push spillbacks (chords from next measure that push back)
             let mut push_spillback_map = detect_push_spillbacks(chart_section.measures());
@@ -2801,7 +2801,7 @@ impl ChartLayoutEngine {
                         let (above, below) = melody_note_extent(
                             md,
                             self.config.spatium,
-                            self.chart_proto_clef_for(chart),
+                            self.section_proto_clef(chart, chart_section),
                         );
                         melody_extra_above = melody_extra_above.max(above);
                         melody_extra_below = melody_extra_below.max(below);
@@ -3037,7 +3037,7 @@ impl ChartLayoutEngine {
                     key_sig_color: system_starts_with_key_change.then(change_highlight_color),
                     time_signature: ts,
                     clef_width,
-                    clef_type: self.chart_clef_for(chart),
+                    clef_type: self.section_clef_for(chart, chart_section),
                     key_sig_width,
                     time_sig_width,
                     page_number: None, // Continuous mode has no pages
@@ -3077,7 +3077,7 @@ impl ChartLayoutEngine {
                                 melody_note_extent(
                                     md,
                                     self.config.spatium,
-                                    self.chart_proto_clef_for(chart),
+                                    self.section_proto_clef(chart, chart_section),
                                 )
                                 .0
                             })
@@ -3115,7 +3115,7 @@ impl ChartLayoutEngine {
                             include_time_sig: ts_changed,
                             time_signature: measure_ts,
                             time_sig_color: highlight.then(change_highlight_color),
-                            clef: self.chart_proto_clef_for(chart),
+                            clef: self.section_proto_clef(chart, chart_section),
                             ctx: &ctx,
                             id_base: id_counter,
                             is_boundary: is_section_boundary,

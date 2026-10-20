@@ -7315,6 +7315,16 @@ mod span_helper_tests {
 #[cfg(test)]
 mod inline_melody_tie_tests {
     #[test]
+    fn a_section_can_set_its_own_clef() {
+        use keyflow_proto::chart::ChartClef;
+        let text = "T - X\n#C 120bpm 4/4 treble\n\n[A] 1\n| C |\n\n[Bass] 1\n\\clef bass\n| C m{ C:34 } |\n";
+        let chart = crate::chart::parse_chart(text).expect("parse");
+        assert_eq!(chart.sections[0].clef, None);
+        assert_eq!(chart.sections[1].clef, Some(ChartClef::Bass));
+        assert_eq!(chart.sections[1].measures().len(), 1, "the clef line is not a bar");
+    }
+
+    #[test]
     fn repeat_start_on_a_space_bar_stays_there() {
         use keyflow_proto::chart::notations::RepeatMark;
         let text = "T - X\n#A 120bpm 4/4\n\n[A] 4\n|: s1 | s1 | Bm | s1 :|\n";

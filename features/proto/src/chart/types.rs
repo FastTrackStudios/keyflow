@@ -616,6 +616,11 @@ pub struct ChartSection {
     /// Such sections have no header text, so the engraver must not draw a
     /// section label for them and the editor must not place a name badge.
     pub implicit: bool,
+
+    /// The clef this section is written in, when it differs from the
+    /// chart's (`\clef bass` inside the section): a bass riff on a treble
+    /// chart. `None` keeps the chart's clef.
+    pub clef: Option<crate::chart::ChartClef>,
 }
 
 impl ChartSection {
@@ -629,6 +634,7 @@ impl ChartSection {
             template_span: None,
             alignment: None,
             implicit: false,
+            clef: None,
         }
     }
 
@@ -679,6 +685,7 @@ impl ChartSection {
             template_span: None,
             alignment: None,
             implicit: false,
+            clef: None,
         }
     }
 
@@ -698,6 +705,7 @@ impl ChartSection {
             template_span: Some(template_span),
             alignment: None,
             implicit: false,
+            clef: None,
         }
     }
 

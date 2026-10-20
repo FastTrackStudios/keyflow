@@ -542,6 +542,18 @@ impl<'a> ChartParser<'a> {
         // Extract and apply section-scoped settings
         // Settings inside a section are temporary - they reset after the section ends
         let settings_checkpoint = self.settings.checkpoint();
+        // `\clef bass` on its own line: the section's clef.
+        let mut section_clef = None;
+        content_lines.retain(|line| {
+            let t = line.trim();
+            match t.strip_prefix("\\clef ").or_else(|| t.strip_prefix("\\Clef ")) {
+                Some(value) => {
+                    section_clef = Self::clef_keyword(value.trim()).or(section_clef);
+                    false
+                }
+                None => true,
+            }
+        });
         let mut actual_content_lines = Vec::new();
         let mut has_section_settings = false;
 
@@ -739,6 +751,7 @@ impl<'a> ChartParser<'a> {
         // Create chart section with tracks
         let mut chart_section = ChartSection::new(section);
         chart_section.tracks = tracks;
+        chart_section.clef = section_clef;
         self.sections.push(chart_section);
 
         // Restore settings to pre-section state if any section settings were applied

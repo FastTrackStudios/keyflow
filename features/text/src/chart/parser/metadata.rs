@@ -292,6 +292,19 @@ impl<'a> ChartParser<'a> {
         SectionType::parse_with_measure_count(marker).is_some()
     }
 
+    /// A clef keyword: `treble`, `bass`, `alto`, `tenor`, `perc` (and the
+    /// `g-clef` / `f-clef` spellings).
+    pub(super) fn clef_keyword(word: &str) -> Option<crate::chart::ChartClef> {
+        match word.to_ascii_lowercase().as_str() {
+            "treble" | "g-clef" => Some(crate::chart::ChartClef::Treble),
+            "bass" | "f-clef" => Some(crate::chart::ChartClef::Bass),
+            "alto" => Some(crate::chart::ChartClef::Alto),
+            "tenor" => Some(crate::chart::ChartClef::Tenor),
+            "perc" | "percussion" => Some(crate::chart::ChartClef::Percussion),
+            _ => None,
+        }
+    }
+
     /// Parse a metadata line (e.g., "120bpm 4/4 #G")
     pub(super) fn parse_metadata_line(&mut self, line: &str) -> Result<(), String> {
         let parts: Vec<&str> = line.split_whitespace().collect();
