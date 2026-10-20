@@ -1136,6 +1136,9 @@ impl MeasureBuilder {
             });
         }
 
+        if self.beam_grouping == BeamGroupingMode::HalfBarEighths {
+            groups = merge_half_bar_eighths(groups, ts);
+        }
         groups
     }
 
@@ -1681,6 +1684,43 @@ fn draw_staff_lines(x: f64, y: f64, width: f64, spatium: f64) -> Vec<PaintComman
     commands
 }
 
+/// In 4/4, two adjacent beats of plain eighths in the same half bar
+/// (beats 1–2 or 3–4) become one beam of four. A group qualifies only when
+/// it is exactly one full beat of two undotted eighths, so rests, sixteenths
+/// and dotted figures keep their beat grouping.
+fn merge_half_bar_eighths(groups: Vec<BeamGroup>, ts: TimeSignature) -> Vec<BeamGroup> {
+    if ts != TimeSignature::COMMON {
+        return groups;
+    }
+    let beat = ts.beat_ticks();
+    let half = ts.measure_ticks() / 2;
+    let plain_beat = |g: &BeamGroup| {
+        g.notes.len() == 2 && g.notes.iter().all(|d| d.ticks() == beat / 2 && d.needs_flag())
+    };
+    let mut out: Vec<BeamGroup> = Vec::with_capacity(groups.len());
+    let mut tick = 0;
+    let mut prev_start: Option<i32> = None;
+    for g in groups {
+        let start = tick;
+        tick += g.notes.iter().map(|d| d.ticks()).sum::<i32>();
+        let mergeable = plain_beat(&g) && start % beat == 0;
+        if mergeable
+            && let Some(p) = prev_start
+            && p + beat == start
+            && p / half == start / half
+            && let Some(last) = out.last_mut()
+            && plain_beat(last)
+        {
+            last.notes.extend(g.notes);
+            prev_start = None;
+            continue;
+        }
+        prev_start = mergeable.then_some(start);
+        out.push(g);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1936,6 +1976,46 @@ mod tests {
         assert_eq!(groups.len(), 2);
         assert_eq!(groups[0].notes.len(), 4);
         assert_eq!(groups[1].notes.len(), 4);
+    }
+
+    #[test]
+    fn half_bar_eighths_beams_four_in_each_half() {
+        let builder = MeasureBuilder::new()
+            .time_signature(4, 4)
+            .beam_grouping(BeamGroupingMode::HalfBarEighths)
+            .rhythm(vec![Duration::Eighth; 8]);
+        let groups = builder.compute_beam_groups();
+        assert_eq!(groups.len(), 2);
+        assert!(groups.iter().all(|g| g.notes.len() == 4));
+    }
+
+    #[test]
+    fn half_bar_eighths_never_crosses_the_middle() {
+        // q | 8 8 | 8 8 | q — the two eighth pairs sit either side of beat 3.
+        let builder = MeasureBuilder::new()
+            .time_signature(4, 4)
+            .beam_grouping(BeamGroupingMode::HalfBarEighths)
+            .rhythm(vec![
+                Duration::Quarter,
+                Duration::Eighth,
+                Duration::Eighth,
+                Duration::Eighth,
+                Duration::Eighth,
+                Duration::Quarter,
+            ]);
+        let groups = builder.compute_beam_groups();
+        let pairs = groups.iter().filter(|g| g.notes.len() == 2).count();
+        assert_eq!(pairs, 2, "beat 2 and beat 3 stay separate beams");
+    }
+
+    #[test]
+    fn half_bar_eighths_keeps_sixteenths_by_beat() {
+        let builder = MeasureBuilder::new()
+            .time_signature(4, 4)
+            .beam_grouping(BeamGroupingMode::HalfBarEighths)
+            .rhythm(vec![Duration::Sixteenth; 8]);
+        let groups = builder.compute_beam_groups();
+        assert_eq!(groups.len(), 2);
     }
 
     #[test]

@@ -341,6 +341,9 @@ impl TimeSignature {
                 }
             }
             BeamGroupingMode::FullBar => vec![self.measure_ticks()],
+            // Pulses are the beats; the half-bar merge happens on the built
+            // groups (`MeasureBuilder::compute_beam_groups`).
+            BeamGroupingMode::HalfBarEighths => self.beam_groups(),
         }
     }
 
@@ -381,4 +384,9 @@ pub enum BeamGroupingMode {
     JazzHalfBar,
     /// Beam every eighth/sixteenth in the measure together. Compressed.
     FullBar,
+    /// Engraved-part convention (Gould): by beat, except that in 4/4 a
+    /// half bar of plain eighths (beats 1–2 or 3–4) is one group of four.
+    /// Sixteenths and mixed figures stay beamed by beat, and nothing is
+    /// beamed across the middle of the bar or over a rest.
+    HalfBarEighths,
 }

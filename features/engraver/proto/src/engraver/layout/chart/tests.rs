@@ -433,7 +433,7 @@ fn lord_of_the_fight_long_endings_start_new_systems() {
                 .is_some_and(|name| name.contains("CH 1") && name.contains("CH 2"))
         })
         .expect("expected CH 1 / CH 2 repeat section");
-    let systems = engine.group_measures_into_systems(chorus_repeat.measures(), 700.0);
+    let systems = engine.group_measures_into_systems(chorus_repeat.measures(), 700.0, &[]);
     let system_sources = systems
         .iter()
         .map(|system| {
@@ -2629,7 +2629,7 @@ fn a_system_stops_when_the_chord_symbols_run_out_of_room() {
         .sections
         .push(ChartSection::new(Section::new(SectionType::Verse)).with_measures(measures));
 
-    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0);
+    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0, &[]);
     assert!(
         systems.len() > 1,
         "sixteen six-chord bars should not share one 500pt line"
@@ -2666,7 +2666,7 @@ fn a_second_ending_stays_on_the_line_with_its_phrase() {
         }
     }
 
-    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0);
+    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0, &[]);
     assert_eq!(
         systems.len(),
         1,
@@ -2681,7 +2681,7 @@ fn a_second_ending_stays_on_the_line_with_its_phrase() {
 fn five_ordinary_bars_are_two_lines_of_three_and_two() {
     let engine = ChartLayoutEngine::new(test_style(), Arc::new(Vec::new()), Arc::new(Vec::new()));
     let chart = long_chart(1, 5, "G");
-    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0);
+    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0, &[]);
     assert_eq!(systems.len(), 2);
     assert_eq!(systems[0].len(), 3);
     assert_eq!(systems[1].len(), 2);
@@ -2694,7 +2694,7 @@ fn five_ordinary_bars_are_two_lines_of_three_and_two() {
 fn six_bars_keep_the_four_bar_grid() {
     let engine = ChartLayoutEngine::new(test_style(), Arc::new(Vec::new()), Arc::new(Vec::new()));
     let chart = long_chart(1, 6, "G");
-    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0);
+    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0, &[]);
     assert_eq!(systems.len(), 2);
     assert_eq!(systems[0].len(), 4);
     assert_eq!(systems[1].len(), 2);
@@ -2810,7 +2810,7 @@ fn a_five_bar_section_fits_one_line_when_asked() {
     let engine = ChartLayoutEngine::new(test_style(), Arc::new(Vec::new()), Arc::new(Vec::new()));
     let chart = long_chart(1, 5, "G");
 
-    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0);
+    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0, &[]);
     assert_eq!(systems.len(), 2, "by default the cap holds at four");
 
     let mut config = ChartLayoutConfig::master_rhythm();
@@ -2821,7 +2821,7 @@ fn a_five_bar_section_fits_one_line_when_asked() {
         Arc::new(Vec::new()),
         Arc::new(Vec::new()),
     );
-    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0);
+    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0, &[]);
     assert_eq!(systems.len(), 1);
     assert_eq!(systems[0].len(), 5);
 }
@@ -2840,6 +2840,6 @@ fn six_bars_are_still_two_lines_with_the_allowance_on() {
         Arc::new(Vec::new()),
     );
     let chart = long_chart(1, 6, "G");
-    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0);
+    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0, &[]);
     assert_eq!(systems.len(), 2);
 }
