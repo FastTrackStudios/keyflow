@@ -2122,22 +2122,23 @@ impl ChartLayoutEngine {
                             );
                             pending_notation.push((node, false, true));
                         }
-                        if let Some(volta) = &measure.volta_start {
-                            let volta_end_local = (local_measure_idx
-                                + usize::from(volta.length_measures))
-                            .min(distributed_widths.len());
+                        if let Some(span) =
+                            volta_at(chart_section.measures(), measure_idx, local_measure_idx == 0)
+                        {
+                            let volta_end_local = (local_measure_idx + span.remaining)
+                                .min(distributed_widths.len());
                             let volta_x_end = measure_x
                                 + distributed_widths[local_measure_idx..volta_end_local]
                                     .iter()
                                     .sum::<f64>();
-                            let closes_in_system = local_measure_idx
-                                + usize::from(volta.length_measures)
+                            let closes_in_system = local_measure_idx + span.remaining
                                 <= distributed_widths.len();
                             let volta_node = notation_renderer::render_volta_span(
-                                volta,
+                                span.volta,
                                 &notation_frame,
                                 volta_x_end,
-                                closes_in_system,
+                                closes_in_system && span.closed,
+                                span.continued,
                                 &mut id_counter,
                             );
                             if let Some(volta_node) = notation_renderer::autoplace_node(
@@ -3509,22 +3510,23 @@ impl ChartLayoutEngine {
                         for n in placed {
                             root.add_child(n);
                         }
-                        if let Some(volta) = &measure.volta_start {
-                            let volta_end_local = (local_measure_idx
-                                + usize::from(volta.length_measures))
-                            .min(distributed_widths.len());
+                        if let Some(span) =
+                            volta_at(chart_section.measures(), measure_idx, local_measure_idx == 0)
+                        {
+                            let volta_end_local = (local_measure_idx + span.remaining)
+                                .min(distributed_widths.len());
                             let volta_x_end = measure_x
                                 + distributed_widths[local_measure_idx..volta_end_local]
                                     .iter()
                                     .sum::<f64>();
-                            let closes_in_system = local_measure_idx
-                                + usize::from(volta.length_measures)
+                            let closes_in_system = local_measure_idx + span.remaining
                                 <= distributed_widths.len();
                             let volta_node = notation_renderer::render_volta_span(
-                                volta,
+                                span.volta,
                                 &notation_frame,
                                 volta_x_end,
-                                closes_in_system,
+                                closes_in_system && span.closed,
+                                span.continued,
                                 &mut id_counter,
                             );
                             if let Some(volta_node) = notation_renderer::autoplace_node(
@@ -3935,6 +3937,51 @@ pub(crate) fn is_dense_rhythm(measure: &crate::chart::types::Measure) -> bool {
     // Rests and spaces are chord entries too (`r8`, `s4`), each with its
     // length; a bar written as one chord has one entry of a whole bar.
     measure.chords.len() > 1 && measure.chords.iter().any(|c| c.duration.to_beats(ts) < 1.0)
+}
+
+/// The ending bracket drawn from a measure: one that starts there, or —
+/// on the first measure of a system — one carried over a system break.
+struct VoltaSpan<'a> {
+    volta: &'a crate::chart::notations::Volta,
+    /// Bars from this measure to the ending's last, inclusive.
+    remaining: usize,
+    /// Carried over from the system above: no left hook, no label.
+    continued: bool,
+    /// Ends with a closing hook. Gould: an ending that ends in a repeat sign
+    /// is closed; the last ending, played straight through, is left open.
+    closed: bool,
+}
+
+fn volta_at(
+    measures: &[crate::chart::types::Measure],
+    idx: usize,
+    system_start: bool,
+) -> Option<VoltaSpan<'_>> {
+    let closed = |start: usize, len: usize| {
+        measures.get(start + len.max(1) - 1).is_some_and(|m| {
+            matches!(m.end_repeat, crate::chart::notations::RepeatMark::Backward)
+        })
+    };
+    if let Some(volta) = &measures.get(idx)?.volta_start {
+        let len = usize::from(volta.length_measures.max(1));
+        return Some(VoltaSpan { volta, remaining: len, continued: false, closed: closed(idx, len) });
+    }
+    if !system_start {
+        return None;
+    }
+    // The nearest ending that starts before this bar, if it reaches it.
+    let (start, volta) = measures[..idx]
+        .iter()
+        .enumerate()
+        .rev()
+        .find_map(|(i, m)| m.volta_start.as_ref().map(|v| (i, v)))?;
+    let len = usize::from(volta.length_measures.max(1));
+    (start + len > idx).then(|| VoltaSpan {
+        volta,
+        remaining: start + len - idx,
+        continued: true,
+        closed: closed(start, len),
+    })
 }
 
 fn starts_long_volta(measure: &crate::chart::types::Measure) -> bool {

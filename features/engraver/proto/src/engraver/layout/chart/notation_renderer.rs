@@ -444,6 +444,7 @@ pub fn render_volta(volta: &Volta, frame: &MeasureFrame, id_counter: &mut u64) -
         frame,
         frame.measure_x + frame.measure_width,
         volta.length_measures <= 1,
+        false,
         id_counter,
     )
 }
@@ -453,6 +454,7 @@ pub fn render_volta_span(
     frame: &MeasureFrame,
     x_end: f64,
     closes_in_system: bool,
+    continued: bool,
     id_counter: &mut u64,
 ) -> SceneNode {
     let stroke = frame.spatium * 0.16;
@@ -468,13 +470,16 @@ pub fn render_volta_span(
     let x_start = frame.measure_x;
 
     let mut paints = Vec::with_capacity(4);
-    // Left hook (down).
-    paints.push(PaintCommand::line(
-        Point::new(x_start, bracket_y),
-        Point::new(x_start, hook_y),
-        Color::BLACK,
-        stroke,
-    ));
+    // Left hook (down) — not on a bracket carried over a system break,
+    // which takes up again with just its line.
+    if !continued {
+        paints.push(PaintCommand::line(
+            Point::new(x_start, bracket_y),
+            Point::new(x_start, hook_y),
+            Color::BLACK,
+            stroke,
+        ));
+    }
     // Horizontal top.
     paints.push(PaintCommand::line(
         Point::new(x_start, bracket_y),
@@ -483,7 +488,8 @@ pub fn render_volta_span(
         stroke,
     ));
 
-    // Right hook only if this volta finishes within this system.
+    // Right hook only if this volta finishes within this system, and is
+    // closed (the caller says; the last ending is left open).
     if closes_in_system {
         paints.push(PaintCommand::line(
             Point::new(x_end, bracket_y),
@@ -493,8 +499,10 @@ pub fn render_volta_span(
         ));
     }
 
-    // Label text ("1.", "2.", or user-supplied).
-    let label = if volta.label.is_empty() {
+    // Label text ("1.", "2.", or user-supplied); printed once, at the start.
+    let label = if continued {
+        String::new()
+    } else if volta.label.is_empty() {
         let mut s = String::new();
         for (i, n) in volta.numbers.iter().enumerate() {
             if i > 0 {

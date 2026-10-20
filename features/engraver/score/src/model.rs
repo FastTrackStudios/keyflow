@@ -112,6 +112,11 @@ pub struct Measure {
     /// The ending (volta) that begins at this measure, by its label
     /// ("1.", "2.", "1., 2.").
     pub ending: Option<String>,
+    /// How many bars the ending's bracket covers, when it was measured (0
+    /// = not known).
+    pub ending_bars: u32,
+    /// The bracket has no closing hook (the last ending, played through).
+    pub ending_open: bool,
 }
 
 /// Barline drawn at a measure's end.

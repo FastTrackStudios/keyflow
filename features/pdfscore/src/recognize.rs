@@ -645,6 +645,8 @@ pub fn recognize(pages: &[Page]) -> Recognized {
     let mut clefs: Vec<ClefSign> = Vec::new();
     let mut key: Option<i8> = None;
     let mut time: Option<(u32, u32)> = None;
+    // Per measure, the ending bracket over it (in step with `measures`).
+    let mut covers: Vec<Option<Cover>> = Vec::new();
 
     for page in pages {
         let staves = staves_of(page);
@@ -656,6 +658,7 @@ pub fn recognize(pages: &[Page]) -> Recognized {
         let vl = vlines(page);
         let beams = beams_of(page, sp);
         let (tie_starts, tie_stops, slur_starts, slur_stops) = ties_of(page, &staves, sp);
+        let brackets = brackets_of(page, sp);
 
         // Barlines: from some staff's top to some staff's bottom.
         // A barline ends on the staff lines; a stem that happens to end
@@ -1382,6 +1385,20 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                     m.directions.push(Direction { tick: tick_at(l.x0), kind: DirectionKind::Words(l.text.clone()) });
                 }
                 prev_alters = alters;
+                // The ending bracket over this bar, if any: one whose line
+                // runs over the bar's middle, above the system.
+                let mid = (x0 + x1) / 2.0;
+                covers.push(
+                    brackets
+                        .iter()
+                        .find(|b| {
+                            b.y < first.top - 0.5 * sp && b.y > first.top - 8.0 * sp && b.x0 < mid && b.x1 > mid
+                        })
+                        .map(|b| Cover {
+                            opens: b.left && b.x0 > x0 - sp,
+                            closes: b.right && (b.x1 - x1).abs() < 1.5 * sp,
+                        }),
+                );
                 measures.push(m);
             }
         }
@@ -1393,6 +1410,7 @@ pub fn recognize(pages: &[Page]) -> Recognized {
         }
     }
     pair_ties(&mut measures);
+    span_endings(&mut measures, &covers);
     report.ties = measures
         .iter()
         .flat_map(|m| &m.events)
@@ -1611,6 +1629,76 @@ fn pair_ties(measures: &mut [Measure]) {
     }
 }
 
+/// An ending bracket's top line, and whether a hook drops from each end.
+struct Bracket {
+    x0: f64,
+    x1: f64,
+    y: f64,
+    left: bool,
+    right: bool,
+}
+
+/// How an ending bracket meets one bar: it begins there (the left hook)
+/// and/or ends there (the right hook).
+#[derive(Debug, Clone, Copy)]
+struct Cover {
+    opens: bool,
+    closes: bool,
+}
+
+/// Horizontal lines longer than a ledger line, with the short verticals
+/// hanging from their ends. A bracket broken over a system break carries on
+/// as a line with no left hook; the last ending is left open (no right hook).
+fn brackets_of(page: &Page, sp: f64) -> Vec<Bracket> {
+    let boxes: Vec<kurbo::Rect> = page.strokes.iter().map(|s| s.path.bounding_box()).collect();
+    let hook_at = |x: f64, y: f64| {
+        boxes.iter().any(|b| {
+            b.width() < 0.5
+                && b.height() > 1.0 * sp
+                && b.height() < 3.5 * sp
+                && (b.x0 - x).abs() < 0.8
+                && (b.y0 - y).abs() < 0.8
+        })
+    };
+    boxes
+        .iter()
+        .filter(|b| b.height() < 0.5 && b.width() > 3.0 * sp)
+        .map(|b| Bracket {
+            x0: b.x0,
+            x1: b.x1,
+            y: b.y0,
+            left: hook_at(b.x0, b.y0),
+            right: hook_at(b.x1, b.y0),
+        })
+        .collect()
+}
+
+/// How long each ending runs, from its bracket: on from the labelled bar
+/// while a bracket stays over the bars (across a system break too), until
+/// the right hook, or a new ending's left hook. Endings with no bracket
+/// found keep a length of 0, which the reader of the score infers.
+fn span_endings(measures: &mut [Measure], covers: &[Option<Cover>]) {
+    for i in 0..measures.len() {
+        if measures[i].ending.is_none() {
+            continue;
+        }
+        let Some(Some(first)) = covers.get(i) else { continue };
+        let mut bars = 1;
+        let mut closed = first.closes;
+        while !closed {
+            match covers.get(i + bars) {
+                Some(Some(c)) if !c.opens && measures[i + bars].ending.is_none() => {
+                    closed = c.closes;
+                    bars += 1;
+                }
+                _ => break,
+            }
+        }
+        measures[i].ending_bars = bars as u32;
+        measures[i].ending_open = !closed;
+    }
+}
+
 /// An ending's label: numbers each followed by a dot ("1.", "2.", "1., 2.").
 fn is_ending_label(text: &str) -> bool {
     let t = text.replace(' ', "");
@@ -1712,5 +1800,27 @@ mod tests {
         assert_eq!(voices.len(), 2);
         let late = voices.iter().find(|v| v.len() == 1).expect("a one-event voice");
         assert_eq!(late[0].1, 3 * DIVISIONS, "it starts on beat 4");
+    }
+
+    /// An ending runs as far as its bracket: across a system break (a line
+    /// with no left hook), to the right hook, or up to the next ending.
+    #[test]
+    fn endings_span_their_brackets() {
+        let mut ms: Vec<Measure> = (0..7).map(|_| Measure::default()).collect();
+        ms[1].ending = Some("1.".into());
+        ms[4].ending = Some("2.".into());
+        let c = |opens, closes| Some(Cover { opens, closes });
+        let covers = [
+            None,
+            c(true, false),  // "1." starts…
+            c(false, false), // …carries over a system break…
+            c(false, true),  // …and closes
+            c(true, false),  // "2." starts…
+            c(false, false), // …runs on, open
+            None,
+        ];
+        span_endings(&mut ms, &covers);
+        assert_eq!((ms[1].ending_bars, ms[1].ending_open), (3, false));
+        assert_eq!((ms[4].ending_bars, ms[4].ending_open), (2, true));
     }
 }

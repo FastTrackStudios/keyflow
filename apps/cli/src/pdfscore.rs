@@ -68,6 +68,15 @@ pub fn cmd_pdf_score(args: &Args<'_>) -> Result<(), String> {
         r.ties,
         r.repeats
     );
+    for (i, m) in rec.score.parts.first().map_or(&[][..], |p| &p.measures[..]).iter().enumerate() {
+        if let Some(label) = &m.ending {
+            let span = match m.ending_bars {
+                0 => "no bracket found".to_string(),
+                n => format!("{n} bar(s), {}", if m.ending_open { "open" } else { "closed" }),
+            };
+            println!("  ending {label} at bar {}: {span}", i + 1);
+        }
+    }
     for w in &r.warnings {
         println!("  ! {w}");
     }

@@ -226,9 +226,12 @@ fn ending_token(label: &str, length: usize) -> String {
     }
 }
 
-/// An ending runs to the repeat sign that closes it (a first ending of two
-/// bars), or is one bar.
+/// An ending runs as far as its bracket was measured; failing that, to the
+/// repeat sign that closes it (a first ending of two bars), or one bar.
 fn ending_length(ms: &[Measure], i: usize) -> usize {
+    if ms[i].ending_bars > 0 {
+        return ms[i].ending_bars as usize;
+    }
     for (j, m) in ms.iter().enumerate().skip(i) {
         if j > i && m.ending.is_some() {
             break;

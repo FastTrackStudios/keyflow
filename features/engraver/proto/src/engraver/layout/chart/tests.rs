@@ -2843,3 +2843,32 @@ fn six_bars_are_still_two_lines_with_the_allowance_on() {
     let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0, &[]);
     assert_eq!(systems.len(), 2);
 }
+
+/// Gould's ending rules: an ending that closes with a repeat sign gets the
+/// right hook, the last one is left open, and a bracket broken over a system
+/// break carries on in the next system without its hook or label.
+#[test]
+fn endings_close_on_a_repeat_and_carry_over_a_system_break() {
+    use keyflow_proto::chart::notations::{RepeatMark, Volta};
+
+    let mut chart = long_chart(1, 6, "G");
+    let measures = &mut chart.sections[0].chord_track_mut().expect("chord track").measures;
+    measures[1].volta_start = Some(Volta { numbers: vec![1], label: String::new(), length_measures: 3 });
+    measures[3].end_repeat = RepeatMark::Backward;
+    measures[4].volta_start = Some(Volta { numbers: vec![2], label: String::new(), length_measures: 2 });
+    let measures = chart.sections[0].measures();
+
+    let first = volta_at(measures, 1, false).expect("1st ending");
+    assert!(first.closed && !first.continued);
+    assert_eq!(first.remaining, 3);
+    // Bar 3 opens a system: the 1st ending carries on there, two bars left.
+    let carried = volta_at(measures, 2, true).expect("carried over");
+    assert!(carried.continued && carried.closed);
+    assert_eq!(carried.remaining, 2);
+    // Mid-system, a bar inside an ending draws nothing of its own.
+    assert!(volta_at(measures, 2, false).is_none());
+    let second = volta_at(measures, 4, false).expect("2nd ending");
+    assert!(!second.closed, "the last ending is open");
+    // Past the end of every ending, nothing.
+    assert!(volta_at(measures, 0, true).is_none());
+}
