@@ -344,6 +344,9 @@ fn comp_rhythm(
         return None;
     }
     let mut out = Vec::new();
+    // The last attack this bar, for a tie to extend: (index in `out`,
+    // chord, ticks so far).
+    let mut held: Option<(usize, String, u32)> = None;
     for e in evs {
         match e {
             Event::Rest(r) => {
@@ -354,6 +357,7 @@ fn comp_rhythm(
                 };
                 out.push(format!("r{v}"));
                 *last_attack = None;
+                held = None;
             }
             Event::Chord(c) => {
                 let name = symbols
@@ -367,8 +371,38 @@ fn comp_rhythm(
                     *last_chord = end_chord;
                     return None;
                 };
-                let token = format!("{name}_{}", note_value(&c.written));
-                if last_attack.as_deref() == Some(token.as_str()) {
+                // Tied on from the bar's previous attack of this chord: one
+                // longer value when a single note value says it.
+                let continues = c.notes.iter().any(|n| n.tie_stop);
+                if continues
+                    && let Some((idx, prev_name, prev_ticks)) = held.clone()
+                    && prev_name == name
+                {
+                    let merged = pieces(prev_ticks + c.duration, m.divisions);
+                    if merged.len() == 1 {
+                        let on = if c.notes.iter().any(|n| n.tie_start) { "~" } else { "" };
+                        let into = if out[idx].starts_with('~') { "~" } else { "" };
+                        out[idx] = format!("{into}{name}_{}{on}", merged[0]);
+                        held = Some((idx, name.clone(), prev_ticks + c.duration));
+                        *last_attack = Some(out[idx].clone());
+                        continue;
+                    }
+                }
+                held = Some((out.len(), name.clone(), c.duration));
+                // A tie that cannot merge is written as one (`Em_16~ ~Em_2.`,
+                // and over the barline `Em_2.~ | ~Em_1`): a held chord, not a
+                // second attack — so never `.`.
+                let into = if continues { "~" } else { "" };
+                let on = if c.notes.iter().any(|n| n.tie_start) { "~" } else { "" };
+                if continues
+                    && let Some(prev) = out.last_mut()
+                    && !prev.ends_with('~')
+                    && !prev.starts_with('r')
+                {
+                    prev.push('~');
+                }
+                let token = format!("{into}{name}_{}{on}", note_value(&c.written));
+                if into.is_empty() && on.is_empty() && last_attack.as_deref() == Some(token.as_str()) {
                     out.push(".".to_string());
                 } else {
                     out.push(token.clone());
@@ -453,13 +487,16 @@ fn melody(m: &Measure, staff: u8) -> String {
             }
             Event::Chord(c) => {
                 let v = note_value(&c.written);
+                // `~` after a note starts a tie, before one ends it.
+                let into = if c.notes.iter().any(|n| n.tie_stop) { "~" } else { "" };
+                let on = if c.notes.iter().any(|n| n.tie_start) { "~" } else { "" };
                 if c.notes.len() == 1 {
-                    parts.push(format!("{}{v}", pitch(&c.notes[0].pitch)));
+                    parts.push(format!("{into}{}{v}{on}", pitch(&c.notes[0].pitch)));
                 } else {
                     let mut ps: Vec<&WrittenPitch> = c.notes.iter().map(|n| &n.pitch).collect();
                     ps.sort_by_key(|p| p.midi());
                     let inner: Vec<String> = ps.iter().map(|p| pitch(p)).collect();
-                    parts.push(format!("<{}>{v}", inner.join(" ")));
+                    parts.push(format!("{into}<{}>{v}{on}", inner.join(" ")));
                 }
             }
         }

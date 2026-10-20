@@ -51,6 +51,8 @@ pub struct Report {
     pub measures: usize,
     pub notes: usize,
     pub rests: usize,
+    /// Ties read (each counted at the note it starts on).
+    pub ties: usize,
     /// Repeats as (measure index, start?) — the score model has no repeat
     /// barlines yet, so they ride here.
     pub repeats: Vec<(usize, bool)>,
@@ -388,6 +390,70 @@ fn lines_of(mut words: Vec<Word>) -> Vec<Word> {
     out
 }
 
+/// Ties: filled crescents between two noteheads at one height, from the
+/// middle of the first to the middle of the second (one space off the heads,
+/// away from the stems). A tie running off a line's end starts at its left
+/// head only; one coming in at a line's start ends at its right head only.
+/// Slurs join different pitches and match nothing here.
+/// Returns (heads a tie starts on, heads a tie ends on) as origins.
+fn ties_of(page: &Page, staves: &[Staff], sp: f64) -> (Vec<(f64, f64)>, Vec<(f64, f64)>) {
+    let heads: Vec<(f64, f64)> = page
+        .glyphs
+        .iter()
+        .filter(|g| matches!(classify(g), Some(Sym::Head(_))))
+        .map(|g| (g.origin.x, g.origin.y))
+        .collect();
+    let (mut starts, mut stops) = (Vec::new(), Vec::new());
+    for f in &page.fills {
+        let curved = f
+            .path
+            .elements()
+            .iter()
+            .filter(|e| matches!(e, kurbo::PathEl::CurveTo(..)))
+            .count();
+        let b = f.path.bounding_box();
+        if curved < 2 || b.width() < 0.8 * sp || b.height() > 1.6 * sp {
+            continue;
+        }
+        let mid_y = (b.y0 + b.y1) / 2.0;
+        // A head whose origin sits within a notehead's width left of the
+        // curve's end, at a height near the curve.
+        let near = |x_end: f64| -> Vec<(f64, f64)> {
+            heads
+                .iter()
+                .copied()
+                .filter(|h| h.0 <= x_end && x_end - h.0 < 1.6 * sp && (h.1 - mid_y).abs() < 2.2 * sp)
+                .collect()
+        };
+        let lefts = near(b.x0);
+        let rights = near(b.x1);
+        let pair = lefts
+            .iter()
+            .flat_map(|l| rights.iter().map(move |r| (*l, *r)))
+            .filter(|(l, r)| r.0 > l.0 + 0.5 * sp && (l.1 - r.1).abs() < 0.3 * sp)
+            .min_by(|a, b| (a.0.1 - mid_y).abs().total_cmp(&(b.0.1 - mid_y).abs()));
+        if let Some((l, r)) = pair {
+            starts.push(l);
+            stops.push(r);
+            continue;
+        }
+        // Over a system break: only one end has a head.
+        let staff = staves.iter().find(|s| mid_y > s.top - 3.0 * sp && mid_y < s.bottom() + 3.0 * sp);
+        if let Some(st) = staff {
+            if b.x1 > st.x1 - 2.0 * sp
+                && let Some(l) = lefts.iter().min_by(|a, b| (a.1 - mid_y).abs().total_cmp(&(b.1 - mid_y).abs()))
+            {
+                starts.push(*l);
+            } else if b.x0 < st.x0 + 12.0 * sp
+                && let Some(r) = rights.iter().min_by(|a, b| (a.1 - mid_y).abs().total_cmp(&(b.1 - mid_y).abs()))
+            {
+                stops.push(*r);
+            }
+        }
+    }
+    (starts, stops)
+}
+
 // ───────────────────────── recognition ─────────────────────────
 
 #[derive(Debug, Clone)]
@@ -496,6 +562,9 @@ fn key_alter(fifths: i8, step: Step) -> i8 {
 pub fn recognize(pages: &[Page]) -> Recognized {
     let mut report = Report::default();
     let mut measures: Vec<Measure> = Vec::new();
+    // Each staff's accidentals at the end of the last measure, for a note
+    // tied over the barline (it keeps its alteration, unprinted).
+    let mut prev_alters: BTreeMap<(u8, i32), i8> = BTreeMap::new();
     let mut title: Option<String> = None;
     let mut part_staves: u8 = 1;
     // Running state across systems and pages.
@@ -512,6 +581,8 @@ pub fn recognize(pages: &[Page]) -> Recognized {
         let sp = staves[0].sp;
         let vl = vlines(page);
         let beams = beams_of(page, sp);
+        let (tie_starts, tie_stops) = ties_of(page, &staves, sp);
+        report.ties += tie_starts.len();
 
         // Barlines: from some staff's top to some staff's bottom.
         let at_line = |y: f64, line: f64| (y - line).abs() < 0.3 * sp;
@@ -968,6 +1039,9 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                 // place the text.
                 let mut onsets: Vec<(f64, u32)> = Vec::new();
                 let mut alters: BTreeMap<(u8, i32), i8> = BTreeMap::new();
+                let at = |list: &[(f64, f64)], x: f64, y: f64| {
+                    list.iter().any(|p| (p.0 - x).abs() < 0.2 && (p.1 - y).abs() < 0.2)
+                };
                 for k in 1..=sys.len() as u8 {
                     let staff = staves[sys[usize::from(k) - 1]];
                     let clef = clefs[usize::from(k) - 1];
@@ -1003,9 +1077,18 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                                 let notes = heads
                                     .iter()
                                     .zip(accidentals)
-                                    .map(|((_, y), acc)| {
+                                    .map(|((x, y), acc)| {
                                         let d = bottom_line(clef) + staff.position(*y);
+                                        let tie_start = at(&tie_starts, *x, *y);
+                                        let tie_stop = at(&tie_stops, *x, *y);
                                         if let Some(a) = acc {
+                                            alters.insert((k, d), *a);
+                                        } else if tie_stop
+                                            && !alters.contains_key(&(k, d))
+                                            && let Some(a) = prev_alters.get(&(k, d))
+                                        {
+                                            // Tied over the barline: the alteration
+                                            // carries, and holds for the bar.
                                             alters.insert((k, d), *a);
                                         }
                                         let step = step_of(d);
@@ -1015,8 +1098,8 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                                             .unwrap_or_else(|| key_alter(key.unwrap_or(0), step));
                                         Note {
                                             pitch: WrittenPitch { step, alter, octave: d.div_euclid(7) as i8 },
-                                            tie_start: false,
-                                            tie_stop: false,
+                                            tie_start,
+                                            tie_stop,
                                             accidental: acc.map(|a| {
                                                 match a {
                                                     2 => "double-sharp",
@@ -1113,6 +1196,7 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                     }
                     m.directions.push(Direction { tick: tick_at(l.x0), kind: DirectionKind::Words(l.text.clone()) });
                 }
+                prev_alters = alters;
                 measures.push(m);
             }
         }

@@ -1158,8 +1158,9 @@ pub fn expand_melodies_across_measures(
                         pitch: note.pitch.clone(),
                         beats: segment_beats,
                         dotted: note.dotted && is_last_segment,
-                        tie_from_previous: !is_first_segment,
-                        tie_to_next: !is_last_segment && !note.is_rest(),
+                        // Split at a barline, or tied as written (`B:48~ ~B:48`).
+                        tie_from_previous: !is_first_segment || note.tie_stop,
+                        tie_to_next: !note.is_rest() && (!is_last_segment || note.tie_start),
                         is_rest: note.is_rest(),
                         octave: resolved_octave,
                         accidental: resolved_accidental,

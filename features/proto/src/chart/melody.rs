@@ -1593,6 +1593,13 @@ mod tests {
     }
 
     #[test]
+    fn tie_markers_with_absolute_octaves() {
+        let melody = Melody::parse("A:44 B:48~ ~B:48 C#:52").unwrap();
+        let ties: Vec<(bool, bool)> = melody.notes.iter().map(|n| (n.tie_start, n.tie_stop)).collect();
+        assert_eq!(ties, vec![(false, false), (true, false), (false, true), (false, false)]);
+    }
+
+    #[test]
     fn test_melody_tie_markers() {
         let melody = Melody::parse("<D 'D>2.~ ~<D 'D>2.~ ~<D 'D>4.").unwrap();
         assert!(melody.notes[0].tie_start);

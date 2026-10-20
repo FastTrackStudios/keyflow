@@ -324,10 +324,14 @@ impl ChartLayoutEngine {
 
         // Add ties for cross-barline notes (configurable — lead-sheet styles
         // sometimes prefer the second piece to render as a fresh attack).
-        if self.config.draw_melody_barline_ties
-            && let Some(data) = melody_data
-        {
-            self.add_melody_ties(&mut result, data, ctx, clef);
+        if let Some(data) = melody_data {
+            self.add_melody_ties(
+                &mut result,
+                data,
+                ctx,
+                clef,
+                self.config.draw_melody_barline_ties,
+            );
         }
 
         // Rhythm-slash ties (chord-side, independent of melody ties).

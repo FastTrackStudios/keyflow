@@ -7294,3 +7294,19 @@ mod span_helper_tests {
         assert_eq!(toks, vec!["|", r#""Ac. Gtr. groove""#, "A", "|"]);
     }
 }
+
+#[cfg(test)]
+mod inline_melody_tie_tests {
+    #[test]
+    fn inline_melody_keeps_ties() {
+        let text = "T - X\n#A 120bpm 4/4 treble\n\n[Hook] 2\n| A m{ A:44 B:48~ ~B:48 C#:52 } | Bm m{ D:51 } |\n";
+        let chart = crate::chart::parse_chart(text).expect("parse");
+        let m = &chart.sections[0].measures()[0];
+        let ties: Vec<(bool, bool)> = m.melodies[0]
+            .notes
+            .iter()
+            .map(|n| (n.tie_start, n.tie_stop))
+            .collect();
+        assert_eq!(ties, vec![(false, false), (true, false), (false, true), (false, false)]);
+    }
+}

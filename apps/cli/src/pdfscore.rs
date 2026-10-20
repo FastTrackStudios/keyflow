@@ -58,13 +58,14 @@ pub fn cmd_pdf_score(args: &Args<'_>) -> Result<(), String> {
     let rec = keyflow_pdfscore::recognize(&pages);
     let r = &rec.report;
     println!(
-        "{}: {} system(s), {} staves, {} measures, {} notes, {} rests, repeats {:?}",
+        "{}: {} system(s), {} staves, {} measures, {} notes, {} rests, {} ties, repeats {:?}",
         args.input.display(),
         r.systems,
         r.staves,
         r.measures,
         r.notes,
         r.rests,
+        r.ties,
         r.repeats
     );
     for w in &r.warnings {
