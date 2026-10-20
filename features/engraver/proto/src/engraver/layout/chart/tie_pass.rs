@@ -6,8 +6,11 @@
 use crate::engraver::layout::context::LayoutContext;
 use crate::engraver::layout::segment::SegmentType;
 use crate::engraver::layout::tlayout::{
-    SlurDirection, SlurEndpoint, SlurObstacle, SlurTieConfig, layout_slur_with_obstacles, layout_tie,
+    ArticulationConfig, ArticulationContext, ArticulationInput, ArticulationType, SlurDirection,
+    SlurEndpoint, SlurObstacle, SlurTieConfig, layout_articulation, layout_slur_with_obstacles,
+    layout_tie,
 };
+use crate::engraver::scene::paint::PaintCommand;
 use crate::engraver::notation::MeasureScene;
 use crate::engraver::scene::node::SceneNode;
 
@@ -226,11 +229,20 @@ impl ChartLayoutEngine {
             .iter()
             .filter(|seg| seg.seg_type.contains(SegmentType::CHORD_REST))
             .collect();
-        let head_y = |i: usize| -> Option<f64> {
+        // A note's heads, top and bottom: a slur on a chord meets its outer
+        // note on the slur's side.
+        let extent = |i: usize| -> Option<(f64, f64)> {
             let seg = segs.get(i)?;
             let oct = seg.octave?;
-            let (line, _) = melody_pitch_to_line_for_clef(&seg.pitch, oct, clef);
-            Some(-(line as f64) * spatium / 2.0)
+            let y_of = |pitch: &str, octave: u8| {
+                let (line, _) = melody_pitch_to_line_for_clef(pitch, octave, clef);
+                -(line as f64) * spatium / 2.0
+            };
+            let main = y_of(&seg.pitch, oct);
+            Some(seg.extra_pitches.iter().fold((main, main), |(top, bottom), (p, o)| {
+                let y = y_of(p, o.unwrap_or(oct));
+                (top.min(y), bottom.max(y))
+            }))
         };
         let head_x = |i: usize| chord_segments.get(i).map(|s| s.x + 0.6 * spatium);
 
@@ -269,16 +281,29 @@ impl ChartLayoutEngine {
             // points into the slur's side — off the stem's tip.
             const STEM: f64 = 3.5;
             let attach = |i: usize| -> Option<(f64, f64)> {
-                let (x, y) = (head_x(i)?, head_y(i)?);
+                let (top, bottom) = extent(i)?;
+                let (x, y) = (head_x(i)?, if below { bottom } else { top });
+                // A flag or beam sits at the tip of a short note's stem.
+                let short = segs.get(i).is_some_and(|s| s.beats < 1.0);
                 let stem_into = match stem_of(i) {
                     Some(up) => up != below,
                     None => false,
                 };
+                // A staccato or tenuto on the slur's side sits inside it:
+                // the slur clears the mark (marks go opposite the stem).
+                let mark_inside = segs.get(i).is_some_and(|s| {
+                    s.articulations
+                        .iter()
+                        .any(|a| matches!(a.as_str(), "staccato" | "staccatissimo" | "tenuto"))
+                }) && stem_of(i).is_some_and(|up| up == below);
+                let y = if mark_inside { y + side * 1.2 * spatium } else { y };
                 Some(if stem_into {
                     // Stem on the slur's side: the stem stands at the head's
                     // right (up) or left (down) edge.
                     let sx = if below { x - 0.6 * spatium } else { x + 0.6 * spatium };
-                    (sx, y + side * (STEM + 0.5) * spatium)
+                    let clear = if short { 0.6 } else { 0.0 };
+                    let flag_x = if short && !below { 0.4 * spatium } else { 0.0 };
+                    (sx + flag_x, y + side * (STEM + 0.5 + clear) * spatium)
                 } else {
                     (x, y + side * 0.9 * spatium)
                 })
@@ -299,12 +324,17 @@ impl ChartLayoutEngine {
             // The notes it passes over, with any stem reaching its side.
             let obstacles: Vec<SlurObstacle> = (a + 1..b)
                 .filter_map(|i| {
-                    let (x, y) = (head_x(i)?, head_y(i)?);
+                    let x = head_x(i)?;
+                    let (top, bottom) = extent(i)?;
                     let reach = match stem_of(i) {
                         Some(up) if up != below => STEM * spatium,
                         _ => 0.5 * spatium,
                     };
-                    let (y0, y1) = if below { (y - 0.5 * spatium, y + reach) } else { (y - reach, y + 0.5 * spatium) };
+                    let (y0, y1) = if below {
+                        (top - 0.5 * spatium, bottom + reach)
+                    } else {
+                        (top - reach, bottom + 0.5 * spatium)
+                    };
                     Some(SlurObstacle::note(kurbo::Rect::new(x - 0.6 * spatium, y0, x + 0.6 * spatium, y1)))
                 })
                 .collect();
@@ -314,6 +344,90 @@ impl ChartLayoutEngine {
             measure_result
                 .scene
                 .add_child(SceneNode::anonymous_leaf(layout.commands));
+        }
+    }
+
+    /// Articulations on melody notes, opposite the stem (Gould): staccato,
+    /// staccatissimo and tenuto close to the notehead — in the next space,
+    /// off any staff line — accents and marcato outside the staff.
+    pub(super) fn add_melody_articulations(
+        &self,
+        measure_result: &mut MeasureScene,
+        melody_data: &MeasureMelodyData,
+        ctx: &LayoutContext<'_>,
+        clef: crate::chart::ChartClef,
+    ) {
+        let spatium = ctx.spatium();
+        let config = ArticulationConfig::default();
+        let chord_segments: Vec<_> = measure_result
+            .segments
+            .iter()
+            .filter(|seg| seg.seg_type.contains(SegmentType::CHORD_REST))
+            .collect();
+        for (i, seg) in melody_data.segments.iter().enumerate() {
+            if seg.is_rest || seg.articulations.is_empty() {
+                continue;
+            }
+            let (Some(cs), Some(oct)) = (chord_segments.get(i), seg.octave) else {
+                continue;
+            };
+            let y_of = |pitch: &str, octave: u8| {
+                let (line, _) = melody_pitch_to_line_for_clef(pitch, octave, clef);
+                -(line as f64) * spatium / 2.0
+            };
+            let main = y_of(&seg.pitch, oct);
+            let (top, bottom) = seg.extra_pitches.iter().fold((main, main), |(t, b), (p, o)| {
+                let y = y_of(p, o.unwrap_or(oct));
+                (t.min(y), b.max(y))
+            });
+            let x = cs.x + 0.6 * spatium;
+            let stem_up = measure_result
+                .entry_stem_up
+                .get(i)
+                .copied()
+                .flatten()
+                .unwrap_or(main > 0.0);
+            let above = !stem_up;
+            // Stacked outward from the head, close marks first.
+            let mut offset = 0.0;
+            let mut names: Vec<&String> = seg.articulations.iter().collect();
+            names.sort_by_key(|n| !matches!(n.as_str(), "staccato" | "staccatissimo" | "tenuto"));
+            for (k, name) in names.into_iter().enumerate() {
+                let kind = match name.as_str() {
+                    "staccato" => ArticulationType::Staccato,
+                    "staccatissimo" => ArticulationType::Staccatissimo,
+                    "tenuto" => ArticulationType::Tenuto,
+                    "accent" => ArticulationType::Accent,
+                    "marcato" => ArticulationType::Marcato,
+                    _ => continue,
+                };
+                let close = matches!(kind, ArticulationType::Staccato | ArticulationType::Staccatissimo | ArticulationType::Tenuto);
+                let id = 4000 + (i * 8 + k) as u64;
+                if close && offset == 0.0 {
+                    let glyph = if above { kind.smufl_codepoint_above() } else { kind.smufl_codepoint_below() };
+                    let side = if above { -1.0 } else { 1.0 };
+                    let mut y = (if above { top } else { bottom }) + side * spatium;
+                    // Inside the staff (lines at whole spaces from the middle)
+                    // a mark on a line moves into the next space out.
+                    let in_staff = y.abs() <= 2.0 * spatium + 0.01;
+                    if in_staff && ((y / spatium) - (y / spatium).round()).abs() < 0.1 {
+                        y += side * 0.5 * spatium;
+                    }
+                    offset = (y - if above { top } else { bottom }).abs() + 0.5 * spatium;
+                    measure_result.scene.add_child(SceneNode::anonymous_leaf(vec![PaintCommand::glyph(
+                        glyph,
+                        kurbo::Point::new(x, y),
+                        spatium * config.scale,
+                        peniko::Color::BLACK,
+                    )]));
+                } else {
+                    let context = ArticulationContext::new(x, main, -2.0 * spatium, 2.0 * spatium)
+                        .with_stem(if stem_up { x + 0.6 * spatium } else { x - 0.6 * spatium }, stem_up)
+                        .with_chord_bounds(top - offset * f64::from(u8::from(above)), bottom + offset * f64::from(u8::from(!above)));
+                    let layout = layout_articulation(&ArticulationInput::new(kind).with_id(id), &context, spatium, &config);
+                    measure_result.scene.add_child(SceneNode::anonymous_leaf(layout.commands));
+                }
+            }
         }
     }
 }

@@ -716,6 +716,8 @@ pub struct MelodyNoteSegment {
     pub slur_start: bool,
     /// A slur ends on this note (its last piece).
     pub slur_stop: bool,
+    /// Articulations by name (`staccato`, `accent`, …), on the first piece.
+    pub articulations: Vec<String>,
     /// Resolved absolute octave (None for rests)
     pub octave: Option<u8>,
     /// Resolved accidental for rendering
@@ -1168,6 +1170,11 @@ pub fn expand_melodies_across_measures(
                         is_rest: note.is_rest(),
                         slur_start: note.slur_start && is_first_segment,
                         slur_stop: note.slur_stop && is_last_segment,
+                        articulations: if is_first_segment {
+                            note.articulations.clone()
+                        } else {
+                            Vec::new()
+                        },
                         octave: resolved_octave,
                         accidental: resolved_accidental,
                         // Polyphony stack — only attach to the first segment

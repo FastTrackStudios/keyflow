@@ -345,6 +345,7 @@ impl ChartLayoutEngine {
                 self.config.draw_melody_barline_ties,
             );
             self.add_melody_slurs(&mut result, data, ctx, clef);
+            self.add_melody_articulations(&mut result, data, ctx, clef);
         }
 
         // Rhythm-slash ties (chord-side, independent of melody ties).

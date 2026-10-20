@@ -117,6 +117,10 @@ pub struct MelodyNote {
     /// A slur ends on this note (`C:54)`).
     #[facet(default)]
     pub slur_stop: bool,
+    /// Articulations, by name: `staccato` (`-.`), `accent` (`->`),
+    /// `tenuto` (`--`), `marcato` (`-^`), `staccatissimo` (`-!`).
+    #[facet(default)]
+    pub articulations: Vec<String>,
 
     /// The lyric syllable sung on this note (karaoke / vocal lanes). `None`
     /// means no syllable here — either an instrumental note or a melisma
@@ -143,6 +147,7 @@ impl MelodyNote {
             tie_stop: false,
             slur_start: false,
             slur_stop: false,
+            articulations: Vec::new(),
             lyric: None,
         }
     }
@@ -164,6 +169,7 @@ impl MelodyNote {
             tie_stop: false,
             slur_start: false,
             slur_stop: false,
+            articulations: Vec::new(),
             lyric: None,
         }
     }
@@ -314,8 +320,12 @@ impl MelodyNote {
         // Trailing marks, in any order: `~` ties into the next note, `(`
         // starts a slur, `)` ends one.
         let (mut tie_start, mut slur_start, mut slur_stop) = (false, false, false);
+        let mut articulations: Vec<String> = Vec::new();
         loop {
-            if let Some(rest) = s.strip_suffix('~') {
+            if let Some((rest, name)) = strip_articulation(s) {
+                articulations.insert(0, name.to_string());
+                s = rest.trim_end();
+            } else if let Some(rest) = s.strip_suffix('~') {
                 tie_start = true;
                 s = rest.trim_end();
             } else if let Some(rest) = s.strip_suffix('(') {
@@ -353,6 +363,7 @@ impl MelodyNote {
             primary.tie_stop = tie_stop;
             primary.slur_start = slur_start;
             primary.slur_stop = slur_stop;
+            primary.articulations = articulations;
             return Ok(primary);
         }
 
@@ -373,6 +384,7 @@ impl MelodyNote {
                 tie_stop,
                 slur_start,
                 slur_stop,
+                articulations: articulations.clone(),
                 lyric: None,
             });
         }
@@ -430,6 +442,7 @@ impl MelodyNote {
                 tie_stop,
                 slur_start,
                 slur_stop,
+                articulations: articulations.clone(),
                 lyric: None,
             });
         }
@@ -482,6 +495,7 @@ impl MelodyNote {
             tie_stop,
             slur_start,
             slur_stop,
+            articulations: articulations.clone(),
             lyric: None,
         })
     }
@@ -695,6 +709,7 @@ impl fmt::Display for MelodyNote {
         if self.tie_start {
             write!(f, "~")?;
         }
+        write_articulations(&self.articulations, f)?;
         if self.slur_stop {
             write!(f, ")")?;
         }
@@ -768,6 +783,7 @@ fn write_chord_note(note: &MelodyNote, f: &mut fmt::Formatter<'_>) -> fmt::Resul
     if note.tie_start {
         write!(f, "~")?;
     }
+    write_articulations(&note.articulations, f)?;
     if note.slur_stop {
         write!(f, ")")?;
     }
@@ -775,6 +791,46 @@ fn write_chord_note(note: &MelodyNote, f: &mut fmt::Formatter<'_>) -> fmt::Resul
         write!(f, "(")?;
     }
     Ok(())
+}
+
+/// The articulation marks a note may carry after it, LilyPond's spellings.
+const ARTICULATION_MARKS: [(&str, &str); 5] = [
+    ("-.", "staccato"),
+    ("->", "accent"),
+    ("--", "tenuto"),
+    ("-^", "marcato"),
+    ("-!", "staccatissimo"),
+];
+
+/// A trailing articulation mark: the note without it, and its name.
+fn strip_articulation(s: &str) -> Option<(&str, &'static str)> {
+    ARTICULATION_MARKS
+        .iter()
+        .find_map(|(mark, name)| s.strip_suffix(mark).map(|rest| (rest, *name)))
+}
+
+fn write_articulations(names: &[String], f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    for name in names {
+        if let Some((mark, _)) = ARTICULATION_MARKS.iter().find(|(_, n)| n == name) {
+            write!(f, "{mark}")?;
+        }
+    }
+    Ok(())
+}
+
+/// A token without its trailing marks — ties, slurs, articulations — which
+/// are not part of its duration.
+fn strip_note_marks(token: &str) -> &str {
+    let mut s = token;
+    loop {
+        if let Some((rest, _)) = strip_articulation(s) {
+            s = rest;
+        } else if let Some(rest) = s.strip_suffix(&['~', '(', ')'][..]) {
+            s = rest;
+        } else {
+            return s;
+        }
+    }
 }
 
 fn split_melody_tokens(content: &str) -> MelodyTokenIter<'_> {
@@ -853,9 +909,8 @@ fn melody_token_has_duration(token: &str) -> bool {
 fn melody_token_duration_suffix(token: &str) -> Result<String, String> {
     let clean_token = token
         .trim()
-        .trim_start_matches('~')
-        .trim_end_matches(&['~', '(', ')'][..])
-        .trim_start_matches('!');
+        .trim_start_matches('~');
+    let clean_token = strip_note_marks(clean_token).trim_start_matches('!');
     let Some(start) = melody_token_duration_start(clean_token) else {
         return Err(format!("Melody token '{}' has no duration", token));
     };
@@ -864,11 +919,7 @@ fn melody_token_duration_suffix(token: &str) -> Result<String, String> {
 
 fn melody_token_duration_start(token: &str) -> Option<usize> {
     // Trailing marks (`~` tie, `(` `)` slur) are not part of the duration.
-    let token = token
-        .trim()
-        .trim_start_matches('~')
-        .trim_end_matches(&['~', '(', ')'][..])
-        .trim_start_matches('!');
+    let token = strip_note_marks(token.trim().trim_start_matches('~')).trim_start_matches('!');
     if token.is_empty() {
         return None;
     }
@@ -910,7 +961,7 @@ fn melody_token_duration_start(token: &str) -> Option<usize> {
 }
 
 fn is_melody_duration_suffix(suffix: &str) -> bool {
-    let suffix = suffix.trim_end_matches(&['~', '(', ')'][..]);
+    let suffix = strip_note_marks(suffix);
     if suffix.is_empty() {
         return false;
     }
@@ -948,10 +999,9 @@ impl<'a> Iterator for MelodyTokenIter<'a> {
             if self.cursor < bytes.len() {
                 self.cursor += 1;
             }
-            while self.cursor < bytes.len()
-                && (bytes[self.cursor].is_ascii_digit()
-                    || matches!(bytes[self.cursor], b'.' | b't' | b'~'))
-            {
+            // The rest of the token is the group's: its duration and any
+            // marks after it (`~`, `(`, `)`, `-.`).
+            while self.cursor < bytes.len() && !bytes[self.cursor].is_ascii_whitespace() {
                 self.cursor += 1;
             }
         } else {
@@ -1118,7 +1168,7 @@ impl Melody {
             }
 
             // An inherited duration goes before any trailing tie/slur marks.
-            let body = token.trim_end_matches(&['~', '(', ')'][..]);
+            let body = strip_note_marks(token);
             let marks = &token[body.len()..];
             let token_to_parse = if melody_token_has_duration(token) {
                 token.to_string()
@@ -1637,6 +1687,25 @@ mod tests {
         assert_eq!(note.extra_pitches, vec![("C#".to_string(), None)]);
         assert_eq!(note.extra_pitch_modifiers, vec![OctaveModifier::Up]);
         assert_eq!(format!("{}", melody), "m{ <F# 'C#>4. }");
+    }
+
+    #[test]
+    fn slurs_on_chord_notes() {
+        let melody = Melody::parse("<G:4 B:4 D:5>4( <A:4 C:5 E:5>4 <B:4 D:5 G:5>2)").unwrap();
+        assert!(melody.notes[0].slur_start);
+        assert!(melody.notes[2].slur_stop);
+        assert_eq!(melody.notes[0].extra_pitches.len(), 2);
+    }
+
+    #[test]
+    fn articulations_parse_and_print() {
+        let melody = Melody::parse("E:48-. G:48-> C:54--( D:44-.)").unwrap();
+        let arts: Vec<Vec<String>> = melody.notes.iter().map(|n| n.articulations.clone()).collect();
+        assert_eq!(arts, vec![vec!["staccato".to_string()], vec!["accent".into()], vec!["tenuto".into()], vec!["staccato".into()]]);
+        assert!(melody.notes[2].slur_start && melody.notes[3].slur_stop);
+        assert_eq!(melody.notes[0].duration, 8);
+        let printed: Vec<String> = melody.notes.iter().map(ToString::to_string).collect();
+        assert_eq!(printed, vec!["E:48-.", "G:48->", "C:54--(", "D:44-.)"]);
     }
 
     #[test]

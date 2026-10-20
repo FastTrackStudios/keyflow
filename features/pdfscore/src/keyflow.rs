@@ -659,9 +659,22 @@ fn melody(m: &Measure, staff: u8) -> String {
                 // `~` after a note starts a tie, before one ends it.
                 let into = if c.notes.iter().any(|n| n.tie_stop) { "~" } else { "" };
                 // After the value: `~` ties on, `)` ends a slur, `(` starts one.
+                // Articulations as LilyPond writes them.
+                let arts: String = [
+                    ("staccato", "-."),
+                    ("accent", "->"),
+                    ("tenuto", "--"),
+                    ("strong-accent", "-^"),
+                    ("staccatissimo", "-!"),
+                ]
+                .iter()
+                .filter(|(name, _)| c.articulations.contains(*name))
+                .map(|(_, mark)| *mark)
+                .collect();
                 let on = format!(
-                    "{}{}{}",
+                    "{}{}{}{}",
                     if c.notes.iter().any(|n| n.tie_start) { "~" } else { "" },
+                    arts,
                     if c.slur_stop { ")" } else { "" },
                     if c.slur_start { "(" } else { "" },
                 );
