@@ -3257,6 +3257,12 @@ impl<'a> ChartParser<'a> {
                             written_token.clone(),
                         );
 
+                        // A bar that opens on a rest still owns its `|:`; leaving it
+                        // pending hands it to the next chord, bars later.
+                        if pending_start_repeat && current_measure.chords.is_empty() {
+                            current_measure.start_repeat = RepeatMark::Forward;
+                            pending_start_repeat = false;
+                        }
                         current_measure
                             .rhythm_elements
                             .push(RhythmElement::Rest(rest_instance));
@@ -3319,6 +3325,11 @@ impl<'a> ChartParser<'a> {
                             written_token.clone(),
                         );
 
+                        // A bar that opens on a space still owns its `|:`.
+                        if pending_start_repeat && current_measure.chords.is_empty() {
+                            current_measure.start_repeat = RepeatMark::Forward;
+                            pending_start_repeat = false;
+                        }
                         // Add to rhythm_elements only (not chords - space is not a chord)
                         current_measure
                             .rhythm_elements
@@ -7303,6 +7314,19 @@ mod span_helper_tests {
 
 #[cfg(test)]
 mod inline_melody_tie_tests {
+    #[test]
+    fn repeat_start_on_a_space_bar_stays_there() {
+        use keyflow_proto::chart::notations::RepeatMark;
+        let text = "T - X\n#A 120bpm 4/4\n\n[A] 4\n|: s1 | s1 | Bm | s1 :|\n";
+        let chart = crate::chart::parse_chart(text).expect("parse");
+        let starts: Vec<bool> = chart.sections[0]
+            .measures()
+            .iter()
+            .map(|m| matches!(m.start_repeat, RepeatMark::Forward))
+            .collect();
+        assert_eq!(starts, vec![true, false, false, false]);
+    }
+
     #[test]
     fn volta_with_a_length() {
         let text = "T - X\n#A 120bpm 4/4\n\n[Hook] 4\n|: A | [1:2] Bm | E :| [2] A |\n";
