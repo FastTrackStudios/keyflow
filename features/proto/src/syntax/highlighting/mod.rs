@@ -13,7 +13,7 @@
 //! ## Example
 //!
 //! ```rust,ignore
-//! use keyflow_syntax::highlighting::{Highlighter, Theme};
+//! use crate::syntax::highlighting::{Highlighter, Theme};
 //!
 //! let source = "Gmaj7_8 | Am | D_4 G";
 //! let spans = Highlighter::highlight_line(source);

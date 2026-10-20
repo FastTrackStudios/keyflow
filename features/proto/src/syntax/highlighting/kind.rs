@@ -3,7 +3,7 @@
 //! Defines the semantic categories for syntax highlighting and the
 //! structure for representing highlighted regions in source text.
 
-use crate::parsing::TextSpan;
+use crate::syntax::parsing::TextSpan;
 use facet::Facet;
 use serde::{Deserialize, Serialize};
 

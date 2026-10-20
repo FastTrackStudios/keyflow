@@ -20,7 +20,7 @@ use keyflow_proto::time::{
     AbsolutePosition, MusicalDuration, MusicalPosition, Tempo, TimeSignature,
 };
 use keyflow_proto::Chart;
-use keyflow_syntax::parsing::Lexer;
+use keyflow_proto::syntax::parsing::Lexer;
 
 use crate::ast::*;
 

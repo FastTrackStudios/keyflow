@@ -4,7 +4,7 @@
 //! the original notation style (slashes, lily syntax, push/pull).
 
 use super::span::AstNode;
-use crate::parsing::TextSpan;
+use crate::syntax::parsing::TextSpan;
 use facet::Facet;
 
 /// Abstract syntax tree for rhythm notation.

@@ -31,7 +31,7 @@ use crate::chord::{Chord, ChordQuality, SuspendedType};
 use crate::key::{Key, KeySpelling, ScaleMode, SpellingMode};
 use crate::primitives::{Accidental, MusicalNote, RomanCase, RootNotation};
 use crate::sections::SectionType;
-use keyflow_syntax::parsing::Lexer;
+use crate::syntax::parsing::Lexer;
 
 /// How chord roots are spelled for display.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -873,7 +873,7 @@ mod tests {
     use crate::chord::ChordRhythm;
     use crate::sections::{Section, SectionType};
     use crate::time::{AbsolutePosition, MusicalDuration, MusicalPosition};
-    use keyflow_syntax::parsing::Lexer;
+    use crate::syntax::parsing::Lexer;
 
     /// One symbol either way round, the way a DAW's chord items are
     /// relabelled: numbers to names and names to numbers, slash chords and

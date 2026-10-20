@@ -9,7 +9,7 @@ pub mod prelude {
     pub use keyflow_proto::sections::{Section, SectionType};
     pub use keyflow_proto::time::{MusicalDuration, MusicalPosition, Tempo, TimeSignature};
     pub use keyflow_proto::{DynamicMarking, TextCue};
-    pub use keyflow_syntax::parsing::ParseError;
+    pub use keyflow_proto::syntax::parsing::ParseError;
 }
 
 /// Parse helpers that accept raw strings and return domain objects.
@@ -18,7 +18,7 @@ pub mod parse {
     use keyflow_proto::chord::Chord;
     use keyflow_proto::sections::SectionType;
     use keyflow_proto::{DynamicMarking, Key, TextCue};
-    use keyflow_syntax::parsing::{Lexer, TokenType};
+    use keyflow_proto::syntax::parsing::{Lexer, TokenType};
 
     use crate::chart::parse_chart;
 
@@ -28,7 +28,7 @@ pub mod parse {
     }
 
     /// Parse a single chord token into a `Chord`.
-    pub fn chord(text: &str) -> Result<Chord, keyflow_syntax::parsing::ParseError> {
+    pub fn chord(text: &str) -> Result<Chord, keyflow_proto::syntax::parsing::ParseError> {
         let mut lexer = Lexer::new(text.to_string());
         let mut tokens = lexer.tokenize();
         if matches!(tokens.last().map(|t| &t.token_type), Some(TokenType::Eof)) {

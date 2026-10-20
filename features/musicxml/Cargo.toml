@@ -7,7 +7,6 @@ description = "MusicXML import — translate score files to keyflow Chart"
 
 [dependencies]
 keyflow-proto.workspace = true
-keyflow-syntax.workspace = true
 musicxml = { workspace = true }
 # `raw::extract_mxl` unpacks .mxl containers itself — the musicxml
 # crate's own zip reader fails on multi-file archives and on inner

@@ -71,7 +71,6 @@ regex = "1.11.3"
 derive_more = { version = "1.0", features = ["debug", "display", "from", "error"] }
 
 keyflow-proto = { workspace = true, features = ["serde"] }
-keyflow-syntax.workspace = true
 keyflow-text.workspace = true
 keyflow-midi = { workspace = true, optional = true }
 facet.workspace = true

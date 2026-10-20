@@ -16,6 +16,7 @@ pub mod lrc;
 pub mod metadata;
 pub mod primitives;
 pub mod sections;
+pub mod syntax;
 pub mod services;
 pub mod time;
 pub mod transpose;
@@ -23,10 +24,10 @@ pub mod transpose;
 pub(crate) mod ast {}
 
 pub(crate) mod parsing {
-    pub(crate) use keyflow_syntax::parsing::*;
+    pub(crate) use crate::syntax::parsing::*;
 
     pub(crate) mod token {
-        pub(crate) use keyflow_syntax::parsing::token::*;
+        pub(crate) use crate::syntax::parsing::token::*;
     }
 }
 
@@ -60,7 +61,7 @@ pub use transpose::{ChartView, NotationSystem, apply_view, renotate_symbol, tran
 
 pub use metadata::SongMetadata;
 
-pub use keyflow_syntax::parsing::{Lexer, ParseError, TextSpan, Token, TokenType};
+pub use crate::syntax::parsing::{Lexer, ParseError, TextSpan, Token, TokenType};
 
 pub use primitives::{
     Interval, MusicalNote, MusicalNoteToken, Note, RomanCase, RomanNumeralToken, RootFormat,

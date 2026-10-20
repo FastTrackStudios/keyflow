@@ -4,7 +4,7 @@
 //! tokenizer and chord parsing infrastructure.
 
 use super::{HighlightKind, HighlightSpan};
-use crate::parsing::{Lexer, Token, TokenType};
+use crate::syntax::parsing::{Lexer, Token, TokenType};
 
 /// Highlighter for Keyflow notation.
 ///

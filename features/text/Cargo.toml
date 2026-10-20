@@ -7,11 +7,10 @@ description = "Keyflow text parsing and highlighting helpers"
 
 [features]
 default = []
-highlighting = ["keyflow-syntax/highlighting"]
+highlighting = ["keyflow-proto/highlighting"]
 
 [dependencies]
 keyflow-proto.workspace = true
-keyflow-syntax.workspace = true
 keyflow-chordpro.workspace = true
 tracing = { workspace = true }
 

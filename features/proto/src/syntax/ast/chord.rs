@@ -5,7 +5,7 @@
 
 use super::RhythmAst;
 use super::span::{AstNode, Spanned};
-use crate::parsing::TextSpan;
+use crate::syntax::parsing::TextSpan;
 use facet::Facet;
 
 /// Abstract syntax tree for a chord.

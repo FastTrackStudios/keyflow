@@ -20,7 +20,6 @@ members = [
     "apps/cli",
     "features/keyflow",
     "features/proto",
-    "features/syntax",
     "features/annotate",
     "features/chordpro",
     "features/chordsheet",
@@ -203,7 +202,6 @@ daw-module = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.7" }
 dawfile-reaper = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.7" }
 keyflow-proto = { path = "features/proto" }
 keyflow-pdfscore = { path = "features/pdfscore" }
-keyflow-syntax = { path = "features/syntax" }
 
 # ── Facet reflection + vox RPC — the rc.7 fleet ───────────────────────
 # Caret, not `=`: the version is a FLOOR, and the lockfile holds the exact

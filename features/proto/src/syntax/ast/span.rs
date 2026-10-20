@@ -2,7 +2,7 @@
 //!
 //! Provides the [`Spanned`] wrapper and [`AstNode`] trait for source tracking.
 
-use crate::parsing::TextSpan;
+use crate::syntax::parsing::TextSpan;
 use facet::Facet;
 
 /// A value with an associated source span.
@@ -14,8 +14,8 @@ use facet::Facet;
 /// # Example
 ///
 /// ```
-/// use keyflow_syntax::ast::Spanned;
-/// use keyflow_syntax::parsing::TextSpan;
+/// use crate::syntax::ast::Spanned;
+/// use crate::syntax::parsing::TextSpan;
 ///
 /// let value = Spanned::new("Cmaj7", TextSpan::new(0, 5));
 /// assert_eq!(value.value, "Cmaj7");

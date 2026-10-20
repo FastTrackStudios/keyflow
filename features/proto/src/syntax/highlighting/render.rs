@@ -4,7 +4,7 @@
 //! and styled spans for UI framework integration.
 
 use super::{HighlightKind, HighlightSpan, Theme};
-use crate::highlighting::theme::Style;
+use crate::syntax::highlighting::theme::Style;
 
 /// A styled text span for UI framework integration.
 ///
@@ -386,7 +386,7 @@ impl Renderer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::highlighting::Highlighter;
+    use crate::syntax::highlighting::Highlighter;
 
     #[test]
     fn test_to_html() {

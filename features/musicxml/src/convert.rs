@@ -1773,7 +1773,7 @@ use keyflow_proto::chart::types::ChordInstance;
 use keyflow_proto::chord::{Chord, ChordRhythm};
 use keyflow_proto::primitives::RootNotation;
 use keyflow_proto::time::{AbsolutePosition, MusicalDuration};
-use keyflow_syntax::parsing::Lexer;
+use keyflow_proto::syntax::parsing::Lexer;
 use musicxml::datatypes::{KindValue, Step};
 use musicxml::elements::Harmony;
 

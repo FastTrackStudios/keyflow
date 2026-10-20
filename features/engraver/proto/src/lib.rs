@@ -14,7 +14,7 @@ pub(crate) mod ast {
     // `allow` keeps `cargo fix` from pruning it (rustc can't see the
     // glob's downstream uses).
     #[allow(unused_imports)]
-    pub(crate) use keyflow_syntax::ast::*;
+    pub(crate) use keyflow_proto::syntax::ast::*;
 }
 pub(crate) mod chart {
     pub(crate) use keyflow_proto::chart::*;
@@ -34,7 +34,7 @@ pub(crate) mod metadata {
 }
 pub(crate) mod parsing {
     #[allow(unused_imports)]
-    pub(crate) use keyflow_syntax::parsing::*;
+    pub(crate) use keyflow_proto::syntax::parsing::*;
 }
 pub(crate) mod primitives {
     pub(crate) use keyflow_proto::primitives::*;

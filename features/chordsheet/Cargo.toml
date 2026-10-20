@@ -15,7 +15,6 @@ manifest = ["dep:serde", "dep:serde_json"]
 
 [dependencies]
 keyflow-proto.workspace = true
-keyflow-syntax.workspace = true
 thiserror = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true, optional = true }

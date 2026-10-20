@@ -6,7 +6,7 @@ license.workspace = true
 
 [features]
 default = ["serde"]
-serde = ["dep:serde"]
+serde = []
 highlighting = []
 syllable-splitting = []
 # `vox` here is the consumer-crate flag the architect-rpc-derive macro
@@ -16,7 +16,6 @@ syllable-splitting = []
 vox = ["dep:vox", "architect/vox"]
 
 [dependencies]
-keyflow-syntax.workspace = true
 facet.workspace = true
 thiserror.workspace = true
 vox = { workspace = true, optional = true }
@@ -24,7 +23,7 @@ vox = { workspace = true, optional = true }
 # wires the macro's emission through to the workspace's vox stack.
 architect = { workspace = true }
 tracing.workspace = true
-serde = { workspace = true, optional = true }
+serde.workspace = true
 color-palette = { workspace = true }
 music-catalog = { workspace = true }
 uuid = { version = "1", features = ["v4", "serde"] }
