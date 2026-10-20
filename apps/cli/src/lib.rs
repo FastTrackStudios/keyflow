@@ -606,7 +606,7 @@ enum MarksArg {
     Classic,
 }
 
-impl From<MarksArg> for engraver_score::section_marks::MarkStyle {
+impl From<MarksArg> for engraver::score::section_marks::MarkStyle {
     fn from(m: MarksArg) -> Self {
         match m {
             MarksArg::Color => Self::Color,

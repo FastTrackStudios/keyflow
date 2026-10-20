@@ -309,7 +309,7 @@ mod tests {
         // repeat gets a split letter — "BR", "BR" (a), "BR" (b), "BR" (c)
         // rather than "BR 1", "BR 1a", "BR 1b", "BR 1c". (The letters
         // themselves are assigned uppercase by
-        // `engraver_proto::compute_section_letters` at render time, not by
+        // `engraver::compute_section_letters` at render time, not by
         // this module — this test only covers the number.)
         let mut numberer = SectionNumberer::new();
         let mut sections = vec![

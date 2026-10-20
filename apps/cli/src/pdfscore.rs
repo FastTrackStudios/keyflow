@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use engraver_score::layout::{LayoutOptions, layout_part};
+use engraver::score::layout::{LayoutOptions, layout_part};
 use keyflow::engraver::fonts::ChartFontBundle;
 
 /// How each bar goes on the chart staff (`--style`).
@@ -17,7 +17,7 @@ pub enum ChartStyle {
     Notation,
 }
 
-impl From<ChartStyle> for keyflow_pdfscore::Style {
+impl From<ChartStyle> for engraver::pdfscore::Style {
     fn from(s: ChartStyle) -> Self {
         match s {
             ChartStyle::Auto => Self::Auto,
@@ -55,8 +55,8 @@ pub struct Args<'a> {
 pub fn cmd_pdf_score(args: &Args<'_>) -> Result<(), String> {
     let bytes =
         std::fs::read(args.input).map_err(|e| format!("read {}: {e}", args.input.display()))?;
-    let pages = keyflow_pdfscore::read_pdf(&bytes).map_err(|e| e.to_string())?;
-    let rec = keyflow_pdfscore::recognize(&pages);
+    let pages = engraver::pdfscore::read_pdf(&bytes).map_err(|e| e.to_string())?;
+    let rec = engraver::pdfscore::recognize(&pages);
     let r = &rec.report;
     println!(
         "{}: {} system(s), {} staves, {} measures, {} notes, {} rests, {} ties, repeats {:?}",
@@ -109,7 +109,7 @@ pub fn cmd_pdf_score(args: &Args<'_>) -> Result<(), String> {
         let path = out_dir.join(format!("{stem}.kf"));
         std::fs::write(
             &path,
-            keyflow_pdfscore::to_keyflow_with(&rec.score, args.artist, args.style.into()),
+            engraver::pdfscore::to_keyflow_with(&rec.score, args.artist, args.style.into()),
         )
         .map_err(|e| e.to_string())?;
         println!("{}", path.display());
@@ -131,13 +131,13 @@ pub fn cmd_pdf_score(args: &Args<'_>) -> Result<(), String> {
     let base = out_dir.join(format!("{stem} {:.0}x{:.0}", args.width, args.height));
     match args.format {
         Format::Pdf => {
-            let pdf = engraver_score::render::pdf(&layout, fonts)?;
+            let pdf = engraver::score::render::pdf(&layout, fonts)?;
             let path = PathBuf::from(format!("{}.pdf", base.display()));
             std::fs::write(&path, pdf).map_err(|e| e.to_string())?;
             println!("{} ({} page(s))", path.display(), layout.pages.len());
         }
         Format::Svg | Format::Png => {
-            for (i, svg) in engraver_score::render::svg_pages(&layout, fonts)
+            for (i, svg) in engraver::score::render::svg_pages(&layout, fonts)
                 .iter()
                 .enumerate()
             {

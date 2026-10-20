@@ -23,12 +23,9 @@ members = [
     "features/proto",
     "features/annotate",
     "features/daw-analysis",
-    "features/pdfscore",
     "features/ui",
     "features/tree-sitter",
-    "features/engraver/engraver",
-    "features/engraver/proto",
-    "features/engraver/score",
+    "features/engraver",
     "features/editor/editor-keyflow",
     "features/editor/editor-keyflow-lang",
     "apps/web",
@@ -68,9 +65,7 @@ keyflow-daw-analysis = { path = "features/daw-analysis" }
 keyflow-ui = { path = "features/ui", default-features = false }
 keyflow-cli = { path = "apps/cli" }
 tree-sitter-keyflow = { path = "features/tree-sitter" }
-engraver = { path = "features/engraver/engraver", default-features = false }
-engraver-proto = { path = "features/engraver/proto", default-features = false }
-engraver-score = { path = "features/engraver/score" }
+engraver = { path = "features/engraver", default-features = false }
 
 # ── editor — its own repo since the 2026-08 split ─────────────────────
 # (FastTrackStudios/editor: document model, markdown pass, Dioxus view,
@@ -183,7 +178,6 @@ daw-proto = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.7" }
 daw-module = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.7" }
 dawfile-reaper = { git = "https://github.com/FastTrackStudios/daw", tag = "v0.0.7" }
 keyflow-proto = { path = "features/proto" }
-keyflow-pdfscore = { path = "features/pdfscore" }
 
 # ── Facet reflection + vox RPC — the rc.7 fleet ───────────────────────
 # Caret, not `=`: the version is a FLOOR, and the lockfile holds the exact

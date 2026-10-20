@@ -4296,13 +4296,6 @@ dependencies = [
 
 [[package]]
 name = "engraver"
-version = "0.1.0"
-dependencies = [
- "engraver-proto",
-]
-
-[[package]]
-name = "engraver-proto"
 version = "0.0.1-alpha"
 dependencies = [
  "anyrender",
@@ -4323,6 +4316,7 @@ dependencies = [
  "lopdf 0.36.0",
  "lyon",
  "macro_rules_attribute",
+ "musicxml",
  "parley 0.2.0",
  "pdf-writer",
  "peniko 0.6.1",
@@ -4342,21 +4336,6 @@ dependencies = [
  "vello",
  "wgpu",
  "winit 0.30.13",
-]
-
-[[package]]
-name = "engraver-score"
-version = "0.0.1-alpha"
-dependencies = [
- "engraver-proto",
- "keyflow-lang",
- "keyflow-proto",
- "kurbo 0.13.1",
- "musicxml",
- "peniko 0.6.1",
- "skrifa 0.26.6",
- "thiserror 2.0.20",
- "tracing",
  "zip 2.4.2",
 ]
 
@@ -7488,10 +7467,9 @@ version = "0.0.1-alpha"
 dependencies = [
  "clap",
  "dawfile-reaper",
- "engraver-score",
+ "engraver",
  "keyflow",
  "keyflow-lang",
- "keyflow-pdfscore",
  "lopdf 0.36.0",
  "png 0.17.16",
  "resvg 0.45.1",
@@ -7565,17 +7543,6 @@ dependencies = [
  "serde_json",
  "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "keyflow-pdfscore"
-version = "0.0.1-alpha"
-dependencies = [
- "engraver-score",
- "kurbo 0.13.1",
- "lopdf 0.36.0",
- "thiserror 2.0.20",
- "tracing",
 ]
 
 [[package]]

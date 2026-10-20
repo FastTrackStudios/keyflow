@@ -8,12 +8,12 @@
 
 use std::path::{Path, PathBuf};
 
-use engraver_score::finale::{FinaleDocument, PartJob, PrintInfo};
-use engraver_score::header::HeaderOverrides;
-use engraver_score::layout::{LayoutOptions, layout_part};
-use engraver_score::model::DirectionKind;
-use engraver_score::model::Score;
-use engraver_score::section_marks::{TextRole, TextRoles, text_key};
+use engraver::score::finale::{FinaleDocument, PartJob, PrintInfo};
+use engraver::score::header::HeaderOverrides;
+use engraver::score::layout::{LayoutOptions, layout_part};
+use engraver::score::model::DirectionKind;
+use engraver::score::model::Score;
+use engraver::score::section_marks::{TextRole, TextRoles, text_key};
 use keyflow::engraver::fonts::ChartFontBundle;
 
 /// Output format for `kf parts`.
@@ -36,7 +36,7 @@ pub struct PartsArgs<'a> {
     /// Ignore the source's system/page layout and pack systems
     /// automatically (keeps its page size, headers and multirests).
     pub auto_layout: bool,
-    pub marks: engraver_score::section_marks::MarkStyle,
+    pub marks: engraver::score::section_marks::MarkStyle,
     /// The song's text decisions (a `.roles` file).
     pub roles: Option<&'a Path>,
     /// Print every rehearsal mark and staff text with its role, as a
@@ -96,7 +96,7 @@ fn texts_inventory(
     // The keyflow header as read from Finale's page 1; uncomment a line to
     // correct it.
     if let Some(job) = jobs.first() {
-        let mut h = engraver_score::header::PartHeader::from_page_texts(
+        let mut h = engraver::score::header::PartHeader::from_page_texts(
             job.options.page_texts.as_deref().unwrap_or_default(),
             &job.name,
         );
@@ -175,7 +175,7 @@ fn load(input: &Path, print: &PrintInfo) -> Result<Source, String> {
             jobs,
         });
     }
-    let score = engraver_score::import_file(input).map_err(|e| e.to_string())?;
+    let score = engraver::score::import_file(input).map_err(|e| e.to_string())?;
     let jobs = score
         .parts
         .iter()
@@ -238,7 +238,7 @@ pub(crate) fn svg_to_png(svg: &str, scale: f32) -> Result<Vec<u8>, String> {
     fontdb.load_font_data(fonts.leland_text_font_data().as_ref().clone());
     fontdb.load_font_data(fonts.freesans_font_data().as_ref().clone());
     fontdb.load_font_data(fonts.chicago_font_data().as_ref().clone());
-    for (_, face) in engraver_score::fonts::text_faces() {
+    for (_, face) in engraver::score::fonts::text_faces() {
         fontdb.load_font_data(face.to_vec());
     }
     let mut options = usvg::Options::default();
@@ -336,7 +336,7 @@ pub fn cmd_parts(args: &PartsArgs<'_>) -> Result<(), String> {
         }
         let layout = layout_part(&source.score, job.part_index, &options);
         if args.check {
-            let report = engraver_score::inspect::collisions(&layout, fonts);
+            let report = engraver::score::inspect::collisions(&layout, fonts);
             println!("{:<28} {:>4} collision(s)", job.name, report.total());
             for ((a, b), n) in &report.by_kind {
                 println!("    {n:>4}  {a:?} × {b:?}");
@@ -373,7 +373,7 @@ pub fn cmd_parts(args: &PartsArgs<'_>) -> Result<(), String> {
         }
         match args.format {
             PartsFormat::Pdf => {
-                let pdf = engraver_score::render::pdf(&layout, fonts)?;
+                let pdf = engraver::score::render::pdf(&layout, fonts)?;
                 // Not `with_extension`: a title like "SorcApp 6.2" would
                 // lose everything after its dot.
                 let path = PathBuf::from(format!("{}.pdf", base.display()));
@@ -381,7 +381,7 @@ pub fn cmd_parts(args: &PartsArgs<'_>) -> Result<(), String> {
                 println!("{} ({} page(s))", path.display(), layout.pages.len());
             }
             PartsFormat::Svg | PartsFormat::Png => {
-                let svgs = engraver_score::render::svg_pages(&layout, fonts);
+                let svgs = engraver::score::render::svg_pages(&layout, fonts);
                 for (i, svg) in svgs.iter().enumerate() {
                     let stem = format!("{}.p{}", base.display(), i + 1);
                     let path = if args.format == PartsFormat::Svg {

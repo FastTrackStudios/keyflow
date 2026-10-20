@@ -27,8 +27,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use engraver_score::finale::{FinaleDocument, PrintInfo};
-use engraver_score::layout::layout_part;
+use engraver::score::finale::{FinaleDocument, PrintInfo};
+use engraver::score::layout::layout_part;
 use keyflow::engraver::fonts::ChartFontBundle;
 
 /// One line of a setlist.
@@ -482,7 +482,7 @@ fn text_page(width: f64, height: f64, lines: &[(f64, f64, f64, bool, &str)]) -> 
 
 fn svg_pdf(pages: &[String]) -> Result<Vec<u8>, String> {
     use keyflow::engraver::export::pdf::PdfSerializer;
-    let faces: Vec<(&str, &[u8])> = engraver_score::fonts::text_faces().to_vec();
+    let faces: Vec<(&str, &[u8])> = engraver::score::fonts::text_faces().to_vec();
     PdfSerializer::serialize_from_svg(pages, &faces).map_err(|e| e.to_string())
 }
 
@@ -565,7 +565,7 @@ pub struct BookArgs<'a> {
     pub dry_run: bool,
     /// See [`crate::parts::auto_layout`].
     pub auto_layout: bool,
-    pub marks: engraver_score::section_marks::MarkStyle,
+    pub marks: engraver::score::section_marks::MarkStyle,
     /// Per-song `.roles` files, named for the song's folder in the library
     /// (`Don't Answer Me.roles`).
     pub roles_dir: Option<&'a Path>,
@@ -649,7 +649,7 @@ pub fn cmd_book(args: &BookArgs<'_>) -> Result<(), String> {
                             crate::parts::auto_layout(&mut options);
                         }
                         let layout = layout_part(&doc.score, job.part_index, &options);
-                        engraver_score::render::pdf(&layout, fonts)?
+                        engraver::score::render::pdf(&layout, fonts)?
                     };
                     parts.push(SongPart {
                         role,
