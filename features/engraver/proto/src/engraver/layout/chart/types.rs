@@ -712,6 +712,10 @@ pub struct MelodyNoteSegment {
     pub tie_to_next: bool,
     /// True if this is a rest
     pub is_rest: bool,
+    /// A slur begins on this note (its first piece, if split at a barline).
+    pub slur_start: bool,
+    /// A slur ends on this note (its last piece).
+    pub slur_stop: bool,
     /// Resolved absolute octave (None for rests)
     pub octave: Option<u8>,
     /// Resolved accidental for rendering
@@ -1162,6 +1166,8 @@ pub fn expand_melodies_across_measures(
                         tie_from_previous: !is_first_segment || note.tie_stop,
                         tie_to_next: !note.is_rest() && (!is_last_segment || note.tie_start),
                         is_rest: note.is_rest(),
+                        slur_start: note.slur_start && is_first_segment,
+                        slur_stop: note.slur_stop && is_last_segment,
                         octave: resolved_octave,
                         accidental: resolved_accidental,
                         // Polyphony stack — only attach to the first segment

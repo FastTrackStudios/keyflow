@@ -401,7 +401,12 @@ fn lines_of(mut words: Vec<Word>) -> Vec<Word> {
 /// head only; one coming in at a line's start ends at its right head only.
 /// Slurs join different pitches and match nothing here.
 /// Returns (heads a tie starts on, heads a tie ends on) as origins.
-fn ties_of(page: &Page, staves: &[Staff], sp: f64) -> (Vec<(f64, f64)>, Vec<(f64, f64)>) {
+#[allow(clippy::type_complexity)]
+fn ties_of(
+    page: &Page,
+    staves: &[Staff],
+    sp: f64,
+) -> (Vec<(f64, f64)>, Vec<(f64, f64)>, Vec<(f64, f64)>, Vec<(f64, f64)>) {
     let heads: Vec<(f64, f64)> = page
         .glyphs
         .iter()
@@ -409,6 +414,7 @@ fn ties_of(page: &Page, staves: &[Staff], sp: f64) -> (Vec<(f64, f64)>, Vec<(f64
         .map(|g| (g.origin.x, g.origin.y))
         .collect();
     let (mut starts, mut stops) = (Vec::new(), Vec::new());
+    let (mut slur_starts, mut slur_stops) = (Vec::new(), Vec::new());
     for f in &page.fills {
         let curved = f
             .path
@@ -417,9 +423,11 @@ fn ties_of(page: &Page, staves: &[Staff], sp: f64) -> (Vec<(f64, f64)>, Vec<(f64
             .filter(|e| matches!(e, kurbo::PathEl::CurveTo(..)))
             .count();
         let b = f.path.bounding_box();
-        if curved < 2 || b.width() < 0.5 * sp || b.height() > 1.6 * sp {
+        // Ties are flat; a slur may climb several spaces.
+        if curved < 2 || b.width() < 0.5 * sp || b.height() > 6.0 * sp {
             continue;
         }
+        let flat = b.height() <= 1.6 * sp;
         let mid_y = (b.y0 + b.y1) / 2.0;
         // A head whose origin sits within a notehead's width left of the
         // curve's end, at a height near the curve.
@@ -443,9 +451,37 @@ fn ties_of(page: &Page, staves: &[Staff], sp: f64) -> (Vec<(f64, f64)>, Vec<(f64
             .flat_map(|l| rights.iter().map(move |r| (*l, *r)))
             .filter(|(l, r)| r.0 > l.0 + 0.5 * sp && (l.1 - r.1).abs() < 0.3 * sp)
             .min_by(|a, b| (a.0.1 - mid_y).abs().total_cmp(&(b.0.1 - mid_y).abs()));
-        if let Some((l, r)) = pair {
+        if let Some((l, r)) = pair.filter(|_| flat) {
             starts.push(l);
             stops.push(r);
+            continue;
+        }
+        // A slur: a curve from one note to a later, different one. Its ends
+        // sit off a head or off a stem's tip, so allow height for a stem.
+        if b.width() > 1.5 * sp {
+            let end_near = |x_end: f64, left: bool| {
+                heads
+                    .iter()
+                    .copied()
+                    .filter(|h| {
+                        let dx = if left { x_end - h.0 } else { h.0 - x_end };
+                        dx > -1.6 * sp && dx < 1.6 * sp && (h.1 - mid_y).abs() < 5.0 * sp
+                    })
+                    .min_by(|a, c| {
+                        let da = (a.0 - x_end).abs() + 0.3 * (a.1 - mid_y).abs();
+                        let dc = (c.0 - x_end).abs() + 0.3 * (c.1 - mid_y).abs();
+                        da.total_cmp(&dc)
+                    })
+            };
+            if let (Some(l), Some(r)) = (end_near(b.x0, true), end_near(b.x1, false))
+                && r.0 > l.0 + sp
+            {
+                slur_starts.push(l);
+                slur_stops.push(r);
+                continue;
+            }
+        }
+        if !flat {
             continue;
         }
         // A short piece ending just before a head is the end of a tie drawn
@@ -476,7 +512,7 @@ fn ties_of(page: &Page, staves: &[Staff], sp: f64) -> (Vec<(f64, f64)>, Vec<(f64
             }
         }
     }
-    (starts, stops)
+    (starts, stops, slur_starts, slur_stops)
 }
 
 // ───────────────────────── recognition ─────────────────────────
@@ -608,7 +644,7 @@ pub fn recognize(pages: &[Page]) -> Recognized {
         let sp = staves[0].sp;
         let vl = vlines(page);
         let beams = beams_of(page, sp);
-        let (tie_starts, tie_stops) = ties_of(page, &staves, sp);
+        let (tie_starts, tie_stops, slur_starts, slur_stops) = ties_of(page, &staves, sp);
 
         // Barlines: from some staff's top to some staff's bottom.
         // A barline ends on the staff lines; a stem that happens to end
@@ -1213,8 +1249,8 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                                     written: *written,
                                     grace: false,
                                     notes,
-                                    slur_start: false,
-                                    slur_stop: false,
+                                    slur_start: heads.iter().any(|(x, y)| at(&slur_starts, *x, *y)),
+                                    slur_stop: heads.iter().any(|(x, y)| at(&slur_stops, *x, *y)),
                                     articulations,
                                     articulation_above: BTreeMap::new(),
                                 }));

@@ -111,6 +111,12 @@ pub struct MelodyNote {
     /// True when this note is tied FROM the previous note (`<tie type="stop"/>`).
     #[facet(default)]
     pub tie_stop: bool,
+    /// A slur begins on this note (`E:48(`).
+    #[facet(default)]
+    pub slur_start: bool,
+    /// A slur ends on this note (`C:54)`).
+    #[facet(default)]
+    pub slur_stop: bool,
 
     /// The lyric syllable sung on this note (karaoke / vocal lanes). `None`
     /// means no syllable here — either an instrumental note or a melisma
@@ -135,6 +141,8 @@ impl MelodyNote {
             extra_pitch_modifiers: Vec::new(),
             tie_start: false,
             tie_stop: false,
+            slur_start: false,
+            slur_stop: false,
             lyric: None,
         }
     }
@@ -154,6 +162,8 @@ impl MelodyNote {
             extra_pitch_modifiers: Vec::new(),
             tie_start: false,
             tie_stop: false,
+            slur_start: false,
+            slur_stop: false,
             lyric: None,
         }
     }
@@ -301,9 +311,22 @@ impl MelodyNote {
         if tie_stop {
             s = s[1..].trim_start();
         }
-        let tie_start = s.ends_with('~');
-        if tie_start {
-            s = s[..s.len() - 1].trim_end();
+        // Trailing marks, in any order: `~` ties into the next note, `(`
+        // starts a slur, `)` ends one.
+        let (mut tie_start, mut slur_start, mut slur_stop) = (false, false, false);
+        loop {
+            if let Some(rest) = s.strip_suffix('~') {
+                tie_start = true;
+                s = rest.trim_end();
+            } else if let Some(rest) = s.strip_suffix('(') {
+                slur_start = true;
+                s = rest.trim_end();
+            } else if let Some(rest) = s.strip_suffix(')') {
+                slur_stop = true;
+                s = rest.trim_end();
+            } else {
+                break;
+            }
         }
 
         let (pitch_part, duration, dotted, triplet, _underscore_form) =
@@ -328,6 +351,8 @@ impl MelodyNote {
             }
             primary.tie_start = tie_start;
             primary.tie_stop = tie_stop;
+            primary.slur_start = slur_start;
+            primary.slur_stop = slur_stop;
             return Ok(primary);
         }
 
@@ -346,6 +371,8 @@ impl MelodyNote {
                 extra_pitch_modifiers: Vec::new(),
                 tie_start,
                 tie_stop,
+                slur_start,
+                slur_stop,
                 lyric: None,
             });
         }
@@ -401,6 +428,8 @@ impl MelodyNote {
                 extra_pitch_modifiers: Vec::new(),
                 tie_start,
                 tie_stop,
+                slur_start,
+                slur_stop,
                 lyric: None,
             });
         }
@@ -451,6 +480,8 @@ impl MelodyNote {
             extra_pitch_modifiers: Vec::new(),
             tie_start,
             tie_stop,
+            slur_start,
+            slur_stop,
             lyric: None,
         })
     }
@@ -664,6 +695,12 @@ impl fmt::Display for MelodyNote {
         if self.tie_start {
             write!(f, "~")?;
         }
+        if self.slur_stop {
+            write!(f, ")")?;
+        }
+        if self.slur_start {
+            write!(f, "(")?;
+        }
         Ok(())
     }
 }
@@ -730,6 +767,12 @@ fn write_chord_note(note: &MelodyNote, f: &mut fmt::Formatter<'_>) -> fmt::Resul
     }
     if note.tie_start {
         write!(f, "~")?;
+    }
+    if note.slur_stop {
+        write!(f, ")")?;
+    }
+    if note.slur_start {
+        write!(f, "(")?;
     }
     Ok(())
 }
@@ -811,7 +854,7 @@ fn melody_token_duration_suffix(token: &str) -> Result<String, String> {
     let clean_token = token
         .trim()
         .trim_start_matches('~')
-        .trim_end_matches('~')
+        .trim_end_matches(&['~', '(', ')'][..])
         .trim_start_matches('!');
     let Some(start) = melody_token_duration_start(clean_token) else {
         return Err(format!("Melody token '{}' has no duration", token));
@@ -820,10 +863,11 @@ fn melody_token_duration_suffix(token: &str) -> Result<String, String> {
 }
 
 fn melody_token_duration_start(token: &str) -> Option<usize> {
+    // Trailing marks (`~` tie, `(` `)` slur) are not part of the duration.
     let token = token
         .trim()
         .trim_start_matches('~')
-        .trim_end_matches('~')
+        .trim_end_matches(&['~', '(', ')'][..])
         .trim_start_matches('!');
     if token.is_empty() {
         return None;
@@ -866,7 +910,7 @@ fn melody_token_duration_start(token: &str) -> Option<usize> {
 }
 
 fn is_melody_duration_suffix(suffix: &str) -> bool {
-    let suffix = suffix.trim_end_matches('~');
+    let suffix = suffix.trim_end_matches(&['~', '(', ')'][..]);
     if suffix.is_empty() {
         return false;
     }
@@ -1073,15 +1117,18 @@ impl Melody {
                 continue;
             }
 
+            // An inherited duration goes before any trailing tie/slur marks.
+            let body = token.trim_end_matches(&['~', '(', ')'][..]);
+            let marks = &token[body.len()..];
             let token_to_parse = if melody_token_has_duration(token) {
                 token.to_string()
             } else if let Some(duration) = &inherited_duration {
-                format!("{token}{duration}")
+                format!("{body}{duration}{marks}")
             } else {
                 // No duration written yet and nothing to inherit: default to a
                 // quarter note. The `_` keeps it unambiguous for every token
                 // shape (scale degrees, `:` octaves, chord-note groups).
-                format!("{token}_4")
+                format!("{body}_4{marks}")
             };
             let note = MelodyNote::parse(&token_to_parse)?;
             if !no_memory {
@@ -1590,6 +1637,29 @@ mod tests {
         assert_eq!(note.extra_pitches, vec![("C#".to_string(), None)]);
         assert_eq!(note.extra_pitch_modifiers, vec![OctaveModifier::Up]);
         assert_eq!(format!("{}", melody), "m{ <F# 'C#>4. }");
+    }
+
+    #[test]
+    fn slur_marks_parse_and_print() {
+        let melody = Melody::parse("E:48( G:48 C:54) D:44~( ~D:44)").unwrap();
+        let marks: Vec<(bool, bool, bool, bool)> = melody
+            .notes
+            .iter()
+            .map(|n| (n.slur_start, n.slur_stop, n.tie_start, n.tie_stop))
+            .collect();
+        assert_eq!(
+            marks,
+            vec![
+                (true, false, false, false),
+                (false, false, false, false),
+                (false, true, false, false),
+                (true, false, true, false),
+                (false, true, false, true),
+            ]
+        );
+        let again = Melody::parse(&melody.notes.iter().map(ToString::to_string).collect::<Vec<_>>().join(" ")).unwrap();
+        assert_eq!(again.notes.iter().map(|n| (n.slur_start, n.slur_stop)).collect::<Vec<_>>(),
+                   melody.notes.iter().map(|n| (n.slur_start, n.slur_stop)).collect::<Vec<_>>());
     }
 
     #[test]

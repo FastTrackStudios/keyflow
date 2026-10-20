@@ -5,7 +5,9 @@
 
 use crate::engraver::layout::context::LayoutContext;
 use crate::engraver::layout::segment::SegmentType;
-use crate::engraver::layout::tlayout::{SlurDirection, SlurEndpoint, SlurTieConfig, layout_tie};
+use crate::engraver::layout::tlayout::{
+    SlurDirection, SlurEndpoint, SlurObstacle, SlurTieConfig, layout_slur_with_obstacles, layout_tie,
+};
 use crate::engraver::notation::MeasureScene;
 use crate::engraver::scene::node::SceneNode;
 
@@ -127,10 +129,25 @@ impl ChartLayoutEngine {
                 .copied()
                 .flatten()
                 .unwrap_or_else(|| line.is_some_and(|l| l < 0));
-            let direction = if stem_up { SlurDirection::Down } else { SlurDirection::Up };
+            // Tied to a note whose stem goes the other way: the tie curves
+            // upward (Gould). Otherwise away from the shared stem side.
+            let next_stem = measure_result.entry_stem_up.get(i + 1).copied().flatten();
+            let next_in_bar = melody_data.segments.get(i + 1).is_some_and(|n| n.tie_from_previous);
+            let mixed = segment.tie_to_next && next_stem.is_some_and(|n| n != stem_up);
+            // A tie over the barline is drawn in two halves that cannot see
+            // each other's stems; both belong to one pitch, so the pitch's own
+            // stem side decides for both (middle line and up: stem down, tie
+            // above).
+            let over_barline = (segment.tie_to_next && !next_in_bar) || (segment.tie_from_previous && i == 0);
+            let below = if over_barline {
+                line.is_some_and(|l| l < 0)
+            } else {
+                stem_up && !mixed
+            };
+            let direction = if below { SlurDirection::Down } else { SlurDirection::Up };
             // A tie sits off the heads on its side (y grows downward), not
             // through their middles.
-            let tie_y = note_y + if stem_up { 0.55 * spatium } else { -0.55 * spatium };
+            let tie_y = note_y + if below { 0.55 * spatium } else { -0.55 * spatium };
             let Some(seg) = chord_segments.get(i) else {
                 continue;
             };
@@ -186,6 +203,117 @@ impl ChartLayoutEngine {
                     .scene
                     .add_child(SceneNode::anonymous_leaf(tie_layout.commands));
             }
+        }
+    }
+
+    /// Slurs on melody notes. A slur runs from its start note to its end
+    /// note in the bar; one crossing a barline is drawn to the bar's end and
+    /// picks up from the next bar's start. It goes on the notehead side —
+    /// below when every stem under it goes up, above otherwise (stems down,
+    /// or mixed: Gould) — and arches over the notes inside it.
+    pub(super) fn add_melody_slurs(
+        &self,
+        measure_result: &mut MeasureScene,
+        melody_data: &MeasureMelodyData,
+        ctx: &LayoutContext<'_>,
+        clef: crate::chart::ChartClef,
+    ) {
+        let spatium = ctx.spatium();
+        let config = SlurTieConfig::default();
+        let segs = &melody_data.segments;
+        let chord_segments: Vec<_> = measure_result
+            .segments
+            .iter()
+            .filter(|seg| seg.seg_type.contains(SegmentType::CHORD_REST))
+            .collect();
+        let head_y = |i: usize| -> Option<f64> {
+            let seg = segs.get(i)?;
+            let oct = seg.octave?;
+            let (line, _) = melody_pitch_to_line_for_clef(&seg.pitch, oct, clef);
+            Some(-(line as f64) * spatium / 2.0)
+        };
+        let head_x = |i: usize| chord_segments.get(i).map(|s| s.x + 0.6 * spatium);
+
+        // (first, last, opens_before_bar, runs_past_bar) for each slur here.
+        let mut spans: Vec<(usize, usize, bool, bool)> = Vec::new();
+        let mut open: Option<usize> = None;
+        for (i, seg) in segs.iter().enumerate() {
+            if seg.is_rest {
+                continue;
+            }
+            if seg.slur_stop {
+                match open.take() {
+                    Some(start) => spans.push((start, i, false, false)),
+                    None => spans.push((0, i, true, false)),
+                }
+            }
+            if seg.slur_start {
+                open = Some(i);
+            }
+        }
+        if let Some(start) = open {
+            let last = segs.iter().rposition(|s| !s.is_rest).unwrap_or(start);
+            spans.push((start, last, false, true));
+        }
+
+        let stem_of = |i: usize| measure_result.entry_stem_up.get(i).copied().flatten();
+        for (k, (a, b, from_start, to_end)) in spans.into_iter().enumerate() {
+            let stems: Vec<bool> = (a..=b).filter_map(stem_of).collect();
+            // Over a barline each half sees only its own bar's stems, and the
+            // two halves must agree: such a slur goes above (Gould's choice
+            // when the stems cannot settle it).
+            let crosses = from_start || to_end;
+            let below = !crosses && !stems.is_empty() && stems.iter().all(|up| *up);
+            let side = if below { 1.0 } else { -1.0 };
+            // Where the slur meets a note: off the head, or — when the stem
+            // points into the slur's side — off the stem's tip.
+            const STEM: f64 = 3.5;
+            let attach = |i: usize| -> Option<(f64, f64)> {
+                let (x, y) = (head_x(i)?, head_y(i)?);
+                let stem_into = match stem_of(i) {
+                    Some(up) => up != below,
+                    None => false,
+                };
+                Some(if stem_into {
+                    // Stem on the slur's side: the stem stands at the head's
+                    // right (up) or left (down) edge.
+                    let sx = if below { x - 0.6 * spatium } else { x + 0.6 * spatium };
+                    (sx, y + side * (STEM + 0.5) * spatium)
+                } else {
+                    (x, y + side * 0.9 * spatium)
+                })
+            };
+            let (Some((xa, ya)), Some((xb, yb))) = (attach(a), attach(b)) else {
+                continue;
+            };
+            let start = SlurEndpoint {
+                x: if from_start { -0.5 * spatium } else { xa },
+                y: ya,
+                stem_up: !below,
+            };
+            let end = SlurEndpoint {
+                x: if to_end { measure_result.width + 0.5 * spatium } else { xb },
+                y: yb,
+                stem_up: !below,
+            };
+            // The notes it passes over, with any stem reaching its side.
+            let obstacles: Vec<SlurObstacle> = (a + 1..b)
+                .filter_map(|i| {
+                    let (x, y) = (head_x(i)?, head_y(i)?);
+                    let reach = match stem_of(i) {
+                        Some(up) if up != below => STEM * spatium,
+                        _ => 0.5 * spatium,
+                    };
+                    let (y0, y1) = if below { (y - 0.5 * spatium, y + reach) } else { (y - reach, y + 0.5 * spatium) };
+                    Some(SlurObstacle::note(kurbo::Rect::new(x - 0.6 * spatium, y0, x + 0.6 * spatium, y1)))
+                })
+                .collect();
+            let direction = if below { SlurDirection::Down } else { SlurDirection::Up };
+            let layout =
+                layout_slur_with_obstacles(&start, &end, direction, &obstacles, 3000 + k as u64, spatium, &config);
+            measure_result
+                .scene
+                .add_child(SceneNode::anonymous_leaf(layout.commands));
         }
     }
 }

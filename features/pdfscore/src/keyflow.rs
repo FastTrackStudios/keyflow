@@ -658,7 +658,13 @@ fn melody(m: &Measure, staff: u8) -> String {
                 let v = note_value(&c.written);
                 // `~` after a note starts a tie, before one ends it.
                 let into = if c.notes.iter().any(|n| n.tie_stop) { "~" } else { "" };
-                let on = if c.notes.iter().any(|n| n.tie_start) { "~" } else { "" };
+                // After the value: `~` ties on, `)` ends a slur, `(` starts one.
+                let on = format!(
+                    "{}{}{}",
+                    if c.notes.iter().any(|n| n.tie_start) { "~" } else { "" },
+                    if c.slur_stop { ")" } else { "" },
+                    if c.slur_start { "(" } else { "" },
+                );
                 if c.notes.len() == 1 {
                     parts.push(format!("{into}{}{v}{on}", pitch(&c.notes[0].pitch)));
                 } else {
