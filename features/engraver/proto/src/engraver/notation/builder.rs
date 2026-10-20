@@ -1695,7 +1695,10 @@ fn merge_half_bar_eighths(groups: Vec<BeamGroup>, ts: TimeSignature) -> Vec<Beam
     let beat = ts.beat_ticks();
     let half = ts.measure_ticks() / 2;
     let plain_beat = |g: &BeamGroup| {
-        g.notes.len() == 2 && g.notes.iter().all(|d| d.ticks() == beat / 2 && d.needs_flag())
+        g.notes.len() == 2
+            && g.notes
+                .iter()
+                .all(|d| d.ticks() == beat / 2 && d.needs_flag())
     };
     let mut out: Vec<BeamGroup> = Vec::with_capacity(groups.len());
     let mut tick = 0;

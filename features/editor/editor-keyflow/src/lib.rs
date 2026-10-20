@@ -92,13 +92,13 @@ pub fn render_svg_live(source: &str) -> Result<String, RenderError> {
 /// Syntax-highlight keyflow source into HTML — one `<span class="kf-…"
 /// style="color:…">` per token, unstyled gaps HTML-escaped, newlines
 /// preserved. Uses the same per-line highlighter the live editor runs
-/// (`keyflow_text::highlighting`), so a source-visible markdown fence
+/// (`keyflow_lang::text::highlighting`), so a source-visible markdown fence
 /// reads with the exact colors of the editor. Theme colors are baked
 /// inline, so the output is self-contained (no external stylesheet).
 ///
 /// Returns the plain HTML-escaped source when nothing highlights.
 pub fn highlight_html(source: &str) -> String {
-    use keyflow_text::highlighting::{HighlightSpan, Highlighter, Renderer, Theme};
+    use keyflow_lang::text::highlighting::{HighlightSpan, Highlighter, Renderer, Theme};
 
     // Highlight per line (the highlighter is line-oriented), shifting
     // each line's span offsets to absolute positions in `source` —
@@ -157,8 +157,8 @@ fn render_inner(source: &str, embed_fonts: bool) -> Result<String, RenderError> 
     let mode = LayoutMode::ContinuousScroll {
         width: LAYOUT_WIDTH,
     };
-    let chart =
-        keyflow_text::chart::parse_chart(source).map_err(|e| RenderError::Render(e.to_string()))?;
+    let chart = keyflow_lang::text::chart::parse_chart(source)
+        .map_err(|e| RenderError::Render(e.to_string()))?;
     let pipeline = pipeline()?;
     let result = pipeline.layout(&chart, &mode);
 

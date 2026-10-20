@@ -872,8 +872,8 @@ mod tests {
     use crate::chart::types::{ChartSection, Measure};
     use crate::chord::ChordRhythm;
     use crate::sections::{Section, SectionType};
-    use crate::time::{AbsolutePosition, MusicalDuration, MusicalPosition};
     use crate::syntax::parsing::Lexer;
+    use crate::time::{AbsolutePosition, MusicalDuration, MusicalPosition};
 
     /// One symbol either way round, the way a DAW's chord items are
     /// relabelled: numbers to names and names to numbers, slash chords and

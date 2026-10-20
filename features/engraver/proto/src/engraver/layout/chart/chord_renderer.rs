@@ -1228,8 +1228,7 @@ pub fn render_chord_symbols(
         // rhythm on one chord (`G#m_8 G#m_8 r8 G#m_8`) is attacks, not new
         // chords, however short they are. (Screen presets that restate
         // repeated chords do it across barlines, below.)
-        if !is_hits && same_bar_symbol.as_deref() == Some(current_symbol.as_str())
-        {
+        if !is_hits && same_bar_symbol.as_deref() == Some(current_symbol.as_str()) {
             last_chord_symbol = Some(current_symbol.clone());
             continue;
         }

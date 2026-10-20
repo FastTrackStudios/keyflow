@@ -1049,7 +1049,11 @@ pub fn melody_note_extent(
             // and a beam sits on its tip. Whole notes have no stem.
             let stem_up = line < 0 && seg.beats < 4.0;
             let top = if stem_up { line + 8 } else { line };
-            let bottom = if !stem_up && line >= 0 && seg.beats < 4.0 { line - 8 } else { line };
+            let bottom = if !stem_up && line >= 0 && seg.beats < 4.0 {
+                line - 8
+            } else {
+                line
+            };
             max_line = max_line.max(top);
             min_line = min_line.min(bottom);
         }
@@ -1072,7 +1076,10 @@ pub fn melody_note_extent(
     if segs.iter().any(|s| s.slur_start || s.slur_stop) {
         extra_above = extra_above.max((max_line - 4).max(0) as f64 * half_sp) + 1.8 * spatium;
     }
-    if segs.iter().any(|s| s.articulations.iter().any(|a| a == "fermata")) {
+    if segs
+        .iter()
+        .any(|s| s.articulations.iter().any(|a| a == "fermata"))
+    {
         extra_above = extra_above.max(2.5 * spatium);
     }
 

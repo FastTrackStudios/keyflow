@@ -16,8 +16,8 @@ pub mod lrc;
 pub mod metadata;
 pub mod primitives;
 pub mod sections;
-pub mod syntax;
 pub mod services;
+pub mod syntax;
 pub mod time;
 pub mod transpose;
 

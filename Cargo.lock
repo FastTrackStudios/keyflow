@@ -4174,7 +4174,7 @@ dependencies = [
  "allsorts",
  "editor-state",
  "engraver",
- "keyflow-text",
+ "keyflow-lang",
  "thiserror 2.0.20",
  "tracing",
  "ttf-parser 0.25.1",
@@ -4185,7 +4185,7 @@ name = "editor-keyflow-lang"
 version = "0.0.1-alpha"
 dependencies = [
  "editor-state",
- "keyflow-text",
+ "keyflow-lang",
 ]
 
 [[package]]
@@ -4316,10 +4316,8 @@ dependencies = [
  "getrandom 0.2.17",
  "helgoboss-midi",
  "keyflow",
- "keyflow-midi",
- "keyflow-musicxml",
+ "keyflow-lang",
  "keyflow-proto",
- "keyflow-text",
  "kurbo 0.13.1",
  "log",
  "lopdf 0.36.0",
@@ -4351,8 +4349,7 @@ name = "engraver-score"
 version = "0.0.1-alpha"
 dependencies = [
  "engraver-proto",
- "keyflow-musicxml",
- "keyflow-musx",
+ "keyflow-lang",
  "keyflow-proto",
  "kurbo 0.13.1",
  "musicxml",
@@ -7473,10 +7470,8 @@ dependencies = [
  "facet",
  "getrandom 0.2.17",
  "helgoboss-midi",
- "keyflow-live",
- "keyflow-midi",
+ "keyflow-lang",
  "keyflow-proto",
- "keyflow-text",
  "regex",
  "tracing",
  "tracing-subscriber",
@@ -7488,27 +7483,6 @@ name = "keyflow-annotate"
 version = "0.0.1-alpha"
 
 [[package]]
-name = "keyflow-chordpro"
-version = "0.0.1-alpha"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "keyflow-chordsheet"
-version = "0.0.1-alpha"
-dependencies = [
- "engraver",
- "keyflow-proto",
- "keyflow-text",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "tracing",
-]
-
-[[package]]
 name = "keyflow-cli"
 version = "0.0.1-alpha"
 dependencies = [
@@ -7516,11 +7490,8 @@ dependencies = [
  "dawfile-reaper",
  "engraver-score",
  "keyflow",
- "keyflow-chordsheet",
- "keyflow-musicxml",
- "keyflow-orchestra",
+ "keyflow-lang",
  "keyflow-pdfscore",
- "keyflow-sync",
  "lopdf 0.36.0",
  "png 0.17.16",
  "resvg 0.45.1",
@@ -7546,37 +7517,39 @@ dependencies = [
 ]
 
 [[package]]
-name = "keyflow-live"
+name = "keyflow-lang"
 version = "0.0.1-alpha"
 dependencies = [
- "keyflow-midi",
- "keyflow-proto",
- "keyflow-text",
-]
-
-[[package]]
-name = "keyflow-lsp"
-version = "0.0.1-alpha"
-dependencies = [
+ "candle-core",
+ "candle-nn",
+ "candle-transformers",
  "dashmap 6.2.1",
+ "facet",
+ "facet-json",
+ "flate2",
+ "fts-sample",
+ "hound",
+ "keyflow-annotate",
  "keyflow-proto",
- "keyflow-text",
+ "midly",
+ "musicxml",
+ "ndarray",
+ "ort",
+ "rand 0.8.8",
+ "rayon",
+ "regex",
+ "roxmltree 0.20.0",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.20",
+ "tokenizers",
  "tokio",
  "tower-lsp",
  "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "keyflow-midi"
-version = "0.0.1-alpha"
-dependencies = [
- "keyflow-proto",
- "keyflow-text",
- "midly",
- "roxmltree 0.20.0",
+ "ureq 2.12.1",
+ "zip 2.4.2",
 ]
 
 [[package]]
@@ -7592,44 +7565,6 @@ dependencies = [
  "serde_json",
  "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "keyflow-musicxml"
-version = "0.0.1-alpha"
-dependencies = [
- "keyflow-proto",
- "keyflow-text",
- "musicxml",
- "thiserror 2.0.20",
- "tracing",
- "zip 2.4.2",
-]
-
-[[package]]
-name = "keyflow-musx"
-version = "0.0.1-alpha"
-dependencies = [
- "flate2",
- "keyflow-musicxml",
- "rayon",
- "regex",
- "roxmltree 0.20.0",
- "serde",
- "serde_json",
- "thiserror 2.0.20",
- "tracing",
- "zip 2.4.2",
-]
-
-[[package]]
-name = "keyflow-orchestra"
-version = "0.0.1-alpha"
-dependencies = [
- "keyflow-annotate",
- "keyflow-musicxml",
- "musicxml",
- "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -7657,38 +7592,6 @@ dependencies = [
  "tracing",
  "uuid",
  "vox",
-]
-
-[[package]]
-name = "keyflow-sync"
-version = "0.0.1-alpha"
-dependencies = [
- "candle-core",
- "candle-nn",
- "candle-transformers",
- "facet",
- "facet-json",
- "flate2",
- "fts-sample",
- "hound",
- "midly",
- "ndarray",
- "ort",
- "rand 0.8.8",
- "serde_json",
- "sha2 0.10.9",
- "tokenizers",
- "tracing",
- "ureq 2.12.1",
-]
-
-[[package]]
-name = "keyflow-text"
-version = "0.0.1-alpha"
-dependencies = [
- "keyflow-chordpro",
- "keyflow-proto",
- "tracing",
 ]
 
 [[package]]

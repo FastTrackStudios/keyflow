@@ -13,7 +13,7 @@
 //! - `\uXXXX` escape expansion
 //! - source spans for editor / LSP integration
 //!
-//! See `keyflow_text::chart::parser::parse_chordpro` for the bridge.
+//! See `keyflow_lang::text::chart::parser::parse_chordpro` for the bridge.
 
 use facet::Facet;
 

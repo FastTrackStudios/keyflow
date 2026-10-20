@@ -1657,7 +1657,7 @@ fn run(cli: Cli) -> Result<(), String> {
             output_dir,
             scale,
         } => {
-            let chart = keyflow_musicxml::import_file(&input)
+            let chart = keyflow_lang::musicxml::import_file(&input)
                 .map_err(|e| format!("musicxml import: {e}"))?;
             std::fs::create_dir_all(&output_dir)
                 .map_err(|e| format!("Failed to create {}: {e}", output_dir.display()))?;
@@ -1694,9 +1694,9 @@ fn run(cli: Cli) -> Result<(), String> {
         } => chordsheet_import(&input, output.as_deref(), manifest.as_deref()),
 
         Commands::MusicxmlKf { input, output } => {
-            let chart = keyflow_musicxml::import_file(&input)
+            let chart = keyflow_lang::musicxml::import_file(&input)
                 .map_err(|e| format!("musicxml import: {e}"))?;
-            let keyflow_text = keyflow::text::chart::exporter::chart_to_keyflow(&chart);
+            let kf_text = keyflow::text::chart::exporter::chart_to_keyflow(&chart);
             match output {
                 Some(output) => {
                     if let Some(parent) = output.parent() {
@@ -1706,12 +1706,12 @@ fn run(cli: Cli) -> Result<(), String> {
                             })?;
                         }
                     }
-                    std::fs::write(&output, keyflow_text)
+                    std::fs::write(&output, kf_text)
                         .map_err(|e| format!("Failed to write {}: {e}", output.display()))?;
                     eprintln!("Wrote {}", output.display());
                 }
                 None => {
-                    print!("{keyflow_text}");
+                    print!("{kf_text}");
                 }
             }
             Ok(())
@@ -1723,7 +1723,7 @@ fn run(cli: Cli) -> Result<(), String> {
             max_diffs,
             include_source,
         } => {
-            let musicxml_chart = keyflow_musicxml::import_file(&musicxml)
+            let musicxml_chart = keyflow_lang::musicxml::import_file(&musicxml)
                 .map_err(|e| format!("musicxml import: {e}"))?;
             let keyflow_source = std::fs::read_to_string(&keyflow)
                 .map_err(|e| format!("Failed to read {}: {e}", keyflow.display()))?;
@@ -1790,7 +1790,7 @@ fn run(cli: Cli) -> Result<(), String> {
                     .ok_or_else(|| format!("Bad filename: {}", path.display()))?;
                 println!("→ {}", stem);
 
-                let chart = match keyflow_musicxml::import_file(path) {
+                let chart = match keyflow_lang::musicxml::import_file(path) {
                     Ok(c) => c,
                     Err(e) => {
                         eprintln!("  ⚠ {stem}: import error: {e}");
@@ -1853,7 +1853,7 @@ fn run(cli: Cli) -> Result<(), String> {
         }
 
         Commands::MusicxmlSpacingCompare { input, tolerance } => {
-            let chart = keyflow_musicxml::import_file(&input)
+            let chart = keyflow_lang::musicxml::import_file(&input)
                 .map_err(|e| format!("musicxml import: {e}"))?;
             let pipeline = LayoutPipeline::new()?;
             let mode = LayoutMode::paginated_a4();
@@ -1950,7 +1950,11 @@ fn run(cli: Cli) -> Result<(), String> {
             // ContinuousScroll has no `pages`; render the whole scene as one image.
             // A snippet is sized to its content, not to its (unbounded) page.
             let svgs: Vec<String> = if matches!(mode, PresetMode::Snippet) {
-                vec![ChartPipeline::shared().map_err(|e| e.to_string())?.export_svg_snippet_embedded(&layout, 8.0)]
+                vec![
+                    ChartPipeline::shared()
+                        .map_err(|e| e.to_string())?
+                        .export_svg_snippet_embedded(&layout, 8.0),
+                ]
             } else if layout.pages.is_empty() {
                 vec![
                     pipeline
@@ -2069,8 +2073,8 @@ fn run(cli: Cli) -> Result<(), String> {
             let source = read_source(&chart)?;
             let parsed = parse_chart(&source)?;
             let mut thresholds = match ratings {
-                RatingsPreset::Speech => keyflow_sync::RatingThresholds::SPEECH,
-                RatingsPreset::Singing => keyflow_sync::RatingThresholds::SINGING,
+                RatingsPreset::Speech => keyflow_lang::sync::RatingThresholds::SPEECH,
+                RatingsPreset::Singing => keyflow_lang::sync::RatingThresholds::SINGING,
             };
             if let Some(v) = verified_threshold {
                 thresholds.verified = v;
@@ -2235,8 +2239,11 @@ fn run(cli: Cli) -> Result<(), String> {
             artist,
             style,
         } => {
-            let (width, height, spatium, margin) =
-                if phone { (390.0, 844.0, 5.5, 14.0) } else { (width, height, spatium, margin) };
+            let (width, height, spatium, margin) = if phone {
+                (390.0, 844.0, 5.5, 14.0)
+            } else {
+                (width, height, spatium, margin)
+            };
             pdfscore::cmd_pdf_score(&pdfscore::Args {
                 input: &input,
                 out_dir: out.as_deref(),
@@ -2269,7 +2276,7 @@ fn chordsheet_import(
     output: Option<&std::path::Path>,
     manifest: Option<&std::path::Path>,
 ) -> Result<(), String> {
-    use keyflow_chordsheet::manifest::Manifest;
+    use keyflow_lang::chordsheet::manifest::Manifest;
 
     let manifest_path = manifest.map(std::path::Path::to_path_buf).or_else(|| {
         // A backup keeps `manifest.json` one level up from `source/`.
@@ -2287,7 +2294,7 @@ fn chordsheet_import(
     let convert = |path: &std::path::Path| -> Result<String, String> {
         let source = std::fs::read_to_string(path)
             .map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
-        let chart = keyflow_chordsheet::import_str(&source, &manifest.options_for(path));
+        let chart = keyflow_lang::chordsheet::import_str(&source, &manifest.options_for(path));
         Ok(keyflow::text::chart::exporter::chart_to_keyflow(&chart))
     };
 

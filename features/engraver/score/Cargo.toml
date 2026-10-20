@@ -14,11 +14,10 @@ pdf = ["engraver-proto/pdf"]
 musicxml = { workspace = true }
 # Finale .musx: notes via its MusicXML converter, part layout from its
 # linked-part records (`finale` module).
-keyflow-musx = { workspace = true }
+keyflow-lang = { workspace = true, features = ["musicxml", "musx"] }
 thiserror = { workspace = true }
 # Format-level MusicXML decoding (.mxl unwrapping, entity decoding, the
 # articulation/dynamics tag tables) shared with every other importer.
-keyflow-musicxml = { workspace = true }
 # layout + SVG rendering (P2): CPU-only engraver tier
 engraver-proto = { workspace = true, features = ["svg"] }
 kurbo = { workspace = true }

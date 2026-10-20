@@ -1,0 +1,96 @@
+[package]
+name = "keyflow-lang"
+version.workspace = true
+edition = "2024"
+license.workspace = true
+description = "The Keyflow chart language: parser, chart model, and its import/export formats"
+
+[features]
+# Every format that needs no native library or GPU. Consumers take the root
+# workspace entry, which turns defaults OFF, and name the formats they use —
+# a wasm build must never pull `sync` or `lsp`. The defaults are what this
+# crate's own tests and `kf` build with.
+default = ["midi", "live", "musicxml", "musx", "orchestra", "manifest", "serde", "sync", "lsp"]
+highlighting = ["keyflow-proto/highlighting"]
+# ChordPro AST (de)serialization.
+serde = ["dep:serde"]
+midi = ["dep:midly"]
+live = ["midi"]
+musicxml = ["dep:musicxml", "dep:zip"]
+musx = ["dep:zip", "dep:flate2", "dep:roxmltree", "dep:regex", "dep:serde", "dep:serde_json"]
+orchestra = ["musicxml", "dep:keyflow-annotate"]
+chordsheet = []
+# Reads the `manifest.json` that a chordsheet.com account backup ships
+# alongside `source/*.txt`, so a batch import can recover the title and
+# artist the source text itself never carries.
+manifest = ["chordsheet", "dep:serde", "dep:serde_json"]
+# Synced lyrics. Lean: the pure-Rust trellis, tokenizer, SI-SDR benchmark,
+# the sidecar format, and the external (shell-out) separator/aligner
+# backends all build with no native deps.
+sync = ["dep:fts-sample", "dep:hound", "dep:midly", "dep:facet", "dep:facet-json"]
+# Self-contained inference: wav2vec2 (alignment) and HT-Demucs (separation)
+# via ONNX Runtime. Model weights are downloaded separately, never embedded.
+sync-onnx = ["sync", "dep:ort", "dep:ndarray"]
+# Download + cache model weights (`kf models pull`). Pure-Rust TLS via ureq.
+sync-download = ["sync", "dep:ureq", "dep:sha2"]
+# CUDA execution provider (implies `sync-onnx`); falls back to CPU at runtime.
+sync-cuda = ["sync-onnx", "ort/cuda"]
+# Whisper ASR (candle, pure Rust) — an LM-backed transcription baseline.
+sync-whisper = ["sync", "sync-download", "dep:candle-core", "dep:candle-nn", "dep:candle-transformers", "dep:tokenizers", "dep:serde_json", "dep:flate2", "dep:rand"]
+sync-whisper-cuda = ["sync-whisper", "candle-core/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
+# The `keyflow-lsp` language server binary.
+lsp = ["highlighting", "dep:tokio", "dep:tower-lsp", "dep:serde", "dep:serde_json", "dep:tracing-subscriber", "dep:dashmap"]
+
+[[bin]]
+name = "keyflow-lsp"
+path = "src/bin/keyflow-lsp.rs"
+required-features = ["lsp"]
+
+[dependencies]
+keyflow-proto.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+keyflow-annotate = { workspace = true, optional = true }
+midly = { version = "0.5", optional = true }
+musicxml = { workspace = true, optional = true }
+zip = { version = "2", default-features = false, features = ["deflate"], optional = true }
+flate2 = { version = "1", optional = true }
+roxmltree = { version = "0.20", optional = true }
+regex = { workspace = true, optional = true }
+serde = { workspace = true, features = ["derive"], optional = true }
+serde_json = { workspace = true, optional = true }
+
+fts-sample = { workspace = true, features = ["load"], optional = true }
+hound = { version = "3.5", optional = true }
+facet = { workspace = true, optional = true }
+facet-json = { workspace = true, optional = true }
+ort = { version = "=2.0.0-rc.10", optional = true, default-features = false, features = [
+    "std",
+    "ndarray",
+    "download-binaries",
+    "copy-dylibs",
+    "tracing",
+] }
+ndarray = { version = "0.16", optional = true }
+ureq = { version = "2.10", optional = true }
+sha2 = { version = "0.10", optional = true }
+candle-core = { version = "0.9", optional = true }
+candle-nn = { version = "0.9", optional = true }
+candle-transformers = { version = "0.9", optional = true }
+tokenizers = { version = "0.21", optional = true, default-features = false, features = ["onig"] }
+rand = { version = "0.8", optional = true }
+
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std"], optional = true }
+tower-lsp = { version = "0.20", optional = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
+dashmap = { version = "6", optional = true }
+
+[dev-dependencies]
+roxmltree = "0.20"
+rayon = "1"
+hound = "3.5"
+serde_json = "1"
+
+[lints]
+workspace = true

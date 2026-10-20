@@ -8,8 +8,8 @@
 use std::path::Path;
 
 use keyflow::Chart;
-use keyflow_sync::karaoke::{VoiceNote, VoiceTrack};
-use keyflow_sync::pipeline::SectionLyrics;
+use keyflow_lang::sync::karaoke::{VoiceNote, VoiceTrack};
+use keyflow_lang::sync::pipeline::SectionLyrics;
 
 #[cfg(feature = "reaper")]
 /// One entry of a MIDI source expanded to absolute ticks.
@@ -84,11 +84,13 @@ pub(crate) fn store_delta_encoded(
 #[cfg(feature = "reaper")]
 /// Standard base64 with padding, as REAPER writes `<X>` payloads.
 fn base64(bytes: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {
-        let n = chunk.iter().enumerate().fold(0u32, |n, (i, b)| n | u32::from(*b) << (16 - 8 * i));
+        let n = chunk
+            .iter()
+            .enumerate()
+            .fold(0u32, |n, (i, b)| n | u32::from(*b) << (16 - 8 * i));
         for i in 0..4 {
             if i <= chunk.len() {
                 out.push(ALPHABET[(n >> (18 - 6 * i) & 63) as usize] as char);
@@ -202,11 +204,11 @@ pub struct VoicesOpts<'a> {
 /// colored vocal part) from a chart's `voice` lanes. Notated timing; no audio
 /// needed. With `--reaper`, also writes a colored per-voice Reaper project.
 pub fn cmd_voices(opts: VoicesOpts<'_>) -> Result<(), String> {
-    use keyflow_sync::karaoke::voices_midi;
+    use keyflow_lang::sync::karaoke::voices_midi;
 
     let text = std::fs::read_to_string(opts.chart).map_err(|e| e.to_string())?;
     let chart = keyflow::parse(text.as_str()).map_err(|e| e.to_string())?;
-    let lane = keyflow_sync::lanes::parse(&text).map_err(|e| e.to_string())?;
+    let lane = keyflow_lang::sync::lanes::parse(&text).map_err(|e| e.to_string())?;
     let voices = chart_to_voices(&chart, lane.bpm, lane.time_sig);
     if voices.is_empty() {
         return Err("chart has no `voice {}` lanes (melody + lyrics)".into());
@@ -286,13 +288,13 @@ pub fn extract_section_lyrics(chart: &Chart) -> Vec<SectionLyrics> {
 // ---- kf models --------------------------------------------------------------
 
 pub fn cmd_models_list() -> Result<(), String> {
-    let reg = keyflow_sync::models::load_registry().map_err(|e| e.to_string())?;
+    let reg = keyflow_lang::sync::models::load_registry().map_err(|e| e.to_string())?;
     println!(
         "Models cache: {}\n",
-        keyflow_sync::models::models_dir().display()
+        keyflow_lang::sync::models::models_dir().display()
     );
     for m in &reg.models {
-        let present = if keyflow_sync::models::is_present(m) {
+        let present = if keyflow_lang::sync::models::is_present(m) {
             "✓ cached"
         } else {
             "  remote"
@@ -303,10 +305,10 @@ pub fn cmd_models_list() -> Result<(), String> {
 }
 
 pub fn cmd_models_pull(id: &str) -> Result<(), String> {
-    let reg = keyflow_sync::models::load_registry().map_err(|e| e.to_string())?;
-    let entry = keyflow_sync::models::find(&reg, id)
+    let reg = keyflow_lang::sync::models::load_registry().map_err(|e| e.to_string())?;
+    let entry = keyflow_lang::sync::models::find(&reg, id)
         .ok_or_else(|| format!("no model with id {id:?} in the registry (try `kf models list`)"))?;
-    let path = keyflow_sync::models::pull(&entry).map_err(|e| e.to_string())?;
+    let path = keyflow_lang::sync::models::pull(&entry).map_err(|e| e.to_string())?;
     println!("{id} ready at {}", path.display());
     Ok(())
 }
@@ -314,11 +316,11 @@ pub fn cmd_models_pull(id: &str) -> Result<(), String> {
 // ---- kf bench ---------------------------------------------------------------
 
 pub fn cmd_bench(reference: &Path, estimate: &Path, tool: &str) -> Result<(), String> {
-    use keyflow_sync::AudioBuffer;
+    use keyflow_lang::sync::AudioBuffer;
     let r = AudioBuffer::load_wav(reference).map_err(|e| e.to_string())?;
     let e = AudioBuffer::load_wav(estimate).map_err(|e| e.to_string())?;
     let scores =
-        keyflow_sync::bench::score_stem(&r.samples, &e.samples).map_err(|x| x.to_string())?;
+        keyflow_lang::sync::bench::score_stem(&r.samples, &e.samples).map_err(|x| x.to_string())?;
     println!("tool        SI-SDR     SDR");
     println!(
         "{tool:<10}  {:>6.1} dB  {:>6.1} dB",
@@ -341,7 +343,7 @@ pub struct SyncOpts<'a> {
     /// align a known song-order transcript.
     pub lyrics_file: Option<&'a Path>,
     /// Confidence cutoffs for the verified/review/failed rating buckets.
-    pub thresholds: keyflow_sync::RatingThresholds,
+    pub thresholds: keyflow_lang::sync::RatingThresholds,
     /// `<star>` token log-prob (None disables it). Absorbs non-transcript audio
     /// (ad-libs, instrumental, repeats) so mismatches don't drag words off.
     pub star_score: Option<f32>,
@@ -353,12 +355,12 @@ pub struct SyncOpts<'a> {
 
 #[cfg(feature = "onnx")]
 pub fn cmd_sync(chart: &Chart, opts: SyncOpts<'_>) -> Result<(), String> {
-    use keyflow_sync::align::tokenizer::Vocab;
-    use keyflow_sync::align::wav2vec2::Wav2Vec2Onnx;
-    use keyflow_sync::audio::AudioBuffer;
-    use keyflow_sync::models;
-    use keyflow_sync::separator::demucs::DemucsOnnx;
-    use keyflow_sync::{TimingMap, pipeline};
+    use keyflow_lang::sync::align::tokenizer::Vocab;
+    use keyflow_lang::sync::align::wav2vec2::Wav2Vec2Onnx;
+    use keyflow_lang::sync::audio::AudioBuffer;
+    use keyflow_lang::sync::models;
+    use keyflow_lang::sync::separator::demucs::DemucsOnnx;
+    use keyflow_lang::sync::{TimingMap, pipeline};
 
     let sections = match opts.lyrics_file {
         Some(path) => {
@@ -434,7 +436,7 @@ pub fn cmd_sync(chart: &Chart, opts: SyncOpts<'_>) -> Result<(), String> {
         &audio,
         separator
             .as_ref()
-            .map(|s| s as &dyn keyflow_sync::StemSeparator),
+            .map(|s| s as &dyn keyflow_lang::sync::StemSeparator),
     )
     .map_err(|e| e.to_string())?;
     if let Some(name) = sep_name {
@@ -481,17 +483,23 @@ pub fn cmd_sync(chart: &Chart, opts: SyncOpts<'_>) -> Result<(), String> {
 #[cfg(feature = "onnx")]
 fn align_known_lyrics(
     audio_path: &Path,
-    sections: &[keyflow_sync::pipeline::SectionLyrics],
+    sections: &[keyflow_lang::sync::pipeline::SectionLyrics],
     separate: bool,
     model_id: &str,
     star_score: Option<f32>,
-    thresholds: keyflow_sync::RatingThresholds,
-) -> Result<(keyflow_sync::TimingMap, keyflow_sync::AudioBuffer), String> {
-    use keyflow_sync::align::tokenizer::Vocab;
-    use keyflow_sync::align::wav2vec2::Wav2Vec2Onnx;
-    use keyflow_sync::audio::AudioBuffer;
-    use keyflow_sync::separator::demucs::DemucsOnnx;
-    use keyflow_sync::{models, pipeline};
+    thresholds: keyflow_lang::sync::RatingThresholds,
+) -> Result<
+    (
+        keyflow_lang::sync::TimingMap,
+        keyflow_lang::sync::AudioBuffer,
+    ),
+    String,
+> {
+    use keyflow_lang::sync::align::tokenizer::Vocab;
+    use keyflow_lang::sync::align::wav2vec2::Wav2Vec2Onnx;
+    use keyflow_lang::sync::audio::AudioBuffer;
+    use keyflow_lang::sync::separator::demucs::DemucsOnnx;
+    use keyflow_lang::sync::{models, pipeline};
 
     let audio = AudioBuffer::load_wav(audio_path).map_err(|e| e.to_string())?;
     println!(
@@ -538,7 +546,7 @@ fn align_known_lyrics(
         &audio,
         separator
             .as_ref()
-            .map(|s| s as &dyn keyflow_sync::StemSeparator),
+            .map(|s| s as &dyn keyflow_lang::sync::StemSeparator),
     )
     .map_err(|e| e.to_string())?;
     if let Some(name) = sep_name {
@@ -572,8 +580,8 @@ pub struct KaraokeOpts<'a> {
 /// and optionally a Reaper project (audio + lyrics MIDI).
 #[cfg(feature = "onnx")]
 pub fn cmd_karaoke(opts: KaraokeOpts<'_>) -> Result<(), String> {
-    use keyflow_sync::karaoke::{LyricEvent, lyrics_lrc, lyrics_midi};
-    use keyflow_sync::{RatingThresholds, lanes};
+    use keyflow_lang::sync::karaoke::{LyricEvent, lyrics_lrc, lyrics_midi};
+    use keyflow_lang::sync::{RatingThresholds, lanes};
 
     let chart_text = std::fs::read_to_string(opts.chart).map_err(|e| e.to_string())?;
     let chart = lanes::parse(&chart_text).map_err(|e| e.to_string())?;
@@ -679,12 +687,12 @@ pub fn cmd_karaoke(_opts: KaraokeOpts<'_>) -> Result<(), String> {
 /// Render the `sync {}` lane: per spine section, the aligned word onsets.
 #[cfg(feature = "onnx")]
 fn render_sync_lane(
-    chart: &keyflow_sync::lanes::LaneChart,
-    map: &keyflow_sync::TimingMap,
+    chart: &keyflow_lang::sync::lanes::LaneChart,
+    map: &keyflow_lang::sync::TimingMap,
     audio: &Path,
 ) -> String {
     use std::collections::BTreeMap;
-    let mut by_section: BTreeMap<u32, Vec<&keyflow_sync::WordEntry>> = BTreeMap::new();
+    let mut by_section: BTreeMap<u32, Vec<&keyflow_lang::sync::WordEntry>> = BTreeMap::new();
     for w in &map.words {
         by_section.entry(w.section).or_default().push(w);
     }
@@ -863,7 +871,7 @@ fn export_reaper_voices(
 #[cfg(all(feature = "reaper", feature = "onnx"))]
 fn export_reaper(
     audio_ref: &str,
-    events: &[keyflow_sync::karaoke::LyricEvent],
+    events: &[keyflow_lang::sync::karaoke::LyricEvent],
     bpm: f32,
     time_sig: (u8, u8),
     duration: f32,
@@ -946,11 +954,11 @@ pub struct TranscribeOpts<'a> {
 
 #[cfg(feature = "onnx")]
 pub fn cmd_transcribe(opts: TranscribeOpts<'_>) -> Result<(), String> {
-    use keyflow_sync::align::tokenizer::Vocab;
-    use keyflow_sync::align::wav2vec2::Wav2Vec2Onnx;
-    use keyflow_sync::audio::AudioBuffer;
-    use keyflow_sync::separator::demucs::DemucsOnnx;
-    use keyflow_sync::{RatingThresholds, models, pipeline};
+    use keyflow_lang::sync::align::tokenizer::Vocab;
+    use keyflow_lang::sync::align::wav2vec2::Wav2Vec2Onnx;
+    use keyflow_lang::sync::audio::AudioBuffer;
+    use keyflow_lang::sync::separator::demucs::DemucsOnnx;
+    use keyflow_lang::sync::{RatingThresholds, models, pipeline};
 
     let audio = AudioBuffer::load_wav(opts.audio).map_err(|e| e.to_string())?;
     let reg = models::load_registry().map_err(|e| e.to_string())?;
@@ -992,7 +1000,7 @@ pub fn cmd_transcribe(opts: TranscribeOpts<'_>) -> Result<(), String> {
         &audio,
         separator
             .as_ref()
-            .map(|s| s as &dyn keyflow_sync::StemSeparator),
+            .map(|s| s as &dyn keyflow_lang::sync::StemSeparator),
     )
     .map_err(|e| e.to_string())?;
 
@@ -1033,15 +1041,15 @@ pub fn cmd_transcribe(_opts: TranscribeOpts<'_>) -> Result<(), String> {
 #[cfg(feature = "whisper")]
 #[allow(unused_variables)]
 fn maybe_separate(
-    audio: keyflow_sync::AudioBuffer,
+    audio: keyflow_lang::sync::AudioBuffer,
     separate: bool,
-) -> Result<keyflow_sync::AudioBuffer, String> {
+) -> Result<keyflow_lang::sync::AudioBuffer, String> {
     if !separate {
         return Ok(audio);
     }
     #[cfg(feature = "onnx")]
     {
-        use keyflow_sync::{models, pipeline, separator::demucs::DemucsOnnx};
+        use keyflow_lang::sync::{models, pipeline, separator::demucs::DemucsOnnx};
         let reg = models::load_registry().map_err(|e| e.to_string())?;
         let se = models::find(&reg, "htdemucs-vocals")
             .ok_or_else(|| "no htdemucs-vocals entry".to_string())?;
@@ -1054,7 +1062,7 @@ fn maybe_separate(
         println!("separating vocals…");
         let sep = DemucsOnnx::load(&sp, "htdemucs-vocals").map_err(|e| e.to_string())?;
         let (vocals, _) =
-            pipeline::prepare_vocals(&audio, Some(&sep as &dyn keyflow_sync::StemSeparator))
+            pipeline::prepare_vocals(&audio, Some(&sep as &dyn keyflow_lang::sync::StemSeparator))
                 .map_err(|e| e.to_string())?;
         Ok(vocals)
     }
@@ -1068,9 +1076,9 @@ fn maybe_separate(
 /// `kf transcribe --engine whisper` — LM-backed ASR baseline (candle).
 #[cfg(feature = "whisper")]
 pub fn cmd_transcribe_whisper(opts: TranscribeOpts<'_>) -> Result<(), String> {
-    use keyflow_sync::audio::AudioBuffer;
-    use keyflow_sync::whisper::{Segment, WhisperAsr, ensure_model};
-    use keyflow_sync::{Rating, RatingThresholds, TimingMap};
+    use keyflow_lang::sync::audio::AudioBuffer;
+    use keyflow_lang::sync::whisper::{Segment, WhisperAsr, ensure_model};
+    use keyflow_lang::sync::{Rating, RatingThresholds, TimingMap};
 
     let audio = AudioBuffer::load_wav(opts.audio).map_err(|e| e.to_string())?;
     let vocals = maybe_separate(audio, opts.separate)?;
@@ -1115,7 +1123,7 @@ pub fn cmd_transcribe_whisper(opts: TranscribeOpts<'_>) -> Result<(), String> {
             let n = toks.len().max(1);
             let dur = (s.end - s.start) / n as f32;
             for (i, w) in toks.iter().enumerate() {
-                words.push(keyflow_sync::WordTiming {
+                words.push(keyflow_lang::sync::WordTiming {
                     word: w.to_string(),
                     start: s.start + dur * i as f32,
                     end: s.start + dur * (i as f32 + 1.0),
@@ -1139,7 +1147,7 @@ pub fn cmd_transcribe_whisper(opts: TranscribeOpts<'_>) -> Result<(), String> {
 /// Strip bracketed/parenthesized non-lyric annotations Whisper emits
 /// (`[Music]`, `(singing)`, …) and join the rest into a transcript string.
 #[cfg(all(feature = "whisper", feature = "onnx"))]
-fn clean_transcript(segments: &[keyflow_sync::whisper::Segment]) -> String {
+fn clean_transcript(segments: &[keyflow_lang::sync::whisper::Segment]) -> String {
     let mut out = String::new();
     for s in segments {
         let mut depth = 0i32;
@@ -1160,11 +1168,11 @@ fn clean_transcript(segments: &[keyflow_sync::whisper::Segment]) -> String {
 #[cfg(all(feature = "whisper", feature = "onnx"))]
 fn whisperx_align(
     opts: &TranscribeOpts<'_>,
-    vocals: &keyflow_sync::AudioBuffer,
-    segments: &[keyflow_sync::whisper::Segment],
+    vocals: &keyflow_lang::sync::AudioBuffer,
+    segments: &[keyflow_lang::sync::whisper::Segment],
 ) -> Result<(), String> {
-    use keyflow_sync::align::{align_words_star, tokenizer::Vocab, wav2vec2::Wav2Vec2Onnx};
-    use keyflow_sync::{RatingThresholds, TimingMap, models};
+    use keyflow_lang::sync::align::{align_words_star, tokenizer::Vocab, wav2vec2::Wav2Vec2Onnx};
+    use keyflow_lang::sync::{RatingThresholds, TimingMap, models};
 
     let transcript = clean_transcript(segments);
     if transcript.is_empty() {
@@ -1228,8 +1236,8 @@ pub struct GuideChartOpts<'a> {
 /// Merge Whisper's per-word output into [`SectionCue`]s, joining an adjacent
 /// "pre" + "chorus" into one "prechorus" cue (Whisper splits the compound).
 #[cfg(all(feature = "whisper", feature = "onnx"))]
-fn words_to_cues(words: &[keyflow_sync::WordTiming]) -> Vec<keyflow_sync::SectionCue> {
-    use keyflow_sync::SectionCue;
+fn words_to_cues(words: &[keyflow_lang::sync::WordTiming]) -> Vec<keyflow_lang::sync::SectionCue> {
+    use keyflow_lang::sync::SectionCue;
     let mut cues = Vec::new();
     let mut i = 0;
     while i < words.len() {
@@ -1262,10 +1270,10 @@ fn words_to_cues(words: &[keyflow_sync::WordTiming]) -> Vec<keyflow_sync::Sectio
 /// `kf guide-chart` — recover a keyflow arrangement from Click + Guide tracks.
 #[cfg(all(feature = "whisper", feature = "onnx"))]
 pub fn cmd_guide_chart(opts: GuideChartOpts<'_>) -> Result<(), String> {
-    use keyflow_sync::align::{align_words_star, tokenizer::Vocab, wav2vec2::Wav2Vec2Onnx};
-    use keyflow_sync::audio::AudioBuffer;
-    use keyflow_sync::whisper::{WhisperAsr, ensure_model};
-    use keyflow_sync::{cues_to_keyflow, detect_click_grid, models};
+    use keyflow_lang::sync::align::{align_words_star, tokenizer::Vocab, wav2vec2::Wav2Vec2Onnx};
+    use keyflow_lang::sync::audio::AudioBuffer;
+    use keyflow_lang::sync::whisper::{WhisperAsr, ensure_model};
+    use keyflow_lang::sync::{cues_to_keyflow, detect_click_grid, models};
 
     // 1. Click track → tempo + bar grid.
     let click = AudioBuffer::load_wav(opts.click).map_err(|e| e.to_string())?;

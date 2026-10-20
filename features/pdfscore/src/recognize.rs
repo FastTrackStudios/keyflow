@@ -265,8 +265,12 @@ fn staves_of(page: &Page) -> Vec<Staff> {
     while i + 4 < lines.len() {
         let w = &lines[i..i + 5];
         let gap = w[1].0 - w[0].0;
-        let even = w.windows(2).all(|p| ((p[1].0 - p[0].0) - gap).abs() < 0.08 * gap);
-        let aligned = w.iter().all(|l| (l.1 - w[0].1).abs() < 2.0 && (l.2 - w[0].2).abs() < 2.0);
+        let even = w
+            .windows(2)
+            .all(|p| ((p[1].0 - p[0].0) - gap).abs() < 0.08 * gap);
+        let aligned = w
+            .iter()
+            .all(|l| (l.1 - w[0].1).abs() < 2.0 && (l.2 - w[0].2).abs() < 2.0);
         if even && aligned && gap > 2.0 && gap < 20.0 {
             out.push(Staff {
                 top: w[0].0,
@@ -301,9 +305,9 @@ fn beams_of(page: &Page, sp: f64) -> Vec<Beam> {
         .iter()
         .filter_map(|f| {
             let els = f.path.elements();
-            let curved = els.iter().any(|e| {
-                matches!(e, kurbo::PathEl::CurveTo(..) | kurbo::PathEl::QuadTo(..))
-            });
+            let curved = els
+                .iter()
+                .any(|e| matches!(e, kurbo::PathEl::CurveTo(..) | kurbo::PathEl::QuadTo(..)));
             let b = f.path.bounding_box();
             if curved || els.len() > 7 || b.width() < 1.2 * sp {
                 return None;
@@ -345,7 +349,11 @@ fn words_of(glyphs: &[&Glyph]) -> Vec<Word> {
     });
     let mut words: Vec<Word> = Vec::new();
     for g in gs {
-        let adv = if g.advance > 0.0 { g.advance } else { 0.5 * g.size };
+        let adv = if g.advance > 0.0 {
+            g.advance
+        } else {
+            0.5 * g.size
+        };
         // In a chord font a capital A-G not after '/' is a new chord's
         // root, however tight the spacing ("F#add2" then "G#m").
         let new_root = is_chord_font(&g.font)
@@ -415,7 +423,12 @@ fn ties_of(
     page: &Page,
     staves: &[Staff],
     sp: f64,
-) -> (Vec<(f64, f64)>, Vec<(f64, f64)>, Vec<(f64, f64)>, Vec<(f64, f64)>) {
+) -> (
+    Vec<(f64, f64)>,
+    Vec<(f64, f64)>,
+    Vec<(f64, f64)>,
+    Vec<(f64, f64)>,
+) {
     let heads: Vec<(f64, f64)> = page
         .glyphs
         .iter()
@@ -444,7 +457,9 @@ fn ties_of(
             heads
                 .iter()
                 .copied()
-                .filter(|h| h.0 <= x_end && x_end - h.0 < 1.6 * sp && (h.1 - mid_y).abs() < 2.2 * sp)
+                .filter(|h| {
+                    h.0 <= x_end && x_end - h.0 < 1.6 * sp && (h.1 - mid_y).abs() < 2.2 * sp
+                })
                 .collect()
         };
         let lefts = near(b.x0);
@@ -453,7 +468,9 @@ fn ties_of(
         let rights: Vec<(f64, f64)> = heads
             .iter()
             .copied()
-            .filter(|h| h.0 > b.x1 - 1.6 * sp && h.0 < b.x1 + 0.8 * sp && (h.1 - mid_y).abs() < 2.2 * sp)
+            .filter(|h| {
+                h.0 > b.x1 - 1.6 * sp && h.0 < b.x1 + 0.8 * sp && (h.1 - mid_y).abs() < 2.2 * sp
+            })
             .collect();
         let pair = lefts
             .iter()
@@ -508,14 +525,20 @@ fn ties_of(
             continue;
         }
         // Over a system break: only one end has a head.
-        let staff = staves.iter().find(|s| mid_y > s.top - 3.0 * sp && mid_y < s.bottom() + 3.0 * sp);
+        let staff = staves
+            .iter()
+            .find(|s| mid_y > s.top - 3.0 * sp && mid_y < s.bottom() + 3.0 * sp);
         if let Some(st) = staff {
             if b.x1 > st.x1 - 2.0 * sp
-                && let Some(l) = lefts.iter().min_by(|a, b| (a.1 - mid_y).abs().total_cmp(&(b.1 - mid_y).abs()))
+                && let Some(l) = lefts
+                    .iter()
+                    .min_by(|a, b| (a.1 - mid_y).abs().total_cmp(&(b.1 - mid_y).abs()))
             {
                 starts.push(*l);
             } else if b.x0 < st.x0 + 12.0 * sp
-                && let Some(r) = rights.iter().min_by(|a, b| (a.1 - mid_y).abs().total_cmp(&(b.1 - mid_y).abs()))
+                && let Some(r) = rights
+                    .iter()
+                    .min_by(|a, b| (a.1 - mid_y).abs().total_cmp(&(b.1 - mid_y).abs()))
             {
                 stops.push(*r);
             }
@@ -614,13 +637,37 @@ fn bottom_line(clef: ClefSign) -> i32 {
 }
 
 fn step_of(d: i32) -> Step {
-    [Step::C, Step::D, Step::E, Step::F, Step::G, Step::A, Step::B][d.rem_euclid(7) as usize]
+    [
+        Step::C,
+        Step::D,
+        Step::E,
+        Step::F,
+        Step::G,
+        Step::A,
+        Step::B,
+    ][d.rem_euclid(7) as usize]
 }
 
 /// Key-signature alteration per step for a circle-of-fifths count.
 fn key_alter(fifths: i8, step: Step) -> i8 {
-    const SHARPS: [Step; 7] = [Step::F, Step::C, Step::G, Step::D, Step::A, Step::E, Step::B];
-    const FLATS: [Step; 7] = [Step::B, Step::E, Step::A, Step::D, Step::G, Step::C, Step::F];
+    const SHARPS: [Step; 7] = [
+        Step::F,
+        Step::C,
+        Step::G,
+        Step::D,
+        Step::A,
+        Step::E,
+        Step::B,
+    ];
+    const FLATS: [Step; 7] = [
+        Step::B,
+        Step::E,
+        Step::A,
+        Step::D,
+        Step::G,
+        Step::C,
+        Step::F,
+    ];
     if fifths > 0 {
         i8::from(SHARPS[..fifths as usize].contains(&step))
     } else if fifths < 0 {
@@ -703,7 +750,9 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                     .iter()
                     .enumerate()
                     .min_by(|a, b| {
-                        (a.1.mid() - g.origin.y).abs().total_cmp(&(b.1.mid() - g.origin.y).abs())
+                        (a.1.mid() - g.origin.y)
+                            .abs()
+                            .total_cmp(&(b.1.mid() - g.origin.y).abs())
                     })?
                     .0;
                 Some(Item {
@@ -721,7 +770,9 @@ pub fn recognize(pages: &[Page]) -> Recognized {
         let mut chord_glyphs: Vec<&Glyph> = Vec::new();
         for g in page.glyphs.iter().filter(|g| is_chord_font(&g.font)) {
             let twin = chord_glyphs.iter().any(|h| {
-                h.ch == g.ch && (h.origin.x - g.origin.x).abs() < 0.3 && (h.origin.y - g.origin.y).abs() < 0.3
+                h.ch == g.ch
+                    && (h.origin.x - g.origin.x).abs() < 0.3
+                    && (h.origin.y - g.origin.y).abs() < 0.3
             });
             if !twin {
                 chord_glyphs.push(g);
@@ -734,12 +785,18 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                 .chars()
                 .map(|ch| {
                     let m = chord_char(ch);
-                    if m.is_empty() { ch.to_string() } else { m.to_string() }
+                    if m.is_empty() {
+                        ch.to_string()
+                    } else {
+                        m.to_string()
+                    }
                 })
                 .collect();
         }
         // Overprinted duplicates (Opus draws some pieces twice).
-        chords.dedup_by(|a, b| a.text == b.text && (a.x0 - b.x0).abs() < 0.5 && (a.y - b.y).abs() < 0.5);
+        chords.dedup_by(|a, b| {
+            a.text == b.text && (a.x0 - b.x0).abs() < 0.5 && (a.y - b.y).abs() < 0.5
+        });
         let text_glyphs: Vec<&Glyph> = page
             .glyphs
             .iter()
@@ -803,7 +860,10 @@ pub fn recognize(pages: &[Page]) -> Recognized {
             }
             // The system's opening line is not a measure boundary.
             groups.retain(|g| g.x1 - first.x0 > 0.5 * sp || g.thick.len() > 1);
-            for it in items.iter_mut().filter(|i| sys.contains(&i.staff) && i.sym == Sym::Dot) {
+            for it in items
+                .iter_mut()
+                .filter(|i| sys.contains(&i.staff) && i.sym == Sym::Dot)
+            {
                 for g in &mut groups {
                     if it.g.origin.x > g.x1 && it.g.origin.x - g.x1 < 1.5 * sp {
                         g.dots_right = true;
@@ -866,12 +926,23 @@ pub fn recognize(pages: &[Page]) -> Recognized {
             let mut new_time = None;
             if !digits.is_empty() {
                 let mid = first.mid();
-                let num: String = digits.iter().filter(|d| d.1 < mid).map(|d| char::from_digit(d.2, 10).unwrap_or('4')).collect();
-                let den: String = digits.iter().filter(|d| d.1 >= mid).map(|d| char::from_digit(d.2, 10).unwrap_or('4')).collect();
+                let num: String = digits
+                    .iter()
+                    .filter(|d| d.1 < mid)
+                    .map(|d| char::from_digit(d.2, 10).unwrap_or('4'))
+                    .collect();
+                let den: String = digits
+                    .iter()
+                    .filter(|d| d.1 >= mid)
+                    .map(|d| char::from_digit(d.2, 10).unwrap_or('4'))
+                    .collect();
                 if let (Ok(n), Ok(d)) = (num.parse::<u32>(), den.parse::<u32>()) {
                     new_time = Some((n, d));
                 }
-                for it in items.iter_mut().filter(|i| sys.contains(&i.staff) && matches!(i.sym, Sym::Digit(_))) {
+                for it in items
+                    .iter_mut()
+                    .filter(|i| sys.contains(&i.staff) && matches!(i.sym, Sym::Digit(_)))
+                {
                     it.used = true;
                 }
             }
@@ -880,7 +951,10 @@ pub fn recognize(pages: &[Page]) -> Recognized {
             for g in &groups {
                 bounds.push((g.x1, Some(g.clone())));
             }
-            if bounds.last().is_some_and(|(x, _)| (first.x1 - x).abs() > sp) {
+            if bounds
+                .last()
+                .is_some_and(|(x, _)| (first.x1 - x).abs() > sp)
+            {
                 bounds.push((first.x1, None));
             }
             let mut first_in_system = true;
@@ -889,7 +963,9 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                 let (x1, ref close) = w[1];
                 let inside = |x: f64| x > x0 && x < x1;
                 let has_events = items.iter().any(|i| {
-                    sys.contains(&i.staff) && matches!(i.sym, Sym::Head(_) | Sym::Rest(_)) && inside(i.g.origin.x)
+                    sys.contains(&i.staff)
+                        && matches!(i.sym, Sym::Head(_) | Sym::Rest(_))
+                        && inside(i.g.origin.x)
                 });
                 if !has_events {
                     continue; // the prelude
@@ -929,7 +1005,14 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                             .take(sys.len())
                             .enumerate()
                             .map(|(k, s)| {
-                                (k as u8 + 1, Clef { sign: *s, line: None, octave_change: 0 })
+                                (
+                                    k as u8 + 1,
+                                    Clef {
+                                        sign: *s,
+                                        line: None,
+                                        octave_change: 0,
+                                    },
+                                )
                             })
                             .collect();
                         time = a.time;
@@ -956,7 +1039,11 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                     // Stems near this staff in this measure.
                     let my_stems: Vec<VLine> = stems
                         .iter()
-                        .filter(|s| inside(s.x) && s.y1 > staff.top - 5.0 * sp && s.y0 < staff.bottom() + 5.0 * sp)
+                        .filter(|s| {
+                            inside(s.x)
+                                && s.y1 > staff.top - 5.0 * sp
+                                && s.y0 < staff.bottom() + 5.0 * sp
+                        })
                         .copied()
                         .collect();
                     // Group noteheads by stem.
@@ -976,7 +1063,9 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                             (_, Some(s)) => by_stem.entry(s).or_default().push(i),
                         }
                     }
-                    let make_chord = |heads: Vec<usize>, stem: Option<VLine>, items: &mut Vec<Item>| {
+                    let make_chord = |heads: Vec<usize>,
+                                      stem: Option<VLine>,
+                                      items: &mut Vec<Item>| {
                         let head = match items[heads[0]].sym {
                             Sym::Head(h) => h,
                             _ => Head::Black,
@@ -989,7 +1078,8 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                         };
                         if let Some(s) = stem {
                             // The stem's far end: away from its noteheads.
-                            let hy: f64 = heads.iter().map(|&i| items[i].g.origin.y).sum::<f64>() / heads.len() as f64;
+                            let hy: f64 = heads.iter().map(|&i| items[i].g.origin.y).sum::<f64>()
+                                / heads.len() as f64;
                             let up = (s.y0 - hy).abs() > (s.y1 - hy).abs();
                             stem_up = Some(up);
                             let tip = if up { s.y0 } else { s.y1 };
@@ -998,7 +1088,9 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                                 .filter(|b| s.x > b.x0 - 0.3 && s.x < b.x1 + 0.3)
                                 .filter(|b| {
                                     let y = b.y_at(s.x);
-                                    y > s.y0 - 0.6 * sp && y < s.y1 + 0.6 * sp && (y - tip).abs() < 2.5 * sp
+                                    y > s.y0 - 0.6 * sp
+                                        && y < s.y1 + 0.6 * sp
+                                        && (y - tip).abs() < 2.5 * sp
                                 })
                                 .count();
                             let mut n_flags = 0;
@@ -1015,8 +1107,13 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                             note_type = shorter(note_type, n_beams as u8 + n_flags);
                         }
                         // Dots right of the rightmost notehead.
-                        let rx = heads.iter().map(|&i| items[i].g.origin.x).fold(f64::MIN, f64::max) + head_w;
-                        let head_ys: Vec<f64> = heads.iter().map(|&i| items[i].g.origin.y).collect();
+                        let rx = heads
+                            .iter()
+                            .map(|&i| items[i].g.origin.x)
+                            .fold(f64::MIN, f64::max)
+                            + head_w;
+                        let head_ys: Vec<f64> =
+                            heads.iter().map(|&i| items[i].g.origin.y).collect();
                         // Every notehead of a dotted chord carries its own
                         // dot: count dot COLUMNS, not dots.
                         let mut dot_xs: Vec<f64> = Vec::new();
@@ -1025,7 +1122,9 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                                 && !it.used
                                 && it.g.origin.x > rx - 0.2 * sp
                                 && it.g.origin.x < rx + 1.4 * sp
-                                && head_ys.iter().any(|hy| (hy - it.g.origin.y).abs() < 0.8 * sp)
+                                && head_ys
+                                    .iter()
+                                    .any(|hy| (hy - it.g.origin.y).abs() < 0.8 * sp)
                             {
                                 if !dot_xs.iter().any(|x| (x - it.g.origin.x).abs() < 0.4 * sp) {
                                     dot_xs.push(it.g.origin.x);
@@ -1034,7 +1133,10 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                             }
                         }
                         let dots = dot_xs.len().min(3) as u8;
-                        let mut hs: Vec<(f64, f64)> = heads.iter().map(|&i| (items[i].g.origin.x, items[i].g.origin.y)).collect();
+                        let mut hs: Vec<(f64, f64)> = heads
+                            .iter()
+                            .map(|&i| (items[i].g.origin.x, items[i].g.origin.y))
+                            .collect();
                         hs.sort_by(|a, b| b.1.total_cmp(&a.1));
                         let mut accidentals = vec![None; hs.len()];
                         for (n, (hx, hy)) in hs.iter().enumerate() {
@@ -1053,7 +1155,10 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                         let x = hs.iter().map(|h| h.0).fold(f64::MAX, f64::min);
                         let mut staccato = false;
                         for it in items.iter_mut() {
-                            if it.sym == Sym::Staccato && !it.used && (it.g.origin.x - x).abs() < 1.0 * sp {
+                            if it.sym == Sym::Staccato
+                                && !it.used
+                                && (it.g.origin.x - x).abs() < 1.0 * sp
+                            {
                                 if hs.iter().any(|h| (h.1 - it.g.origin.y).abs() < 2.5 * sp) {
                                     staccato = true;
                                     it.used = true;
@@ -1073,7 +1178,9 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                                 let dx = it.g.origin.x - rightmost;
                                 // The glyph's origin is where the line ends,
                                 // about 1.5 sp below the head it leaves.
-                                dx > 0.3 * sp && dx < 3.0 * sp && hs.iter().any(|h| (h.1 - it.g.origin.y).abs() < 2.2 * sp)
+                                dx > 0.3 * sp
+                                    && dx < 3.0 * sp
+                                    && hs.iter().any(|h| (h.1 - it.g.origin.y).abs() < 2.2 * sp)
                             } else {
                                 (it.g.origin.x - x).abs() < 1.2 * sp
                                     && hs.iter().any(|h| (h.1 - it.g.origin.y).abs() < 4.5 * sp)
@@ -1094,7 +1201,11 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                             y,
                             kind: EvKind::Chord {
                                 heads: hs,
-                                written: WrittenDuration { note_type: Some(note_type), dots, tuplet: None },
+                                written: WrittenDuration {
+                                    note_type: Some(note_type),
+                                    dots,
+                                    tuplet: None,
+                                },
                                 accidentals,
                                 staccato,
                                 slash: head == Head::Slash,
@@ -1112,7 +1223,12 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                     let mut stacks: Vec<Vec<usize>> = Vec::new();
                     for i in stemless {
                         match stacks.last_mut() {
-                            Some(st) if (items[st[0]].g.origin.x - items[i].g.origin.x).abs() < 0.8 * sp => st.push(i),
+                            Some(st)
+                                if (items[st[0]].g.origin.x - items[i].g.origin.x).abs()
+                                    < 0.8 * sp =>
+                            {
+                                st.push(i)
+                            }
                             _ => stacks.push(vec![i]),
                         }
                     }
@@ -1121,7 +1237,9 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                     }
                     // Rests.
                     for &i in &in_m {
-                        let Sym::Rest(kind) = items[i].sym else { continue };
+                        let Sym::Rest(kind) = items[i].sym else {
+                            continue;
+                        };
                         let g = items[i].g.clone();
                         let mut dots = 0u8;
                         for it in items.iter_mut() {
@@ -1143,11 +1261,19 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                             y: g.origin.y,
                             kind: match kind {
                                 RestKind::Measure => EvKind::Rest {
-                                    written: WrittenDuration { note_type: Some(NoteTypeValue::Whole), dots: 0, tuplet: None },
+                                    written: WrittenDuration {
+                                        note_type: Some(NoteTypeValue::Whole),
+                                        dots: 0,
+                                        tuplet: None,
+                                    },
                                     measure: true,
                                 },
                                 RestKind::Of(t) => EvKind::Rest {
-                                    written: WrittenDuration { note_type: Some(t), dots, tuplet: None },
+                                    written: WrittenDuration {
+                                        note_type: Some(t),
+                                        dots,
+                                        tuplet: None,
+                                    },
                                     measure: false,
                                 },
                             },
@@ -1161,7 +1287,10 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                 // eighth rests in 4/4 are eighths).
                 for k in 1..=sys.len() as u8 {
                     let is_slash = |e: &Ev| matches!(&e.kind, EvKind::Chord { slash: true, .. });
-                    let count = events.iter().filter(|e| e.staff_in_system == k && is_slash(e)).count() as u32;
+                    let count = events
+                        .iter()
+                        .filter(|e| e.staff_in_system == k && is_slash(e))
+                        .count() as u32;
                     if count == 0 {
                         continue;
                     }
@@ -1182,7 +1311,12 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                     };
                     if let Some(v) = value {
                         for e in events.iter_mut().filter(|e| e.staff_in_system == k) {
-                            if let EvKind::Chord { slash: true, written, .. } = &mut e.kind {
+                            if let EvKind::Chord {
+                                slash: true,
+                                written,
+                                ..
+                            } = &mut e.kind
+                            {
                                 written.note_type = Some(v);
                             }
                         }
@@ -1194,126 +1328,156 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                 let mut onsets: Vec<(f64, u32)> = Vec::new();
                 let mut alters: BTreeMap<(u8, i32), i8> = BTreeMap::new();
                 let at = |list: &[(f64, f64)], x: f64, y: f64| {
-                    list.iter().any(|p| (p.0 - x).abs() < 0.2 && (p.1 - y).abs() < 0.2)
+                    list.iter()
+                        .any(|p| (p.0 - x).abs() < 0.2 && (p.1 - y).abs() < 0.2)
                 };
                 for k in 1..=sys.len() as u8 {
                     let staff = staves[sys[usize::from(k) - 1]];
                     let clef = clefs[usize::from(k) - 1];
-                    let mut evs: Vec<&Ev> = events.iter().filter(|e| e.staff_in_system == k).collect();
+                    let mut evs: Vec<&Ev> =
+                        events.iter().filter(|e| e.staff_in_system == k).collect();
                     evs.sort_by(|a, b| a.x.total_cmp(&b.x));
                     let voices = split_voices(&evs, m.len_ticks, staff.mid(), sp);
                     for (v, evs) in voices.into_iter().enumerate() {
-                    let voice = (u32::from(k) - 1) * 4 + v as u32 + 1;
-                    let mut tick = 0u32;
-                    for (e, start) in evs {
-                        // A late-entering second voice starts where the
-                        // split put it, not at the barline.
-                        tick = tick.max(start);
-                        // Every staff's onsets place the text: when the top
-                        // staff rests, the bass carries the rhythm. A
-                        // whole-bar rest is centred, not on a beat.
-                        if !matches!(e.kind, EvKind::Rest { measure: true, .. }) {
-                            onsets.push((e.x, tick));
-                        }
-                        match &e.kind {
-                            EvKind::Rest { written, measure } => {
-                                let dur = if *measure { m.len_ticks } else { ticks_of(written) };
-                                m.events.push(Event::Rest(Rest {
-                                    tick,
-                                    duration: dur,
-                                    voice,
-                                    staff: k,
-                                    written: *written,
-                                    measure_rest: *measure,
-                                }));
-                                report.rests += 1;
-                                tick += dur;
+                        let voice = (u32::from(k) - 1) * 4 + v as u32 + 1;
+                        let mut tick = 0u32;
+                        for (e, start) in evs {
+                            // A late-entering second voice starts where the
+                            // split put it, not at the barline.
+                            tick = tick.max(start);
+                            // Every staff's onsets place the text: when the top
+                            // staff rests, the bass carries the rhythm. A
+                            // whole-bar rest is centred, not on a beat.
+                            if !matches!(e.kind, EvKind::Rest { measure: true, .. }) {
+                                onsets.push((e.x, tick));
                             }
-                            EvKind::Chord { heads, written, accidentals, staccato, slash, marks } => {
-                                let dur = ticks_of(written);
-                                let notes = heads
-                                    .iter()
-                                    .zip(accidentals)
-                                    .map(|((x, y), acc)| {
-                                        let d = bottom_line(clef) + staff.position(*y);
-                                        let tie_start = at(&tie_starts, *x, *y);
-                                        let tie_stop = at(&tie_stops, *x, *y);
-                                        if let Some(a) = acc {
-                                            alters.insert((k, d), *a);
-                                        } else if tie_stop
-                                            && !alters.contains_key(&(k, d))
-                                            && let Some(a) = prev_alters.get(&(k, d))
-                                        {
-                                            // Tied over the barline: the alteration
-                                            // carries, and holds for the bar.
-                                            alters.insert((k, d), *a);
-                                        }
-                                        let step = step_of(d);
-                                        let alter = alters
-                                            .get(&(k, d))
-                                            .copied()
-                                            .unwrap_or_else(|| key_alter(key.unwrap_or(0), step));
-                                        Note {
-                                            pitch: WrittenPitch { step, alter, octave: d.div_euclid(7) as i8 },
-                                            tie_start,
-                                            tie_stop,
-                                            accidental: acc.map(|a| {
-                                                match a {
-                                                    2 => "double-sharp",
-                                                    1 => "sharp",
-                                                    0 => "natural",
-                                                    -1 => "flat",
-                                                    _ => "flat-flat",
-                                                }
-                                                .to_string()
-                                            }),
-                                        }
-                                    })
-                                    .collect::<Vec<_>>();
-                                report.notes += notes.len();
-                                let mut articulations = std::collections::BTreeSet::new();
-                                if *staccato {
-                                    articulations.insert("staccato".to_string());
+                            match &e.kind {
+                                EvKind::Rest { written, measure } => {
+                                    let dur = if *measure {
+                                        m.len_ticks
+                                    } else {
+                                        ticks_of(written)
+                                    };
+                                    m.events.push(Event::Rest(Rest {
+                                        tick,
+                                        duration: dur,
+                                        voice,
+                                        staff: k,
+                                        written: *written,
+                                        measure_rest: *measure,
+                                    }));
+                                    report.rests += 1;
+                                    tick += dur;
                                 }
-                                // Read by the chart writer: an attack, not a pitch.
-                                if *slash {
-                                    articulations.insert("rhythm-slash".to_string());
+                                EvKind::Chord {
+                                    heads,
+                                    written,
+                                    accidentals,
+                                    staccato,
+                                    slash,
+                                    marks,
+                                } => {
+                                    let dur = ticks_of(written);
+                                    let notes = heads
+                                        .iter()
+                                        .zip(accidentals)
+                                        .map(|((x, y), acc)| {
+                                            let d = bottom_line(clef) + staff.position(*y);
+                                            let tie_start = at(&tie_starts, *x, *y);
+                                            let tie_stop = at(&tie_stops, *x, *y);
+                                            if let Some(a) = acc {
+                                                alters.insert((k, d), *a);
+                                            } else if tie_stop
+                                                && !alters.contains_key(&(k, d))
+                                                && let Some(a) = prev_alters.get(&(k, d))
+                                            {
+                                                // Tied over the barline: the alteration
+                                                // carries, and holds for the bar.
+                                                alters.insert((k, d), *a);
+                                            }
+                                            let step = step_of(d);
+                                            let alter =
+                                                alters.get(&(k, d)).copied().unwrap_or_else(|| {
+                                                    key_alter(key.unwrap_or(0), step)
+                                                });
+                                            Note {
+                                                pitch: WrittenPitch {
+                                                    step,
+                                                    alter,
+                                                    octave: d.div_euclid(7) as i8,
+                                                },
+                                                tie_start,
+                                                tie_stop,
+                                                accidental: acc.map(|a| {
+                                                    match a {
+                                                        2 => "double-sharp",
+                                                        1 => "sharp",
+                                                        0 => "natural",
+                                                        -1 => "flat",
+                                                        _ => "flat-flat",
+                                                    }
+                                                    .to_string()
+                                                }),
+                                            }
+                                        })
+                                        .collect::<Vec<_>>();
+                                    report.notes += notes.len();
+                                    let mut articulations = std::collections::BTreeSet::new();
+                                    if *staccato {
+                                        articulations.insert("staccato".to_string());
+                                    }
+                                    // Read by the chart writer: an attack, not a pitch.
+                                    if *slash {
+                                        articulations.insert("rhythm-slash".to_string());
+                                    }
+                                    for mark in marks {
+                                        articulations.insert((*mark).to_string());
+                                    }
+                                    m.events.push(Event::Chord(Chord {
+                                        tick,
+                                        duration: dur,
+                                        voice,
+                                        staff: k,
+                                        written: *written,
+                                        grace: false,
+                                        notes,
+                                        slur_start: heads
+                                            .iter()
+                                            .any(|(x, y)| at(&slur_starts, *x, *y)),
+                                        slur_stop: heads
+                                            .iter()
+                                            .any(|(x, y)| at(&slur_stops, *x, *y)),
+                                        articulations,
+                                        articulation_above: BTreeMap::new(),
+                                    }));
+                                    tick += dur;
                                 }
-                                for mark in marks {
-                                    articulations.insert((*mark).to_string());
-                                }
-                                m.events.push(Event::Chord(Chord {
-                                    tick,
-                                    duration: dur,
-                                    voice,
-                                    staff: k,
-                                    written: *written,
-                                    grace: false,
-                                    notes,
-                                    slur_start: heads.iter().any(|(x, y)| at(&slur_starts, *x, *y)),
-                                    slur_stop: heads.iter().any(|(x, y)| at(&slur_stops, *x, *y)),
-                                    articulations,
-                                    articulation_above: BTreeMap::new(),
-                                }));
-                                tick += dur;
                             }
                         }
-                    }
-                    // A second voice may stop short (Sibelius hides its
-                    // rests); any voice running long was misread.
-                    // A voice of nothing but rests says "silent" however it
-                    // is spelled (a lone half rest for the bar).
-                    let only_rests = m.events.iter().filter(|e| e.voice() == voice).all(|e| matches!(e, Event::Rest(_)));
-                    let wrong = !only_rests && if v == 0 { tick != m.len_ticks } else { tick > m.len_ticks };
-                    if wrong && tick != 0 {
-                        report.warnings.push(format!(
-                            "measure {} staff {k} voice {}: content {} quarters, meter {}",
-                            index + 1,
-                            v + 1,
-                            f64::from(tick) / f64::from(DIVISIONS),
-                            f64::from(m.len_ticks) / f64::from(DIVISIONS)
-                        ));
-                    }
+                        // A second voice may stop short (Sibelius hides its
+                        // rests); any voice running long was misread.
+                        // A voice of nothing but rests says "silent" however it
+                        // is spelled (a lone half rest for the bar).
+                        let only_rests = m
+                            .events
+                            .iter()
+                            .filter(|e| e.voice() == voice)
+                            .all(|e| matches!(e, Event::Rest(_)));
+                        let wrong = !only_rests
+                            && if v == 0 {
+                                tick != m.len_ticks
+                            } else {
+                                tick > m.len_ticks
+                            };
+                        if wrong && tick != 0 {
+                            report.warnings.push(format!(
+                                "measure {} staff {k} voice {}: content {} quarters, meter {}",
+                                index + 1,
+                                v + 1,
+                                f64::from(tick) / f64::from(DIVISIONS),
+                                f64::from(m.len_ticks) / f64::from(DIVISIONS)
+                            ));
+                        }
                     }
                 }
 
@@ -1331,7 +1495,8 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                         None => {
                             let frac = ((x - x0) / (x1 - x0).max(1.0)).clamp(0.0, 0.999);
                             let eighth = DIVISIONS / 2;
-                            ((frac * f64::from(bar_len) / f64::from(eighth)).round() as u32 * eighth)
+                            ((frac * f64::from(bar_len) / f64::from(eighth)).round() as u32
+                                * eighth)
                                 .min(bar_len.saturating_sub(eighth))
                         }
                     }
@@ -1346,7 +1511,10 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                 let centre = |w: &Word| (w.x0 + w.x1) / 2.0;
                 // A chord symbol is left-aligned with its note (a cue is
                 // centred over its spot, hence `centre` for the bar above).
-                for c in chords.iter().filter(|c| c.y < first.top && c.y > above_limit && in_span(c.x0 + 1.0 * sp)) {
+                for c in chords
+                    .iter()
+                    .filter(|c| c.y < first.top && c.y > above_limit && in_span(c.x0 + 1.0 * sp))
+                {
                     m.directions.push(Direction {
                         tick: tick_at(c.x0 + 0.3 * sp),
                         kind: DirectionKind::Harmony(c.text.clone()),
@@ -1357,24 +1525,40 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                 let above = |l: &Word| {
                     l.y < first.top || (is_ending_label(&l.text) && l.y < first.top + 1.5 * sp)
                 };
-                for l in lines.iter().filter(|l| above(l) && l.y > above_limit && in_span(centre(l))) {
+                for l in lines
+                    .iter()
+                    .filter(|l| above(l) && l.y > above_limit && in_span(centre(l)))
+                {
                     if title.as_deref() == Some(l.text.as_str()) {
                         continue;
                     }
                     // A credit beside the title, not a cue for the band.
                     let lower = l.text.to_ascii_lowercase();
-                    if ["arranged by", "arr.", "arr ", "transcribed by", "composed by", "words and music", "copyright"]
-                        .iter()
-                        .any(|p| lower.starts_with(p))
+                    if [
+                        "arranged by",
+                        "arr.",
+                        "arr ",
+                        "transcribed by",
+                        "composed by",
+                        "words and music",
+                        "copyright",
+                    ]
+                    .iter()
+                    .any(|p| lower.starts_with(p))
                     {
                         continue;
                     }
                     // A measure number over the system start.
-                    if l.text.chars().all(|c| c.is_ascii_digit()) && (l.x0 - first.x0).abs() < 2.0 * sp {
+                    if l.text.chars().all(|c| c.is_ascii_digit())
+                        && (l.x0 - first.x0).abs() < 2.0 * sp
+                    {
                         continue;
                     }
                     if let Some(t) = tempo_of(l) {
-                        m.directions.push(Direction { tick: 0, kind: DirectionKind::Tempo(t) });
+                        m.directions.push(Direction {
+                            tick: 0,
+                            kind: DirectionKind::Tempo(t),
+                        });
                         continue;
                     }
                     // "1." / "2." over a bracket: an ending, not a cue.
@@ -1382,7 +1566,10 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                         m.ending = Some(l.text.replace(' ', ""));
                         continue;
                     }
-                    m.directions.push(Direction { tick: tick_at(l.x0), kind: DirectionKind::Words(l.text.clone()) });
+                    m.directions.push(Direction {
+                        tick: tick_at(l.x0),
+                        kind: DirectionKind::Words(l.text.clone()),
+                    });
                 }
                 prev_alters = alters;
                 // The ending bracket over this bar, if any: one whose line
@@ -1392,7 +1579,10 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                     brackets
                         .iter()
                         .find(|b| {
-                            b.y < first.top - 0.5 * sp && b.y > first.top - 8.0 * sp && b.x0 < mid && b.x1 > mid
+                            b.y < first.top - 0.5 * sp
+                                && b.y > first.top - 8.0 * sp
+                                && b.x0 < mid
+                                && b.x1 > mid
                         })
                         .map(|b| Cover {
                             opens: b.left && b.x0 > x0 - sp,
@@ -1402,7 +1592,10 @@ pub fn recognize(pages: &[Page]) -> Recognized {
                 measures.push(m);
             }
         }
-        for it in items.iter().filter(|i| !i.used && !matches!(i.sym, Sym::Brace | Sym::Clef(_))) {
+        for it in items
+            .iter()
+            .filter(|i| !i.used && !matches!(i.sym, Sym::Brace | Sym::Clef(_)))
+        {
             report.warnings.push(format!(
                 "unclaimed {:?} '{}' at ({:.1}, {:.1}) page {}",
                 it.sym, it.g.ch, it.g.origin.x, it.g.origin.y, page.number
@@ -1424,7 +1617,11 @@ pub fn recognize(pages: &[Page]) -> Recognized {
         work_title: title,
         parts: vec![Part {
             id: "P1".into(),
-            name: if part_staves > 1 { "Keys".into() } else { "Part".into() },
+            name: if part_staves > 1 {
+                "Keys".into()
+            } else {
+                "Part".into()
+            },
             abbreviation: None,
             staves: part_staves,
             transpose: None,
@@ -1497,7 +1694,11 @@ fn split_voices<'e>(evs: &[&'e Ev], len: u32, mid: f64, sp: f64) -> Vec<Vec<(&'e
                     .filter(|&i| self.assign[i] == v)
                     .map(|i| self.evs[i].y)
                     .collect();
-                if ys.is_empty() { self.mid } else { ys.iter().sum::<f64>() / ys.len() as f64 }
+                if ys.is_empty() {
+                    self.mid
+                } else {
+                    ys.iter().sum::<f64>() / ys.len() as f64
+                }
             };
             if avg(0) <= avg(1) {
                 score += 5;
@@ -1546,7 +1747,8 @@ fn split_voices<'e>(evs: &[&'e Ev], len: u32, mid: f64, sp: f64) -> Vec<Vec<(&'e
                     }
                 });
                 // Two events at one x cannot share a voice.
-                let clash = (0..i).any(|j| self.assign[j] == v && (e.x - self.evs[j].x).abs() < 0.4 * self.sp);
+                let clash = (0..i)
+                    .any(|j| self.assign[j] == v && (e.x - self.evs[j].x).abs() < 0.4 * self.sp);
                 if !ok || clash {
                     continue;
                 }
@@ -1571,7 +1773,10 @@ fn split_voices<'e>(evs: &[&'e Ev], len: u32, mid: f64, sp: f64) -> Vec<Vec<(&'e
     match search.best {
         Some((_, assign, onset)) => {
             let pick = |v: u8| -> Vec<(&'e Ev, u32)> {
-                (0..evs.len()).filter(|&i| assign[i] == v).map(|i| (evs[i], onset[i])).collect()
+                (0..evs.len())
+                    .filter(|&i| assign[i] == v)
+                    .map(|i| (evs[i], onset[i]))
+                    .collect()
             };
             vec![pick(0), pick(1)]
         }
@@ -1593,7 +1798,10 @@ fn pair_ties(measures: &mut [Measure]) {
             .collect();
         idx.sort_by_key(|&e| m.events[e].tick());
         for e in idx {
-            by_voice.entry(m.events[e].voice()).or_default().push((mi, e));
+            by_voice
+                .entry(m.events[e].voice())
+                .or_default()
+                .push((mi, e));
         }
     }
     for chords in by_voice.values() {
@@ -1601,12 +1809,17 @@ fn pair_ties(measures: &mut [Measure]) {
             let ((ma, ea), (mb, eb)) = (w[0], w[1]);
             let pitches = |mi: usize, ei: usize| -> Vec<(WrittenPitch, bool, bool)> {
                 match &measures[mi].events[ei] {
-                    Event::Chord(c) => c.notes.iter().map(|n| (n.pitch, n.tie_start, n.tie_stop)).collect(),
+                    Event::Chord(c) => c
+                        .notes
+                        .iter()
+                        .map(|n| (n.pitch, n.tie_start, n.tie_stop))
+                        .collect(),
                     Event::Rest(_) => Vec::new(),
                 }
             };
             let (a, b) = (pitches(ma, ea), pitches(mb, eb));
-            let same = |p: &WrittenPitch, q: &WrittenPitch| p.step == q.step && p.octave == q.octave;
+            let same =
+                |p: &WrittenPitch, q: &WrittenPitch| p.step == q.step && p.octave == q.octave;
             let starts: Vec<WrittenPitch> = a
                 .iter()
                 .filter(|(p, start, _)| *start || b.iter().any(|(q, _, stop)| *stop && same(p, q)))
@@ -1682,7 +1895,9 @@ fn span_endings(measures: &mut [Measure], covers: &[Option<Cover>]) {
         if measures[i].ending.is_none() {
             continue;
         }
-        let Some(Some(first)) = covers.get(i) else { continue };
+        let Some(Some(first)) = covers.get(i) else {
+            continue;
+        };
         let mut bars = 1;
         let mut closed = first.closes;
         while !closed {
@@ -1704,7 +1919,8 @@ fn is_ending_label(text: &str) -> bool {
     let t = text.replace(' ', "");
     !t.is_empty()
         && t.split(',').all(|p| {
-            p.strip_suffix('.').is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+            p.strip_suffix('.')
+                .is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
         })
 }
 
@@ -1725,7 +1941,10 @@ fn tempo_of(l: &Word) -> Option<TempoMark> {
         "e." => ("eighth", 1),
         _ => return None,
     };
-    let per_minute: String = rest.chars().take_while(|c| c.is_ascii_digit() || *c == '-').collect();
+    let per_minute: String = rest
+        .chars()
+        .take_while(|c| c.is_ascii_digit() || *c == '-')
+        .collect();
     (!per_minute.is_empty()).then(|| TempoMark {
         text: None,
         beat_unit: beat_unit.into(),
@@ -1747,7 +1966,11 @@ mod tests {
             y,
             kind: EvKind::Chord {
                 heads: vec![(x, y)],
-                written: WrittenDuration { note_type: Some(t), dots: 0, tuplet: None },
+                written: WrittenDuration {
+                    note_type: Some(t),
+                    dots: 0,
+                    tuplet: None,
+                },
                 accidentals: vec![None],
                 staccato: false,
                 slash: false,
@@ -1763,7 +1986,11 @@ mod tests {
             up: None,
             y,
             kind: EvKind::Rest {
-                written: WrittenDuration { note_type: Some(t), dots: 0, tuplet: None },
+                written: WrittenDuration {
+                    note_type: Some(t),
+                    dots: 0,
+                    tuplet: None,
+                },
                 measure: false,
             },
         }
@@ -1773,14 +2000,26 @@ mod tests {
     fn a_held_chord_under_a_line_is_two_voices() {
         // Can't Stop the Feeling, bar 1: a quarter rest over a whole-note
         // chord at one x, then six eighths — every stem down.
-        let mut evs = vec![rest(90.0, 158.0, NoteTypeValue::Quarter), note(90.0, 180.0, None, NoteTypeValue::Whole)];
+        let mut evs = vec![
+            rest(90.0, 158.0, NoteTypeValue::Quarter),
+            note(90.0, 180.0, None, NoteTypeValue::Whole),
+        ];
         for k in 0..6 {
-            evs.push(note(126.0 + 18.0 * f64::from(k), 156.0, Some(false), NoteTypeValue::Eighth));
+            evs.push(note(
+                126.0 + 18.0 * f64::from(k),
+                156.0,
+                Some(false),
+                NoteTypeValue::Eighth,
+            ));
         }
         let refs: Vec<&Ev> = evs.iter().collect();
         let voices = split_voices(&refs, 4 * DIVISIONS, 168.0, 5.0);
         assert_eq!(voices.len(), 2);
-        let len = |v: &[(&Ev, u32)]| v.iter().map(|(e, _)| ev_ticks(e, 4 * DIVISIONS)).sum::<u32>();
+        let len = |v: &[(&Ev, u32)]| {
+            v.iter()
+                .map(|(e, _)| ev_ticks(e, 4 * DIVISIONS))
+                .sum::<u32>()
+        };
         assert_eq!(len(&voices[0]), 4 * DIVISIONS);
         assert_eq!(len(&voices[1]), 4 * DIVISIONS);
     }
@@ -1791,14 +2030,22 @@ mod tests {
         // a second voice's quarter under it (its earlier rests hidden).
         let mut evs = Vec::new();
         for k in 0..6 {
-            evs.push(note(100.0 + 20.0 * f64::from(k), 234.0, Some(true), NoteTypeValue::Eighth));
+            evs.push(note(
+                100.0 + 20.0 * f64::from(k),
+                234.0,
+                Some(true),
+                NoteTypeValue::Eighth,
+            ));
         }
         evs.push(note(230.0, 215.0, Some(false), NoteTypeValue::Quarter));
         evs.push(rest(230.0, 202.0, NoteTypeValue::Quarter));
         let refs: Vec<&Ev> = evs.iter().collect();
         let voices = split_voices(&refs, 4 * DIVISIONS, 230.0, 5.0);
         assert_eq!(voices.len(), 2);
-        let late = voices.iter().find(|v| v.len() == 1).expect("a one-event voice");
+        let late = voices
+            .iter()
+            .find(|v| v.len() == 1)
+            .expect("a one-event voice");
         assert_eq!(late[0].1, 3 * DIVISIONS, "it starts on beat 4");
     }
 

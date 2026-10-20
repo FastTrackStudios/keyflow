@@ -22,7 +22,7 @@ use engraver_proto::engraver::layout::chart::LayoutMode;
 const TWO_BARS: &str = "VS: | Cmaj7 F#m7b5 | Bbmaj9 G7b9 |\n";
 
 fn chart(source: &str) -> keyflow_proto::Chart {
-    keyflow_text::chart::parse_chart(source).expect("the fixture parses")
+    keyflow_lang::text::chart::parse_chart(source).expect("the fixture parses")
 }
 
 #[test]

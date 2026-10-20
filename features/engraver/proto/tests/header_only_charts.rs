@@ -25,7 +25,7 @@ mod glyph {
 /// Every text run the engraved page draws, in order.
 fn drawn_text(source: &str) -> Vec<String> {
     let pipeline = ChartPipeline::shared().expect("the pipeline builds");
-    let chart = keyflow_text::chart::parse_chart(source).expect("parses");
+    let chart = keyflow_lang::text::chart::parse_chart(source).expect("parses");
     let laid_out = pipeline.layout_preset(
         &chart,
         Preset::Page,

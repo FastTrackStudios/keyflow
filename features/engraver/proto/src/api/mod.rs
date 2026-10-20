@@ -100,7 +100,8 @@ pub mod chart {
         text: &str,
         mode: &LayoutMode,
     ) -> Result<ChartLayoutResult, ChartLayoutError> {
-        let chart = keyflow_text::chart::parse_chart(text).map_err(ChartLayoutError::Parse)?;
+        let chart =
+            keyflow_lang::text::chart::parse_chart(text).map_err(ChartLayoutError::Parse)?;
         layout_chart(&chart, mode)
     }
 

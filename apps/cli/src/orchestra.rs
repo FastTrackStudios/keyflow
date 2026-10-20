@@ -2,12 +2,12 @@
 
 use std::path::Path;
 
-use keyflow_orchestra::analysis::analyze;
-use keyflow_orchestra::{Config, ProfileKind, detect_profile, process_part};
+use keyflow_lang::orchestra::analysis::analyze;
+use keyflow_lang::orchestra::{Config, ProfileKind, detect_profile, process_part};
 
 /// `kf score <file>` — instrumentation / articulation / structure report.
 pub fn score_report(input: &Path) -> Result<(), String> {
-    let score = keyflow_orchestra::score::load(input).map_err(|e| e.to_string())?;
+    let score = keyflow_lang::orchestra::score::load(input).map_err(|e| e.to_string())?;
     let report = analyze(&score);
 
     println!(
@@ -85,7 +85,7 @@ pub fn orchestrate(
     part_filter: Option<&str>,
     profile_override: Option<&str>,
 ) -> Result<(), String> {
-    let score = keyflow_orchestra::score::load(input).map_err(|e| e.to_string())?;
+    let score = keyflow_lang::orchestra::score::load(input).map_err(|e| e.to_string())?;
     let mut total_notes = 0usize;
     let mut total_ccs = 0usize;
     for part in &score.parts {

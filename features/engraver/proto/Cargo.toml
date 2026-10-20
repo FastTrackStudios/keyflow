@@ -60,7 +60,7 @@ pdf = [
 # the separate `pdf` feature above.
 engraver = ["svg", "wgpu"]
 engraver-example = ["engraver", "dep:winit", "dep:pollster", "dep:env_logger", "dep:log"]
-midi-import = ["engraver", "dep:keyflow-midi"]
+midi-import = ["engraver", "keyflow-lang/midi"]
 
 [dependencies]
 tracing = "0.1"
@@ -71,8 +71,7 @@ regex = "1.11.3"
 derive_more = { version = "1.0", features = ["debug", "display", "from", "error"] }
 
 keyflow-proto = { workspace = true, features = ["serde"] }
-keyflow-text.workspace = true
-keyflow-midi = { workspace = true, optional = true }
+keyflow-lang.workspace = true
 facet.workspace = true
 helgoboss-midi = "0.4.0"
 
@@ -113,7 +112,7 @@ uuid = { version = "1.0", features = ["serde", "v4"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 pollster = "0.4"
 keyflow = { workspace = true, features = ["text"] }
-keyflow-musicxml.workspace = true
+keyflow-lang = { workspace = true, features = ["manifest", "musicxml"] }
 
 [lints]
 workspace = true

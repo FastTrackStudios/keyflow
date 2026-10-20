@@ -891,13 +891,27 @@ mod tests {
     fn up_curves_bow_up_and_down_curves_bow_down() {
         // y grows downward: "up" means the curve's control points sit above
         // (smaller y than) its ends.
-        let start = SlurEndpoint { x: 0.0, y: 10.0, stem_up: false };
-        let end = SlurEndpoint { x: 40.0, y: 10.0, stem_up: false };
+        let start = SlurEndpoint {
+            x: 0.0,
+            y: 10.0,
+            stem_up: false,
+        };
+        let end = SlurEndpoint {
+            x: 40.0,
+            y: 10.0,
+            stem_up: false,
+        };
         let config = SlurTieConfig::default();
         let up = layout_tie(&start, &end, SlurDirection::Up, 1, 5.0, &config).control_points;
-        assert!(up.cp1.y < up.p1.y && up.cp2.y < up.p2.y, "up tie bows up: {up:?}");
+        assert!(
+            up.cp1.y < up.p1.y && up.cp2.y < up.p2.y,
+            "up tie bows up: {up:?}"
+        );
         let down = layout_tie(&start, &end, SlurDirection::Down, 2, 5.0, &config).control_points;
-        assert!(down.cp1.y > down.p1.y && down.cp2.y > down.p2.y, "down tie bows down: {down:?}");
+        assert!(
+            down.cp1.y > down.p1.y && down.cp2.y > down.p2.y,
+            "down tie bows down: {down:?}"
+        );
     }
 
     #[test]

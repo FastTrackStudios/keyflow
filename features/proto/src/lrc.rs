@@ -1,4 +1,4 @@
-//! Reading `.lrc` — the other direction from `keyflow_sync::karaoke::lyrics_lrc`.
+//! Reading `.lrc` — the other direction from `keyflow_lang::sync::karaoke::lyrics_lrc`.
 //!
 //! An LRC is a cheap, ubiquitous head start. Community databases
 //! (LRCLIB and the aggregators built on it) carry line-level timings for

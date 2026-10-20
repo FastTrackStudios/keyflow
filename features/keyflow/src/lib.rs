@@ -8,12 +8,12 @@
 #[cfg(feature = "svg")]
 pub use engraver;
 #[cfg(feature = "live")]
-pub use keyflow_live as live;
+pub use keyflow_lang::live;
 #[cfg(feature = "midi")]
-pub use keyflow_midi as midi;
-pub use keyflow_proto::*;
+pub use keyflow_lang::midi;
 #[cfg(feature = "text")]
-pub use keyflow_text as text;
+pub use keyflow_lang::text;
+pub use keyflow_proto::*;
 
 pub mod summary;
 
@@ -75,7 +75,7 @@ impl IntoChart for &String {
 /// lines (e.g. `Verse 1:`) to the section parser and fail.
 #[cfg(feature = "text")]
 fn parse_text_chart(source: &str) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError> {
-    keyflow_text::chart::parse_document(source)
+    keyflow_lang::text::chart::parse_document(source)
         .map(|(chart, _doc)| chart)
         .map_err(KeyflowSourceError::Text)
 }
@@ -83,28 +83,28 @@ fn parse_text_chart(source: &str) -> std::result::Result<keyflow_proto::Chart, K
 #[cfg(feature = "midi")]
 impl IntoChart for &[u8] {
     fn into_chart(self) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError> {
-        keyflow_midi::parse_midi_bytes(self).map_err(KeyflowSourceError::Midi)
+        keyflow_lang::midi::parse_midi_bytes(self).map_err(KeyflowSourceError::Midi)
     }
 }
 
 #[cfg(feature = "midi")]
 impl IntoChart for Vec<u8> {
     fn into_chart(self) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError> {
-        keyflow_midi::parse_midi_bytes(&self).map_err(KeyflowSourceError::Midi)
+        keyflow_lang::midi::parse_midi_bytes(&self).map_err(KeyflowSourceError::Midi)
     }
 }
 
 #[cfg(feature = "midi")]
 impl IntoChart for &std::path::Path {
     fn into_chart(self) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError> {
-        keyflow_midi::parse_midi_path(self).map_err(KeyflowSourceError::Midi)
+        keyflow_lang::midi::parse_midi_path(self).map_err(KeyflowSourceError::Midi)
     }
 }
 
 #[cfg(feature = "midi")]
 impl IntoChart for std::path::PathBuf {
     fn into_chart(self) -> std::result::Result<keyflow_proto::Chart, KeyflowSourceError> {
-        keyflow_midi::parse_midi_path(self.as_path()).map_err(KeyflowSourceError::Midi)
+        keyflow_lang::midi::parse_midi_path(self.as_path()).map_err(KeyflowSourceError::Midi)
     }
 }
 
@@ -119,7 +119,7 @@ pub fn parse<T: IntoChart>(
 pub fn parse_document(
     input: &str,
 ) -> std::result::Result<(keyflow_proto::Chart, keyflow_proto::document::KfDocument), String> {
-    keyflow_text::chart::parse_document(input)
+    keyflow_lang::text::chart::parse_document(input)
 }
 
 // Local modules

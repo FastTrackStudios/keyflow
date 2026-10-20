@@ -772,9 +772,9 @@ fn command_collision_rect(cmd: &PaintCommand) -> Option<Rect> {
         // A straight line's box has no area, and would drop out of the shape
         // (a volta's top line and hooks did, so a repeat count sat under the
         // bracket): it takes its stroke's thickness.
-        PaintCommand::Line { start, end, width, .. } => {
-            Some(Rect::from_points(*start, *end).inflate(width * 0.5, width * 0.5))
-        }
+        PaintCommand::Line {
+            start, end, width, ..
+        } => Some(Rect::from_points(*start, *end).inflate(width * 0.5, width * 0.5)),
         other => other.bounding_box(),
     }
 }
@@ -1039,17 +1039,29 @@ mod tests {
     fn text_clears_a_volta_bracket_placed_before_it() {
         let frame = test_frame();
         let mut skyline = MeasureSkyline::new();
-        let volta = Volta { numbers: vec![1], label: String::new(), length_measures: 1 };
+        let volta = Volta {
+            numbers: vec![1],
+            label: String::new(),
+            length_measures: 1,
+        };
         let bracket = render_volta_span(&volta, &frame, 220.0, true, false, &mut 0);
         let line_y = frame.staff_top() - frame.spatium * 3.0;
         autoplace_node(&mut skyline, bracket, true, 1.0).expect("bracket placed");
 
         let count = SceneNode::leaf(
             SemanticId::new(ElementType::RehearsalMark, 1),
-            vec![PaintCommand::text("x2", "FreeSans", 20.0, Point::new(190.0, line_y + 12.0), Color::BLACK)],
+            vec![PaintCommand::text(
+                "x2",
+                "FreeSans",
+                20.0,
+                Point::new(190.0, line_y + 12.0),
+                Color::BLACK,
+            )],
         );
         let placed = autoplace_node(&mut skyline, count, true, 1.0).expect("count placed");
-        let PaintCommand::Text { position, .. } = &placed.commands[0] else { panic!("text") };
+        let PaintCommand::Text { position, .. } = &placed.commands[0] else {
+            panic!("text")
+        };
         assert!(
             position.y + 20.0 * 0.1 < line_y,
             "the count's baseline {} should sit above the bracket line at {line_y}",

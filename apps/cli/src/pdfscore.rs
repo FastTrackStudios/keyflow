@@ -53,7 +53,8 @@ pub struct Args<'a> {
 }
 
 pub fn cmd_pdf_score(args: &Args<'_>) -> Result<(), String> {
-    let bytes = std::fs::read(args.input).map_err(|e| format!("read {}: {e}", args.input.display()))?;
+    let bytes =
+        std::fs::read(args.input).map_err(|e| format!("read {}: {e}", args.input.display()))?;
     let pages = keyflow_pdfscore::read_pdf(&bytes).map_err(|e| e.to_string())?;
     let rec = keyflow_pdfscore::recognize(&pages);
     let r = &rec.report;
@@ -68,11 +69,21 @@ pub fn cmd_pdf_score(args: &Args<'_>) -> Result<(), String> {
         r.ties,
         r.repeats
     );
-    for (i, m) in rec.score.parts.first().map_or(&[][..], |p| &p.measures[..]).iter().enumerate() {
+    for (i, m) in rec
+        .score
+        .parts
+        .first()
+        .map_or(&[][..], |p| &p.measures[..])
+        .iter()
+        .enumerate()
+    {
         if let Some(label) = &m.ending {
             let span = match m.ending_bars {
                 0 => "no bracket found".to_string(),
-                n => format!("{n} bar(s), {}", if m.ending_open { "open" } else { "closed" }),
+                n => format!(
+                    "{n} bar(s), {}",
+                    if m.ending_open { "open" } else { "closed" }
+                ),
             };
             println!("  ending {label} at bar {}: {span}", i + 1);
         }
@@ -96,8 +107,11 @@ pub fn cmd_pdf_score(args: &Args<'_>) -> Result<(), String> {
 
     if args.kf {
         let path = out_dir.join(format!("{stem}.kf"));
-        std::fs::write(&path, keyflow_pdfscore::to_keyflow_with(&rec.score, args.artist, args.style.into()))
-            .map_err(|e| e.to_string())?;
+        std::fs::write(
+            &path,
+            keyflow_pdfscore::to_keyflow_with(&rec.score, args.artist, args.style.into()),
+        )
+        .map_err(|e| e.to_string())?;
         println!("{}", path.display());
     }
 
@@ -123,7 +137,10 @@ pub fn cmd_pdf_score(args: &Args<'_>) -> Result<(), String> {
             println!("{} ({} page(s))", path.display(), layout.pages.len());
         }
         Format::Svg | Format::Png => {
-            for (i, svg) in engraver_score::render::svg_pages(&layout, fonts).iter().enumerate() {
+            for (i, svg) in engraver_score::render::svg_pages(&layout, fonts)
+                .iter()
+                .enumerate()
+            {
                 let p = if args.format == Format::Svg {
                     let p = PathBuf::from(format!("{}.p{}.svg", base.display(), i + 1));
                     std::fs::write(&p, svg).map_err(|e| e.to_string())?;

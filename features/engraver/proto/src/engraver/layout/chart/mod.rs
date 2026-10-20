@@ -79,8 +79,8 @@ use crate::engraver::scene::traverse::SceneNodeExt;
 use crate::engraver::style::MStyle;
 use crate::key::KeySpelling;
 use crate::sections::SectionType;
-use kurbo::{Affine, Rect};
 use crate::time::MusicalPositionExt as _;
+use kurbo::{Affine, Rect};
 use tracing::debug;
 
 fn key_signature_fifths(chart: &Chart) -> i8 {
@@ -2122,17 +2122,19 @@ impl ChartLayoutEngine {
                             );
                             pending_notation.push((node, false, true));
                         }
-                        if let Some(span) =
-                            volta_at(chart_section.measures(), measure_idx, local_measure_idx == 0)
-                        {
-                            let volta_end_local = (local_measure_idx + span.remaining)
-                                .min(distributed_widths.len());
+                        if let Some(span) = volta_at(
+                            chart_section.measures(),
+                            measure_idx,
+                            local_measure_idx == 0,
+                        ) {
+                            let volta_end_local =
+                                (local_measure_idx + span.remaining).min(distributed_widths.len());
                             let volta_x_end = measure_x
                                 + distributed_widths[local_measure_idx..volta_end_local]
                                     .iter()
                                     .sum::<f64>();
-                            let closes_in_system = local_measure_idx + span.remaining
-                                <= distributed_widths.len();
+                            let closes_in_system =
+                                local_measure_idx + span.remaining <= distributed_widths.len();
                             let volta_node = notation_renderer::render_volta_span(
                                 span.volta,
                                 &notation_frame,
@@ -3510,17 +3512,19 @@ impl ChartLayoutEngine {
                         for n in placed {
                             root.add_child(n);
                         }
-                        if let Some(span) =
-                            volta_at(chart_section.measures(), measure_idx, local_measure_idx == 0)
-                        {
-                            let volta_end_local = (local_measure_idx + span.remaining)
-                                .min(distributed_widths.len());
+                        if let Some(span) = volta_at(
+                            chart_section.measures(),
+                            measure_idx,
+                            local_measure_idx == 0,
+                        ) {
+                            let volta_end_local =
+                                (local_measure_idx + span.remaining).min(distributed_widths.len());
                             let volta_x_end = measure_x
                                 + distributed_widths[local_measure_idx..volta_end_local]
                                     .iter()
                                     .sum::<f64>();
-                            let closes_in_system = local_measure_idx + span.remaining
-                                <= distributed_widths.len();
+                            let closes_in_system =
+                                local_measure_idx + span.remaining <= distributed_widths.len();
                             let volta_node = notation_renderer::render_volta_span(
                                 span.volta,
                                 &notation_frame,
@@ -3659,7 +3663,9 @@ impl ChartLayoutEngine {
         // A section of written notes keeps one grid: as many bars a line as
         // its widest bar allows, every line. Greedy packing would set one
         // bar here and two there, and a chart is read by counting bars.
-        if measures.iter().any(|m| self.melody_width_needed(m) > 0.0 || is_dense_rhythm(m))
+        if measures
+            .iter()
+            .any(|m| self.melody_width_needed(m) > 0.0 || is_dense_rhythm(m))
             && !measures.iter().any(|m| m.volta_start.is_some())
         {
             let widest = widths
@@ -3958,13 +3964,18 @@ fn volta_at(
     system_start: bool,
 ) -> Option<VoltaSpan<'_>> {
     let closed = |start: usize, len: usize| {
-        measures.get(start + len.max(1) - 1).is_some_and(|m| {
-            matches!(m.end_repeat, crate::chart::notations::RepeatMark::Backward)
-        })
+        measures
+            .get(start + len.max(1) - 1)
+            .is_some_and(|m| matches!(m.end_repeat, crate::chart::notations::RepeatMark::Backward))
     };
     if let Some(volta) = &measures.get(idx)?.volta_start {
         let len = usize::from(volta.length_measures.max(1));
-        return Some(VoltaSpan { volta, remaining: len, continued: false, closed: closed(idx, len) });
+        return Some(VoltaSpan {
+            volta,
+            remaining: len,
+            continued: false,
+            closed: closed(idx, len),
+        });
     }
     if !system_start {
         return None;

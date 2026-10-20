@@ -190,7 +190,7 @@ fn lord_of_the_fight_a_major_seven_at_6_4_renders_triangle_seven() {
     let text_font = Arc::new(Vec::new());
     let symbol_font = Arc::new(Vec::new());
     let engine = ChartLayoutEngine::new(style, text_font, symbol_font);
-    let chart = keyflow_musicxml::import_file(lord_of_the_fight_fixture())
+    let chart = keyflow_lang::musicxml::import_file(lord_of_the_fight_fixture())
         .expect("Lord of the Fight fixture should import");
 
     let source_measure_6 = chart
@@ -228,7 +228,7 @@ fn lord_of_the_fight_measure_5_staff_text_uses_expected_placement() {
     let text_font = Arc::new(Vec::new());
     let symbol_font = Arc::new(Vec::new());
     let engine = ChartLayoutEngine::new(style, text_font, symbol_font);
-    let chart = keyflow_musicxml::import_file(lord_of_the_fight_fixture())
+    let chart = keyflow_lang::musicxml::import_file(lord_of_the_fight_fixture())
         .expect("Lord of the Fight fixture should import");
 
     let source_measure_5 = chart
@@ -303,7 +303,7 @@ fn lord_of_the_fight_measure_5_add_bass_sits_near_measure_end() {
     let text_font = Arc::new(Vec::new());
     let symbol_font = Arc::new(Vec::new());
     let engine = ChartLayoutEngine::new(style, text_font, symbol_font);
-    let chart = keyflow_musicxml::import_file(lord_of_the_fight_fixture())
+    let chart = keyflow_lang::musicxml::import_file(lord_of_the_fight_fixture())
         .expect("Lord of the Fight fixture should import");
 
     let source_measure_5 = chart
@@ -369,7 +369,7 @@ fn lord_of_the_fight_a_over_c_sharp_at_10_1_has_no_conflicts() {
     let text_font = Arc::new(Vec::new());
     let symbol_font = Arc::new(Vec::new());
     let engine = ChartLayoutEngine::new(style, text_font, symbol_font);
-    let chart = keyflow_musicxml::import_file(lord_of_the_fight_fixture())
+    let chart = keyflow_lang::musicxml::import_file(lord_of_the_fight_fixture())
         .expect("Lord of the Fight fixture should import");
 
     let (measure_idx, chord_idx) = chart
@@ -419,7 +419,7 @@ fn lord_of_the_fight_a_over_c_sharp_at_10_1_has_no_conflicts() {
 fn lord_of_the_fight_long_endings_start_new_systems() {
     let style = test_style();
     let engine = ChartLayoutEngine::new(style, Arc::new(Vec::new()), Arc::new(Vec::new()));
-    let chart = keyflow_musicxml::import_file(lord_of_the_fight_fixture())
+    let chart = keyflow_lang::musicxml::import_file(lord_of_the_fight_fixture())
         .expect("Lord of the Fight fixture should import");
 
     let chorus_repeat = chart
@@ -465,7 +465,7 @@ fn lord_of_the_fight_start_of_system_dynamics_sit_under_clef_prefix() {
     let text_font = Arc::new(Vec::new());
     let symbol_font = Arc::new(Vec::new());
     let engine = ChartLayoutEngine::new(style, text_font, symbol_font);
-    let chart = keyflow_musicxml::import_file(lord_of_the_fight_fixture())
+    let chart = keyflow_lang::musicxml::import_file(lord_of_the_fight_fixture())
         .expect("Lord of the Fight fixture should import");
 
     let result = engine.layout_chart(&chart, &LayoutMode::default());
@@ -551,7 +551,7 @@ fn lord_of_the_fight_repeat_pass_dynamics_stack_under_section_cards() {
     let text_font = Arc::new(Vec::new());
     let symbol_font = Arc::new(Vec::new());
     let engine = ChartLayoutEngine::new(style, text_font, symbol_font);
-    let chart = keyflow_musicxml::import_file(lord_of_the_fight_fixture())
+    let chart = keyflow_lang::musicxml::import_file(lord_of_the_fight_fixture())
         .expect("Lord of the Fight fixture should import");
 
     let result = engine.layout_chart(&chart, &LayoutMode::default());
@@ -702,7 +702,7 @@ fn lord_of_the_fight_has_no_disallowed_visual_collisions() {
     let text_font = Arc::new(Vec::new());
     let symbol_font = Arc::new(Vec::new());
     let engine = ChartLayoutEngine::new(style, text_font, symbol_font);
-    let chart = keyflow_musicxml::import_file(lord_of_the_fight_fixture())
+    let chart = keyflow_lang::musicxml::import_file(lord_of_the_fight_fixture())
         .expect("Lord of the Fight fixture should import");
 
     let result = engine.layout_chart(&chart, &LayoutMode::default());
@@ -722,7 +722,7 @@ fn lord_of_the_fight_reports_dead_vertical_space_between_systems() {
     let text_font = Arc::new(Vec::new());
     let symbol_font = Arc::new(Vec::new());
     let engine = ChartLayoutEngine::new(style, text_font, symbol_font);
-    let chart = keyflow_musicxml::import_file(lord_of_the_fight_fixture())
+    let chart = keyflow_lang::musicxml::import_file(lord_of_the_fight_fixture())
         .expect("Lord of the Fight fixture should import");
 
     let result = engine.layout_chart(&chart, &LayoutMode::default());
@@ -758,7 +758,7 @@ fn layout_chart_meets_60hz_budget() {
     let text_font = Arc::new(Vec::new());
     let symbol_font = Arc::new(Vec::new());
     let engine = ChartLayoutEngine::new(style, text_font, symbol_font);
-    let chart = keyflow_musicxml::import_file(lord_of_the_fight_fixture())
+    let chart = keyflow_lang::musicxml::import_file(lord_of_the_fight_fixture())
         .expect("Lord of the Fight fixture should import");
 
     const FRAME_BUDGET_MS: f64 = 1000.0 / 60.0; // 16.67 ms
@@ -2347,7 +2347,7 @@ mod content_bounds_guard {
         let fonts = ChartFontBundle::new().unwrap();
         let style = crate::api::style::leak_lead_sheet_style();
         let engine = fonts.create_layout_engine(style);
-        let chart = keyflow_text::chart::parse_chart("1 4 6 5").unwrap();
+        let chart = keyflow_lang::text::chart::parse_chart("1 4 6 5").unwrap();
         let r = engine.layout_chart(&chart, &LayoutMode::ContinuousScroll { width: 800.0 });
         let b = r.content_bounds().expect("non-empty scene");
         // The last chord ("5") renders near x=595; the bounds must reach it.
@@ -2404,7 +2404,7 @@ mod degree_root_size_guard {
         let style = crate::api::style::leak_lead_sheet_style();
         let engine = fonts.create_layout_engine(style);
 
-        let chart = keyflow_text::chart::parse_chart("1 5 7").unwrap();
+        let chart = keyflow_lang::text::chart::parse_chart("1 5 7").unwrap();
         let r = engine.layout_chart(&chart, &LayoutMode::ContinuousScroll { width: 800.0 });
         let mut glyphs = Vec::new();
         chord_glyphs(&r.scene, &mut glyphs);
@@ -2449,9 +2449,10 @@ mod slash_continuation_guard {
     fn bare_continuation_slashes_keep_next_chord_on_its_beat() {
         let style = test_style();
         let engine = ChartLayoutEngine::new(style, Arc::new(Vec::new()), Arc::new(Vec::new()));
-        let chart =
-            keyflow_text::chart::parse_chart("Slash Test\n#A 120bpm 4/4\n\nVS 2\nA //// // D //")
-                .expect("chart should parse");
+        let chart = keyflow_lang::text::chart::parse_chart(
+            "Slash Test\n#A 120bpm 4/4\n\nVS 2\nA //// // D //",
+        )
+        .expect("chart should parse");
         let result = engine.layout_chart(&chart, &LayoutMode::default());
 
         let texts = collect_text_command_positions(&result.scene);
@@ -2852,10 +2853,21 @@ fn endings_close_on_a_repeat_and_carry_over_a_system_break() {
     use keyflow_proto::chart::notations::{RepeatMark, Volta};
 
     let mut chart = long_chart(1, 6, "G");
-    let measures = &mut chart.sections[0].chord_track_mut().expect("chord track").measures;
-    measures[1].volta_start = Some(Volta { numbers: vec![1], label: String::new(), length_measures: 3 });
+    let measures = &mut chart.sections[0]
+        .chord_track_mut()
+        .expect("chord track")
+        .measures;
+    measures[1].volta_start = Some(Volta {
+        numbers: vec![1],
+        label: String::new(),
+        length_measures: 3,
+    });
     measures[3].end_repeat = RepeatMark::Backward;
-    measures[4].volta_start = Some(Volta { numbers: vec![2], label: String::new(), length_measures: 2 });
+    measures[4].volta_start = Some(Volta {
+        numbers: vec![2],
+        label: String::new(),
+        length_measures: 2,
+    });
     let measures = chart.sections[0].measures();
 
     let first = volta_at(measures, 1, false).expect("1st ending");

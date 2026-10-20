@@ -14,8 +14,8 @@ use facet::Facet;
 /// # Example
 ///
 /// ```
-/// use crate::syntax::ast::Spanned;
-/// use crate::syntax::parsing::TextSpan;
+/// use keyflow_proto::syntax::ast::Spanned;
+/// use keyflow_proto::syntax::parsing::TextSpan;
 ///
 /// let value = Spanned::new("Cmaj7", TextSpan::new(0, 5));
 /// assert_eq!(value.value, "Cmaj7");

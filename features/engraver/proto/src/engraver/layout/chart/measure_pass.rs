@@ -465,8 +465,8 @@ pub fn measure_measure_with_config(
     // is one label, not eight).
     let mut last_printed: Option<&str> = None;
     for (chord_idx, chord) in measure.chords.iter().enumerate() {
-        let hidden_repeat = chord.original_token == "."
-            || last_printed == Some(chord.full_symbol.as_str());
+        let hidden_repeat =
+            chord.original_token == "." || last_printed == Some(chord.full_symbol.as_str());
         let is_visible = !is_placeholder(&chord.full_symbol) && !hidden_repeat;
         if is_visible {
             last_printed = Some(chord.full_symbol.as_str());

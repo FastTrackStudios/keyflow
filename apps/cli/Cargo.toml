@@ -21,29 +21,26 @@ default = []
 # Self-contained lyrics-to-audio alignment + Demucs separation (embeds the ort
 # native lib). Off by default so the stock `kf` binary stays lean; model weights
 # are always pulled separately. Build with `--features onnx` for `kf sync`.
-onnx = ["keyflow-sync/onnx", "download"]
+onnx = ["keyflow-lang/sync-onnx", "download"]
 # GPU-accelerated inference via CUDA (implies onnx). Falls back to CPU at runtime.
-onnx-cuda = ["keyflow-sync/cuda", "onnx"]
+onnx-cuda = ["keyflow-lang/sync-cuda", "onnx"]
 # Whisper ASR comparison baseline (candle, pure Rust).
-whisper = ["keyflow-sync/whisper", "download"]
-whisper-cuda = ["keyflow-sync/whisper-cuda", "whisper"]
+whisper = ["keyflow-lang/sync-whisper", "download"]
+whisper-cuda = ["keyflow-lang/sync-whisper-cuda", "whisper"]
 # Reaper `.rpp` export (audio + lyrics MIDI) via the daw crate.
 reaper = ["dep:dawfile-reaper"]
 # Download model weights (`kf models pull`).
-download = ["keyflow-sync/download"]
+download = ["keyflow-lang/sync-download"]
 
 [dependencies]
 keyflow = { workspace = true, features = ["text", "midi", "engraver", "pdf", "highlighting"] }
-keyflow-chordsheet = { workspace = true }
-keyflow-musicxml = { workspace = true }
-keyflow-orchestra.workspace = true
+keyflow-lang = { workspace = true, features = ["manifest", "musicxml", "orchestra", "sync"] }
 # `kf parts`: score/part engraving (Finale layouts, PDF export).
 engraver-score = { workspace = true, features = ["pdf"] }
 keyflow-pdfscore = { workspace = true }
 # `kf book`: concatenating part PDFs into instrument books (same lopdf
 # engraver-proto's PDF export uses).
 lopdf = "0.36"
-keyflow-sync.workspace = true
 
 clap = { version = "4", features = ["derive"] }
 # `kf session`: reads its JSON spec.

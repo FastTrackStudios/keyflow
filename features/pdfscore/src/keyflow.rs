@@ -44,7 +44,11 @@ pub fn to_keyflow_with(score: &Score, artist: Option<&str>, style: Style) -> Str
     // A title that would read as music ("1901", "Em") is quoted.
     let musical = title.starts_with(|c: char| c.is_ascii_digit())
         || (title.len() <= 4 && title.starts_with(|c: char| ('A'..='G').contains(&c)));
-    let title = if musical { format!("\"{title}\"") } else { title.to_string() };
+    let title = if musical {
+        format!("\"{title}\"")
+    } else {
+        title.to_string()
+    };
     match artist {
         Some(a) => {
             let _ = writeln!(out, "{title} - {a}");
@@ -95,7 +99,10 @@ pub fn to_keyflow_with(score: &Score, artist: Option<&str>, style: Style) -> Str
             }
         }
     }
-    let part = &engraver_score::model::Part { measures, ..part.clone() };
+    let part = &engraver_score::model::Part {
+        measures,
+        ..part.clone()
+    };
     let sections = sections_of(&part.measures);
     // One staff: each bar shows the top staff when it plays, else the bass
     // staff ("bass line below"). A section whose written lines all come
@@ -109,7 +116,9 @@ pub fn to_keyflow_with(score: &Score, artist: Option<&str>, style: Style) -> Str
     let mut bass_sections: Vec<bool> = Vec::new();
     for range in &sections {
         let line_from = |staff: u8| {
-            range.clone().any(|i| plan[i].0 == staff && is_line(&part.measures[i], staff, style))
+            range
+                .clone()
+                .any(|i| plan[i].0 == staff && is_line(&part.measures[i], staff, style))
         };
         let (top, bass) = (line_from(1), line_from(2));
         bass_sections.push(bass && !top);
@@ -131,7 +140,13 @@ pub fn to_keyflow_with(score: &Score, artist: Option<&str>, style: Style) -> Str
             last_attack = None;
         }
         let (staff, bar_style) = plan[i];
-        bars.push(bar_text(m, staff, bar_style, &mut last_chord, &mut last_attack));
+        bars.push(bar_text(
+            m,
+            staff,
+            bar_style,
+            &mut last_chord,
+            &mut last_attack,
+        ));
     }
     let named = sections.len() > 1;
     for (k, range) in sections.iter().enumerate() {
@@ -199,14 +214,20 @@ fn bar_line(ms: &[Measure], bars: &[String], line: &[usize]) -> String {
         }
         s.push_str(&bars[i]);
         let next = line.get(k + 1).map(|&j| &ms[j]);
-        s.push_str(match (m.repeat_end, next.is_some_and(|n| n.repeat_start), next.is_some()) {
-            (true, true, _) => " :| |: ",
-            (true, false, true) => " :| ",
-            (false, true, _) => " |: ",
-            (false, false, true) => " | ",
-            (true, _, false) => " :|",
-            (false, _, false) => " |",
-        });
+        s.push_str(
+            match (
+                m.repeat_end,
+                next.is_some_and(|n| n.repeat_start),
+                next.is_some(),
+            ) {
+                (true, true, _) => " :| |: ",
+                (true, false, true) => " :| ",
+                (false, true, _) => " |: ",
+                (false, false, true) => " | ",
+                (true, _, false) => " :|",
+                (false, _, false) => " |",
+            },
+        );
     }
     s
 }
@@ -330,7 +351,11 @@ fn bar_text(
     // A voice that does not fit its bar was misread; the chart keeps the
     // bar's chords and leaves those notes out rather than spill them into
     // the next bar.
-    let notes = if voice_ticks(m, staff) > len { String::new() } else { melody(m, staff) };
+    let notes = if voice_ticks(m, staff) > len {
+        String::new()
+    } else {
+        melody(m, staff)
+    };
     if !notes.is_empty() {
         let _ = write!(s, " m{{ {notes} }}");
     }
@@ -377,7 +402,11 @@ fn pieces(ticks: u32, div: u32) -> Vec<String> {
     let mut left = (f64::from(ticks) * 4.0 / f64::from(div.max(1))).round() as u32;
     let mut out = Vec::new();
     while left > 0 {
-        let (n, v) = VALUES.iter().find(|(n, _)| *n <= left).copied().unwrap_or((1, "16"));
+        let (n, v) = VALUES
+            .iter()
+            .find(|(n, _)| *n <= left)
+            .copied()
+            .unwrap_or((1, "16"));
         out.push(v.to_string());
         left -= n;
     }
@@ -389,7 +418,14 @@ fn pieces(ticks: u32, div: u32) -> Vec<String> {
 
 /// A length in quarters as a note value (1 = whole … 32) and a dot.
 fn value_of(q: f64) -> (u32, bool) {
-    for (v, len) in [(1, 4.0), (2, 2.0), (4, 1.0), (8, 0.5), (16, 0.25), (32, 0.125)] {
+    for (v, len) in [
+        (1, 4.0),
+        (2, 2.0),
+        (4, 1.0),
+        (8, 0.5),
+        (16, 0.25),
+        (32, 0.125),
+    ] {
         if (q - len).abs() < 1e-6 {
             return (v, false);
         }
@@ -484,7 +520,10 @@ fn comp_rhythm(
         Style::Auto => comping,
     };
     // Whatever the bar becomes, its last symbol is the harmony going on.
-    let end_chord = symbols.last().map(|c| c.1.clone()).or_else(|| last_chord.clone());
+    let end_chord = symbols
+        .last()
+        .map(|c| c.1.clone())
+        .or_else(|| last_chord.clone());
     if !wanted || !fits || attacks.is_empty() {
         *last_chord = end_chord;
         return None;
@@ -526,7 +565,11 @@ fn comp_rhythm(
                 {
                     let merged = pieces(prev_ticks + c.duration, m.divisions);
                     if merged.len() == 1 {
-                        let on = if c.notes.iter().any(|n| n.tie_start) { "~" } else { "" };
+                        let on = if c.notes.iter().any(|n| n.tie_start) {
+                            "~"
+                        } else {
+                            ""
+                        };
                         let into = if out[idx].starts_with('~') { "~" } else { "" };
                         out[idx] = format!("{into}{name}_{}{on}", merged[0]);
                         held = Some((idx, name.clone(), prev_ticks + c.duration));
@@ -539,7 +582,11 @@ fn comp_rhythm(
                 // and over the barline `Em_2.~ | ~Em_1`): a held chord, not a
                 // second attack — so never `.`.
                 let into = if continues { "~" } else { "" };
-                let on = if c.notes.iter().any(|n| n.tie_start) { "~" } else { "" };
+                let on = if c.notes.iter().any(|n| n.tie_start) {
+                    "~"
+                } else {
+                    ""
+                };
                 if continues
                     && let Some(prev) = out.last_mut()
                     && !prev.ends_with('~')
@@ -548,7 +595,10 @@ fn comp_rhythm(
                     prev.push('~');
                 }
                 let token = format!("{into}{name}_{}{on}", note_value(&c.written));
-                if into.is_empty() && on.is_empty() && last_attack.as_deref() == Some(token.as_str()) {
+                if into.is_empty()
+                    && on.is_empty()
+                    && last_attack.as_deref() == Some(token.as_str())
+                {
                     out.push(".".to_string());
                 } else {
                     out.push(token.clone());
@@ -572,14 +622,20 @@ fn first_voice(m: &Measure, staff: u8) -> Vec<&Event> {
             _ => None,
         })
         .min();
-    let mut evs: Vec<&Event> = m.events.iter().filter(|e| Some(e.voice()) == voice).collect();
+    let mut evs: Vec<&Event> = m
+        .events
+        .iter()
+        .filter(|e| Some(e.voice()) == voice)
+        .collect();
     evs.sort_by_key(|e| e.tick());
     evs
 }
 
 /// Whether `staff` sounds in this bar (any note, not just rests).
 fn plays(m: &Measure, staff: u8) -> bool {
-    m.events.iter().any(|e| matches!(e, Event::Chord(c) if c.staff == staff))
+    m.events
+        .iter()
+        .any(|e| matches!(e, Event::Chord(c) if c.staff == staff))
 }
 
 /// Whether the bar's `staff` is a written line (single notes), which the
@@ -652,7 +708,10 @@ fn melody(m: &Measure, staff: u8) -> String {
         match e {
             Event::Rest(r) => {
                 if r.measure_rest {
-                    parts.push(format!("r{}", value_of(f64::from(m.len_ticks) / f64::from(m.divisions.max(1))).0));
+                    parts.push(format!(
+                        "r{}",
+                        value_of(f64::from(m.len_ticks) / f64::from(m.divisions.max(1))).0
+                    ));
                 } else {
                     parts.push(format!("r{}", note_value(&r.written)));
                 }
@@ -660,7 +719,11 @@ fn melody(m: &Measure, staff: u8) -> String {
             Event::Chord(c) => {
                 let v = note_value(&c.written);
                 // `~` after a note starts a tie, before one ends it.
-                let into = if c.notes.iter().any(|n| n.tie_stop) { "~" } else { "" };
+                let into = if c.notes.iter().any(|n| n.tie_stop) {
+                    "~"
+                } else {
+                    ""
+                };
                 // After the value: `~` ties on, `)` ends a slur, `(` starts one.
                 // Articulations as LilyPond writes them.
                 let arts: String = [
@@ -678,7 +741,11 @@ fn melody(m: &Measure, staff: u8) -> String {
                 .collect();
                 let on = format!(
                     "{}{}{}{}",
-                    if c.notes.iter().any(|n| n.tie_start) { "~" } else { "" },
+                    if c.notes.iter().any(|n| n.tie_start) {
+                        "~"
+                    } else {
+                        ""
+                    },
                     arts,
                     if c.slur_stop { ")" } else { "" },
                     if c.slur_start { "(" } else { "" },

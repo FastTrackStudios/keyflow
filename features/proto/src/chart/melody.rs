@@ -910,9 +910,7 @@ fn melody_token_has_duration(token: &str) -> bool {
 }
 
 fn melody_token_duration_suffix(token: &str) -> Result<String, String> {
-    let clean_token = token
-        .trim()
-        .trim_start_matches('~');
+    let clean_token = token.trim().trim_start_matches('~');
     let clean_token = strip_note_marks(clean_token).trim_start_matches('!');
     let Some(start) = melody_token_duration_start(clean_token) else {
         return Err(format!("Melody token '{}' has no duration", token));
@@ -1703,8 +1701,20 @@ mod tests {
     #[test]
     fn articulations_parse_and_print() {
         let melody = Melody::parse("E:48-. G:48-> C:54--( D:44-.)").unwrap();
-        let arts: Vec<Vec<String>> = melody.notes.iter().map(|n| n.articulations.clone()).collect();
-        assert_eq!(arts, vec![vec!["staccato".to_string()], vec!["accent".into()], vec!["tenuto".into()], vec!["staccato".into()]]);
+        let arts: Vec<Vec<String>> = melody
+            .notes
+            .iter()
+            .map(|n| n.articulations.clone())
+            .collect();
+        assert_eq!(
+            arts,
+            vec![
+                vec!["staccato".to_string()],
+                vec!["accent".into()],
+                vec!["tenuto".into()],
+                vec!["staccato".into()]
+            ]
+        );
         assert!(melody.notes[2].slur_start && melody.notes[3].slur_stop);
         assert_eq!(melody.notes[0].duration, 8);
         let printed: Vec<String> = melody.notes.iter().map(ToString::to_string).collect();
@@ -1729,16 +1739,41 @@ mod tests {
                 (false, true, false, true),
             ]
         );
-        let again = Melody::parse(&melody.notes.iter().map(ToString::to_string).collect::<Vec<_>>().join(" ")).unwrap();
-        assert_eq!(again.notes.iter().map(|n| (n.slur_start, n.slur_stop)).collect::<Vec<_>>(),
-                   melody.notes.iter().map(|n| (n.slur_start, n.slur_stop)).collect::<Vec<_>>());
+        let again = Melody::parse(
+            &melody
+                .notes
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(" "),
+        )
+        .unwrap();
+        assert_eq!(
+            again
+                .notes
+                .iter()
+                .map(|n| (n.slur_start, n.slur_stop))
+                .collect::<Vec<_>>(),
+            melody
+                .notes
+                .iter()
+                .map(|n| (n.slur_start, n.slur_stop))
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]
     fn tie_markers_with_absolute_octaves() {
         let melody = Melody::parse("A:44 B:48~ ~B:48 C#:52").unwrap();
-        let ties: Vec<(bool, bool)> = melody.notes.iter().map(|n| (n.tie_start, n.tie_stop)).collect();
-        assert_eq!(ties, vec![(false, false), (true, false), (false, true), (false, false)]);
+        let ties: Vec<(bool, bool)> = melody
+            .notes
+            .iter()
+            .map(|n| (n.tie_start, n.tie_stop))
+            .collect();
+        assert_eq!(
+            ties,
+            vec![(false, false), (true, false), (false, true), (false, false)]
+        );
     }
 
     #[test]

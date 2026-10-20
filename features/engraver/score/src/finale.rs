@@ -1,8 +1,8 @@
 //! Finale `.musx` → engraved parts, formatted as the arranger formatted them.
 //!
-//! The notes come through MusicXML ([`keyflow_musx::musx_to_musicxml`] then
+//! The notes come through MusicXML ([`keyflow_lang::musx::musx_to_musicxml`] then
 //! [`crate::import`]); the layout comes straight from Finale's linked-part
-//! records ([`keyflow_musx::layout`]): each part's own system breaks, page
+//! records ([`keyflow_lang::musx::layout`]): each part's own system breaks, page
 //! turns, multimeasure rests, measure widths, staff size, page text and
 //! measure-number style. This module turns the second into
 //! [`LayoutOptions`] for the first.
@@ -15,7 +15,7 @@
 //!   with the staff size);
 //! - x from `margin_left + system.left` to `width − margin_right − right`.
 
-use keyflow_musx::layout::{
+use keyflow_lang::musx::layout::{
     self as fl, DocumentLayout, MeasureNumberRegion, PartLayout as FinalePart, TextPiece, TextStyle,
 };
 
@@ -34,7 +34,7 @@ fn pt(evpu: f64) -> f64 {
 #[derive(Debug, thiserror::Error)]
 pub enum FinaleError {
     #[error("musx: {0}")]
-    Musx(#[from] keyflow_musx::Error),
+    Musx(#[from] keyflow_lang::musx::Error),
     #[error("import: {0}")]
     Import(#[from] ImportError),
 }
@@ -48,9 +48,9 @@ pub struct FinaleDocument {
 impl FinaleDocument {
     /// Decode a `.musx` archive.
     pub fn from_musx(musx: &[u8]) -> Result<Self, FinaleError> {
-        let (enigma, metadata) = keyflow_musx::musx_parts(musx)?;
+        let (enigma, metadata) = keyflow_lang::musx::musx_parts(musx)?;
         let layout = fl::document_layout(&enigma)?;
-        let musicxml = keyflow_musx::enigmaxml_to_musicxml(&enigma, Some(&metadata))?;
+        let musicxml = keyflow_lang::musx::enigmaxml_to_musicxml(&enigma, Some(&metadata))?;
         let score = import_bytes(musicxml.into_bytes())?;
         Ok(Self { score, layout })
     }

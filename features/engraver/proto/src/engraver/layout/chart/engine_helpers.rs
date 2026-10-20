@@ -378,7 +378,9 @@ impl ChartLayoutEngine {
         chart: &Chart,
         section: &crate::chart::types::ChartSection,
     ) -> crate::chart::ChartClef {
-        section.clef.unwrap_or_else(|| self.chart_proto_clef_for(chart))
+        section
+            .clef
+            .unwrap_or_else(|| self.chart_proto_clef_for(chart))
     }
 
     /// [`Self::section_proto_clef`] as the engraver's clef type.

@@ -7,9 +7,9 @@ description = "Music theory and chord parsing - re-exports from keyflow-proto"
 
 [features]
 default = ["text", "engraver"]
-text = ["dep:keyflow-text"]
-midi = ["dep:keyflow-midi"]
-live = ["dep:keyflow-live"]
+text = ["dep:keyflow-lang"]
+midi = ["text", "keyflow-lang/midi"]
+live = ["midi", "keyflow-lang/live"]
 # CPU layout + SVG export (no GPU). Pair with `text` for `.kf` text → SVG.
 # This is what lightweight / wasm consumers (e.g. an editor rendering `.kf`
 # fences) should enable — it never pulls in wgpu/vello.
@@ -24,7 +24,7 @@ engraver = ["svg", "wgpu", "engraver/engraver"]
 # PDF chart export (kf CLI, site) — split out because printpdf's azul dep
 # doesn't build for iOS.
 pdf = ["engraver", "engraver/pdf"]
-highlighting = ["keyflow-text?/highlighting"]
+highlighting = ["keyflow-lang?/highlighting"]
 midi-import = ["engraver", "engraver/midi-import"]
 
 [dependencies]
@@ -43,9 +43,7 @@ helgoboss-midi = "0.4.0"
 
 # Keyflow protocol types
 keyflow-proto.workspace = true
-keyflow-text = { workspace = true, optional = true }
-keyflow-midi = { workspace = true, optional = true }
-keyflow-live = { workspace = true, optional = true }
+keyflow-lang = { workspace = true, optional = true }
 engraver = { workspace = true, optional = true }
 
 # WASM-specific dependencies

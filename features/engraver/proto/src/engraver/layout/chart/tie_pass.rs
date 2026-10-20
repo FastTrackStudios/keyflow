@@ -10,9 +10,9 @@ use crate::engraver::layout::tlayout::{
     SlurEndpoint, SlurObstacle, SlurTieConfig, layout_articulation, layout_slur_with_obstacles,
     layout_tie,
 };
-use crate::engraver::scene::paint::PaintCommand;
 use crate::engraver::notation::MeasureScene;
 use crate::engraver::scene::node::SceneNode;
+use crate::engraver::scene::paint::PaintCommand;
 
 use super::ChartLayoutEngine;
 use super::types::{MeasureMelodyData, melody_pitch_to_line_for_clef};
@@ -135,22 +135,35 @@ impl ChartLayoutEngine {
             // Tied to a note whose stem goes the other way: the tie curves
             // upward (Gould). Otherwise away from the shared stem side.
             let next_stem = measure_result.entry_stem_up.get(i + 1).copied().flatten();
-            let next_in_bar = melody_data.segments.get(i + 1).is_some_and(|n| n.tie_from_previous);
+            let next_in_bar = melody_data
+                .segments
+                .get(i + 1)
+                .is_some_and(|n| n.tie_from_previous);
             let mixed = segment.tie_to_next && next_stem.is_some_and(|n| n != stem_up);
             // A tie over the barline is drawn in two halves that cannot see
             // each other's stems; both belong to one pitch, so the pitch's own
             // stem side decides for both (middle line and up: stem down, tie
             // above).
-            let over_barline = (segment.tie_to_next && !next_in_bar) || (segment.tie_from_previous && i == 0);
+            let over_barline =
+                (segment.tie_to_next && !next_in_bar) || (segment.tie_from_previous && i == 0);
             let below = if over_barline {
                 line.is_some_and(|l| l < 0)
             } else {
                 stem_up && !mixed
             };
-            let direction = if below { SlurDirection::Down } else { SlurDirection::Up };
+            let direction = if below {
+                SlurDirection::Down
+            } else {
+                SlurDirection::Up
+            };
             // A tie sits off the heads on its side (y grows downward), not
             // through their middles.
-            let tie_y = note_y + if below { 0.55 * spatium } else { -0.55 * spatium };
+            let tie_y = note_y
+                + if below {
+                    0.55 * spatium
+                } else {
+                    -0.55 * spatium
+                };
             let Some(seg) = chord_segments.get(i) else {
                 continue;
             };
@@ -179,8 +192,14 @@ impl ChartLayoutEngine {
                         y: tie_y,
                         stem_up: false,
                     };
-                    let tie_layout =
-                        layout_tie(&start, &end, direction, 1000 + i as u64, spatium, &tie_config);
+                    let tie_layout = layout_tie(
+                        &start,
+                        &end,
+                        direction,
+                        1000 + i as u64,
+                        spatium,
+                        &tie_config,
+                    );
                     measure_result
                         .scene
                         .add_child(SceneNode::anonymous_leaf(tie_layout.commands));
@@ -200,8 +219,14 @@ impl ChartLayoutEngine {
                     y: tie_y,
                     stem_up: false,
                 };
-                let tie_layout =
-                    layout_tie(&start, &end, direction, 2000 + i as u64, spatium, &tie_config);
+                let tie_layout = layout_tie(
+                    &start,
+                    &end,
+                    direction,
+                    2000 + i as u64,
+                    spatium,
+                    &tie_config,
+                );
                 measure_result
                     .scene
                     .add_child(SceneNode::anonymous_leaf(tie_layout.commands));
@@ -239,10 +264,14 @@ impl ChartLayoutEngine {
                 -(line as f64) * spatium / 2.0
             };
             let main = y_of(&seg.pitch, oct);
-            Some(seg.extra_pitches.iter().fold((main, main), |(top, bottom), (p, o)| {
-                let y = y_of(p, o.unwrap_or(oct));
-                (top.min(y), bottom.max(y))
-            }))
+            Some(
+                seg.extra_pitches
+                    .iter()
+                    .fold((main, main), |(top, bottom), (p, o)| {
+                        let y = y_of(p, o.unwrap_or(oct));
+                        (top.min(y), bottom.max(y))
+                    }),
+            )
         };
         let head_x = |i: usize| chord_segments.get(i).map(|s| s.x + 0.6 * spatium);
 
@@ -296,11 +325,19 @@ impl ChartLayoutEngine {
                         .iter()
                         .any(|a| matches!(a.as_str(), "staccato" | "staccatissimo" | "tenuto"))
                 }) && stem_of(i).is_some_and(|up| up == below);
-                let y = if mark_inside { y + side * 1.2 * spatium } else { y };
+                let y = if mark_inside {
+                    y + side * 1.2 * spatium
+                } else {
+                    y
+                };
                 Some(if stem_into {
                     // Stem on the slur's side: the stem stands at the head's
                     // right (up) or left (down) edge.
-                    let sx = if below { x - 0.6 * spatium } else { x + 0.6 * spatium };
+                    let sx = if below {
+                        x - 0.6 * spatium
+                    } else {
+                        x + 0.6 * spatium
+                    };
                     let clear = if short { 0.6 } else { 0.0 };
                     let flag_x = if short && !below { 0.4 * spatium } else { 0.0 };
                     (sx + flag_x, y + side * (STEM + 0.5 + clear) * spatium)
@@ -317,7 +354,11 @@ impl ChartLayoutEngine {
                 stem_up: !below,
             };
             let end = SlurEndpoint {
-                x: if to_end { measure_result.width + 0.5 * spatium } else { xb },
+                x: if to_end {
+                    measure_result.width + 0.5 * spatium
+                } else {
+                    xb
+                },
                 y: yb,
                 stem_up: !below,
             };
@@ -335,12 +376,28 @@ impl ChartLayoutEngine {
                     } else {
                         (top - reach, bottom + 0.5 * spatium)
                     };
-                    Some(SlurObstacle::note(kurbo::Rect::new(x - 0.6 * spatium, y0, x + 0.6 * spatium, y1)))
+                    Some(SlurObstacle::note(kurbo::Rect::new(
+                        x - 0.6 * spatium,
+                        y0,
+                        x + 0.6 * spatium,
+                        y1,
+                    )))
                 })
                 .collect();
-            let direction = if below { SlurDirection::Down } else { SlurDirection::Up };
-            let layout =
-                layout_slur_with_obstacles(&start, &end, direction, &obstacles, 3000 + k as u64, spatium, &config);
+            let direction = if below {
+                SlurDirection::Down
+            } else {
+                SlurDirection::Up
+            };
+            let layout = layout_slur_with_obstacles(
+                &start,
+                &end,
+                direction,
+                &obstacles,
+                3000 + k as u64,
+                spatium,
+                &config,
+            );
             measure_result
                 .scene
                 .add_child(SceneNode::anonymous_leaf(layout.commands));
@@ -376,10 +433,13 @@ impl ChartLayoutEngine {
                 -(line as f64) * spatium / 2.0
             };
             let main = y_of(&seg.pitch, oct);
-            let (top, bottom) = seg.extra_pitches.iter().fold((main, main), |(t, b), (p, o)| {
-                let y = y_of(p, o.unwrap_or(oct));
-                (t.min(y), b.max(y))
-            });
+            let (top, bottom) = seg
+                .extra_pitches
+                .iter()
+                .fold((main, main), |(t, b), (p, o)| {
+                    let y = y_of(p, o.unwrap_or(oct));
+                    (t.min(y), b.max(y))
+                });
             let x = cs.x + 0.6 * spatium;
             let stem_up = measure_result
                 .entry_stem_up
@@ -402,14 +462,19 @@ impl ChartLayoutEngine {
                     } else {
                         // fermataAbove, over the stem tip when the stem is up.
                         let reach = if stem_up { top - 3.5 * spatium } else { top };
-                        ('\u{E4C0}', kurbo::Point::new(x, reach.min(-2.0 * spatium) - 1.2 * spatium))
+                        (
+                            '\u{E4C0}',
+                            kurbo::Point::new(x, reach.min(-2.0 * spatium) - 1.2 * spatium),
+                        )
                     };
-                    measure_result.scene.add_child(SceneNode::anonymous_leaf(vec![PaintCommand::glyph(
-                        glyph,
-                        at,
-                        spatium * config.scale,
-                        peniko::Color::BLACK,
-                    )]));
+                    measure_result
+                        .scene
+                        .add_child(SceneNode::anonymous_leaf(vec![PaintCommand::glyph(
+                            glyph,
+                            at,
+                            spatium * config.scale,
+                            peniko::Color::BLACK,
+                        )]));
                     continue;
                 }
                 let kind = match name.as_str() {
@@ -420,10 +485,19 @@ impl ChartLayoutEngine {
                     "marcato" => ArticulationType::Marcato,
                     _ => continue,
                 };
-                let close = matches!(kind, ArticulationType::Staccato | ArticulationType::Staccatissimo | ArticulationType::Tenuto);
+                let close = matches!(
+                    kind,
+                    ArticulationType::Staccato
+                        | ArticulationType::Staccatissimo
+                        | ArticulationType::Tenuto
+                );
                 let id = 4000 + (i * 8 + k) as u64;
                 if close && offset == 0.0 {
-                    let glyph = if above { kind.smufl_codepoint_above() } else { kind.smufl_codepoint_below() };
+                    let glyph = if above {
+                        kind.smufl_codepoint_above()
+                    } else {
+                        kind.smufl_codepoint_below()
+                    };
                     let side = if above { -1.0 } else { 1.0 };
                     let mut y = (if above { top } else { bottom }) + side * spatium;
                     // Inside the staff (lines at whole spaces from the middle)
@@ -433,18 +507,37 @@ impl ChartLayoutEngine {
                         y += side * 0.5 * spatium;
                     }
                     offset = (y - if above { top } else { bottom }).abs() + 0.5 * spatium;
-                    measure_result.scene.add_child(SceneNode::anonymous_leaf(vec![PaintCommand::glyph(
-                        glyph,
-                        kurbo::Point::new(x, y),
-                        spatium * config.scale,
-                        peniko::Color::BLACK,
-                    )]));
+                    measure_result
+                        .scene
+                        .add_child(SceneNode::anonymous_leaf(vec![PaintCommand::glyph(
+                            glyph,
+                            kurbo::Point::new(x, y),
+                            spatium * config.scale,
+                            peniko::Color::BLACK,
+                        )]));
                 } else {
                     let context = ArticulationContext::new(x, main, -2.0 * spatium, 2.0 * spatium)
-                        .with_stem(if stem_up { x + 0.6 * spatium } else { x - 0.6 * spatium }, stem_up)
-                        .with_chord_bounds(top - offset * f64::from(u8::from(above)), bottom + offset * f64::from(u8::from(!above)));
-                    let layout = layout_articulation(&ArticulationInput::new(kind).with_id(id), &context, spatium, &config);
-                    measure_result.scene.add_child(SceneNode::anonymous_leaf(layout.commands));
+                        .with_stem(
+                            if stem_up {
+                                x + 0.6 * spatium
+                            } else {
+                                x - 0.6 * spatium
+                            },
+                            stem_up,
+                        )
+                        .with_chord_bounds(
+                            top - offset * f64::from(u8::from(above)),
+                            bottom + offset * f64::from(u8::from(!above)),
+                        );
+                    let layout = layout_articulation(
+                        &ArticulationInput::new(kind).with_id(id),
+                        &context,
+                        spatium,
+                        &config,
+                    );
+                    measure_result
+                        .scene
+                        .add_child(SceneNode::anonymous_leaf(layout.commands));
                 }
             }
         }

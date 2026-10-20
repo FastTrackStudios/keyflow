@@ -225,7 +225,10 @@ impl ChartLayoutEngine {
         if has_written_notes && let Some(data) = melody_data {
             for (i, seg) in data.segments.iter().enumerate() {
                 if seg.tie_to_next
-                    && data.segments.get(i + 1).is_some_and(|n| n.tie_from_previous)
+                    && data
+                        .segments
+                        .get(i + 1)
+                        .is_some_and(|n| n.tie_from_previous)
                     && let Some(w) = chord_min_widths.get_mut(i)
                 {
                     *w = w.max(2.6 * self.config.spatium);

@@ -12,7 +12,7 @@ use musicxml::elements::{
     PartElement, PartListElement, ScorePartwise,
 };
 
-use keyflow_musicxml::raw::{
+use keyflow_lang::musicxml::raw::{
     articulation_tag, decode_entities, dynamics_tag, extract_mxl, tie_flags,
 };
 

@@ -146,8 +146,11 @@ impl ChartLayoutEngine {
                 continue;
             }
 
-            let systems =
-                temp_engine.group_measures_into_systems(chart_section.measures(), content_width, &[]);
+            let systems = temp_engine.group_measures_into_systems(
+                chart_section.measures(),
+                content_width,
+                &[],
+            );
 
             for (system_idx, measure_indices) in systems.iter().enumerate() {
                 let include_time_sig = global_system_index == 0;
@@ -996,7 +999,7 @@ mod tests {
         let mut fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         fixture.push("../../../features");
         fixture.push("examples/png-project-charts/02 LORD OF THE FIGHT Master RS.musicxml");
-        let chart = keyflow_musicxml::import_file(fixture).expect("LotF should import");
+        let chart = keyflow_lang::musicxml::import_file(fixture).expect("LotF should import");
         let measures: Vec<&crate::chart::types::Measure> = chart
             .sections
             .iter()
@@ -1071,7 +1074,7 @@ mod tests {
         let mut fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         fixture.push("../../../features");
         fixture.push("examples/png-project-charts/02 LORD OF THE FIGHT Master RS.musicxml");
-        let chart = keyflow_musicxml::import_file(fixture).expect("LotF should import");
+        let chart = keyflow_lang::musicxml::import_file(fixture).expect("LotF should import");
         let engine = test_engine();
         let report = engine.compare_musicxml_widths(
             &chart,
@@ -1108,7 +1111,7 @@ mod tests {
         let mut fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         fixture.push("../../../features");
         fixture.push("examples/png-project-charts/02 LORD OF THE FIGHT Master RS.musicxml");
-        let chart = keyflow_musicxml::import_file(fixture).expect("LotF should import");
+        let chart = keyflow_lang::musicxml::import_file(fixture).expect("LotF should import");
         let engine = test_engine();
         let report = engine.compare_musicxml_widths(
             &chart,

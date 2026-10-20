@@ -7,7 +7,7 @@
 //! - MusicXML
 
 #[cfg(feature = "midi-import")]
-pub use keyflow_midi::import::{
+pub use keyflow_lang::midi::import::{
     ChordMarker, MarkerEvent, MarkerType, MelodyGrid, MidiChartConfig, MidiFile, MidiImportConfig,
     MidiNote, MidiTrack, MusicalPosition, PushPull, PushPullAmount, RhythmElement, SectionMarker,
     SectionType, TempoEvent, TimeSignatureEvent, format_duration_suffix, format_measure_rhythm,

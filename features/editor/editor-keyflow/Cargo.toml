@@ -19,7 +19,7 @@ engraver = { workspace = true, default-features = false, features = ["svg"] }
 # Keyflow syntax highlighter (re-exported through keyflow-text's
 # wasm-clean `highlighting` feature — keyflow-syntax only, no facade/
 # tokio). Powers `highlight_html` for source-visible fences.
-keyflow-text = { workspace = true, features = ["highlighting"] }
+keyflow-lang = { workspace = true, features = ["highlighting"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 
