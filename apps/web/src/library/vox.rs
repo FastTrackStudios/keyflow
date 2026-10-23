@@ -241,6 +241,9 @@ pub fn song_doc_from(song: &SongEntry, updated_at: String) -> SongDoc {
             .to_owned(),
         tags: song.tags.clone(),
         updated_at,
+        // Unconditional save, as before revisions existed: this screen
+        // does not track the song's revision yet.
+        revision: String::new(),
     }
 }
 
@@ -323,6 +326,9 @@ pub fn chart_doc_from(draft: &Draft, updated_at: String) -> ChartDoc {
         // song's main chart. The server gives a song's *first* chart the
         // flag unasked, so a new song still gets its main chart.
         is_default: draft.make_default && draft.song.is_some(),
+        // Unconditional save, as before revisions existed: drafts do not
+        // track the chart's revision yet.
+        revision: String::new(),
         updated_at,
     }
 }
@@ -646,6 +652,8 @@ pub async fn create_song(
             key: key.unwrap_or_default().trim().to_owned(),
             tags: Vec::new(),
             updated_at: String::new(),
+            // A create: no revision to expect.
+            revision: String::new(),
         })
         .await
         .map_err(error_from)?;
