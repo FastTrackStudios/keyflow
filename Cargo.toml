@@ -206,7 +206,7 @@ futures-channel = "0.3"
 # a split tag checks that repo out twice, and cargo treats the two
 # checkouts as different crates whose traits then refuse to unify.
 #
-# v0.9.29, the tag task@main pins too. This repo takes `ssg`, `ssg-ui`,
+# v0.9.30, the tag task@main pins too. This repo takes `ssg`, `ssg-ui`,
 # `ssg-build`, `view-knowledge-graph` and the *-proto wire crates from
 # task@main, and every one of those reaches
 # architect-ui. Pin a different tag here and the site ends up holding two
@@ -224,18 +224,18 @@ futures-channel = "0.3"
 # AND 0.13 (iroh, via architect), wasm-streams 0.4 (dioxus-web) AND 0.5
 # (reqwest 0.13), and links clean. Two majors of a crate are fine; two
 # copies of the SAME crate at different sources are what breaks.
-architect = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.9.29" }
+architect = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.9.30" }
 
 # The shared musical vocabulary — section colours and the canonical
 # palettes `keyflow-proto` engraves section cards with.
 music-catalog = { git = "https://github.com/FastTrackStudios/music-convention", tag = "v0.1.0" }
 color-palette = { git = "https://github.com/FastTrackStudios/music-convention", tag = "v0.1.0" }
 # The Dioxus primitive library (was libs/ui/fts-ui, renamed on the split).
-architect-ui = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.9.29" }
+architect-ui = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.9.30" }
 # Loro documents and their sync + presence sessions — the client half of
 # Task's per-file collaboration. Same tag as the rest of architect: two
 # copies of it would not link into one wasm binary.
-crdt = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.9.29" }
+crdt = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.9.30" }
 
 # The FastTrackStudio account. One identity across Task, Session, Signal,
 # Keyflow and Ignition, served by auth.fasttrackstudio.app.
@@ -255,7 +255,7 @@ crdt = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.9.29" 
 # Telemetry. Same tag as everything above — see the note there for why
 # that is not optional. `otel` is inert unless the build bakes
 # TASK_OTLP_ENDPOINT, so dev builds stay telemetry-free.
-architect-telemetry = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.9.29", features = ["otel"] }
+architect-telemetry = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.9.30", features = ["otel"] }
 
 # ── MusicXML parsing (keyflow) ─────────────────────────────────────────
 musicxml = "1.1"
@@ -353,8 +353,8 @@ phon-jit = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.2.3" 
 facet-core = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.4.0" }
 vox-phon = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.3.0" }
 
-# One architect for the whole graph: v0.9.29. This repo's pins above and
-# task@main's crates are all on v0.9.29 now; what this patch still lifts
+# One architect for the whole graph: v0.9.30. This repo's pins above and
+# task@main's crates are all on v0.9.30 now; what this patch still lifts
 # is daw v0.0.7, which pins architect v0.0.2 (same crate version 0.1.0, so
 # the patch applies) and would otherwise put a second architect source in
 # this repo's Cargo.lock. It only acts here: a git dependency's [patch] is
@@ -363,19 +363,19 @@ vox-phon = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.3.0" 
 # lets it patch the plain one; a same-host patch is refused. Bump this tag
 # with the pins above; drop the block once keyflow takes daw from studio.
 [patch."https://github.com/FastTrackStudios/architect"]
-architect = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.29" }
-architect-action-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.29" }
-architect-atom = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.29" }
-architect-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.29" }
-architect-permissions = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.29" }
-architect-rpc-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.29" }
-architect-story-core = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.29" }
-architect-story-macros = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.29" }
-architect-story-runtime = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.29" }
-architect-telemetry = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.29" }
-architect-ui = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.29" }
-crdt = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.29" }
-crdt-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.29" }
+architect = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.30" }
+architect-action-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.30" }
+architect-atom = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.30" }
+architect-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.30" }
+architect-permissions = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.30" }
+architect-rpc-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.30" }
+architect-story-core = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.30" }
+architect-story-macros = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.30" }
+architect-story-runtime = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.30" }
+architect-telemetry = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.30" }
+architect-ui = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.30" }
+crdt = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.30" }
+crdt-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.30" }
 
 [workspace.lints.rust]
 # Flipped from "allow" 2026-07-28 (task cleanup): the blanket allows are
