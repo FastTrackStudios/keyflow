@@ -4111,10 +4111,16 @@ name = "editor-keyflow"
 version = "0.0.1-alpha"
 dependencies = [
  "allsorts",
+ "dioxus",
+ "dioxus-ssr",
  "editor-state",
+ "editor-view",
+ "editor-vim",
  "engraver",
+ "gloo-timers",
  "keyflow-lang",
  "thiserror 2.0.20",
+ "tokio",
  "tracing",
  "ttf-parser 0.25.1",
 ]

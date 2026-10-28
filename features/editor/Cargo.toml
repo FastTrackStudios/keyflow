@@ -34,6 +34,29 @@ tracing = { workspace = true }
 allsorts = { version = "0.16", optional = true }
 ttf-parser = { version = "0.25", optional = true }
 
+# The chart editor as a Dioxus component, for the `view` feature: the
+# editor's view and vim layers directly rather than the umbrella `editor`
+# crate, which carries typst, mermaid and an `asset!` stylesheet. The
+# renderer is the host's choice — `native` (Blitz) or `web` below.
+dioxus = { workspace = true, optional = true }
+editor-view = { workspace = true, optional = true }
+editor-vim = { workspace = true, optional = true }
+
+# The preview's debounce. Target-split like keyflow-ui's: tokio's timer
+# needs a reactor, which a browser does not have — `tokio::time::sleep`
+# compiles for wasm32 and panics at runtime.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1.49", features = ["time", "rt"], optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+gloo-timers = { version = "0.3", features = ["futures"], optional = true }
+
+[dev-dependencies]
+# The `view` smoke test renders the components to HTML, and drives the
+# preview hook's debounce on a runtime.
+dioxus-ssr = { workspace = true }
+tokio = { version = "1.49", features = ["macros", "rt", "time"] }
+
 [features]
 default = ["render"]
 # `.kf` fences → inline SVG.
@@ -42,6 +65,22 @@ render = ["dep:engraver"]
 # `allsorts` is a large dependency and nothing in a browser needs it, so
 # only the site's build script and its dev server turn this on.
 subset = ["render", "dep:allsorts", "dep:ttf-parser"]
+# The chart preview's model, host-neutral and without Dioxus: engrave a
+# chart to page SVGs at true paper size, and the fit / zoom / pan math
+# with the column width passed in (no DOM measuring). See `preview`.
+preview = ["render"]
+# The chart editor as a Dioxus component (`view::KeyflowEditor`), plus
+# the debounced preview hook (`view::use_engraved_pages`) and the chart
+# command palette. Host-neutral: inline styles, no web_sys, no
+# localStorage — it renders under Blitz and in a browser alike. Pick the
+# renderer with `native` or `web`; with neither, editor-view's
+# contenteditable path is built (what `web` selects).
+view = ["preview", "dep:dioxus", "dep:editor-view", "dep:editor-vim", "dep:tokio", "dep:gloo-timers"]
+# Blitz / dioxus-native: editor-view paints its own caret and selection
+# and turns keydown into edits.
+native = ["view", "editor-view/native"]
+# A browser or a webview: editor-view's contenteditable bridge.
+web = ["view", "editor-view/web"]
 
 [lints]
 workspace = true

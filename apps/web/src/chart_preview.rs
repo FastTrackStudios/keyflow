@@ -25,20 +25,21 @@
 
 use dioxus::prelude::*;
 
-use crate::chart::{ChartShape, Page, blank_page, engrave, export_pdf, export_svg, filename_for};
+use editor_keyflow::preview::{
+    self, DEFAULT_PAN, DEFAULT_ZOOM, PAGE_GAP_PX, camera_transform, first_fit, reset_view,
+    step_zoom, wheel_zoom,
+};
+use editor_keyflow::view::use_engraved_pages;
+
+use crate::chart::{Page, export_pdf, export_svg, filename_for};
 use crate::chart_gpu;
 use crate::chart_url;
 use crate::notation::{CHOICES, Notation};
 
-/// Zoom bounds, matching keyflow-ui's native chart viewports.
-const ZOOM_MIN: f64 = 0.1;
-const ZOOM_MAX: f64 = 8.0;
-
-/// Breathing room left around a page that has been fitted to the screen.
-const FIT_MARGIN_PX: f64 = 12.0;
-
-/// The zoom at which a page `page_width_px` wide fits the chart column, or
-/// `None` off the browser (the host build, where there is nothing to measure).
+/// The width of the chart column in CSS pixels, for the fit math in
+/// `editor_keyflow::preview` (shared with Studio; the measuring is the
+/// browser's, and stays here). `None` anywhere there is no document, or
+/// before it has one — the host build, where there is nothing to measure.
 ///
 /// Measures `.kf-editor`, not the stage and not the window. The stage is
 /// `display: none` until its tab is picked on a narrow screen, so it has no
@@ -52,20 +53,6 @@ const FIT_MARGIN_PX: f64 = 12.0;
 /// answer runs large — which costs nothing, because that is precisely where
 /// the caller throws the result away: the page already fits at the default
 /// zoom and only a SMALLER fit is ever applied.
-fn fit_zoom(page_width_px: f64) -> Option<f64> {
-    if page_width_px <= 0.0 {
-        return None;
-    }
-    let column = column_width()?;
-    let usable = column - FIT_MARGIN_PX * 2.0;
-    if usable <= 0.0 {
-        return None;
-    }
-    Some((usable / page_width_px).clamp(ZOOM_MIN, ZOOM_MAX))
-}
-
-/// The width of the editor column in CSS pixels. `None` anywhere there is no
-/// document, or before it has one.
 fn column_width() -> Option<f64> {
     #[cfg(target_arch = "wasm32")]
     {
@@ -82,22 +69,12 @@ fn column_width() -> Option<f64> {
     }
 }
 
-/// Gap between stacked pages, in CSS px.
-const PAGE_GAP_PX: f64 = 24.0;
-
-/// Idle delay before re-engraving. Long enough that a run of keystrokes
-/// costs one render, short enough to feel live.
-#[cfg(target_arch = "wasm32")]
-const DEBOUNCE_MS: u32 = 150;
-
 /// A chart you can move around, zoom, and take away.
 #[component]
 pub fn ChartPreview(
     /// Chart source. Re-engraved on a debounce; pan and zoom survive.
     source: String,
 ) -> Element {
-    let mut pages = use_signal(|| vec![blank_page()]);
-    let mut generation = use_signal(|| 0_u64);
     // Which notation the chart is DRAWN in. The source is never touched;
     // this re-notates on the way to the engraver, so the editor keeps
     // showing what was typed while the chart shows what you asked for.
@@ -105,33 +82,19 @@ pub fn ChartPreview(
     let exporting = use_signal(|| false);
     let status = use_signal(|| Option::<String>::None);
 
-    // Debounced re-render. The generation counter is what makes it
-    // debounced rather than merely delayed: a render that is no longer the
-    // newest drops itself on wake instead of overwriting a fresher one.
-    // (This is why the preview does not use `use_memo` the way `Chart`
-    // does — the point is *not* to engrave on every pass.)
     let shown_now = notation();
-    let src_for_render = source.clone();
-    use_effect(use_reactive!(|(src_for_render, shown_now)| {
-        let mine = generation.peek().wrapping_add(1);
-        generation.set(mine);
-        spawn(async move {
-            #[cfg(target_arch = "wasm32")]
-            gloo_timers::future::TimeoutFuture::new(DEBOUNCE_MS).await;
-            if *generation.peek() != mine {
-                return;
-            }
-            let shown = shown_now.apply(&src_for_render);
-            let rendered = engrave(&shown, ChartShape::Page).unwrap_or_else(|e| {
-                tracing::debug!("chart preview render failed: {e}");
-                vec![blank_page()]
-            });
-            pages.set(rendered);
-        });
-    }));
+    // What is on screen, for the exports that should match it.
+    let shown_for_export = shown_now.apply(&source);
 
-    let mut zoom = use_signal(|| 0.75_f64);
-    let mut pan = use_signal(|| (24.0_f64, 24.0_f64));
+    // Debounced re-render (`editor_keyflow::view::use_engraved_pages`,
+    // the same hook Studio's preview uses): a newer edit supersedes a
+    // pending render rather than queueing behind it. (This is why the
+    // preview does not use `use_memo` the way `Chart` does — the point is
+    // *not* to engrave on every pass.)
+    let pages = use_engraved_pages(shown_for_export.clone());
+
+    let mut zoom = use_signal(|| DEFAULT_ZOOM);
+    let mut pan = use_signal(|| DEFAULT_PAN);
     let mut dragging = use_signal(|| false);
     let mut last = use_signal(|| (0.0_f64, 0.0_f64));
     // Fit the first page to the screen once, if the default zoom is wider
@@ -160,22 +123,24 @@ pub fn ChartPreview(
         let Some(page) = first else {
             return;
         };
-        let Some(fit) = fit_zoom(page.width_px) else {
+        let Some(column) = column_width() else {
             return;
         };
+        if preview::fit_zoom(page.width_px, column).is_none() {
+            return;
+        }
         // Only ever downward, and only once. On a desktop the page already
         // fits at 75% and this changes nothing; after the first fit the
         // zoom belongs to whoever is reading.
-        if fit < *zoom.peek() {
+        let current = *zoom.peek();
+        if let Some((fit, at)) = first_fit(page.width_px, column, current) {
             zoom.set(fit);
-            pan.set((FIT_MARGIN_PX, FIT_MARGIN_PX));
+            pan.set(at);
         }
         fitted.set(true);
     });
 
     let src_for_export = source.clone();
-    // What is on screen, for the exports that should match it.
-    let shown_for_export = shown_now.apply(&source);
 
     // One live surface, or none. Asked once: if WebGL2 is refused the
     // preview renders the same SVG pages the rest of the site does, and
@@ -249,12 +214,12 @@ pub fn ChartPreview(
                 span { class: "kf-pane-name", "Chart" }
                 button {
                     class: "kf-button",
-                    onclick: move |_| *zoom.write() = (zoom() * 1.25).min(ZOOM_MAX),
+                    onclick: move |_| *zoom.write() = step_zoom(zoom(), true),
                     "+"
                 }
                 button {
                     class: "kf-button",
-                    onclick: move |_| *zoom.write() = (zoom() / 1.25).max(ZOOM_MIN),
+                    onclick: move |_| *zoom.write() = step_zoom(zoom(), false),
                     "−"
                 }
                 button {
@@ -265,20 +230,10 @@ pub fn ChartPreview(
                         // behaviour exactly, but on a phone 75% is wider
                         // than the screen, and a Reset that puts the chart
                         // back to not fitting is not a way out of a zoom.
-                        let fit = pages
-                            .read()
-                            .first()
-                            .and_then(|p| fit_zoom(p.width_px));
-                        match fit {
-                            Some(f) if f < 0.75 => {
-                                zoom.set(f);
-                                pan.set((FIT_MARGIN_PX, FIT_MARGIN_PX));
-                            }
-                            _ => {
-                                zoom.set(0.75);
-                                pan.set((24.0, 24.0));
-                            }
-                        }
+                        let page = pages.read().first().map(|p| p.width_px);
+                        let (z, p) = reset_view(page, column_width());
+                        zoom.set(z);
+                        pan.set(p);
                     },
                     "Reset"
                 }
@@ -318,17 +273,10 @@ pub fn ChartPreview(
                 // around what you are looking at rather than the corner.
                 onwheel: move |e| {
                     e.prevent_default();
-                    let old = zoom();
-                    let factor = if e.delta().strip_units().y < 0.0 { 1.05 } else { 0.95 };
-                    let new = (old * factor).clamp(ZOOM_MIN, ZOOM_MAX);
                     let at = e.element_coordinates();
-                    let (px, py) = pan();
-                    let change = new / old;
-                    pan.set((
-                        at.x - (at.x - px) * change,
-                        at.y - (at.y - py) * change,
-                    ));
-                    zoom.set(new);
+                    let (z, p) = wheel_zoom(zoom(), pan(), (at.x, at.y), e.delta().strip_units().y);
+                    pan.set(p);
+                    zoom.set(z);
                 },
 
                 onmousedown: move |e| {
@@ -398,7 +346,7 @@ pub fn ChartPreview(
                 } else {
                     div {
                         class: "kf-preview-pages",
-                        style: "transform: translate({pan().0}px, {pan().1}px) scale({zoom()}); transform-origin: 0 0;",
+                        style: camera_transform(zoom(), pan()),
                         for (i, page) in pages.read().iter().enumerate() {
                             PreviewPage { key: "{i}", page: page.clone() }
                         }

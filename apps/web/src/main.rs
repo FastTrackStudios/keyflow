@@ -20,7 +20,6 @@ mod guide;
 mod guide_live;
 mod highlight;
 mod keyflow_editor;
-mod keyflow_palette;
 // Charts kept in a FastTrackStudio account — the client for Task's
 // vault, and the reason the header has a Library link. Pure request
 // builders and response parsers, so `just test` exercises the wire
@@ -140,7 +139,7 @@ fn main() {
     // The palette ships markdown's catalog, which is the wrong language for
     // a buffer holding a chart. Same reasoning as the fence registry above:
     // the editor cannot know what Keyflow is, so Keyflow tells it.
-    editor::editor_view::palette::register_catalog(keyflow_palette::commands());
+    editor::editor_view::palette::register_catalog(editor_keyflow::view::palette_commands());
 
     dioxus::LaunchBuilder::new()
         .with_cfg(server_only! {

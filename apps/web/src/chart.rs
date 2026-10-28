@@ -42,50 +42,17 @@ use dioxus::prelude::*;
 use keyflow::engraver::api::pipeline::Paper;
 use keyflow_ui::ChartLayoutManager;
 
-/// Points → CSS pixels. Screen DPI over the typographic 72.
-pub const DPI_SCALE: f64 = 96.0 / 72.0;
+// The on-screen engraving — `ChartShape`, `Page`, `blank_page` and
+// `engrave` itself — is `editor_keyflow::preview`, shared with the editor
+// component Studio mounts, so a chart engraves the same in the browser and
+// in the app. What stays here is what leaves the page (the exports) and
+// the components that put pages on it.
+pub use editor_keyflow::preview::{ChartShape, Page, engrave};
 
-/// Layout width handed to the engine, in points.
-///
-/// It decides how much music fits on a system in [`ChartShape::Inline`],
-/// and is ignored outright in [`ChartShape::Page`], where paper size
-/// decides. One value, so a chart cannot break differently depending on
-/// which caller engraved it.
+/// Layout width handed to the engine for the EXPORTS, in points — the
+/// same value `editor_keyflow::preview` lays the screen out at, so a
+/// downloaded chart breaks its systems where the one on screen does.
 const LAYOUT_WIDTH_PT: f64 = 900.0;
-
-/// How a chart is laid out and framed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ChartShape {
-    /// Continuous, cropped to the music, scaled to its container. For a
-    /// chart inside prose, where the surrounding text sets the measure —
-    /// a two-bar example on an uncropped A4 page is a centimetre of music
-    /// above a screenful of blank paper.
-    Inline,
-    /// Paginated at true paper size. For a working surface, where the
-    /// point is to see the page you are about to print.
-    Page,
-}
-
-/// One engraved page: its real size in CSS px, and its markup.
-#[derive(Clone, PartialEq)]
-pub struct Page {
-    pub width_px: f64,
-    pub height_px: f64,
-    pub svg: String,
-}
-
-/// A blank sheet.
-///
-/// Shown whenever the source does not yet lay out — still typing the
-/// title, or a parse error. The page should never simply vanish while
-/// someone is mid-thought.
-pub fn blank_page() -> Page {
-    Page {
-        width_px: 595.0 * DPI_SCALE,
-        height_px: 842.0 * DPI_SCALE,
-        svg: String::new(),
-    }
-}
 
 /// The chart fonts, declared once for the whole page.
 ///
@@ -208,38 +175,6 @@ pub fn Chart(
     }
 }
 
-/// Lay a chart out and serialise it for the screen.
-///
-/// Split out so it can be tested without a renderer — it is the whole of
-/// what this module does that can be wrong.
-pub fn engrave(source: &str, shape: ChartShape) -> Result<Vec<Page>, String> {
-    let manager = laid_out(source, shape)?;
-
-    match shape {
-        ChartShape::Inline => Ok(vec![Page {
-            width_px: 0.0,
-            height_px: 0.0,
-            svg: inline_ready(&manager.export_svg_snippet()?),
-        }]),
-        ChartShape::Page => {
-            let pages: Vec<Page> = manager
-                .export_svg_pages_sized()?
-                .into_iter()
-                .map(|(w_pt, h_pt, svg)| Page {
-                    width_px: w_pt * DPI_SCALE,
-                    height_px: h_pt * DPI_SCALE,
-                    svg: inline_ready(&svg),
-                })
-                .collect();
-            Ok(if pages.is_empty() {
-                vec![blank_page()]
-            } else {
-                pages
-            })
-        }
-    }
-}
-
 /// A manager holding a laid-out chart — the single place the site builds
 /// one, so every caller gets the same layout for the same source.
 ///
@@ -323,23 +258,68 @@ fn zip_pages(pages: &[String], stem: &str) -> Result<Vec<u8>, String> {
     Ok(buffer.into_inner())
 }
 
-/// Strip the XML prolog so the document can be inlined into HTML.
-///
-/// The serialiser emits a standalone `.svg` file, which opens with
-/// `<?xml …?>`. That is correct for a file and invalid inside an HTML
-/// element — the browser renders it as stray text above the chart.
-fn inline_ready(svg: &str) -> String {
-    match svg.find("<svg") {
-        Some(at) => svg[at..].to_string(),
-        None => svg.to_string(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use editor_keyflow::preview::DPI_SCALE;
 
     const TWO_BARS: &str = "VS: | 1 4 | 5 6- |\n";
+
+    /// The screen engraving moved to `editor_keyflow::preview` (shared
+    /// with Studio); the exports still lay out through keyflow-ui's
+    /// manager. Same style, paper and width, so the same chart — this is
+    /// what notices if the two ever drift.
+    #[test]
+    fn the_screen_and_the_exports_lay_out_alike() {
+        let source = keyflow_ui::examples::EXAMPLE_THRILLER;
+        // Two engravings of one chart differ in their `data-*` metadata
+        // and nothing else: node ids come from a counter that runs on across
+        // layouts, and the rest are written in hash-map order. Compare each
+        // element with its metadata sorted and its id dropped.
+        let ids = |svg: &str| {
+            let mut out = String::with_capacity(svg.len());
+            for line in svg.lines() {
+                let mut attrs = Vec::new();
+                let mut rest = line;
+                while let Some(i) = rest.find(" data-") {
+                    out.push_str(&rest[..i]);
+                    let after = &rest[i..];
+                    let end = after
+                        .find("=\"")
+                        .and_then(|q| after[q + 2..].find('"').map(|e| q + 3 + e))
+                        .unwrap_or(after.len());
+                    if !after.starts_with(" data-id=") {
+                        attrs.push(&after[..end]);
+                    }
+                    rest = &after[end..];
+                }
+                out.push_str(rest);
+                attrs.sort_unstable();
+                out.extend(attrs);
+                out.push('\n');
+            }
+            out
+        };
+        let strip = |svg: String| ids(&svg[svg.find("<svg").unwrap_or(0)..]);
+        let manager = laid_out(source, ChartShape::Inline).unwrap();
+        let inline = engrave(source, ChartShape::Inline).unwrap();
+        assert_eq!(
+            ids(&inline[0].svg),
+            strip(manager.export_svg_snippet().unwrap())
+        );
+
+        let manager = laid_out(source, ChartShape::Page).unwrap();
+        let pages = engrave(source, ChartShape::Page).unwrap();
+        let expected = manager.export_svg_pages_sized().unwrap();
+        assert_eq!(pages.len(), expected.len());
+        for (page, (w, h, svg)) in pages.iter().zip(expected) {
+            assert_eq!(
+                (page.width_px, page.height_px),
+                (w * DPI_SCALE, h * DPI_SCALE)
+            );
+            assert_eq!(ids(&page.svg), strip(svg));
+        }
+    }
 
     #[test]
     fn engraves_an_inline_snippet() {
