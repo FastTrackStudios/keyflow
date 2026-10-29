@@ -695,7 +695,7 @@ dependencies = [
 [[package]]
 name = "architect"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.9.30#16cd68ae82526e7a3f64c344a6f9f8282e0f4170"
+source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.9.31#89338f66fd386daa981367e4c2749f2d6f73e1bb"
 dependencies = [
  "architect-action-derive",
  "architect-atom",
@@ -723,7 +723,7 @@ dependencies = [
 [[package]]
 name = "architect-action-derive"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.9.30#16cd68ae82526e7a3f64c344a6f9f8282e0f4170"
+source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.9.31#89338f66fd386daa981367e4c2749f2d6f73e1bb"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -733,7 +733,7 @@ dependencies = [
 [[package]]
 name = "architect-atom"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.9.30#16cd68ae82526e7a3f64c344a6f9f8282e0f4170"
+source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.9.31#89338f66fd386daa981367e4c2749f2d6f73e1bb"
 dependencies = [
  "dioxus",
 ]
@@ -741,7 +741,7 @@ dependencies = [
 [[package]]
 name = "architect-derive"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.9.30#16cd68ae82526e7a3f64c344a6f9f8282e0f4170"
+source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.9.31#89338f66fd386daa981367e4c2749f2d6f73e1bb"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -752,7 +752,7 @@ dependencies = [
 [[package]]
 name = "architect-permissions"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.9.30#16cd68ae82526e7a3f64c344a6f9f8282e0f4170"
+source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.9.31#89338f66fd386daa981367e4c2749f2d6f73e1bb"
 dependencies = [
  "serde",
  "serde_json",
@@ -762,7 +762,7 @@ dependencies = [
 [[package]]
 name = "architect-rpc-derive"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.9.30#16cd68ae82526e7a3f64c344a6f9f8282e0f4170"
+source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.9.31#89338f66fd386daa981367e4c2749f2d6f73e1bb"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -772,7 +772,7 @@ dependencies = [
 [[package]]
 name = "architect-story-core"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.9.30#16cd68ae82526e7a3f64c344a6f9f8282e0f4170"
+source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.9.31#89338f66fd386daa981367e4c2749f2d6f73e1bb"
 dependencies = [
  "linkme",
 ]
@@ -780,7 +780,7 @@ dependencies = [
 [[package]]
 name = "architect-story-macros"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.9.30#16cd68ae82526e7a3f64c344a6f9f8282e0f4170"
+source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.9.31#89338f66fd386daa981367e4c2749f2d6f73e1bb"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -791,7 +791,7 @@ dependencies = [
 [[package]]
 name = "architect-story-runtime"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.9.30#16cd68ae82526e7a3f64c344a6f9f8282e0f4170"
+source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.9.31#89338f66fd386daa981367e4c2749f2d6f73e1bb"
 dependencies = [
  "architect-story-core",
  "architect-story-macros",
@@ -802,8 +802,9 @@ dependencies = [
 [[package]]
 name = "architect-telemetry"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.9.30#16cd68ae82526e7a3f64c344a6f9f8282e0f4170"
+source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.9.31#89338f66fd386daa981367e4c2749f2d6f73e1bb"
 dependencies = [
+ "libc",
  "opentelemetry",
  "opentelemetry-appender-tracing",
  "opentelemetry-otlp",
@@ -818,7 +819,7 @@ dependencies = [
 [[package]]
 name = "architect-ui"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.9.30#16cd68ae82526e7a3f64c344a6f9f8282e0f4170"
+source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.9.31#89338f66fd386daa981367e4c2749f2d6f73e1bb"
 dependencies = [
  "architect-story-runtime",
  "chrono",
@@ -2067,7 +2068,7 @@ checksum = "724d27a0ee38b700e5e164350e79aba601a0db673ac47fce1cb74c3e38864036"
 [[package]]
 name = "collection-proto"
 version = "26.10.1"
-source = "git+https://github.com/FastTrackStudios/task?branch=main#4d6f1fe6fccd0aa3aa300ef92e9942671e1d62e7"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#1dcfeabfefab54a46991f25f62d8f6a15c3c0da8"
 dependencies = [
  "architect",
  "facet",
@@ -2483,7 +2484,7 @@ dependencies = [
 [[package]]
 name = "crdt"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.9.30#16cd68ae82526e7a3f64c344a6f9f8282e0f4170"
+source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.9.31#89338f66fd386daa981367e4c2749f2d6f73e1bb"
 dependencies = [
  "architect",
  "architect-permissions",
@@ -2504,7 +2505,7 @@ dependencies = [
 [[package]]
 name = "crdt-derive"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.9.30#16cd68ae82526e7a3f64c344a6f9f8282e0f4170"
+source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.9.31#89338f66fd386daa981367e4c2749f2d6f73e1bb"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6378,7 +6379,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.62.2",
+ "windows-core 0.58.0",
 ]
 
 [[package]]
@@ -7843,7 +7844,7 @@ dependencies = [
 [[package]]
 name = "links-proto"
 version = "26.10.1"
-source = "git+https://github.com/FastTrackStudios/task?branch=main#4d6f1fe6fccd0aa3aa300ef92e9942671e1d62e7"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#1dcfeabfefab54a46991f25f62d8f6a15c3c0da8"
 dependencies = [
  "architect",
  "facet",
@@ -9961,6 +9962,7 @@ dependencies = [
  "opentelemetry",
  "tracing",
  "tracing-core",
+ "tracing-opentelemetry",
  "tracing-subscriber",
 ]
 
@@ -10051,7 +10053,7 @@ dependencies = [
 [[package]]
 name = "org-proto"
 version = "26.10.1"
-source = "git+https://github.com/FastTrackStudios/task?branch=main#4d6f1fe6fccd0aa3aa300ef92e9942671e1d62e7"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#1dcfeabfefab54a46991f25f62d8f6a15c3c0da8"
 dependencies = [
  "architect",
  "chrono",
@@ -11783,7 +11785,7 @@ dependencies = [
 [[package]]
 name = "resources-proto"
 version = "26.10.1"
-source = "git+https://github.com/FastTrackStudios/task?branch=main#4d6f1fe6fccd0aa3aa300ef92e9942671e1d62e7"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#1dcfeabfefab54a46991f25f62d8f6a15c3c0da8"
 dependencies = [
  "architect",
  "facet",
@@ -13090,7 +13092,7 @@ dependencies = [
 [[package]]
 name = "ssg"
 version = "26.10.1"
-source = "git+https://github.com/FastTrackStudios/task?branch=main#4d6f1fe6fccd0aa3aa300ef92e9942671e1d62e7"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#1dcfeabfefab54a46991f25f62d8f6a15c3c0da8"
 dependencies = [
  "ssg-ui",
  "ssg-vault",
@@ -13099,7 +13101,7 @@ dependencies = [
 [[package]]
 name = "ssg-build"
 version = "26.10.1"
-source = "git+https://github.com/FastTrackStudios/task?branch=main#4d6f1fe6fccd0aa3aa300ef92e9942671e1d62e7"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#1dcfeabfefab54a46991f25f62d8f6a15c3c0da8"
 dependencies = [
  "notify",
  "ssg-vault",
@@ -13108,7 +13110,7 @@ dependencies = [
 [[package]]
 name = "ssg-ui"
 version = "26.10.1"
-source = "git+https://github.com/FastTrackStudios/task?branch=main#4d6f1fe6fccd0aa3aa300ef92e9942671e1d62e7"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#1dcfeabfefab54a46991f25f62d8f6a15c3c0da8"
 dependencies = [
  "dioxus",
  "ssg-vault",
@@ -13120,7 +13122,7 @@ dependencies = [
 [[package]]
 name = "ssg-vault"
 version = "26.10.1"
-source = "git+https://github.com/FastTrackStudios/task?branch=main#4d6f1fe6fccd0aa3aa300ef92e9942671e1d62e7"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#1dcfeabfefab54a46991f25f62d8f6a15c3c0da8"
 dependencies = [
  "pulldown-cmark",
 ]
@@ -15555,7 +15557,7 @@ checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 [[package]]
 name = "vault-proto"
 version = "26.10.1"
-source = "git+https://github.com/FastTrackStudios/task?branch=main#4d6f1fe6fccd0aa3aa300ef92e9942671e1d62e7"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#1dcfeabfefab54a46991f25f62d8f6a15c3c0da8"
 dependencies = [
  "architect",
  "chrono",
@@ -15700,7 +15702,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "view-knowledge-graph"
 version = "26.10.1"
-source = "git+https://github.com/FastTrackStudios/task?branch=main#4d6f1fe6fccd0aa3aa300ef92e9942671e1d62e7"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#1dcfeabfefab54a46991f25f62d8f6a15c3c0da8"
 dependencies = [
  "architect-ui",
  "dioxus",
