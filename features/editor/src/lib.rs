@@ -5,6 +5,11 @@
 //! The renderer is the `render` feature (on by default): it pulls
 //! engraver's CPU-only `svg` tier. `lang` needs only the parser, so a host
 //! that wants decorations without fences turns defaults off.
+//!
+//! Opt-in, both off by default: `preview` (the chart preview's model —
+//! pages and camera math, no Dioxus) and `view` (the chart editor as a
+//! Dioxus component, for a browser or a Blitz window; `native` / `web`
+//! pick editor-view's renderer).
 
 #[cfg(feature = "render")]
 mod fence;
@@ -20,3 +25,13 @@ pub use fence::*;
 pub mod font_subset;
 
 pub mod lang;
+
+/// The chart preview's model: engraving to page SVGs and the camera math,
+/// without Dioxus or a DOM. Behind the `preview` feature.
+#[cfg(feature = "preview")]
+pub mod preview;
+
+/// The chart editor as a Dioxus component, and the live preview's hook.
+/// Behind the `view` feature; `native` / `web` pick the renderer.
+#[cfg(feature = "view")]
+pub mod view;

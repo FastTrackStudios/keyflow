@@ -84,6 +84,13 @@ editor-state = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1
 # Byte-offset `Changes` ⇄ scalar text ops, at the editor's own tag: what
 # a remote edit to a shared chart becomes on its way into the editor.
 editor-crdt = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.24" }
+# The editor's view and vim layers on their own, for `editor-keyflow`'s
+# `view` feature: the umbrella `editor` crate pulls typst + mermaid and an
+# `asset!` stylesheet, none of which a Blitz host can take. Defaults OFF —
+# a consumer names its renderer (`editor-view/native` for Blitz, `web` for
+# the contenteditable bridge) through `editor-keyflow`'s pass-throughs.
+editor-view = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.24", default-features = false }
+editor-vim = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.24" }
 
 # ── features/editor — this repo's half of the editor integration ──────
 # It needs `editor-state` from below and `keyflow-lang`/`engraver` from
@@ -271,6 +278,9 @@ dioxus = { git = "https://github.com/DioxusLabs/dioxus", rev = "f717a8e184a522d0
 # reqwest would be a second major in the wasm binary. Same rev as the
 # meta-crate above — they are one repo and must not drift.
 dioxus-web = { git = "https://github.com/DioxusLabs/dioxus", rev = "f717a8e184a522d078b70bb4b4d62a5f9a99ddfc", default-features = false }
+# Server-side rendering, for the smoke test of `editor-keyflow`'s `view`
+# components (a dev-dependency only). Same rev as the rest of dioxus.
+dioxus-ssr = { git = "https://github.com/DioxusLabs/dioxus", rev = "f717a8e184a522d078b70bb4b4d62a5f9a99ddfc" }
 # Blitz native renderer — dioxus-native(-dom) moved into the dioxus repo
 # on the 0.8 line; blitz-* come from crates.io (0.3.0-beta.1), matching
 # dioxus git's own `=0.3.0-beta.1` pins. Feature union of the wave-1

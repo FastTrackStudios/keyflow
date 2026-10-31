@@ -78,7 +78,11 @@ editor = { workspace = true }
 editor-state = { workspace = true }
 # Registers the chart renderer into editor-state's fence registry, so
 # ```kf+ fences in the workbench engrave instead of showing source.
-editor-keyflow = { workspace = true }
+# `view` is the chart editor component itself (`KeyflowEditor`, the
+# preview's pages and camera math, the chart command palette) — the same
+# one Studio mounts under Blitz. `web` picks editor-view's contenteditable
+# renderer, which the umbrella `editor` above selects anyway.
+editor-keyflow = { workspace = true, features = ["view", "web"] }
 # (Its `lang` module is Keyflow *as a language* inside the editor: syntax
 # decorations, IDE diagnostics, hover, and the resolved-chord overlays —
 # 1 -> C in the key of C. That is what makes the workbench a Keyflow

@@ -31,9 +31,16 @@
 //!
 //! What stays here is the handful of things that are not settings: the two
 //! naming forms that are not directives at all.
+//!
+//! The catalog is process-wide, so registering it is the host's call — a
+//! host that also edits markdown notes wants its markdown catalog there:
+//!
+//! ```ignore
+//! editor_view::palette::register_catalog(editor_keyflow::view::palette_commands());
+//! ```
 
-use editor::editor_view::palette::{CommandEntry, CommandKind};
-use keyflow::chart::settings::DIRECTIVES;
+use editor_view::palette::{CommandEntry, CommandKind};
+use keyflow_lang::text::proto::chart::settings::DIRECTIVES;
 
 /// Which group a directive belongs in.
 ///
@@ -53,7 +60,7 @@ fn group_for(key: &str) -> &'static str {
 /// added here because they are not settings and the parser does not list
 /// them among its own.
 #[must_use]
-pub fn commands() -> Vec<CommandEntry> {
+pub fn palette_commands() -> Vec<CommandEntry> {
     let mut out: Vec<CommandEntry> = DIRECTIVES
         .iter()
         .map(|spec| CommandEntry {
@@ -110,7 +117,7 @@ pub fn commands() -> Vec<CommandEntry> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use keyflow::text::chart::parse_chart;
+    use keyflow_lang::text::chart::parse_chart;
 
     /// Every command inserts a line that parses.
     ///
@@ -120,7 +127,7 @@ mod tests {
     /// caret rather than doing nothing.
     #[test]
     fn every_command_is_a_working_line() {
-        for entry in commands() {
+        for entry in palette_commands() {
             let CommandKind::InsertBlockSnippet(text, _) = entry.kind else {
                 panic!("{}: chart commands are block snippets", entry.label);
             };
@@ -139,7 +146,7 @@ mod tests {
     /// added to `DIRECTIVES` shows up here without anyone editing this file.
     #[test]
     fn every_directive_reaches_the_menu() {
-        let labels: Vec<_> = commands().iter().map(|c| c.label).collect();
+        let labels: Vec<_> = palette_commands().iter().map(|c| c.label).collect();
         for spec in DIRECTIVES {
             assert!(
                 labels.contains(&spec.label),
@@ -148,7 +155,7 @@ mod tests {
             );
         }
         assert_eq!(
-            commands().iter().filter(|c| c.icon == "/").count(),
+            palette_commands().iter().filter(|c| c.icon == "/").count(),
             DIRECTIVES.len() + 2,
             "directive rows are the table plus the two extra feel values",
         );
@@ -158,7 +165,7 @@ mod tests {
     /// chart syntax rather than a command.
     #[test]
     fn the_catalog_is_commands_only() {
-        let labels: Vec<_> = commands().iter().map(|c| c.label).collect();
+        let labels: Vec<_> = palette_commands().iter().map(|c| c.label).collect();
         for not_a_command in [
             "Heading 1",
             "Bulleted list",
