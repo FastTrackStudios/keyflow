@@ -34,8 +34,26 @@ tracing = { workspace = true }
 allsorts = { version = "0.16", optional = true }
 ttf-parser = { version = "0.25", optional = true }
 
+dioxus = { workspace = true, optional = true }
+editor-view = { workspace = true, optional = true }
+editor-vim = { workspace = true, optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1.49", features = ["time", "rt"], optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+gloo-timers = { version = "0.3", features = ["futures"], optional = true }
+
+[dev-dependencies]
+dioxus-ssr = { workspace = true }
+tokio = { version = "1.49", features = ["macros", "rt", "time"] }
+
 [features]
 default = ["render"]
+preview = ["render"]
+view = ["preview", "dep:dioxus", "dep:editor-view", "dep:editor-vim", "dep:tokio", "dep:gloo-timers"]
+native = ["view", "editor-view/native"]
+web = ["view", "editor-view/web"]
 # `.kf` fences → inline SVG.
 render = ["dep:engraver"]
 # Subset `@font-face` rules for a page of charts — see `font_subset`.

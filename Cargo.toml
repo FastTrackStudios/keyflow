@@ -76,6 +76,8 @@ engraver = { path = "features/engraver", default-features = false }
 # the graph acyclic.
 # Not the markdown fences (Typst, Mermaid): nothing here renders them.
 editor-state = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.25", default-features = false }
+editor-view = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.25", default-features = false }
+editor-vim = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.25" }
 
 # ── features/editor — this repo's half of the editor integration ──────
 # It needs `editor-state` from below and `keyflow-lang`/`engraver` from
@@ -136,6 +138,7 @@ musicxml = "1.1"
 # across every dioxus-* entry below AND the FTS fork tags of
 # primitives/lucide/sdk (`fts-upstream-2026-11`), which pin the same rev).
 dioxus = { git = "https://github.com/DioxusLabs/dioxus", rev = "430cfb563f1b70602ef387f0c80f171d84527b41", default-features = false, features = ["lib"] }
+dioxus-ssr = { git = "https://github.com/DioxusLabs/dioxus", rev = "430cfb563f1b70602ef387f0c80f171d84527b41" }
 # Blitz native renderer — dioxus-native(-dom) moved into the dioxus repo
 # on the 0.8 line; blitz-* are `=0.3.0-beta.4`, patched to the FTS fork
 # below. Feature union of the wave-1 UI libs (prelude, system-fonts) and

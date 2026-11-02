@@ -20,3 +20,9 @@ pub use fence::*;
 pub mod font_subset;
 
 pub mod lang;
+
+#[cfg(feature = "preview")]
+pub mod preview;
+
+#[cfg(feature = "view")]
+pub mod view;
