@@ -480,7 +480,7 @@ pub fn create_main_pipeline(
         vertex: wgpu::VertexState {
             module: &shader,
             entry_point: Some("vs_main"),
-            buffers: &[Vertex::desc()],
+            buffers: &[Some(Vertex::desc())],
             compilation_options: Default::default(),
         },
         fragment: Some(wgpu::FragmentState {
@@ -660,7 +660,7 @@ pub fn create_blit_pipeline(
         vertex: wgpu::VertexState {
             module: &shader,
             entry_point: Some("vs_main"),
-            buffers: &[BlitVertex::desc()],
+            buffers: &[Some(BlitVertex::desc())],
             compilation_options: Default::default(),
         },
         fragment: Some(wgpu::FragmentState {
@@ -704,7 +704,7 @@ pub fn create_sdf_pipeline(
         vertex: wgpu::VertexState {
             module: &shader,
             entry_point: Some("vs_main"),
-            buffers: &[SdfRectVertex::desc()],
+            buffers: &[Some(SdfRectVertex::desc())],
             compilation_options: Default::default(),
         },
         fragment: Some(wgpu::FragmentState {

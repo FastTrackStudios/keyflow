@@ -48,11 +48,12 @@ mod desktop {
             let current_aa = Self::antialiasing_from_env("KEYFLOW_AA_QUALITY", "msaa8");
             tracing::info!("ChartGraphics AA mode: {:?}", current_aa);
 
-            let mut renderer = VelloWindowRenderer::with_options(VelloRendererOptions {
-                base_color: Color::TRANSPARENT,
-                antialiasing_method: current_aa,
-                ..Default::default()
-            });
+            // `VelloRendererOptions` is non-exhaustive: start from the
+            // defaults and set the two fields this surface cares about.
+            let mut options = VelloRendererOptions::default();
+            options.base_color = Color::TRANSPARENT;
+            options.antialiasing_method = current_aa;
+            let mut renderer = VelloWindowRenderer::with_options(options);
 
             renderer.resume(window.clone(), width, height, || {});
 

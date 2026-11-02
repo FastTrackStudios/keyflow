@@ -8,7 +8,7 @@
     options.fts = {
       rustToolchain = lib.mkOption {
         type = lib.types.package;
-        description = "FTS-wide pinned Rust toolchain (stable 1.94 + wasm32).";
+        description = "FTS-wide pinned Rust toolchain (stable 1.99.1 + wasm32).";
       };
       buildInputs = lib.mkOption {
         type = lib.types.listOf lib.types.package;

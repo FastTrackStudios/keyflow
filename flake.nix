@@ -14,12 +14,16 @@
     den.url = "github:denful/den";
     import-tree.url = "github:vic/import-tree";
 
-    # Shared Dioxus toolchain hub — every FTS Dioxus repo follows its
-    # nixpkgs / rust-overlay pins so `dx` and the Rust toolchain stay
-    # in lockstep.
+    # Shared Dioxus toolchain hub — nixpkgs follows it.
     dioxus-flake.url = "github:FastTrackStudios/Dioxus-Flake";
     nixpkgs.follows = "dioxus-flake/nixpkgs";
-    rust-overlay.follows = "dioxus-flake/rust-overlay";
+    # rust-overlay is ours, not the hub's (task made the same move): the
+    # hub's sat at 2026-04-05, which capped the toolchain at 1.94, and
+    # architect v0.10.0 needs 1.99.1 (its Dioxus rev and dioxus-primitives
+    # extend from `Box<[T; N]>`, which 1.94 cannot iterate). `dx` has its
+    # own nixpkgs-dx pin, so nothing needed the coupling.
+    rust-overlay.url = "github:oxalica/rust-overlay";
+    rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
     flake-parts.url = "github:hercules-ci/flake-parts";
 
     # crane — cargo-in-nix builds for the deployable images (task-server
