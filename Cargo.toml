@@ -78,12 +78,12 @@ engraver = { path = "features/engraver", default-features = false }
 # understands the ```kf fence family natively. `editor-keyflow` (here)
 # implements its `fence_renderer` seam so charts engrave; editor-state
 # knows nothing about keyflow, which is what keeps the graph acyclic.
-editor = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.24" }
+editor = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.25" }
 # Not the markdown fences (Typst, Mermaid): nothing here renders them.
-editor-state = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.24", default-features = false }
+editor-state = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.25", default-features = false }
 # Byte-offset `Changes` ⇄ scalar text ops, at the editor's own tag: what
 # a remote edit to a shared chart becomes on its way into the editor.
-editor-crdt = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.24" }
+editor-crdt = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.25" }
 
 # ── features/editor — this repo's half of the editor integration ──────
 # It needs `editor-state` from below and `keyflow-lang`/`engraver` from
@@ -107,7 +107,7 @@ editor-keyflow = { path = "features/editor" }
 # at rev 607916d for a reason that no longer holds: task@main's crates
 # reach architect-ui, this repo was on architect v0.0.2, and taking both
 # put two copies of the architect crates in one wasm binary. Both repos
-# pin architect v0.8.2 now, so there is one copy and the rev pin has
+# pin one architect tag now, so there is one copy and the rev pin has
 # nothing left to protect. See the architect block below.
 #
 # The other reason it was a rev, once: 263ec34 carried a stray
@@ -206,7 +206,7 @@ futures-channel = "0.3"
 # a split tag checks that repo out twice, and cargo treats the two
 # checkouts as different crates whose traits then refuse to unify.
 #
-# v0.9.31, the tag task@main pins too. This repo takes `ssg`, `ssg-ui`,
+# v0.10.0, the tag task pins too. This repo takes `ssg`, `ssg-ui`,
 # `ssg-build`, `view-knowledge-graph` and the *-proto wire crates from
 # task@main, and every one of those reaches
 # architect-ui. Pin a different tag here and the site ends up holding two
@@ -224,18 +224,18 @@ futures-channel = "0.3"
 # AND 0.13 (iroh, via architect), wasm-streams 0.4 (dioxus-web) AND 0.5
 # (reqwest 0.13), and links clean. Two majors of a crate are fine; two
 # copies of the SAME crate at different sources are what breaks.
-architect = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.9.31" }
+architect = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.10.0" }
 
 # The shared musical vocabulary — section colours and the canonical
 # palettes `keyflow-proto` engraves section cards with.
 music-catalog = { git = "https://github.com/FastTrackStudios/music-convention", tag = "v0.1.0" }
 color-palette = { git = "https://github.com/FastTrackStudios/music-convention", tag = "v0.1.0" }
 # The Dioxus primitive library (was libs/ui/fts-ui, renamed on the split).
-architect-ui = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.9.31" }
+architect-ui = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.10.0" }
 # Loro documents and their sync + presence sessions — the client half of
 # Task's per-file collaboration. Same tag as the rest of architect: two
 # copies of it would not link into one wasm binary.
-crdt = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.9.31" }
+crdt = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.10.0" }
 
 # The FastTrackStudio account. One identity across Task, Session, Signal,
 # Keyflow and Ignition, served by auth.fasttrackstudio.app.
@@ -255,27 +255,27 @@ crdt = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.9.31" 
 # Telemetry. Same tag as everything above — see the note there for why
 # that is not optional. `otel` is inert unless the build bakes
 # TASK_OTLP_ENDPOINT, so dev builds stay telemetry-free.
-architect-telemetry = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.9.31", features = ["otel"] }
+architect-telemetry = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.10.0", features = ["otel"] }
 
 # ── MusicXML parsing (keyflow) ─────────────────────────────────────────
 musicxml = "1.1"
 
 # ── UI framework ──────────────────────────────────────────────────────
-# dioxus 0.8 line — git rev pinned (0.8.0-alpha.0 + the blitz beta bump;
-# bump this rev deliberately, it must stay in lockstep across every
-# dioxus-* entry below AND the FTS fork branches of primitives/lumen/
-# lucide/sdk, which pin the same rev).
-dioxus = { git = "https://github.com/DioxusLabs/dioxus", rev = "f717a8e184a522d078b70bb4b4d62a5f9a99ddfc", default-features = false, features = ["lib"] }
+# dioxus 0.8 line — git rev pinned (0.8.0-alpha.3, the rev architect
+# v0.10.0 pins; bump this rev deliberately, it must stay in lockstep
+# across every dioxus-* entry below AND the FTS fork tags of
+# primitives/lucide/sdk (`fts-upstream-2026-11`), which pin the same rev).
+dioxus = { git = "https://github.com/DioxusLabs/dioxus", rev = "430cfb563f1b70602ef387f0c80f171d84527b41", default-features = false, features = ["lib"] }
 # Direct, and only apps/web takes it: it is how the site turns on
 # `hydrate` for static generation without `dioxus/fullstack`, whose
 # reqwest would be a second major in the wasm binary. Same rev as the
 # meta-crate above — they are one repo and must not drift.
-dioxus-web = { git = "https://github.com/DioxusLabs/dioxus", rev = "f717a8e184a522d078b70bb4b4d62a5f9a99ddfc", default-features = false }
+dioxus-web = { git = "https://github.com/DioxusLabs/dioxus", rev = "430cfb563f1b70602ef387f0c80f171d84527b41", default-features = false }
 # Blitz native renderer — dioxus-native(-dom) moved into the dioxus repo
-# on the 0.8 line; blitz-* come from crates.io (0.3.0-beta.1), matching
-# dioxus git's own `=0.3.0-beta.1` pins. Feature union of the wave-1
-# UI libs (prelude, system-fonts) and daw-reaper-dioxus (svg, autofocus,
-# incremental, data-uri theme-skin PNGs).
+# on the 0.8 line; blitz-* are `=0.3.0-beta.4`, patched to the FTS fork
+# below. Feature union of the wave-1 UI libs (prelude, system-fonts) and
+# daw-reaper-dioxus (svg, autofocus, data-uri theme-skin PNGs); upstream
+# dropped the `incremental` feature.
 # `vello` — the compute-shader renderer — because dioxus-native's own
 # default is `vello-hybrid`, which does much of its path work on the CPU.
 # Hybrid exists for WebGL-class targets; on a desktop GPU it is what
@@ -286,19 +286,18 @@ dioxus-web = { git = "https://github.com/DioxusLabs/dioxus", rev = "f717a8e184a5
 # Both features can be on at once: the renderer is chosen by a `cfg_if`
 # chain that tests `vello` first, so this wins over the default without
 # having to turn defaults off and re-list them.
-dioxus-native = { git = "https://github.com/DioxusLabs/dioxus", rev = "f717a8e184a522d078b70bb4b4d62a5f9a99ddfc", features = ["prelude", "system-fonts", "svg", "autofocus", "incremental", "data-uri", "vello"] }
-lucide-dioxus = { git = "https://github.com/FastTrackStudios/lucide", branch = "main", features = ["all-icons"] }
-anyrender_vello = "0.12"
-# keyflow-ui / engraver renderer stack (paired with dioxus-native
-# 0.7.9 from crates.io). NOTE: keyflow-ui pins anyrender_vello 0.10.1 and
-# dioxus-native 0.7.9 INLINE in its own manifest — they collide with the
-# root's anyrender_vello 0.11 / blitz-git dioxus-native pins above, and
-# root pins win in the workspace table, so the conflicting pair stays
-# crate-local.
-anyrender = "0.11"
-anyrender_vello_hybrid = "0.8"
-vello_hybrid = "0.0.9"
-vello_common = "0.0.9"
+dioxus-native = { git = "https://github.com/DioxusLabs/dioxus", rev = "430cfb563f1b70602ef387f0c80f171d84527b41", features = ["prelude", "system-fonts", "svg", "autofocus", "data-uri", "vello"] }
+lucide-dioxus = { git = "https://github.com/FastTrackStudios/lucide", tag = "fts-upstream-2026-11", features = ["all-icons"] }
+anyrender_vello = "0.15"
+# keyflow-ui / engraver renderer stack: the anyrender line Blitz paints
+# with (0.14, from the blitz tag in [patch.crates-io]), anyrender_vello
+# 0.15 / anyrender_vello_hybrid 0.11 from vendor, vello 0.11 and wgpu 30
+# beneath them.
+anyrender = "0.14"
+anyrender_vello_hybrid = "0.11"
+# vello_hybrid's successor; anyrender_vello_hybrid 0.11 paints into its Scene.
+vello_gpu = "0.3"
+vello_common = "0.3"
 peniko = "0.6"
 kurbo = "0.13"
 
@@ -320,19 +319,29 @@ regex = "1"
 # handshake fails ("schema decode consumed N of M bytes") whenever
 # Task's protos have moved since the pinned `main`.
 [patch.crates-io]
-# Blitz from the FTS fork (0.3.0-beta.1 line, upstream 02523b83 +
-# fts-focus: focus-follows-pointerdown for all focusable content —
-# upstream only click-focuses text inputs, leaving the editor's
-# tabindex div unfocusable by mouse). dioxus git pins `=0.3.0-beta.1`.
-# One rev across all blitz crates; the bump is gated on dioxus's next
-# Blitz sync and moves as one step. See the session repo's manifest for
-# the full history of why 02523b83 is the ceiling.
-blitz-dom = { git = "https://github.com/FastTrackStudios/blitz", rev = "c82dd238000515c44c758845b9a17e9b48eb0087" }
-blitz-traits = { git = "https://github.com/FastTrackStudios/blitz", rev = "c82dd238000515c44c758845b9a17e9b48eb0087" }
-blitz-paint = { git = "https://github.com/FastTrackStudios/blitz", rev = "c82dd238000515c44c758845b9a17e9b48eb0087" }
-blitz-shell = { git = "https://github.com/FastTrackStudios/blitz", rev = "c82dd238000515c44c758845b9a17e9b48eb0087" }
-blitz-net = { git = "https://github.com/FastTrackStudios/blitz", rev = "c82dd238000515c44c758845b9a17e9b48eb0087" }
-blitz-html = { git = "https://github.com/FastTrackStudios/blitz", rev = "c82dd238000515c44c758845b9a17e9b48eb0087" }
+# Blitz from the FTS fork: tag `fts-upstream-2026-11`, DioxusLabs/blitz
+# main plus the FTS work carried on top (focus-follows-pointerdown, touch
+# as pointer events, layered compositing, the measure fix; the fork's
+# FTS.md lists them). dioxus git pins `=0.3.0-beta.4`. The same tag
+# architect pins (FastTrackStudios/architect#211), so one lock holds one
+# Blitz. `anyrender` comes from the same tag: blitz-paint paints into it,
+# and so does engraver's `ChartView` when an app (session) puts a chart in
+# a Blitz canvas, so the two must be one crate.
+blitz-dom = { git = "https://github.com/FastTrackStudios/blitz", tag = "fts-upstream-2026-11" }
+blitz-traits = { git = "https://github.com/FastTrackStudios/blitz", tag = "fts-upstream-2026-11" }
+blitz-paint = { git = "https://github.com/FastTrackStudios/blitz", tag = "fts-upstream-2026-11" }
+blitz-shell = { git = "https://github.com/FastTrackStudios/blitz", tag = "fts-upstream-2026-11" }
+blitz-net = { git = "https://github.com/FastTrackStudios/blitz", tag = "fts-upstream-2026-11" }
+blitz-html = { git = "https://github.com/FastTrackStudios/blitz", tag = "fts-upstream-2026-11" }
+anyrender = { git = "https://github.com/FastTrackStudios/blitz", tag = "fts-upstream-2026-11" }
+# The renderer and windowing crates architect patches from
+# FastTrackStudios/vendor `v0.7.1` (each crate's UPSTREAM.md says what
+# changed). The iOS ones only resolve for apps/mobile's target.
+anyrender_vello = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.7.1" }
+anyrender_vello_hybrid = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.7.1" }
+winit-uikit = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.7.1" }
+wgpu-hal = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.7.1" }
+raw-window-metal = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.7.1" }
 
 # The same vendored phon, phon-jit, facet-core and vox-phon Task patches
 # in (see its root manifest, and vendor's README, for each one's reason),
@@ -353,8 +362,18 @@ phon-jit = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.2.3" 
 facet-core = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.4.0" }
 vox-phon = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.3.0" }
 
-# One architect for the whole graph: v0.9.31. This repo's pins above and
-# task@main's crates are all on v0.9.31 now; what this patch still lifts
+# The Dioxus crates architect takes from FastTrackStudios/vendor `v0.7.1`
+# rather than the pinned rev (FastTrackStudios/architect#211): the
+# simulator renderer, focus parked while busy, a dropped handler's owner
+# not being a panic. Upstream renamed dioxus-core's vdom crate to
+# `dioxus-vdom`.
+[patch."https://github.com/DioxusLabs/dioxus"]
+dioxus-native = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.7.1" }
+dioxus-native-dom = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.7.1" }
+dioxus-vdom = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.7.1" }
+
+# One architect for the whole graph: v0.10.0. This repo's pins above and
+# task's crates are all on v0.10.0; what this patch still lifts
 # is daw v0.0.7, which pins architect v0.0.2 (same crate version 0.1.0, so
 # the patch applies) and would otherwise put a second architect source in
 # this repo's Cargo.lock. It only acts here: a git dependency's [patch] is
@@ -363,19 +382,19 @@ vox-phon = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.3.0" 
 # lets it patch the plain one; a same-host patch is refused. Bump this tag
 # with the pins above; drop the block once keyflow takes daw from studio.
 [patch."https://github.com/FastTrackStudios/architect"]
-architect = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.31" }
-architect-action-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.31" }
-architect-atom = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.31" }
-architect-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.31" }
-architect-permissions = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.31" }
-architect-rpc-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.31" }
-architect-story-core = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.31" }
-architect-story-macros = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.31" }
-architect-story-runtime = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.31" }
-architect-telemetry = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.31" }
-architect-ui = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.31" }
-crdt = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.31" }
-crdt-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.9.31" }
+architect = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
+architect-action-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
+architect-atom = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
+architect-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
+architect-permissions = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
+architect-rpc-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
+architect-story-core = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
+architect-story-macros = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
+architect-story-runtime = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
+architect-telemetry = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
+architect-ui = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
+crdt = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
+crdt-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
 
 [workspace.lints.rust]
 # Flipped from "allow" 2026-07-28 (task cleanup): the blanket allows are

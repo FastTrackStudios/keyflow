@@ -395,11 +395,17 @@ fn replay_recorded_scene(
     if scene_transform == Affine::IDENTITY {
         for cmd in &recorded.commands {
             match cmd {
-                RenderCommand::PushLayer(cmd) => {
-                    target.push_layer(cmd.blend, cmd.alpha, cmd.transform, &cmd.clip, None, None)
-                }
+                RenderCommand::PushLayer(cmd) => target.push_layer(
+                    cmd.fill,
+                    cmd.blend,
+                    cmd.alpha,
+                    cmd.transform,
+                    &cmd.clip,
+                    None,
+                    None,
+                ),
                 RenderCommand::PushClipLayer(cmd) => {
-                    target.push_clip_layer(cmd.transform, &cmd.clip)
+                    target.push_clip_layer(cmd.fill, cmd.transform, &cmd.clip)
                 }
                 RenderCommand::PopLayer => target.pop_layer(),
                 RenderCommand::Stroke(cmd) => target.stroke(
@@ -444,6 +450,7 @@ fn replay_recorded_scene(
     for cmd in &recorded.commands {
         match cmd {
             RenderCommand::PushLayer(cmd) => target.push_layer(
+                cmd.fill,
                 cmd.blend,
                 cmd.alpha,
                 scene_transform * cmd.transform,
@@ -452,7 +459,7 @@ fn replay_recorded_scene(
                 None,
             ),
             RenderCommand::PushClipLayer(cmd) => {
-                target.push_clip_layer(scene_transform * cmd.transform, &cmd.clip)
+                target.push_clip_layer(cmd.fill, scene_transform * cmd.transform, &cmd.clip)
             }
             RenderCommand::PopLayer => target.pop_layer(),
             RenderCommand::Stroke(cmd) => target.stroke(
@@ -714,7 +721,15 @@ impl ChartLayoutManager {
         }
 
         let clip_rect = Rect::new(0.0, 0.0, width, height);
-        scene.push_layer(Compose::SrcOver, 1.0, offset, &clip_rect, None, None);
+        scene.push_layer(
+            Fill::NonZero,
+            Compose::SrcOver,
+            1.0,
+            offset,
+            &clip_rect,
+            None,
+            None,
+        );
 
         let (visible_pages, focus_page) =
             self.visible_and_focus_for_viewport(width, height, transform);
@@ -902,7 +917,15 @@ impl ChartLayoutManager {
         }
 
         let clip_rect = Rect::new(0.0, 0.0, width, height);
-        scene.push_layer(Compose::SrcOver, 1.0, offset, &clip_rect, None, None);
+        scene.push_layer(
+            Fill::NonZero,
+            Compose::SrcOver,
+            1.0,
+            offset,
+            &clip_rect,
+            None,
+            None,
+        );
 
         if let Some((scene_x, scene_y)) = hover_point {
             self.render_hover_highlight(scene, scene_x, scene_y, offset * transform);

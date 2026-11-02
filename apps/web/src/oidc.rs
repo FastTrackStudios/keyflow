@@ -16,7 +16,7 @@
 //! dependency because the site was pinned to an architect that predated
 //! that module, and the pin could not move on its own.
 //!
-//! **That pin has moved**: the site and Task are both on v0.8.2, so the
+//! **That pin has moved**: the site and Task are both on one architect tag, so the
 //! crate is now reachable and this file is redundant. Replacing it is a
 //! deliberate follow-up rather than a drive-by — the tests below are the
 //! contract to keep passing when it happens.

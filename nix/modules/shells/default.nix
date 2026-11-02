@@ -28,7 +28,7 @@
       ++ [
         config.fts.rustToolchain
         config.fts.dx.cli          # dx 0.7.9 — prebuilt, no cargo install
-        config.fts.dx.wasmBindgen  # wasm-bindgen-cli 0.2.126 (lock match)
+        config.fts.dx.wasmBindgen  # wasm-bindgen-cli 0.2.127 (lock match)
         config.fts.dx.binaryen     # wasm-opt 129 — what dx 0.7.9 pins
       ]
       # cargo-rail — graph-aware workspace maintenance (unify / change /

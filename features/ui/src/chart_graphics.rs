@@ -2,7 +2,7 @@
 //!
 //! Provides platform-specific rendering backends:
 //! - **Desktop** (`desktop-graphics`): `VelloWindowRenderer` with WGPU behind a transparent WebView
-//! - **WASM** (`wasm-graphics`): `vello_hybrid::WebGlRenderer` rendering to an HTML canvas
+//! - **WASM** (`wasm-graphics`): `vello_gpu::WebGlRenderer` rendering to an HTML canvas
 
 // ─── Desktop backend (VelloWindowRenderer + WGPU) ───────────────────────────
 
@@ -48,11 +48,12 @@ mod desktop {
             let current_aa = Self::antialiasing_from_env("KEYFLOW_AA_QUALITY", "msaa8");
             tracing::info!("ChartGraphics AA mode: {:?}", current_aa);
 
-            let mut renderer = VelloWindowRenderer::with_options(VelloRendererOptions {
-                base_color: Color::TRANSPARENT,
-                antialiasing_method: current_aa,
-                ..Default::default()
-            });
+            // `VelloRendererOptions` is non-exhaustive: start from the
+            // defaults and set the two fields this surface cares about.
+            let mut options = VelloRendererOptions::default();
+            options.base_color = Color::TRANSPARENT;
+            options.antialiasing_method = current_aa;
+            let mut renderer = VelloWindowRenderer::with_options(options);
 
             renderer.resume(window.clone(), width, height, || {});
 
@@ -115,25 +116,26 @@ mod desktop {
 #[cfg(feature = "desktop-graphics")]
 pub use desktop::ChartGraphics;
 
-// ─── WASM backend (vello_hybrid WebGlRenderer) ─────────────────────────────
+// ─── WASM backend (vello_gpu WebGlRenderer) ───────────────────────────────
 
 #[cfg(all(feature = "wasm-graphics", target_arch = "wasm32"))]
 mod wasm {
     use anyrender_vello_hybrid::{WebGlImageManager, WebGlScenePainter};
     use rustc_hash::FxHashMap;
-    use vello_hybrid::{RenderSettings, RenderSize, Resources, Scene, WebGlRenderer};
+    use vello_gpu::{RenderSize, Resources, Scene, WebGlRenderer, WebGlTextureBindings};
     use web_sys::HtmlCanvasElement;
 
-    /// Chart graphics context wrapping vello_hybrid's WebGlRenderer.
+    /// Chart graphics context wrapping vello_gpu's WebGlRenderer.
     ///
     /// Renders charts to an HTML `<canvas>` element via WebGL2.
     /// Uses the same `anyrender::PaintScene` abstraction as the desktop backend,
     /// so `ChartLayoutManager::render_to_scene()` works identically.
     pub struct ChartGraphics {
         renderer: WebGlRenderer,
-        // vello_hybrid 0.0.9 split the image/glyph atlases out of the
-        // renderer into `Resources`, which the caller now owns and passes
-        // to both the image manager and `render`.
+        // The image/glyph atlases live in `Resources`, which the caller
+        // owns and passes to both the image manager and `render`.
+        // vello_gpu (vello_hybrid's successor) hands them back from
+        // `WebGlRenderer::new`.
         resources: Resources,
         scene: Scene,
         cached_images: FxHashMap<u64, vello_common::paint::ImageId>,
@@ -146,13 +148,16 @@ mod wasm {
         ///
         /// Initializes a WebGL2 rendering context from the canvas.
         pub fn new_web(canvas: &HtmlCanvasElement, width: u32, height: u32) -> Self {
-            let renderer = WebGlRenderer::new(canvas);
-            let scene = Scene::new_with(width as u16, height as u16, RenderSettings::default());
+            // A canvas without a WebGL2 context is not something the page
+            // can recover from; the chart's SVG sits behind this surface.
+            let (renderer, resources) =
+                WebGlRenderer::new(canvas).expect("a WebGL2 context for the chart canvas");
+            let scene = Scene::new(width as u16, height as u16);
             tracing::info!("ChartGraphics WebGL: {}x{}", width, height);
 
             Self {
                 renderer,
-                resources: Resources::new(),
+                resources,
                 scene,
                 cached_images: FxHashMap::default(),
                 width,
@@ -164,7 +169,7 @@ mod wasm {
         pub fn resize(&mut self, width: u32, height: u32) {
             self.width = width;
             self.height = height;
-            self.scene = Scene::new_with(width as u16, height as u16, RenderSettings::default());
+            self.scene = Scene::new(width as u16, height as u16);
         }
 
         /// Check if the renderer is active (always true for WebGL once created).
@@ -199,13 +204,16 @@ mod wasm {
 
             // Render the built scene to the canvas via WebGL2.
             let render_size = RenderSize {
-                width: self.width,
-                height: self.height,
+                width: self.width as u16,
+                height: self.height as u16,
             };
-            if let Err(e) = self
-                .renderer
-                .render(&self.scene, &mut self.resources, &render_size)
-            {
+            if let Err(e) = self.renderer.render(
+                &self.scene,
+                &mut self.resources,
+                &render_size,
+                &WebGlTextureBindings::new(),
+                peniko::Color::TRANSPARENT,
+            ) {
                 tracing::error!("WebGL chart render failed: {:?}", e);
             }
 

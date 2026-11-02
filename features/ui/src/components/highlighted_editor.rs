@@ -4,7 +4,7 @@
 //! providing real-time syntax highlighting as the user types.
 
 use crate::prelude::*;
-use dioxus::dioxus_core::Task;
+use dioxus::core::Task;
 use keyflow::text::highlighting::{Highlighter, Renderer, Theme};
 use keyflow::text::ide::{self, Severity};
 
