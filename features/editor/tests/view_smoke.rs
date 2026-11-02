@@ -101,3 +101,23 @@ async fn the_preview_hook_engraves_after_its_debounce() {
         "the chart engraved: {html}"
     );
 }
+
+#[test]
+fn host_can_choose_the_syntax_theme() {
+    fn app() -> Element {
+        rsx! {
+            KeyflowEditor {
+                initial: CHART.to_string(),
+                on_change: |_| {},
+                highlight_theme: editor_keyflow::lang::HighlightTheme::default_light(),
+            }
+        }
+    }
+    let html = render(app);
+    let css =
+        editor_keyflow::lang::highlight_css(&editor_keyflow::lang::HighlightTheme::default_light());
+    assert!(
+        html.contains(&css),
+        "the selected syntax palette is emitted"
+    );
+}

@@ -74,6 +74,9 @@ pub fn KeyflowEditor(
     /// stays in step with the buffer.
     #[props(default)]
     on_transaction: Option<EventHandler<TransactionEvent>>,
+    /// Syntax colours supplied by the host; changing them restyles the editor.
+    #[props(default)]
+    highlight_theme: Option<HighlightTheme>,
     /// Emit the editor's stylesheets — editor-view's `EDITOR_CSS` and the
     /// pane chrome ([`PANE_CSS`](super::PANE_CSS)) — as `<style>`
     /// elements. On by default; a host that ships both in its own sheet
@@ -132,7 +135,7 @@ pub fn KeyflowEditor(
         on_change.call(state.read().doc.to_string());
     });
 
-    let css = use_memo(|| highlight_css(&HighlightTheme::default_dark()));
+    let css = highlight_css(&highlight_theme.unwrap_or_else(HighlightTheme::default_dark));
 
     rsx! {
         if stylesheet {
