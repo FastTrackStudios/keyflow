@@ -5,7 +5,7 @@
 # FTS features can be published as aspects and consumed from the system
 # flake (and vice versa) without copy-paste.
 #
-# Today the heavy outputs (shells, crane packages, images) are ordinary
+# Today the outputs (the dev and CI shells) are ordinary
 # perSystem modules speaking the `fts.*` schema (options.nix). New
 # shareable features (e.g. an `fts-rig` aspect carrying the systemd user
 # unit + udev rules for a rig host) belong here as den.aspects.<name>.

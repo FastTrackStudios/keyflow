@@ -53,17 +53,12 @@
       # rust-toolchain.toml names (1.99.1), with wasm for the web remotes.
       fts.rustToolchain = pkgs.rust-bin.stable."1.99.1".default.override {
         extensions = [ "rust-src" "rust-analyzer" "clippy" "rustfmt" ];
-        # wasm for the web remotes; on darwin also the iOS targets for the
-        # iPhone app (device + simulator), and x86_64-apple-darwin so
-        # airlock (Apple Silicon) can cross-compile the Intel desktop/
-        # plugin builds without needing real Intel hardware (deploy-macos.sh
-        # TARGET=x86_64-apple-darwin, nice-plug-xtask's bundle-universal).
+        # wasm for the library wasm check (Task's and Studio's web apps
+        # build these crates for the browser); on darwin also
+        # x86_64-apple-darwin so airlock (Apple Silicon) can cross-compile
+        # the Intel builds without needing real Intel hardware.
         targets = [ "wasm32-unknown-unknown" ]
-          ++ lib.optionals pkgs.stdenv.isDarwin [
-            "aarch64-apple-ios"
-            "aarch64-apple-ios-sim"
-            "x86_64-apple-darwin"
-          ];
+          ++ lib.optionals pkgs.stdenv.isDarwin [ "x86_64-apple-darwin" ];
       };
 
       fts.buildInputs = (with pkgs; [
@@ -103,7 +98,6 @@
       fts.nativeBuildInputs = with pkgs; [
         pkg-config
         rustPlatform.bindgenHook
-        tailwindcss_4
         # `cargo-nightly` — the ONLY nightly door (wasm threads / build-std;
         # see the toolchain definition above). Named, not on PATH as `cargo`,
         # so the stable 1.99.1 pin still governs every ordinary build.
@@ -156,16 +150,7 @@
       }
       // lib.optionalAttrs pkgs.stdenv.isDarwin (
         let
-          # iOS cross toolchain: the nix cc wrapper only targets macOS, so
-          # the iOS targets link/compile through Xcode's clang via xcrun,
-          # with the nix SDK env (SDKROOT/DEVELOPER_DIR) scrubbed.
-          iosCC = sdk: pkgs.writeShellScript "ios-clang-${sdk}" ''
-            exec /usr/bin/env -u SDKROOT -u DEVELOPER_DIR /usr/bin/xcrun --sdk ${sdk} clang "$@"
-          '';
-          iosCXX = sdk: pkgs.writeShellScript "ios-clang++-${sdk}" ''
-            exec /usr/bin/env -u SDKROOT -u DEVELOPER_DIR /usr/bin/xcrun --sdk ${sdk} clang++ "$@"
-          '';
-          # The wasm C compiler (ring's build for the web bundle) is clang-18,
+          # The wasm C compiler (ring's build for the wasm target) is clang-18,
           # but the darwin DYLD_LIBRARY_PATH below (for the app's runtime dylibs)
           # forces it to load the stdenv's clang-21 libclang-cpp → symbol
           # mismatch → SIGABRT. Run it with DYLD_LIBRARY_PATH unset so it
@@ -182,18 +167,6 @@
           # with this pinned nightly rustc (the workspace pin is stable 1.99.1,
           # which can't parse `become`). See libs/vendor/phon-jit/build.rs.
           PHON_JIT_NIGHTLY_RUSTC = "${rustNightly}/bin/rustc";
-          # Rust defaults aarch64-apple-ios to iOS 10, whose runtime lacks
-          # `___chkstk_darwin` (it moved into libSystem at iOS 12) — linking
-          # a large-stack crate then fails with an undefined symbol. Pin a
-          # modern floor for compile + link consistency (the device is iOS
-          # 26; 15 is a safe, widely-compatible baseline).
-          IPHONEOS_DEPLOYMENT_TARGET = "15.0";
-          CARGO_TARGET_AARCH64_APPLE_IOS_LINKER = "${iosCC "iphoneos"}";
-          CARGO_TARGET_AARCH64_APPLE_IOS_SIM_LINKER = "${iosCC "iphonesimulator"}";
-          CC_aarch64_apple_ios = "${iosCC "iphoneos"}";
-          CXX_aarch64_apple_ios = "${iosCXX "iphoneos"}";
-          CC_aarch64_apple_ios_sim = "${iosCC "iphonesimulator"}";
-          CXX_aarch64_apple_ios_sim = "${iosCXX "iphonesimulator"}";
         }
       );
     };

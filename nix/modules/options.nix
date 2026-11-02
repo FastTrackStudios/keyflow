@@ -16,34 +16,15 @@
       };
       nativeBuildInputs = lib.mkOption {
         type = lib.types.listOf lib.types.package;
-        description = "Host tools for interactive builds (pkg-config, bindgen, dx…).";
+        description = "Host tools for interactive builds (pkg-config, bindgen, git…).";
       };
       shellEnv = lib.mkOption {
         type = lib.types.attrsOf lib.types.str;
         description = "Env every dev/CI shell exports (bindgen, wasm CC, LD paths…).";
       };
-      # dx 0.7.9 toolchain trio from the nixpkgs-dx pin — shells and the
-      # hermetic web bundles must use the SAME dx/wasm-bindgen/binaryen.
-      dx = {
-        cli = lib.mkOption { type = lib.types.package; };
-        wasmBindgen = lib.mkOption { type = lib.types.package; };
-        binaryen = lib.mkOption { type = lib.types.package; };
-      };
       pkgsDx = lib.mkOption {
         type = lib.types.raw;
-        description = "The nixpkgs-dx package set (current-unstable, dx 0.7.9 era).";
-      };
-      # crane build plumbing shared by all deployable packages.
-      craneLib = lib.mkOption { type = lib.types.raw; };
-      src = lib.mkOption { type = lib.types.raw; };
-      commonArgs = lib.mkOption { type = lib.types.raw; };
-      buildRev = lib.mkOption {
-        type = lib.types.str;
-        description = "Git rev baked into deployable images (version.json / TASK_BUILD_REV).";
-      };
-      mkStaticSite = lib.mkOption {
-        type = lib.types.raw;
-        description = "static-web-server OCI image factory: { name, tag ?, siteRoot }.";
+        description = "The nixpkgs-dx package set (current-unstable; cargo-rail builds through it).";
       };
       cargoRail = lib.mkOption {
         type = lib.types.nullOr lib.types.package;

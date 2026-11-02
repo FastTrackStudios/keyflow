@@ -1,5 +1,5 @@
 {
-  description = "Keyflow — the chart language, the Engraver layout engine, and keyflow.fasttrackstudio.app";
+  description = "Keyflow — the chart language and the Engraver layout engine";
 
   # Dendritic layout (den): every .nix under nix/modules/ is a
   # flake-parts module, auto-loaded by import-tree — one file per
@@ -26,13 +26,9 @@
     rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
     flake-parts.url = "github:hercules-ci/flake-parts";
 
-    # crane — cargo-in-nix builds for the deployable images (task-server
-    # + the dx web bundles). Same pin style the dissolved task flake used.
-    crane.url = "github:ipetkov/crane";
-
-    # Dedicated, current-unstable nixpkgs used ONLY to source `dx`
-    # (dioxus-cli) at the version the workspace Cargo.lock pins (0.7.9)
-    # plus binaryen 129 — see nix/modules/dx.nix.
+    # Dedicated, current-unstable nixpkgs: cargo-rail builds through it
+    # and the dev shell takes Playwright's browsers from it — see
+    # nix/modules/dx.nix.
     nixpkgs-dx.url = "github:NixOS/nixpkgs/d99b013d5d1931ad77fe3912ed218170dec5d9a4";
   };
 
