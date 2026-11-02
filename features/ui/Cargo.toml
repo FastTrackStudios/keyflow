@@ -34,8 +34,8 @@ dioxus = { workspace = true, optional = true }
 dioxus-native = { workspace = true, optional = true }
 
 # Vello scene types (for building scenes to hand off to ChartGraphics)
-vello = "0.9"
-vello_hybrid = { workspace = true, optional = true }
+vello = "0.11"
+vello_gpu = { workspace = true, optional = true }
 kurbo = { workspace = true }
 
 # WASM WebGL rendering
@@ -75,11 +75,11 @@ native = ["dioxus", "dioxus-native", "desktop-graphics"]
 # transport signals) live in the consuming app, not here — keyflow-ui must
 # stay below the app layer.
 desktop-graphics = ["anyrender_vello", "peniko", "keyflow/wgpu"]
-# WASM chart graphics — WebGL2 rendering via vello_hybrid.
+# WASM chart graphics — WebGL2 rendering via vello_gpu.
 wasm-graphics = [
     "dioxus",
     "anyrender_vello_hybrid",
-    "vello_hybrid",
+    "vello_gpu",
     "vello_common",
     "web-sys",
     "rustc-hash",

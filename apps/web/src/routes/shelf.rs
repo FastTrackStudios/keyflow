@@ -142,8 +142,8 @@ impl Ui {
 /// it so the next press carries on from there.
 fn step_focus(mut ui: Ui, order: &[String], current: Option<&String>, key: &Key) -> bool {
     let down = match key {
-        Key::ArrowDown => true,
-        Key::ArrowUp => false,
+        Key::Named(NamedKey::ArrowDown) => true,
+        Key::Named(NamedKey::ArrowUp) => false,
         _ => return false,
     };
     let at = current.and_then(|c| order.iter().position(|k| k == c));
@@ -1105,7 +1105,7 @@ fn ListPane(org: String, list: SongList, rows: Vec<(usize, ListRow)>, ui: Ui) ->
                     value: "{draft}",
                     oninput: move |e| renaming.set(Some(e.value())),
                     onkeydown: move |e: KeyboardEvent| {
-                        if e.key() == Key::Escape {
+                        if e.key() == Key::Named(NamedKey::Escape) {
                             renaming.set(None);
                         }
                     },

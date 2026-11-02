@@ -48,17 +48,17 @@
       fts.dx.binaryen = pkgsDx.binaryen;
 
       # wasm-bindgen-cli matching the workspace Cargo.lock's
-      # wasm-bindgen (0.2.126) — dx 0.7.9 rejects a mismatch. Built
-      # through pkgsDx (its fetchCargoVendor pulls from
+      # wasm-bindgen (0.2.127, what the dioxus rev requires) — dx rejects
+      # a mismatch. Built through pkgsDx (its fetchCargoVendor pulls from
       # static.crates.io; the older pin's fetcher 403s).
       fts.dx.wasmBindgen = pkgsDx.rustPlatform.buildRustPackage rec {
         pname = "wasm-bindgen-cli";
-        version = "0.2.126";
+        version = "0.2.127";
         src = pkgsDx.fetchCrate {
           inherit pname version;
-          hash = "sha256-H6Is3fiZVxZCfOMWK5dWMSrtn50VGv0sfdnsT+cTtyk=";
+          hash = "sha256-di+qBAdd7pENLiIB9CoZoab+W5xeDoByMREcCGTSzWo=";
         };
-        cargoHash = "sha256-VucqkXbCi4qtQzY/HrXiDnbSURsagPsdNVMn1Tw3UiY=";
+        cargoHash = "sha256-FTv2GZIAQs0ePdIZXIXil7JbZ6kIT05VG6vqC1qNFxQ=";
         nativeBuildInputs = [ pkgsDx.pkg-config ];
         # No darwin frameworks: nixpkgs removed the apple_sdk stubs — the
         # default apple-sdk in the darwin stdenv covers Security/CF.

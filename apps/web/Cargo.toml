@@ -60,7 +60,7 @@ view-knowledge-graph = { workspace = true }
 # reaches `view-knowledge-graph` and so pulled a second copy of the
 # architect crates — two reqwest majors in one wasm binary, ~100
 # `duplicate symbol: intounderlyingsource_*` errors at link time. Both
-# repos pin architect v0.8.2 now, so there is one copy.
+# repos pin one architect tag now, so there is one copy.
 #
 # What ssg-ui's `graph` does NOT supply is the rail itself. Its
 # `VaultGraph` is static SVG with `<a>` nodes, deliberately: it has to
@@ -165,7 +165,7 @@ web-sys = { version = "0.3", features = [
 # pin — a floating "0.2" silently resolves past the CLI and breaks the web
 # build with "Incorrect wasm-bindgen-cli version".
 js-sys = "0.3"
-wasm-bindgen = "=0.2.126"
+wasm-bindgen = "=0.2.127"
 kurbo = { workspace = true }
 
 tracing = { workspace = true }
