@@ -2018,7 +2018,7 @@ checksum = "724d27a0ee38b700e5e164350e79aba601a0db673ac47fce1cb74c3e38864036"
 [[package]]
 name = "collection-proto"
 version = "26.10.1"
-source = "git+https://github.com/FastTrackStudios/task?branch=build%2Fsta-376-architect-v0.10.0#de59e29f56b47ab7fae38a0f9e4c2c9d7a914a5e"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#7b90e40fc221e331fafffb2bd375981fefdf9f72"
 dependencies = [
  "architect",
  "facet",
@@ -5827,7 +5827,7 @@ dependencies = [
  "log",
  "presser",
  "thiserror 2.0.20",
- "windows 0.62.2",
+ "windows 0.58.0",
 ]
 
 [[package]]
@@ -7881,7 +7881,7 @@ dependencies = [
 [[package]]
 name = "links-proto"
 version = "26.10.1"
-source = "git+https://github.com/FastTrackStudios/task?branch=build%2Fsta-376-architect-v0.10.0#de59e29f56b47ab7fae38a0f9e4c2c9d7a914a5e"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#7b90e40fc221e331fafffb2bd375981fefdf9f72"
 dependencies = [
  "architect",
  "facet",
@@ -10134,7 +10134,7 @@ dependencies = [
 [[package]]
 name = "org-proto"
 version = "26.10.1"
-source = "git+https://github.com/FastTrackStudios/task?branch=build%2Fsta-376-architect-v0.10.0#de59e29f56b47ab7fae38a0f9e4c2c9d7a914a5e"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#7b90e40fc221e331fafffb2bd375981fefdf9f72"
 dependencies = [
  "architect",
  "chrono",
@@ -11902,7 +11902,7 @@ dependencies = [
 [[package]]
 name = "resources-proto"
 version = "26.10.1"
-source = "git+https://github.com/FastTrackStudios/task?branch=build%2Fsta-376-architect-v0.10.0#de59e29f56b47ab7fae38a0f9e4c2c9d7a914a5e"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#7b90e40fc221e331fafffb2bd375981fefdf9f72"
 dependencies = [
  "architect",
  "facet",
@@ -13224,7 +13224,7 @@ dependencies = [
 [[package]]
 name = "ssg"
 version = "26.10.1"
-source = "git+https://github.com/FastTrackStudios/task?branch=build%2Fsta-376-architect-v0.10.0#de59e29f56b47ab7fae38a0f9e4c2c9d7a914a5e"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#7b90e40fc221e331fafffb2bd375981fefdf9f72"
 dependencies = [
  "ssg-ui",
  "ssg-vault",
@@ -13233,7 +13233,7 @@ dependencies = [
 [[package]]
 name = "ssg-build"
 version = "26.10.1"
-source = "git+https://github.com/FastTrackStudios/task?branch=build%2Fsta-376-architect-v0.10.0#de59e29f56b47ab7fae38a0f9e4c2c9d7a914a5e"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#7b90e40fc221e331fafffb2bd375981fefdf9f72"
 dependencies = [
  "notify",
  "ssg-vault",
@@ -13242,7 +13242,7 @@ dependencies = [
 [[package]]
 name = "ssg-ui"
 version = "26.10.1"
-source = "git+https://github.com/FastTrackStudios/task?branch=build%2Fsta-376-architect-v0.10.0#de59e29f56b47ab7fae38a0f9e4c2c9d7a914a5e"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#7b90e40fc221e331fafffb2bd375981fefdf9f72"
 dependencies = [
  "dioxus",
  "ssg-vault",
@@ -13254,7 +13254,7 @@ dependencies = [
 [[package]]
 name = "ssg-vault"
 version = "26.10.1"
-source = "git+https://github.com/FastTrackStudios/task?branch=build%2Fsta-376-architect-v0.10.0#de59e29f56b47ab7fae38a0f9e4c2c9d7a914a5e"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#7b90e40fc221e331fafffb2bd375981fefdf9f72"
 dependencies = [
  "pulldown-cmark",
 ]
@@ -15652,7 +15652,7 @@ checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 [[package]]
 name = "vault-proto"
 version = "26.10.1"
-source = "git+https://github.com/FastTrackStudios/task?branch=build%2Fsta-376-architect-v0.10.0#de59e29f56b47ab7fae38a0f9e4c2c9d7a914a5e"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#7b90e40fc221e331fafffb2bd375981fefdf9f72"
 dependencies = [
  "architect",
  "chrono",
@@ -15800,7 +15800,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "view-knowledge-graph"
 version = "26.10.1"
-source = "git+https://github.com/FastTrackStudios/task?branch=build%2Fsta-376-architect-v0.10.0#de59e29f56b47ab7fae38a0f9e4c2c9d7a914a5e"
+source = "git+https://github.com/FastTrackStudios/task?branch=main#7b90e40fc221e331fafffb2bd375981fefdf9f72"
 dependencies = [
  "architect-ui",
  "dioxus",
@@ -17848,7 +17848,7 @@ dependencies = [
  "as-raw-xcb-connection",
  "gethostname",
  "libc",
- "libloading 0.8.9",
+ "libloading 0.9.0",
  "once_cell",
  "rustix 1.1.5",
  "x11rb-protocol 0.14.0",
