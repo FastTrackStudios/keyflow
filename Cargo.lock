@@ -3152,6 +3152,7 @@ name = "engraver"
 version = "0.0.1-alpha"
 dependencies = [
  "anyrender",
+ "anyrender_vello_cpu",
  "bitflags 2.13.2",
  "bytemuck",
  "color-eyre",
@@ -3173,6 +3174,7 @@ dependencies = [
  "parley 0.2.0",
  "pdf-writer",
  "peniko 0.6.1",
+ "png 0.17.16",
  "pollster",
  "printpdf",
  "regex",

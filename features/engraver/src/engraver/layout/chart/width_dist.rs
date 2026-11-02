@@ -114,7 +114,7 @@ impl ChartLayoutEngine {
         let config_with_settings = config.clone().with_chart_settings(&chart.settings);
         let temp_engine = ChartLayoutEngine {
             config: config_with_settings,
-            style: self.style,
+            style: std::sync::Arc::clone(&self.style),
             text_font_data: self.text_font_data.clone(),
             symbol_font_data: self.symbol_font_data.clone(),
         };

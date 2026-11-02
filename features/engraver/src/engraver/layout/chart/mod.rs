@@ -615,7 +615,9 @@ fn key_change_indicator_node(
 #[derive(Clone)]
 pub struct ChartLayoutEngine {
     config: ChartLayoutConfig,
-    style: &'static MStyle,
+    /// Shared rather than `'static`, so a theme can swap the style table
+    /// at runtime without leaking one per edit.
+    style: Arc<MStyle>,
     text_font_data: Arc<Vec<u8>>,
     symbol_font_data: Arc<Vec<u8>>,
 }
@@ -627,12 +629,28 @@ impl ChartLayoutEngine {
         text_font_data: Arc<Vec<u8>>,
         symbol_font_data: Arc<Vec<u8>>,
     ) -> Self {
+        Self::new_shared(Arc::new(style.clone()), text_font_data, symbol_font_data)
+    }
+
+    /// Create an engine over a shared, swappable style — what a themed
+    /// view uses, since a `'static` style would leak one per theme edit.
+    pub fn new_shared(
+        style: Arc<MStyle>,
+        text_font_data: Arc<Vec<u8>>,
+        symbol_font_data: Arc<Vec<u8>>,
+    ) -> Self {
         Self {
             config: ChartLayoutConfig::default(),
             style,
             text_font_data,
             symbol_font_data,
         }
+    }
+
+    /// The style this engine lays out with.
+    #[must_use]
+    pub fn style(&self) -> &Arc<MStyle> {
+        &self.style
     }
 
     /// Create with custom configuration.
@@ -644,7 +662,7 @@ impl ChartLayoutEngine {
     ) -> Self {
         Self {
             config,
-            style,
+            style: Arc::new(style.clone()),
             text_font_data,
             symbol_font_data,
         }
@@ -693,7 +711,7 @@ impl ChartLayoutEngine {
         let config_with_settings = self.config.clone().with_chart_settings(&chart.settings);
         let temp_engine = ChartLayoutEngine {
             config: config_with_settings,
-            style: self.style,
+            style: Arc::clone(&self.style),
             text_font_data: self.text_font_data.clone(),
             symbol_font_data: self.symbol_font_data.clone(),
         };
@@ -733,7 +751,7 @@ impl ChartLayoutEngine {
 
         let measure_engine = ChartLayoutEngine {
             config: measure_config,
-            style: self.style,
+            style: Arc::clone(&self.style),
             text_font_data: self.text_font_data.clone(),
             symbol_font_data: self.symbol_font_data.clone(),
         };
@@ -911,7 +929,7 @@ impl ChartLayoutEngine {
         // Create a temporary engine with the custom config
         let temp_engine = ChartLayoutEngine {
             config: config.clone(),
-            style: self.style,
+            style: Arc::clone(&self.style),
             text_font_data: self.text_font_data.clone(),
             symbol_font_data: self.symbol_font_data.clone(),
         };

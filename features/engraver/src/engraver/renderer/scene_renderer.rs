@@ -18,6 +18,7 @@ use skrifa::{
 };
 
 use crate::engraver::fonts::SMuFLFont;
+use crate::engraver::renderer::theme::{InkMap, InkRole};
 use crate::engraver::scene::node::SceneNode;
 use crate::engraver::scene::paint::{FillRule, LineCap, LineJoin, PaintCommand, TextAnchor};
 
@@ -120,6 +121,16 @@ pub struct VelloSceneRenderer<'a> {
     transform_stack: Vec<Affine>,
     /// Render statistics
     stats: RenderStats,
+    /// A theme's recolouring of the layout's baked ink. `None` paints the
+    /// colours exactly as laid out, at no cost.
+    ink_map: Option<InkMap>,
+    /// A theme's text-face substitutions, `(family the scene asks for,
+    /// family to draw it with)`.
+    font_aliases: Vec<(String, String)>,
+    /// Page boxes the host has already filled with its own paper (and
+    /// drawn artwork on). The layout's own sheet over each one, and its
+    /// drop shadow, are skipped, or they would hide that artwork.
+    host_paper: Vec<Rect>,
 }
 
 /// Statistics from a render pass.
@@ -148,6 +159,9 @@ impl<'a> VelloSceneRenderer<'a> {
             font_registry: std::collections::HashMap::new(),
             transform_stack: vec![Affine::IDENTITY],
             stats: RenderStats::default(),
+            ink_map: None,
+            font_aliases: Vec::new(),
+            host_paper: Vec::new(),
         }
     }
 
@@ -161,6 +175,9 @@ impl<'a> VelloSceneRenderer<'a> {
             font_registry: std::collections::HashMap::new(),
             transform_stack: vec![Affine::IDENTITY],
             stats: RenderStats::default(),
+            ink_map: None,
+            font_aliases: Vec::new(),
+            host_paper: Vec::new(),
         }
     }
 
@@ -172,6 +189,54 @@ impl<'a> VelloSceneRenderer<'a> {
     /// Reset render statistics for a new pass.
     pub fn reset_stats(&mut self) {
         self.stats = RenderStats::default();
+    }
+
+    /// Recolour every paint command through `ink_map` (a theme's palette).
+    /// `None`, the default, paints the layout's own colours untouched.
+    #[must_use]
+    pub fn with_ink_map(mut self, ink_map: Option<InkMap>) -> Self {
+        self.ink_map = ink_map;
+        self
+    }
+
+    /// Draw text the scene asks for in family `from` with the registered
+    /// family `to` instead. An alias to an unregistered family is ignored.
+    #[must_use]
+    pub fn with_font_alias(mut self, from: impl Into<String>, to: impl Into<String>) -> Self {
+        self.font_aliases.push((from.into(), to.into()));
+        self
+    }
+
+    /// The host paints the paper for these page boxes itself; skip the
+    /// layout's own white sheet over each (see `host_paper`).
+    #[must_use]
+    pub fn with_host_paper(mut self, pages: Vec<Rect>) -> Self {
+        self.host_paper = pages;
+        self
+    }
+
+    /// Whether a rect command is the layout's own sheet of paper — or its
+    /// drop shadow, the same size a few points off — over a page the host
+    /// has already painted.
+    fn is_host_paper(&self, rect: &Rect, fill: Option<Color>, stroke: Option<Color>) -> bool {
+        const EPS: f64 = 0.01;
+        const SHADOW_OFFSET: f64 = 8.0;
+        fill.is_some()
+            && stroke.is_none()
+            && self.host_paper.iter().any(|p| {
+                (p.width() - rect.width()).abs() < EPS
+                    && (p.height() - rect.height()).abs() < EPS
+                    && (rect.x0 - p.x0).abs() <= SHADOW_OFFSET
+                    && (rect.y0 - p.y0).abs() <= SHADOW_OFFSET
+            })
+    }
+
+    /// `color` as the theme paints it in `role`.
+    fn ink(&self, color: Color, role: InkRole) -> Color {
+        match &self.ink_map {
+            Some(map) => map.map(color, role),
+            None => color,
+        }
     }
 
     /// Set the SMuFL font for glyph rendering.
@@ -373,7 +438,7 @@ impl<'a> VelloSceneRenderer<'a> {
                     FillRule::NonZero => Fill::NonZero,
                     FillRule::EvenOdd => Fill::EvenOdd,
                 };
-                scene.fill(fill, transform, *color, None, path);
+                scene.fill(fill, transform, self.ink(*color, InkRole::Fill), None, path);
             }
 
             PaintCommand::Stroke {
@@ -393,7 +458,13 @@ impl<'a> VelloSceneRenderer<'a> {
                 if !dash_pattern.is_empty() {
                     stroke = stroke.with_dashes(*dash_offset, dash_pattern.iter().copied());
                 }
-                scene.stroke(&stroke, transform, *color, None, path);
+                scene.stroke(
+                    &stroke,
+                    transform,
+                    self.ink(*color, InkRole::Line),
+                    None,
+                    path,
+                );
             }
 
             PaintCommand::Line {
@@ -408,7 +479,13 @@ impl<'a> VelloSceneRenderer<'a> {
                 let mut stroke = Stroke::new(*width);
                 stroke.start_cap = cap;
                 stroke.end_cap = cap;
-                scene.stroke(&stroke, transform, *color, None, &line);
+                scene.stroke(
+                    &stroke,
+                    transform,
+                    self.ink(*color, InkRole::Line),
+                    None,
+                    &line,
+                );
             }
 
             PaintCommand::Rect {
@@ -418,22 +495,49 @@ impl<'a> VelloSceneRenderer<'a> {
                 stroke_width,
                 corner_radius,
             } => {
+                if corner_radius.is_none() && self.is_host_paper(rect, *fill, *stroke) {
+                    return;
+                }
                 if let Some(radius) = corner_radius {
                     let rounded = RoundedRect::from_rect(*rect, *radius);
                     if let Some(fill_color) = fill {
-                        scene.fill(Fill::NonZero, transform, *fill_color, None, &rounded);
+                        scene.fill(
+                            Fill::NonZero,
+                            transform,
+                            self.ink(*fill_color, InkRole::Fill),
+                            None,
+                            &rounded,
+                        );
                     }
                     if let Some(stroke_color) = stroke {
                         let stroke_style = Stroke::new(*stroke_width);
-                        scene.stroke(&stroke_style, transform, *stroke_color, None, &rounded);
+                        scene.stroke(
+                            &stroke_style,
+                            transform,
+                            self.ink(*stroke_color, InkRole::Line),
+                            None,
+                            &rounded,
+                        );
                     }
                 } else {
                     if let Some(fill_color) = fill {
-                        scene.fill(Fill::NonZero, transform, *fill_color, None, rect);
+                        scene.fill(
+                            Fill::NonZero,
+                            transform,
+                            self.ink(*fill_color, InkRole::Fill),
+                            None,
+                            rect,
+                        );
                     }
                     if let Some(stroke_color) = stroke {
                         let stroke_style = Stroke::new(*stroke_width);
-                        scene.stroke(&stroke_style, transform, *stroke_color, None, rect);
+                        scene.stroke(
+                            &stroke_style,
+                            transform,
+                            self.ink(*stroke_color, InkRole::Line),
+                            None,
+                            rect,
+                        );
                     }
                 }
             }
@@ -447,11 +551,23 @@ impl<'a> VelloSceneRenderer<'a> {
             } => {
                 let circle = Circle::new(*center, *radius);
                 if let Some(fill_color) = fill {
-                    scene.fill(Fill::NonZero, transform, *fill_color, None, &circle);
+                    scene.fill(
+                        Fill::NonZero,
+                        transform,
+                        self.ink(*fill_color, InkRole::Fill),
+                        None,
+                        &circle,
+                    );
                 }
                 if let Some(stroke_color) = stroke {
                     let stroke_style = Stroke::new(*stroke_width);
-                    scene.stroke(&stroke_style, transform, *stroke_color, None, &circle);
+                    scene.stroke(
+                        &stroke_style,
+                        transform,
+                        self.ink(*stroke_color, InkRole::Line),
+                        None,
+                        &circle,
+                    );
                 }
             }
 
@@ -465,11 +581,23 @@ impl<'a> VelloSceneRenderer<'a> {
             } => {
                 let ellipse = Ellipse::new(*center, (*radius_x, *radius_y), 0.0);
                 if let Some(fill_color) = fill {
-                    scene.fill(Fill::NonZero, transform, *fill_color, None, &ellipse);
+                    scene.fill(
+                        Fill::NonZero,
+                        transform,
+                        self.ink(*fill_color, InkRole::Fill),
+                        None,
+                        &ellipse,
+                    );
                 }
                 if let Some(stroke_color) = stroke {
                     let stroke_style = Stroke::new(*stroke_width);
-                    scene.stroke(&stroke_style, transform, *stroke_color, None, &ellipse);
+                    scene.stroke(
+                        &stroke_style,
+                        transform,
+                        self.ink(*stroke_color, InkRole::Line),
+                        None,
+                        &ellipse,
+                    );
                 }
             }
 
@@ -479,7 +607,8 @@ impl<'a> VelloSceneRenderer<'a> {
                 size,
                 color,
             } => {
-                self.render_glyph(scene, *codepoint, *position, *size, *color, transform);
+                let color = self.ink(*color, InkRole::Fill);
+                self.render_glyph(scene, *codepoint, *position, *size, color, transform);
             }
 
             PaintCommand::Text {
@@ -498,7 +627,7 @@ impl<'a> VelloSceneRenderer<'a> {
                     font_family,
                     *font_size,
                     *position,
-                    *color,
+                    self.ink(*color, InkRole::Fill),
                     *anchor,
                     transform,
                 );
@@ -649,10 +778,12 @@ impl<'a> VelloSceneRenderer<'a> {
         let screen_font_size = font_size * scale_x;
 
         // Try to find the font: first check registry by family name, then fall back to default text font
-        let font_data = self
-            .font_registry
-            .get(font_family)
-            .or(self.text_font.as_ref());
+        let family = self
+            .font_aliases
+            .iter()
+            .find(|(from, to)| from == font_family && self.font_registry.contains_key(to))
+            .map_or(font_family, |(_, to)| to.as_str());
+        let font_data = self.font_registry.get(family).or(self.text_font.as_ref());
 
         // Try to render with the resolved font
         if let Some(font_data) = font_data

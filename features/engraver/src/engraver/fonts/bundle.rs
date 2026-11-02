@@ -150,6 +150,17 @@ impl ChartFontBundle {
         )
     }
 
+    /// [`Self::create_layout_engine`] over a shared style, which a theme
+    /// can replace at runtime without leaking the old one.
+    #[must_use]
+    pub fn create_layout_engine_shared(&self, style: Arc<MStyle>) -> ChartLayoutEngine {
+        ChartLayoutEngine::new_shared(
+            style,
+            self.text_font_data.clone(),
+            self.symbol_font_data.clone(),
+        )
+    }
+
     /// Configure a `VelloSceneRenderer` with all required named fonts.
     ///
     /// Registers the SMuFL font, text font, and all named font aliases so that
