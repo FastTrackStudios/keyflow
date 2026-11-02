@@ -40,7 +40,8 @@ default = ["render"]
 render = ["dep:engraver"]
 # Subset `@font-face` rules for a page of charts — see `font_subset`.
 # `allsorts` is a large dependency and nothing in a browser needs it, so
-# only the site's build script and its dev server turn this on.
+# only a host-side build (a static-page renderer, a dev server) turns
+# this on.
 subset = ["render", "dep:allsorts", "dep:ttf-parser"]
 
 [lints]

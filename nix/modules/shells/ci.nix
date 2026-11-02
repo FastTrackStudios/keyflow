@@ -4,14 +4,7 @@
 # no dioxus-cli / editor tooling, no .env sourcing. Toolchain + native
 # headers + the env the build scripts need, nothing else. Workflows
 # enter it via `nix develop .#ci`.
-#
-# tailwindcss IS here, despite "CI drives plain cargo": the Task apps'
-# assets/tailwind.css is gitignored build output that `asset!()` demands
-# at compile time. `dx` generates it during a normal dx build, but CI
-# drives plain cargo, so the workflow runs `just css` first — which
-# needs this binary. It is a single prebuilt
-# store path, not a from-source cargo-install, so it does not
-# reintroduce the stall described above.
+
 { ... }:
 {
   perSystem = { pkgs, lib, config, ... }: {
@@ -24,19 +17,17 @@
       # from a hook — see the stall note above).
       ++ lib.optionals (config.fts.cargoRail != null) [ config.fts.cargoRail ]
       ++ config.fts.buildInputs
-      # The shared native tool list (pkg-config, bindgen, tailwindcss).
+      # The shared native tool list (pkg-config, bindgen, git).
       # Consumed from toolchain.nix instead of hand-repeating entries
       # here, so the two shells can't drift again.
       ++ config.fts.nativeBuildInputs
-      # `just` so the workflow can invoke `just css` instead of
-      # repeating the tailwindcss commands — the recipe stays the one
-      # definition of how those sheets get built.
+      # `just`, so a CI step can call a recipe rather than restating it.
       ++ [
         pkgs.just
       ];
 
-      # Seeded cargo-home bins (dx for the web-bundle steps) resolve
-      # from PATH — never installed from here. APPEND, don't prepend:
+      # Seeded cargo-home bins resolve from PATH — never installed from
+      # here. APPEND, don't prepend:
       # GitHub-hosted runners ship a rustup stable in ~/.cargo/bin that
       # would otherwise shadow the pinned nix rustc (first symptom:
       # "can't find crate for core" on the wasm target).

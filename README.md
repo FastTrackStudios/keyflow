@@ -47,9 +47,11 @@ features/
 
 apps/
   cli            the `kf` command line tool
-  web            keyflow.fasttrackstudio.app — landing page, editor, guide
-  mobile         Keyflow for iOS — chart library + the Keyflow keyboard
 ```
+
+Keyflow has no app of its own: its editor, chart library and guide ship
+inside [Studio](https://github.com/FastTrackStudios/studio), which builds
+these crates for desktop, iOS and the browser.
 
 A crate is a domain, not a format: each crate's parts are modules, and
 the optional ones sit behind a Cargo feature of the same name.
@@ -88,59 +90,14 @@ Never commit those overrides — the paths are machine-specific.
 against them. Keyflow's own `keyflow-proto` (with `syntax` folded in) is
 the authority; daw's copies come out once its consumers are repointed.
 
-## The site
-
-`apps/web` is [keyflow.fasttrackstudio.app](https://keyflow.fasttrackstudio.app):
-a landing page, a live editor, and the guide.
-
-It has **no backend**. A chart is deflated and base64url-encoded into the
-URL, so sharing a chart is sharing a link — no account, no database. A
-full song fits: the "Messengers of Hope" example encodes to about 700
-characters. Past `MAX_URL_CHART_LEN` the share control says so instead of
-handing over a URL that will be truncated in transit.
-
-The guide is `docs/guides/*.md`, rendered to HTML at build time by
-`apps/web/build.rs` — no markdown parser reaches the browser. The guides'
-own fence convention is honoured: ` ```kf- ` is a syntax illustration shown
-as source, ` ```kf+ ` is a real chart, engraved on the page with a link
-that opens it in the editor. A test asserts every `kf+` fence parses *and*
-engraves, so the guide cannot teach something the parser rejects.
-
-Charts render as SVG, not on a GPU canvas. Layout costs about 10 ms and the
-result is static until the source changes, so it is serialised once and the
-browser scales, prints and selects it for free. The WebGL surface in
-`keyflow-ui` remains for what it was built for — a cursor tracking playback
-at 120 Hz in the desktop app.
-
-```bash
-just web            # dx serve, hot reload
-just web-build      # the shipping bundle
-just web-check      # compile for wasm32 — `just check` does NOT
-```
-
-Deployment needs SPA fallback (unknown paths serve `index.html`);
-`nix/modules/packages/static-site.nix` does this.
-
-## The iOS app
-
-`apps/mobile` is the chart library and editor, plus the reason it exists: a
-**custom keyboard** for Keyflow syntax, in the spirit of Musician Keyboard.
-`|`, `♭`, `𝄆` and section headers are not on the stock keyboard, which is
-what makes writing a chart on a phone unpleasant today.
-
-The keyboard's layout, key semantics and suggestions live in Rust
-(`src/keyboard.rs`) and are tested against the real parser; the Swift
-extension that draws them is not yet written. See
-`apps/mobile/ios/README.md` for why the split falls there and what the
-extension's sandbox forbids.
-
 ## Build
 
 ```bash
 nix develop          # or direnv: `use flake`
 just check           # cargo check --workspace
 just test            # cargo nextest run --workspace
-just ci              # fmt + check + test, the order CI runs them
+just wasm-check      # the library crates for wasm32 — `just check` does NOT
+just ci              # fmt + check + wasm-check + test, the order CI runs them
 just kf --help       # the keyflow CLI
 ```
 

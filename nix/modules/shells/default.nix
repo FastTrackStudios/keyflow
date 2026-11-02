@@ -1,18 +1,12 @@
 # Dev Shell — one shell for the whole workspace. Toolchain + native/
-# audio/wasm env so `cargo` / `dx` behave identically for the rig,
-# the web remotes, and THE app.
-#
-# dx comes from the store (fts.dx — the nixpkgs-dx 0.7.9 pin, same trio
-# the hermetic web bundles use). The old `cargo install dioxus-cli`
-# shellHook is gone — that was the "reinstalling all of dioxus every
-# time" churn: the shell shipped nixpkgs' 0.7.4, the hook detected the
-# mismatch and rebuilt 0.7.9 from source into ~/.cargo/bin.
+# wasm env so `cargo` behaves identically for the libraries, the CLI
+# and the library wasm checks.
 { ... }:
 {
   perSystem = { pkgs, lib, config, ... }: {
     devShells.default = pkgs.mkShell ({
       packages = (with pkgs; [
-        # The command runner the whole repo drives through (just web-stage,
+        # The command runner the whole repo drives through (just check,
         # just rig-install, …). NixOS hosts have it system-wide, which masked
         # its absence here; nix-darwin (airlock) does not, so builds that shell
         # out to `just` failed there.
@@ -25,12 +19,7 @@
         # PyPI tool, not in nixpkgs; python3 comes from buildInputs).
         uv
       ])
-      ++ [
-        config.fts.rustToolchain
-        config.fts.dx.cli          # dx 0.7.9 — prebuilt, no cargo install
-        config.fts.dx.wasmBindgen  # wasm-bindgen-cli 0.2.127 (lock match)
-        config.fts.dx.binaryen     # wasm-opt 129 — what dx 0.7.9 pins
-      ]
+      ++ [ config.fts.rustToolchain ]
       # cargo-rail — graph-aware workspace maintenance (unify / change /
       # release / split). Pinned upstream binary, NOT nixpkgs' stale
       # 0.7.0 — see nix/modules/cargo-rail.nix (incl. the plan/affected
@@ -45,11 +34,6 @@
         # integration-test harness (`just reaper-integration-test`).
         pkgs.xorg.xorgserver
         pkgs.xvfb-run
-        # linuxdeploy — dx's AppImage bundler (`dx bundle --package-types
-        # appimage`) shells out to it; without it packaging aborts. Not in the
-        # flake's (older) nixpkgs pin, so take it from the current-unstable
-        # nixpkgs-dx set that already provides the dx toolchain.
-        config.fts.pkgsDx.linuxdeploy
       ]
       ++ config.fts.buildInputs
       ++ config.fts.nativeBuildInputs;
@@ -75,8 +59,8 @@
         # which drives rustc through its own wrapper binary that sccache
         # refuses ("Compiler not supported"), so every dx build and
         # `dx serve` had to unset it by hand.
-        # Append (not prepend): store-provided tools (dx, wasm-bindgen)
-        # must win over stale cargo-installed copies; cargo/uv bins
+        # Append (not prepend): store-provided tools must win over stale
+        # cargo-installed copies; cargo/uv bins
         # (tracey, graphify) only need to be reachable.
         export PATH="$PATH:$HOME/.cargo/bin:$HOME/.local/bin"
 
@@ -117,11 +101,8 @@
         echo "  ─────────────────────────────────────────────"
         echo "  just check / just test / just ci"
         echo "  just kf --help              — the keyflow CLI"
-        echo "  just web                    — serve keyflow.fasttrackstudio.app"
-        echo "  (cd apps/mobile && ./ios/build-ios.sh)   — the iOS app"
         echo ""
         echo "  Rust: $(rustc --version)"
-        echo "  dx:   $(dx --version 2>/dev/null || echo 'not available')"
         echo "  graphify: $(graphify --version 2>/dev/null || echo 'not available') — 'just graph' to (re)build the repo knowledge graph"
         echo ""
       '';

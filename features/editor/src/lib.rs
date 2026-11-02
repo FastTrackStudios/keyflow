@@ -14,8 +14,8 @@ pub use fence::*;
 /// Subset `@font-face` rules for the charts a page actually draws.
 ///
 /// Behind the `subset` feature: `allsorts` is large and nothing in a
-/// browser needs it. Turned on by the site's build script and by its
-/// dev server.
+/// browser needs it. For host-side builds that render pages ahead of
+/// time.
 #[cfg(feature = "subset")]
 pub mod font_subset;
 

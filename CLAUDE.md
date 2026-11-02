@@ -61,18 +61,19 @@ features/editor/      editor-keyflow — this repo's half of the editor
                       integration: the fence renderer (`render`) and `lang`
                       (decorations, hover, highlight)
 features/tree-sitter/ the grammar
-apps/cli/             the `kf` command line tool
-apps/web/             keyflow.fasttrackstudio.app — landing page, editor,
-                      guide. Wasm; charts render as SVG.
-apps/mobile/          Keyflow for iOS — chart library + the Keyflow
-                      keyboard extension
-docs/guides/          the language guide — also the source content for
-                      the site's embedded tutorial
+apps/cli/             the `kf` command line tool (Studio depends on it)
+docs/guides/          the language guide
 docs/spec/            tracey-tracked spec (score-engraving)
 ```
 
 The layers, bottom up: proto → lang → engraver → keyflow → ui / editor /
-apps. `annotate` sits beside proto; `daw-analysis` above the facade.
+cli. `annotate` sits beside proto; `daw-analysis` above the facade.
+
+**There is no Keyflow app.** The standalone web site and iOS app were
+removed: Keyflow's editor, chart library and guide ship inside Studio,
+which builds these crates for desktop, iOS and the browser. So the
+library crates keep their `wasm32` and `target_os = "ios"` support even
+though nothing in this workspace builds an app for either target.
 
 **Defaults and the root entry.** `keyflow-lang` and `engraver` default to
 every native feature, so `cargo test -p <crate>` covers all of it. The
@@ -120,16 +121,17 @@ builds only the features it names — the wasm site must never pull
   `<crate>/tests/fixtures/`, never up and out of the crate directory.
 - Async: `tokio::sync::*` for locks/channels; `architect::platform::{spawn,
   sleep, timeout}` for tasks/timers — the wasm-cfg-split seam.
-- **`cargo check --workspace` does not check the site.** It builds
-  `keyflow-web` for the *host*, where every `cfg(target_arch = "wasm32")`
-  block and the whole WebGL surface are invisible. Run `just web-check`
-  (CI does). Two wasm traps already caught this way, both of which
-  *compile* and then fail at runtime or link time:
-  - `tokio::time::sleep` needs a reactor and panics in the browser. The
-    editor debounce is target-split onto `gloo-timers`.
+- **`cargo check --workspace` does not check the wasm build.** It builds
+  every crate for the *host*, where every `cfg(target_arch = "wasm32")`
+  block and the whole WebGL surface are invisible. Run `just wasm-check`
+  (CI does): the browser build of the surface Task's and Studio's web
+  apps take. Two wasm traps, both of which *compile* and then fail at
+  runtime or link time:
+  - `tokio::time::sleep` needs a reactor and panics in the browser. Use
+    `architect::platform::sleep`, or target-split onto `gloo-timers`.
   - `getrandom` 0.3 needs BOTH the `wasm_js` cfg (`.cargo/config.toml`)
-    and the `wasm_js` feature (a direct dep in `apps/web`). Either alone
-    is a `compile_error!`.
+    and the `wasm_js` feature, which only a direct dependency of the
+    final binary can turn on. Either alone is a `compile_error!`.
 - **Never enable `keyflow-ui`'s `web` feature from a wasm consumer.** It
   turns on `dioxus/desktop`, which drags dioxus-desktop → tungstenite →
   native-tls → openssl-sys, and openssl does not build for wasm32. That is
@@ -160,16 +162,6 @@ builds only the features it names — the wasm site must never pull
   knows nothing about keyflow; `editor-keyflow` implements its
   `fence_renderer` seam and registers itself. If you find yourself adding
   `keyflow` to a crate in the editor repo, the code belongs here instead.
-- **The site's Tailwind sheet is build output.** `apps/web/assets/tailwind.css`
-  is gitignored and `asset!()` demands it at compile time, so a fresh
-  clone must `just tailwind` before `cargo check` passes (CI does). It
-  scans two GIT DEPS — architect-ui and view-knowledge-graph — through
-  symlinks that `just _tw-link` resolves via `cargo metadata`, because a
-  git dep has no stable path to glob. **A `@source` that matches nothing
-  is silent**: no error, just missing classes and an unstyled component.
-  `just tailwind-check` exists to make that loud. architect-ui's prebuilt
-  `UTILITIES_CSS` is not a substitute — it lacks `cursor-grab`,
-  `cursor-grabbing` and `backdrop-blur-sm`, which the graph view needs.
 - **Engraving belongs in `use_memo`, not `use_effect`.** It is a pure
   function of the source. An effect that writes a signal the component
   also reads re-enters on every pass.

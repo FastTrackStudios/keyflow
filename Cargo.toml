@@ -30,15 +30,10 @@ members = [
     "features/tree-sitter",
     "features/engraver",
     "features/editor",
-    "apps/web",
-    "apps/mobile",
 ]
 
 [workspace.package]
-# Tracks the release tag. The deploy builds through Nix, which filters
-# `.git` out of its source (nix/modules/crane.nix), so `git describe`
-# cannot answer inside it — the manifest is the only version a shipped
-# binary can read. Bump this with the tag.
+# Tracks the release tag. Bump this with the tag.
 version = "0.0.1-alpha"
 edition = "2024"
 rust-version = "1.87"
@@ -52,9 +47,10 @@ repository = "https://github.com/FastTrackStudios/keyflow"
 # language crate beneath them, for formats the facade does not re-export.
 # Defaults OFF at the root for all three: `keyflow-lang` and `engraver`
 # default to every native feature (sync, lsp, pdf, …) so their own tests
-# cover them, and the facade's default pulls `engraver` (wgpu + vello), which the wasm site does not want (it renders through
-# vello_hybrid) and the iOS build cannot take (printpdf's azul dep does not
-# build for iOS). Every consumer names the features it needs.
+# cover them, and the facade's default pulls `engraver` (wgpu + vello),
+# which a wasm consumer does not want (it renders through vello_hybrid)
+# and an iOS build cannot take (printpdf's azul dep does not build for
+# iOS). Every consumer names the features it needs.
 keyflow = { path = "features/keyflow", default-features = false }
 keyflow-lang = { path = "features/lang", default-features = false }
 keyflow-annotate = { path = "features/annotate" }
@@ -74,95 +70,17 @@ engraver = { path = "features/engraver", default-features = false }
 # vim, tree-sitter syntax, CRDT, LSP.) It sits BELOW this repo and depends
 # on dioxus and crates.io only — that is what makes it embeddable.
 #
-# The guide renders through it in read-only mode, and it already
-# understands the ```kf fence family natively. `editor-keyflow` (here)
-# implements its `fence_renderer` seam so charts engrave; editor-state
-# knows nothing about keyflow, which is what keeps the graph acyclic.
-editor = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.25" }
+# It already understands the ```kf fence family natively.
+# `editor-keyflow` (here) implements its `fence_renderer` seam so charts
+# engrave; editor-state knows nothing about keyflow, which is what keeps
+# the graph acyclic.
 # Not the markdown fences (Typst, Mermaid): nothing here renders them.
 editor-state = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.25", default-features = false }
-# Byte-offset `Changes` ⇄ scalar text ops, at the editor's own tag: what
-# a remote edit to a shared chart becomes on its way into the editor.
-editor-crdt = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.25" }
 
 # ── features/editor — this repo's half of the editor integration ──────
 # It needs `editor-state` from below and `keyflow-lang`/`engraver` from
 # here, so this is the only repo where it can live.
 editor-keyflow = { path = "features/editor" }
-
-# ── task — the vault / knowledge-graph layer ──────────────────────────
-# The guide is a vault: `docs/guides/*.md` are wiki notes that
-# cross-link as `[[slug]]`, and the site renders that web as a real
-# knowledge graph. `view-knowledge-graph` is the port of llm_wiki's
-# graph view — deliberately FS-free and pure, so the same code that
-# builds the graph natively builds it in the browser.
-#
-# Note the direction: this depends on `task`, and `task` depends on
-# `keyflow` (via editor-keyflow). Cargo stays acyclic — different
-# packages, and nothing in this dependency's tree touches keyflow, so
-# there is no duplicate-crate hazard — but a change spanning both repos
-# needs two bumps in sequence.
-#
-# Tracks `main`, like the three `ssg` entries below. It used to be frozen
-# at rev 607916d for a reason that no longer holds: task@main's crates
-# reach architect-ui, this repo was on architect v0.0.2, and taking both
-# put two copies of the architect crates in one wasm binary. Both repos
-# pin one architect tag now, so there is one copy and the rev pin has
-# nothing left to protect. See the architect block below.
-#
-# The other reason it was a rev, once: 263ec34 carried a stray
-# `features/editor/mermaid-rs-renderer/Cargo.toml.orig` — a cargo
-# packaging artifact — and cargo refuses to vendor a source containing a
-# reserved file name, so every Nix build of the site died in
-# `vendor-cargo-deps` before it reached a compiler. That file is long
-# gone from task; if it ever comes back, the symptom is a deploy-only
-# failure (`cargo build` reads the checkout directly and never vendors)
-# and the fix is to pin a rev again, here and on all three ssg entries.
-view-knowledge-graph = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
-
-# features/ssg — a vault (a directory of markdown notes) published as a
-# static site. apps/web's guide is one: `ssg-build` renders it to HTML in
-# build.rs, `ssg`/`ssg-ui` are the page model and the components, and
-# `dx build --ssg` pre-renders the routes the vault names.
-#
-# `graph` on ssg-ui is what makes `ssg_ui::{vault_graph, local_graph}`
-# available — the vault→graph build and the one-hop subgraph the guide's
-# rail draws. It was off while this repo's architect tag differed from
-# task's, because the feature reaches view-knowledge-graph and pulled a
-# second copy of the architect crates through it. One tag now, so it is
-# simply on, and apps/web reads those two functions from here instead of
-# keeping its own copies.
-ssg = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
-ssg-ui = { git = "https://github.com/FastTrackStudios/task", branch = "main", features = ["graph"] }
-ssg-build = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
-
-# The chart library speaks to Task over vox — the same wire contract
-# Task's own web app, CLI and desktop client use — rather than over the
-# MCP tool surface it used to borrow. `resources-proto` is the songs and
-# charts (`ResourcesService`), `collection-proto` the song lists, and
-# `links-proto` the `song:<slug>` node references a list is made of. All
-# three are wasm-clean wire crates: no filesystem, no server. They reach
-# `architect` through task's workspace pin, which is the same tag as
-# this repo's (see the architect block below), so there is one copy.
-resources-proto = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
-collection-proto = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
-links-proto = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
-# The server lane, for exactly one call: `ensure_personal_org`. A person
-# who has just signed up belongs to no org, and the library's answer to
-# that must not be "go and open Task first".
-org-proto = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
-# `VaultSync::open_collab` — how a chart open in the editor joins its
-# live, shared Loro document on Task.
-vault-proto = { git = "https://github.com/FastTrackStudios/task", branch = "main" }
-
-# ── apps ──────────────────────────────────────────────────────────────
-# The site. A workspace member so `cargo check --workspace` covers it on
-# the host; the shipping build is `dx build --platform web`.
-keyflow-web = { path = "apps/web" }
-# The iOS app. A workspace member so its keyboard layout and chart library
-# are checked and tested on the host; the shipping build is
-# `dx build --platform ios` (see apps/mobile/ios/README.md).
-keyflow-mobile = { path = "apps/mobile" }
 
 # ── Cross-repo — tagged git deps ────────────────────────────────
 # Defaults OFF at the root so lean consumers (probe-only scanners, the
@@ -190,40 +108,17 @@ keyflow-proto = { path = "features/proto" }
 facet = { version = "0.50.0-rc.7", features = ["reflect", "chrono", "uuid"] }
 facet-json = { version = "0.50.0-rc.7" }
 vox = { version = "0.10.0-rc.7", default-features = false, features = ["runtime"] }
-# The client half of vox the site dials Task with: `vox-core` for the
-# initiator handshake and the `FromVoxLane` the generated clients
-# implement, `vox-websocket` for the browser WebSocket link.
-vox-core = "0.10.0-rc.7"
-vox-websocket = "0.10.0-rc.7"
-futures-channel = "0.3"
 
 # ── Architect framework — its own repo since the 2026-08 three-way split
 # (FastTrackStudios/architect: the entity/RPC framework, the auth/crdt/
 # permissions stack, architect-ui + architect-story, architect-telemetry).
 #
-# ONE tag pin shared by EVERY entry below — `architect`, `architect-ui`,
-# `auth-http`, `auth-client`, `architect-telemetry`. They are one repo:
+# ONE tag pin shared by EVERY entry below — `architect` and
+# `architect-ui`, and the [patch] table further down. They are one repo:
 # a split tag checks that repo out twice, and cargo treats the two
 # checkouts as different crates whose traits then refuse to unify.
 #
-# v0.10.0, the tag task pins too. This repo takes `ssg`, `ssg-ui`,
-# `ssg-build`, `view-knowledge-graph` and the *-proto wire crates from
-# task@main, and every one of those reaches
-# architect-ui. Pin a different tag here and the site ends up holding two
-# architect-uis: `ssg_ui::VaultArticle` and a local component would be
-# rendering against different `ThemeProvider`s, different story
-# registries, different everything — types that share a name and do not
-# unify. So: bump this together with task's pin, in that order (task
-# first, since this tracks task@main).
-#
-# Historically this pin also blamed reqwest: v0.0.2 here against v0.7.1
-# there was reported as ~100 `duplicate symbol: intounderlyingsource_*`
-# errors out of rust-lld, attributed to two reqwest majors compiling
-# their own wasm-streams glue. That is not what the toolchain does today.
-# With the tags unified, the wasm binary carries reqwest 0.12 (auth-http)
-# AND 0.13 (iroh, via architect), wasm-streams 0.4 (dioxus-web) AND 0.5
-# (reqwest 0.13), and links clean. Two majors of a crate are fine; two
-# copies of the SAME crate at different sources are what breaks.
+# v0.10.0, the tag task and studio pin too; bump it together with theirs.
 architect = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.10.0" }
 
 # The shared musical vocabulary — section colours and the canonical
@@ -232,31 +127,6 @@ music-catalog = { git = "https://github.com/FastTrackStudios/music-convention", 
 color-palette = { git = "https://github.com/FastTrackStudios/music-convention", tag = "v0.1.0" }
 # The Dioxus primitive library (was libs/ui/fts-ui, renamed on the split).
 architect-ui = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.10.0" }
-# Loro documents and their sync + presence sessions — the client half of
-# Task's per-file collaboration. Same tag as the rest of architect: two
-# copies of it would not link into one wasm binary.
-crdt = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.10.0" }
-
-# The FastTrackStudio account. One identity across Task, Session, Signal,
-# Keyflow and Ignition, served by auth.fasttrackstudio.app.
-#
-# `auth-http` and `auth-client` (architect v0.6.0) used to be here, for
-# the site's email-and-password sign-in. The site signs in by OIDC
-# redirect now — see `apps/web/src/auth.rs` for why — and that is two
-# form posts and a GET, which leaves neither crate anything to do.
-#
-# Architect's own `auth_client::oidc` is the right home for the PKCE
-# half. It arrived in v0.7.1, which this repo could not take while it was
-# pinned to v0.0.2 — so the flow was written as a documented port in
-# `apps/web/src/oidc.rs`. **That pin is gone as of this commit**, so the
-# port is now redundant; replacing it with the crate is a follow-up, kept
-# out of a dependency bump so the two stay reviewable apart.
-#
-# Telemetry. Same tag as everything above — see the note there for why
-# that is not optional. `otel` is inert unless the build bakes
-# TASK_OTLP_ENDPOINT, so dev builds stay telemetry-free.
-architect-telemetry = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.10.0", features = ["otel"] }
-
 # ── MusicXML parsing (keyflow) ─────────────────────────────────────────
 musicxml = "1.1"
 
@@ -266,11 +136,6 @@ musicxml = "1.1"
 # across every dioxus-* entry below AND the FTS fork tags of
 # primitives/lucide/sdk (`fts-upstream-2026-11`), which pin the same rev).
 dioxus = { git = "https://github.com/DioxusLabs/dioxus", rev = "430cfb563f1b70602ef387f0c80f171d84527b41", default-features = false, features = ["lib"] }
-# Direct, and only apps/web takes it: it is how the site turns on
-# `hydrate` for static generation without `dioxus/fullstack`, whose
-# reqwest would be a second major in the wasm binary. Same rev as the
-# meta-crate above — they are one repo and must not drift.
-dioxus-web = { git = "https://github.com/DioxusLabs/dioxus", rev = "430cfb563f1b70602ef387f0c80f171d84527b41", default-features = false }
 # Blitz native renderer — dioxus-native(-dom) moved into the dioxus repo
 # on the 0.8 line; blitz-* are `=0.3.0-beta.4`, patched to the FTS fork
 # below. Feature union of the wave-1 UI libs (prelude, system-fonts) and
@@ -304,20 +169,12 @@ kurbo = "0.13"
 # ── Serialization ─────────────────────────────────────────────────────
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-# The `S256` half of PKCE, for the site's sign-in redirect. base64url is
-# already here (the chart-in-URL codec uses it); this is the other half.
-sha2 = "0.10"
 thiserror = "2.0"
 
 # ── Observability ─────────────────────────────────────────────────────
 tracing = { version = "0.1", features = ["std"] }
 regex = "1"
 
-# LOCAL CO-DEVELOPMENT — do not commit.
-# Task's wire crates against the checkout next door, so the site and a
-# locally-served task-server agree on the vox schema. Without it the
-# handshake fails ("schema decode consumed N of M bytes") whenever
-# Task's protos have moved since the pinned `main`.
 [patch.crates-io]
 # Blitz from the FTS fork: tag `fts-upstream-2026-11`, DioxusLabs/blitz
 # main plus the FTS work carried on top (focus-follows-pointerdown, touch
@@ -336,21 +193,18 @@ blitz-html = { git = "https://github.com/FastTrackStudios/blitz", tag = "fts-ups
 anyrender = { git = "https://github.com/FastTrackStudios/blitz", tag = "fts-upstream-2026-11" }
 # The renderer and windowing crates architect patches from
 # FastTrackStudios/vendor `v0.7.1` (each crate's UPSTREAM.md says what
-# changed). The iOS ones only resolve for apps/mobile's target.
+# changed). Architect's iOS-only ones (winit-uikit, raw-window-metal) are
+# not here: nothing in this workspace builds for iOS any more.
 anyrender_vello = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.7.1" }
 anyrender_vello_hybrid = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.7.1" }
-winit-uikit = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.7.1" }
 wgpu-hal = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.7.1" }
-raw-window-metal = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.7.1" }
 
 # The same vendored phon, phon-jit, facet-core and vox-phon Task patches
 # in (see its root manifest, and vendor's README, for each one's reason),
-# so both ends of a vox call run one codec. They became necessary here with
-# `open_collab`: its reply carries a `Uuid`, an opaque scalar upstream phon
-# cannot derive a decoder for — the call failed in the browser with "cannot
-# derive phon from this type". Every earlier library reply happened to be
-# strings and lists. vox-phon: upstream rc.7 fails every real schema
-# exchange with "schema decode consumed N of M bytes".
+# so both ends of a vox call run one codec: upstream phon cannot derive a
+# decoder for opaque scalars such as `Uuid` ("cannot derive phon from this
+# type"), and upstream vox-phon rc.7 fails every real schema exchange with
+# "schema decode consumed N of M bytes".
 #
 # phon and facet-core are SIBLING-CHECKOUT PATHS (../vendor, a clone of
 # FastTrackStudios/vendor): their rc.7 forward-ports are committed there
@@ -384,17 +238,13 @@ dioxus-vdom = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.7.
 [patch."https://github.com/FastTrackStudios/architect"]
 architect = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
 architect-action-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
-architect-atom = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
 architect-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
 architect-permissions = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
 architect-rpc-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
 architect-story-core = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
 architect-story-macros = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
 architect-story-runtime = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
-architect-telemetry = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
 architect-ui = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
-crdt = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
-crdt-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
 
 [workspace.lints.rust]
 # Flipped from "allow" 2026-07-28 (task cleanup): the blanket allows are
@@ -480,22 +330,6 @@ inherits = "dev"
 debug = 2
 split-debuginfo = "packed"
 
-# dx web builds: native debuginfo in the wasm module blew past
-# Chrome's 1 GiB WebAssembly module cap (1.14 GB observed). Wasm dev
-# builds don't need it — strip it and dev bundles come back to a
-# loadable size.
-[profile.wasm-dev]
-inherits = "dev"
-debug = false
-strip = "debuginfo"
-
-# Engraver lays out and rasterises a whole chart per keystroke, and in
-# the browser that runs on the main thread. Dependencies build at
-# opt-level 3 for wasm dev bundles (package overrides may not carry
-# through `inherits`, so this is restated rather than inherited) — at
-# opt-level 1 the live preview visibly lags typing.
-[profile.wasm-dev.package."*"]
-opt-level = 3
 [profile.dev.package."*"]
 opt-level = 1
 

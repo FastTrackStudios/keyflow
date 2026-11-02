@@ -43,23 +43,18 @@ jobs:
           mkdir -p "$dir"
           echo "CARGO_TARGET_DIR=$dir" >> "$GITHUB_ENV"
           echo "target dir: $dir ($(du -sh "$dir" 2>/dev/null | cut -f1))"
-      # apps/web/assets/tailwind.css is gitignored build output that
-      # `asset!()` demands at compile time, so the sheet has to exist
-      # before any cargo step. `tailwind-check` also fails loudly if the
-      # @source globs matched nothing — see apps/web/tailwind.css.
-      - name: tailwind
-        run: ${NIX_DEV} just tailwind-check
       - name: Manifests + lockfile
         run: ${NIX_DEV} cargo metadata --locked --format-version 1 > /dev/null
       - name: cargo fmt --check
         run: ${NIX_DEV} cargo fmt --all --check
       - name: cargo check --workspace
         run: ${NIX_DEV} cargo check --workspace
-      # The site is a wasm binary. `--workspace` above builds it for the
-      # host, which does not compile the WebGL surface or any
-      # `cfg(target_arch = "wasm32")` block — so a browser-only break
-      # sails through the gate without this step.
+      # Task's and Studio's web apps build these crates for the browser.
+      # `--workspace` above builds them for the host, which does not
+      # compile the WebGL surface or any `cfg(target_arch = "wasm32")`
+      # block — so a browser-only break sails through without this step.
+      # The recipe holds the exact package/feature set.
       - name: cargo check (wasm)
-        run: ${NIX_DEV} cargo check -p keyflow-web --target wasm32-unknown-unknown
+        run: ${NIX_DEV} just wasm-check
       - name: cargo nextest
         run: ${NIX_DEV} cargo nextest run --workspace --no-fail-fast
