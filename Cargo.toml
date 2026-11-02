@@ -10,7 +10,7 @@
 #
 # A crate is a domain, not a format: proto -> lang -> engraver -> keyflow,
 # each old crate a module of one of those, its optional parts behind a
-# Cargo feature of the module's name. See CLAUDE.md "Layout".
+# Cargo feature of the module's name. See AGENTS.md "Layout".
 #
 # `daw` still carries its own copies of `keyflow-proto` and `keyflow-syntax`
 # (`expression-editor-core`, which `daw-reaper` hard-depends on, builds
