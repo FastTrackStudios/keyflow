@@ -54,3 +54,9 @@ features/tree-sitter/src/parser.c
 # own chordsheet backup, which is committed at examples/chordsheet-compat/.
 # Drop a local copy in and run `cargo test -- --ignored`.
 features/examples/
+
+# devenv: state, eval cache and per-user overrides.
+.devenv/
+.devenv.flake.nix
+devenv.local.nix
+devenv.local.yaml

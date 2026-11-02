@@ -22,6 +22,28 @@ rustflags = [
   "--cfg", 'getrandom_backend="wasm_js"',
 ]
 
+# mold instead of the default `ld.bfd`: linking is the serial tail of every
+# build and the binaries are large. mold comes from the shell (devenv-fleet's
+# `rust` module); GCC 15 accepts -fuse-ld=mold natively. x86-64-v3 (AVX2, FMA,
+# BMI2 — Haswell, 2013, and later) for the DSP. These two tables are Studio's,
+# flag for flag and in the same order, so kache keys Keyflow's builds of shared
+# crates the same as Studio's and the store is shared. Keep them in step with
+# Studio's .cargo/config.toml. `target.<triple>.rustflags` REPLACES
+# `build.rustflags`, so each table repeats the frame-pointer flag. CI must not
+# set RUSTFLAGS or CARGO_TARGET_*_RUSTFLAGS: either replaces these tables.
+[target.x86_64-unknown-linux-gnu]
+rustflags = [
+  "-C", "force-frame-pointers=yes",
+  "-C", "link-arg=-fuse-ld=mold",
+  "-C", "target-cpu=x86-64-v3",
+]
+
+[target.x86_64-apple-darwin]
+rustflags = [
+  "-C", "force-frame-pointers=yes",
+  "-C", "target-cpu=x86-64-v3",
+]
+
 # Carried over from the dissolved session/keyflow workspaces: git deps and
 # patched git sources fetch via the git CLI so SSH / credentials work the
 # same way `git` does outside cargo.

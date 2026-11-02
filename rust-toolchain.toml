@@ -1,0 +1,6 @@
+# The FastTrackStudio fleet pin; devenv.nix (via devenv-fleet) and the nix CI
+# shell provide the same 1.99.1. Keep in lockstep with architect, Task, Studio.
+[toolchain]
+channel = "1.99.1"
+components = ["rustfmt", "clippy", "rust-src"]
+targets = ["wasm32-unknown-unknown"]
