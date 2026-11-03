@@ -75,9 +75,9 @@ engraver = { path = "features/engraver", default-features = false }
 # engrave; editor-state knows nothing about keyflow, which is what keeps
 # the graph acyclic.
 # Not the markdown fences (Typst, Mermaid): nothing here renders them.
-editor-state = { git = "https://github.com/FastTrackStudios/editor", rev = "5c5c3de76abc364d0ae3714f525c0fbc475e11fd", default-features = false }
-editor-view = { git = "https://github.com/FastTrackStudios/editor", rev = "5c5c3de76abc364d0ae3714f525c0fbc475e11fd", default-features = false }
-editor-vim = { git = "https://github.com/FastTrackStudios/editor", rev = "5c5c3de76abc364d0ae3714f525c0fbc475e11fd" }
+editor-state = { git = "https://github.com/FastTrackStudios/editor", rev = "f70f074443c3654833f970eaf49968e27c47c006", default-features = false }
+editor-view = { git = "https://github.com/FastTrackStudios/editor", rev = "f70f074443c3654833f970eaf49968e27c47c006", default-features = false }
+editor-vim = { git = "https://github.com/FastTrackStudios/editor", rev = "f70f074443c3654833f970eaf49968e27c47c006" }
 
 # ── features/editor — this repo's half of the editor integration ──────
 # It needs `editor-state` from below and `keyflow-lang`/`engraver` from
@@ -121,14 +121,14 @@ vox = { version = "0.10.0-rc.7", default-features = false, features = ["runtime"
 # checkouts as different crates whose traits then refuse to unify.
 #
 # Provisional paint-view checkpoint; return to one shared tag once released.
-architect = { git = "https://github.com/FastTrackStudios/architect", rev = "bd6019487d4122d2f8c8ac068c09b3db7a02e261" }
+architect = { git = "https://github.com/FastTrackStudios/architect", rev = "8e0aed9e577868035508b86a9292328ef7f5f8cc" }
 
 # The shared musical vocabulary — section colours and the canonical
 # palettes `keyflow-proto` engraves section cards with.
 music-catalog = { git = "https://github.com/FastTrackStudios/music-convention", tag = "v0.1.0" }
 color-palette = { git = "https://github.com/FastTrackStudios/music-convention", tag = "v0.1.0" }
 # The Dioxus primitive library (was libs/ui/fts-ui, renamed on the split).
-architect-ui = { git = "https://github.com/FastTrackStudios/architect", rev = "bd6019487d4122d2f8c8ac068c09b3db7a02e261" }
+architect-ui = { git = "https://github.com/FastTrackStudios/architect", rev = "8e0aed9e577868035508b86a9292328ef7f5f8cc" }
 # ── MusicXML parsing (keyflow) ─────────────────────────────────────────
 musicxml = "1.1"
 
@@ -226,7 +226,7 @@ vox-phon = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.3.0" 
 # `dioxus-vdom`.
 [patch."https://github.com/DioxusLabs/dioxus"]
 dioxus-native = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.7.1" }
-dioxus-native-dom = { git = "https://www.github.com/FastTrackStudios/vendor", rev = "ba4ac02415f9b6c6dc4a7466f490364b2c00fcbf" }
+dioxus-native-dom = { git = "https://www.github.com/FastTrackStudios/vendor", rev = "25bf4bcdfd0b6acb268ca91a93bc8ff8da683a96" }
 dioxus-vdom = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.7.1" }
 
 # One architect revision for the whole graph. This patch lifts
@@ -238,15 +238,15 @@ dioxus-vdom = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.7.
 # lets it patch the plain one; a same-host patch is refused. Bump this revision
 # with the pins above; drop the block once keyflow takes daw from studio.
 [patch."https://github.com/FastTrackStudios/architect"]
-architect = { git = "https://www.github.com/FastTrackStudios/architect", rev = "bd6019487d4122d2f8c8ac068c09b3db7a02e261" }
-architect-action-derive = { git = "https://www.github.com/FastTrackStudios/architect", rev = "bd6019487d4122d2f8c8ac068c09b3db7a02e261" }
-architect-derive = { git = "https://www.github.com/FastTrackStudios/architect", rev = "bd6019487d4122d2f8c8ac068c09b3db7a02e261" }
-architect-permissions = { git = "https://www.github.com/FastTrackStudios/architect", rev = "bd6019487d4122d2f8c8ac068c09b3db7a02e261" }
-architect-rpc-derive = { git = "https://www.github.com/FastTrackStudios/architect", rev = "bd6019487d4122d2f8c8ac068c09b3db7a02e261" }
-architect-story-core = { git = "https://www.github.com/FastTrackStudios/architect", rev = "bd6019487d4122d2f8c8ac068c09b3db7a02e261" }
-architect-story-macros = { git = "https://www.github.com/FastTrackStudios/architect", rev = "bd6019487d4122d2f8c8ac068c09b3db7a02e261" }
-architect-story-runtime = { git = "https://www.github.com/FastTrackStudios/architect", rev = "bd6019487d4122d2f8c8ac068c09b3db7a02e261" }
-architect-ui = { git = "https://www.github.com/FastTrackStudios/architect", rev = "bd6019487d4122d2f8c8ac068c09b3db7a02e261" }
+architect = { git = "https://www.github.com/FastTrackStudios/architect", rev = "8e0aed9e577868035508b86a9292328ef7f5f8cc" }
+architect-action-derive = { git = "https://www.github.com/FastTrackStudios/architect", rev = "8e0aed9e577868035508b86a9292328ef7f5f8cc" }
+architect-derive = { git = "https://www.github.com/FastTrackStudios/architect", rev = "8e0aed9e577868035508b86a9292328ef7f5f8cc" }
+architect-permissions = { git = "https://www.github.com/FastTrackStudios/architect", rev = "8e0aed9e577868035508b86a9292328ef7f5f8cc" }
+architect-rpc-derive = { git = "https://www.github.com/FastTrackStudios/architect", rev = "8e0aed9e577868035508b86a9292328ef7f5f8cc" }
+architect-story-core = { git = "https://www.github.com/FastTrackStudios/architect", rev = "8e0aed9e577868035508b86a9292328ef7f5f8cc" }
+architect-story-macros = { git = "https://www.github.com/FastTrackStudios/architect", rev = "8e0aed9e577868035508b86a9292328ef7f5f8cc" }
+architect-story-runtime = { git = "https://www.github.com/FastTrackStudios/architect", rev = "8e0aed9e577868035508b86a9292328ef7f5f8cc" }
+architect-ui = { git = "https://www.github.com/FastTrackStudios/architect", rev = "8e0aed9e577868035508b86a9292328ef7f5f8cc" }
 
 [workspace.lints.rust]
 # Flipped from "allow" 2026-07-28 (task cleanup): the blanket allows are
@@ -351,4 +351,4 @@ blitz-html = { git = "https://www.github.com/FastTrackStudios/blitz", rev = "db5
 anyrender = { git = "https://www.github.com/FastTrackStudios/blitz", rev = "db5b7ef11e4df19ef317c23f77152ec5e1887101" }
 
 [patch."https://github.com/FastTrackStudios/vendor"]
-dioxus-native-dom = { git = "https://www.github.com/FastTrackStudios/vendor", rev = "ba4ac02415f9b6c6dc4a7466f490364b2c00fcbf" }
+dioxus-native-dom = { git = "https://www.github.com/FastTrackStudios/vendor", rev = "25bf4bcdfd0b6acb268ca91a93bc8ff8da683a96" }
