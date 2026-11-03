@@ -7,6 +7,11 @@ dist/
 node_modules/
 .DS_Store
 .direnv/
+# devenv: state, eval cache and per-user overrides.
+.devenv/
+.devenv.flake.nix
+devenv.local.nix
+devenv.local.yaml
 .claude/worktrees/
 
 # graphify knowledge graph — regenerable via `just graph`, machine-local.
