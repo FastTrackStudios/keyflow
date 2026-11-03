@@ -4808,7 +4808,7 @@ dependencies = [
 [[package]]
 name = "dioxus-test"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?rev=888c3b9e92f6a241c11a649e96109b66bdec78ed#888c3b9e92f6a241c11a649e96109b66bdec78ed"
+source = "git+https://github.com/FastTrackStudios/editor?rev=5c5c3de76abc364d0ae3714f525c0fbc475e11fd#5c5c3de76abc364d0ae3714f525c0fbc475e11fd"
 dependencies = [
  "anyrender",
  "anyrender_vello_cpu",
@@ -5135,6 +5135,8 @@ dependencies = [
  "editor-view",
  "editor-vim",
  "engraver",
+ "futures-channel",
+ "futures-util",
  "gloo-timers 0.3.0",
  "keyflow-lang",
  "thiserror 2.0.20",
@@ -5146,7 +5148,7 @@ dependencies = [
 [[package]]
 name = "editor-state"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?rev=888c3b9e92f6a241c11a649e96109b66bdec78ed#888c3b9e92f6a241c11a649e96109b66bdec78ed"
+source = "git+https://github.com/FastTrackStudios/editor?rev=5c5c3de76abc364d0ae3714f525c0fbc475e11fd#5c5c3de76abc364d0ae3714f525c0fbc475e11fd"
 dependencies = [
  "editor-syntax",
  "ropey",
@@ -5159,7 +5161,7 @@ dependencies = [
 [[package]]
 name = "editor-syntax"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?rev=888c3b9e92f6a241c11a649e96109b66bdec78ed#888c3b9e92f6a241c11a649e96109b66bdec78ed"
+source = "git+https://github.com/FastTrackStudios/editor?rev=5c5c3de76abc364d0ae3714f525c0fbc475e11fd#5c5c3de76abc364d0ae3714f525c0fbc475e11fd"
 dependencies = [
  "arborium",
  "arborium-theme",
@@ -5169,7 +5171,7 @@ dependencies = [
 [[package]]
 name = "editor-view"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?rev=888c3b9e92f6a241c11a649e96109b66bdec78ed#888c3b9e92f6a241c11a649e96109b66bdec78ed"
+source = "git+https://github.com/FastTrackStudios/editor?rev=5c5c3de76abc364d0ae3714f525c0fbc475e11fd#5c5c3de76abc364d0ae3714f525c0fbc475e11fd"
 dependencies = [
  "dioxus",
  "editor-state",
@@ -5185,7 +5187,7 @@ dependencies = [
 [[package]]
 name = "editor-vim"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?rev=888c3b9e92f6a241c11a649e96109b66bdec78ed#888c3b9e92f6a241c11a649e96109b66bdec78ed"
+source = "git+https://github.com/FastTrackStudios/editor?rev=5c5c3de76abc364d0ae3714f525c0fbc475e11fd#5c5c3de76abc364d0ae3714f525c0fbc475e11fd"
 dependencies = [
  "editor-state",
  "tracing",

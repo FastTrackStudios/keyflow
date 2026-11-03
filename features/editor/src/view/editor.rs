@@ -14,12 +14,17 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::PoisonError;
 
 use dioxus::prelude::*;
-use editor_view::editor_state::{EditorState, HoverSource, Keymap, commands};
+use editor_view::editor_state::{
+    Changes, EditorState, HoverSource, Keymap, Selection, TransactionSpec, commands,
+};
 use editor_view::palette::{CommandPalette, PaletteState};
-use editor_view::{DecorationSource, EDITOR_CSS, Editor, TransactionEvent};
+use editor_view::{DecorationSource, EDITOR_CSS, Editor, TransactionEvent, dispatch_spec};
+use futures_util::StreamExt;
 
+use super::control::{self, Command, Control};
 use super::style::PANE_CSS;
 use crate::lang::{HighlightTheme, highlight_css, keyflow_decorations, keyflow_hover};
 
@@ -83,6 +88,11 @@ pub fn KeyflowEditor(
     /// turns this off. The highlight colours are always emitted.
     #[props(default = true)]
     stylesheet: bool,
+    /// Reaches this editor from outside the UI thread: [`set_text`](super::set_text),
+    /// [`focus`](super::focus) and [`state`](super::state) find it by this id
+    /// while it is mounted. Read at mount. Absent, the editor is not reachable.
+    #[props(default)]
+    id: Option<String>,
 ) -> Element {
     let own = use_signal(|| EditorState::new(initial));
     let state = state.unwrap_or(own);
@@ -119,6 +129,50 @@ pub fn KeyflowEditor(
     });
 
     let keymap = use_hook(chart_keymap);
+
+    // What the control API reads and asks for. The editor writes `focused`,
+    // and bumping `focus_req` asks it to take focus. They are the host's to
+    // hold, so they live here and not inside the editor.
+    let focused = use_signal(|| cfg!(feature = "native"));
+    let mut focus_req = use_signal(|| 0u64);
+
+    // Registered for as long as the editor is mounted, when it has an id. The
+    // drain task applies queued commands on the UI thread. It is spawned, not
+    // a `use_future`, so the reads it makes are not tracked, and it runs
+    // whether or not the editor has focus.
+    let handle = use_hook(move || {
+        let id = id?;
+        let (handle, mut queue) = Control::register(&id);
+        spawn(async move {
+            while let Some(command) = queue.next().await {
+                match command {
+                    Command::SetText(text) => {
+                        let len = state.peek().doc.len();
+                        let spec = TransactionSpec::new()
+                            .changes(Changes::replace(0..len, text.as_str()))
+                            .selection(Selection::caret(text.len()));
+                        dispatch_spec(state, spec, Some(forward));
+                    }
+                    Command::Focus => *focus_req.write() += 1,
+                }
+            }
+        });
+        Some(Rc::new(handle))
+    });
+
+    // The snapshot the control API reads, brought up to date after each
+    // render. The reads here are tracked, so a change to the text or to focus
+    // publishes it.
+    let snapshot = handle.as_ref().map(|h| h.snapshot.clone());
+    use_effect(move || {
+        let Some(snapshot) = &snapshot else { return };
+        let buf = state.read();
+        *snapshot.lock().unwrap_or_else(PoisonError::into_inner) = control::EditorState {
+            text: buf.doc.to_string(),
+            cursor: buf.selection.primary().head,
+            focused: focused(),
+        };
+    });
 
     let mut own_vim = use_signal(|| vim);
     let vim_on = if on_vim.is_some() { vim } else { own_vim() };
@@ -181,6 +235,8 @@ pub fn KeyflowEditor(
                         vim: vim_signal,
                         palette: Some(palette),
                         on_transaction,
+                        focused: Some(focused),
+                        focus_request: Some(focus_req),
                     }
                     CommandPalette { state, palette }
                 }

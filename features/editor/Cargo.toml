@@ -38,6 +38,12 @@ dioxus = { workspace = true, optional = true }
 editor-view = { workspace = true, optional = true }
 editor-vim = { workspace = true, optional = true }
 
+# The host control API's cross-thread queue and its drain on the UI thread.
+# Both crates are already in the lock file through dioxus, so this adds no
+# package; it names them here so the queue works on wasm, where tokio is out.
+futures-channel = { version = "0.3", optional = true }
+futures-util = { version = "0.3", optional = true }
+
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1.49", features = ["time", "rt"], optional = true }
 
@@ -45,14 +51,14 @@ tokio = { version = "1.49", features = ["time", "rt"], optional = true }
 gloo-timers = { version = "0.3", features = ["futures"], optional = true }
 
 [dev-dependencies]
-dioxus-test = { git = "https://github.com/FastTrackStudios/editor", rev = "888c3b9e92f6a241c11a649e96109b66bdec78ed" }
+dioxus-test = { git = "https://github.com/FastTrackStudios/editor", rev = "5c5c3de76abc364d0ae3714f525c0fbc475e11fd" }
 dioxus-ssr = { workspace = true }
 tokio = { version = "1.49", features = ["macros", "rt", "time"] }
 
 [features]
 default = ["render"]
 preview = ["render"]
-view = ["preview", "dep:dioxus", "dep:editor-view", "dep:editor-vim", "dep:tokio", "dep:gloo-timers"]
+view = ["preview", "dep:dioxus", "dep:editor-view", "dep:editor-vim", "dep:futures-channel", "dep:futures-util", "dep:tokio", "dep:gloo-timers"]
 native = ["view", "editor-view/native"]
 web = ["view", "editor-view/web"]
 # `.kf` fences → inline SVG.

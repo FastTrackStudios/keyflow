@@ -27,11 +27,13 @@
 //! }
 //! ```
 
+mod control;
 mod editor;
 mod pages;
 mod palette;
 mod style;
 
+pub use control::{EditorState, focus, set_text, state};
 pub use editor::{KeyflowEditor, KeyflowEditorProps};
 pub use pages::{DEBOUNCE_MS, use_engraved_pages};
 pub use palette::palette_commands;
