@@ -51,6 +51,7 @@ tokio = { version = "1.49", features = ["time", "rt"], optional = true }
 gloo-timers = { version = "0.3", features = ["futures"], optional = true }
 
 [dev-dependencies]
+png = "0.17"
 dioxus-test = { git = "https://github.com/FastTrackStudios/editor", rev = "5c5c3de76abc364d0ae3714f525c0fbc475e11fd" }
 dioxus-ssr = { workspace = true }
 tokio = { version = "1.49", features = ["macros", "rt", "time"] }
