@@ -233,9 +233,11 @@ impl PaintView for ChartPaintView {
                 });
                 true
             }
-            ViewInput::Wheel { dx, dy } => {
+            ViewInput::Wheel { dx, dy, x, y, mods } => {
                 let (dx, dy) = (f64::from(*dx), f64::from(*dy));
-                let (ctrl, pointer, content) = (self.ctrl, self.pointer, self.content);
+                // Ctrl (Cmd on macOS) and the pointer come with the wheel itself.
+                let ctrl = mods.iter().any(|m| *m == "Mod");
+                let (pointer, content) = (point(*x, *y), self.content);
                 self.edit_view(&data, ctx, |view, zoom| {
                     if ctrl && dy != 0.0 {
                         let factor = wheel_zoom_factor(dy);

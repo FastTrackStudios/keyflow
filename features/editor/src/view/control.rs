@@ -31,6 +31,11 @@ pub(super) enum Command {
     SetText(String),
     /// Move keyboard focus into the editor.
     Focus,
+    /// Put the caret at this byte offset (clamped to the document).
+    SetOffset(usize),
+    /// Put the caret at this line and column, both 0-based; the column is
+    /// in characters and clamped to its line.
+    SetLineCol { line: usize, col: usize },
 }
 
 /// The snapshot the editor writes and [`state`] reads.
@@ -108,6 +113,35 @@ pub fn set_text(id: &str, text: &str) -> Result<(), String> {
 /// has `id`.
 pub fn focus(id: &str) -> Result<(), String> {
     send(id, Command::Focus)
+}
+
+/// The byte offset of `line` and `col` in `text`. A line past the last is
+/// the last line, and a column past its line's end is the line's end.
+pub(super) fn line_col_offset(text: &str, line: usize, col: usize) -> usize {
+    let mut start = 0;
+    let mut lines = text.split('\n').peekable();
+    let mut index = 0;
+    while let Some(l) = lines.next() {
+        if index == line || lines.peek().is_none() {
+            return start + l.char_indices().nth(col).map_or(l.len(), |(b, _)| b);
+        }
+        start += l.len() + 1;
+        index += 1;
+    }
+    0
+}
+
+/// Puts the caret at byte `offset` of the document (clamped to its end).
+/// Queued like [`set_text`]; `Err` when no mounted editor has `id`.
+pub fn set_cursor(id: &str, offset: usize) -> Result<(), String> {
+    send(id, Command::SetOffset(offset))
+}
+
+/// Puts the caret at `line` and `col` (both 0-based; `col` in characters,
+/// clamped to the line). Queued like [`set_text`]; `Err` when no mounted
+/// editor has `id`.
+pub fn set_cursor_at(id: &str, line: usize, col: usize) -> Result<(), String> {
+    send(id, Command::SetLineCol { line, col })
 }
 
 /// The editor's text, cursor and focus, from its snapshot. `None` when no

@@ -30,4 +30,4 @@ pub mod view;
 /// The host control API. [`set_text`], [`focus`] and [`state`] reach a
 /// mounted [`view::KeyflowEditor`] by its `id`.
 #[cfg(feature = "view")]
-pub use view::{EditorState, focus, set_text, state};
+pub use view::{EditorState, focus, set_cursor, set_cursor_at, set_text, state};
