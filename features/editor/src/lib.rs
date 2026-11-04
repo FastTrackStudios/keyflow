@@ -20,3 +20,14 @@ pub use fence::*;
 pub mod font_subset;
 
 pub mod lang;
+
+#[cfg(feature = "preview")]
+pub mod preview;
+
+#[cfg(feature = "view")]
+pub mod view;
+
+/// The host control API. [`set_text`], [`focus`] and [`state`] reach a
+/// mounted [`view::KeyflowEditor`] by its `id`.
+#[cfg(feature = "view")]
+pub use view::{EditorState, focus, set_cursor, set_cursor_at, set_text, state};

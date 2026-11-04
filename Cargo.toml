@@ -75,7 +75,9 @@ engraver = { path = "features/engraver", default-features = false }
 # engrave; editor-state knows nothing about keyflow, which is what keeps
 # the graph acyclic.
 # Not the markdown fences (Typst, Mermaid): nothing here renders them.
-editor-state = { git = "https://github.com/FastTrackStudios/editor", tag = "v0.1.25", default-features = false }
+editor-state = { git = "https://github.com/FastTrackStudios/editor", rev = "554b713a613d24b6deb69168c6e6a80d9da3f11c", default-features = false }
+editor-view = { git = "https://github.com/FastTrackStudios/editor", rev = "554b713a613d24b6deb69168c6e6a80d9da3f11c", default-features = false }
+editor-vim = { git = "https://github.com/FastTrackStudios/editor", rev = "554b713a613d24b6deb69168c6e6a80d9da3f11c" }
 
 # ── features/editor — this repo's half of the editor integration ──────
 # It needs `editor-state` from below and `keyflow-lang`/`engraver` from
@@ -113,20 +115,20 @@ vox = { version = "0.10.0-rc.7", default-features = false, features = ["runtime"
 # (FastTrackStudios/architect: the entity/RPC framework, the auth/crdt/
 # permissions stack, architect-ui + architect-story, architect-telemetry).
 #
-# ONE tag pin shared by EVERY entry below — `architect` and
+# ONE revision shared by EVERY entry below — `architect` and
 # `architect-ui`, and the [patch] table further down. They are one repo:
-# a split tag checks that repo out twice, and cargo treats the two
+# a split revision checks that repo out twice, and cargo treats the two
 # checkouts as different crates whose traits then refuse to unify.
 #
-# v0.10.0, the tag task and studio pin too; bump it together with theirs.
-architect = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.10.0" }
+# Provisional paint-view checkpoint; return to one shared tag once released.
+architect = { git = "https://github.com/FastTrackStudios/architect", rev = "8e0aed9e577868035508b86a9292328ef7f5f8cc" }
 
 # The shared musical vocabulary — section colours and the canonical
 # palettes `keyflow-proto` engraves section cards with.
 music-catalog = { git = "https://github.com/FastTrackStudios/music-convention", tag = "v0.1.0" }
 color-palette = { git = "https://github.com/FastTrackStudios/music-convention", tag = "v0.1.0" }
 # The Dioxus primitive library (was libs/ui/fts-ui, renamed on the split).
-architect-ui = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.10.0" }
+architect-ui = { git = "https://github.com/FastTrackStudios/architect", rev = "8e0aed9e577868035508b86a9292328ef7f5f8cc" }
 # ── MusicXML parsing (keyflow) ─────────────────────────────────────────
 musicxml = "1.1"
 
@@ -136,6 +138,7 @@ musicxml = "1.1"
 # across every dioxus-* entry below AND the FTS fork tags of
 # primitives/lucide/sdk (`fts-upstream-2026-11`), which pin the same rev).
 dioxus = { git = "https://github.com/DioxusLabs/dioxus", rev = "430cfb563f1b70602ef387f0c80f171d84527b41", default-features = false, features = ["lib"] }
+dioxus-ssr = { git = "https://github.com/DioxusLabs/dioxus", rev = "430cfb563f1b70602ef387f0c80f171d84527b41" }
 # Blitz native renderer — dioxus-native(-dom) moved into the dioxus repo
 # on the 0.8 line; blitz-* are `=0.3.0-beta.4`, patched to the FTS fork
 # below. Feature union of the wave-1 UI libs (prelude, system-fonts) and
@@ -184,13 +187,13 @@ regex = "1"
 # Blitz. `anyrender` comes from the same tag: blitz-paint paints into it,
 # and so does engraver's `ChartView` when an app (session) puts a chart in
 # a Blitz canvas, so the two must be one crate.
-blitz-dom = { git = "https://github.com/FastTrackStudios/blitz", tag = "fts-upstream-2026-11" }
-blitz-traits = { git = "https://github.com/FastTrackStudios/blitz", tag = "fts-upstream-2026-11" }
-blitz-paint = { git = "https://github.com/FastTrackStudios/blitz", tag = "fts-upstream-2026-11" }
-blitz-shell = { git = "https://github.com/FastTrackStudios/blitz", tag = "fts-upstream-2026-11" }
-blitz-net = { git = "https://github.com/FastTrackStudios/blitz", tag = "fts-upstream-2026-11" }
-blitz-html = { git = "https://github.com/FastTrackStudios/blitz", tag = "fts-upstream-2026-11" }
-anyrender = { git = "https://github.com/FastTrackStudios/blitz", tag = "fts-upstream-2026-11" }
+blitz-dom = { git = "https://www.github.com/FastTrackStudios/blitz", rev = "db5b7ef11e4df19ef317c23f77152ec5e1887101" }
+blitz-traits = { git = "https://www.github.com/FastTrackStudios/blitz", rev = "db5b7ef11e4df19ef317c23f77152ec5e1887101" }
+blitz-paint = { git = "https://www.github.com/FastTrackStudios/blitz", rev = "db5b7ef11e4df19ef317c23f77152ec5e1887101" }
+blitz-shell = { git = "https://www.github.com/FastTrackStudios/blitz", rev = "db5b7ef11e4df19ef317c23f77152ec5e1887101" }
+blitz-net = { git = "https://www.github.com/FastTrackStudios/blitz", rev = "db5b7ef11e4df19ef317c23f77152ec5e1887101" }
+blitz-html = { git = "https://www.github.com/FastTrackStudios/blitz", rev = "db5b7ef11e4df19ef317c23f77152ec5e1887101" }
+anyrender = { git = "https://www.github.com/FastTrackStudios/blitz", rev = "db5b7ef11e4df19ef317c23f77152ec5e1887101" }
 # The renderer and windowing crates architect patches from
 # FastTrackStudios/vendor `v0.7.1` (each crate's UPSTREAM.md says what
 # changed). Architect's iOS-only ones (winit-uikit, raw-window-metal) are
@@ -223,28 +226,27 @@ vox-phon = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.3.0" 
 # `dioxus-vdom`.
 [patch."https://github.com/DioxusLabs/dioxus"]
 dioxus-native = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.7.1" }
-dioxus-native-dom = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.7.1" }
+dioxus-native-dom = { git = "https://www.github.com/FastTrackStudios/vendor", rev = "25bf4bcdfd0b6acb268ca91a93bc8ff8da683a96" }
 dioxus-vdom = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.7.1" }
 
-# One architect for the whole graph: v0.10.0. This repo's pins above and
-# task's crates are all on v0.10.0; what this patch still lifts
+# One architect revision for the whole graph. This patch lifts
 # is daw v0.0.7, which pins architect v0.0.2 (same crate version 0.1.0, so
 # the patch applies) and would otherwise put a second architect source in
 # this repo's Cargo.lock. It only acts here: a git dependency's [patch] is
 # ignored by its consumers, and studio gives daw its own copy. The www.
 # host is a different source to cargo (GitHub redirects it), which is what
-# lets it patch the plain one; a same-host patch is refused. Bump this tag
+# lets it patch the plain one; a same-host patch is refused. Bump this revision
 # with the pins above; drop the block once keyflow takes daw from studio.
 [patch."https://github.com/FastTrackStudios/architect"]
-architect = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
-architect-action-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
-architect-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
-architect-permissions = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
-architect-rpc-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
-architect-story-core = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
-architect-story-macros = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
-architect-story-runtime = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
-architect-ui = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.10.0" }
+architect = { git = "https://www.github.com/FastTrackStudios/architect", rev = "8e0aed9e577868035508b86a9292328ef7f5f8cc" }
+architect-action-derive = { git = "https://www.github.com/FastTrackStudios/architect", rev = "8e0aed9e577868035508b86a9292328ef7f5f8cc" }
+architect-derive = { git = "https://www.github.com/FastTrackStudios/architect", rev = "8e0aed9e577868035508b86a9292328ef7f5f8cc" }
+architect-permissions = { git = "https://www.github.com/FastTrackStudios/architect", rev = "8e0aed9e577868035508b86a9292328ef7f5f8cc" }
+architect-rpc-derive = { git = "https://www.github.com/FastTrackStudios/architect", rev = "8e0aed9e577868035508b86a9292328ef7f5f8cc" }
+architect-story-core = { git = "https://www.github.com/FastTrackStudios/architect", rev = "8e0aed9e577868035508b86a9292328ef7f5f8cc" }
+architect-story-macros = { git = "https://www.github.com/FastTrackStudios/architect", rev = "8e0aed9e577868035508b86a9292328ef7f5f8cc" }
+architect-story-runtime = { git = "https://www.github.com/FastTrackStudios/architect", rev = "8e0aed9e577868035508b86a9292328ef7f5f8cc" }
+architect-ui = { git = "https://www.github.com/FastTrackStudios/architect", rev = "8e0aed9e577868035508b86a9292328ef7f5f8cc" }
 
 [workspace.lints.rust]
 # Flipped from "allow" 2026-07-28 (task cleanup): the blanket allows are
@@ -336,3 +338,17 @@ opt-level = 1
 [profile.dev.build-override]
 opt-level = 3
 debug = false
+
+# Temporary integration pins unify the renderer and IME forks across git
+# dependencies. Replace these with released tags when those forks ship.
+[patch."https://github.com/FastTrackStudios/blitz"]
+blitz-dom = { git = "https://www.github.com/FastTrackStudios/blitz", rev = "db5b7ef11e4df19ef317c23f77152ec5e1887101" }
+blitz-traits = { git = "https://www.github.com/FastTrackStudios/blitz", rev = "db5b7ef11e4df19ef317c23f77152ec5e1887101" }
+blitz-paint = { git = "https://www.github.com/FastTrackStudios/blitz", rev = "db5b7ef11e4df19ef317c23f77152ec5e1887101" }
+blitz-shell = { git = "https://www.github.com/FastTrackStudios/blitz", rev = "db5b7ef11e4df19ef317c23f77152ec5e1887101" }
+blitz-net = { git = "https://www.github.com/FastTrackStudios/blitz", rev = "db5b7ef11e4df19ef317c23f77152ec5e1887101" }
+blitz-html = { git = "https://www.github.com/FastTrackStudios/blitz", rev = "db5b7ef11e4df19ef317c23f77152ec5e1887101" }
+anyrender = { git = "https://www.github.com/FastTrackStudios/blitz", rev = "db5b7ef11e4df19ef317c23f77152ec5e1887101" }
+
+[patch."https://github.com/FastTrackStudios/vendor"]
+dioxus-native-dom = { git = "https://www.github.com/FastTrackStudios/vendor", rev = "25bf4bcdfd0b6acb268ca91a93bc8ff8da683a96" }

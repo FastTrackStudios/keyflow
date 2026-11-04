@@ -34,8 +34,34 @@ tracing = { workspace = true }
 allsorts = { version = "0.16", optional = true }
 ttf-parser = { version = "0.25", optional = true }
 
+dioxus = { workspace = true, optional = true }
+editor-view = { workspace = true, optional = true }
+editor-vim = { workspace = true, optional = true }
+
+# The host control API's cross-thread queue and its drain on the UI thread.
+# Both crates are already in the lock file through dioxus, so this adds no
+# package; it names them here so the queue works on wasm, where tokio is out.
+futures-channel = { version = "0.3", optional = true }
+futures-util = { version = "0.3", optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1.49", features = ["time", "rt"], optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+gloo-timers = { version = "0.3", features = ["futures"], optional = true }
+
+[dev-dependencies]
+png = "0.17"
+dioxus-test = { git = "https://github.com/FastTrackStudios/editor", rev = "554b713a613d24b6deb69168c6e6a80d9da3f11c" }
+dioxus-ssr = { workspace = true }
+tokio = { version = "1.49", features = ["macros", "rt", "time"] }
+
 [features]
 default = ["render"]
+preview = ["render"]
+view = ["preview", "dep:dioxus", "dep:editor-view", "dep:editor-vim", "dep:futures-channel", "dep:futures-util", "dep:tokio", "dep:gloo-timers"]
+native = ["view", "editor-view/native"]
+web = ["view", "editor-view/web"]
 # `.kf` fences → inline SVG.
 render = ["dep:engraver"]
 # Subset `@font-face` rules for a page of charts — see `font_subset`.

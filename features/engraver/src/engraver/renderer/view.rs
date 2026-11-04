@@ -29,18 +29,40 @@
 //! — see the note on `playhead_secs`). Re-lays-out only when the chart
 //! itself changes; a pan or a zoom alone is a paint of what is already
 //! there, at a new transform.
+//!
+//! ## Themes and the paint thread
+//!
+//! A [`ChartTheme`] (see [`ChartView::set_theme`]) decides the paper, the
+//! ink, the geometry, the type and the page artwork. Its colours and
+//! artwork apply at paint time; its geometry and type re-lay the chart
+//! out, so they are part of the layout's cache key.
+//!
+//! [`ChartView::paint`] lays out synchronously when that key changes,
+//! which is the simple path. A host that must never stall its paint
+//! thread instead asks for a [`LayoutJob`] ([`ChartView::layout_job`]),
+//! runs it elsewhere (a [`LayoutWorker`], or its own pool), hands the
+//! result back with [`ChartView::apply_precomputed_layout`] — the same
+//! seam keyflow-ui's `ChartLayoutManager::apply_precomputed_layout` is —
+//! and paints with [`ChartView::paint_cached`], which never lays out: it
+//! paints the last layout it has, in the current theme's colours, until
+//! the new one arrives.
+
+use std::sync::{Arc, OnceLock};
 
 use anyrender::PaintScene;
-use kurbo::{Affine, Rect};
-use peniko::{Color, Fill};
+use kurbo::{Affine, Rect, Stroke};
+use peniko::Fill;
 
 use crate::Chart;
-use crate::api::pipeline::{ChartPipeline, Paper, Preset, PresetOptions};
-use crate::api::style::leak_default_style;
-use crate::engraver::layout::chart::ChartLayoutResult;
+use crate::api::pipeline::{ChartPipeline, Preset, PresetOptions};
 use crate::engraver::layout::chart::cursor::{ChartCursor, CursorConfig};
+use crate::engraver::layout::chart::{
+    ChartLayoutConfig, ChartLayoutEngine, ChartLayoutResult, LayoutMode,
+};
 use crate::engraver::renderer::cursor_renderer::render_cursor_commands;
 use crate::engraver::renderer::scene_renderer::SceneRenderBuilder;
+use crate::engraver::renderer::theme::{ArtworkLayer, ChartTheme, InkMap};
+use crate::engraver::style::MStyle;
 
 /// 96 CSS px per 72pt inch — the engraver's own scale between points (its
 /// layout unit) and pixels. Matches keyflow-ui's `DPI_SCALE`.
@@ -79,16 +101,153 @@ pub struct ChartView {
     /// does.
     pipeline: ChartPipeline,
     cursor: ChartCursor,
+    /// The cursor's own config, before a theme recolours it.
+    cursor_base: CursorConfig,
+    theme: ChartTheme,
+    /// `theme.render` as a paint-time recolouring; `None` for the default
+    /// look, which then paints exactly as laid out.
+    ink_map: Option<InkMap>,
     cached: Option<Cached>,
+}
+
+/// keyflow-ui's own style, built once and shared by every view that has
+/// no theme style of its own.
+fn default_style() -> Arc<MStyle> {
+    static STYLE: OnceLock<Arc<MStyle>> = OnceLock::new();
+    Arc::clone(STYLE.get_or_init(|| Arc::new(MStyle::default())))
+}
+
+/// A layout to run off the paint thread: everything it needs, owned, so
+/// it is `Send`. From [`ChartView::layout_job`]; its result goes back
+/// through [`ChartView::apply_precomputed_layout`].
+pub struct LayoutJob {
+    engine: ChartLayoutEngine,
+    chart: Chart,
+    mode: LayoutMode,
+    config: ChartLayoutConfig,
+    key: u64,
+    layout_key: u64,
+}
+
+impl LayoutJob {
+    /// Lay the chart out. The expensive part; call it anywhere.
+    #[must_use]
+    pub fn run(self) -> PreparedLayout {
+        let layout = self
+            .engine
+            .layout_chart_with_config(&self.chart, &self.mode, &self.config);
+        PreparedLayout {
+            key: self.key,
+            layout_key: self.layout_key,
+            spatium: self.config.spatium,
+            layout,
+        }
+    }
+
+    /// The caller's chart key this job lays out.
+    #[must_use]
+    pub fn key(&self) -> u64 {
+        self.key
+    }
+}
+
+/// A finished [`LayoutJob`], ready for [`ChartView::apply_precomputed_layout`].
+pub struct PreparedLayout {
+    key: u64,
+    layout_key: u64,
+    spatium: f64,
+    layout: ChartLayoutResult,
+}
+
+impl PreparedLayout {
+    /// The caller's chart key it was laid out for.
+    #[must_use]
+    pub fn key(&self) -> u64 {
+        self.key
+    }
+}
+
+/// A background thread that runs [`LayoutJob`]s, newest first: a job
+/// submitted while another is queued replaces it, so a burst of edits (or
+/// theme tweaks) lays out once, for the last one. The thread ends when
+/// the worker is dropped.
+#[cfg(not(target_arch = "wasm32"))]
+pub struct LayoutWorker {
+    jobs: Option<std::sync::mpsc::Sender<LayoutJob>>,
+    done: std::sync::mpsc::Receiver<PreparedLayout>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl LayoutWorker {
+    /// Start the worker thread.
+    ///
+    /// # Errors
+    ///
+    /// The OS refused to spawn the thread.
+    pub fn spawn() -> std::io::Result<Self> {
+        let (jobs, job_rx) = std::sync::mpsc::channel::<LayoutJob>();
+        let (done_tx, done) = std::sync::mpsc::channel();
+        let thread = std::thread::Builder::new()
+            .name("chart-layout".into())
+            .spawn(move || {
+                while let Ok(mut job) = job_rx.recv() {
+                    while let Ok(newer) = job_rx.try_recv() {
+                        job = newer;
+                    }
+                    if done_tx.send(job.run()).is_err() {
+                        return;
+                    }
+                }
+            })?;
+        Ok(Self {
+            jobs: Some(jobs),
+            done,
+            thread: Some(thread),
+        })
+    }
+
+    /// Queue `job`, superseding any job not yet started.
+    pub fn submit(&self, job: LayoutJob) {
+        if let Some(jobs) = &self.jobs {
+            let _ = jobs.send(job);
+        }
+    }
+
+    /// The newest finished layout since the last call, if any. Never
+    /// blocks — what a paint callback calls each frame.
+    #[must_use]
+    pub fn poll(&self) -> Option<PreparedLayout> {
+        self.done.try_iter().last()
+    }
+
+    /// Block until the next layout finishes (tests, export).
+    #[must_use]
+    pub fn wait(&self) -> Option<PreparedLayout> {
+        self.done.recv().ok()
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl Drop for LayoutWorker {
+    fn drop(&mut self) {
+        // Closing the queue ends the thread after its current job.
+        self.jobs = None;
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
 }
 
 struct Cached {
     /// The caller's chart key (its own hash — see [`ChartView::paint`]).
     /// The Page preset's `(LayoutMode, ChartLayoutConfig)` pair is a fixed
     /// physical page size, independent of the panel's width or the view's
-    /// zoom — unlike the Responsive preset this used to use — so nothing
-    /// else needs to be part of the cache key.
+    /// zoom — unlike the Responsive preset this used to use — so beyond
+    /// the theme's own layout key nothing else is part of the cache key.
     key: u64,
+    /// [`ChartTheme::layout_key`] of the theme it was laid out under.
+    layout_key: u64,
     layout: ChartLayoutResult,
     /// The layout config's own staff-space unit, in points — what the
     /// RENDERER has to be told to match, or every SMuFL glyph (noteheads,
@@ -114,10 +273,13 @@ impl ChartView {
     /// The font bundle failed to build.
     pub fn new() -> Result<Self, String> {
         let pipeline =
-            ChartPipeline::with_style(leak_default_style()).map_err(|e| e.to_string())?;
+            ChartPipeline::with_shared_style(default_style()).map_err(|e| e.to_string())?;
         Ok(Self {
             pipeline,
             cursor: ChartCursor::new(CursorConfig::playback()),
+            cursor_base: CursorConfig::playback(),
+            theme: ChartTheme::default(),
+            ink_map: None,
             cached: None,
         })
     }
@@ -126,11 +288,124 @@ impl ChartView {
     /// transport (a print preview, a shared read-only page).
     #[must_use]
     pub fn without_cursor(mut self) -> Self {
-        self.cursor = ChartCursor::new(CursorConfig {
+        self.cursor_base = CursorConfig {
             show_when_stopped: false,
             ..CursorConfig::playback()
-        });
+        };
+        self.apply_cursor_theme();
         self
+    }
+
+    /// This view, under `theme`.
+    #[must_use]
+    pub fn with_theme(mut self, theme: ChartTheme) -> Self {
+        self.set_theme(theme);
+        self
+    }
+
+    /// Switch to `theme`. Its colours and artwork show on the next paint;
+    /// a change to its geometry or type also makes the layout stale (see
+    /// [`ChartView::needs_layout`]), which [`ChartView::paint`] redoes
+    /// inline and [`ChartView::paint_cached`] leaves to the host's
+    /// background layout — painting the old layout, recoloured, meanwhile.
+    pub fn set_theme(&mut self, theme: ChartTheme) {
+        let same_style = match (&theme.typography.style, &self.theme.typography.style) {
+            (Some(a), Some(b)) => Arc::ptr_eq(a, b),
+            (None, None) => true,
+            _ => false,
+        };
+        if !same_style {
+            let style = theme.typography.style.clone().unwrap_or_else(default_style);
+            // Only the shared font bundle can fail, and `new` already
+            // built it; keep the old pipeline if it somehow does.
+            if let Ok(pipeline) = ChartPipeline::with_shared_style(style) {
+                self.pipeline = pipeline;
+            }
+        }
+        self.ink_map = InkMap::from_render_config(&theme.render);
+        self.theme = theme;
+        self.apply_cursor_theme();
+    }
+
+    /// The current theme.
+    #[must_use]
+    pub fn theme(&self) -> &ChartTheme {
+        &self.theme
+    }
+
+    fn apply_cursor_theme(&mut self) {
+        let mut config = self.cursor_base.clone();
+        if let Some(color) = self.theme.render.cursor_color {
+            let c = color.to_rgba8();
+            config.accent_color = [c.r, c.g, c.b, c.a];
+        }
+        self.cursor = ChartCursor::new(config);
+    }
+
+    /// The Page preset's layout parameters under the current theme.
+    fn layout_params(&self) -> (LayoutMode, ChartLayoutConfig) {
+        // `viewport_pt`/`zoom` are `PresetOptions` fields `Preset::Page`
+        // never reads (`resolve_preset` picks the paper size and
+        // `master_rhythm()` outright) — `for_screen`'s defaults are a
+        // placeholder for them, not a real viewport.
+        let geometry = &self.theme.geometry;
+        let options = PresetOptions::for_screen(612.0, 1.0).with_paper(geometry.paper);
+        let (mode, mut config) = ChartPipeline::resolve_preset(Preset::Page, options);
+        if let Some(margins) = geometry.margins {
+            config.margins = margins;
+        }
+        if let Some(spacing) = geometry.system_spacing {
+            config.system_spacing = spacing;
+        }
+        if let Some(spatium) = self.theme.render.staff_space {
+            config.spatium = spatium;
+        }
+        config.harmony_style.root_size *= self.theme.typography.chord_scale;
+        (mode, config)
+    }
+
+    /// Whether `key` (the caller's chart key, as for [`ChartView::paint`])
+    /// needs laying out under the current theme — what a host checks
+    /// before asking for a [`ChartView::layout_job`].
+    #[must_use]
+    pub fn needs_layout(&self, key: u64) -> bool {
+        let layout_key = self.theme.layout_key();
+        self.cached
+            .as_ref()
+            .is_none_or(|c| c.key != key || c.layout_key != layout_key)
+    }
+
+    /// A [`LayoutJob`] for `chart` under the current theme, to run off the
+    /// paint thread. `key` is the caller's chart key, as for
+    /// [`ChartView::paint`].
+    #[must_use]
+    pub fn layout_job(&self, chart: Chart, key: u64) -> LayoutJob {
+        let (mode, config) = self.layout_params();
+        LayoutJob {
+            engine: self.pipeline.engine().clone(),
+            chart,
+            mode,
+            config,
+            key,
+            layout_key: self.theme.layout_key(),
+        }
+    }
+
+    /// Install a layout finished off the paint thread. Returns `false`,
+    /// and drops it, if the theme's geometry or type changed since the
+    /// job was made — painting it would show the old page under the new
+    /// theme; the host asks for a fresh job instead.
+    pub fn apply_precomputed_layout(&mut self, prepared: PreparedLayout) -> bool {
+        if prepared.layout_key != self.theme.layout_key() {
+            return false;
+        }
+        self.cached = Some(Cached {
+            key: prepared.key,
+            layout_key: prepared.layout_key,
+            layout: prepared.layout,
+            spatium: prepared.spatium,
+        });
+        true
     }
 
     /// Re-lay-out `chart` (the Page preset — a fixed Letter page, taking
@@ -173,26 +448,34 @@ impl ChartView {
         scroll_pt: (f64, f64),
         playhead_secs: Option<f64>,
     ) -> (f64, f64) {
-        let _ = (width_px, scale); // the Page preset's size does not depend on the panel
-        let stale = self.cached.as_ref().is_none_or(|c| c.key != key);
-        if stale {
-            // `viewport_pt`/`zoom` are `PresetOptions` fields `Preset::Page`
-            // never reads (`resolve_preset` picks the paper size and
-            // `master_rhythm()` outright) — `for_screen`'s defaults are a
-            // placeholder for them, not a real viewport.
-            let options = PresetOptions::for_screen(612.0, 1.0).with_paper(Paper::Letter);
-            let (mode, config) = ChartPipeline::resolve_preset(Preset::Page, options);
-            let spatium = config.spatium;
+        let _ = width_px; // the Page preset's size does not depend on the panel
+        if self.needs_layout(key) {
+            let (mode, config) = self.layout_params();
             let layout = self.pipeline.layout_with_config(chart, &mode, &config);
             self.cached = Some(Cached {
                 key,
+                layout_key: self.theme.layout_key(),
                 layout,
-                spatium,
+                spatium: config.spatium,
             });
         }
-        let Some(cached) = &self.cached else {
-            return (0.0, 0.0);
-        };
+        self.paint_cached(scene, scale, zoom, scroll_pt, playhead_secs)
+            .unwrap_or((0.0, 0.0))
+    }
+
+    /// Paint the layout already cached — never laying out, so it never
+    /// stalls the paint thread — in the current theme. `None` (and nothing
+    /// painted) before the first layout. Arguments and return value as for
+    /// [`ChartView::paint`].
+    pub fn paint_cached(
+        &self,
+        scene: &mut impl PaintScene,
+        scale: f64,
+        zoom: f64,
+        scroll_pt: (f64, f64),
+        playhead_secs: Option<f64>,
+    ) -> Option<(f64, f64)> {
+        let cached = self.cached.as_ref()?;
         // Points → device pixels, THEN pan: `scroll_pt` is in the chart's
         // own units so it stays put in content terms as `zoom` changes; a
         // pixel-space scroll would have needed rescaling on every zoom.
@@ -208,35 +491,63 @@ impl ChartView {
         // preset; a Responsive/Snippet layout (nothing currently asks for
         // one, but `ChartView` does not rule it out) has none, so this
         // falls back to the whole scene box as one sheet.
-        let page_color = Color::from_rgba8(0xff, 0xff, 0xff, 0xff);
-        if cached.layout.pages.is_empty() {
-            let page = Rect::new(
+        let pages: Vec<Rect> = if cached.layout.pages.is_empty() {
+            vec![Rect::new(
                 0.0,
                 0.0,
                 cached.layout.total_width,
                 cached.layout.total_height,
-            );
-            scene.fill(Fill::NonZero, transform, page_color, None, &page);
+            )]
         } else {
-            for page in &cached.layout.pages {
-                let rect = Rect::new(
-                    page.x_offset,
-                    page.y_offset,
-                    page.x_offset + page.width,
-                    page.y_offset + page.height,
-                );
-                scene.fill(Fill::NonZero, transform, page_color, None, &rect);
-            }
+            cached
+                .layout
+                .pages
+                .iter()
+                .map(|page| {
+                    Rect::new(
+                        page.x_offset,
+                        page.y_offset,
+                        page.x_offset + page.width,
+                        page.y_offset + page.height,
+                    )
+                })
+                .collect()
+        };
+        let paper = self.theme.render.background_color;
+        for page in &pages {
+            scene.fill(Fill::NonZero, transform, paper, None, page);
         }
+        self.paint_artwork(scene, transform, &pages, ArtworkLayer::UnderMusic);
 
         // The pipeline's own font bundle; `configure_renderer` borrows it
         // and hands back a renderer that only lives as long as this call.
         // `spatium` MUST match the layout config's own — see the note on
         // `Cached::spatium` — the render-time default (10pt) is not it.
         let bundle = self.pipeline.fonts();
-        let base = SceneRenderBuilder::new().spatium(cached.spatium).build();
+        // Artwork under the music sits on the paper filled above; the
+        // layout's own white sheet would cover it, so skip that one.
+        let host_paper = if self
+            .theme
+            .artwork
+            .iter()
+            .any(|a| a.layer == ArtworkLayer::UnderMusic)
+        {
+            pages.clone()
+        } else {
+            Vec::new()
+        };
+        let base = SceneRenderBuilder::new()
+            .spatium(cached.spatium)
+            .build()
+            .with_ink_map(self.ink_map.clone())
+            .with_host_paper(host_paper);
         let mut renderer = bundle.configure_renderer(base);
+        for (from, to) in &self.theme.typography.font_aliases {
+            renderer = renderer.with_font_alias(from.clone(), to.clone());
+        }
         renderer.render_with_transform(scene, &cached.layout.scene, transform);
+
+        self.paint_artwork(scene, transform, &pages, ArtworkLayer::OverMusic);
 
         if let Some(secs) = playhead_secs
             && let Some(state) = self.cursor.compute_at_time(&cached.layout, secs)
@@ -247,7 +558,27 @@ impl ChartView {
             render_cursor_commands(scene, &state.commands, transform, Some(font));
         }
 
-        (cached.layout.total_width, cached.layout.total_height)
+        Some((cached.layout.total_width, cached.layout.total_height))
+    }
+
+    fn paint_artwork(
+        &self,
+        scene: &mut impl PaintScene,
+        transform: Affine,
+        pages: &[Rect],
+        layer: ArtworkLayer,
+    ) {
+        for art in self.theme.artwork.iter().filter(|a| a.layer == layer) {
+            for page in pages {
+                let path = art.placed(*page);
+                if let Some(fill) = art.fill {
+                    scene.fill(Fill::NonZero, transform, fill, None, &path);
+                }
+                if let Some((color, width)) = art.stroke {
+                    scene.stroke(&Stroke::new(width), transform, color, None, &path);
+                }
+            }
+        }
     }
 
     /// Where the playback cursor sits vertically, in chart points (the

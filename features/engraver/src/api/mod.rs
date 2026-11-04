@@ -416,6 +416,20 @@ pub mod pipeline {
             Ok(Self { fonts, engine })
         }
 
+        /// A pipeline over a shared style — for a themed view, whose style
+        /// table changes at runtime and must not be leaked per change.
+        ///
+        /// # Errors
+        ///
+        /// The shared font bundle failed to build.
+        pub fn with_shared_style(
+            style: std::sync::Arc<crate::engraver::style::MStyle>,
+        ) -> Result<Self, ChartLayoutError> {
+            let fonts = ChartFontBundle::shared().map_err(ChartLayoutError::Fonts)?;
+            let engine = fonts.create_layout_engine_shared(style);
+            Ok(Self { fonts, engine })
+        }
+
         /// The font bundle, for callers that need the raw bytes.
         #[must_use]
         pub const fn fonts(&self) -> &'static ChartFontBundle {
