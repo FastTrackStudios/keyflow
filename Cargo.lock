@@ -4808,7 +4808,7 @@ dependencies = [
 [[package]]
 name = "dioxus-test"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?rev=f70f074443c3654833f970eaf49968e27c47c006#f70f074443c3654833f970eaf49968e27c47c006"
+source = "git+https://github.com/FastTrackStudios/editor?rev=e36fb29152e00605fbf3bf526dd06be20a2b8db1#e36fb29152e00605fbf3bf526dd06be20a2b8db1"
 dependencies = [
  "anyrender",
  "anyrender_vello_cpu",
@@ -5149,7 +5149,7 @@ dependencies = [
 [[package]]
 name = "editor-state"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?rev=f70f074443c3654833f970eaf49968e27c47c006#f70f074443c3654833f970eaf49968e27c47c006"
+source = "git+https://github.com/FastTrackStudios/editor?rev=e36fb29152e00605fbf3bf526dd06be20a2b8db1#e36fb29152e00605fbf3bf526dd06be20a2b8db1"
 dependencies = [
  "editor-syntax",
  "ropey",
@@ -5162,7 +5162,7 @@ dependencies = [
 [[package]]
 name = "editor-syntax"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?rev=f70f074443c3654833f970eaf49968e27c47c006#f70f074443c3654833f970eaf49968e27c47c006"
+source = "git+https://github.com/FastTrackStudios/editor?rev=e36fb29152e00605fbf3bf526dd06be20a2b8db1#e36fb29152e00605fbf3bf526dd06be20a2b8db1"
 dependencies = [
  "arborium",
  "arborium-theme",
@@ -5172,7 +5172,7 @@ dependencies = [
 [[package]]
 name = "editor-view"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?rev=f70f074443c3654833f970eaf49968e27c47c006#f70f074443c3654833f970eaf49968e27c47c006"
+source = "git+https://github.com/FastTrackStudios/editor?rev=e36fb29152e00605fbf3bf526dd06be20a2b8db1#e36fb29152e00605fbf3bf526dd06be20a2b8db1"
 dependencies = [
  "dioxus",
  "editor-state",
@@ -5190,7 +5190,7 @@ dependencies = [
 [[package]]
 name = "editor-vim"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?rev=f70f074443c3654833f970eaf49968e27c47c006#f70f074443c3654833f970eaf49968e27c47c006"
+source = "git+https://github.com/FastTrackStudios/editor?rev=e36fb29152e00605fbf3bf526dd06be20a2b8db1#e36fb29152e00605fbf3bf526dd06be20a2b8db1"
 dependencies = [
  "editor-state",
  "tracing",
