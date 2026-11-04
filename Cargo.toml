@@ -75,9 +75,9 @@ engraver = { path = "features/engraver", default-features = false }
 # engrave; editor-state knows nothing about keyflow, which is what keeps
 # the graph acyclic.
 # Not the markdown fences (Typst, Mermaid): nothing here renders them.
-editor-state = { git = "https://github.com/FastTrackStudios/editor", rev = "e36fb29152e00605fbf3bf526dd06be20a2b8db1", default-features = false }
-editor-view = { git = "https://github.com/FastTrackStudios/editor", rev = "e36fb29152e00605fbf3bf526dd06be20a2b8db1", default-features = false }
-editor-vim = { git = "https://github.com/FastTrackStudios/editor", rev = "e36fb29152e00605fbf3bf526dd06be20a2b8db1" }
+editor-state = { git = "https://github.com/FastTrackStudios/editor", rev = "554b713a613d24b6deb69168c6e6a80d9da3f11c", default-features = false }
+editor-view = { git = "https://github.com/FastTrackStudios/editor", rev = "554b713a613d24b6deb69168c6e6a80d9da3f11c", default-features = false }
+editor-vim = { git = "https://github.com/FastTrackStudios/editor", rev = "554b713a613d24b6deb69168c6e6a80d9da3f11c" }
 
 # ── features/editor — this repo's half of the editor integration ──────
 # It needs `editor-state` from below and `keyflow-lang`/`engraver` from
