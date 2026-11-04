@@ -5,7 +5,9 @@
 
 use dioxus::prelude::*;
 use dioxus_test::render;
-use editor_keyflow::view::{KeyflowEditor, PANE_CSS, editor_state::EditorState, editor_view::EDITOR_CSS};
+use editor_keyflow::view::{
+    KeyflowEditor, PANE_CSS, editor_state::EditorState, editor_view::EDITOR_CSS,
+};
 
 const HOST: &str = ".kf-pane-head { display: none; } .editor-root { --editor-caret: #ff0000; } .editor-frame { --editor-caret: #ff0000; }";
 
@@ -33,7 +35,9 @@ fn Harness() -> Element {
 #[allow(dead_code)]
 fn red_pixels(path: &std::path::Path) -> usize {
     let file = std::fs::File::open(path).expect("open png");
-    let mut reader = png::Decoder::new(std::io::BufReader::new(file)).read_info().expect("png");
+    let mut reader = png::Decoder::new(std::io::BufReader::new(file))
+        .read_info()
+        .expect("png");
     let mut buf = vec![0; reader.output_buffer_size()];
     let info = reader.next_frame(&mut buf).expect("frame");
     buf[..info.buffer_size()]
@@ -56,12 +60,20 @@ async fn probe(t: &dioxus_test::DocumentTester, name: &str) -> (usize, usize, us
 
 fn colours(path: &std::path::Path) -> (usize, usize) {
     let file = std::fs::File::open(path).expect("open png");
-    let mut reader = png::Decoder::new(std::io::BufReader::new(file)).read_info().expect("png");
+    let mut reader = png::Decoder::new(std::io::BufReader::new(file))
+        .read_info()
+        .expect("png");
     let mut buf = vec![0; reader.output_buffer_size()];
     let info = reader.next_frame(&mut buf).expect("frame");
     let px = &buf[..info.buffer_size()];
-    let red = px.chunks_exact(4).filter(|p| p[0] > 180 && p[1] < 90 && p[2] < 90).count();
-    let blue = px.chunks_exact(4).filter(|p| i32::from(p[2]) - i32::from(p[0]) > 60 && p[2] > p[1]).count();
+    let red = px
+        .chunks_exact(4)
+        .filter(|p| p[0] > 180 && p[1] < 90 && p[2] < 90)
+        .count();
+    let blue = px
+        .chunks_exact(4)
+        .filter(|p| i32::from(p[2]) - i32::from(p[0]) > 60 && p[2] > p[1])
+        .count();
     (red, blue)
 }
 
@@ -76,7 +88,13 @@ async fn the_plain_caret_is_in_the_dom_and_painted() {
     t.type_text(" Am");
     let typed = probe(&t, "typed").await;
     for (name, (carets, red, _)) in [("start", start), ("line_end", end), ("typed", typed)] {
-        assert!(carets >= 1, "{name}: no .ed-native-caret element in the DOM");
-        assert!(red >= 10, "{name}: the caret is not painted in the host's colour ({red} px)");
+        assert!(
+            carets >= 1,
+            "{name}: no .ed-native-caret element in the DOM"
+        );
+        assert!(
+            red >= 10,
+            "{name}: the caret is not painted in the host's colour ({red} px)"
+        );
     }
 }

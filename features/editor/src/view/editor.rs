@@ -156,15 +156,14 @@ pub fn KeyflowEditor(
                     Command::Focus => *focus_req.write() += 1,
                     Command::SetOffset(offset) => {
                         let len = state.peek().doc.len();
-                        let spec = TransactionSpec::new()
-                            .selection(Selection::caret(offset.min(len)));
+                        let spec =
+                            TransactionSpec::new().selection(Selection::caret(offset.min(len)));
                         dispatch_spec(state, spec, Some(forward));
                     }
                     Command::SetLineCol { line, col } => {
                         let text = state.peek().doc.to_string();
                         let offset = super::control::line_col_offset(&text, line, col);
-                        let spec = TransactionSpec::new()
-                            .selection(Selection::caret(offset));
+                        let spec = TransactionSpec::new().selection(Selection::caret(offset));
                         dispatch_spec(state, spec, Some(forward));
                     }
                 }
