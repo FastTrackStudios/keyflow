@@ -376,6 +376,21 @@ impl<'a> ChartParser<'a> {
         Some((track_type, name, remaining))
     }
 
+    /// A `[lyrics]` track written as a timed lane (`@<bar>:<beat> words`),
+    /// or `None` when the lines are ordinary lyric text.
+    pub(super) fn timed_lyrics_track(lines: &[&str], name: &Option<String>) -> Option<Track> {
+        let text = lines.join("\n");
+        if !crate::text::chart::LyricLine::is_timed_text(&text) {
+            return None;
+        }
+        let line = crate::text::chart::LyricLine::parse_timed(&text);
+        let mut track = Track::lyrics(line);
+        if let Some(name) = name {
+            track = track.with_name(name.clone());
+        }
+        Some(track)
+    }
+
     /// Group content lines by track type
     /// Returns a Vec of (TrackType, Option<name>, Vec<lines>)
     pub(super) fn group_lines_by_track<'b>(
@@ -591,7 +606,24 @@ impl<'a> ChartParser<'a> {
         // Parse each track group into tracks
         let mut tracks: Vec<Track> = Vec::new();
 
-        if track_groups.is_empty() {
+        // A section whose only content is a timed lyric lane still recalls
+        // its chords: `VS 8` followed by `[lyrics] @1 …` is the same verse,
+        // now with words under it.
+        let lyric_lane_only = !track_groups.is_empty()
+            && track_groups.iter().all(|(track_type, _, lines)| {
+                *track_type == TrackType::Lyrics
+                    && crate::text::chart::LyricLine::is_timed_text(&lines.join("\n"))
+            });
+        let lyric_lane_tracks: Vec<Track> = if lyric_lane_only {
+            track_groups
+                .iter()
+                .filter_map(|(_, name, lines)| Self::timed_lyrics_track(lines, name))
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        if track_groups.is_empty() || lyric_lane_only {
             // No explicit content - prefer template recall over empty measures
             let template_measures =
                 self.recall_section_measures(&section_type, same_as.as_ref(), measure_count);
@@ -614,6 +646,7 @@ impl<'a> ChartParser<'a> {
             if !measures.is_empty() {
                 tracks.push(Track::chords(measures));
             }
+            tracks.extend(lyric_lane_tracks);
         } else {
             // Has explicit content - enter section (clears section memory for non-first sections)
             let was_first_section = self.chord_memory.in_first_section();
@@ -720,6 +753,10 @@ impl<'a> ChartParser<'a> {
                         }
                     }
                     TrackType::Lyrics => {
+                        if let Some(track) = Self::timed_lyrics_track(&track_lines, &track_name) {
+                            tracks.push(track);
+                            continue;
+                        }
                         // Parse lyrics content - join all lines
                         let combined = track_lines.join(" ");
                         let trimmed = combined.trim();
