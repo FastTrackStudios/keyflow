@@ -1030,7 +1030,13 @@ impl ChartLayoutEngine {
         // Prevailing meter, carried across sections/systems in playback order so a
         // measure whose `time_signature` differs from its predecessor renders an
         // inline meter change. Seeded with the chart's initial meter.
+        // `prev_prevailing_ts` + `ts_run_len` detect a one-measure excursion (e.g.
+        // the auto-revert after `!T2/4`): that revert is drawn but NOT highlighted,
+        // since the return-to-normal is adjacent and obvious. A revert that is
+        // several measures after the change is highlighted like any other change.
         let mut prevailing_ts = time_signature;
+        let mut prev_prevailing_ts: Option<(u8, u8)> = None;
+        let mut ts_run_len: usize = 0;
 
         // Detect count-in from parsed chart sections if not configured explicitly.
         // If the chart has a CountIn section, use its measure count.
@@ -1780,16 +1786,15 @@ impl ChartLayoutEngine {
                         // that render both here AND spill back to previous section
                         let is_section_boundary = measure_idx == 0;
                         // A measure whose meter differs from the prevailing one
-                        // renders the new time signature inline, highlighted red
-                        // — every change alike, the return after a one-bar
-                        // `!T3/4` included. (Treating that return as "obvious"
-                        // and drawing it black also caught the next 3/4 of an
-                        // alternating hook — 4/4, 3/4, 4/4, 3/4 — which looked
-                        // like a revert to the meter two bars back, so This
-                        // Christmas's outro drew its 3/4s black.)
+                        // renders the new time signature inline. It is highlighted
+                        // red unless it merely closes a one-measure excursion (the
+                        // auto-revert after `!T2/4`): that return-to-normal renders
+                        // in default black because it is adjacent and obvious.
                         let measure_ts = measure.time_signature;
                         let ts_changed = measure_ts != prevailing_ts;
-                        let highlight = ts_changed;
+                        let is_oneshot_revert =
+                            ts_changed && ts_run_len == 1 && prev_prevailing_ts == Some(measure_ts);
+                        let highlight = ts_changed && !is_oneshot_revert;
                         let measure_result = self.layout_measure(MeasureLayoutParams {
                             harmony_style: &harmony_style,
                             measure,
@@ -1807,7 +1812,11 @@ impl ChartLayoutEngine {
                         });
                         id_counter += 10;
                         if ts_changed {
+                            prev_prevailing_ts = Some(prevailing_ts);
                             prevailing_ts = measure_ts;
+                            ts_run_len = 1;
+                        } else {
+                            ts_run_len += 1;
                         }
 
                         // Red key-change indicator when a key change lands on a
@@ -2800,7 +2809,13 @@ impl ChartLayoutEngine {
         // Prevailing meter, carried across sections/systems in playback order so a
         // measure whose `time_signature` differs from its predecessor renders an
         // inline meter change. Seeded with the chart's initial meter.
+        // `prev_prevailing_ts` + `ts_run_len` detect a one-measure excursion (e.g.
+        // the auto-revert after `!T2/4`): that revert is drawn but NOT highlighted,
+        // since the return-to-normal is adjacent and obvious. A revert that is
+        // several measures after the change is highlighted like any other change.
         let mut prevailing_ts = time_signature;
+        let mut prev_prevailing_ts: Option<(u8, u8)> = None;
+        let mut ts_run_len: usize = 0;
 
         // Track offset into `chart_measurements`. Compact and End sections are
         // filtered out of the measure pass, so this offset only advances for
@@ -3242,16 +3257,15 @@ impl ChartLayoutEngine {
                         // is_boundary: first measure of section needs width for pushed chords
                         let is_section_boundary = measure_idx == 0;
                         // A measure whose meter differs from the prevailing one
-                        // renders the new time signature inline, highlighted red
-                        // — every change alike, the return after a one-bar
-                        // `!T3/4` included. (Treating that return as "obvious"
-                        // and drawing it black also caught the next 3/4 of an
-                        // alternating hook — 4/4, 3/4, 4/4, 3/4 — which looked
-                        // like a revert to the meter two bars back, so This
-                        // Christmas's outro drew its 3/4s black.)
+                        // renders the new time signature inline. It is highlighted
+                        // red unless it merely closes a one-measure excursion (the
+                        // auto-revert after `!T2/4`): that return-to-normal renders
+                        // in default black because it is adjacent and obvious.
                         let measure_ts = measure.time_signature;
                         let ts_changed = measure_ts != prevailing_ts;
-                        let highlight = ts_changed;
+                        let is_oneshot_revert =
+                            ts_changed && ts_run_len == 1 && prev_prevailing_ts == Some(measure_ts);
+                        let highlight = ts_changed && !is_oneshot_revert;
                         let measure_result = self.layout_measure(MeasureLayoutParams {
                             harmony_style: &harmony_style,
                             measure,
@@ -3269,7 +3283,11 @@ impl ChartLayoutEngine {
                         });
                         id_counter += 10;
                         if ts_changed {
+                            prev_prevailing_ts = Some(prevailing_ts);
                             prevailing_ts = measure_ts;
+                            ts_run_len = 1;
+                        } else {
+                            ts_run_len += 1;
                         }
 
                         // Red key-change indicator when a key change lands on a
