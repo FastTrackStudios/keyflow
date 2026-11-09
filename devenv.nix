@@ -117,9 +117,6 @@ in
   );
 
   enterShell = ''
-    # Machine-local values (.env, not committed) go into the shell's environment.
-    if [ -f "$DEVENV_ROOT/.env" ]; then set -a; . "$DEVENV_ROOT/.env"; set +a; fi
-
     # Appended, not prepended: store-provided tools must win over stale
     # cargo-installed copies; cargo and uv bins only need to be reachable.
     export PATH="$PATH:$HOME/.cargo/bin:$HOME/.local/bin"
