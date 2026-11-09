@@ -3685,18 +3685,25 @@ impl ChartLayoutEngine {
         let mut current_width = 0.0f64;
 
         let harmony_style = self.measured_harmony_style();
-        // A bar asks for the wider of what its chord symbols and its notes
-        // need: a bar of beamed eighths is not as narrow as its one symbol.
+        // A bar asks for the narrowest it can honestly be drawn: room for its
+        // symbols on their beats (the measuring pass's minimum), its notes,
+        // and at least its slashes. Not a comfortable width — the bars-per-line
+        // cap is the phrase grouping a chart is read by, and a line keeps all
+        // of it unless the symbols physically cannot fit. The spring
+        // distribution then shares out whatever room is left.
         let widths: Vec<f64> = measures
             .iter()
-            .map(|m| {
-                self.chord_symbol_width_needed(m, &harmony_style)
+            .enumerate()
+            .map(|(idx, m)| {
+                self.chord_symbol_width_floor(m, &harmony_style)
                     .max(self.melody_width_needed(m))
+                    .max(measured_min.get(idx).copied().unwrap_or(0.0))
             })
             .collect();
         // A system always holds at least one measure, however wide it is —
         // better one cramped bar than an empty line and the same cramped bar.
-        let usable = content_width.max(1.0);
+        // The clef, key and time signature take the start of every line.
+        let usable = (content_width - self.config.spatium * 8.0).max(1.0);
 
         // A section of written notes keeps one grid: the same number of bars
         // on every line, as many as every line can hold. Greedy packing would
@@ -3841,30 +3848,12 @@ impl ChartLayoutEngine {
         if notes > 0.0 { notes + 2.0 * sp } else { 0.0 }
     }
 
-    /// The width this measure's chord symbols need, laid end to end.
-    ///
-    /// An estimate, and deliberately a cheap one: this runs before the real
-    /// measurement pass, and only has to be good enough to stop a line taking
-    /// more bars than it can print. A bar with no symbols still asks for the
-    /// configured minimum, so an empty line is never chosen over a full one.
-    fn chord_symbol_width_needed(
-        &self,
-        measure: &crate::chart::types::Measure,
-        harmony_style: &HarmonyStyle,
-    ) -> f64 {
-        self.printed_symbols_width(measure, harmony_style)
-            .max(self.config.min_measure_width)
-    }
-
     /// The narrowest this measure can honestly be drawn.
     ///
-    /// [`Self::chord_symbol_width_needed`] asks for a comfortable bar — it
-    /// carries `min_measure_width`, which at the master-rhythm preset is a
-    /// quarter of the page. That is the right question when deciding how many
-    /// bars to put on a line, and the wrong one when asking whether a section
-    /// *can* be squeezed onto one: four bars of that floor already fill the
-    /// page, so the answer would always be no. This asks only for room for the
-    /// symbols, and a bar with none still gets its slashes.
+    /// Room for the symbols laid end to end, and a bar with none still gets
+    /// its slashes — never the comfortable `min_measure_width`, which at the
+    /// master-rhythm preset is a quarter of the page and would decide line
+    /// breaks by looks rather than by what fits.
     fn chord_symbol_width_floor(
         &self,
         measure: &crate::chart::types::Measure,

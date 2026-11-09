@@ -286,6 +286,38 @@ fn an_accented_staccato_chord_draws_both_marks() {
     );
 }
 
+/// Sleigh Ride's first verse, as charted.
+const SLEIGH_RIDE_VERSE: &str = "Sleigh Ride - Tori Kelly\n#B 86bpm 4/4\n\nVS 8\n\
+     Bmaj7 / G#m7 / C#m9 / F#7 / Bmaj7\n\
+     Bmaj7 / G#m7 / C#m9 / F#7 / Bmaj7 / Cmaj7 / Dmaj7 / F#7 /\n\
+     Bmaj7 / G#m7 / C#m9 / F#7 / Bmaj7\n\
+     Bmaj7 / G#m7 / C#m9 / F#7 / Bmaj7 ////\n";
+
+#[test]
+fn a_verse_of_chord_clusters_keeps_four_bars_a_line() {
+    let chart = keyflow_lang::text::chart::parse_chart(SLEIGH_RIDE_VERSE).expect("parses");
+    let result = ChartPipeline::shared()
+        .expect("the pipeline builds")
+        .layout_preset(&chart, Preset::Page, PresetOptions::for_export());
+    let system_of = |m| beats(&result, m).first().expect("beats").system;
+    for line in [0..4, 4..8] {
+        let first = system_of(line.start);
+        assert!(
+            line.clone().all(|m| system_of(m) == first),
+            "bars {} to {} are one line of four",
+            line.start + 1,
+            line.end
+        );
+    }
+    // Every bar names its Bmaj7: bars of changes name each chord in them,
+    // and a held Bmaj7 after a bar of changes is named too.
+    let b_symbols = symbols(&result.scene)
+        .iter()
+        .filter(|s| s.text.starts_with('B'))
+        .count();
+    assert_eq!(b_symbols, 8);
+}
+
 #[test]
 fn repeat_chord_symbols_always_prints_every_symbol() {
     let source = format!("\\repeat_chord_symbols = always\n\n{CLUSTER_THEN_HELD}");

@@ -56,15 +56,21 @@ pub struct SymbolSpacing {
     pub clearance: f64,
 }
 
+/// Padding, in staff spaces, the renderer's collision pass adds to each side
+/// of a chord symbol's layout box before asking for the minimum gap between
+/// two. Small: the layout box already carries the glyphs' side bearings, and
+/// every point of it costs room a four-bar line of chord clusters needs.
+pub const COLLISION_PADDING_SPATIUMS: f64 = 0.2;
+
 impl SymbolSpacing {
     /// The clearance the renderer keeps: its collision pass pads every
-    /// symbol by half a space each side and then asks for `min_gap` between
-    /// the padded boxes.
+    /// symbol by [`COLLISION_PADDING_SPATIUMS`] each side and then asks for
+    /// `min_gap` between the padded boxes.
     #[must_use]
     pub fn new(spatium: f64, min_gap: f64) -> Self {
         Self {
             spatium,
-            clearance: spatium + min_gap.max(0.0),
+            clearance: 2.0 * COLLISION_PADDING_SPATIUMS * spatium + min_gap.max(0.0),
         }
     }
 }

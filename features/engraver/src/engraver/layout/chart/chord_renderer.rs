@@ -1040,6 +1040,10 @@ pub fn render_chord_symbols(
     let mut same_bar_symbol: Option<String> = None;
 
     let is_boundary = is_at_boundary(ctx.measure_idx, ctx.local_measure_idx);
+    // A bar of changes names every chord in it, beat 1 included, even when
+    // beat 1 repeats the last chord of the bar before: only a plain bar of
+    // one held chord leaves a repeated symbol off.
+    let bar_changes = bar_has_chord_changes(measure);
     let is_hits = ctx.section_name.eq_ignore_ascii_case("hits");
     let mut hits_chord_shown = false;
     let note_lift_bias = chord_lift_bias_for_measure(ctx, measure, is_boundary);
@@ -1227,7 +1231,7 @@ pub fn render_chord_symbols(
                 last_chord_symbol.as_deref(),
                 is_pushed_at_boundary,
                 ctx.time_signature,
-                ctx.hide_repeated_chords,
+                ctx.hide_repeated_chords && !bar_changes,
             )
         {
             last_chord_symbol = Some(current_symbol.clone());
@@ -1316,10 +1320,11 @@ pub fn render_chord_symbols(
         // layout_harmony's bounds are layout extents. Pad them slightly for
         // collision resolution so adjacent chord ink never kisses/overlaps
         // when glyph metrics are optimistic for jazz/SMuFL text runs.
+        let pad = ctx.spatium * super::symbol_spacing::COLLISION_PADDING_SPATIUMS;
         let collision_bounds = Rect::new(
-            layout_data.bounds.x0 - ctx.spatium * 0.5,
+            layout_data.bounds.x0 - pad,
             layout_data.bounds.y0,
-            layout_data.bounds.x1 + ctx.spatium * 0.5,
+            layout_data.bounds.x1 + pad,
             layout_data.bounds.y1,
         );
         chord_bounds_info.push(ChordBoundsInfo {
