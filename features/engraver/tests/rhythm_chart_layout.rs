@@ -645,8 +645,8 @@ fn sleigh_ride_verse_keeps_four_a_line_and_its_whole_bars_readable() {
 /// The largest chord-symbol font size on the first line of `source`.
 fn first_line_symbol_size(source: &str) -> f64 {
     fn sizes(node: &SceneNode, in_chord: bool, out: &mut Vec<(f64, usize)>) {
-        let chord = in_chord
-            || node.metadata.get("element_type").map(String::as_str) == Some("chord");
+        let chord =
+            in_chord || node.metadata.get("element_type").map(String::as_str) == Some("chord");
         if chord {
             let system = node
                 .metadata
@@ -752,5 +752,9 @@ fn the_last_bar_closes_with_a_final_barline() {
     vertical_line_widths(&result.scene, Affine::IDENTITY, &mut lines);
     let thin = lines.iter().map(|(_, w)| *w).fold(f64::INFINITY, f64::min);
     let thick: Vec<_> = lines.iter().filter(|(_, w)| *w > thin * 1.5).collect();
-    assert_eq!(thick.len(), 1, "one thick line, the final barline: {lines:?}");
+    assert_eq!(
+        thick.len(),
+        1,
+        "one thick line, the final barline: {lines:?}"
+    );
 }

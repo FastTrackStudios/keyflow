@@ -449,10 +449,22 @@ fn articulation_markers(
         id
     };
     if has(|c| matches!(c, Command::Accent)) {
-        nodes.push(create_accent_marker(chord_x, y, ctx.spatium, staccato, next_id()));
+        nodes.push(create_accent_marker(
+            chord_x,
+            y,
+            ctx.spatium,
+            staccato,
+            next_id(),
+        ));
     }
     if has(|c| matches!(c, Command::Marcato)) {
-        nodes.push(create_marcato_marker(chord_x, y, ctx.spatium, staccato, next_id()));
+        nodes.push(create_marcato_marker(
+            chord_x,
+            y,
+            ctx.spatium,
+            staccato,
+            next_id(),
+        ));
     }
     if staccato {
         nodes.push(create_staccato_marker(chord_x, y, ctx.spatium, next_id()));
@@ -791,7 +803,9 @@ pub fn system_articulation_lift<'m>(
                 .iter()
                 .any(|c| matches!(c, Command::Staccato));
             match (accent, staccato) {
-                (true, true) => spatium * (ARTICULATION_CLEARANCE_SPATIUMS + STACCATO_STACK_SPATIUMS),
+                (true, true) => {
+                    spatium * (ARTICULATION_CLEARANCE_SPATIUMS + STACCATO_STACK_SPATIUMS)
+                }
                 (true, false) | (false, true) => spatium * ARTICULATION_CLEARANCE_SPATIUMS,
                 (false, false) => 0.0,
             }

@@ -627,8 +627,18 @@ pub fn render_hairpin_segment(
     };
     let (a, b) = (open_at(t0) / 2.0, open_at(t1) / 2.0);
     let paints = vec![
-        PaintCommand::line(Point::new(x0, y - a), Point::new(x1, y - b), Color::BLACK, stroke),
-        PaintCommand::line(Point::new(x0, y + a), Point::new(x1, y + b), Color::BLACK, stroke),
+        PaintCommand::line(
+            Point::new(x0, y - a),
+            Point::new(x1, y - b),
+            Color::BLACK,
+            stroke,
+        ),
+        PaintCommand::line(
+            Point::new(x0, y + a),
+            Point::new(x1, y + b),
+            Color::BLACK,
+            stroke,
+        ),
     ];
     let mut node = SceneNode::leaf(SemanticId::new(ElementType::Articulation, id), paints);
     node.set_element_type("hairpin");

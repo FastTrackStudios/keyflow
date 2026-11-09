@@ -6316,7 +6316,10 @@ C#m
         .expect("parses");
         let measures = chart.sections[0].measures();
         let pin = &measures[0].hairpins[0];
-        assert_eq!((pin.start_beat, pin.end_measure_offset, pin.end_beat), (3, 2, 2));
+        assert_eq!(
+            (pin.start_beat, pin.end_measure_offset, pin.end_beat),
+            (3, 2, 2)
+        );
         let pin = &measures[3].hairpins[0];
         assert_eq!(pin.kind, HairpinKind::Decrescendo);
         assert_eq!(pin.end_measure_offset, 1);

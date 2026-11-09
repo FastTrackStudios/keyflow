@@ -697,7 +697,10 @@ mod symbol_scale_tests {
 
     #[test]
     fn a_line_that_fits_keeps_full_size_symbols() {
-        assert_eq!(symbol_scale_for_sparse_bars(&[100.0, 40.0, 100.0, 100.0], 480.0), 1.0);
+        assert_eq!(
+            symbol_scale_for_sparse_bars(&[100.0, 40.0, 100.0, 100.0], 480.0),
+            1.0
+        );
     }
 
     #[test]

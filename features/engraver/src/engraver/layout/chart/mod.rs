@@ -2160,8 +2160,7 @@ impl ChartLayoutEngine {
                             node.set_page(page_number);
                             node.set_system(global_system_index as u32);
                             node.set_measure(measure_idx as u32);
-                            if matches!(item.placement, crate::chart::notations::Placement::Below)
-                            {
+                            if matches!(item.placement, crate::chart::notations::Placement::Below) {
                                 below_stack.push(node);
                             } else {
                                 pending_notation.push((node, false, false));
@@ -2319,12 +2318,8 @@ impl ChartLayoutEngine {
                             }
                             other => other,
                         };
-                        let barline = self.draw_barline(
-                            measure_x,
-                            staff_y,
-                            staff_height,
-                            barline_type,
-                        );
+                        let barline =
+                            self.draw_barline(measure_x, staff_y, staff_height, barline_type);
                         record_system_ink_bottom(
                             &mut system_ink_bottom,
                             &mut system_height_contributors,
@@ -3590,8 +3585,7 @@ impl ChartLayoutEngine {
                                 &mut id_counter,
                             ),
                         ) {
-                            if matches!(item.placement, crate::chart::notations::Placement::Below)
-                            {
+                            if matches!(item.placement, crate::chart::notations::Placement::Below) {
                                 below_stack.push(node);
                             } else if let Some(n) = notation_renderer::autoplace_node(
                                 &mut system_skyline,
@@ -3865,7 +3859,8 @@ impl ChartLayoutEngine {
             .iter()
             .enumerate()
             .map(|(idx, m)| {
-                (self.chord_symbol_width_floor(m, &harmony_style)
+                (self
+                    .chord_symbol_width_floor(m, &harmony_style)
                     .max(measured_min.get(idx).copied().unwrap_or(0.0))
                     * symbol_scale)
                     .max(self.melody_width_needed(m))
@@ -4071,12 +4066,17 @@ impl ChartLayoutEngine {
 /// The (section, bar) of the chart's last drawn bar: the last bar of the
 /// last section that draws a staff.
 fn last_drawn_bar(chart: &Chart) -> Option<(usize, usize)> {
-    chart.sections.iter().enumerate().rev().find_map(|(idx, section)| {
-        let drawn = !section.section.section_type.is_compact()
-            && !matches!(section.section.section_type, SectionType::End);
-        let bars = section.measures().len();
-        (drawn && bars > 0).then(|| (idx, bars - 1))
-    })
+    chart
+        .sections
+        .iter()
+        .enumerate()
+        .rev()
+        .find_map(|(idx, section)| {
+            let drawn = !section.section.section_type.is_compact()
+                && !matches!(section.section.section_type, SectionType::End);
+            let bars = section.measures().len();
+            (drawn && bars > 0).then(|| (idx, bars - 1))
+        })
 }
 
 /// The most bars a line can hold when every line holds the same number.

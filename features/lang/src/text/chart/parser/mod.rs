@@ -1749,7 +1749,11 @@ G D Em
             .measures()
             .iter()
             .enumerate()
-            .flat_map(|(i, m)| m.staff_text.iter().map(move |t| (i, t.text.clone(), t.beat)))
+            .flat_map(|(i, m)| {
+                m.staff_text
+                    .iter()
+                    .map(move |t| (i, t.text.clone(), t.beat))
+            })
             .collect()
     }
 
@@ -1760,7 +1764,8 @@ G D Em
     #[test]
     fn a_cue_before_a_chord_opens_that_chords_bar() {
         // After a bar of written values, mid-line.
-        let chart = parse_chart("T - A\n4/4\n\nvs 3\nE_4. E_4. A_4 \"Ring out\" E E\n").expect("parse");
+        let chart =
+            parse_chart("T - A\n4/4\n\nvs 3\nE_4. E_4. A_4 \"Ring out\" E E\n").expect("parse");
         assert_eq!(staff_text_beats(&chart), [(1, "Ring out".to_string(), 1)]);
 
         // After a bare whole-bar chord, mid-line, before slashed chords.
@@ -1768,17 +1773,16 @@ G D Em
         assert_eq!(staff_text_beats(&chart), [(1, "Cue".to_string(), 1)]);
 
         // After a bar of slashes, mid-line.
-        let chart =
-            parse_chart("T - A\n4/4\n\nvs 2\nD /// G / \"Ring out\" E\n").expect("parse");
+        let chart = parse_chart("T - A\n4/4\n\nvs 2\nD /// G / \"Ring out\" E\n").expect("parse");
         assert_eq!(staff_text_beats(&chart), [(1, "Ring out".to_string(), 1)]);
 
         // Sleigh Ride's vamp: whole bars, the cue on the third.
-        let chart = parse_chart("T - A\n4/4\n\nvs 4\nCmaj7 Gm9 \"Vamp\" Fmaj9 Fm6\n").expect("parse");
+        let chart =
+            parse_chart("T - A\n4/4\n\nvs 4\nCmaj7 Gm9 \"Vamp\" Fmaj9 Fm6\n").expect("parse");
         assert_eq!(staff_text_beats(&chart), [(2, "Vamp".to_string(), 1)]);
 
         // At the start of a line.
-        let chart =
-            parse_chart("T - A\n4/4\n\nvs 2\nA\n\"Ring out\" E\n").expect("parse");
+        let chart = parse_chart("T - A\n4/4\n\nvs 2\nA\n\"Ring out\" E\n").expect("parse");
         assert_eq!(staff_text_beats(&chart), [(1, "Ring out".to_string(), 1)]);
 
         // Mid-bar text keeps its beat.

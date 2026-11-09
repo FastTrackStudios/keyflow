@@ -25,7 +25,11 @@ struct Item {
 fn items(source: &str) -> Vec<Item> {
     fn walk(node: &SceneNode, parent: Affine, out: &mut Vec<Item>) {
         let t = parent * node.transform;
-        let kind = node.metadata.get("element_type").cloned().unwrap_or_default();
+        let kind = node
+            .metadata
+            .get("element_type")
+            .cloned()
+            .unwrap_or_default();
         if matches!(kind.as_str(), "dynamic" | "staff_text" | "text_cue") {
             let rect = node
                 .commands
@@ -39,7 +43,12 @@ fn items(source: &str) -> Vec<Item> {
                     } => {
                         let p = t * *position;
                         let w = text.chars().count() as f64 * font_size * 0.48;
-                        Some(Rect::new(p.x, p.y - font_size * 0.65, p.x + w, p.y + font_size * 0.1))
+                        Some(Rect::new(
+                            p.x,
+                            p.y - font_size * 0.65,
+                            p.x + w,
+                            p.y + font_size * 0.1,
+                        ))
                     }
                     PaintCommand::Glyph { position, size, .. } => {
                         let p = t * *position;
@@ -95,7 +104,11 @@ fn a_bars_dynamic_and_cues_do_not_overlap() {
     let dynamic = items.iter().find(|i| i.kind == "dynamic").expect("dynamic");
     for other in items.iter().filter(|i| i.kind != "dynamic") {
         if other.rect.y0 < dynamic.rect.y1 && other.rect.y1 > dynamic.rect.y0 {
-            assert!(other.rect.x0 >= dynamic.rect.x0, "{} left of the dynamic", other.kind);
+            assert!(
+                other.rect.x0 >= dynamic.rect.x0,
+                "{} left of the dynamic",
+                other.kind
+            );
         }
     }
 }
@@ -150,16 +163,27 @@ fn a_beat_one_cue_starts_at_its_bars_first_beat() {
     let result = ChartPipeline::shared()
         .expect("the pipeline builds")
         .layout_preset(&chart, Preset::Page, PresetOptions::for_export());
-    let beats: Vec<_> = result.beat_positions.iter().filter(|b| b.measure == bar).collect();
+    let beats: Vec<_> = result
+        .beat_positions
+        .iter()
+        .filter(|b| b.measure == bar)
+        .collect();
     let bar_start = beats[0].measure_x0;
-    let beat_two = beats.iter().find(|b| b.beat == 1 || b.beat == 2).map(|b| b.x);
-    let second = beats.get(1).map(|b| b.x).or(beat_two).expect("a second beat");
+    let beat_two = beats
+        .iter()
+        .find(|b| b.beat == 1 || b.beat == 2)
+        .map(|b| b.x);
+    let second = beats
+        .get(1)
+        .map(|b| b.x)
+        .or(beat_two)
+        .expect("a second beat");
     let cue = items(source)
         .into_iter()
         .find(|i| {
-            i.commands.iter().any(
-                |c| matches!(c, PaintCommand::Text { text, .. } if text == "Ring out"),
-            )
+            i.commands
+                .iter()
+                .any(|c| matches!(c, PaintCommand::Text { text, .. } if text == "Ring out"))
         })
         .expect("the cue draws");
     assert!(
@@ -215,7 +239,10 @@ fn a_hairpin_is_a_wedge_across_its_beats_inside_its_bar() {
     assert_eq!(pins.len(), 1);
     let [(ux0, uy0), (ux1, uy1), (lx0, ly0), (lx1, ly1)] = pins[0];
     let (_, x0, x1) = bars[0];
-    assert!(ux0 >= x0 - 1.0 && ux1 <= x1 + 1.0, "inside bar 1: {ux0}..{ux1} vs {x0}..{x1}");
+    assert!(
+        ux0 >= x0 - 1.0 && ux1 <= x1 + 1.0,
+        "inside bar 1: {ux0}..{ux1} vs {x0}..{x1}"
+    );
     assert!(ux1 - ux0 > 0.7 * (x1 - x0), "spans the bar's beats");
     // A crescendo: closed at the start, open at the end.
     assert!((uy0 - ly0).abs() < 0.01, "closed start");
@@ -227,16 +254,21 @@ fn a_hairpin_is_a_wedge_across_its_beats_inside_its_bar() {
 fn a_hairpin_continues_across_bars_and_lines() {
     // Over bars 4 and 5, across a line break: one wedge in two pieces,
     // opening evenly through the break.
-    let (pins, bars) = hairpin_lines(
-        "H\n#G 120bpm 4/4\n\nVS 6\nG\nC\nD\nhairpin < 1..+1:4\nG\nC\nD\n",
-    );
+    let (pins, bars) =
+        hairpin_lines("H\n#G 120bpm 4/4\n\nVS 6\nG\nC\nD\nhairpin < 1..+1:4\nG\nC\nD\n");
     assert_eq!(pins.len(), 2, "a piece in each bar");
     let page_right = bars.iter().map(|b| b.2).fold(0.0, f64::max);
     for pin in &pins {
-        assert!(pin.iter().all(|(x, _)| *x <= page_right + 1.0), "on the page: {pin:?}");
+        assert!(
+            pin.iter().all(|(x, _)| *x <= page_right + 1.0),
+            "on the page: {pin:?}"
+        );
     }
     let open = |p: &[(f64, f64); 4], end: usize| (p[2 + end].1 - p[end].1).abs();
     assert!(open(&pins[0], 0) < 0.01, "starts closed");
-    assert!((open(&pins[0], 1) - open(&pins[1], 0)).abs() < 0.01, "opens on through the break");
+    assert!(
+        (open(&pins[0], 1) - open(&pins[1], 0)).abs() < 0.01,
+        "opens on through the break"
+    );
     assert!(open(&pins[1], 1) > open(&pins[0], 1), "and keeps opening");
 }
