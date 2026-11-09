@@ -1528,6 +1528,31 @@ impl ChartLayoutEngine {
                 let is_short_system =
                     self.config.snippet_mode || effective_measure_count < max_measures as f64;
 
+                // A full line whose chord-dense bars need so much room that
+                // its sparse bars cannot keep their share draws its chord
+                // symbols smaller (down to `MIN_SYSTEM_SYMBOL_SCALE`) rather
+                // than squeezing a whole-bar chord, or breaking the line.
+                let symbol_scale = if is_short_system {
+                    1.0
+                } else {
+                    width_dist::symbol_scale_for_sparse_bars(
+                        &measure_min_widths,
+                        measures_area_width,
+                    )
+                };
+                let measure_min_widths: Vec<f64> = measure_min_widths
+                    .iter()
+                    .map(|w| w * symbol_scale)
+                    .collect();
+                let scaled_harmony_style;
+                let harmony_style: &HarmonyStyle = if symbol_scale < 1.0 {
+                    let size = harmony_style.root_size * symbol_scale;
+                    scaled_harmony_style = harmony_style.clone().with_root_size(size);
+                    &scaled_harmony_style
+                } else {
+                    &harmony_style
+                };
+
                 // Distribute width proportionally using spring physics
                 // For full systems, distribute the entire measures_area_width
                 // For short systems, distribute only the proportional amount
@@ -3796,13 +3821,19 @@ impl ChartLayoutEngine {
         // cap is the phrase grouping a chart is read by, and a line keeps all
         // of it unless the symbols physically cannot fit. The spring
         // distribution then shares out whatever room is left.
+        //
+        // Symbols are measured at the smallest a line may draw them
+        // (`width_dist::MIN_SYSTEM_SYMBOL_SCALE`): a full line of chord
+        // clusters draws its symbols smaller rather than lose a bar.
+        let symbol_scale = width_dist::MIN_SYSTEM_SYMBOL_SCALE;
         let widths: Vec<f64> = measures
             .iter()
             .enumerate()
             .map(|(idx, m)| {
-                self.chord_symbol_width_floor(m, &harmony_style)
-                    .max(self.melody_width_needed(m))
+                (self.chord_symbol_width_floor(m, &harmony_style)
                     .max(measured_min.get(idx).copied().unwrap_or(0.0))
+                    * symbol_scale)
+                    .max(self.melody_width_needed(m))
             })
             .collect();
         // A system always holds at least one measure, however wide it is —

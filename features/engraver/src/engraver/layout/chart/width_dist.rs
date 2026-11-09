@@ -663,6 +663,63 @@ fn keep_sparse_bars_readable(
     widths
 }
 
+/// The smallest a line's chord symbols are drawn to make room for its
+/// sparse bars.
+pub const MIN_SYSTEM_SYMBOL_SCALE: f64 = 0.85;
+
+/// How much a full line's chord symbols must shrink for its sparse bars to
+/// keep [`SPARSE_BAR_FLOOR`] of the average bar while every chord-dense bar
+/// keeps the room its (scaled) symbols need — or, with no sparse bar, for
+/// the dense bars to fit the line at all. `1.0` when they already fit;
+/// never below [`MIN_SYSTEM_SYMBOL_SCALE`].
+///
+/// `min_widths` are the bars' minimum widths at full symbol size — mostly
+/// their symbols' widths, which scale with the font.
+#[must_use]
+pub fn symbol_scale_for_sparse_bars(min_widths: &[f64], total_width: f64) -> f64 {
+    let n = min_widths.len();
+    if n < 2 || total_width <= 0.0 {
+        return 1.0;
+    }
+    let floor = SPARSE_BAR_FLOOR * total_width / n as f64;
+    let sparse = min_widths.iter().filter(|w| **w < floor).count();
+    let dense: f64 = min_widths.iter().filter(|w| **w >= floor).sum();
+    let room = total_width - sparse as f64 * floor;
+    if dense <= room || dense <= 0.0 {
+        return 1.0;
+    }
+    (room / dense).clamp(MIN_SYSTEM_SYMBOL_SCALE, 1.0)
+}
+
+#[cfg(test)]
+mod symbol_scale_tests {
+    use super::*;
+
+    #[test]
+    fn a_line_that_fits_keeps_full_size_symbols() {
+        assert_eq!(symbol_scale_for_sparse_bars(&[100.0, 40.0, 100.0, 100.0], 480.0), 1.0);
+    }
+
+    #[test]
+    fn dense_bars_shrink_their_symbols_so_a_sparse_bar_keeps_its_share() {
+        // Floor = 0.65 * 120 = 78; three dense bars need 405 of the 402 left.
+        let scale = symbol_scale_for_sparse_bars(&[135.0, 40.0, 135.0, 135.0], 480.0);
+        assert!(scale < 1.0 && scale > 0.99, "{scale}");
+    }
+
+    #[test]
+    fn a_line_of_only_dense_bars_shrinks_to_fit() {
+        let scale = symbol_scale_for_sparse_bars(&[125.0, 125.0, 125.0, 125.0], 480.0);
+        assert!((scale - 0.96).abs() < 1e-9, "{scale}");
+    }
+
+    #[test]
+    fn symbols_never_shrink_below_the_minimum() {
+        let scale = symbol_scale_for_sparse_bars(&[200.0, 40.0, 200.0, 200.0], 480.0);
+        assert_eq!(scale, MIN_SYSTEM_SYMBOL_SCALE);
+    }
+}
+
 fn measure_duration_ticks(time_signature: (u8, u8)) -> f64 {
     let (beats, denominator) = time_signature;
     if denominator == 0 {

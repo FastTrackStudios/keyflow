@@ -582,3 +582,116 @@ fn repeat_chord_symbols_always_prints_every_symbol() {
     let source = format!("\\repeat_chord_symbols = always\n\n{CLUSTER_THEN_HELD}");
     assert_eq!(printed_b_symbols(&source), 3);
 }
+
+/// Each line of `source`'s first section: (bar widths, the beat xs of each
+/// bar).
+fn lines_of(source: &str) -> Vec<Vec<(f64, Vec<f64>)>> {
+    let chart = keyflow_lang::text::chart::parse_chart(source).expect("parses");
+    let result = ChartPipeline::shared()
+        .expect("the pipeline builds")
+        .layout_preset(&chart, Preset::Page, PresetOptions::for_export());
+    let bars = chart.sections[0].measures().len();
+    let mut lines: Vec<Vec<(usize, f64, Vec<f64>)>> = Vec::new();
+    for m in 0..bars {
+        let b = beats(&result, m);
+        let first = b.first().expect("the bar has beats");
+        let xs = b.iter().map(|p| p.x).collect();
+        let entry = (first.system, first.measure_x1 - first.measure_x0, xs);
+        match lines.last_mut() {
+            Some(line) if line[0].0 == entry.0 => line.push(entry),
+            _ => lines.push(vec![entry]),
+        }
+    }
+    lines
+        .into_iter()
+        .map(|l| l.into_iter().map(|(_, w, xs)| (w, xs)).collect())
+        .collect()
+}
+
+fn assert_four_a_line_and_sparse_bars_readable(source: &str) {
+    let lines = lines_of(source);
+    for (i, line) in lines.iter().enumerate() {
+        assert_eq!(line.len(), 4, "line {} holds four bars", i + 1);
+        let average = line.iter().map(|(w, _)| w).sum::<f64>() / 4.0;
+        for (bar, (width, _)) in line.iter().enumerate() {
+            assert!(
+                *width >= 0.65 * average - 0.5,
+                "line {} bar {}: {width:.1} is under 65% of the {average:.1} average",
+                i + 1,
+                bar + 1
+            );
+        }
+    }
+}
+
+#[test]
+fn sleigh_ride_verse_keeps_four_a_line_and_its_whole_bars_readable() {
+    let source = "Sleigh Ride - Tori Kelly\n#B 86bpm 4/4\n\nVS 8\n\
+         Bmaj7 / G#m7 / C#m9 / F#7 / Bmaj7\n\
+         Bmaj7 / G#m7 / C#m9 / F#7 / Bmaj7 // Gmaj7 / F#7 /\n\
+         Bmaj7 / G#m7 / C#m9 / F#7 / Bmaj7\n\
+         Bmaj7 / G#m7 / C#m9 / F#7 / Bmaj7 ////\n";
+    assert_four_a_line_and_sparse_bars_readable(source);
+    // The whole-bar Bmaj7 (bar 2) keeps even beats.
+    let lines = lines_of(source);
+    let xs = &lines[0][1].1;
+    let steps: Vec<f64> = xs.windows(2).map(|w| w[1] - w[0]).collect();
+    assert!(
+        steps.iter().all(|s| (s - steps[0]).abs() < 1.0),
+        "uneven beats in a held bar: {steps:?}"
+    );
+}
+
+/// The largest chord-symbol font size on the first line of `source`.
+fn first_line_symbol_size(source: &str) -> f64 {
+    fn sizes(node: &SceneNode, in_chord: bool, out: &mut Vec<(f64, usize)>) {
+        let chord = in_chord
+            || node.metadata.get("element_type").map(String::as_str) == Some("chord");
+        if chord {
+            let system = node
+                .metadata
+                .get("system")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(usize::MAX);
+            for command in &node.commands {
+                if let PaintCommand::Text { font_size, .. } = command {
+                    out.push((*font_size, system));
+                }
+            }
+        }
+        for child in &node.children {
+            sizes(child, chord, out);
+        }
+    }
+    let chart = keyflow_lang::text::chart::parse_chart(source).expect("parses");
+    let result = ChartPipeline::shared()
+        .expect("the pipeline builds")
+        .layout_preset(&chart, Preset::Page, PresetOptions::for_export());
+    let mut out = Vec::new();
+    sizes(&result.scene, false, &mut out);
+    let first = out.iter().map(|(_, s)| *s).min().expect("symbols");
+    out.iter()
+        .filter(|(_, s)| *s == first)
+        .map(|(f, _)| *f)
+        .fold(0.0, f64::max)
+}
+
+#[test]
+fn four_a_line_wins_and_a_crowded_line_draws_smaller_symbols() {
+    // Three bars of four symbols around one whole bar. At full size the
+    // three clusters alone overflow the line, which used to break it two
+    // and two; the line keeps its four bars and draws its symbols smaller.
+    let dense = "Bmaj7 / G#m7 / C#m9 / F#7(#9) /";
+    let source = format!("Dense\n#B 86bpm 4/4\n\nVS 4\n{dense}\nBmaj7\n{dense}\n{dense}\n");
+    let lines = lines_of(&source);
+    assert_eq!(lines.len(), 1, "one line of four bars");
+    assert_eq!(lines[0].len(), 4);
+
+    let roomy = "Roomy\n#B 86bpm 4/4\n\nVS 4\nBmaj7\nG#m7\nC#m9\nF#7\n";
+    let full = first_line_symbol_size(roomy);
+    let crowded = first_line_symbol_size(&source);
+    assert!(
+        crowded < full - 0.1 && crowded >= full * 0.85 - 0.01,
+        "crowded line symbols {crowded} vs full {full}"
+    );
+}
