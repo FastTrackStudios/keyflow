@@ -619,7 +619,11 @@ impl<'a> ChartParser<'a> {
     /// bar's written length less that chord's own.
     fn last_chord_onset(measure: &Measure, time_sig: TimeSignature) -> Option<f64> {
         let last = measure.chords.last()?;
-        let chords: f64 = measure.chords.iter().map(|c| c.duration.to_beats(time_sig)).sum();
+        let chords: f64 = measure
+            .chords
+            .iter()
+            .map(|c| c.duration.to_beats(time_sig))
+            .sum();
         let rests: f64 = measure
             .rhythm_elements
             .iter()
