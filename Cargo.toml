@@ -34,7 +34,7 @@ members = [
 
 [workspace.package]
 # Tracks the release tag. Bump this with the tag.
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.87"
 authors = ["FastTrack Studio"]
@@ -120,16 +120,16 @@ vox = { version = "0.10.0-rc.7", default-features = false, features = ["runtime"
 # a split revision checks that repo out twice, and cargo treats the two
 # checkouts as different crates whose traits then refuse to unify.
 #
-# architect v0.11.2 (31f120f): the tag's commit, as a rev so the [patch]
-# table below can name the same one.
-architect = { git = "https://github.com/FastTrackStudios/architect", rev = "31f120f73819d35a954269b71bae7c790f5fc51f" }
+# architect v0.11.2, by tag: studio pins the same tag, and a `rev` of the
+# same commit would be a second architect source in studio's lock.
+architect = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.11.2" }
 
 # The shared musical vocabulary — section colours and the canonical
 # palettes `keyflow-proto` engraves section cards with.
 music-catalog = { git = "https://github.com/FastTrackStudios/music-convention", tag = "v0.1.0" }
 color-palette = { git = "https://github.com/FastTrackStudios/music-convention", tag = "v0.1.0" }
 # The Dioxus primitive library (was libs/ui/fts-ui, renamed on the split).
-architect-ui = { git = "https://github.com/FastTrackStudios/architect", rev = "31f120f73819d35a954269b71bae7c790f5fc51f" }
+architect-ui = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.11.2" }
 # ── MusicXML parsing (keyflow) ─────────────────────────────────────────
 musicxml = "1.1"
 
@@ -239,19 +239,19 @@ dioxus-vdom = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.7.
 # lets it patch the plain one; a same-host patch is refused. Bump this revision
 # with the pins above; drop the block once keyflow takes daw from studio.
 [patch."https://github.com/FastTrackStudios/architect"]
-architect = { git = "https://www.github.com/FastTrackStudios/architect", rev = "31f120f73819d35a954269b71bae7c790f5fc51f" }
-architect-action-derive = { git = "https://www.github.com/FastTrackStudios/architect", rev = "31f120f73819d35a954269b71bae7c790f5fc51f" }
-architect-derive = { git = "https://www.github.com/FastTrackStudios/architect", rev = "31f120f73819d35a954269b71bae7c790f5fc51f" }
-architect-permissions = { git = "https://www.github.com/FastTrackStudios/architect", rev = "31f120f73819d35a954269b71bae7c790f5fc51f" }
-architect-rpc-derive = { git = "https://www.github.com/FastTrackStudios/architect", rev = "31f120f73819d35a954269b71bae7c790f5fc51f" }
-architect-story-core = { git = "https://www.github.com/FastTrackStudios/architect", rev = "31f120f73819d35a954269b71bae7c790f5fc51f" }
-architect-story-macros = { git = "https://www.github.com/FastTrackStudios/architect", rev = "31f120f73819d35a954269b71bae7c790f5fc51f" }
-architect-story-runtime = { git = "https://www.github.com/FastTrackStudios/architect", rev = "31f120f73819d35a954269b71bae7c790f5fc51f" }
-architect-ui = { git = "https://www.github.com/FastTrackStudios/architect", rev = "31f120f73819d35a954269b71bae7c790f5fc51f" }
+architect = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.11.2" }
+architect-action-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.11.2" }
+architect-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.11.2" }
+architect-permissions = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.11.2" }
+architect-rpc-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.11.2" }
+architect-story-core = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.11.2" }
+architect-story-macros = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.11.2" }
+architect-story-runtime = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.11.2" }
+architect-ui = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.11.2" }
 # Reached both through the patched crates above and through the unpatched
 # ones (architect-workspace, -shell): unpatched, each lands twice in the lock.
-architect-theme = { git = "https://www.github.com/FastTrackStudios/architect", rev = "31f120f73819d35a954269b71bae7c790f5fc51f" }
-architect-workspace-hack = { git = "https://www.github.com/FastTrackStudios/architect", rev = "31f120f73819d35a954269b71bae7c790f5fc51f" }
+architect-theme = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.11.2" }
+architect-workspace-hack = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.11.2" }
 
 [workspace.lints.rust]
 # Flipped from "allow" 2026-07-28 (task cleanup): the blanket allows are
