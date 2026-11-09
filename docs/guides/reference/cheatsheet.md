@@ -32,6 +32,8 @@ Rosalita (Come Out Tonight) - Bruce Springsteen
 #G 120bpm 4/4
 ```
 
+A line `Transcribed By Cody Wright` under the title (any case, a colon after *By* is fine) credits the transcriber: it prints as a small line above the page footer, on every page, and leaves the subtitle alone. To keep parentheses in the title itself, give it with `\title "Joy To The World (Unspeakable Joy)"` (and `\subtitle "…"` for a subtitle of its own).
+
 [[header|Header]] has the detail.
 
 ## Sections
@@ -201,6 +203,8 @@ A line starting with `\` sets something for the chart. Backslash, not slash: a l
 | `\chord_memory = true` | a bare root recalls the quality its degree last had |
 | `\repeat_chord_symbols = clusters` | `changes` (default), `clusters` or `always`: when a chord still sounding is named again |
 | `\progression G B C Cm` | the chords a section falls back to when it names none |
+| `\title "Joy To The World (Unspeakable Joy)"` | the title exactly as written, parentheses and all |
+| `\subtitle "Live at the Ryman"` | the line under the title |
 | `\alias name value` | give a name to a run of chart text |
 
 ```kf+

@@ -514,6 +514,16 @@ impl ChartLayoutEngine {
             return;
         }
         page_rendering::add_page_footer(root, page_x, page_y, page_width, page_height);
+        if let Some(name) = metadata.transcriber.as_deref().filter(|n| !n.is_empty()) {
+            page_rendering::add_transcriber_credit(
+                root,
+                page_x,
+                page_y,
+                page_width,
+                page_height,
+                name,
+            );
+        }
     }
 
     /// Title header on first page (title, subtitle, composer, tempo, count-in snippet).

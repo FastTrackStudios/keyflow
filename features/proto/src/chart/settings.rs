@@ -66,9 +66,10 @@ pub struct DirectiveSpec {
 
 /// Every directive a chart may carry, in the order a menu should show them.
 ///
-/// Includes the three that are not [`ChartSetting`]s: `\duration` and
-/// `\progression`, which the text parser reads before settings get a look,
-/// and `\alias`, which is a naming form rather than a setting.
+/// Includes the five that are not [`ChartSetting`]s: `\duration`,
+/// `\progression`, `\title` and `\subtitle`, which the text parser reads
+/// before settings get a look, and `\alias`, which is a naming form rather
+/// than a setting.
 pub const DIRECTIVES: &[DirectiveSpec] = &[
     DirectiveSpec {
         key: "duration",
@@ -81,6 +82,18 @@ pub const DIRECTIVES: &[DirectiveSpec] = &[
         label: "Default progression",
         example: "\\progression G B C Cm",
         summary: "the chords a section falls back to when it names none",
+    },
+    DirectiveSpec {
+        key: "title",
+        label: "Title",
+        example: "\\title \"Joy To The World (Unspeakable Joy)\"",
+        summary: "the title exactly as written, parentheses and all",
+    },
+    DirectiveSpec {
+        key: "subtitle",
+        label: "Subtitle",
+        example: "\\subtitle \"Live at the Ryman\"",
+        summary: "the line under the title",
     },
     DirectiveSpec {
         key: "push",
@@ -542,10 +555,14 @@ mod tests {
     #[test]
     fn every_directive_example_parses() {
         for spec in DIRECTIVES {
-            // `\duration`, `\progression` and `\alias` are read by the text
-            // parser before settings see the line; the rest must round-trip
+            // `\duration`, `\progression`, `\title`, `\subtitle` and `\alias`
+            // are read by the text parser before settings see the line; the
+            // rest must round-trip
             // through here.
-            if matches!(spec.key, "duration" | "progression" | "alias") {
+            if matches!(
+                spec.key,
+                "duration" | "progression" | "alias" | "title" | "subtitle"
+            ) {
                 continue;
             }
             let mut settings = ChartSettings::new();
