@@ -133,3 +133,38 @@ fn cues_are_one_upright_bundled_face_without_underline_and_never_shrink() {
         "the long cue draws"
     );
 }
+
+/// Joy to the World's outro: `"Ring out" E % % %` after a bar of written
+/// values. The cue starts at its bar's first beat — it used to draw under
+/// beat 2, because the beat anchor scaled the bar's segment positions (in
+/// points) by the staff space a second time.
+#[test]
+fn a_beat_one_cue_starts_at_its_bars_first_beat() {
+    let source = "Joy\n#D 128bpm 4/4\n\nOUT 10\n@guitar \"Guitar hook\"\nE /// A /\nA E /// A / A\nE_4. E_4. A_4 A\n\"Ring out\" E % % %\n";
+    let chart = keyflow_lang::text::chart::parse_chart(source).expect("parses");
+    let bar = chart.sections[0]
+        .measures()
+        .iter()
+        .position(|m| m.staff_text.iter().any(|t| t.text == "Ring out"))
+        .expect("the cue is on a bar");
+    let result = ChartPipeline::shared()
+        .expect("the pipeline builds")
+        .layout_preset(&chart, Preset::Page, PresetOptions::for_export());
+    let beats: Vec<_> = result.beat_positions.iter().filter(|b| b.measure == bar).collect();
+    let bar_start = beats[0].measure_x0;
+    let beat_two = beats.iter().find(|b| b.beat == 1 || b.beat == 2).map(|b| b.x);
+    let second = beats.get(1).map(|b| b.x).or(beat_two).expect("a second beat");
+    let cue = items(source)
+        .into_iter()
+        .find(|i| {
+            i.commands.iter().any(
+                |c| matches!(c, PaintCommand::Text { text, .. } if text == "Ring out"),
+            )
+        })
+        .expect("the cue draws");
+    assert!(
+        cue.rect.x0 >= bar_start - 1.0 && cue.rect.x0 < second,
+        "Ring out at {:.1}; bar starts {bar_start:.1}, beat 2 at {second:.1}",
+        cue.rect.x0
+    );
+}

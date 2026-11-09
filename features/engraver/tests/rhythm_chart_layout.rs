@@ -695,3 +695,33 @@ fn four_a_line_wins_and_a_crowded_line_draws_smaller_symbols() {
         "crowded line symbols {crowded} vs full {full}"
     );
 }
+
+/// Every glyph `glyph` in the scene with its colour.
+fn glyph_colors(node: &SceneNode, glyph: char, out: &mut Vec<peniko::Color>) {
+    for command in &node.commands {
+        if let PaintCommand::Glyph {
+            codepoint, color, ..
+        } = command
+            && *codepoint == glyph
+        {
+            out.push(*color);
+        }
+    }
+    for child in &node.children {
+        glyph_colors(child, glyph, out);
+    }
+}
+
+#[test]
+fn every_accent_draws_in_black_even_on_a_chord_named_once() {
+    // All I Want for Christmas: `>Am7b5/D_4 >Am7b5/D_4 r2` names the chord
+    // once and accents both attacks.
+    let result = render("AIW\n#G 150bpm 4/4\n\nOUT 1\n>Am7b5/D_4 >Am7b5/D_4 r2\n");
+    let mut accents = Vec::new();
+    glyph_colors(&result.scene, '\u{E4A0}', &mut accents);
+    assert_eq!(accents.len(), 2, "both attacks are accented");
+    assert!(
+        accents.iter().all(|c| *c == peniko::Color::BLACK),
+        "accents are black: {accents:?}"
+    );
+}

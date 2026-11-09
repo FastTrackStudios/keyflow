@@ -49,9 +49,10 @@ fn pull_marker_color() -> Color {
     Color::from_rgba8(0x00, 0x00, 0xCC, 0xFF)
 }
 
-/// Create accent marker color (red for visibility)
+/// Articulation marks (accent, marcato, staccato) are notation, drawn in
+/// the staff's black like the slashes they sit on.
 fn accent_marker_color() -> Color {
-    Color::from_rgba8(0xCC, 0x00, 0x00, 0xFF)
+    Color::BLACK
 }
 
 /// Context for rendering chord symbols in a measure.
@@ -429,6 +430,36 @@ fn create_accent_marker(
     node
 }
 
+/// The marks a chord carries on its attack — accent, marcato, staccato —
+/// over the slash it is played on. Drawn whether or not the chord's symbol
+/// prints: `>X_4 >X_4 r2` names X once and accents both attacks.
+fn articulation_markers(
+    chord: &ChordInstance,
+    chord_x: f64,
+    ctx: &ChordRenderContext<'_>,
+    id_counter: &mut u64,
+) -> Vec<SceneNode> {
+    let has = |wanted: fn(&Command) -> bool| chord.commands.iter().any(wanted);
+    let staccato = has(|c| matches!(c, Command::Staccato));
+    let y = ctx.chord_y + ctx.articulation_lift;
+    let mut nodes = Vec::new();
+    let mut next_id = || {
+        let id = *id_counter;
+        *id_counter += 1;
+        id
+    };
+    if has(|c| matches!(c, Command::Accent)) {
+        nodes.push(create_accent_marker(chord_x, y, ctx.spatium, staccato, next_id()));
+    }
+    if has(|c| matches!(c, Command::Marcato)) {
+        nodes.push(create_marcato_marker(chord_x, y, ctx.spatium, staccato, next_id()));
+    }
+    if staccato {
+        nodes.push(create_staccato_marker(chord_x, y, ctx.spatium, next_id()));
+    }
+    nodes
+}
+
 /// The marcato wedge (SMuFL articMarcatoAbove), placed like an accent.
 fn create_marcato_marker(
     segment_x: f64,
@@ -466,6 +497,11 @@ fn create_fermata_marker(symbol_bounds: Rect, spatium: f64, id: u64) -> SceneNod
     node
 }
 
+/// How far a line's chord symbols rise to clear an accent or staccato
+/// between them and the staff — enough that the mark never touches the
+/// symbol above it.
+const ARTICULATION_CLEARANCE_SPATIUMS: f64 = 1.1;
+
 /// How far an accent rises to clear a staccato dot on the same chord.
 const STACCATO_STACK_SPATIUMS: f64 = 0.9;
 
@@ -485,7 +521,7 @@ fn create_staccato_marker(segment_x: f64, chord_y: f64, spatium: f64, id: u64) -
 
     // SMuFL articStaccatoAbove: U+E4A2
     let staccato_glyph = '\u{E4A2}';
-    let color = Color::from_rgba8(0xCC, 0x00, 0x00, 0xFF); // Red — matches accent markers
+    let color = accent_marker_color();
 
     // Size relative to spatium (with articulation magnification factor)
     let font_size = spatium * 1.2 * ARTICULATION_MAG;
@@ -755,8 +791,8 @@ pub fn system_articulation_lift<'m>(
                 .iter()
                 .any(|c| matches!(c, Command::Staccato));
             match (accent, staccato) {
-                (true, true) => spatium * (0.5 + STACCATO_STACK_SPATIUMS),
-                (true, false) | (false, true) => spatium * 0.5,
+                (true, true) => spatium * (ARTICULATION_CLEARANCE_SPATIUMS + STACCATO_STACK_SPATIUMS),
+                (true, false) | (false, true) => spatium * ARTICULATION_CLEARANCE_SPATIUMS,
                 (false, false) => 0.0,
             }
         })
@@ -1207,14 +1243,7 @@ pub fn render_chord_symbols(
             )
         };
 
-        // Check if chord has regular accent (not AccentOnPush - that renders on spillback)
-        let has_regular_accent = chord.commands.iter().any(|c| matches!(c, Command::Accent));
-        let has_marcato = chord.commands.iter().any(|c| matches!(c, Command::Marcato));
         let has_fermata = chord.commands.iter().any(|c| matches!(c, Command::Fermata));
-        let has_staccato = chord
-            .commands
-            .iter()
-            .any(|c| matches!(c, Command::Staccato));
 
         // In Hits sections: show chord name only for the first chord, then just accents/staccatos
         let skip_chord_name = is_hits && hits_chord_shown;
@@ -1223,27 +1252,7 @@ pub fn render_chord_symbols(
             // Hits: skip chord name but still render articulation markers
             last_chord_symbol = Some(current_symbol.clone());
 
-            if has_regular_accent {
-                let accent_node = create_accent_marker(
-                    chord_x,
-                    ctx.chord_y + ctx.articulation_lift,
-                    ctx.spatium,
-                    has_staccato,
-                    id_counter,
-                );
-                id_counter += 1;
-                nodes.push(accent_node);
-            }
-            if has_staccato {
-                let staccato_node = create_staccato_marker(
-                    chord_x,
-                    ctx.chord_y + ctx.articulation_lift,
-                    ctx.spatium,
-                    id_counter,
-                );
-                id_counter += 1;
-                nodes.push(staccato_node);
-            }
+            nodes.extend(articulation_markers(chord, chord_x, ctx, &mut id_counter));
             // Stop signs in Hits: use a synthetic bounds around the beat position
             let synth_bounds = Rect::new(
                 chord_x,
@@ -1301,6 +1310,7 @@ pub fn render_chord_symbols(
                 ));
                 id_counter += 1;
             }
+            nodes.extend(articulation_markers(chord, chord_x, ctx, &mut id_counter));
             continue;
         }
 
@@ -1318,6 +1328,7 @@ pub fn render_chord_symbols(
                 ));
                 id_counter += 1;
             }
+            nodes.extend(articulation_markers(chord, chord_x, ctx, &mut id_counter));
             continue;
         }
 
@@ -1335,6 +1346,7 @@ pub fn render_chord_symbols(
                 ));
                 id_counter += 1;
             }
+            nodes.extend(articulation_markers(chord, chord_x, ctx, &mut id_counter));
             continue;
         }
         same_bar_symbol = Some(current_symbol.clone());
@@ -1359,6 +1371,7 @@ pub fn render_chord_symbols(
                 ));
                 id_counter += 1;
             }
+            nodes.extend(articulation_markers(chord, chord_x, ctx, &mut id_counter));
             continue;
         }
 
@@ -1494,31 +1507,9 @@ pub fn render_chord_symbols(
             nodes.push(marker_node);
         }
 
-        // Add accent marker for regular accents (rendered in red above the chord)
-        // AccentOnPush accents are rendered on the spillback chord instead
-        if has_regular_accent {
-            let accent_node = create_accent_marker(
-                chord_x,
-                ctx.chord_y + ctx.articulation_lift,
-                ctx.spatium,
-                has_staccato,
-                id_counter,
-            );
-            id_counter += 1;
-            nodes.push(accent_node);
-        }
-
-        // Marcato: the wedge sits where an accent would, above any dot.
-        if has_marcato {
-            nodes.push(create_marcato_marker(
-                chord_x,
-                ctx.chord_y + ctx.articulation_lift,
-                ctx.spatium,
-                has_staccato,
-                id_counter,
-            ));
-            id_counter += 1;
-        }
+        // Accent, marcato and staccato on the attack. (AccentOnPush accents
+        // are rendered on the spillback chord instead.)
+        nodes.extend(articulation_markers(chord, chord_x, ctx, &mut id_counter));
 
         // Fermata: over the chord symbol, the hold read before the chord is.
         if has_fermata {
@@ -1528,18 +1519,6 @@ pub fn render_chord_symbols(
                 id_counter,
             ));
             id_counter += 1;
-        }
-
-        // Add staccato marker (dot above the rhythm slash notehead)
-        if has_staccato {
-            let staccato_node = create_staccato_marker(
-                chord_x,
-                ctx.chord_y + ctx.articulation_lift,
-                ctx.spatium,
-                id_counter,
-            );
-            id_counter += 1;
-            nodes.push(staccato_node);
         }
 
         // Add stop sign / stop groove markers inline with chord symbols

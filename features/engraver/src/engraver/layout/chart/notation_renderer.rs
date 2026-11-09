@@ -68,7 +68,7 @@ pub struct MeasureFrame<'a> {
     pub beats_per_measure: u8,
     /// Source MusicXML measure width, in tenths, when available.
     pub source_measure_width: Option<f64>,
-    /// Per-beat segment x-positions (measure-local, in spatiums) emitted by
+    /// Per-beat segment x-positions (measure-local, in points) emitted by
     /// the chord-rest layout pass. When present, beat_x() snaps to the
     /// closest segment so figured-bass numerals / dynamics line up under
     /// their chord symbol instead of a uniform grid approximation.
@@ -97,8 +97,12 @@ impl<'a> MeasureFrame<'a> {
         if let Some(segments) = self.segment_positions
             && !segments.is_empty()
         {
+            // Segment positions are points from the bar start (the chord
+            // renderer adds them to `measure_x` as they are). Scaling them by
+            // the staff space put a beat-1 cue under beat 2 and sent a
+            // hairpin off the page.
             let idx = beat_idx.min(segments.len() - 1);
-            return self.measure_x + segments[idx] * self.spatium;
+            return self.measure_x + segments[idx];
         }
         let beats = self.beats_per_measure.max(1) as f64;
         let beat_clamped = (beat.max(1) as f64 - 1.0).min(beats - 1.0);
