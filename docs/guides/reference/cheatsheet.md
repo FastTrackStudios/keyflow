@@ -171,7 +171,7 @@ A line starting with `\` sets something for the chart. Backslash, not slash: a l
 | `\auto_rhythm_slashes = true` | fill long chords with quarter-note slashes |
 | `\push_alters_rhythm = true` | a push changes the notation, not just the symbol |
 | `\chord_memory = true` | a bare root recalls the quality its degree last had |
-| `\repeat_chord_symbols = always` | print a chord's symbol even when it repeats the last one |
+| `\repeat_chord_symbols = clusters` | `changes` (default), `clusters` or `always`: when a chord still sounding is named again |
 | `\progression G B C Cm` | the chords a section falls back to when it names none |
 | `\alias name value` | give a name to a run of chart text |
 
@@ -182,7 +182,7 @@ VS 2
 G C D Em
 ```
 
-A bar's first chord is named when the harmony changes there, when the bar itself has changes (`Bmaj7 / G#m7 / C#m9 / F#7 /` names its `Bmaj7` even after a bar of `Bmaj7`), and at the start of every line or section. A chord still sounding from the bar before is not named again (`D /// G /` then `G`). `\repeat_chord_symbols = always` prints every one; `auto` is the default.
+A bar's first chord is named when the harmony changes there and at the start of every line or section. A chord still sounding from the bar before is not named again — not after `D /// G /` then `G`, and not in a bar of changes that starts on it (`Bmaj7` then `Bmaj7 / G#m7 / C#m9 / F#7 /` names only the G#m7, C#m9 and F#7). That is `\repeat_chord_symbols = changes`, the default. `clusters` also names a bar of changes' first chord when the bar before held that one chord (the second `Bmaj7` above prints); `always` prints every symbol.
 
 A bar written with note values (`_2`, `_8`, `r4`) is drawn as rhythmic notation — a half is a stemmed half-note slash, an eighth a flagged one — and every chord symbol sits over the slash it is played on. A bar of plain chords (`G // C //`, or `G` for the whole bar) is drawn as beat slashes. Bars widen for their chord symbols rather than letting one drift off its beat; `kf pdf --chord-gap <pt>` (and `kf png`) sets the clear space kept between two symbols (default 3pt), so a smaller gap packs chord-dense bars onto fewer lines.
 

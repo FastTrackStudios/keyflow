@@ -48,6 +48,7 @@ impl ChartLayoutConfig {
             min_measure_width: 100.0,
             harmony_style: HarmonyStyle::musejazz(),
             hide_repeated_chords: true,
+            name_cluster_beat_one: false,
             use_stems: true,
             auto_rhythm_slashes: true,
             show_measure_numbers: true,
@@ -89,6 +90,7 @@ impl ChartLayoutConfig {
             min_measure_width: 80.0,
             harmony_style: HarmonyStyle::musejazz(),
             hide_repeated_chords: false,
+            name_cluster_beat_one: false,
             use_stems: true,
             auto_rhythm_slashes: true,
             show_measure_numbers: true,
@@ -152,6 +154,7 @@ impl ChartLayoutConfig {
             min_measure_width,
             harmony_style: HarmonyStyle::ireal_pro_screen().with_root_size(root_size),
             hide_repeated_chords: false,
+            name_cluster_beat_one: false,
             use_stems: false,
             auto_rhythm_slashes: false,
             show_measure_numbers: false,
@@ -196,6 +199,7 @@ impl ChartLayoutConfig {
             min_measure_width: 72.0,
             harmony_style: HarmonyStyle::ireal_pro_screen(),
             hide_repeated_chords: false,
+            name_cluster_beat_one: false,
             use_stems: false,
             auto_rhythm_slashes: false,
             show_measure_numbers: false,
@@ -224,8 +228,10 @@ impl ChartLayoutConfig {
     pub fn with_chart_settings(mut self, settings: &crate::chart::ChartSettings) -> Self {
         self.auto_rhythm_slashes = settings.auto_rhythm_slashes();
         self.push_alters_rhythm = settings.push_alters_rhythm();
-        if settings.repeat_chord_symbols_always() {
-            self.hide_repeated_chords = false;
+        match settings.repeat_chord_symbols() {
+            crate::chart::RepeatChordSymbols::Changes => {}
+            crate::chart::RepeatChordSymbols::Clusters => self.name_cluster_beat_one = true,
+            crate::chart::RepeatChordSymbols::Always => self.hide_repeated_chords = false,
         }
         self
     }

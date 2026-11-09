@@ -43,7 +43,9 @@ pub use notations::{
 pub use position::ChartPosition;
 pub use rhythm::{BeatStructure, ResolvedRhythm, SectionRhythms, Spillback};
 pub use semantic_role::{NavigationType, SemanticRole};
-pub use settings::{ChartSetting, ChartSettings, ChartSettingsCheckpoint, SettingValue};
+pub use settings::{
+    ChartSetting, ChartSettings, ChartSettingsCheckpoint, RepeatChordSymbols, SettingValue,
+};
 pub use source_link::SourceLink;
 pub use templates::TemplateManager;
 pub use track::{Track, TrackType};

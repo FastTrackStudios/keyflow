@@ -438,15 +438,69 @@ fn a_chord_pushed_in_at_the_end_of_a_bar_is_not_named_again() {
 }
 
 #[test]
-fn a_bar_of_changes_names_its_first_chord_even_when_it_continues() {
-    // All I Want for Christmas: `G` then `G // B7 //` — a cluster bar names
-    // its beat-1 G.
-    let result = render("AIW\n#G 150bpm 4/4\n\nCH 2\nG\nG // B7 //\n");
-    let g = symbols(&result.scene)
-        .iter()
-        .filter(|s| s.text == "G")
-        .count();
-    assert_eq!(g, 2);
+fn a_bar_of_changes_does_not_rename_a_chord_still_sounding_by_default() {
+    // All I Want for Christmas: `G` then `G // B7 //` — the G is still
+    // sounding, so by default the bar names only its B7.
+    let g = |source: &str| {
+        symbols(&render(source).scene)
+            .iter()
+            .filter(|s| s.text == "G")
+            .count()
+    };
+    assert_eq!(g("AIW\n#G 150bpm 4/4\n\nCH 2\nG\nG // B7 //\n"), 1);
+    // `\repeat_chord_symbols = clusters` opts in to naming it.
+    assert_eq!(
+        g("AIW\n#G 150bpm 4/4\n\\repeat_chord_symbols = clusters\n\nCH 2\nG\nG // B7 //\n"),
+        2
+    );
+}
+
+/// Sleigh Ride, verse bars 1 to 4 as charted: a cluster, a held Bmaj7, then
+/// a cluster starting on that same Bmaj7.
+const SLEIGH_RIDE_OPENING: &str = "VS 4\n\
+     Bmaj7 / G#m7 / C#m9 / F#7 / Bmaj7\n\
+     Bmaj7 / G#m7 / C#m9 / F#7 / Bmaj7 // Gmaj7 / F#7 /\n";
+
+#[test]
+fn sleigh_ride_bar_three_renames_its_bmaj7_only_when_asked() {
+    let header = "Sleigh Ride - Tori Kelly\n#B 86bpm 4/4\n";
+    // Default: bar 1 and bar 2 (a change from F#7) name Bmaj7; bar 3's
+    // Bmaj7 is still sounding; bar 4's comes back after F#7.
+    assert_eq!(
+        printed_b_symbols(&format!("{header}\n{SLEIGH_RIDE_OPENING}")),
+        3
+    );
+    assert_eq!(
+        printed_b_symbols(&format!(
+            "{header}\\repeat_chord_symbols = changes\n\n{SLEIGH_RIDE_OPENING}"
+        )),
+        3
+    );
+    assert_eq!(
+        printed_b_symbols(&format!(
+            "{header}\\repeat_chord_symbols = clusters\n\n{SLEIGH_RIDE_OPENING}"
+        )),
+        4
+    );
+}
+
+#[test]
+fn by_default_no_still_sounding_chord_is_named_again() {
+    // This Christmas, Joy to the World and All I Want for Christmas shapes:
+    // a held chord, then a bar of changes beginning on it.
+    for (source, chord, expected) in [
+        (
+            "TC\n#F 93bpm 4/4\n\nVS 2\nBbmaj7\nBbmaj7 // Am7 //\n",
+            "B",
+            1,
+        ),
+        ("Joy\n#D 128bpm 4/4\n\nVS 2\nG\nG // A //\n", "G", 1),
+        ("AIW\n#G 150bpm 4/4\n\nVS 2\nC\nC // D //\n", "C", 1),
+    ] {
+        let all = symbols(&render(source).scene);
+        let n = all.iter().filter(|s| s.text.starts_with(chord)).count();
+        assert_eq!(n, expected, "{source}: {all:?}");
+    }
 }
 
 /// World y of every glyph `glyph` in the scene.
@@ -514,13 +568,13 @@ fn a_verse_of_chord_clusters_keeps_four_bars_a_line() {
             line.end
         );
     }
-    // Every bar names its Bmaj7: bars of changes name each chord in them,
-    // and a held Bmaj7 after a bar of changes is named too.
-    let b_symbols = symbols(&result.scene)
-        .iter()
-        .filter(|s| s.text.starts_with('B'))
-        .count();
-    assert_eq!(b_symbols, 8);
+    // A held Bmaj7 after a bar of changes is named (a change from F#7);
+    // a cluster after that held Bmaj7 is not, except at a line start (bar 5).
+    assert_eq!(printed_b_symbols(SLEIGH_RIDE_VERSE), 6);
+    // With `clusters`, every bar names its Bmaj7.
+    let clusters =
+        SLEIGH_RIDE_VERSE.replacen("4/4\n", "4/4\n\\repeat_chord_symbols = clusters\n", 1);
+    assert_eq!(printed_b_symbols(&clusters), 8);
 }
 
 #[test]

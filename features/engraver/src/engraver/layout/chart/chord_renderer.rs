@@ -88,10 +88,11 @@ pub struct ChordRenderContext<'a> {
     /// [`system_articulation_lift`]). Articulation marks are placed from the
     /// staff, which sits this much further below the symbols.
     pub articulation_lift: f64,
-    /// Whether the bar before this one held a single chord throughout.
-    /// Only then does a bar of changes re-name a beat-1 chord that repeats
-    /// it; after a bar that changed into it (a push, a beat-4 change) the
-    /// chord is already named and still sounding.
+    /// Whether a bar of changes re-names a beat-1 chord that repeats the
+    /// one sounding: only under `\\repeat_chord_symbols = clusters`, and
+    /// only when the bar before held that single chord throughout. After a
+    /// bar that changed into it (a push, a beat-4 change) the chord is
+    /// already named and still sounding.
     pub prev_bar_held_one_chord: bool,
     /// Internal push positions from rhythm builder.
     pub internal_push_positions: &'a [(usize, usize)],
