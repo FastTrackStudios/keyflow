@@ -683,21 +683,21 @@ fn create_stop_groove_marker(
 /// Render text cues for a measure below the staff.
 ///
 /// Cues are instrument-specific directions like `@keys "synth here"` that render
-/// in the instrument's color below the staff. Text uses MuseJazzText font with
-/// an underline in the same color (overline when rendered above staff).
+/// in the instrument's color below the staff, in the same plain upright face
+/// as the chart's text cues ([`super::notation_renderer::CUE_FONT`]) — the
+/// colour says which instrument, so there is no underline. Each starts at
+/// the bar start; [`super::notation_renderer::stack_below_staff_rows`] lays
+/// them out beside the bar's dynamic and text cues.
 pub fn render_text_cues(
     cues: &[crate::chart::cues::TextCue],
     measure_x: f64,
-    _measure_width: f64,
     staff_y: f64,
     staff_height: f64,
     spatium: f64,
-    text_metrics: &crate::engraver::layout::text_metrics::TextFontMetrics,
     id_counter: &mut u64,
 ) -> Vec<SceneNode> {
     let mut nodes = Vec::new();
-    let font_size = spatium * 2.6;
-    let line_thickness = spatium * 0.12;
+    let font_size = spatium * super::notation_renderer::CUE_FONT_SIZE_SP;
     // Position below the staff with padding
     let base_y = staff_y + staff_height + spatium * 3.0;
 
@@ -712,27 +712,13 @@ pub fn render_text_cues(
         let cue_y = base_y + (i as f64) * spatium * 2.8;
         let text_x = measure_x + spatium * 0.3;
 
-        let mut paints = Vec::new();
-
-        // Text in MuseJazzText font
-        paints.push(PaintCommand::text(
+        let paints = vec![PaintCommand::text(
             display_text,
-            "MuseJazz Text",
+            super::notation_renderer::CUE_FONT,
             font_size,
             kurbo::Point::new(text_x, cue_y),
             color,
-        ));
-
-        // Underline: use actual font metrics for precise text width
-        let text_width = text_metrics.horizontal_advance(display_text, font_size);
-        let line_y = cue_y + spatium * 0.4;
-        let line_end_x = text_x + text_width;
-        paints.push(PaintCommand::line(
-            kurbo::Point::new(text_x, line_y),
-            kurbo::Point::new(line_end_x, line_y),
-            color,
-            line_thickness,
-        ));
+        )];
 
         let mut node = SceneNode::leaf(
             SemanticId::new(ElementType::Articulation, *id_counter),

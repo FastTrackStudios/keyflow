@@ -2239,12 +2239,28 @@ fn mid_chart_time_signature_change_renders_in_red() {
         "a constant-meter chart should render no red time signatures"
     );
 
-    // One-measure excursion (`!T2/4`): the 2/4 is highlighted red (2 digits),
-    // but the immediate revert to 4/4 is adjacent/obvious, so it draws in black.
+    // One-measure excursion (`!T2/4`): the 2/4 and the return to 4/4 are
+    // both red — every meter change is highlighted alike.
     assert_eq!(
         red_count(&chart_with_meters(&[(4, 4), (2, 4), (4, 4)])),
-        2,
-        "only the one-measure 2/4 should be red; its immediate revert stays black"
+        4,
+        "the one-measure 2/4 and its return are both red"
+    );
+
+    // An alternating hook (This Christmas's outro: 4/4, 3/4, 4/4, 3/4, …):
+    // every change is red, the second and third 3/4 as much as the first.
+    assert_eq!(
+        red_count(&chart_with_meters(&[
+            (4, 4),
+            (3, 4),
+            (4, 4),
+            (3, 4),
+            (4, 4),
+            (3, 4),
+            (4, 4)
+        ])),
+        12,
+        "all six changes of an alternating hook are red"
     );
 
     // Persistent change then revert several bars later: BOTH the 2/4 and the

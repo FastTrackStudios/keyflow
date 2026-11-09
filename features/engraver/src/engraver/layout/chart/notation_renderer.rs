@@ -37,7 +37,16 @@ use crate::engraver::scene::paint::PaintCommand;
 const DYNAMIC_COLOR: Color = super::constants::REPEAT_COLOR;
 const STAFF_TEXT_COLOR: Color = super::constants::REPEAT_COLOR;
 const DYNAMIC_GLYPH_SIZE_SP: f64 = 3.05;
-const STAFF_TEXT_FONT_SIZE_SP: f64 = 2.5;
+const STAFF_TEXT_FONT_SIZE_SP: f64 = CUE_FONT_SIZE_SP;
+
+/// The face every below-staff cue is drawn in — text cues (`"Rubato"`) and
+/// instrument cues (`@bells "Bells only"`) alike: plain upright FreeSans,
+/// which the chart font bundle embeds. Lyrics are FreeSans *italic*, so the
+/// two stay distinct. (Text cues used to ask for "Leland Text", which has no
+/// letters: every one silently fell back to the handwritten chord face.)
+pub const CUE_FONT: &str = "FreeSans";
+/// Cue size in staff spaces.
+pub const CUE_FONT_SIZE_SP: f64 = 2.4;
 
 #[derive(Clone)]
 pub struct DynamicStackAnchor {
@@ -255,7 +264,7 @@ pub fn render_staff_text(
 
         paints.push(PaintCommand::text(
             &item.text,
-            "Leland Text",
+            CUE_FONT,
             font_size,
             Point::new(x, baseline_y),
             STAFF_TEXT_COLOR,
@@ -919,6 +928,85 @@ fn scale_node_around_anchor(
             }
         }
     }
+}
+
+/// Lay a bar's below-staff items out in rows so none overlaps another.
+///
+/// `nodes` come in priority order — the dynamic first, then text cues, then
+/// instrument cues. Each keeps its own anchor x (the bar start or its beat)
+/// unless something is already there on the row: then it moves right of
+/// that item, if it still ends inside the bar (`bar_right`); otherwise it
+/// tries the next row, and opens a new row at its anchor when none has room.
+/// Rows are top-aligned, one tallest-item apart. Nothing is shrunk — an item
+/// longer than the bar keeps its size and runs on past the barline (the
+/// system skyline moves the next bar's items clear of it).
+pub fn stack_below_staff_rows(
+    nodes: Vec<crate::engraver::scene::node::SceneNode>,
+    bar_right: f64,
+    gap: f64,
+    row_gap: f64,
+) -> Vec<crate::engraver::scene::node::SceneNode> {
+    let boxed: Vec<_> = nodes
+        .into_iter()
+        .map(|node| {
+            let bbox = estimate_node_shape(&node).map(|s| s.bbox());
+            let baseline = node_baseline(&node);
+            (node, bbox.zip(baseline))
+        })
+        .collect();
+    let placed = boxed.iter().filter(|(_, b)| b.is_some()).count();
+    if placed < 2 {
+        return boxed.into_iter().map(|(n, _)| n).collect();
+    }
+    // Rows share a baseline: the lowest natural one, so nothing moves up
+    // into the staff. A row is one line of the largest text apart.
+    let first_baseline = boxed
+        .iter()
+        .filter_map(|(_, b)| b.map(|(_, y)| y))
+        .fold(f64::NEG_INFINITY, f64::max);
+    let pitch = boxed
+        .iter()
+        .flat_map(|(n, _)| n.commands.iter())
+        .filter_map(|c| match c {
+            PaintCommand::Text { font_size, .. } => Some(*font_size),
+            _ => None,
+        })
+        .fold(0.0, f64::max)
+        .max(row_gap)
+        + row_gap;
+    // The right edge of the ink already on each row.
+    let mut rows: Vec<f64> = Vec::new();
+    boxed
+        .into_iter()
+        .map(|(mut node, shape)| {
+            let Some((rect, baseline)) = shape else {
+                return node;
+            };
+            let width = rect.width();
+            let slot = rows.iter().enumerate().find_map(|(i, &right)| {
+                let x = rect.x0.max(right + gap);
+                (x + width <= bar_right || x <= rect.x0).then_some((i, x))
+            });
+            let (row, x) = slot.unwrap_or_else(|| {
+                rows.push(f64::NEG_INFINITY);
+                (rows.len() - 1, rect.x0)
+            });
+            rows[row] = x + width;
+            let dy = first_baseline + pitch * row as f64 - baseline;
+            shift_node_xy(&mut node, x - rect.x0, dy);
+            node
+        })
+        .collect()
+}
+
+/// The baseline of a node's first text run or glyph.
+fn node_baseline(node: &crate::engraver::scene::node::SceneNode) -> Option<f64> {
+    node.commands.iter().find_map(|c| match c {
+        PaintCommand::Text { position, .. } | PaintCommand::Glyph { position, .. } => {
+            Some((node.transform * *position).y)
+        }
+        _ => None,
+    })
 }
 
 pub fn shrink_node_to_max_right(

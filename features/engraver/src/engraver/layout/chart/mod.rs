@@ -1030,13 +1030,7 @@ impl ChartLayoutEngine {
         // Prevailing meter, carried across sections/systems in playback order so a
         // measure whose `time_signature` differs from its predecessor renders an
         // inline meter change. Seeded with the chart's initial meter.
-        // `prev_prevailing_ts` + `ts_run_len` detect a one-measure excursion (e.g.
-        // the auto-revert after `!T2/4`): that revert is drawn but NOT highlighted,
-        // since the return-to-normal is adjacent and obvious. A revert that is
-        // several measures after the change is highlighted like any other change.
         let mut prevailing_ts = time_signature;
-        let mut prev_prevailing_ts: Option<(u8, u8)> = None;
-        let mut ts_run_len: usize = 0;
 
         // Detect count-in from parsed chart sections if not configured explicitly.
         // If the chart has a CountIn section, use its measure count.
@@ -1761,15 +1755,16 @@ impl ChartLayoutEngine {
                         // that render both here AND spill back to previous section
                         let is_section_boundary = measure_idx == 0;
                         // A measure whose meter differs from the prevailing one
-                        // renders the new time signature inline. It is highlighted
-                        // red unless it merely closes a one-measure excursion (the
-                        // auto-revert after `!T2/4`): that return-to-normal renders
-                        // in default black because it is adjacent and obvious.
+                        // renders the new time signature inline, highlighted red
+                        // — every change alike, the return after a one-bar
+                        // `!T3/4` included. (Treating that return as "obvious"
+                        // and drawing it black also caught the next 3/4 of an
+                        // alternating hook — 4/4, 3/4, 4/4, 3/4 — which looked
+                        // like a revert to the meter two bars back, so This
+                        // Christmas's outro drew its 3/4s black.)
                         let measure_ts = measure.time_signature;
                         let ts_changed = measure_ts != prevailing_ts;
-                        let is_oneshot_revert =
-                            ts_changed && ts_run_len == 1 && prev_prevailing_ts == Some(measure_ts);
-                        let highlight = ts_changed && !is_oneshot_revert;
+                        let highlight = ts_changed;
                         let measure_result = self.layout_measure(MeasureLayoutParams {
                             harmony_style: &harmony_style,
                             measure,
@@ -1787,11 +1782,7 @@ impl ChartLayoutEngine {
                         });
                         id_counter += 10;
                         if ts_changed {
-                            prev_prevailing_ts = Some(prevailing_ts);
                             prevailing_ts = measure_ts;
-                            ts_run_len = 1;
-                        } else {
-                            ts_run_len += 1;
                         }
 
                         // Red key-change indicator when a key change lands on a
@@ -2066,11 +2057,9 @@ impl ChartLayoutEngine {
                             chord_renderer::render_text_cues(
                                 &measure.text_cues,
                                 measure_x,
-                                this_measure_width,
                                 staff_y,
                                 staff_height,
                                 self.config.spatium,
-                                &text_metrics,
                                 &mut id_counter,
                             )
                         } else {
@@ -2117,15 +2106,26 @@ impl ChartLayoutEngine {
                         system_skyline.add_above(staff_band);
                         system_skyline.add_below(staff_band);
                         let autoplace_gap = self.config.spatium * 0.1;
-                        for mut node in notation_renderer::render_dynamics(
-                            &measure.classical_dynamics,
-                            &notation_frame,
-                            &mut id_counter,
+                        // The bar's below-staff texts — its dynamic, text cues
+                        // and instrument cues — are laid out together, in
+                        // rows, so none lands on another.
+                        let mut below_stack: Vec<SceneNode> = Vec::new();
+                        for (item, mut node) in measure.classical_dynamics.iter().zip(
+                            notation_renderer::render_dynamics(
+                                &measure.classical_dynamics,
+                                &notation_frame,
+                                &mut id_counter,
+                            ),
                         ) {
                             node.set_page(page_number);
                             node.set_system(global_system_index as u32);
                             node.set_measure(measure_idx as u32);
-                            pending_notation.push((node, false, false));
+                            if matches!(item.placement, crate::chart::notations::Placement::Below)
+                            {
+                                below_stack.push(node);
+                            } else {
+                                pending_notation.push((node, false, false));
+                            }
                         }
                         for (item, mut node) in
                             measure
@@ -2140,6 +2140,10 @@ impl ChartLayoutEngine {
                         {
                             let above =
                                 matches!(item.placement, crate::chart::notations::Placement::Above);
+                            if !above {
+                                below_stack.push(node);
+                                continue;
+                            }
                             notation_renderer::shrink_node_to_max_right(
                                 &mut node,
                                 measure_x + this_measure_width - autoplace_gap,
@@ -2196,13 +2200,14 @@ impl ChartLayoutEngine {
                                 matches!(item.placement, crate::chart::notations::Placement::Above);
                             pending_notation.push((node, above, false));
                         }
-                        for mut node in cue_nodes {
-                            notation_renderer::shrink_node_to_max_right(
-                                &mut node,
-                                measure_x + this_measure_width - autoplace_gap,
-                                0.45,
-                            );
-                            pending_notation.push((node, false, true));
+                        below_stack.extend(cue_nodes);
+                        for node in notation_renderer::stack_below_staff_rows(
+                            below_stack,
+                            measure_x + this_measure_width - autoplace_gap,
+                            self.config.spatium * 1.6,
+                            self.config.spatium * 0.6,
+                        ) {
+                            pending_notation.push((node, false, false));
                         }
                         if let Some(span) = volta_at(
                             chart_section.measures(),
@@ -2770,13 +2775,7 @@ impl ChartLayoutEngine {
         // Prevailing meter, carried across sections/systems in playback order so a
         // measure whose `time_signature` differs from its predecessor renders an
         // inline meter change. Seeded with the chart's initial meter.
-        // `prev_prevailing_ts` + `ts_run_len` detect a one-measure excursion (e.g.
-        // the auto-revert after `!T2/4`): that revert is drawn but NOT highlighted,
-        // since the return-to-normal is adjacent and obvious. A revert that is
-        // several measures after the change is highlighted like any other change.
         let mut prevailing_ts = time_signature;
-        let mut prev_prevailing_ts: Option<(u8, u8)> = None;
-        let mut ts_run_len: usize = 0;
 
         // Track offset into `chart_measurements`. Compact and End sections are
         // filtered out of the measure pass, so this offset only advances for
@@ -3218,15 +3217,16 @@ impl ChartLayoutEngine {
                         // is_boundary: first measure of section needs width for pushed chords
                         let is_section_boundary = measure_idx == 0;
                         // A measure whose meter differs from the prevailing one
-                        // renders the new time signature inline. It is highlighted
-                        // red unless it merely closes a one-measure excursion (the
-                        // auto-revert after `!T2/4`): that return-to-normal renders
-                        // in default black because it is adjacent and obvious.
+                        // renders the new time signature inline, highlighted red
+                        // — every change alike, the return after a one-bar
+                        // `!T3/4` included. (Treating that return as "obvious"
+                        // and drawing it black also caught the next 3/4 of an
+                        // alternating hook — 4/4, 3/4, 4/4, 3/4 — which looked
+                        // like a revert to the meter two bars back, so This
+                        // Christmas's outro drew its 3/4s black.)
                         let measure_ts = measure.time_signature;
                         let ts_changed = measure_ts != prevailing_ts;
-                        let is_oneshot_revert =
-                            ts_changed && ts_run_len == 1 && prev_prevailing_ts == Some(measure_ts);
-                        let highlight = ts_changed && !is_oneshot_revert;
+                        let highlight = ts_changed;
                         let measure_result = self.layout_measure(MeasureLayoutParams {
                             harmony_style: &harmony_style,
                             measure,
@@ -3244,11 +3244,7 @@ impl ChartLayoutEngine {
                         });
                         id_counter += 10;
                         if ts_changed {
-                            prev_prevailing_ts = Some(prevailing_ts);
                             prevailing_ts = measure_ts;
-                            ts_run_len = 1;
-                        } else {
-                            ts_run_len += 1;
                         }
 
                         // Red key-change indicator when a key change lands on a
@@ -3473,11 +3469,9 @@ impl ChartLayoutEngine {
                             chord_renderer::render_text_cues(
                                 &measure.text_cues,
                                 measure_x,
-                                this_measure_width,
                                 staff_y,
                                 staff_height,
                                 self.config.spatium,
-                                &text_metrics,
                                 &mut id_counter,
                             )
                         } else {
@@ -3528,12 +3522,19 @@ impl ChartLayoutEngine {
                         // Collect (node, is_above) then drain into root after
                         // skyline runs so closures don't fight over &mut root.
                         let mut placed: Vec<SceneNode> = Vec::new();
-                        for node in notation_renderer::render_dynamics(
-                            &measure.classical_dynamics,
-                            &notation_frame,
-                            &mut id_counter,
+                        // Below-staff texts are stacked in rows together.
+                        let mut below_stack: Vec<SceneNode> = Vec::new();
+                        for (item, node) in measure.classical_dynamics.iter().zip(
+                            notation_renderer::render_dynamics(
+                                &measure.classical_dynamics,
+                                &notation_frame,
+                                &mut id_counter,
+                            ),
                         ) {
-                            if let Some(n) = notation_renderer::autoplace_node(
+                            if matches!(item.placement, crate::chart::notations::Placement::Below)
+                            {
+                                below_stack.push(node);
+                            } else if let Some(n) = notation_renderer::autoplace_node(
                                 &mut system_skyline,
                                 node,
                                 false,
@@ -3555,6 +3556,10 @@ impl ChartLayoutEngine {
                         {
                             let above =
                                 matches!(item.placement, crate::chart::notations::Placement::Above);
+                            if !above {
+                                below_stack.push(node);
+                                continue;
+                            }
                             notation_renderer::shrink_node_to_max_right(
                                 &mut node,
                                 measure_x + this_measure_width - autoplace_gap,
@@ -3631,18 +3636,18 @@ impl ChartLayoutEngine {
                                 placed.push(n);
                             }
                         }
-                        for mut node in cue_nodes {
-                            notation_renderer::shrink_node_to_max_right(
-                                &mut node,
-                                measure_x + this_measure_width - autoplace_gap,
-                                0.45,
-                            );
-                            if let Some(n) = notation_renderer::autoplace_text_node(
+                        below_stack.extend(cue_nodes);
+                        for node in notation_renderer::stack_below_staff_rows(
+                            below_stack,
+                            measure_x + this_measure_width - autoplace_gap,
+                            self.config.spatium * 1.6,
+                            self.config.spatium * 0.6,
+                        ) {
+                            if let Some(n) = notation_renderer::autoplace_node(
                                 &mut system_skyline,
                                 node,
                                 false,
                                 autoplace_gap,
-                                text_shrink_displacement,
                             ) {
                                 placed.push(n);
                             }
