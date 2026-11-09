@@ -169,7 +169,7 @@ builds only the features it names — the wasm site must never pull
 ## Build
 
 ```bash
-nix develop          # or direnv: `use flake`
+devenv shell         # or direnv: .envrc (`use devenv`)
 just check
 just test
 just ci              # what CI runs, in CI's order
