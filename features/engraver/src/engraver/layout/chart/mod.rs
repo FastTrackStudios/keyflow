@@ -1121,6 +1121,12 @@ impl ChartLayoutEngine {
         // Track global measure offset for looking up pre-measured values
         let mut global_section_measure_offset: usize = 0;
 
+        // The chart's last bar closes with a final barline. A snippet is a
+        // fragment, so it does not.
+        let final_bar = (!self.config.snippet_mode)
+            .then(|| last_drawn_bar(chart))
+            .flatten();
+
         // Process each section
         for (section_idx, chart_section) in chart.sections.iter().enumerate() {
             // Skip count-in sections - we synthesize count-in from config.count_in_measures.
@@ -2303,12 +2309,21 @@ impl ChartLayoutEngine {
 
                         measure_x += this_measure_width;
 
-                        // Closing barline — style + end-repeat aware.
+                        // Closing barline — style + end-repeat aware, and
+                        // thin-thick on the chart's last bar.
+                        let barline_type = match Self::end_barline_type(measure) {
+                            BarlineType::Single
+                                if final_bar == Some((section_idx, measure_idx)) =>
+                            {
+                                BarlineType::End
+                            }
+                            other => other,
+                        };
                         let barline = self.draw_barline(
                             measure_x,
                             staff_y,
                             staff_height,
-                            Self::end_barline_type(measure),
+                            barline_type,
                         );
                         record_system_ink_bottom(
                             &mut system_ink_bottom,
@@ -4051,6 +4066,17 @@ impl ChartLayoutEngine {
             .with_text_font_metrics(text_metrics)
             .with_symbol_font_metrics(symbol_metrics)
     }
+}
+
+/// The (section, bar) of the chart's last drawn bar: the last bar of the
+/// last section that draws a staff.
+fn last_drawn_bar(chart: &Chart) -> Option<(usize, usize)> {
+    chart.sections.iter().enumerate().rev().find_map(|(idx, section)| {
+        let drawn = !section.section.section_type.is_compact()
+            && !matches!(section.section.section_type, SectionType::End);
+        let bars = section.measures().len();
+        (drawn && bars > 0).then(|| (idx, bars - 1))
+    })
 }
 
 /// The most bars a line can hold when every line holds the same number.

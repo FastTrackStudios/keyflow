@@ -725,3 +725,32 @@ fn every_accent_draws_in_black_even_on_a_chord_named_once() {
         "accents are black: {accents:?}"
     );
 }
+
+/// Stroke widths of every vertical line in the scene, left to right.
+fn vertical_line_widths(node: &SceneNode, parent: Affine, out: &mut Vec<(f64, f64)>) {
+    let t = parent * node.transform;
+    for command in &node.commands {
+        if let PaintCommand::Line {
+            start, end, width, ..
+        } = command
+        {
+            let (a, b) = (t * *start, t * *end);
+            if (a.x - b.x).abs() < 0.01 && (a.y - b.y).abs() > 10.0 {
+                out.push((a.x, *width));
+            }
+        }
+    }
+    for child in &node.children {
+        vertical_line_widths(child, t, out);
+    }
+}
+
+#[test]
+fn the_last_bar_closes_with_a_final_barline() {
+    let result = render("End\n#G 120bpm 4/4\n\nVS 2\nG\nC\n\nCH 2\nD\nG\n");
+    let mut lines = Vec::new();
+    vertical_line_widths(&result.scene, Affine::IDENTITY, &mut lines);
+    let thin = lines.iter().map(|(_, w)| *w).fold(f64::INFINITY, f64::min);
+    let thick: Vec<_> = lines.iter().filter(|(_, w)| *w > thin * 1.5).collect();
+    assert_eq!(thick.len(), 1, "one thick line, the final barline: {lines:?}");
+}
