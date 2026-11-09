@@ -157,8 +157,10 @@ fn timed_lines(
         .filter(|l| l.timed)
 }
 
-/// Engrave the system's lyric rows (one per timed lyric track), each placed
-/// below whatever the skyline already holds under the staff.
+/// Engrave the system's lyric rows (one per timed lyric track). Each row is
+/// a line of its own across the whole system, below every cue row: a row
+/// that only stepped around the cues it touched would interleave words with
+/// the cues beside them, and read as neither.
 pub fn place_system_lyrics(
     skyline: &mut MeasureSkyline,
     system: &LyricSystem<'_>,
@@ -168,7 +170,7 @@ pub fn place_system_lyrics(
     let font = LyricFont::from_style(system.style, system.spatium);
     let text_metrics = &font.metrics(text_metrics);
     let font_size = font.size;
-    let baseline =
+    let first_baseline =
         system.staff_y + system.staff_height + system.spatium * LYRIC_BASELINE_BELOW_STAFF_SP;
     let left_edge = system.first_measure_x;
     let right_edge = system.first_measure_x + system.widths.iter().sum::<f64>();
@@ -191,6 +193,16 @@ pub fn place_system_lyrics(
             .iter()
             .map(|p| text_metrics.horizontal_advance(&p.text, font_size))
             .collect();
+        let Some(baseline) = reserve_row(
+            skyline,
+            system,
+            first_baseline,
+            font_size,
+            left_edge,
+            right_edge,
+        ) else {
+            continue;
+        };
         let xs = flow(&row.words, &widths, &metrics, right_edge);
         let marks = connectors(&row, &xs, &widths, &metrics, left_edge, right_edge);
 
@@ -218,13 +230,35 @@ pub fn place_system_lyrics(
         let mut node = SceneNode::leaf(SemanticId::new(ElementType::Lyrics, *id_counter), paints);
         node.set_element_type("lyric_lane");
         *id_counter += 1;
-        if let Some(node) =
-            notation_renderer::autoplace_node(skyline, node, false, system.spatium * 0.6)
-        {
-            nodes.push(node);
-        }
+        nodes.push(node);
     }
     nodes
+}
+
+/// Claim a full-width band for one lyric row below everything already under
+/// the staff, and return its baseline. The band — not the words — goes into
+/// the skyline, so a second row lands below the first.
+fn reserve_row(
+    skyline: &mut MeasureSkyline,
+    system: &LyricSystem<'_>,
+    baseline: f64,
+    font_size: f64,
+    left_edge: f64,
+    right_edge: f64,
+) -> Option<f64> {
+    let band = kurbo::Rect::new(
+        left_edge,
+        baseline - font_size * 0.8,
+        right_edge,
+        baseline + font_size * 0.25,
+    );
+    let probe = SceneNode::leaf(
+        SemanticId::new(ElementType::Lyrics, 0),
+        vec![PaintCommand::filled_rect(band, Color::TRANSPARENT)],
+    );
+    let placed = notation_renderer::autoplace_node(skyline, probe, false, system.spatium)?;
+    let moved = notation_renderer::scene_ink_bounds(&placed, kurbo::Affine::IDENTITY)?;
+    Some(baseline + (moved.y0 - band.y0))
 }
 
 /// The syllables of `line` that fall in this system, at their beats.
