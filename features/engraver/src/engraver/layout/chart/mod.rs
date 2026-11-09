@@ -2220,15 +2220,16 @@ impl ChartLayoutEngine {
                                 matches!(item.placement, crate::chart::notations::Placement::Above);
                             pending_notation.push((node, above, false));
                         }
-                        for (item, node) in
-                            measure
-                                .hairpins
-                                .iter()
-                                .zip(notation_renderer::render_hairpins(
-                                    &measure.hairpins,
-                                    &notation_frame,
-                                    &mut id_counter,
-                                ))
+                        let hairpins = notation_renderer::hairpins_through(
+                            chart_section.measures(),
+                            measure_idx,
+                        );
+                        for ((item, _), node) in
+                            hairpins.iter().zip(notation_renderer::render_hairpins(
+                                &hairpins,
+                                &notation_frame,
+                                &mut id_counter,
+                            ))
                         {
                             let above =
                                 matches!(item.placement, crate::chart::notations::Placement::Above);
@@ -3658,15 +3659,16 @@ impl ChartLayoutEngine {
                             }
                             placed.push(node);
                         }
-                        for (item, node) in
-                            measure
-                                .hairpins
-                                .iter()
-                                .zip(notation_renderer::render_hairpins(
-                                    &measure.hairpins,
-                                    &notation_frame,
-                                    &mut id_counter,
-                                ))
+                        let hairpins = notation_renderer::hairpins_through(
+                            chart_section.measures(),
+                            measure_idx,
+                        );
+                        for ((item, _), node) in
+                            hairpins.iter().zip(notation_renderer::render_hairpins(
+                                &hairpins,
+                                &notation_frame,
+                                &mut id_counter,
+                            ))
                         {
                             let above =
                                 matches!(item.placement, crate::chart::notations::Placement::Above);

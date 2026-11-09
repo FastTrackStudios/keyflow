@@ -168,3 +168,75 @@ fn a_beat_one_cue_starts_at_its_bars_first_beat() {
         cue.rect.x0
     );
 }
+
+/// Every hairpin segment: its two lines' (start, end) points.
+fn hairpin_lines(source: &str) -> (Vec<[(f64, f64); 4]>, Vec<(usize, f64, f64)>) {
+    fn walk(node: &SceneNode, parent: Affine, out: &mut Vec<[(f64, f64); 4]>) {
+        let t = parent * node.transform;
+        if node.metadata.get("element_type").map(String::as_str) == Some("hairpin") {
+            let lines: Vec<_> = node
+                .commands
+                .iter()
+                .filter_map(|c| match c {
+                    PaintCommand::Line { start, end, .. } => {
+                        let (a, b) = (t * *start, t * *end);
+                        Some(((a.x, a.y), (b.x, b.y)))
+                    }
+                    _ => None,
+                })
+                .collect();
+            if let [(a0, a1), (b0, b1)] = lines[..] {
+                out.push([a0, a1, b0, b1]);
+            }
+            return;
+        }
+        for child in &node.children {
+            walk(child, t, out);
+        }
+    }
+    let chart = keyflow_lang::text::chart::parse_chart(source).expect("parses");
+    let result = ChartPipeline::shared()
+        .expect("the pipeline builds")
+        .layout_preset(&chart, Preset::Page, PresetOptions::for_export());
+    let mut out = Vec::new();
+    walk(&result.scene, Affine::IDENTITY, &mut out);
+    let mut bars: Vec<(usize, f64, f64)> = result
+        .beat_positions
+        .iter()
+        .map(|b| (b.measure, b.measure_x0, b.measure_x1))
+        .collect();
+    bars.dedup_by_key(|b| b.0);
+    (out, bars)
+}
+
+#[test]
+fn a_hairpin_is_a_wedge_across_its_beats_inside_its_bar() {
+    let (pins, bars) = hairpin_lines("H\n#G 120bpm 4/4\n\nVS 2\nhairpin < 1..4\nG\nC\n");
+    assert_eq!(pins.len(), 1);
+    let [(ux0, uy0), (ux1, uy1), (lx0, ly0), (lx1, ly1)] = pins[0];
+    let (_, x0, x1) = bars[0];
+    assert!(ux0 >= x0 - 1.0 && ux1 <= x1 + 1.0, "inside bar 1: {ux0}..{ux1} vs {x0}..{x1}");
+    assert!(ux1 - ux0 > 0.7 * (x1 - x0), "spans the bar's beats");
+    // A crescendo: closed at the start, open at the end.
+    assert!((uy0 - ly0).abs() < 0.01, "closed start");
+    assert!(ly1 - uy1 > 3.0, "open end");
+    assert!((ux0 - lx0).abs() < 0.01 && (ux1 - lx1).abs() < 0.01);
+}
+
+#[test]
+fn a_hairpin_continues_across_bars_and_lines() {
+    // Over bars 4 and 5, across a line break: one wedge in two pieces,
+    // opening evenly through the break.
+    let (pins, bars) = hairpin_lines(
+        "H\n#G 120bpm 4/4\n\nVS 6\nG\nC\nD\nhairpin < 1..+1:4\nG\nC\nD\n",
+    );
+    assert_eq!(pins.len(), 2, "a piece in each bar");
+    let page_right = bars.iter().map(|b| b.2).fold(0.0, f64::max);
+    for pin in &pins {
+        assert!(pin.iter().all(|(x, _)| *x <= page_right + 1.0), "on the page: {pin:?}");
+    }
+    let open = |p: &[(f64, f64); 4], end: usize| (p[2 + end].1 - p[end].1).abs();
+    assert!(open(&pins[0], 0) < 0.01, "starts closed");
+    assert!((open(&pins[0], 1) - open(&pins[1], 0)).abs() < 0.01, "opens on through the break");
+    assert!(open(&pins[1], 1) > open(&pins[0], 1), "and keeps opening");
+}

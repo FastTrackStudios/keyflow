@@ -187,11 +187,7 @@ impl<'a> ChartParser<'a> {
             .parse::<u8>()
             .ok()
             .unwrap_or(1);
-        let end_beat = end
-            .trim_start_matches('@')
-            .parse::<u8>()
-            .ok()
-            .unwrap_or(start_beat);
+        let (end_measure_offset, end_beat) = Self::parse_hairpin_end(end, start_beat);
         let placement = parts
             .next()
             .and_then(Self::parse_placement)
@@ -199,10 +195,23 @@ impl<'a> ChartParser<'a> {
         Some(Hairpin {
             kind,
             start_beat,
-            end_measure_offset: 0,
+            end_measure_offset,
             end_beat,
             placement,
         })
+    }
+
+    /// A hairpin's end: `4` is beat 4 of its own bar; `+2:3` is beat 3 two
+    /// bars later; `+2` the end of the bar two bars later.
+    fn parse_hairpin_end(end: &str, start_beat: u8) -> (u16, u8) {
+        let end = end.trim_start_matches('@');
+        if let Some(later) = end.strip_prefix('+') {
+            let (bars, beat) = later.split_once(':').unwrap_or((later, ""));
+            let bars = bars.parse::<u16>().unwrap_or(0);
+            let beat = beat.parse::<u8>().unwrap_or(u8::MAX);
+            return (bars, beat);
+        }
+        (0, end.parse::<u8>().unwrap_or(start_beat))
     }
 
     fn parse_dynamic_level(value: &str) -> Option<DynamicLevel> {
@@ -2138,11 +2147,8 @@ impl<'a> ChartParser<'a> {
                             .parse::<u8>()
                             .ok()
                             .unwrap_or(1);
-                        let end_beat = end
-                            .trim_start_matches('@')
-                            .parse::<u8>()
-                            .ok()
-                            .unwrap_or(start_beat);
+                        let (end_measure_offset, end_beat) =
+                            Self::parse_hairpin_end(end, start_beat);
                         skip_tokens = 2;
                         let placement = tokens_str
                             .get(token_idx + 3)
@@ -2153,7 +2159,7 @@ impl<'a> ChartParser<'a> {
                         current_measure.hairpins.push(Hairpin {
                             kind,
                             start_beat,
-                            end_measure_offset: 0,
+                            end_measure_offset,
                             end_beat,
                             placement: placement.unwrap_or(Placement::Below),
                         });
@@ -6300,6 +6306,21 @@ C#m
         assert_eq!(measure.hairpins[0].kind, HairpinKind::Crescendo);
         assert_eq!(measure.hairpins[0].start_beat, 2);
         assert_eq!(measure.hairpins[0].end_beat, 4);
+    }
+
+    #[test]
+    fn a_hairpin_can_end_bars_later() {
+        let chart = parse_chart(
+            "H\n120bpm 4/4 #G\n\nvs 4\nhairpin < 3..+2:2\nG\nC\nD\nhairpin > 1..+1\nG\n",
+        )
+        .expect("parses");
+        let measures = chart.sections[0].measures();
+        let pin = &measures[0].hairpins[0];
+        assert_eq!((pin.start_beat, pin.end_measure_offset, pin.end_beat), (3, 2, 2));
+        let pin = &measures[3].hairpins[0];
+        assert_eq!(pin.kind, HairpinKind::Decrescendo);
+        assert_eq!(pin.end_measure_offset, 1);
+        assert_eq!(pin.end_beat, u8::MAX, "to the end of the bar");
     }
 
     #[test]

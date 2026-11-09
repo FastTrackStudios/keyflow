@@ -560,55 +560,97 @@ pub fn render_volta_span(
 /// MuseScore's `hairpin.cpp` / `HairpinSegment`); those are skipped here and
 /// will be handled by a follow-up that runs after measure layout completes.
 pub fn render_hairpins(
-    hairpins: &[Hairpin],
+    hairpins: &[(Hairpin, u16)],
     frame: &MeasureFrame<'_>,
     id_counter: &mut u64,
 ) -> Vec<SceneNode> {
-    let mut nodes = Vec::with_capacity(hairpins.len());
-    // Wedge opening = spatium (MuseScore: `Sid::hairpinHeight = 1.2sp`).
+    hairpins
+        .iter()
+        .filter_map(|(hp, bars_in)| {
+            let node = render_hairpin_segment(hp, *bars_in, frame, *id_counter)?;
+            *id_counter += 1;
+            Some(node)
+        })
+        .collect()
+}
+
+/// The part of a hairpin that falls in this bar, `bars_in` bars after the
+/// one it starts in.
+///
+/// A hairpin runs from the start of its first beat to the end of its last
+/// (`hairpin < 1..4` fills a 4/4 bar), and opens evenly over its whole
+/// length: a wedge over three bars is a third open at the first barline,
+/// whatever line each bar is on. `None` when this bar is past its end.
+pub fn render_hairpin_segment(
+    hp: &Hairpin,
+    bars_in: u16,
+    frame: &MeasureFrame<'_>,
+    id: u64,
+) -> Option<SceneNode> {
+    if bars_in > hp.end_measure_offset {
+        return None;
+    }
+    // Wedge opening = 1.2sp (MuseScore: `Sid::hairpinHeight`).
     let opening = frame.spatium * 1.2;
     let stroke = frame.spatium * 0.12;
-    let baseline_y = frame.staff_bottom() + frame.spatium * 4.0;
-
-    for hp in hairpins {
-        // Single-measure only — skip multi-measure spanners.
-        if hp.end_measure_offset > 0 {
-            continue;
-        }
-        let placement_y = match hp.placement {
-            Placement::Above => frame.staff_top() - frame.spatium * 2.5,
-            Placement::Below => baseline_y,
+    let pad = frame.spatium * 0.3;
+    let y = match hp.placement {
+        Placement::Above => frame.staff_top() - frame.spatium * 2.5,
+        Placement::Below => frame.staff_bottom() + frame.spatium * 4.0,
+    };
+    let beats = f64::from(frame.beats_per_measure.max(1));
+    // Positions along the hairpin, in beats from its start.
+    let start_beat = f64::from(hp.start_beat.max(1)) - 1.0;
+    let end_beat = f64::from(hp.end_beat.max(1)).min(beats);
+    let total = (f64::from(hp.end_measure_offset) * beats + end_beat - start_beat).max(0.5);
+    let here_from = f64::from(bars_in) * beats - start_beat;
+    let (t0, x0) = if bars_in == 0 {
+        (0.0, frame.measure_x.max(frame.beat_x(hp.start_beat.max(1))))
+    } else {
+        (here_from / total, frame.measure_x + pad)
+    };
+    let bar_end_x = frame.measure_x + frame.measure_width - pad;
+    let (t1, x1) = if bars_in == hp.end_measure_offset {
+        let x = if end_beat >= beats {
+            bar_end_x
+        } else {
+            frame.beat_x(hp.end_beat.saturating_add(1)) - pad
         };
-        let x_start = frame.beat_x(hp.start_beat);
-        let x_end = frame.beat_x(hp.end_beat).max(x_start + frame.spatium);
+        (1.0, x)
+    } else {
+        ((here_from + beats) / total, bar_end_x)
+    };
+    let x1 = x1.max(x0 + frame.spatium);
+    let open_at = |t: f64| match hp.kind {
+        HairpinKind::Crescendo => opening * t.clamp(0.0, 1.0),
+        HairpinKind::Decrescendo => opening * (1.0 - t.clamp(0.0, 1.0)),
+    };
+    let (a, b) = (open_at(t0) / 2.0, open_at(t1) / 2.0);
+    let paints = vec![
+        PaintCommand::line(Point::new(x0, y - a), Point::new(x1, y - b), Color::BLACK, stroke),
+        PaintCommand::line(Point::new(x0, y + a), Point::new(x1, y + b), Color::BLACK, stroke),
+    ];
+    let mut node = SceneNode::leaf(SemanticId::new(ElementType::Articulation, id), paints);
+    node.set_element_type("hairpin");
+    Some(node)
+}
 
-        let (left_open, right_open) = match hp.kind {
-            // Crescendo: < — closed at start, opens to the right.
-            HairpinKind::Crescendo => (0.0, opening),
-            // Decrescendo: > — open at start, closes to the right.
-            HairpinKind::Decrescendo => (opening, 0.0),
-        };
-
-        let upper_start = Point::new(x_start, placement_y - left_open / 2.0);
-        let lower_start = Point::new(x_start, placement_y + left_open / 2.0);
-        let upper_end = Point::new(x_end, placement_y - right_open / 2.0);
-        let lower_end = Point::new(x_end, placement_y + right_open / 2.0);
-
-        let paints = vec![
-            PaintCommand::line(upper_start, upper_end, Color::BLACK, stroke),
-            PaintCommand::line(lower_start, lower_end, Color::BLACK, stroke),
-        ];
-
-        let mut node = SceneNode::leaf(
-            SemanticId::new(ElementType::Articulation, *id_counter),
-            paints,
-        );
-        node.set_element_type("hairpin");
-        *id_counter += 1;
-        nodes.push(node);
-    }
-
-    nodes
+/// Every hairpin sounding in bar `measure` of `measures`, with how many
+/// bars after its own it is: the ones it starts, and the ones started in
+/// an earlier bar that run on through it.
+#[must_use]
+pub fn hairpins_through(measures: &[crate::chart::Measure], measure: usize) -> Vec<(Hairpin, u16)> {
+    const LONGEST_SPAN: usize = 64;
+    (measure.saturating_sub(LONGEST_SPAN)..=measure)
+        .filter_map(|start| measures.get(start).map(|m| (start, m)))
+        .flat_map(|(start, m)| {
+            let bars_in = (measure - start) as u16;
+            m.hairpins
+                .iter()
+                .filter(move |hp| hp.end_measure_offset >= bars_in)
+                .map(move |hp| (hp.clone(), bars_in))
+        })
+        .collect()
 }
 
 // ────────────────────────────────────────────────────────────────────────────
