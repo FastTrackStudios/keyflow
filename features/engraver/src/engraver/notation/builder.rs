@@ -137,6 +137,9 @@ pub struct MeasureBuilder {
     stemless: bool,
     /// Written note values: every note keeps its stem (see [`Self::written_rhythm`]).
     written_rhythm: bool,
+    /// In a written rhythm, the entries that are plain beat slashes
+    /// (stemless) — see [`Self::beat_slashes`].
+    beat_slashes: Vec<bool>,
     /// Tuplet group specifications
     tuplet_groups: Vec<TupletSpec>,
     /// Compact mode: use minimal left margin for tight spaces (count-in, etc.)
@@ -190,6 +193,7 @@ impl MeasureBuilder {
             id_base: 1,
             stemless: false,
             written_rhythm: false,
+            beat_slashes: Vec::new(),
             tuplet_groups: Vec::new(),
             compact: false,
             segment_min_widths: Vec::new(),
@@ -345,6 +349,14 @@ impl MeasureBuilder {
         self
     }
 
+    /// In a [`Self::written_rhythm`], mark entries (by rhythm index) that are
+    /// beat slashes the writer spelled with `/`: they draw stemless.
+    #[must_use]
+    pub fn beat_slashes(mut self, mask: Vec<bool>) -> Self {
+        self.beat_slashes = mask;
+        self
+    }
+
     /// Add a tuplet group specification.
     ///
     /// Tuplet groups define which notes form a tuplet (triplet, quintuplet, etc.)
@@ -392,8 +404,15 @@ impl MeasureBuilder {
     fn compute_auto_stemless(&self) -> Vec<bool> {
         let mut result = vec![false; self.rhythm.len()];
 
-        // Only apply in rhythmic mode, and never to written note values
-        if !matches!(self.mode, NotationMode::Rhythmic) || self.written_rhythm {
+        // Only apply in rhythmic mode; written note values keep their stems
+        // except the beat slashes the writer spelled with `/`.
+        if !matches!(self.mode, NotationMode::Rhythmic) {
+            return result;
+        }
+        if self.written_rhythm {
+            for (flag, beat_slash) in result.iter_mut().zip(&self.beat_slashes) {
+                *flag = *beat_slash;
+            }
             return result;
         }
 

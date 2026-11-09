@@ -139,36 +139,76 @@ fn the_chorus_figure_puts_each_symbol_on_its_own_attack() {
     assert_eq!((beat.measure, beat.tick), (CHORUS_FIGURE, 960), "{b7:?}");
 }
 
+fn count_glyphs(node: &SceneNode, glyph: char) -> usize {
+    let own = node
+        .commands
+        .iter()
+        .filter(|command| {
+            matches!(command, PaintCommand::Glyph { codepoint, .. } if *codepoint == glyph)
+        })
+        .count();
+    own + node
+        .children
+        .iter()
+        .map(|c| count_glyphs(c, glyph))
+        .sum::<usize>()
+}
+
 #[test]
-fn written_note_values_print_as_written() {
+fn rhythm_figures_print_as_written_and_groove_bars_as_beat_slashes() {
     let result = layout();
     let ticks = |m| beats(&result, m).iter().map(|b| b.tick).collect::<Vec<_>>();
+    // Figures: a hit and a stop, an accented change, an eighth pickup.
     assert_eq!(
         ticks(VERSE_HALF_AND_REST),
         vec![0, 960],
-        "a half, then a half rest"
+        "a held half, then a half rest"
     );
     assert_eq!(ticks(VERSE_HALF_QUARTER_QUARTER), vec![0, 960, 1440]);
     assert_eq!(ticks(CHORUS_FIGURE), vec![0, 240, 960]);
+    // Groove bars: `Fadd2_2 Dm_4` is a change on beat 3, not a hold.
+    assert_eq!(
+        ticks(1),
+        vec![0, 480, 960],
+        "the 3/4 turnaround is three beats"
+    );
     // A plain bar of one chord is still four beat slashes.
     assert_eq!(ticks(VERSE_PLAIN), vec![0, 480, 960, 1440]);
 
-    // Five written halves: Ebmaj9_2, Ebmaj7_2, B7(b5)_2 and the two 3/4
-    // bars' Fadd2_2 — each a hollow half-note slash.
-    fn count(node: &SceneNode, glyph: char) -> usize {
-        let own = node
-            .commands
-            .iter()
-            .filter(|command| {
-                matches!(command, PaintCommand::Glyph { codepoint, .. } if *codepoint == glyph)
-            })
-            .count();
-        own + node.children.iter().map(|c| count(c, glyph)).sum::<usize>()
-    }
+    // Three held halves — Ebmaj9_2 before its rest, Ebmaj7_2 before the
+    // accents, B7(b5)_2 after the eighth — each a hollow half-note slash.
     assert_eq!(
-        count(&result.scene, WHITE_HALF_SLASH),
-        5,
-        "every written half is a half-note slash"
+        count_glyphs(&result.scene, WHITE_HALF_SLASH),
+        3,
+        "only a held half is a half-note slash"
+    );
+}
+
+#[test]
+fn slashes_written_with_a_slash_stay_beat_slashes_inside_a_figure() {
+    // Writing `/` is the writer saying "groove", even in a bar with a hit.
+    let chart = keyflow_lang::text::chart::parse_chart(
+        "Groove\n#F 93bpm 4/4\n\nCH 3\n>C/F_8 F_4. >B7(b5) //\nF#7sus // >.G7sus / r4\nC#m9 / r2.\n",
+    )
+    .expect("the chart parses");
+    let result = ChartPipeline::shared()
+        .expect("the pipeline builds")
+        .layout_preset(&chart, Preset::Page, PresetOptions::for_export());
+    let ticks = |m| beats(&result, m).iter().map(|b| b.tick).collect::<Vec<_>>();
+    assert_eq!(
+        ticks(0),
+        vec![0, 240, 960, 1440],
+        "B7(b5) is two beat slashes"
+    );
+    assert_eq!(
+        ticks(1),
+        vec![0, 480, 960, 1440],
+        "F#7sus is two beat slashes"
+    );
+    assert_eq!(
+        count_glyphs(&result.scene, WHITE_HALF_SLASH),
+        0,
+        "no slash-written chord becomes a held half"
     );
 }
 
