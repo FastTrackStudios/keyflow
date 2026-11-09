@@ -3,7 +3,10 @@
 //! lyrics are never committed here.
 
 use keyflow_lang::text::chart::{Chart, TrackType, parse_chart};
-use keyflow_lang::text::lyric_lane::{PlaceOptions, Timeline, place_lrc, write_lanes};
+use keyflow_lang::text::lyric_lane::{
+    BarWord, PlaceOptions, Timeline, count_in_bars, place_bar_words, place_lrc, read_chord_sheet,
+    read_word_map, write_lanes,
+};
 use keyflow_lang::text::proto::lrc;
 
 const CHART: &str = include_str!("fixtures/lrc/lanterns.kf");
@@ -13,7 +16,7 @@ const LRC: &str = include_str!("fixtures/lrc/lanterns.lrc");
 fn convert(source: &str) -> (String, Vec<String>) {
     let chart = parse_chart(source).expect("fixture parses");
     let timeline = Timeline::from_chart(&chart, 1.0);
-    let placement = place_lrc(&lrc::parse(LRC), &timeline, &PlaceOptions::default());
+    let placement = place_lrc(&lrc::parse(LRC), &timeline, &PlaceOptions::default(), 0);
     let unplaced = placement.unplaced.iter().map(|u| u.text.clone()).collect();
     (write_lanes(source, &chart, &placement).unwrap(), unplaced)
 }
@@ -119,9 +122,9 @@ fn a_measured_clock_follows_the_recording() {
     // The band rushes: every bar 1.9 s, not 2. By the chorus the chart's
     // own tempo would be half a bar late.
     let starts: Vec<f64> = (0..14).map(|k| 1.0 + 1.9 * k as f64).collect();
-    let timeline = Timeline::from_bar_starts(&chart, &starts);
+    let timeline = Timeline::from_bar_starts(&chart, &starts, 0);
     let line = "[00:12.40]<00:12.40>Hum\n";
-    let placement = place_lrc(&lrc::parse(line), &timeline, &PlaceOptions::default());
+    let placement = place_lrc(&lrc::parse(line), &timeline, &PlaceOptions::default(), 0);
     // 12.4 s is bar 7 (the chorus's bar 1) on the measured clock.
     let lane = &placement.lanes[&2];
     assert_eq!(lane.syllables[0].measure_index, 0);
@@ -133,11 +136,96 @@ fn crowded_words_never_share_a_place_or_reorder() {
     let chart = parse_chart(CHART).unwrap();
     let timeline = Timeline::from_chart(&chart, 1.0);
     let line = "[00:05.00]<00:05.00>a <00:05.01>b <00:05.02>c <00:05.03>d\n";
-    let placement = place_lrc(&lrc::parse(line), &timeline, &PlaceOptions::default());
+    let placement = place_lrc(&lrc::parse(line), &timeline, &PlaceOptions::default(), 0);
     let places: Vec<(usize, f32)> = placement.lanes[&1]
         .syllables
         .iter()
         .map(|s| (s.measure_index, s.beat))
         .collect();
     assert_eq!(places, vec![(0, 0.0), (0, 0.5), (0, 1.0), (0, 1.5)]);
+}
+
+/// The fixture with a two-bar count-in in front of it.
+fn with_count_in() -> String {
+    CHART.replacen("IN 2", "Count 2\n\nIN 2", 1)
+}
+
+#[test]
+fn a_count_in_is_not_a_bar_of_the_song() {
+    let source = with_count_in();
+    let chart = parse_chart(&source).unwrap();
+    assert_eq!(count_in_bars(&chart), 2);
+    // `--downbeat` is bar 1, after the count-in: the words land where they
+    // did without it, one section further down the list.
+    let timeline = Timeline::from_chart(&chart, 1.0);
+    let placement = place_lrc(&lrc::parse(LRC), &timeline, &PlaceOptions::default(), 2);
+    let out = write_lanes(&source, &chart, &placement).unwrap();
+    let after = parse_chart(&out).unwrap();
+    assert_eq!(
+        lane_text(&after, 2).as_deref(),
+        Some("@1 Paper @1:3 lanterns @2 drifting\n@3 over @3:3.5 sleepy @4:3 town")
+    );
+    // A sync starts at bar 1 too; the count-in runs back from it.
+    let starts: Vec<f64> = (0..14).map(|k| 1.0 + 2.0 * k as f64).collect();
+    let synced = Timeline::from_bar_starts(&chart, &starts, 2);
+    assert_eq!(synced.bars[2].start, 1.0);
+    assert_eq!(synced.bars[0].start, -3.0);
+    let placement = place_lrc(&lrc::parse(LRC), &synced, &PlaceOptions::default(), 2);
+    assert_eq!(
+        placement.lanes.keys().copied().collect::<Vec<_>>(),
+        vec![2, 3, 4]
+    );
+}
+
+#[test]
+fn a_word_map_places_syllables_and_held_notes() {
+    let map = "## VS\n3 1 Si-\n3 2.5 lent\n3 3 night\n4 1 ____\n5 1 Ho-\n5 2 ly\n";
+    let chart = parse_chart(CHART).unwrap();
+    let words = read_word_map(map).unwrap();
+    assert_eq!(
+        words[0],
+        BarWord {
+            bar: 3,
+            beat: Some(1.0),
+            text: "Si-".into(),
+            line_end: false
+        }
+    );
+    let placement = place_bar_words(&chart, &words, &PlaceOptions::default());
+    let out = write_lanes(CHART, &chart, &placement).unwrap();
+    let after = parse_chart(&out).unwrap();
+    assert_eq!(
+        lane_text(&after, 1).as_deref(),
+        Some("@1 Si- @1:2.5 lent @1:3 night @2 _ @3 Ho- @3:2 ly")
+    );
+}
+
+#[test]
+fn a_chord_sheet_puts_each_word_under_its_chord() {
+    let sheet = "\
+[Verse]
+D      G
+Paper lanterns drifting
+A          D
+over sleepy town
+
+[Chorus]
+G    D   A   D
+Hum along to-night
+";
+    let chart = parse_chart(CHART).unwrap();
+    let (words, notes) = read_chord_sheet(sheet, &chart);
+    assert!(notes.is_empty(), "{notes:?}");
+    let placement = place_bar_words(&chart, &words, &PlaceOptions::default());
+    let out = write_lanes(CHART, &chart, &placement).unwrap();
+    let after = parse_chart(&out).unwrap();
+    // Two words under D share its bar; bar 3 of the verse is 3/4.
+    assert_eq!(
+        lane_text(&after, 1).as_deref(),
+        Some("@1 Paper @1:3 lanterns @2 drifting\n@3 over @3:2.5 sleepy @4 town")
+    );
+    assert_eq!(
+        lane_text(&after, 2).as_deref(),
+        Some("@1 Hum @1:3 along @3 to-night")
+    );
 }

@@ -390,15 +390,41 @@ enum Commands {
         /// recording that drifts, where one tempo cannot.
         #[arg(long)]
         sync: Option<PathBuf>,
-        /// The sync bar (0-based, as in sync.json) that is the chart's bar 1.
-        /// Default: 1 when the sync has exactly one bar more than the chart
-        /// (a pickup), else 0.
+        /// The sync bar (0-based, as in sync.json) that is the chart's bar 1
+        /// (the first bar after any `Count`). Default: 1 when the sync's
+        /// first bar is a short lead-in (a 2/4 pickup before 4/4), else 0.
         #[arg(long, requires = "sync")]
         sync_first_bar: Option<usize>,
-        /// Seconds added to every LRC time (negative if the LRC runs late).
-        #[arg(long, default_value_t = 0.0, allow_hyphen_values = true)]
+        /// Seconds added to every LRC time. LRC lines are stamped a touch
+        /// before the singing (they are timed to show the line early), so
+        /// the default nudges them late by a quarter second; 0 takes the
+        /// stamps as they are, negative if the LRC runs late.
+        #[arg(long, default_value_t = 0.25, allow_hyphen_values = true)]
         offset: f64,
         /// Quantise words to this note value: 8 = eighths, 4 = beats, 16.
+        #[arg(long, default_value_t = 8)]
+        grid: u32,
+        /// Output `.kf` (default: stdout).
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+    /// Put a song's lyrics into a chart from a chord-over-lyrics sheet: each
+    /// chord on the sheet is one bar of the chart, in order, and a word goes
+    /// in the bar of the chord at or before it. `[Verse]`-style headings
+    /// move on to the chart's next section of that kind. With `--map`, read
+    /// a `bar beat word` map instead. Writes `[lyrics lrc]` lanes, like
+    /// `lyrics-lrc`.
+    #[command(name = "lyrics-sheet")]
+    LyricsSheet {
+        /// The chart (`.kf`).
+        chart: PathBuf,
+        /// The sheet (chord lines over lyric lines), or a map with `--map`.
+        sheet: PathBuf,
+        /// The input is a `bar beat word` map (printed bar numbers; `#`
+        /// comments; `Si-` joins syllables, `____` holds one).
+        #[arg(long)]
+        map: bool,
+        /// Quantise words to this note value: 8 = eighths, 4 = beats.
         #[arg(long, default_value_t = 8)]
         grid: u32,
         /// Output `.kf` (default: stdout).
@@ -1194,36 +1220,16 @@ impl LayoutPipeline {
 
     fn export_pdf(&self, result: &ChartLayoutResult) -> Result<Vec<u8>, String> {
         let svg_pages = self.export_svg_pages(result);
-        // Register every font the SVG can reference, under the same names as
-        // `with_embedded_fonts`, so svg2pdf's usvg resolves them exactly like
-        // resvg does for the PNG export. Omitting any (previously Chicago, the
-        // title font) made the PDF fall back to a system face and diverge.
-        let leland = self.font_bundle.symbol_font_data();
-        let leland_text = self.font_bundle.leland_text_font_data();
-        let musejazz = self.font_bundle.text_font_data();
-        let musejazz_music = self.font_bundle.musejazz_font_data();
-        let chicago = self.font_bundle.chicago_font_data();
-        let bravura = self.font_bundle.bravura_font_data();
-        let freesans = self.font_bundle.freesans_font_data();
-
-        PdfSerializer::serialize_from_svg(
-            &svg_pages,
-            &[
-                ("Leland", leland.as_slice()),
-                ("Bravura", bravura.as_slice()),
-                ("Leland Text", leland_text.as_slice()),
-                ("LelandText", leland_text.as_slice()),
-                ("Edwin", leland_text.as_slice()),
-                ("MuseJazz", musejazz_music.as_slice()),
-                ("MuseJazz Text", musejazz.as_slice()),
-                ("MuseJazzText", musejazz.as_slice()),
-                ("Chicago", chicago.as_slice()),
-                ("ChicagoFLF", chicago.as_slice()),
-                ("FreeSans", freesans.as_slice()),
-                ("sans-serif", chicago.as_slice()),
-            ],
-        )
-        .map_err(|e| format!("Failed to export PDF: {e}"))
+        // Every font the SVG can reference, from the bundle's one list —
+        // the same one the PNG and `ChartPipeline::export_pdf` use. This
+        // used to be a hand-written copy, and it drifted: it left out
+        // Chicago once (the title fell back to a system face), and then
+        // FreeSans Oblique, so the lyric lane printed upright in the PDF
+        // while the PNG showed it in italic.
+        let fonts = self.font_bundle.embeddable_fonts_for_raster();
+        let refs: Vec<(&str, &[u8])> = fonts.iter().map(|(n, b)| (*n, b.as_slice())).collect();
+        PdfSerializer::serialize_from_svg(&svg_pages, &refs)
+            .map_err(|e| format!("Failed to export PDF: {e}"))
     }
 }
 
@@ -1352,6 +1358,7 @@ fn svg_to_png(svg: &str, scale: f32, font_bundle: &ChartFontBundle) -> Result<Ve
     fontdb.load_font_data(font_bundle.chicago_font_data().as_ref().clone()); // ChicagoFLF
     fontdb.load_font_data(font_bundle.bravura_font_data().as_ref().clone());
     fontdb.load_font_data(font_bundle.freesans_font_data().as_ref().clone());
+    fontdb.load_font_data(font_bundle.freesans_oblique_font_data().as_ref().clone()); // lyrics
     fontdb.load_system_fonts();
 
     let opts = usvg::Options {
@@ -2226,6 +2233,20 @@ fn run(cli: Cli) -> Result<(), String> {
                 None => lyrics::Clock::Downbeat(downbeat.unwrap_or(0.0)),
             },
             offset,
+            grid,
+            output: output.as_deref(),
+        }),
+
+        Commands::LyricsSheet {
+            chart,
+            sheet,
+            map,
+            grid,
+            output,
+        } => lyrics::cmd_lyrics_sheet(lyrics::LyricsSheetOpts {
+            chart: &chart,
+            sheet: &sheet,
+            map,
             grid,
             output: output.as_deref(),
         }),
