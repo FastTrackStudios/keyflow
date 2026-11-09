@@ -80,6 +80,10 @@ pub struct ChordRenderContext<'a> {
     /// A chord symbol sits over the segment that starts on its onset. Empty
     /// when unknown, in which case the index-based mapping is used.
     pub segment_ticks: &'a [i32],
+    /// The symbol of a chord tied over the barline into this bar, if any.
+    /// A first chord that continues it is not a new attack and prints no
+    /// symbol, whatever the repeat rules say.
+    pub tied_in: Option<&'a str>,
     /// Internal push positions from rhythm builder.
     pub internal_push_positions: &'a [(usize, usize)],
     /// Harmony style for chord symbols.
@@ -1204,6 +1208,13 @@ pub fn render_chord_symbols(
             continue;
         }
 
+        // A tie carried over the barline is the same chord still sounding.
+        if is_first_real && ctx.tied_in == Some(current_symbol.as_str()) {
+            last_chord_symbol = Some(current_symbol.clone());
+            same_bar_symbol = Some(current_symbol.clone());
+            continue;
+        }
+
         // `.` is "that chord again": it never restates the symbol (a new
         // line restates it — the previous symbol resets there).
         if chord.original_token == "."
@@ -1835,6 +1846,7 @@ mod tests {
             push_alters_rhythm: false,
             spatium: 5.0,
             segment_ticks: &[],
+            tied_in: None,
             measure_measurements: None,
             spillback_positions: &[],
             note_line_stacks: &[],

@@ -1915,6 +1915,16 @@ impl ChartLayoutEngine {
                             section_name: &chart_section.section.section_type.full_name(),
                             segment_positions: &segment_positions,
                             segment_ticks: &segment_ticks,
+                            tied_in: measure_idx
+                                .checked_sub(1)
+                                .and_then(|prev| chart_section.measures().get(prev))
+                                .and_then(|prev| {
+                                    prev.chords.iter().rev().find(|c| {
+                                        !chord_renderer::is_placeholder_chord(&c.full_symbol)
+                                    })
+                                })
+                                .filter(|c| c.rhythm.is_tied())
+                                .map(|c| c.full_symbol.as_str()),
                             internal_push_positions: &measure_result.internal_push_positions,
                             harmony_style: &harmony_style,
                             time_signature,
@@ -3299,6 +3309,16 @@ impl ChartLayoutEngine {
                             section_name: &chart_section.section.section_type.full_name(),
                             segment_positions: &segment_positions,
                             segment_ticks: &segment_ticks,
+                            tied_in: measure_idx
+                                .checked_sub(1)
+                                .and_then(|prev| chart_section.measures().get(prev))
+                                .and_then(|prev| {
+                                    prev.chords.iter().rev().find(|c| {
+                                        !chord_renderer::is_placeholder_chord(&c.full_symbol)
+                                    })
+                                })
+                                .filter(|c| c.rhythm.is_tied())
+                                .map(|c| c.full_symbol.as_str()),
                             internal_push_positions: &measure_result.internal_push_positions,
                             harmony_style: &harmony_style,
                             time_signature,

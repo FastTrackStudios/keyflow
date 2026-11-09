@@ -203,6 +203,38 @@ fn glyph_xs(node: &SceneNode, parent: Affine, glyph: char, out: &mut Vec<f64>) {
 }
 
 #[test]
+fn a_chord_tied_over_the_barline_draws_a_tie_and_is_not_named_again() {
+    // Joy to the World's intro: the G is held into the next bar.
+    fn ties(node: &SceneNode) -> usize {
+        usize::from(node.metadata.get("element_type").map(String::as_str) == Some("chord_tie"))
+            + node.children.iter().map(ties).sum::<usize>()
+    }
+    let render = |source: &str| {
+        let chart = keyflow_lang::text::chart::parse_chart(source).expect("the chart parses");
+        ChartPipeline::shared()
+            .expect("the pipeline builds")
+            .layout_preset(&chart, Preset::Page, PresetOptions::for_export())
+    };
+    let tied = render("Joy\n#D 128bpm 4/4\n\nIN 2\nD_2. G_4 ~\nG\n");
+    let g_symbols = |result: &ChartLayoutResult| {
+        symbols(&result.scene)
+            .iter()
+            .filter(|s| s.text == "G")
+            .count()
+    };
+    assert_eq!(ties(&tied.scene), 1, "the tie is drawn");
+    assert_eq!(g_symbols(&tied), 1, "the held G is not re-attacked");
+
+    let struck = render("Joy\n#D 128bpm 4/4\n\nIN 2\nD_2. G_4\nG\n");
+    assert_eq!(ties(&struck.scene), 0);
+    assert_eq!(
+        g_symbols(&struck),
+        2,
+        "without the tie, bar 2 strikes G again"
+    );
+}
+
+#[test]
 fn a_held_dotted_half_shows_its_dot_clear_of_the_head() {
     // Silent Night's end: `A_2. r4`.
     let chart = keyflow_lang::text::chart::parse_chart("End\n#A 90bpm 4/4\n\nVS 1\nA_2. r4\n")
