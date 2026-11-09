@@ -606,6 +606,32 @@ impl<'a> ChartParser<'a> {
         !(quoted || barline || command || repeat_count || token.is_empty())
     }
 
+    /// Whether a token is a chord (not a slash, rest, space, simile, text,
+    /// barline, repeat count or command).
+    fn is_chord_token(token: &str) -> bool {
+        Self::is_music_token(token)
+            && !token.chars().all(|c| matches!(c, '/' | '.' | '%'))
+            && !token.starts_with('%')
+            && !token.starts_with(['r', 's'])
+    }
+
+    /// Where, in beats from the bar start, the bar's last chord begins: the
+    /// bar's written length less that chord's own.
+    fn last_chord_onset(measure: &Measure, time_sig: TimeSignature) -> Option<f64> {
+        let last = measure.chords.last()?;
+        let chords: f64 = measure.chords.iter().map(|c| c.duration.to_beats(time_sig)).sum();
+        let rests: f64 = measure
+            .rhythm_elements
+            .iter()
+            .map(|e| match e {
+                RhythmElement::Rest(r) => r.duration.to_beats(time_sig),
+                RhythmElement::Space(s) => s.duration.to_beats(time_sig),
+                RhythmElement::Chord(_) => 0.0,
+            })
+            .sum();
+        Some((chords + rests - last.duration.to_beats(time_sig)).max(0.0))
+    }
+
     fn fresh_measure(time_sig: TimeSignature) -> Measure {
         let mut measure = Measure::new();
         measure.time_signature = (time_sig.numerator as u8, time_sig.denominator as u8);
@@ -2254,6 +2280,32 @@ impl<'a> ChartParser<'a> {
                 {
                     pending_staff_text.push((staff_text(1), measures.len()));
                     continue;
+                }
+                // Text written right after a chord, with that chord's bar
+                // going on (`G7 "Let ring" /`), is a cue for that chord (a
+                // new chord after it opens the next bar instead): it
+                // goes under the chord's own beat — the chord may already
+                // have closed its bar, which would otherwise leave the cue
+                // at beat 1.
+                let after_a_chord = token_idx
+                    .checked_sub(1)
+                    .and_then(|i| tokens_str.get(i))
+                    .is_some_and(|t| Self::is_chord_token(t));
+                if after_a_chord && !next_opens_a_bar {
+                    let in_current = !current_measure.chords.is_empty();
+                    let target = if in_current {
+                        Some(&mut current_measure)
+                    } else {
+                        measures.last_mut()
+                    };
+                    if let Some(target) = target
+                        && let Some(onset) = Self::last_chord_onset(target, time_sig)
+                    {
+                        let beat = (onset.floor().max(0.0) as u8 + 1)
+                            .min(beats_per_measure.ceil().max(1.0) as u8);
+                        target.staff_text.push(staff_text(beat));
+                        continue;
+                    }
                 }
                 let beat = (current_measure_beats.floor().max(0.0) as u8 + 1)
                     .min(beats_per_measure.ceil().max(1.0) as u8);

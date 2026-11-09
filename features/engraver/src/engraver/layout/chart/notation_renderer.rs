@@ -995,10 +995,13 @@ fn scale_node_around_anchor(
 /// tries the next row, and opens a new row at its anchor when none has room.
 /// Rows are top-aligned, one tallest-item apart. Nothing is shrunk — an item
 /// longer than the bar keeps its size and runs on past the barline (the
-/// system skyline moves the next bar's items clear of it).
+/// system skyline moves the next bar's items clear of it) — but never past
+/// `line_right`, the end of the line: a cue on a line's last beat moves left
+/// to end there rather than run off the page.
 pub fn stack_below_staff_rows(
     nodes: Vec<crate::engraver::scene::node::SceneNode>,
     bar_right: f64,
+    line_right: f64,
     gap: f64,
     row_gap: f64,
 ) -> Vec<crate::engraver::scene::node::SceneNode> {
@@ -1012,7 +1015,17 @@ pub fn stack_below_staff_rows(
         .collect();
     let placed = boxed.iter().filter(|(_, b)| b.is_some()).count();
     if placed < 2 {
-        return boxed.into_iter().map(|(n, _)| n).collect();
+        return boxed
+            .into_iter()
+            .map(|(mut node, shape)| {
+                if let Some((rect, _)) = shape
+                    && rect.x1 > line_right
+                {
+                    shift_node_xy(&mut node, line_right - rect.x1, 0.0);
+                }
+                node
+            })
+            .collect();
     }
     // Rows share a baseline: the lowest natural one, so nothing moves up
     // into the staff. A row is one line of the largest text apart.
@@ -1047,6 +1060,7 @@ pub fn stack_below_staff_rows(
                 rows.push(f64::NEG_INFINITY);
                 (rows.len() - 1, rect.x0)
             });
+            let x = x.min(line_right - width).max(rows[row] + gap);
             rows[row] = x + width;
             let dy = first_baseline + pitch * row as f64 - baseline;
             shift_node_xy(&mut node, x - rect.x0, dy);

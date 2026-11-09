@@ -1789,6 +1789,19 @@ G D Em
         let chart = parse_chart("T - A\n4/4\n\nvs 1\nA // \"Push\" B //\n").expect("parse");
         assert_eq!(staff_text_beats(&chart), [(0, "Push".to_string(), 3)]);
 
+        // Sleigh Ride: a cue right after a mid-bar chord goes under that
+        // chord, written before it or after it.
+        let chart = parse_chart(
+            "T - A\n4/4\n\nvs 2\nBmaj7\nCmaj7 / Am7 / Dm9 / G7 \"Let ring\" /\n",
+        )
+        .expect("parse");
+        assert_eq!(staff_text_beats(&chart), [(1, "Let ring".to_string(), 4)]);
+        let chart = parse_chart(
+            "T - A\n4/4\n\nvs 2\nBmaj7\nCmaj7 / Am7 / Dm9 / \"Let ring\" G7 /\n",
+        )
+        .expect("parse");
+        assert_eq!(staff_text_beats(&chart), [(1, "Let ring".to_string(), 4)]);
+
         // Text at the end of a line trails the bar it follows.
         let chart = parse_chart("T - A\n4/4\n\nvs 2\nG7 % \"Let ring\"\n").expect("parse");
         assert_eq!(staff_text_beats(&chart), [(1, "Let ring".to_string(), 1)]);

@@ -2244,6 +2244,7 @@ impl ChartLayoutEngine {
                         for node in notation_renderer::stack_below_staff_rows(
                             below_stack,
                             measure_x + this_measure_width - autoplace_gap,
+                            content_x + content_width,
                             self.config.spatium * 1.6,
                             self.config.spatium * 0.6,
                         ) {
@@ -3694,6 +3695,7 @@ impl ChartLayoutEngine {
                         for node in notation_renderer::stack_below_staff_rows(
                             below_stack,
                             measure_x + this_measure_width - autoplace_gap,
+                            content_x + content_width,
                             self.config.spatium * 1.6,
                             self.config.spatium * 0.6,
                         ) {
