@@ -2413,6 +2413,7 @@ impl ChartLayoutEngine {
                         staff_y,
                         staff_height,
                         spatium: self.config.spatium,
+                        style: self.style(),
                     };
                     for node in lyric_lane::place_system_lyrics(
                         &mut system_skyline,
@@ -3839,6 +3840,7 @@ impl ChartLayoutEngine {
                         staff_y,
                         staff_height,
                         spatium: self.config.spatium,
+                        style: self.style(),
                     };
                     for node in lyric_lane::place_system_lyrics(
                         &mut system_skyline,

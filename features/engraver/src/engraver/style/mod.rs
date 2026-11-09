@@ -209,6 +209,12 @@ pub enum Sid {
     LyricistFontSize,
     /// Lyricist horizontal alignment
     LyricistAlign,
+    /// Font family of a chart's lyric lane
+    LyricsFontFace,
+    /// Lyric lane text size, in spatia
+    LyricsFontSize,
+    /// Lyric lane font style (italic by default)
+    LyricsFontStyle,
 
     /// Sentinel value for array sizing - must be last
     #[doc(hidden)]
@@ -307,6 +313,9 @@ impl Sid {
         Self::LyricistFontFace,
         Self::LyricistFontSize,
         Self::LyricistAlign,
+        Self::LyricsFontFace,
+        Self::LyricsFontSize,
+        Self::LyricsFontStyle,
     ];
 
     /// Get the XML name for this style property (for serialization)
@@ -392,6 +401,9 @@ impl Sid {
             Self::LyricistFontFace => "lyricistFontFace",
             Self::LyricistFontSize => "lyricistFontSize",
             Self::LyricistAlign => "lyricistAlign",
+            Self::LyricsFontFace => "lyricsFontFace",
+            Self::LyricsFontSize => "lyricsFontSize",
+            Self::LyricsFontStyle => "lyricsFontStyle",
             Self::Styles => "STYLES",
         }
     }
@@ -715,7 +727,7 @@ mod tests {
     #[test]
     fn test_sid_count() {
         // Verify the count matches actual enum variants
-        assert_eq!(Sid::COUNT, 79);
+        assert_eq!(Sid::COUNT, 82);
     }
 
     #[test]
