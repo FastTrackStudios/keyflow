@@ -135,6 +135,11 @@ pub struct MeasureBuilder {
     id_base: u64,
     /// Whether notes should be stemless
     stemless: bool,
+    /// Written note values: every note keeps its stem (see [`Self::written_rhythm`]).
+    written_rhythm: bool,
+    /// In a written rhythm, the entries that are plain beat slashes
+    /// (stemless) — see [`Self::beat_slashes`].
+    beat_slashes: Vec<bool>,
     /// Tuplet group specifications
     tuplet_groups: Vec<TupletSpec>,
     /// Compact mode: use minimal left margin for tight spaces (count-in, etc.)
@@ -187,6 +192,8 @@ impl MeasureBuilder {
             justify: false,
             id_base: 1,
             stemless: false,
+            written_rhythm: false,
+            beat_slashes: Vec::new(),
             tuplet_groups: Vec::new(),
             compact: false,
             segment_min_widths: Vec::new(),
@@ -327,6 +334,29 @@ impl MeasureBuilder {
         self
     }
 
+    /// Mark the rhythm as written note values rather than filler slashes.
+    ///
+    /// Rhythmic notation drawn as written: every note keeps its stem, and a
+    /// half note is a stemmed hollow slash, so `C_2 D_4 E_4` reads as a half
+    /// and two quarters. Without it, quarter-family and longer slashes are
+    /// drawn stemless, the beat-slash convention for a bar of plain chords.
+    #[must_use]
+    pub fn written_rhythm(mut self) -> Self {
+        if matches!(self.mode, NotationMode::Rhythmic) {
+            self.stemless = false;
+            self.written_rhythm = true;
+        }
+        self
+    }
+
+    /// In a [`Self::written_rhythm`], mark entries (by rhythm index) that are
+    /// beat slashes the writer spelled with `/`: they draw stemless.
+    #[must_use]
+    pub fn beat_slashes(mut self, mask: Vec<bool>) -> Self {
+        self.beat_slashes = mask;
+        self
+    }
+
     /// Add a tuplet group specification.
     ///
     /// Tuplet groups define which notes form a tuplet (triplet, quintuplet, etc.)
@@ -374,8 +404,15 @@ impl MeasureBuilder {
     fn compute_auto_stemless(&self) -> Vec<bool> {
         let mut result = vec![false; self.rhythm.len()];
 
-        // Only apply in rhythmic mode
+        // Only apply in rhythmic mode; written note values keep their stems
+        // except the beat slashes the writer spelled with `/`.
         if !matches!(self.mode, NotationMode::Rhythmic) {
+            return result;
+        }
+        if self.written_rhythm {
+            for (flag, beat_slash) in result.iter_mut().zip(&self.beat_slashes) {
+                *flag = *beat_slash;
+            }
             return result;
         }
 

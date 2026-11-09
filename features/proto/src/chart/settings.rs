@@ -39,6 +39,9 @@ pub enum ChartSetting {
     /// (`4` after `4maj7` is `4maj7`). OFF by default — a chord is what is
     /// written; `\chord_memory = true` turns it on for a chart.
     ChordMemory,
+    /// When a chord symbol that repeats the one before it is printed. See
+    /// [`RepeatChordSymbols`]: `changes` (default), `clusters`, `always`.
+    RepeatChordSymbols,
 }
 
 /// One writable directive, described once so everything downstream can read
@@ -116,6 +119,12 @@ pub const DIRECTIVES: &[DirectiveSpec] = &[
         summary: "a bare root recalls the quality its degree last had",
     },
     DirectiveSpec {
+        key: "repeat_chord_symbols",
+        label: "Repeat chord symbols",
+        example: "\\repeat_chord_symbols = clusters",
+        summary: "changes (default), clusters, or always: when a still-sounding chord is named again",
+    },
+    DirectiveSpec {
         key: "alias",
         label: "Alias",
         example: "\\alias name value",
@@ -138,6 +147,7 @@ impl ChartSetting {
             Self::PushAltersRhythm => "push_alters_rhythm",
             Self::Swing => "swing",
             Self::ChordMemory => "chord_memory",
+            Self::RepeatChordSymbols => "repeat_chord_symbols",
         }
     }
 
@@ -149,6 +159,7 @@ impl ChartSetting {
         Self::PushAltersRhythm,
         Self::Swing,
         Self::ChordMemory,
+        Self::RepeatChordSymbols,
     ];
 }
 
@@ -159,6 +170,46 @@ pub enum SettingValue {
     Bool(bool),
     String(String),
     Number(i32),
+}
+
+/// When a chord symbol that repeats the chord already sounding is printed
+/// (`\repeat_chord_symbols = …`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RepeatChordSymbols {
+    /// A chord still sounding is never named again: a symbol prints when the
+    /// harmony changes, and at the start of a line or section.
+    #[default]
+    Changes,
+    /// As `Changes`, but a bar of changes also names its beat-1 chord when
+    /// the bar before held that one chord (`Bmaj7` then
+    /// `Bmaj7 / G#m7 / C#m9 / F#7 /` names both Bmaj7s).
+    Clusters,
+    /// Every chord prints its symbol.
+    Always,
+}
+
+impl RepeatChordSymbols {
+    /// Read a directive value. `auto` is the old name of `changes`; a
+    /// boolean reads as `always` / `changes`.
+    #[must_use]
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.trim().to_lowercase().as_str() {
+            "changes" | "auto" | "false" | "no" | "off" | "0" => Some(Self::Changes),
+            "clusters" | "cluster" => Some(Self::Clusters),
+            "always" | "true" | "yes" | "on" | "1" => Some(Self::Always),
+            _ => None,
+        }
+    }
+
+    /// The directive value that reads back as this mode.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Changes => "changes",
+            Self::Clusters => "clusters",
+            Self::Always => "always",
+        }
+    }
 }
 
 impl ChartSettings {
@@ -236,6 +287,18 @@ impl ChartSettings {
                 self.set(
                     ChartSetting::PushAltersRhythm,
                     SettingValue::Bool(bool_value),
+                );
+                Ok(())
+            }
+            "REPEAT_CHORD_SYMBOLS" | "REPEATCHORDSYMBOLS" => {
+                let mode = RepeatChordSymbols::parse(value).ok_or_else(|| {
+                    format!(
+                        "Invalid repeat_chord_symbols value: '{value}'. Expected 'changes', 'clusters' or 'always'"
+                    )
+                })?;
+                self.set(
+                    ChartSetting::RepeatChordSymbols,
+                    SettingValue::String(mode.as_str().to_string()),
                 );
                 Ok(())
             }
@@ -370,6 +433,20 @@ impl ChartSettings {
         self.get_bool(ChartSetting::ChordMemory)
     }
 
+    /// When a still-sounding chord's symbol is printed again
+    /// (`\repeat_chord_symbols = …`). Default [`RepeatChordSymbols::Changes`].
+    pub fn repeat_chord_symbols(&self) -> RepeatChordSymbols {
+        self.get_string(ChartSetting::RepeatChordSymbols)
+            .and_then(|s| RepeatChordSymbols::parse(&s))
+            .unwrap_or_default()
+    }
+
+    /// Whether every chord prints its symbol, repeats included
+    /// (`\repeat_chord_symbols = always`).
+    pub fn repeat_chord_symbols_always(&self) -> bool {
+        self.repeat_chord_symbols() == RepeatChordSymbols::Always
+    }
+
     /// Check if auto rhythm slashes is enabled (default: true)
     ///
     /// When enabled, whole notes and half notes in rhythm charts are automatically
@@ -449,6 +526,7 @@ impl ChartSetting {
             ChartSetting::PushAltersRhythm => "PUSH_ALTERS_RHYTHM",
             ChartSetting::Swing => "SWING",
             ChartSetting::ChordMemory => "CHORD_MEMORY",
+            ChartSetting::RepeatChordSymbols => "REPEAT_CHORD_SYMBOLS",
         }
     }
 }
@@ -526,6 +604,37 @@ mod tests {
             .parse_setting_line("\\chord-memory = false")
             .unwrap();
         assert!(!settings.chord_memory());
+    }
+
+    #[test]
+    fn repeat_chord_symbols_is_changes_until_set() {
+        let mut settings = ChartSettings::new();
+        assert_eq!(settings.repeat_chord_symbols(), RepeatChordSymbols::Changes);
+        settings
+            .parse_setting_line("\\repeat_chord_symbols = always")
+            .unwrap();
+        assert!(settings.repeat_chord_symbols_always());
+        settings
+            .parse_setting_line("\\repeat_chord_symbols = clusters")
+            .unwrap();
+        assert_eq!(
+            settings.repeat_chord_symbols(),
+            RepeatChordSymbols::Clusters
+        );
+        assert!(!settings.repeat_chord_symbols_always());
+        settings
+            .parse_setting_line("\\repeat_chord_symbols = changes")
+            .unwrap();
+        assert_eq!(settings.repeat_chord_symbols(), RepeatChordSymbols::Changes);
+        settings
+            .parse_setting_line("\\repeat_chord_symbols = auto")
+            .unwrap();
+        assert!(!settings.repeat_chord_symbols_always());
+        assert!(
+            settings
+                .parse_setting_line("\\repeat_chord_symbols = sometimes")
+                .is_err()
+        );
     }
 
     #[test]

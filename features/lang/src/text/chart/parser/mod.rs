@@ -1543,6 +1543,39 @@ G D Em
         assert_eq!(measures[0].chords.len(), 8);
     }
 
+    /// A written note value carries to the bare chords after it in its own
+    /// bar, never across the barline: `D_2. G_4 G` is a bar of D and G and
+    /// then a whole bar of G — not a quarter that leaves the line a bar and
+    /// three beats long, padded out with an empty bar.
+    #[test]
+    fn a_bare_chord_after_a_written_bar_is_a_whole_bar() {
+        let chart = parse_chart("T - A\n4/4\n\nvs 3\nD_2. G_4 G A\n").expect("parse");
+        let measures = chart.sections[0].measures();
+        let symbols: Vec<Vec<&str>> = measures
+            .iter()
+            .map(|m| m.chords.iter().map(|c| c.full_symbol.as_str()).collect())
+            .collect();
+        assert_eq!(symbols, vec![vec!["D", "G"], vec!["G"], vec!["A"]]);
+
+        // Inside the bar the value still carries: four eighths and a half.
+        let carried = parse_chart("T - A\n4/4\n\nvs 2\nC_8 D E F G_2 A\n").expect("parse");
+        let measures = carried.sections[0].measures();
+        assert_eq!(measures.len(), 2);
+        assert_eq!(measures[0].chords.len(), 5);
+        assert_eq!(measures[1].chords.len(), 1, "A is a whole bar");
+
+        // The declared default still applies to a bar's first chord.
+        let declared =
+            parse_chart("T - A\n4/4\n\n\\duration 2\nvs 2\nD_4 E_4 F G A B\n").expect("parse");
+        let measures = declared.sections[0].measures();
+        assert_eq!(measures.len(), 2);
+        assert_eq!(
+            measures[1].chords.len(),
+            2,
+            "a bar after written quarters returns to the declared halves"
+        );
+    }
+
     /// `.3` is three direct repeats, the same way `%3` is three simile marks.
     #[test]
     fn a_counted_direct_repeat_is_that_many_dots() {
@@ -1709,6 +1742,67 @@ G D Em
             "trailing text stays put"
         );
         assert!(text_on(&trailing, 1).is_empty());
+    }
+
+    fn staff_text_beats(chart: &crate::text::chart::Chart) -> Vec<(usize, String, u8)> {
+        chart.sections[0]
+            .measures()
+            .iter()
+            .enumerate()
+            .flat_map(|(i, m)| {
+                m.staff_text
+                    .iter()
+                    .map(move |t| (i, t.text.clone(), t.beat))
+            })
+            .collect()
+    }
+
+    /// Text written in front of a chord is a cue for that chord's bar, at
+    /// its first beat — never the bar before, and never past the end of a
+    /// full bar (Joy to the World drew `"Ring out"` under beat 3 of the bar
+    /// before, its beat computed as 5).
+    #[test]
+    fn a_cue_before_a_chord_opens_that_chords_bar() {
+        // After a bar of written values, mid-line.
+        let chart =
+            parse_chart("T - A\n4/4\n\nvs 3\nE_4. E_4. A_4 \"Ring out\" E E\n").expect("parse");
+        assert_eq!(staff_text_beats(&chart), [(1, "Ring out".to_string(), 1)]);
+
+        // After a bare whole-bar chord, mid-line, before slashed chords.
+        let chart = parse_chart("T - A\n4/4\n\nvs 2\nG \"Cue\" A // B //\n").expect("parse");
+        assert_eq!(staff_text_beats(&chart), [(1, "Cue".to_string(), 1)]);
+
+        // After a bar of slashes, mid-line.
+        let chart = parse_chart("T - A\n4/4\n\nvs 2\nD /// G / \"Ring out\" E\n").expect("parse");
+        assert_eq!(staff_text_beats(&chart), [(1, "Ring out".to_string(), 1)]);
+
+        // Sleigh Ride's vamp: whole bars, the cue on the third.
+        let chart =
+            parse_chart("T - A\n4/4\n\nvs 4\nCmaj7 Gm9 \"Vamp\" Fmaj9 Fm6\n").expect("parse");
+        assert_eq!(staff_text_beats(&chart), [(2, "Vamp".to_string(), 1)]);
+
+        // At the start of a line.
+        let chart = parse_chart("T - A\n4/4\n\nvs 2\nA\n\"Ring out\" E\n").expect("parse");
+        assert_eq!(staff_text_beats(&chart), [(1, "Ring out".to_string(), 1)]);
+
+        // Mid-bar text keeps its beat.
+        let chart = parse_chart("T - A\n4/4\n\nvs 1\nA // \"Push\" B //\n").expect("parse");
+        assert_eq!(staff_text_beats(&chart), [(0, "Push".to_string(), 3)]);
+
+        // Sleigh Ride: a cue right after a mid-bar chord goes under that
+        // chord, written before it or after it.
+        let chart =
+            parse_chart("T - A\n4/4\n\nvs 2\nBmaj7\nCmaj7 / Am7 / Dm9 / G7 \"Let ring\" /\n")
+                .expect("parse");
+        assert_eq!(staff_text_beats(&chart), [(1, "Let ring".to_string(), 4)]);
+        let chart =
+            parse_chart("T - A\n4/4\n\nvs 2\nBmaj7\nCmaj7 / Am7 / Dm9 / \"Let ring\" G7 /\n")
+                .expect("parse");
+        assert_eq!(staff_text_beats(&chart), [(1, "Let ring".to_string(), 4)]);
+
+        // Text at the end of a line trails the bar it follows.
+        let chart = parse_chart("T - A\n4/4\n\nvs 2\nG7 % \"Let ring\"\n").expect("parse");
+        assert_eq!(staff_text_beats(&chart), [(1, "Let ring".to_string(), 1)]);
     }
 
     /// A cue on a bar that also carries explicit durations used to vanish: the

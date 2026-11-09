@@ -30,7 +30,6 @@ impl ChartLayoutEngine {
         measure: &crate::chart::types::Measure,
         ctx: &LayoutContext<'_>,
     ) {
-        use crate::chord::ChordRhythm;
         let spatium = ctx.spatium();
         let tie_config = SlurTieConfig::default();
 
@@ -40,52 +39,55 @@ impl ChartLayoutEngine {
             .filter(|seg| seg.seg_type.contains(SegmentType::CHORD_REST))
             .collect();
 
-        let mut seg_cursor = 0usize;
         let staff_y = 2.0 * spatium;
+        let ts = measure.time_signature;
+        let per_beat = super::symbol_spacing::ticks_per_beat(ts);
+        let time_sig = crate::time::TimeSignature::new(ts.0.into(), ts.1.into());
 
-        for chord in &measure.chords {
-            let seg_count = match &chord.rhythm {
-                ChordRhythm::Slashes { count, .. } => (*count as usize).max(1),
-                _ => 1,
-            };
-            let tied = matches!(&chord.rhythm, ChordRhythm::Slashes { tied: true, .. });
-            let last_seg_idx = seg_cursor + seg_count - 1;
-
-            if tied {
-                let from = chord_segments.get(last_seg_idx);
-                let to = chord_segments.get(last_seg_idx + 1);
-                if let Some(from) = from {
-                    // Segment positions and the measure width are in points.
-                    let start_x = from.x + spatium;
-                    let end_x = match to {
-                        Some(seg) => seg.x,
-                        None => measure_result.width + spatium * 0.5,
-                    };
-                    let start = SlurEndpoint {
-                        x: start_x,
-                        y: staff_y,
-                        stem_up: false,
-                    };
-                    let end = SlurEndpoint {
-                        x: end_x,
-                        y: staff_y,
-                        stem_up: false,
-                    };
-                    let tie_layout = layout_tie(
-                        &start,
-                        &end,
-                        SlurDirection::Down,
-                        3000 + last_seg_idx as u64,
-                        spatium,
-                        &tie_config,
-                    );
-                    measure_result
-                        .scene
-                        .add_child(SceneNode::anonymous_leaf(tie_layout.commands));
-                }
+        for (chord_idx, chord) in measure.chords.iter().enumerate() {
+            // `C // ~` and `G_4 ~` alike: a tie leaves the chord's last
+            // attack, wherever the chord was written with slashes or a value.
+            if !chord.rhythm.is_tied() {
+                continue;
             }
-
-            seg_cursor += seg_count;
+            use crate::time::MusicalPositionExt as _;
+            let onset = super::symbol_spacing::chord_onset_tick(measure, chord_idx, ts);
+            let end_tick = onset + (chord.duration.to_beats(time_sig) * per_beat).round() as i32;
+            let Some(last_seg_idx) = chord_segments
+                .iter()
+                .rposition(|seg| seg.tick >= onset && seg.tick < end_tick)
+            else {
+                continue;
+            };
+            let from = chord_segments[last_seg_idx];
+            let to = chord_segments.get(last_seg_idx + 1);
+            // Segment positions and the measure width are in points.
+            let start_x = from.x + spatium;
+            let end_x = match to {
+                Some(seg) => seg.x,
+                None => measure_result.width + spatium * 0.5,
+            };
+            let start = SlurEndpoint {
+                x: start_x,
+                y: staff_y,
+                stem_up: false,
+            };
+            let end = SlurEndpoint {
+                x: end_x,
+                y: staff_y,
+                stem_up: false,
+            };
+            let tie_layout = layout_tie(
+                &start,
+                &end,
+                SlurDirection::Down,
+                3000 + last_seg_idx as u64,
+                spatium,
+                &tie_config,
+            );
+            let mut node = SceneNode::anonymous_leaf(tie_layout.commands);
+            node.set_element_type("chord_tie");
+            measure_result.scene.add_child(node);
         }
     }
     /// Tie arcs on melody notes: a tie into the next note of the same bar

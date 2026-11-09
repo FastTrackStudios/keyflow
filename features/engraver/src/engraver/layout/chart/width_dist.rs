@@ -132,6 +132,10 @@ impl ChartLayoutEngine {
                 .map(|section| section.measures()),
             &temp_engine.config.harmony_style,
             &mut measurement_cache,
+            super::symbol_spacing::SymbolSpacing::new(
+                temp_engine.config.spatium,
+                temp_engine.config.min_chord_symbol_gap,
+            ),
         );
         let text_metrics = TextFontMetrics::new(temp_engine.text_font_data.clone());
         let key_signature = key_signature_fifths(chart);
@@ -405,197 +409,6 @@ impl ChartLayoutEngine {
     ///
     /// # Returns
     /// A weight value (typically 1.0-3.0) where higher = more space needed
-    /// Compute minimum segment widths based on actual chord symbol layout bounds.
-    ///
-    /// Compute minimum segment widths based on chord symbol collision avoidance.
-    ///
-    /// This calculates the minimum width each segment needs so that chord symbols
-    /// placed above them don't collide with the next chord symbol. By setting
-    /// segment minimum widths, the spacing system will allocate enough horizontal
-    /// space for chord symbols, and the noteheads will naturally move to accommodate.
-    ///
-    /// # Arguments
-    /// * `measure` - The measure containing chord data
-    /// * `num_segments` - Number of rhythm segments in this measure
-    /// * `measure_width` - Target measure width in points
-    /// * `_ctx` - Layout context
-    ///
-    /// # Returns
-    /// A vector of minimum widths (in spatiums) for each segment index.
-    pub(super) fn compute_chord_min_widths(
-        &self,
-        measure: &crate::chart::types::Measure,
-        num_segments: usize,
-        measure_width: f64,
-        ctx: &LayoutContext<'_>,
-        is_boundary: bool,
-    ) -> Vec<f64> {
-        use crate::chart::types::RhythmElement;
-
-        let spatium = ctx.spatium();
-        let mut min_widths = vec![0.0; num_segments];
-
-        // Build list of (segment_index, chord) using cumulative beat positions.
-        // For slash notation, a chord with Slashes { count: 2 } occupies 2 segments,
-        // so the segment index must be computed from cumulative beat durations,
-        // not from the rhythm_elements array index.
-        let mut seen_real_chord = false;
-        let mut cumulative_beats = 0usize;
-        let mut last_symbol: Option<String> = None;
-        let visible_chords: Vec<_> = measure
-            .rhythm_elements
-            .iter()
-            .filter_map(|elem| {
-                if let RhythmElement::Chord(chord) = elem {
-                    // Capture this chord's segment position BEFORE adding its duration
-                    let seg_idx = cumulative_beats;
-
-                    // Add this chord's beat duration to the running total
-                    let chord_beats = match &chord.rhythm {
-                        crate::chord::ChordRhythm::Slashes { count, .. } => *count as usize,
-                        crate::chord::ChordRhythm::Default => 1,
-                        _ => 1,
-                    };
-                    cumulative_beats += chord_beats;
-
-                    // Skip invisible chords (spaces, rests represented as chords)
-                    let is_visible = !chord.full_symbol.is_empty()
-                        && chord.full_symbol != "s"
-                        && chord.full_symbol != "r";
-
-                    if !is_visible {
-                        return None;
-                    }
-                    // A `.` repeat, or the symbol already printed in this
-                    // bar, draws nothing and needs no room for a symbol.
-                    if chord.original_token == "."
-                        || last_symbol.as_deref() == Some(chord.full_symbol.as_str())
-                    {
-                        return None;
-                    }
-                    last_symbol = Some(chord.full_symbol.clone());
-
-                    // Check if this is a pushed spillback chord (first real chord that's pushed).
-                    // Spillback chords render in the PREVIOUS measure. However, at boundaries
-                    // (first measure of section/system), they ALSO render in the current measure
-                    // to avoid confusion, so we still need to reserve width.
-                    let is_pushed = !seen_real_chord
-                        && chord
-                            .push_pull
-                            .as_ref()
-                            .is_some_and(|(is_push, _)| *is_push);
-
-                    // Only skip if pushed AND not at a boundary
-                    let should_skip_for_spillback = is_pushed && !is_boundary;
-
-                    seen_real_chord = true;
-
-                    if should_skip_for_spillback {
-                        debug!(
-                            "[chord-min-width] Skipping pushed spillback '{}' - renders in previous measure",
-                            chord.full_symbol
-                        );
-                        return None;
-                    }
-
-                    return Some((seg_idx, chord));
-                }
-                None
-            })
-            .collect();
-
-        if visible_chords.len() < 2 {
-            return min_widths; // No collision possible with 0 or 1 chord
-        }
-
-        // Get font metrics for measuring chord symbol widths
-        let text_metrics = self.config.harmony_style.text_font_metrics.as_ref();
-        let base_font_size = self.config.harmony_style.root_size;
-        let min_gap = base_font_size * 0.5; // Minimum gap between chord symbols
-
-        // Estimate segment width assuming equal distribution
-        let estimated_segment_width = if num_segments > 0 {
-            measure_width / (num_segments as f64)
-        } else {
-            measure_width
-        };
-
-        // Calculate chord widths and required segment widths
-        for i in 0..visible_chords.len() - 1 {
-            let (idx1, chord1) = visible_chords[i];
-            let (idx2, _chord2) = visible_chords[i + 1];
-
-            // Calculate chord width using actual font metrics if available
-            let chord1_width = if let Some(metrics) = text_metrics {
-                metrics.horizontal_advance(&chord1.full_symbol, base_font_size)
-            } else {
-                // Fallback estimate: ~0.6 × font_size per character
-                chord1.full_symbol.len() as f64 * base_font_size * 0.6
-            };
-            // Add minimum width floor
-            let chord1_width = chord1_width.max(base_font_size * 1.5);
-
-            // Calculate how many segments between these chords
-            let segment_gap = idx2.saturating_sub(idx1);
-            if segment_gap == 0 {
-                continue; // Same segment, can't help here
-            }
-
-            // Required space for chord symbol + gap
-            let required_space = chord1_width + min_gap;
-
-            // Available space based on current segment widths
-            let available_space = segment_gap as f64 * estimated_segment_width;
-
-            // Only set minimum if there would be an actual collision
-            if required_space > available_space {
-                // Collision deficit = how much the chords would overlap
-                let collision_deficit = required_space - available_space;
-
-                // Split the work between segment spacing and left-shifting.
-                // First chord (segment 0) can overhang into clef area, so it relies
-                // more on movement (70%) and less on spacing (30%).
-                // Other chords use 50/50 split.
-                let spacing_ratio = if idx1 == 0 { 0.3 } else { 0.5 };
-                let spacing_contribution = collision_deficit * spacing_ratio;
-
-                // Add the spacing contribution to the current estimated segment width
-                // NOTE: min_width is in POINTS (same units as segment.width)
-                let min_width_points = estimated_segment_width + spacing_contribution;
-
-                // Only set if it's larger than the current minimum
-                if idx1 < min_widths.len() {
-                    min_widths[idx1] = min_widths[idx1].max(min_width_points);
-                }
-
-                debug!(
-                    "[chord-min-width] Chord '{}' at seg {} collision: deficit={:.1}pt, \
-                     spacing contribution={:.1}pt. Setting min_width[{}]={:.1}pt",
-                    chord1.full_symbol,
-                    idx1,
-                    collision_deficit,
-                    spacing_contribution,
-                    idx1,
-                    min_widths[idx1]
-                );
-            }
-        }
-
-        // Set minimum for last segment to prevent notehead overflow into barline.
-        // The last notehead needs room to render without crossing the barline.
-        let last_segment_padding = spatium * 1.5; // ~1.5 staff spaces for last notehead
-        if num_segments > 0 {
-            let last_idx = num_segments - 1;
-            min_widths[last_idx] = min_widths[last_idx].max(last_segment_padding);
-        }
-
-        if min_widths.iter().any(|&w| w > 0.0) {
-            debug!("[chord-min-width] Final min_widths (pts): {:?}", min_widths);
-        }
-
-        min_widths
-    }
-
     /// Calculate content weight for a measure (for spring-based spacing).
     ///
     /// Weight is based on the actual rhythm elements (after push/pull processing).
@@ -778,6 +591,7 @@ impl ChartLayoutEngine {
             self.config.spacing_slope,
             self.config.spacing_density,
         );
+        let widths = keep_sparse_bars_readable(widths, min_widths, count_in_measures);
 
         debug!(
             target: "crate::engraver::layout::chart::spacing",
@@ -795,6 +609,117 @@ impl ChartLayoutEngine {
         );
 
         widths
+    }
+}
+
+/// A bar's share of the line never falls below this fraction of the line's
+/// average bar.
+const SPARSE_BAR_FLOOR: f64 = 0.65;
+
+/// Lift bars squeezed below [`SPARSE_BAR_FLOOR`] of the average, taking the
+/// room from bars that have more than their own minimum.
+///
+/// A whole-bar chord between bars of four changes otherwise gets what the
+/// dense bars leave, a third of their width, and reads as a mistake. The
+/// dense bars give back only slack above what their symbols need, so their
+/// symbols still sit on their beats.
+fn keep_sparse_bars_readable(
+    mut widths: Vec<f64>,
+    min_widths: &[f64],
+    count_in_measures: usize,
+) -> Vec<f64> {
+    let body = count_in_measures.min(widths.len())..widths.len();
+    let n = body.len();
+    if n < 2 {
+        return widths;
+    }
+    let total: f64 = widths[body.clone()].iter().sum();
+    let floor = SPARSE_BAR_FLOOR * total / n as f64;
+    let min_of = |i: usize| min_widths.get(i - body.start).copied().unwrap_or(0.0);
+
+    let deficit: f64 = body.clone().map(|i| (floor - widths[i]).max(0.0)).sum();
+    if deficit <= 0.0 {
+        return widths;
+    }
+    let slack: f64 = body
+        .clone()
+        .filter(|&i| widths[i] > floor)
+        .map(|i| widths[i] - min_of(i).max(floor))
+        .filter(|s| *s > 0.0)
+        .sum();
+    if slack <= 0.0 {
+        return widths;
+    }
+    let give = deficit.min(slack);
+    let lift = give / deficit;
+    for i in body.clone() {
+        if widths[i] < floor {
+            widths[i] += (floor - widths[i]) * lift;
+        } else {
+            let own = (widths[i] - min_of(i).max(floor)).max(0.0);
+            widths[i] -= own / slack * give;
+        }
+    }
+    widths
+}
+
+/// The smallest a line's chord symbols are drawn to make room for its
+/// sparse bars.
+pub const MIN_SYSTEM_SYMBOL_SCALE: f64 = 0.85;
+
+/// How much a full line's chord symbols must shrink for its sparse bars to
+/// keep [`SPARSE_BAR_FLOOR`] of the average bar while every chord-dense bar
+/// keeps the room its (scaled) symbols need — or, with no sparse bar, for
+/// the dense bars to fit the line at all. `1.0` when they already fit;
+/// never below [`MIN_SYSTEM_SYMBOL_SCALE`].
+///
+/// `min_widths` are the bars' minimum widths at full symbol size — mostly
+/// their symbols' widths, which scale with the font.
+#[must_use]
+pub fn symbol_scale_for_sparse_bars(min_widths: &[f64], total_width: f64) -> f64 {
+    let n = min_widths.len();
+    if n < 2 || total_width <= 0.0 {
+        return 1.0;
+    }
+    let floor = SPARSE_BAR_FLOOR * total_width / n as f64;
+    let sparse = min_widths.iter().filter(|w| **w < floor).count();
+    let dense: f64 = min_widths.iter().filter(|w| **w >= floor).sum();
+    let room = total_width - sparse as f64 * floor;
+    if dense <= room || dense <= 0.0 {
+        return 1.0;
+    }
+    (room / dense).clamp(MIN_SYSTEM_SYMBOL_SCALE, 1.0)
+}
+
+#[cfg(test)]
+mod symbol_scale_tests {
+    use super::*;
+
+    #[test]
+    fn a_line_that_fits_keeps_full_size_symbols() {
+        assert_eq!(
+            symbol_scale_for_sparse_bars(&[100.0, 40.0, 100.0, 100.0], 480.0),
+            1.0
+        );
+    }
+
+    #[test]
+    fn dense_bars_shrink_their_symbols_so_a_sparse_bar_keeps_its_share() {
+        // Floor = 0.65 * 120 = 78; three dense bars need 405 of the 402 left.
+        let scale = symbol_scale_for_sparse_bars(&[135.0, 40.0, 135.0, 135.0], 480.0);
+        assert!(scale < 1.0 && scale > 0.99, "{scale}");
+    }
+
+    #[test]
+    fn a_line_of_only_dense_bars_shrinks_to_fit() {
+        let scale = symbol_scale_for_sparse_bars(&[125.0, 125.0, 125.0, 125.0], 480.0);
+        assert!((scale - 0.96).abs() < 1e-9, "{scale}");
+    }
+
+    #[test]
+    fn symbols_never_shrink_below_the_minimum() {
+        let scale = symbol_scale_for_sparse_bars(&[200.0, 40.0, 200.0, 200.0], 480.0);
+        assert_eq!(scale, MIN_SYSTEM_SYMBOL_SCALE);
     }
 }
 

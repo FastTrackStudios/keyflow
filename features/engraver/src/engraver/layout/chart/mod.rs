@@ -24,6 +24,7 @@ pub mod prefix_renderer;
 pub mod rhythm_builder;
 pub mod section_layout;
 pub mod spacing;
+pub mod symbol_spacing;
 pub mod tie_pass;
 pub mod types;
 pub mod width_dist;
@@ -407,6 +408,10 @@ pub struct ChartLayoutConfig {
     /// When true, if a chord is the same as the previous chord, it won't be displayed.
     /// This reduces visual clutter in charts with many repeated chords.
     pub hide_repeated_chords: bool,
+    /// Whether a bar of changes re-names its beat-1 chord when the bar
+    /// before held that same chord (`\\repeat_chord_symbols = clusters`).
+    /// Off by default: a chord still sounding is not named again.
+    pub name_cluster_beat_one: bool,
     /// Use stemmed rhythm notation (for charts with push/pull timing).
     /// When false (default), uses stemless slash notation.
     /// When true, uses stemmed rhythmic notation with beams and triplet brackets.
@@ -569,6 +574,9 @@ struct MeasureLayoutParams<'a> {
     ctx: &'a LayoutContext<'a>,
     id_base: u64,
     is_boundary: bool,
+    /// The harmony style the symbols render in, with its font metrics —
+    /// what the measure measures its symbols against.
+    harmony_style: &'a HarmonyStyle,
 }
 
 /// Red used to highlight mid-chart meter and key changes so they are obvious.
@@ -1095,6 +1103,10 @@ impl ChartLayoutEngine {
                 .map(|s| s.measures()),
             &harmony_style,
             &mut measurement_cache,
+            symbol_spacing::SymbolSpacing::new(
+                self.config.spatium,
+                self.config.min_chord_symbol_gap,
+            ),
         );
 
         debug!(
@@ -1108,6 +1120,12 @@ impl ChartLayoutEngine {
 
         // Track global measure offset for looking up pre-measured values
         let mut global_section_measure_offset: usize = 0;
+
+        // The chart's last bar closes with a final barline. A snippet is a
+        // fragment, so it does not.
+        let final_bar = (!self.config.snippet_mode)
+            .then(|| last_drawn_bar(chart))
+            .flatten();
 
         // Process each section
         for (section_idx, chart_section) in chart.sections.iter().enumerate() {
@@ -1214,9 +1232,18 @@ impl ChartLayoutEngine {
                                 .map_or(0.0, |m| m.min_width)
                         })
                         .collect();
+                    // The clef, key and time signature take the start of
+                    // every line: what is left is the room for bars.
+                    let (_, _, _, prefix_width) = prefix_renderer::calculate_prefix_width(
+                        self.config.spatium,
+                        true,
+                        true,
+                        prevailing_fifths_at(chart, section_idx, 0),
+                        true,
+                    );
                     self.group_measures_into_systems(
                         chart_section.measures(),
-                        content_width,
+                        content_width - prefix_width,
                         &measured,
                     )
                 }
@@ -1439,6 +1466,19 @@ impl ChartLayoutEngine {
                         key_signature,
                         include_time_sig,
                     );
+                // A key change on the line's first bar is printed in the
+                // prefix, naturals first: B to C cancels five sharps rather
+                // than silently dropping them.
+                let key_change_from: Option<i8> = measure_indices
+                    .first()
+                    .and_then(|m| key_changes_in_section.get(m))
+                    .and_then(|kc| kc.from_key.as_ref())
+                    .map(prefix_renderer::key_to_fifths);
+                let naturals_width = key_change_from.map_or(0.0, |prev| {
+                    prefix_renderer::naturals_width(prev, key_signature, self.config.spatium)
+                });
+                let key_sig_width = key_sig_width + naturals_width;
+                let prefix_width = prefix_width + naturals_width;
 
                 // Calculate measure width using spring-based distribution
                 let measures_area_width = content_width - prefix_width;
@@ -1499,6 +1539,31 @@ impl ChartLayoutEngine {
                 // Snippet mode always treated as short system (no stretching)
                 let is_short_system =
                     self.config.snippet_mode || effective_measure_count < max_measures as f64;
+
+                // A full line whose chord-dense bars need so much room that
+                // its sparse bars cannot keep their share draws its chord
+                // symbols smaller (down to `MIN_SYSTEM_SYMBOL_SCALE`) rather
+                // than squeezing a whole-bar chord, or breaking the line.
+                let symbol_scale = if is_short_system {
+                    1.0
+                } else {
+                    width_dist::symbol_scale_for_sparse_bars(
+                        &measure_min_widths,
+                        measures_area_width,
+                    )
+                };
+                let measure_min_widths: Vec<f64> = measure_min_widths
+                    .iter()
+                    .map(|w| w * symbol_scale)
+                    .collect();
+                let scaled_harmony_style;
+                let harmony_style: &HarmonyStyle = if symbol_scale < 1.0 {
+                    let size = harmony_style.root_size * symbol_scale;
+                    scaled_harmony_style = harmony_style.clone().with_root_size(size);
+                    &scaled_harmony_style
+                } else {
+                    &harmony_style
+                };
 
                 // Distribute width proportionally using spring physics
                 // For full systems, distribute the entire measures_area_width
@@ -1634,6 +1699,7 @@ impl ChartLayoutEngine {
                     include_key_sig,
                     include_time_sig,
                     key_signature,
+                    prev_key_signature: key_change_from,
                     key_sig_color: system_starts_with_key_change.then(change_highlight_color),
                     time_signature: ts,
                     clef_width,
@@ -1668,6 +1734,14 @@ impl ChartLayoutEngine {
 
                 let mut system_skyline = notation_renderer::MeasureSkyline::new();
                 let mut pending_notation: Vec<(SceneNode, bool, bool)> = Vec::new();
+                // One chord-symbol baseline for the line, raised for any
+                // articulations on it.
+                let system_artic_lift = chord_renderer::system_articulation_lift(
+                    measure_indices
+                        .iter()
+                        .filter_map(|&i| chart_section.measures().get(i)),
+                    self.config.spatium,
+                );
                 for (local_measure_idx, &measure_idx) in measure_indices.iter().enumerate() {
                     if let Some(measure) = chart_section.measures().get(measure_idx) {
                         // Get preprocessed melody data for this measure (handles spillover)
@@ -1700,8 +1774,9 @@ impl ChartLayoutEngine {
                             0.0
                         };
                         let this_measure_extra_above = melody_extent.max(melody_floor);
-                        let this_chord_y =
-                            staff_y + constants::CHORD_Y_OFFSET - this_measure_extra_above;
+                        let this_chord_y = staff_y + constants::CHORD_Y_OFFSET
+                            - this_measure_extra_above
+                            - system_artic_lift;
 
                         // Get distributed width for this measure
                         let this_measure_width = distributed_widths
@@ -1727,6 +1802,7 @@ impl ChartLayoutEngine {
                             ts_changed && ts_run_len == 1 && prev_prevailing_ts == Some(measure_ts);
                         let highlight = ts_changed && !is_oneshot_revert;
                         let measure_result = self.layout_measure(MeasureLayoutParams {
+                            harmony_style: &harmony_style,
                             measure,
                             melody_data,
                             spillbacks,
@@ -1773,6 +1849,8 @@ impl ChartLayoutEngine {
                         // Get ChordRest segment x-positions (already in points after spacing)
                         let segment_positions: Vec<f64> =
                             self.get_chord_rest_positions(&measure_result);
+                        let segment_ticks: Vec<i32> =
+                            chord_layout::get_chord_rest_ticks(&measure_result);
 
                         let mut measure_container =
                             SceneNode::group(SemanticId::new(ElementType::Measure, id_counter));
@@ -1903,6 +1981,23 @@ impl ChartLayoutEngine {
                             local_measure_idx,
                             section_name: &chart_section.section.section_type.full_name(),
                             segment_positions: &segment_positions,
+                            segment_ticks: &segment_ticks,
+                            articulation_lift: system_artic_lift,
+                            prev_bar_held_one_chord: self.config.name_cluster_beat_one
+                                && measure_idx
+                                    .checked_sub(1)
+                                    .and_then(|prev| chart_section.measures().get(prev))
+                                    .is_some_and(chord_renderer::holds_one_chord),
+                            tied_in: measure_idx
+                                .checked_sub(1)
+                                .and_then(|prev| chart_section.measures().get(prev))
+                                .and_then(|prev| {
+                                    prev.chords.iter().rev().find(|c| {
+                                        !chord_renderer::is_placeholder_chord(&c.full_symbol)
+                                    })
+                                })
+                                .filter(|c| c.rhythm.is_tied())
+                                .map(|c| c.full_symbol.as_str()),
                             internal_push_positions: &measure_result.internal_push_positions,
                             harmony_style: &harmony_style,
                             time_signature,
@@ -2002,11 +2097,9 @@ impl ChartLayoutEngine {
                             chord_renderer::render_text_cues(
                                 &measure.text_cues,
                                 measure_x,
-                                this_measure_width,
                                 staff_y,
                                 staff_height,
                                 self.config.spatium,
-                                &text_metrics,
                                 &mut id_counter,
                             )
                         } else {
@@ -2053,15 +2146,25 @@ impl ChartLayoutEngine {
                         system_skyline.add_above(staff_band);
                         system_skyline.add_below(staff_band);
                         let autoplace_gap = self.config.spatium * 0.1;
-                        for mut node in notation_renderer::render_dynamics(
-                            &measure.classical_dynamics,
-                            &notation_frame,
-                            &mut id_counter,
+                        // The bar's below-staff texts — its dynamic, text cues
+                        // and instrument cues — are laid out together, in
+                        // rows, so none lands on another.
+                        let mut below_stack: Vec<SceneNode> = Vec::new();
+                        for (item, mut node) in measure.classical_dynamics.iter().zip(
+                            notation_renderer::render_dynamics(
+                                &measure.classical_dynamics,
+                                &notation_frame,
+                                &mut id_counter,
+                            ),
                         ) {
                             node.set_page(page_number);
                             node.set_system(global_system_index as u32);
                             node.set_measure(measure_idx as u32);
-                            pending_notation.push((node, false, false));
+                            if matches!(item.placement, crate::chart::notations::Placement::Below) {
+                                below_stack.push(node);
+                            } else {
+                                pending_notation.push((node, false, false));
+                            }
                         }
                         for (item, mut node) in
                             measure
@@ -2076,6 +2179,10 @@ impl ChartLayoutEngine {
                         {
                             let above =
                                 matches!(item.placement, crate::chart::notations::Placement::Above);
+                            if !above {
+                                below_stack.push(node);
+                                continue;
+                            }
                             notation_renderer::shrink_node_to_max_right(
                                 &mut node,
                                 measure_x + this_measure_width - autoplace_gap,
@@ -2118,27 +2225,30 @@ impl ChartLayoutEngine {
                                 matches!(item.placement, crate::chart::notations::Placement::Above);
                             pending_notation.push((node, above, false));
                         }
-                        for (item, node) in
-                            measure
-                                .hairpins
-                                .iter()
-                                .zip(notation_renderer::render_hairpins(
-                                    &measure.hairpins,
-                                    &notation_frame,
-                                    &mut id_counter,
-                                ))
+                        let hairpins = notation_renderer::hairpins_through(
+                            chart_section.measures(),
+                            measure_idx,
+                        );
+                        for ((item, _), node) in
+                            hairpins.iter().zip(notation_renderer::render_hairpins(
+                                &hairpins,
+                                &notation_frame,
+                                &mut id_counter,
+                            ))
                         {
                             let above =
                                 matches!(item.placement, crate::chart::notations::Placement::Above);
                             pending_notation.push((node, above, false));
                         }
-                        for mut node in cue_nodes {
-                            notation_renderer::shrink_node_to_max_right(
-                                &mut node,
-                                measure_x + this_measure_width - autoplace_gap,
-                                0.45,
-                            );
-                            pending_notation.push((node, false, true));
+                        below_stack.extend(cue_nodes);
+                        for node in notation_renderer::stack_below_staff_rows(
+                            below_stack,
+                            measure_x + this_measure_width - autoplace_gap,
+                            content_x + content_width,
+                            self.config.spatium * 1.6,
+                            self.config.spatium * 0.6,
+                        ) {
+                            pending_notation.push((node, false, false));
                         }
                         if let Some(span) = volta_at(
                             chart_section.measures(),
@@ -2199,13 +2309,18 @@ impl ChartLayoutEngine {
 
                         measure_x += this_measure_width;
 
-                        // Closing barline — style + end-repeat aware.
-                        let barline = self.draw_barline(
-                            measure_x,
-                            staff_y,
-                            staff_height,
-                            Self::end_barline_type(measure),
-                        );
+                        // Closing barline — style + end-repeat aware, and
+                        // thin-thick on the chart's last bar.
+                        let barline_type = match Self::end_barline_type(measure) {
+                            BarlineType::Single
+                                if final_bar == Some((section_idx, measure_idx)) =>
+                            {
+                                BarlineType::End
+                            }
+                            other => other,
+                        };
+                        let barline =
+                            self.draw_barline(measure_x, staff_y, staff_height, barline_type);
                         record_system_ink_bottom(
                             &mut system_ink_bottom,
                             &mut system_height_contributors,
@@ -2697,6 +2812,10 @@ impl ChartLayoutEngine {
                 .map(|s| s.measures()),
             &harmony_style,
             &mut measurement_cache,
+            symbol_spacing::SymbolSpacing::new(
+                self.config.spatium,
+                self.config.min_chord_symbol_gap,
+            ),
         );
 
         // Prevailing meter, carried across sections/systems in playback order so a
@@ -2801,9 +2920,18 @@ impl ChartLayoutEngine {
                                 .map_or(0.0, |m| m.min_width)
                         })
                         .collect();
+                    // The clef, key and time signature take the start of
+                    // every line: what is left is the room for bars.
+                    let (_, _, _, prefix_width) = prefix_renderer::calculate_prefix_width(
+                        self.config.spatium,
+                        true,
+                        true,
+                        prevailing_fifths_at(chart, section_idx, 0),
+                        true,
+                    );
                     self.group_measures_into_systems(
                         chart_section.measures(),
-                        content_width,
+                        content_width - prefix_width,
                         &measured,
                     )
                 }
@@ -2894,6 +3022,19 @@ impl ChartLayoutEngine {
                         key_signature,
                         include_time_sig,
                     );
+                // A key change on the line's first bar is printed in the
+                // prefix, naturals first: B to C cancels five sharps rather
+                // than silently dropping them.
+                let key_change_from: Option<i8> = measure_indices
+                    .first()
+                    .and_then(|m| key_changes_in_section.get(m))
+                    .and_then(|kc| kc.from_key.as_ref())
+                    .map(prefix_renderer::key_to_fifths);
+                let naturals_width = key_change_from.map_or(0.0, |prev| {
+                    prefix_renderer::naturals_width(prev, key_signature, self.config.spatium)
+                });
+                let key_sig_width = key_sig_width + naturals_width;
+                let prefix_width = prefix_width + naturals_width;
 
                 // Calculate measure width using spring-based distribution
                 let measures_area_width = content_width - prefix_width;
@@ -3055,6 +3196,7 @@ impl ChartLayoutEngine {
                     include_key_sig,
                     include_time_sig,
                     key_signature,
+                    prev_key_signature: key_change_from,
                     key_sig_color: system_starts_with_key_change.then(change_highlight_color),
                     time_signature: ts,
                     clef_width,
@@ -3088,6 +3230,14 @@ impl ChartLayoutEngine {
                 // Measures now start directly at measure 1.
 
                 let mut system_skyline = notation_renderer::MeasureSkyline::new();
+                // One chord-symbol baseline for the line, raised for any
+                // articulations on it.
+                let system_artic_lift = chord_renderer::system_articulation_lift(
+                    measure_indices
+                        .iter()
+                        .filter_map(|&i| chart_section.measures().get(i)),
+                    self.config.spatium,
+                );
                 for (local_measure_idx, &measure_idx) in measure_indices.iter().enumerate() {
                     if let Some(measure) = chart_section.measures().get(measure_idx) {
                         let melody_data = melody_data_map.get(&measure_idx);
@@ -3103,8 +3253,9 @@ impl ChartLayoutEngine {
                                 .0
                             })
                             .unwrap_or(0.0);
-                        let this_chord_y =
-                            staff_y + constants::CHORD_Y_OFFSET - this_measure_extra_above;
+                        let this_chord_y = staff_y + constants::CHORD_Y_OFFSET
+                            - this_measure_extra_above
+                            - system_artic_lift;
 
                         // Get distributed width for this measure
                         let this_measure_width = distributed_widths
@@ -3128,6 +3279,7 @@ impl ChartLayoutEngine {
                             ts_changed && ts_run_len == 1 && prev_prevailing_ts == Some(measure_ts);
                         let highlight = ts_changed && !is_oneshot_revert;
                         let measure_result = self.layout_measure(MeasureLayoutParams {
+                            harmony_style: &harmony_style,
                             measure,
                             melody_data,
                             spillbacks,
@@ -3173,6 +3325,8 @@ impl ChartLayoutEngine {
 
                         let segment_positions: Vec<f64> =
                             self.get_chord_rest_positions(&measure_result);
+                        let segment_ticks: Vec<i32> =
+                            chord_layout::get_chord_rest_ticks(&measure_result);
 
                         let mut measure_container =
                             SceneNode::group(SemanticId::new(ElementType::Measure, id_counter));
@@ -3279,6 +3433,23 @@ impl ChartLayoutEngine {
                             local_measure_idx,
                             section_name: &chart_section.section.section_type.full_name(),
                             segment_positions: &segment_positions,
+                            segment_ticks: &segment_ticks,
+                            articulation_lift: system_artic_lift,
+                            prev_bar_held_one_chord: self.config.name_cluster_beat_one
+                                && measure_idx
+                                    .checked_sub(1)
+                                    .and_then(|prev| chart_section.measures().get(prev))
+                                    .is_some_and(chord_renderer::holds_one_chord),
+                            tied_in: measure_idx
+                                .checked_sub(1)
+                                .and_then(|prev| chart_section.measures().get(prev))
+                                .and_then(|prev| {
+                                    prev.chords.iter().rev().find(|c| {
+                                        !chord_renderer::is_placeholder_chord(&c.full_symbol)
+                                    })
+                                })
+                                .filter(|c| c.rhythm.is_tied())
+                                .map(|c| c.full_symbol.as_str()),
                             internal_push_positions: &measure_result.internal_push_positions,
                             harmony_style: &harmony_style,
                             time_signature,
@@ -3353,11 +3524,9 @@ impl ChartLayoutEngine {
                             chord_renderer::render_text_cues(
                                 &measure.text_cues,
                                 measure_x,
-                                this_measure_width,
                                 staff_y,
                                 staff_height,
                                 self.config.spatium,
-                                &text_metrics,
                                 &mut id_counter,
                             )
                         } else {
@@ -3408,12 +3577,18 @@ impl ChartLayoutEngine {
                         // Collect (node, is_above) then drain into root after
                         // skyline runs so closures don't fight over &mut root.
                         let mut placed: Vec<SceneNode> = Vec::new();
-                        for node in notation_renderer::render_dynamics(
-                            &measure.classical_dynamics,
-                            &notation_frame,
-                            &mut id_counter,
+                        // Below-staff texts are stacked in rows together.
+                        let mut below_stack: Vec<SceneNode> = Vec::new();
+                        for (item, node) in measure.classical_dynamics.iter().zip(
+                            notation_renderer::render_dynamics(
+                                &measure.classical_dynamics,
+                                &notation_frame,
+                                &mut id_counter,
+                            ),
                         ) {
-                            if let Some(n) = notation_renderer::autoplace_node(
+                            if matches!(item.placement, crate::chart::notations::Placement::Below) {
+                                below_stack.push(node);
+                            } else if let Some(n) = notation_renderer::autoplace_node(
                                 &mut system_skyline,
                                 node,
                                 false,
@@ -3435,6 +3610,10 @@ impl ChartLayoutEngine {
                         {
                             let above =
                                 matches!(item.placement, crate::chart::notations::Placement::Above);
+                            if !above {
+                                below_stack.push(node);
+                                continue;
+                            }
                             notation_renderer::shrink_node_to_max_right(
                                 &mut node,
                                 measure_x + this_measure_width - autoplace_gap,
@@ -3490,15 +3669,16 @@ impl ChartLayoutEngine {
                             }
                             placed.push(node);
                         }
-                        for (item, node) in
-                            measure
-                                .hairpins
-                                .iter()
-                                .zip(notation_renderer::render_hairpins(
-                                    &measure.hairpins,
-                                    &notation_frame,
-                                    &mut id_counter,
-                                ))
+                        let hairpins = notation_renderer::hairpins_through(
+                            chart_section.measures(),
+                            measure_idx,
+                        );
+                        for ((item, _), node) in
+                            hairpins.iter().zip(notation_renderer::render_hairpins(
+                                &hairpins,
+                                &notation_frame,
+                                &mut id_counter,
+                            ))
                         {
                             let above =
                                 matches!(item.placement, crate::chart::notations::Placement::Above);
@@ -3511,18 +3691,19 @@ impl ChartLayoutEngine {
                                 placed.push(n);
                             }
                         }
-                        for mut node in cue_nodes {
-                            notation_renderer::shrink_node_to_max_right(
-                                &mut node,
-                                measure_x + this_measure_width - autoplace_gap,
-                                0.45,
-                            );
-                            if let Some(n) = notation_renderer::autoplace_text_node(
+                        below_stack.extend(cue_nodes);
+                        for node in notation_renderer::stack_below_staff_rows(
+                            below_stack,
+                            measure_x + this_measure_width - autoplace_gap,
+                            content_x + content_width,
+                            self.config.spatium * 1.6,
+                            self.config.spatium * 0.6,
+                        ) {
+                            if let Some(n) = notation_renderer::autoplace_node(
                                 &mut system_skyline,
                                 node,
                                 false,
                                 autoplace_gap,
-                                text_shrink_displacement,
                             ) {
                                 placed.push(n);
                             }
@@ -3664,13 +3845,26 @@ impl ChartLayoutEngine {
         let mut current_system: Vec<usize> = Vec::new();
         let mut current_width = 0.0f64;
 
-        let text_metrics = TextFontMetrics::new(self.text_font_data.clone());
-        // A bar asks for the wider of what its chord symbols and its notes
-        // need: a bar of beamed eighths is not as narrow as its one symbol.
+        let harmony_style = self.measured_harmony_style();
+        // A bar asks for the narrowest it can honestly be drawn: room for its
+        // symbols on their beats (the measuring pass's minimum), its notes,
+        // and at least its slashes. Not a comfortable width — the bars-per-line
+        // cap is the phrase grouping a chart is read by, and a line keeps all
+        // of it unless the symbols physically cannot fit. The spring
+        // distribution then shares out whatever room is left.
+        //
+        // Symbols are measured at the smallest a line may draw them
+        // (`width_dist::MIN_SYSTEM_SYMBOL_SCALE`): a full line of chord
+        // clusters draws its symbols smaller rather than lose a bar.
+        let symbol_scale = width_dist::MIN_SYSTEM_SYMBOL_SCALE;
         let widths: Vec<f64> = measures
             .iter()
-            .map(|m| {
-                self.chord_symbol_width_needed(m, &text_metrics)
+            .enumerate()
+            .map(|(idx, m)| {
+                (self
+                    .chord_symbol_width_floor(m, &harmony_style)
+                    .max(measured_min.get(idx).copied().unwrap_or(0.0))
+                    * symbol_scale)
                     .max(self.melody_width_needed(m))
             })
             .collect();
@@ -3678,22 +3872,24 @@ impl ChartLayoutEngine {
         // better one cramped bar than an empty line and the same cramped bar.
         let usable = content_width.max(1.0);
 
-        // A section of written notes keeps one grid: as many bars a line as
-        // its widest bar allows, every line. Greedy packing would set one
-        // bar here and two there, and a chart is read by counting bars.
+        // A section of written notes keeps one grid: the same number of bars
+        // on every line, as many as every line can hold. Greedy packing would
+        // set one bar here and two there, and a chart is read by counting
+        // bars. The grid is checked line by line, not against the widest bar
+        // alone: a dense hook bar and the short turnaround after it share a
+        // line wherever the pair fits, even though two hook bars would not.
         if measures
             .iter()
             .any(|m| self.melody_width_needed(m) > 0.0 || is_dense_rhythm(m))
             && !measures.iter().any(|m| m.volta_start.is_some())
         {
-            let widest = widths
+            let needed: Vec<f64> = widths
                 .iter()
                 .zip(measured_min.iter().chain(std::iter::repeat(&0.0)))
-                .map(|(w, m)| w.max(*m))
-                .fold(0.0f64, f64::max)
-                .max(1.0);
-            let per_line = ((usable / widest).floor() as usize)
-                .clamp(1, self.config.max_measures_per_system.max(1));
+                .map(|(w, m)| w.max(*m).max(1.0))
+                .collect();
+            let per_line =
+                uniform_bars_per_line(&needed, usable, self.config.max_measures_per_system.max(1));
             return (0..measures.len())
                 .collect::<Vec<_>>()
                 .chunks(per_line)
@@ -3710,7 +3906,7 @@ impl ChartLayoutEngine {
         {
             let squeezed: f64 = measures
                 .iter()
-                .map(|measure| self.chord_symbol_width_floor(measure, &text_metrics))
+                .map(|measure| self.chord_symbol_width_floor(measure, &harmony_style))
                 .sum();
             if squeezed <= usable {
                 return vec![(0..measures.len()).collect()];
@@ -3819,55 +4015,86 @@ impl ChartLayoutEngine {
         if notes > 0.0 { notes + 2.0 * sp } else { 0.0 }
     }
 
-    /// The width this measure's chord symbols need, laid end to end.
-    ///
-    /// An estimate, and deliberately a cheap one: this runs before the real
-    /// measurement pass, and only has to be good enough to stop a line taking
-    /// more bars than it can print. A bar with no symbols still asks for the
-    /// configured minimum, so an empty line is never chosen over a full one.
-    fn chord_symbol_width_needed(
-        &self,
-        measure: &crate::chart::types::Measure,
-        text_metrics: &TextFontMetrics,
-    ) -> f64 {
-        let font_size = self.config.harmony_style.root_size;
-        let gap = self.config.min_chord_symbol_gap.max(1.0);
-        let symbols: f64 = measure
-            .chords
-            .iter()
-            .filter(|c| !c.full_symbol.is_empty() && c.full_symbol != "s")
-            .filter(|c| printed_symbol(measure, c))
-            .map(|c| text_metrics.horizontal_advance(&c.full_symbol, font_size) + gap)
-            .sum();
-        symbols.max(self.config.min_measure_width)
-    }
-
     /// The narrowest this measure can honestly be drawn.
     ///
-    /// [`Self::chord_symbol_width_needed`] asks for a comfortable bar — it
-    /// carries `min_measure_width`, which at the master-rhythm preset is a
-    /// quarter of the page. That is the right question when deciding how many
-    /// bars to put on a line, and the wrong one when asking whether a section
-    /// *can* be squeezed onto one: four bars of that floor already fill the
-    /// page, so the answer would always be no. This asks only for room for the
-    /// symbols, and a bar with none still gets its slashes.
+    /// Room for the symbols laid end to end, and a bar with none still gets
+    /// its slashes — never the comfortable `min_measure_width`, which at the
+    /// master-rhythm preset is a quarter of the page and would decide line
+    /// breaks by looks rather than by what fits.
     fn chord_symbol_width_floor(
         &self,
         measure: &crate::chart::types::Measure,
-        text_metrics: &TextFontMetrics,
+        harmony_style: &HarmonyStyle,
     ) -> f64 {
-        let font_size = self.config.harmony_style.root_size;
-        let gap = self.config.min_chord_symbol_gap.max(1.0);
-        let symbols: f64 = measure
-            .chords
-            .iter()
-            .filter(|c| !c.full_symbol.is_empty() && c.full_symbol != "s")
-            .filter(|c| printed_symbol(measure, c))
-            .map(|c| text_metrics.horizontal_advance(&c.full_symbol, font_size) + gap)
-            .sum();
         // Four slashes and the space they need to read as four.
-        symbols.max(self.config.spatium * 8.0)
+        self.printed_symbols_width(measure, harmony_style)
+            .max(self.config.spatium * 8.0)
     }
+
+    /// The bar's printed symbols laid end to end at their rendered widths,
+    /// each with the clearance the renderer keeps between two symbols.
+    fn printed_symbols_width(
+        &self,
+        measure: &crate::chart::types::Measure,
+        harmony_style: &HarmonyStyle,
+    ) -> f64 {
+        let spacing = symbol_spacing::SymbolSpacing::new(
+            self.config.spatium,
+            self.config.min_chord_symbol_gap,
+        );
+        symbol_spacing::printed_symbols(measure, harmony_style, measure.time_signature, true)
+            .iter()
+            .map(|s| s.extent.left + s.extent.right + spacing.clearance)
+            .sum()
+    }
+
+    /// The configured harmony style with the engine's font metrics, so a
+    /// symbol measures as wide as it will print.
+    fn measured_harmony_style(&self) -> HarmonyStyle {
+        let text_metrics = TextFontMetrics::new(self.text_font_data.clone());
+        let symbol_metrics = if self.config.harmony_style.symbol_font_family.is_none() {
+            text_metrics.clone()
+        } else {
+            TextFontMetrics::new(self.symbol_font_data.clone())
+        };
+        self.config
+            .harmony_style
+            .clone()
+            .with_text_font_metrics(text_metrics)
+            .with_symbol_font_metrics(symbol_metrics)
+    }
+}
+
+/// The (section, bar) of the chart's last drawn bar: the last bar of the
+/// last section that draws a staff.
+fn last_drawn_bar(chart: &Chart) -> Option<(usize, usize)> {
+    chart
+        .sections
+        .iter()
+        .enumerate()
+        .rev()
+        .find_map(|(idx, section)| {
+            let drawn = !section.section.section_type.is_compact()
+                && !matches!(section.section.section_type, SectionType::End);
+            let bars = section.measures().len();
+            (drawn && bars > 0).then(|| (idx, bars - 1))
+        })
+}
+
+/// The most bars a line can hold when every line holds the same number.
+///
+/// `needed` is each bar's width; bars are taken in order, `n` to a line, and
+/// `n` is the largest (up to `cap`) for which no line overflows `usable`.
+/// A bar wider than the line still gets a line to itself.
+fn uniform_bars_per_line(needed: &[f64], usable: f64, cap: usize) -> usize {
+    (1..=cap.max(1))
+        .rev()
+        .find(|&n| {
+            needed
+                .chunks(n)
+                .all(|line| line.iter().sum::<f64>() <= usable)
+        })
+        .unwrap_or(1)
 }
 
 /// How far past the bars-per-line cap a system may run to keep an ending with
@@ -3889,6 +4116,13 @@ fn rescue_orphan_bar(
     usable: f64,
     measures: &[crate::chart::types::Measure],
 ) {
+    // Only a section of one line and a bar is rebalanced. In a longer one the
+    // full lines above set the four-bar grid the reader counts by, and a
+    // short line just before the end would break it: seventeen bars read as
+    // four, four, four, four and one, not four, four, four, three and two.
+    if systems.len() != 2 {
+        return;
+    }
     let Some((last, rest)) = systems.split_last_mut() else {
         return;
     };
@@ -3934,25 +4168,6 @@ fn rescue_orphan_bar(
 /// A bar whose written chord rhythm has attacks shorter than a beat — a
 /// comp figure, not a chord held under slashes. It needs room like notes
 /// do, and its section keeps one grid.
-/// Whether `chord`'s symbol prints in its bar: a `.` repeat and a repeat of
-/// the bar's previous symbol print nothing, so they ask no room for one.
-fn printed_symbol(
-    measure: &crate::chart::types::Measure,
-    chord: &crate::chart::types::ChordInstance,
-) -> bool {
-    if chord.original_token == "." {
-        return false;
-    }
-    let idx = measure.chords.iter().position(|c| std::ptr::eq(c, chord));
-    !idx.is_some_and(|i| {
-        measure.chords[..i]
-            .iter()
-            .rev()
-            .find(|c| c.full_symbol != "r" && c.full_symbol != "s")
-            .is_some_and(|prev| prev.full_symbol == chord.full_symbol)
-    })
-}
-
 pub(crate) fn is_dense_rhythm(measure: &crate::chart::types::Measure) -> bool {
     let ts = crate::time::TimeSignature::new(
         measure.time_signature.0.into(),

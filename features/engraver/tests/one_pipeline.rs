@@ -214,7 +214,7 @@ fn paper_still_carries_the_footer() {
     );
     let svg = pipeline.export_svg_pages_linked(&result).concat();
     assert!(
-        svg.contains("Created with FastTrackStudio"),
+        svg.contains("Created with Keyflow – FastTrackStudio"),
         "a printed page lost its footer"
     );
 }

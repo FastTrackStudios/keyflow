@@ -40,6 +40,7 @@ impl ChartLayoutEngine {
             ctx,
             id_base,
             is_boundary,
+            harmony_style,
         } = params;
         // Check if this measure has melodies (from preprocessed data or raw measure)
         let has_melodies =
@@ -209,17 +210,91 @@ impl ChartLayoutEngine {
         // Convert measure width from points to spatiums for justification
         let width_spatiums = measure_width / self.config.spatium;
 
-        // Calculate number of rhythm segments (for chord min width calculation)
-        let num_segments = if let Some(ref entries) = rhythm_entries {
-            entries.len()
-        } else {
-            full_rhythm.len()
-        };
+        // A bar is drawn as a rhythm figure — stemmed, a held half as a
+        // hollow half slash — only when its written values say it is one: a
+        // rest, a tie, a value shorter than the beat, or an articulated or
+        // held (`_N` with an accent, staccato or fermata) value. Anything
+        // else, including `Fadd2_2 Dm_4`, is a groove bar and reads as beat
+        // slashes; and chords written with `/` are beat slashes even inside
+        // a figure, because writing slashes is the writer saying "groove".
+        let written_rhythm = !has_melodies
+            && self.config.use_stems
+            && reads_as_rhythm_figure(measure, time_signature);
 
-        // Compute minimum segment widths based on actual chord symbol layout bounds
-        // This ensures segments are wide enough to prevent chord symbol collisions
+        // Apply auto_rhythm_slashes: expand whole/half notes to quarter slashes
+        // This makes master rhythm charts easier to read by showing consistent quarter slashes
+        // instead of whole note diamonds for sustained chords
+        let auto_expanded =
+            self.config.auto_rhythm_slashes && !has_melodies && !has_explicit_chord_rhythm;
+        let full_rhythm = if auto_expanded {
+            self.expand_rhythm_to_quarters(full_rhythm)
+        } else {
+            full_rhythm
+        };
+        // Expand half/whole note entries to quarter slashes when auto_rhythm_slashes is enabled.
+        // Rests are preserved as-is (expand_entries_to_quarters keeps them unchanged).
+        // In a rhythm figure only the slash-written chords are spelled out
+        // as beats, and `beat_slashes` marks them to draw stemless.
+        let mut beat_slashes: Vec<bool> = Vec::new();
+        let rhythm_entries = rhythm_entries.map(|entries| {
+            if written_rhythm {
+                let slash_onsets = slash_written_onsets(measure, time_signature);
+                let (expanded, mask) = expand_slash_written_entries(entries, &slash_onsets);
+                beat_slashes = mask;
+                expanded
+            } else if self.config.auto_rhythm_slashes && !has_melodies {
+                self.expand_entries_to_quarters(entries)
+            } else {
+                entries
+            }
+        });
+
+        // The segments the builder will lay out, as (start tick, length).
+        let segments = super::symbol_spacing::segments_from_lengths(match &rhythm_entries {
+            Some(entries) => entries
+                .iter()
+                .map(|e| e.duration().ticks())
+                .collect::<Vec<_>>(),
+            None => full_rhythm.iter().map(Duration::ticks).collect(),
+        });
+
+        // Each segment wide enough that every chord symbol clears the next
+        // one while sitting on its own slash: the beats widen, the symbols
+        // stay put.
+        let symbol_spacing = super::symbol_spacing::SymbolSpacing::new(
+            self.config.spatium,
+            self.config.min_chord_symbol_gap,
+        );
+        let symbols = super::symbol_spacing::printed_symbols(
+            measure,
+            harmony_style,
+            time_signature,
+            is_boundary,
+        );
         let mut chord_min_widths =
-            self.compute_chord_min_widths(measure, num_segments, measure_width, ctx, is_boundary);
+            super::symbol_spacing::symbol_segment_minimums(&segments, &symbols, symbol_spacing);
+        // Equal beats, equal space — as far as the bar has room for it. The
+        // room past the symbols' own minimums goes first to evening the
+        // beats out, rather than to whichever beat the springs favour.
+        let equalized = super::symbol_spacing::equalize_equal_beats(&segments, &chord_min_widths);
+        let room =
+            (measure_width - self.config.spatium * 3.0 - chord_min_widths.iter().sum::<f64>())
+                .max(0.0);
+        let shortfall: f64 = equalized
+            .iter()
+            .zip(&chord_min_widths)
+            .map(|(e, m)| e - m)
+            .sum();
+        if shortfall > 0.0 {
+            let share = (room / shortfall).min(1.0);
+            for (m, e) in chord_min_widths.iter_mut().zip(&equalized) {
+                *m += (e - *m) * share;
+            }
+        }
+        // The last notehead needs room to render without crossing the barline.
+        if let Some(last) = chord_min_widths.last_mut() {
+            *last = last.max(self.config.spatium * 1.5);
+        }
         // A note tied to the next one in the bar needs room for the arc:
         // two sixteenths set head to head leave a tie nobody can see.
         if has_written_notes && let Some(data) = melody_data {
@@ -236,18 +311,6 @@ impl ChartLayoutEngine {
             }
         }
 
-        // Apply auto_rhythm_slashes: expand whole/half notes to quarter slashes
-        // This makes master rhythm charts easier to read by showing consistent quarter slashes
-        // instead of whole note diamonds for sustained chords
-        // Track whether we did auto-expansion (those slashes should be stemless)
-        let auto_expanded =
-            self.config.auto_rhythm_slashes && !has_melodies && !has_explicit_chord_rhythm;
-        let full_rhythm = if auto_expanded {
-            self.expand_rhythm_to_quarters(full_rhythm)
-        } else {
-            full_rhythm
-        };
-
         // Build the measure based on whether we have explicit rhythm entries or not
         let mut builder = MeasureBuilder::new()
             .id_base(id_base)
@@ -258,14 +321,6 @@ impl ChartLayoutEngine {
 
         // Set the rhythm using either entries (for explicit rhythms) or rhythm (for slash fills)
         if let Some(entries) = rhythm_entries {
-            // Expand half/whole note entries to quarter slashes when auto_rhythm_slashes is enabled.
-            // This converts diamond noteheads to slash noteheads for master rhythm chart style.
-            // Rests are preserved as-is (expand_entries_to_quarters keeps them unchanged).
-            let entries = if self.config.auto_rhythm_slashes && !has_melodies {
-                self.expand_entries_to_quarters(entries)
-            } else {
-                entries
-            };
             builder = builder.entries(entries);
         } else {
             builder = builder.rhythm(full_rhythm);
@@ -301,6 +356,11 @@ impl ChartLayoutEngine {
             if !self.config.use_stems && !has_explicit_chord_rhythm && !has_triplets {
                 // Pure stemless mode - no triplets, just make everything stemless
                 builder = builder.stemless();
+            } else if written_rhythm && !has_written_notes {
+                // A rhythm figure: every written attack keeps its stem, so a
+                // dotted quarter beside an eighth reads as the figure it is;
+                // the slash-written beats stay plain stemless slashes.
+                builder = builder.written_rhythm().beat_slashes(beat_slashes);
             } else if self.config.auto_rhythm_slashes && !has_melodies {
                 // Auto-rhythm slashes mode - use per-note auto_stemless()
                 // This makes plain quarters stemless but keeps triplet notes with stems
@@ -464,4 +524,115 @@ fn simile_scene(measure_width: f64, ctx: &LayoutContext<'_>, id_base: u64) -> Sc
     );
     node.metadata.insert("simile".to_string(), "1".to_string());
     node
+}
+
+/// Whether a bar's written values make it a rhythm figure (see
+/// `layout_measure`): a rest, or a `_N` value that is shorter than the
+/// beat, tied, or articulated / held.
+fn reads_as_rhythm_figure(
+    measure: &crate::chart::types::Measure,
+    time_signature: (u8, u8),
+) -> bool {
+    use crate::chart::commands::Command;
+    use crate::chart::types::RhythmElement;
+    use crate::time::{MusicalPositionExt as _, TimeSignature};
+
+    if !rhythm_builder::measure_has_explicit_chord_rhythm(measure) {
+        return false;
+    }
+    let ts = TimeSignature::new(time_signature.0.into(), time_signature.1.into());
+    // One written value filling the bar (`A_1`, `A_2.` in 3/4) is a hold:
+    // the chord struck and let ring, drawn as the held slash it is.
+    let bar_beats = f64::from(time_signature.0);
+    let mut chords = measure
+        .rhythm_elements
+        .iter()
+        .filter(|e| !matches!(e, RhythmElement::Space(_)));
+    if let (Some(RhythmElement::Chord(only)), None) = (chords.next(), chords.next())
+        && only.rhythm.has_lily_duration()
+        && !only.rhythm.is_space()
+        && only.duration.to_beats(ts) >= bar_beats - 1e-6
+    {
+        return true;
+    }
+    measure.rhythm_elements.iter().any(|elem| match elem {
+        RhythmElement::Rest(_) => true,
+        RhythmElement::Space(_) => false,
+        RhythmElement::Chord(chord) => {
+            chord.rhythm.has_lily_duration()
+                && !chord.rhythm.is_space()
+                && (chord.duration.to_beats(ts) < 1.0 - 1e-6
+                    || chord.rhythm.is_tied()
+                    || chord.commands.iter().any(|c| {
+                        matches!(
+                            c,
+                            Command::Accent
+                                | Command::AccentOnPush
+                                | Command::Staccato
+                                | Command::Fermata
+                        )
+                    }))
+        }
+    })
+}
+
+/// Onset ticks of the chords (and continuation slashes) written with `/`
+/// rather than a note value.
+fn slash_written_onsets(
+    measure: &crate::chart::types::Measure,
+    time_signature: (u8, u8),
+) -> Vec<i32> {
+    use crate::chart::types::RhythmElement;
+    use crate::time::{MusicalPositionExt as _, TimeSignature};
+
+    let ts = TimeSignature::new(time_signature.0.into(), time_signature.1.into());
+    let per_beat = super::symbol_spacing::ticks_per_beat(time_signature);
+    let mut beats = 0.0;
+    let mut onsets = Vec::new();
+    for elem in &measure.rhythm_elements {
+        let (written_with_slashes, duration) = match elem {
+            RhythmElement::Chord(c) => (!c.rhythm.has_lily_duration(), c.duration),
+            RhythmElement::Space(s) => (true, s.duration),
+            RhythmElement::Rest(r) => (false, r.duration),
+        };
+        if written_with_slashes {
+            onsets.push((beats * per_beat).round() as i32);
+        }
+        beats += duration.to_beats(ts);
+    }
+    onsets
+}
+
+/// Spell the notes that start on a slash-written onset as quarter slashes,
+/// returning the entries and, per entry, whether it is such a beat slash.
+fn expand_slash_written_entries(
+    entries: Vec<RhythmEntry>,
+    slash_onsets: &[i32],
+) -> (Vec<RhythmEntry>, Vec<bool>) {
+    let quarter = Duration::Quarter.ticks();
+    let mut out = Vec::with_capacity(entries.len());
+    let mut mask = Vec::with_capacity(entries.len());
+    let mut tick = 0;
+    for entry in entries {
+        let len = entry.duration().ticks();
+        match entry {
+            RhythmEntry::Note(dur) if slash_onsets.contains(&tick) && len >= quarter => {
+                for _ in 0..len / quarter {
+                    out.push(RhythmEntry::Note(Duration::Quarter));
+                    mask.push(true);
+                }
+                if len % quarter >= Duration::Eighth.ticks() {
+                    out.push(RhythmEntry::Note(Duration::Eighth));
+                    mask.push(false);
+                }
+                let _ = dur;
+            }
+            other => {
+                out.push(other);
+                mask.push(false);
+            }
+        }
+        tick += len;
+    }
+    (out, mask)
 }

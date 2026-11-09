@@ -98,9 +98,12 @@ pub fn compute_section_letters(sections: &[crate::ChartSection]) -> HashMap<usiz
             continue;
         }
 
-        // Skip non-numbered section types (Intro, Outro, Solo, etc.)
-        // These show their full name + comment, so letters are redundant
+        // Non-numbered section types (Intro, Inst, Solo, etc.) take no
+        // letter themselves, but they do sit between the sections around
+        // them: VS / INST / VS is two verses, VS 1 and VS 2, not one run
+        // of VS 1A and VS 2B.
         if !section_type.should_number() {
+            runs.push((String::new(), Vec::new()));
             continue;
         }
 
@@ -278,6 +281,23 @@ INST \"Guitar Lead\" 8
 Refrain
 Refrain
 ";
+
+    /// Silent Night: verses separated by instrumentals are VS 1, VS 2,
+    /// VS 3 — the instrumental is between them, so no letters.
+    #[test]
+    fn an_instrumental_between_verses_ends_the_run() {
+        let chart = keyflow_lang::text::chart::parse_chart(
+            "T\n#A 90bpm 3/4\n\nVS 1\nA\n\nINST 1\nD\n\nVS 1\nA\n\nINST 1\nD\n\nVS 1\nA\n",
+        )
+        .expect("parses");
+        assert!(compute_section_letters(&chart.sections).is_empty());
+
+        // Back to back, the verses are still lettered.
+        let chart =
+            keyflow_lang::text::chart::parse_chart("T\n#A 90bpm 3/4\n\nVS 1\nA\n\nVS 1\nA\n")
+                .expect("parses");
+        assert_eq!(compute_section_letters(&chart.sections).len(), 2);
+    }
 
     #[test]
     fn test_chart_section_timeline_sample() {

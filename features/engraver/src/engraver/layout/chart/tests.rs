@@ -2700,6 +2700,17 @@ fn six_bars_keep_the_four_bar_grid() {
     assert_eq!(systems[1].len(), 2);
 }
 
+/// A long section keeps its grid to the end: seventeen bars are four full
+/// lines and one bar, not a short line borrowed to keep the last bar company.
+#[test]
+fn seventeen_bars_fill_four_lines_and_leave_one() {
+    let engine = ChartLayoutEngine::new(test_style(), Arc::new(Vec::new()), Arc::new(Vec::new()));
+    let chart = long_chart(1, 17, "G");
+    let systems = engine.group_measures_into_systems(chart.sections[0].measures(), 500.0, &[]);
+    let lens: Vec<usize> = systems.iter().map(Vec::len).collect();
+    assert_eq!(lens, vec![4, 4, 4, 4, 1]);
+}
+
 // endregion: --- Chart modes
 
 /// Folding a section is supposed to buy vertical space. A rule and a word

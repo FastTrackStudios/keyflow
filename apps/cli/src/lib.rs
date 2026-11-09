@@ -128,6 +128,13 @@ enum Commands {
         /// spacing, without its shrinking.
         #[arg(long)]
         tight_spacing: bool,
+        /// Clear space between two chord symbols, in points (default 3).
+        /// Bars widen until every symbol sits on its own slash with this
+        /// much air before the next one, so a smaller gap packs chord-dense
+        /// bars tighter and fits more of them on a line; a larger one
+        /// spreads them out.
+        #[arg(long, value_name = "PT")]
+        chord_gap: Option<f64>,
     },
     /// Import MIDI and render the generated chart to PDF
     MidiPdf {
@@ -275,6 +282,13 @@ enum Commands {
         /// spacing, without its shrinking.
         #[arg(long)]
         tight_spacing: bool,
+        /// Clear space between two chord symbols, in points (default 3).
+        /// Bars widen until every symbol sits on its own slash with this
+        /// much air before the next one, so a smaller gap packs chord-dense
+        /// bars tighter and fits more of them on a line; a larger one
+        /// spreads them out.
+        #[arg(long, value_name = "PT")]
+        chord_gap: Option<f64>,
     },
     /// Preprocess a markdown docs tree: render ```` ```kf ```` blocks to inline
     /// SVG, writing a generated mirror tree a stock dodeca (`ddc`) build serves.
@@ -1001,6 +1015,7 @@ impl LayoutPipeline {
         width_pt: f64,
         chart_mode: ChartModeArg,
         tight_spacing: bool,
+        chord_gap: Option<f64>,
     ) -> ChartLayoutResult {
         let options = PresetOptions::for_export().with_viewport_pt(width_pt);
         let (mode, config) = match preset {
@@ -1038,6 +1053,9 @@ impl LayoutPipeline {
             config
         };
         config.tight_system_spacing |= tight_spacing;
+        if let Some(gap) = chord_gap {
+            config.min_chord_symbol_gap = gap.max(0.0);
+        }
         match chart_mode {
             ChartModeArg::Default | ChartModeArg::Written => {
                 self.engine.layout_chart_with_config(chart, &mode, &config)
@@ -1253,6 +1271,7 @@ fn render_variant_pngs(
         width_pt,
         ChartModeArg::Default,
         false,
+        None,
     );
     let svgs: Vec<String> = if layout.pages.is_empty() {
         vec![
@@ -1450,6 +1469,7 @@ fn run(cli: Cli) -> Result<(), String> {
             output,
             chart_mode,
             tight_spacing,
+            chord_gap,
         } => {
             let source = read_source(&input)?;
             let chart = parse_chart(&source)?;
@@ -1465,6 +1485,7 @@ fn run(cli: Cli) -> Result<(), String> {
                 BreakpointArg::Desktop.default_width_pt(),
                 chart_mode,
                 tight_spacing,
+                chord_gap,
             );
 
             println!(
@@ -1932,6 +1953,7 @@ fn run(cli: Cli) -> Result<(), String> {
             scale,
             chart_mode,
             tight_spacing,
+            chord_gap,
         } => {
             let source = read_source(&input)?;
             let chart = parse_chart(&source)?;
@@ -1945,6 +1967,7 @@ fn run(cli: Cli) -> Result<(), String> {
                 viewport_pt,
                 chart_mode,
                 tight_spacing,
+                chord_gap,
             );
 
             // ContinuousScroll has no `pages`; render the whole scene as one image.

@@ -102,6 +102,9 @@ pub struct PrefixRenderContext {
     /// measure carries a key change passes red to highlight the change in
     /// place (instead of drawing a separate red indicator on top).
     pub key_sig_color: Option<peniko::Color>,
+    /// The key this line's first bar changes from, when it does: the prefix
+    /// then cancels the old accidentals with naturals before the new ones.
+    pub prev_key_signature: Option<i8>,
     /// Time signature (numerator, denominator).
     pub time_signature: (u8, u8),
     /// Width of the clef element.
@@ -164,11 +167,16 @@ pub fn render_system_prefix(
     }
 
     // Render key signature if requested (between clef and time signature)
-    if ctx.include_key_sig && ctx.key_signature != 0 {
+    let cancels = ctx
+        .prev_key_signature
+        .is_some_and(|prev| naturals_count(prev, ctx.key_signature) > 0);
+    if ctx.include_key_sig && (ctx.key_signature != 0 || cancels) {
         let key_params = KeySigParams {
             id: id_counter,
             key: KeySigType::Standard(ctx.key_signature),
             color: ctx.key_sig_color,
+            show_naturals: cancels,
+            prev_key: ctx.prev_key_signature.map(KeySigType::Standard),
             ..Default::default()
         };
         id_counter += 1;
@@ -238,6 +246,34 @@ pub fn render_system_prefix(
 /// # Returns
 /// Tuple of (clef_width, key_sig_width, time_sig_width, total_width)
 #[must_use]
+/// How many of `prev`'s accidentals a change to `new` cancels.
+#[must_use]
+pub fn naturals_count(prev: i8, new: i8) -> u8 {
+    if prev == 0 || prev.signum() != new.signum() {
+        prev.unsigned_abs()
+    } else {
+        prev.unsigned_abs().saturating_sub(new.unsigned_abs())
+    }
+}
+
+/// The width the cancelling naturals of a key change add to a prefix
+/// (matching `layout_keysig`'s spacing).
+#[must_use]
+pub fn naturals_width(prev: i8, new: i8, spatium: f64) -> f64 {
+    let n = naturals_count(prev, new);
+    if n == 0 {
+        return 0.0;
+    }
+    let naturals = f64::from(n) * spatium * 0.9 * 0.8 + spatium * 0.3;
+    // A change to C has no key signature of its own, so no trailing space
+    // was reserved for one.
+    if new == 0 {
+        naturals + spatium * 0.5
+    } else {
+        naturals
+    }
+}
+
 pub fn calculate_prefix_width(
     spatium: f64,
     include_clef: bool,

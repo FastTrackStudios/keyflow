@@ -14,7 +14,9 @@ use crate::engraver::scene::node::SceneNode;
 use crate::engraver::scene::paint::PaintCommand;
 
 use super::LayoutData;
-use super::note::{Accidental, NoteDuration, NoteHeadType, NoteParams, layout_note};
+use super::note::{
+    Accidental, NoteDuration, NoteHeadType, NoteParams, SlashLongStyle, layout_note,
+};
 
 /// SMuFL codepoints for stems and flags.
 pub mod glyphs {
@@ -184,6 +186,11 @@ pub fn layout_chord(params: &ChordParams, ctx: &LayoutContext) -> (LayoutData, S
             offset_x: notehead_offsets[i],
             ledger_lines: i == 0 || i == sorted_notes.len() - 1, // Only top/bottom get ledgers
             accidental_column_width: column_width_param,
+            slash_long_style: if params.stemless {
+                SlashLongStyle::Diamond
+            } else {
+                SlashLongStyle::WhiteSlash
+            },
         };
 
         let (note_layout, note_node) = layout_note(&note_params, ctx);
@@ -337,15 +344,9 @@ const SLASH_STEM_UP_SE_Y: f64 = 1.0;
 const SLASH_STEM_DOWN_NW_X: f64 = 0.0;
 const SLASH_STEM_DOWN_NW_Y: f64 = -1.0;
 
-/// SMuFL stemUpSE anchor for diamond noteheads (noteheadSlashDiamondWhite).
-/// From Bravura metadata: [2.0, 0.0] - stem connects at center of diamond
-const DIAMOND_STEM_UP_SE_X: f64 = 2.0;
-const DIAMOND_STEM_UP_SE_Y: f64 = 0.0;
-
-/// SMuFL stemDownNW anchor for diamond noteheads (noteheadSlashDiamondWhite).
-/// From Bravura metadata: [0.0, 0.0] - stem connects at center of diamond
-const DIAMOND_STEM_DOWN_NW_X: f64 = 0.0;
-const DIAMOND_STEM_DOWN_NW_Y: f64 = 0.0;
+/// SMuFL stemUpSE x for the hollow half slash (noteheadSlashWhiteHalf),
+/// which is wider than the filled slash; its y matches the filled one.
+const WHITE_HALF_SLASH_STEM_UP_SE_X: f64 = 2.84;
 
 /// Standard stem width in staff spaces (from MuseScore default).
 const STEM_WIDTH: f64 = 0.12;
@@ -413,18 +414,19 @@ fn draw_stem(
     let bottom_y = -bottom_note.line as f64 * spatium / 2.0;
     let stem_notehead_x_offset = stem_side_notehead_offset(stem_dir, offsets);
 
-    // Determine if we're using diamond notehead (for half/whole in slash mode)
-    let uses_diamond = head_type == NoteHeadType::Slash
-        && matches!(
-            duration,
-            NoteDuration::Half | NoteDuration::Whole | NoteDuration::DoubleWhole
-        );
+    // A stemmed long slash is never the diamond: layout_chord draws the
+    // diamond only for the stemless held-chord slash, and a stemmed half is
+    // the hollow half slash, which takes its stem at the slash's ends like
+    // the filled one does. Anchoring it at the diamond's centre left the
+    // stem hanging from the middle of the head.
+    let white_half_slash =
+        head_type == NoteHeadType::Slash && matches!(duration, NoteDuration::Half);
 
     let (stem_x, stem_start_y, stem_end_y) = match stem_dir {
         StemDirection::Up | StemDirection::Auto => {
             // Use SMuFL anchors from Bravura font metadata
-            let (anchor_x, anchor_y) = if uses_diamond {
-                (DIAMOND_STEM_UP_SE_X, DIAMOND_STEM_UP_SE_Y)
+            let (anchor_x, anchor_y) = if white_half_slash {
+                (WHITE_HALF_SLASH_STEM_UP_SE_X, SLASH_STEM_UP_SE_Y)
             } else if head_type == NoteHeadType::Slash {
                 (SLASH_STEM_UP_SE_X, SLASH_STEM_UP_SE_Y)
             } else {
@@ -438,9 +440,7 @@ fn draw_stem(
         }
         StemDirection::Down => {
             // Use SMuFL anchors from Bravura font metadata
-            let (anchor_x, anchor_y) = if uses_diamond {
-                (DIAMOND_STEM_DOWN_NW_X, DIAMOND_STEM_DOWN_NW_Y)
-            } else if head_type == NoteHeadType::Slash {
+            let (anchor_x, anchor_y) = if head_type == NoteHeadType::Slash {
                 (SLASH_STEM_DOWN_NW_X, SLASH_STEM_DOWN_NW_Y)
             } else {
                 (STEM_DOWN_NW_X, STEM_DOWN_NW_Y)

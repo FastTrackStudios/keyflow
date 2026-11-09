@@ -34,7 +34,7 @@ members = [
 
 [workspace.package]
 # Tracks the release tag. Bump this with the tag.
-version = "0.0.1-alpha"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.87"
 authors = ["FastTrack Studio"]

@@ -37,7 +37,16 @@ use crate::engraver::scene::paint::PaintCommand;
 const DYNAMIC_COLOR: Color = super::constants::REPEAT_COLOR;
 const STAFF_TEXT_COLOR: Color = super::constants::REPEAT_COLOR;
 const DYNAMIC_GLYPH_SIZE_SP: f64 = 3.05;
-const STAFF_TEXT_FONT_SIZE_SP: f64 = 2.5;
+const STAFF_TEXT_FONT_SIZE_SP: f64 = CUE_FONT_SIZE_SP;
+
+/// The face every below-staff cue is drawn in — text cues (`"Rubato"`) and
+/// instrument cues (`@bells "Bells only"`) alike: plain upright FreeSans,
+/// which the chart font bundle embeds. Lyrics are FreeSans *italic*, so the
+/// two stay distinct. (Text cues used to ask for "Leland Text", which has no
+/// letters: every one silently fell back to the handwritten chord face.)
+pub const CUE_FONT: &str = "FreeSans";
+/// Cue size in staff spaces.
+pub const CUE_FONT_SIZE_SP: f64 = 2.4;
 
 #[derive(Clone)]
 pub struct DynamicStackAnchor {
@@ -59,7 +68,7 @@ pub struct MeasureFrame<'a> {
     pub beats_per_measure: u8,
     /// Source MusicXML measure width, in tenths, when available.
     pub source_measure_width: Option<f64>,
-    /// Per-beat segment x-positions (measure-local, in spatiums) emitted by
+    /// Per-beat segment x-positions (measure-local, in points) emitted by
     /// the chord-rest layout pass. When present, beat_x() snaps to the
     /// closest segment so figured-bass numerals / dynamics line up under
     /// their chord symbol instead of a uniform grid approximation.
@@ -88,8 +97,12 @@ impl<'a> MeasureFrame<'a> {
         if let Some(segments) = self.segment_positions
             && !segments.is_empty()
         {
+            // Segment positions are points from the bar start (the chord
+            // renderer adds them to `measure_x` as they are). Scaling them by
+            // the staff space put a beat-1 cue under beat 2 and sent a
+            // hairpin off the page.
             let idx = beat_idx.min(segments.len() - 1);
-            return self.measure_x + segments[idx] * self.spatium;
+            return self.measure_x + segments[idx];
         }
         let beats = self.beats_per_measure.max(1) as f64;
         let beat_clamped = (beat.max(1) as f64 - 1.0).min(beats - 1.0);
@@ -255,7 +268,7 @@ pub fn render_staff_text(
 
         paints.push(PaintCommand::text(
             &item.text,
-            "Leland Text",
+            CUE_FONT,
             font_size,
             Point::new(x, baseline_y),
             STAFF_TEXT_COLOR,
@@ -547,55 +560,107 @@ pub fn render_volta_span(
 /// MuseScore's `hairpin.cpp` / `HairpinSegment`); those are skipped here and
 /// will be handled by a follow-up that runs after measure layout completes.
 pub fn render_hairpins(
-    hairpins: &[Hairpin],
+    hairpins: &[(Hairpin, u16)],
     frame: &MeasureFrame<'_>,
     id_counter: &mut u64,
 ) -> Vec<SceneNode> {
-    let mut nodes = Vec::with_capacity(hairpins.len());
-    // Wedge opening = spatium (MuseScore: `Sid::hairpinHeight = 1.2sp`).
+    hairpins
+        .iter()
+        .filter_map(|(hp, bars_in)| {
+            let node = render_hairpin_segment(hp, *bars_in, frame, *id_counter)?;
+            *id_counter += 1;
+            Some(node)
+        })
+        .collect()
+}
+
+/// The part of a hairpin that falls in this bar, `bars_in` bars after the
+/// one it starts in.
+///
+/// A hairpin runs from the start of its first beat to the end of its last
+/// (`hairpin < 1..4` fills a 4/4 bar), and opens evenly over its whole
+/// length: a wedge over three bars is a third open at the first barline,
+/// whatever line each bar is on. `None` when this bar is past its end.
+pub fn render_hairpin_segment(
+    hp: &Hairpin,
+    bars_in: u16,
+    frame: &MeasureFrame<'_>,
+    id: u64,
+) -> Option<SceneNode> {
+    if bars_in > hp.end_measure_offset {
+        return None;
+    }
+    // Wedge opening = 1.2sp (MuseScore: `Sid::hairpinHeight`).
     let opening = frame.spatium * 1.2;
     let stroke = frame.spatium * 0.12;
-    let baseline_y = frame.staff_bottom() + frame.spatium * 4.0;
-
-    for hp in hairpins {
-        // Single-measure only — skip multi-measure spanners.
-        if hp.end_measure_offset > 0 {
-            continue;
-        }
-        let placement_y = match hp.placement {
-            Placement::Above => frame.staff_top() - frame.spatium * 2.5,
-            Placement::Below => baseline_y,
+    let pad = frame.spatium * 0.3;
+    let y = match hp.placement {
+        Placement::Above => frame.staff_top() - frame.spatium * 2.5,
+        Placement::Below => frame.staff_bottom() + frame.spatium * 4.0,
+    };
+    let beats = f64::from(frame.beats_per_measure.max(1));
+    // Positions along the hairpin, in beats from its start.
+    let start_beat = f64::from(hp.start_beat.max(1)) - 1.0;
+    let end_beat = f64::from(hp.end_beat.max(1)).min(beats);
+    let total = (f64::from(hp.end_measure_offset) * beats + end_beat - start_beat).max(0.5);
+    let here_from = f64::from(bars_in) * beats - start_beat;
+    let (t0, x0) = if bars_in == 0 {
+        (0.0, frame.measure_x.max(frame.beat_x(hp.start_beat.max(1))))
+    } else {
+        (here_from / total, frame.measure_x + pad)
+    };
+    let bar_end_x = frame.measure_x + frame.measure_width - pad;
+    let (t1, x1) = if bars_in == hp.end_measure_offset {
+        let x = if end_beat >= beats {
+            bar_end_x
+        } else {
+            frame.beat_x(hp.end_beat.saturating_add(1)) - pad
         };
-        let x_start = frame.beat_x(hp.start_beat);
-        let x_end = frame.beat_x(hp.end_beat).max(x_start + frame.spatium);
+        (1.0, x)
+    } else {
+        ((here_from + beats) / total, bar_end_x)
+    };
+    let x1 = x1.max(x0 + frame.spatium);
+    let open_at = |t: f64| match hp.kind {
+        HairpinKind::Crescendo => opening * t.clamp(0.0, 1.0),
+        HairpinKind::Decrescendo => opening * (1.0 - t.clamp(0.0, 1.0)),
+    };
+    let (a, b) = (open_at(t0) / 2.0, open_at(t1) / 2.0);
+    let paints = vec![
+        PaintCommand::line(
+            Point::new(x0, y - a),
+            Point::new(x1, y - b),
+            Color::BLACK,
+            stroke,
+        ),
+        PaintCommand::line(
+            Point::new(x0, y + a),
+            Point::new(x1, y + b),
+            Color::BLACK,
+            stroke,
+        ),
+    ];
+    let mut node = SceneNode::leaf(SemanticId::new(ElementType::Articulation, id), paints);
+    node.set_element_type("hairpin");
+    Some(node)
+}
 
-        let (left_open, right_open) = match hp.kind {
-            // Crescendo: < — closed at start, opens to the right.
-            HairpinKind::Crescendo => (0.0, opening),
-            // Decrescendo: > — open at start, closes to the right.
-            HairpinKind::Decrescendo => (opening, 0.0),
-        };
-
-        let upper_start = Point::new(x_start, placement_y - left_open / 2.0);
-        let lower_start = Point::new(x_start, placement_y + left_open / 2.0);
-        let upper_end = Point::new(x_end, placement_y - right_open / 2.0);
-        let lower_end = Point::new(x_end, placement_y + right_open / 2.0);
-
-        let paints = vec![
-            PaintCommand::line(upper_start, upper_end, Color::BLACK, stroke),
-            PaintCommand::line(lower_start, lower_end, Color::BLACK, stroke),
-        ];
-
-        let mut node = SceneNode::leaf(
-            SemanticId::new(ElementType::Articulation, *id_counter),
-            paints,
-        );
-        node.set_element_type("hairpin");
-        *id_counter += 1;
-        nodes.push(node);
-    }
-
-    nodes
+/// Every hairpin sounding in bar `measure` of `measures`, with how many
+/// bars after its own it is: the ones it starts, and the ones started in
+/// an earlier bar that run on through it.
+#[must_use]
+pub fn hairpins_through(measures: &[crate::chart::Measure], measure: usize) -> Vec<(Hairpin, u16)> {
+    const LONGEST_SPAN: usize = 64;
+    (measure.saturating_sub(LONGEST_SPAN)..=measure)
+        .filter_map(|start| measures.get(start).map(|m| (start, m)))
+        .flat_map(|(start, m)| {
+            let bars_in = (measure - start) as u16;
+            m.hairpins
+                .iter()
+                .filter(move |hp| hp.end_measure_offset >= bars_in)
+                .map(move |hp| (hp.clone(), bars_in))
+        })
+        .collect()
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -919,6 +984,99 @@ fn scale_node_around_anchor(
             }
         }
     }
+}
+
+/// Lay a bar's below-staff items out in rows so none overlaps another.
+///
+/// `nodes` come in priority order — the dynamic first, then text cues, then
+/// instrument cues. Each keeps its own anchor x (the bar start or its beat)
+/// unless something is already there on the row: then it moves right of
+/// that item, if it still ends inside the bar (`bar_right`); otherwise it
+/// tries the next row, and opens a new row at its anchor when none has room.
+/// Rows are top-aligned, one tallest-item apart. Nothing is shrunk — an item
+/// longer than the bar keeps its size and runs on past the barline (the
+/// system skyline moves the next bar's items clear of it) — but never past
+/// `line_right`, the end of the line: a cue on a line's last beat moves left
+/// to end there rather than run off the page.
+pub fn stack_below_staff_rows(
+    nodes: Vec<crate::engraver::scene::node::SceneNode>,
+    bar_right: f64,
+    line_right: f64,
+    gap: f64,
+    row_gap: f64,
+) -> Vec<crate::engraver::scene::node::SceneNode> {
+    let boxed: Vec<_> = nodes
+        .into_iter()
+        .map(|node| {
+            let bbox = estimate_node_shape(&node).map(|s| s.bbox());
+            let baseline = node_baseline(&node);
+            (node, bbox.zip(baseline))
+        })
+        .collect();
+    let placed = boxed.iter().filter(|(_, b)| b.is_some()).count();
+    if placed < 2 {
+        return boxed
+            .into_iter()
+            .map(|(mut node, shape)| {
+                if let Some((rect, _)) = shape
+                    && rect.x1 > line_right
+                {
+                    shift_node_xy(&mut node, line_right - rect.x1, 0.0);
+                }
+                node
+            })
+            .collect();
+    }
+    // Rows share a baseline: the lowest natural one, so nothing moves up
+    // into the staff. A row is one line of the largest text apart.
+    let first_baseline = boxed
+        .iter()
+        .filter_map(|(_, b)| b.map(|(_, y)| y))
+        .fold(f64::NEG_INFINITY, f64::max);
+    let pitch = boxed
+        .iter()
+        .flat_map(|(n, _)| n.commands.iter())
+        .filter_map(|c| match c {
+            PaintCommand::Text { font_size, .. } => Some(*font_size),
+            _ => None,
+        })
+        .fold(0.0, f64::max)
+        .max(row_gap)
+        + row_gap;
+    // The right edge of the ink already on each row.
+    let mut rows: Vec<f64> = Vec::new();
+    boxed
+        .into_iter()
+        .map(|(mut node, shape)| {
+            let Some((rect, baseline)) = shape else {
+                return node;
+            };
+            let width = rect.width();
+            let slot = rows.iter().enumerate().find_map(|(i, &right)| {
+                let x = rect.x0.max(right + gap);
+                (x + width <= bar_right || x <= rect.x0).then_some((i, x))
+            });
+            let (row, x) = slot.unwrap_or_else(|| {
+                rows.push(f64::NEG_INFINITY);
+                (rows.len() - 1, rect.x0)
+            });
+            let x = x.min(line_right - width).max(rows[row] + gap);
+            rows[row] = x + width;
+            let dy = first_baseline + pitch * row as f64 - baseline;
+            shift_node_xy(&mut node, x - rect.x0, dy);
+            node
+        })
+        .collect()
+}
+
+/// The baseline of a node's first text run or glyph.
+fn node_baseline(node: &crate::engraver::scene::node::SceneNode) -> Option<f64> {
+    node.commands.iter().find_map(|c| match c {
+        PaintCommand::Text { position, .. } | PaintCommand::Glyph { position, .. } => {
+            Some((node.transform * *position).y)
+        }
+        _ => None,
+    })
 }
 
 pub fn shrink_node_to_max_right(
