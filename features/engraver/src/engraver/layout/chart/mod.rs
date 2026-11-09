@@ -1948,6 +1948,10 @@ impl ChartLayoutEngine {
                             segment_positions: &segment_positions,
                             segment_ticks: &segment_ticks,
                             articulation_lift: system_artic_lift,
+                            prev_bar_held_one_chord: measure_idx
+                                .checked_sub(1)
+                                .and_then(|prev| chart_section.measures().get(prev))
+                                .is_some_and(chord_renderer::holds_one_chord),
                             tied_in: measure_idx
                                 .checked_sub(1)
                                 .and_then(|prev| chart_section.measures().get(prev))
@@ -3375,6 +3379,10 @@ impl ChartLayoutEngine {
                             segment_positions: &segment_positions,
                             segment_ticks: &segment_ticks,
                             articulation_lift: system_artic_lift,
+                            prev_bar_held_one_chord: measure_idx
+                                .checked_sub(1)
+                                .and_then(|prev| chart_section.measures().get(prev))
+                                .is_some_and(chord_renderer::holds_one_chord),
                             tied_in: measure_idx
                                 .checked_sub(1)
                                 .and_then(|prev| chart_section.measures().get(prev))

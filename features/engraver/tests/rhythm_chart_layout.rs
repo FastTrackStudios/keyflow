@@ -270,6 +270,13 @@ fn a_key_change_at_a_line_start_cancels_the_old_key() {
 }
 
 #[test]
+fn a_fermata_shows_even_when_its_chords_symbol_does_not() {
+    // `D // \fermata` on a D already sounding: no symbol, but the hold.
+    let result = render("F - x\n#D 90bpm 4/4\n\nVS 2\nD\nD // \\fermata r2\n");
+    assert_eq!(count_glyphs(&result.scene, '\u{E4C0}'), 1);
+}
+
+#[test]
 fn a_marcato_chord_draws_the_wedge() {
     let result = render("Hit\n#C 120bpm 4/4\n\nVS 1\nC_4 \\marcato r4 G_2\n");
     assert_eq!(count_glyphs(&result.scene, '\u{E4AC}'), 1);
@@ -413,6 +420,21 @@ fn a_chord_still_sounding_over_the_barline_is_not_named_again() {
         .filter(|s| s.text == "G")
         .count();
     assert_eq!(g, 1);
+}
+
+#[test]
+fn a_chord_pushed_in_at_the_end_of_a_bar_is_not_named_again() {
+    // This Christmas: the hook ends on a pushed `>Fadd2_8`, and the 3/4
+    // turnaround starts on that same Fadd2. It is already named and still
+    // sounding, so the turnaround names only its Dm.
+    let result = render(
+        "TC\n#F 93bpm 4/4\n\nIN 2\nBbmaj7_8 Ebmaj7_8 Am7_16 Dm7_8. Abmaj9_8 Bbmaj7_8 Ebmaj7_8 >Fadd2_8 !T3/4 Fadd2 // Dm /\n",
+    );
+    let fadd2 = symbols(&result.scene)
+        .iter()
+        .filter(|s| s.text.starts_with('F'))
+        .count();
+    assert_eq!(fadd2, 1);
 }
 
 #[test]

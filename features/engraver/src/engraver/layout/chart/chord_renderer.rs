@@ -88,6 +88,11 @@ pub struct ChordRenderContext<'a> {
     /// [`system_articulation_lift`]). Articulation marks are placed from the
     /// staff, which sits this much further below the symbols.
     pub articulation_lift: f64,
+    /// Whether the bar before this one held a single chord throughout.
+    /// Only then does a bar of changes re-name a beat-1 chord that repeats
+    /// it; after a bar that changed into it (a push, a beat-4 change) the
+    /// chord is already named and still sounding.
+    pub prev_bar_held_one_chord: bool,
     /// Internal push positions from rhythm builder.
     pub internal_push_positions: &'a [(usize, usize)],
     /// Harmony style for chord symbols.
@@ -1286,10 +1291,29 @@ pub fn render_chord_symbols(
             continue;
         }
 
+        // A fermata belongs to the chord however it was written and whether
+        // or not its symbol prints: when the symbol is left off below, the
+        // hold still shows, over the beat.
+        let has_fermata_cmd = chord.commands.iter().any(|c| matches!(c, Command::Fermata));
+        let hidden_fermata_bounds = Rect::new(
+            chord_x,
+            ctx.chord_y - ctx.spatium * 2.0,
+            chord_x + ctx.spatium * 2.0,
+            ctx.chord_y,
+        );
+
         // A tie carried over the barline is the same chord still sounding.
         if is_first_real && ctx.tied_in == Some(current_symbol.as_str()) {
             last_chord_symbol = Some(current_symbol.clone());
             same_bar_symbol = Some(current_symbol.clone());
+            if has_fermata_cmd {
+                nodes.push(create_fermata_marker(
+                    hidden_fermata_bounds,
+                    ctx.spatium,
+                    id_counter,
+                ));
+                id_counter += 1;
+            }
             continue;
         }
 
@@ -1299,6 +1323,14 @@ pub fn render_chord_symbols(
             && last_chord_symbol.as_deref() == Some(current_symbol.as_str())
         {
             same_bar_symbol = Some(current_symbol.clone());
+            if has_fermata_cmd {
+                nodes.push(create_fermata_marker(
+                    hidden_fermata_bounds,
+                    ctx.spatium,
+                    id_counter,
+                ));
+                id_counter += 1;
+            }
             continue;
         }
 
@@ -1308,6 +1340,14 @@ pub fn render_chord_symbols(
         // repeated chords do it across barlines, below.)
         if !is_hits && same_bar_symbol.as_deref() == Some(current_symbol.as_str()) {
             last_chord_symbol = Some(current_symbol.clone());
+            if has_fermata_cmd {
+                nodes.push(create_fermata_marker(
+                    hidden_fermata_bounds,
+                    ctx.spatium,
+                    id_counter,
+                ));
+                id_counter += 1;
+            }
             continue;
         }
         same_bar_symbol = Some(current_symbol.clone());
@@ -1320,10 +1360,18 @@ pub fn render_chord_symbols(
                 last_chord_symbol.as_deref(),
                 is_pushed_at_boundary,
                 ctx.time_signature,
-                ctx.hide_repeated_chords && !bar_changes,
+                ctx.hide_repeated_chords && !(bar_changes && ctx.prev_bar_held_one_chord),
             )
         {
             last_chord_symbol = Some(current_symbol.clone());
+            if has_fermata_cmd {
+                nodes.push(create_fermata_marker(
+                    hidden_fermata_bounds,
+                    ctx.spatium,
+                    id_counter,
+                ));
+                id_counter += 1;
+            }
             continue;
         }
 
@@ -1599,6 +1647,17 @@ pub fn render_chord_symbols(
         last_chord_symbol,
         next_id: id_counter,
     }
+}
+
+/// Whether a bar holds one chord throughout (its symbols, rests aside, are
+/// all the same).
+#[must_use]
+pub fn holds_one_chord(measure: &Measure) -> bool {
+    measure
+        .chords
+        .iter()
+        .any(|c| !is_placeholder_chord(&c.full_symbol))
+        && !bar_has_chord_changes(measure)
 }
 
 /// Whether the bar changes chord: two or more different symbols in it.
@@ -1943,6 +2002,7 @@ mod tests {
             segment_ticks: &[],
             tied_in: None,
             articulation_lift: 0.0,
+            prev_bar_held_one_chord: false,
             measure_measurements: None,
             spillback_positions: &[],
             note_line_stacks: &[],
