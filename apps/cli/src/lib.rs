@@ -15,6 +15,7 @@ use std::path::PathBuf;
 
 mod book;
 mod docs;
+mod lyrics;
 mod orchestra;
 mod parts;
 mod pdfscore;
@@ -371,6 +372,38 @@ enum Commands {
         /// Also export a Reaper `.rpp` (needs the `reaper` feature).
         #[arg(long)]
         reaper: bool,
+    },
+    /// Put a song's lyrics into a chart from an LRC: every word under the
+    /// bar and (roughly) the beat it is sung on, as a `[lyrics lrc]` lane in
+    /// each section. Chords are untouched; re-running replaces the lanes.
+    #[command(name = "lyrics-lrc")]
+    LyricsLrc {
+        /// The chart (`.kf`).
+        chart: PathBuf,
+        /// The synced lyrics (`.lrc`; plain or with per-word times).
+        lrc: PathBuf,
+        /// Seconds into the recording where bar 1 starts. The chart's tempo
+        /// and meters place every other bar.
+        #[arg(long, conflicts_with = "sync", required_unless_present = "sync")]
+        downbeat: Option<f64>,
+        /// A Songsterr `sync.json` with each bar's start time — follows a
+        /// recording that drifts, where one tempo cannot.
+        #[arg(long)]
+        sync: Option<PathBuf>,
+        /// The sync bar (0-based, as in sync.json) that is the chart's bar 1.
+        /// Default: 1 when the sync has exactly one bar more than the chart
+        /// (a pickup), else 0.
+        #[arg(long, requires = "sync")]
+        sync_first_bar: Option<usize>,
+        /// Seconds added to every LRC time (negative if the LRC runs late).
+        #[arg(long, default_value_t = 0.0, allow_hyphen_values = true)]
+        offset: f64,
+        /// Quantise words to this note value: 8 = eighths, 4 = beats, 16.
+        #[arg(long, default_value_t = 8)]
+        grid: u32,
+        /// Output `.kf` (default: stdout).
+        #[arg(short, long)]
+        output: Option<PathBuf>,
     },
     /// Emit a multi-voice melody+lyrics MIDI from a chart's `voice {}` lanes —
     /// one track/MIDI-channel per colored vocal part. Notated timing; no audio.
@@ -2171,6 +2204,30 @@ fn run(cli: Cli) -> Result<(), String> {
             out_dir: &out_dir,
             separate,
             reaper,
+        }),
+
+        Commands::LyricsLrc {
+            chart,
+            lrc,
+            downbeat,
+            sync,
+            sync_first_bar,
+            offset,
+            grid,
+            output,
+        } => lyrics::cmd_lyrics_lrc(lyrics::LyricsLrcOpts {
+            chart: &chart,
+            lrc: &lrc,
+            clock: match &sync {
+                Some(path) => lyrics::Clock::Sync {
+                    path,
+                    first_bar: sync_first_bar,
+                },
+                None => lyrics::Clock::Downbeat(downbeat.unwrap_or(0.0)),
+            },
+            offset,
+            grid,
+            output: output.as_deref(),
         }),
 
         Commands::Voices {
