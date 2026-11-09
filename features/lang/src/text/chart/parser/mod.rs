@@ -1744,6 +1744,52 @@ G D Em
         assert!(text_on(&trailing, 1).is_empty());
     }
 
+    fn staff_text_beats(chart: &crate::text::chart::Chart) -> Vec<(usize, String, u8)> {
+        chart.sections[0]
+            .measures()
+            .iter()
+            .enumerate()
+            .flat_map(|(i, m)| m.staff_text.iter().map(move |t| (i, t.text.clone(), t.beat)))
+            .collect()
+    }
+
+    /// Text written in front of a chord is a cue for that chord's bar, at
+    /// its first beat — never the bar before, and never past the end of a
+    /// full bar (Joy to the World drew `"Ring out"` under beat 3 of the bar
+    /// before, its beat computed as 5).
+    #[test]
+    fn a_cue_before_a_chord_opens_that_chords_bar() {
+        // After a bar of written values, mid-line.
+        let chart = parse_chart("T - A\n4/4\n\nvs 3\nE_4. E_4. A_4 \"Ring out\" E E\n").expect("parse");
+        assert_eq!(staff_text_beats(&chart), [(1, "Ring out".to_string(), 1)]);
+
+        // After a bare whole-bar chord, mid-line, before slashed chords.
+        let chart = parse_chart("T - A\n4/4\n\nvs 2\nG \"Cue\" A // B //\n").expect("parse");
+        assert_eq!(staff_text_beats(&chart), [(1, "Cue".to_string(), 1)]);
+
+        // After a bar of slashes, mid-line.
+        let chart =
+            parse_chart("T - A\n4/4\n\nvs 2\nD /// G / \"Ring out\" E\n").expect("parse");
+        assert_eq!(staff_text_beats(&chart), [(1, "Ring out".to_string(), 1)]);
+
+        // Sleigh Ride's vamp: whole bars, the cue on the third.
+        let chart = parse_chart("T - A\n4/4\n\nvs 4\nCmaj7 Gm9 \"Vamp\" Fmaj9 Fm6\n").expect("parse");
+        assert_eq!(staff_text_beats(&chart), [(2, "Vamp".to_string(), 1)]);
+
+        // At the start of a line.
+        let chart =
+            parse_chart("T - A\n4/4\n\nvs 2\nA\n\"Ring out\" E\n").expect("parse");
+        assert_eq!(staff_text_beats(&chart), [(1, "Ring out".to_string(), 1)]);
+
+        // Mid-bar text keeps its beat.
+        let chart = parse_chart("T - A\n4/4\n\nvs 1\nA // \"Push\" B //\n").expect("parse");
+        assert_eq!(staff_text_beats(&chart), [(0, "Push".to_string(), 3)]);
+
+        // Text at the end of a line trails the bar it follows.
+        let chart = parse_chart("T - A\n4/4\n\nvs 2\nG7 % \"Let ring\"\n").expect("parse");
+        assert_eq!(staff_text_beats(&chart), [(1, "Let ring".to_string(), 1)]);
+    }
+
     /// A cue on a bar that also carries explicit durations used to vanish: the
     /// auto-duration pass appended `_2` to `^"…"`, which no longer ends in a
     /// quote and so stopped being staff text at all.

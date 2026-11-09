@@ -585,6 +585,18 @@ impl<'a> ChartParser<'a> {
         }
     }
 
+    /// Whether a token on a chord line is music — a chord, rest, slash or
+    /// simile — rather than text, a barline, a repeat count or a command.
+    fn is_music_token(token: &str) -> bool {
+        let quoted = token.ends_with('"');
+        let barline = token.starts_with('|') || token.starts_with(':');
+        let command = token.starts_with('\\');
+        let repeat_count = token
+            .strip_prefix('x')
+            .is_some_and(|n| n.is_empty() || n == "^" || n.chars().all(|c| c.is_ascii_digit()));
+        !(quoted || barline || command || repeat_count || token.is_empty())
+    }
+
     fn fresh_measure(time_sig: TimeSignature) -> Measure {
         let mut measure = Measure::new();
         measure.time_signature = (time_sig.numerator as u8, time_sig.denominator as u8);
@@ -1891,6 +1903,10 @@ impl<'a> ChartParser<'a> {
         let mut current_measure = Self::fresh_measure(time_sig);
         let mut current_measure_beats: f64 = 0.0;
         let mut pending_cue: Option<TextCue> = None;
+        // Text written after a full bar and before the next chord opens the
+        // next bar. It waits here, with the bar count it was written at,
+        // until that bar has been started.
+        let mut pending_staff_text: Vec<(StaffText, usize)> = Vec::new();
         let mut pending_dynamic: Option<DynamicMarking> = None;
         let mut pending_stop: Option<Command> = None;
         let mut just_processed_separator = false; // Track if we just processed a | separator
@@ -1929,6 +1945,16 @@ impl<'a> ChartParser<'a> {
         self.record_line_system_votes(&tokens_str);
 
         for (token_idx, token_str) in tokens_str.iter().enumerate() {
+            // Text waiting for the bar after a full one: once that bar has
+            // begun, the text opens it.
+            if pending_staff_text
+                .first()
+                .is_some_and(|(_, written_at)| measures.len() > *written_at)
+            {
+                for (text, _) in pending_staff_text.drain(..) {
+                    current_measure.staff_text.push(text);
+                }
+            }
             if skip_tokens > 0 {
                 skip_tokens -= 1;
                 continue;
@@ -2191,7 +2217,40 @@ impl<'a> ChartParser<'a> {
             }
 
             if let Some((text, placement)) = Self::parse_quoted_text_token(token_str) {
-                let beat = current_measure_beats.floor().max(0.0) as u8 + 1;
+                let staff_text = |beat: u8| StaffText {
+                    text: text.clone(),
+                    beat,
+                    placement,
+                    source_default_x: None,
+                    boxed: false,
+                    bold: false,
+                    italic: false,
+                };
+                // Text written before more music on the line is a cue for
+                // what follows it; text at the end of the line trails the
+                // bar before it.
+                let next_music = tokens_str[token_idx + 1..]
+                    .iter()
+                    .find(|t| Self::is_music_token(t));
+                // Slashes after a bare chord still belong to its bar
+                // (`C#m "…" /.`): only a new chord opens the next one.
+                let next_opens_a_bar =
+                    next_music.is_some_and(|t| !t.chars().all(|c| matches!(c, '/' | '.')));
+                let current_has_music = !current_measure.chords.is_empty()
+                    || !current_measure.rhythm_elements.is_empty();
+                // A full bar not yet closed (a bare chord may still take
+                // slashes) is the bar before: text in front of the next
+                // chord opens the next bar, at its first beat — not beat
+                // five of this one.
+                if current_has_music
+                    && current_measure_beats > beats_per_measure - 0.001
+                    && next_opens_a_bar
+                {
+                    pending_staff_text.push((staff_text(1), measures.len()));
+                    continue;
+                }
+                let beat = (current_measure_beats.floor().max(0.0) as u8 + 1)
+                    .min(beats_per_measure.ceil().max(1.0) as u8);
                 // Text sitting between two chords belongs to the measure it
                 // opens, not the one it follows. `| Bm | ^"Back to top" G |`
                 // is a cue over the second bar — attaching it to whatever
@@ -2203,7 +2262,8 @@ impl<'a> ChartParser<'a> {
                 // An empty current measure that a barline *just* opened is the
                 // measure being written. One that is empty for any other
                 // reason means the text trails the bar before it.
-                let opens_this_measure = measure_was_created_by_separator || measures.is_empty();
+                let opens_this_measure =
+                    measure_was_created_by_separator || measures.is_empty() || next_opens_a_bar;
                 let current_is_empty = current_measure.chords.is_empty()
                     && current_measure.rhythm_elements.is_empty()
                     && current_measure.figured_bass.is_empty()
@@ -2213,15 +2273,7 @@ impl<'a> ChartParser<'a> {
                 } else {
                     &mut current_measure
                 };
-                target_measure.staff_text.push(StaffText {
-                    text,
-                    beat,
-                    placement,
-                    source_default_x: None,
-                    boxed: false,
-                    bold: false,
-                    italic: false,
-                });
+                target_measure.staff_text.push(staff_text(beat));
                 continue;
             }
 
@@ -3680,6 +3732,14 @@ impl<'a> ChartParser<'a> {
         // structure-only chart. Without this the bar was dropped and the
         // section fell back to the prevailing meter.
         let oneshot_bar_pending = oneshot_revert.is_some() && measures.len() == oneshot_measure_idx;
+
+        // Text still waiting for its bar when the line ends: the music after
+        // it never opened one (it was a mark, not a chord), so it stays on
+        // the bar it was written after, at that bar's last beat.
+        for (mut text, _) in pending_staff_text.drain(..) {
+            text.beat = text.beat.max(current_measure_beats.ceil().max(1.0) as u8);
+            current_measure.staff_text.push(text);
+        }
 
         // Add last measure if it has content
         // (If we just processed a separator, the empty measure was already pushed)
