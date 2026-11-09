@@ -1903,6 +1903,10 @@ impl<'a> ChartParser<'a> {
         let mut last_token_was_slash = false; // Track for slash accumulation (consecutive slashes accumulate)
         let mut pending_start_repeat = false;
         let mut chord_length_override: Option<(ChordRhythm, MusicalDuration)> =
+            default_chord_length.clone();
+        // The declared default (`\duration`), which a written note value
+        // only overrides until the barline.
+        let mut declared_chord_length: Option<(ChordRhythm, MusicalDuration)> =
             default_chord_length;
         let mut skip_next_token = false;
         // Number of upcoming tokens to skip — used by multi-token annotations
@@ -2146,6 +2150,7 @@ impl<'a> ChartParser<'a> {
             {
                 if let Some(next) = tokens_str.get(token_idx + 1) {
                     chord_length_override = Self::parse_chord_length_value(next, time_sig);
+                    declared_chord_length = chord_length_override.clone();
                     if *token_str == "\\duration" || *token_str == "\\Duration" {
                         default_melody_duration = Some(next.to_string());
                     }
@@ -3512,6 +3517,17 @@ impl<'a> ChartParser<'a> {
                     let slash_token_follows = tokens_str.get(token_idx + 1).is_some_and(|t| {
                         !t.is_empty() && t.trim_end_matches('.').chars().all(|c| c == '/')
                     });
+                    // A written note value carries to the bare chords after it
+                    // in the same bar (`C_8 D E F`), never across the barline:
+                    // a bare chord that starts a bar means the whole bar (or
+                    // the declared `\duration`), whatever the bar before it
+                    // was written in. `D_2. G_4 G` is three bars' worth of
+                    // music only if the last G is a whole bar.
+                    let starts_a_bar = current_measure_beats < 0.001
+                        || current_measure_beats > beats_per_measure - 0.001;
+                    if starts_a_bar && !token_has_explicit_length {
+                        chord_length_override = declared_chord_length.clone();
+                    }
                     if let Some((rhythm, duration)) = &chord_length_override {
                         if chord.rhythm == ChordRhythm::Default
                             && !token_has_explicit_length
