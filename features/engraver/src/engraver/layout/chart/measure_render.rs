@@ -273,6 +273,24 @@ impl ChartLayoutEngine {
         );
         let mut chord_min_widths =
             super::symbol_spacing::symbol_segment_minimums(&segments, &symbols, symbol_spacing);
+        // Equal beats, equal space — as far as the bar has room for it. The
+        // room past the symbols' own minimums goes first to evening the
+        // beats out, rather than to whichever beat the springs favour.
+        let equalized = super::symbol_spacing::equalize_equal_beats(&segments, &chord_min_widths);
+        let room =
+            (measure_width - self.config.spatium * 3.0 - chord_min_widths.iter().sum::<f64>())
+                .max(0.0);
+        let shortfall: f64 = equalized
+            .iter()
+            .zip(&chord_min_widths)
+            .map(|(e, m)| e - m)
+            .sum();
+        if shortfall > 0.0 {
+            let share = (room / shortfall).min(1.0);
+            for (m, e) in chord_min_widths.iter_mut().zip(&equalized) {
+                *m += (e - *m) * share;
+            }
+        }
         // The last notehead needs room to render without crossing the barline.
         if let Some(last) = chord_min_widths.last_mut() {
             *last = last.max(self.config.spatium * 1.5);
@@ -523,6 +541,20 @@ fn reads_as_rhythm_figure(
         return false;
     }
     let ts = TimeSignature::new(time_signature.0.into(), time_signature.1.into());
+    // One written value filling the bar (`A_1`, `A_2.` in 3/4) is a hold:
+    // the chord struck and let ring, drawn as the held slash it is.
+    let bar_beats = f64::from(time_signature.0);
+    let mut chords = measure
+        .rhythm_elements
+        .iter()
+        .filter(|e| !matches!(e, RhythmElement::Space(_)));
+    if let (Some(RhythmElement::Chord(only)), None) = (chords.next(), chords.next())
+        && only.rhythm.has_lily_duration()
+        && !only.rhythm.is_space()
+        && only.duration.to_beats(ts) >= bar_beats - 1e-6
+    {
+        return true;
+    }
     measure.rhythm_elements.iter().any(|elem| match elem {
         RhythmElement::Rest(_) => true,
         RhythmElement::Space(_) => false,

@@ -717,6 +717,9 @@ impl Chart {
                 super::commands::Command::Staccato => {
                     // Staccato is encoded as '.' prefix in the token, not inline
                 }
+                super::commands::Command::Marcato => {
+                    output.push_str(" \\marcato");
+                }
                 super::commands::Command::Stop
                 | super::commands::Command::StopAfter
                 | super::commands::Command::StopGroove

@@ -591,6 +591,7 @@ impl ChartLayoutEngine {
             self.config.spacing_slope,
             self.config.spacing_density,
         );
+        let widths = keep_sparse_bars_readable(widths, min_widths, count_in_measures);
 
         debug!(
             target: "crate::engraver::layout::chart::spacing",
@@ -609,6 +610,57 @@ impl ChartLayoutEngine {
 
         widths
     }
+}
+
+/// A bar's share of the line never falls below this fraction of the line's
+/// average bar.
+const SPARSE_BAR_FLOOR: f64 = 0.65;
+
+/// Lift bars squeezed below [`SPARSE_BAR_FLOOR`] of the average, taking the
+/// room from bars that have more than their own minimum.
+///
+/// A whole-bar chord between bars of four changes otherwise gets what the
+/// dense bars leave, a third of their width, and reads as a mistake. The
+/// dense bars give back only slack above what their symbols need, so their
+/// symbols still sit on their beats.
+fn keep_sparse_bars_readable(
+    mut widths: Vec<f64>,
+    min_widths: &[f64],
+    count_in_measures: usize,
+) -> Vec<f64> {
+    let body = count_in_measures.min(widths.len())..widths.len();
+    let n = body.len();
+    if n < 2 {
+        return widths;
+    }
+    let total: f64 = widths[body.clone()].iter().sum();
+    let floor = SPARSE_BAR_FLOOR * total / n as f64;
+    let min_of = |i: usize| min_widths.get(i - body.start).copied().unwrap_or(0.0);
+
+    let deficit: f64 = body.clone().map(|i| (floor - widths[i]).max(0.0)).sum();
+    if deficit <= 0.0 {
+        return widths;
+    }
+    let slack: f64 = body
+        .clone()
+        .filter(|&i| widths[i] > floor)
+        .map(|i| widths[i] - min_of(i).max(floor))
+        .filter(|s| *s > 0.0)
+        .sum();
+    if slack <= 0.0 {
+        return widths;
+    }
+    let give = deficit.min(slack);
+    let lift = give / deficit;
+    for i in body.clone() {
+        if widths[i] < floor {
+            widths[i] += (floor - widths[i]) * lift;
+        } else {
+            let own = (widths[i] - min_of(i).max(floor)).max(0.0);
+            widths[i] -= own / slack * give;
+        }
+    }
+    widths
 }
 
 fn measure_duration_ticks(time_signature: (u8, u8)) -> f64 {

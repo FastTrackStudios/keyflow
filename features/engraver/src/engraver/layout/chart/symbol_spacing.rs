@@ -264,6 +264,35 @@ pub fn symbol_segment_minimums(
     minimums
 }
 
+/// Equal beats get equal space: a bar of four one-beat chords keeps its
+/// four beats even, however much wider `G#m7` is than `F#7`. Every segment
+/// of a length asks for what the widest of that length needs.
+///
+/// Costs room, so the measure layout applies it only when the bar it was
+/// given can afford it; the line-breaking minimum does not ask for it, and
+/// a line keeps its four bars.
+#[must_use]
+pub fn equalize_equal_beats(segments: &[(i32, i32)], minimums: &[f64]) -> Vec<f64> {
+    let mut minimums = minimums.to_vec();
+    let widest_by_len: Vec<(i32, f64)> = segments.iter().zip(&minimums).fold(
+        Vec::new(),
+        |mut acc: Vec<(i32, f64)>, ((_, len), w)| {
+            match acc.iter_mut().find(|(l, _)| l == len) {
+                Some((_, widest)) => *widest = widest.max(*w),
+                None => acc.push((*len, *w)),
+            }
+            acc
+        },
+    );
+    for ((_, len), w) in segments.iter().zip(minimums.iter_mut()) {
+        if let Some((_, widest)) = widest_by_len.iter().find(|(l, _)| l == len) {
+            *w = *widest;
+        }
+    }
+
+    minimums
+}
+
 /// The narrowest a bar's body (barline to barline) can be and still print
 /// its symbols on their beats: the symbol minimums, a slash's width for every
 /// segment they leave alone, and the gaps at either barline.
@@ -312,6 +341,10 @@ mod tests {
         let tail = 20.0 + 8.0 - 5.0;
         for w in &mins[1..] {
             assert!((w - tail / 3.0).abs() < 1e-9, "{mins:?}");
+        }
+        // Equalized, every quarter asks for what the widest one needs.
+        for w in equalize_equal_beats(&segments, &mins) {
+            assert!((w - 38.0).abs() < 1e-9);
         }
     }
 

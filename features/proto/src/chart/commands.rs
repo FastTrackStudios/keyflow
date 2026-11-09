@@ -22,6 +22,10 @@ pub enum Command {
     /// This renders the accent at the spillback position in the previous measure
     AccentOnPush,
 
+    /// Marcato - a strong, short hit (`\\marcato` after the chord).
+    /// Renders the marcato wedge (^) above the rhythm slash.
+    Marcato,
+
     /// Staccato - short, detached chord hit
     /// Syntax: .C (staccato chord), >.'C (accented staccato push)
     /// Renders a staccato dot (·) above the rhythm slash notehead
@@ -58,6 +62,7 @@ impl Command {
             "fermata" => Some(Command::Fermata),
             "accent" => Some(Command::Accent),
             "staccato" => Some(Command::Staccato),
+            "marcato" => Some(Command::Marcato),
             // Slash commands apply to the PREVIOUS chord, so these are "after" variants
             "stop" => Some(Command::StopAfter),
             "stopgroove" | "stop_groove" => Some(Command::StopGrooveAfter),
@@ -71,6 +76,7 @@ impl Command {
             Command::Fermata => "𝄐",                        // Unicode fermata symbol
             Command::Accent | Command::AccentOnPush => ">", // Accent symbol
             Command::Staccato => ".",                       // Staccato dot
+            Command::Marcato => "^",                        // Marcato wedge
             Command::Stop | Command::StopAfter => "🛑",     // Stop sign
             Command::StopGroove | Command::StopGrooveAfter => "⭕", // Stop groove (circle)
         }
@@ -83,6 +89,7 @@ impl Command {
             Command::Accent => "accent",
             Command::AccentOnPush => "accent_on_push",
             Command::Staccato => "staccato",
+            Command::Marcato => "marcato",
             Command::Stop => "stop",
             Command::StopAfter => "stop_after",
             Command::StopGroove => "stop_groove",

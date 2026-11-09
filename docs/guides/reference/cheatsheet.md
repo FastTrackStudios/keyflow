@@ -129,6 +129,10 @@ VS 2
 | `>` | accent | `>C` |
 | `.` before a chord | staccato | `.C` |
 | `!STOP` | a full stop, before or after | `G !STOP` |
+| `\marcato` after a chord | marcato (^) | `C \marcato` |
+| `\fermata` after a chord | a hold, drawn over the symbol | `A_2. \fermata` |
+
+A bar written as one value that fills it (`A_1`, `A_2.` in 3/4) is a hold and draws as a held slash with its stem and dot. `G_4 ~` ties the chord over the barline: the tie is drawn and the next bar's `G` is not named again.
 
 ```kf+
 VS 4

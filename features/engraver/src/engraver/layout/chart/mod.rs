@@ -1222,9 +1222,18 @@ impl ChartLayoutEngine {
                                 .map_or(0.0, |m| m.min_width)
                         })
                         .collect();
+                    // The clef, key and time signature take the start of
+                    // every line: what is left is the room for bars.
+                    let (_, _, _, prefix_width) = prefix_renderer::calculate_prefix_width(
+                        self.config.spatium,
+                        true,
+                        true,
+                        prevailing_fifths_at(chart, section_idx, 0),
+                        true,
+                    );
                     self.group_measures_into_systems(
                         chart_section.measures(),
-                        content_width,
+                        content_width - prefix_width,
                         &measured,
                     )
                 }
@@ -1676,6 +1685,14 @@ impl ChartLayoutEngine {
 
                 let mut system_skyline = notation_renderer::MeasureSkyline::new();
                 let mut pending_notation: Vec<(SceneNode, bool, bool)> = Vec::new();
+                // One chord-symbol baseline for the line, raised for any
+                // articulations on it.
+                let system_artic_lift = chord_renderer::system_articulation_lift(
+                    measure_indices
+                        .iter()
+                        .filter_map(|&i| chart_section.measures().get(i)),
+                    self.config.spatium,
+                );
                 for (local_measure_idx, &measure_idx) in measure_indices.iter().enumerate() {
                     if let Some(measure) = chart_section.measures().get(measure_idx) {
                         // Get preprocessed melody data for this measure (handles spillover)
@@ -1708,8 +1725,9 @@ impl ChartLayoutEngine {
                             0.0
                         };
                         let this_measure_extra_above = melody_extent.max(melody_floor);
-                        let this_chord_y =
-                            staff_y + constants::CHORD_Y_OFFSET - this_measure_extra_above;
+                        let this_chord_y = staff_y + constants::CHORD_Y_OFFSET
+                            - this_measure_extra_above
+                            - system_artic_lift;
 
                         // Get distributed width for this measure
                         let this_measure_width = distributed_widths
@@ -1915,6 +1933,7 @@ impl ChartLayoutEngine {
                             section_name: &chart_section.section.section_type.full_name(),
                             segment_positions: &segment_positions,
                             segment_ticks: &segment_ticks,
+                            articulation_lift: system_artic_lift,
                             tied_in: measure_idx
                                 .checked_sub(1)
                                 .and_then(|prev| chart_section.measures().get(prev))
@@ -2827,9 +2846,18 @@ impl ChartLayoutEngine {
                                 .map_or(0.0, |m| m.min_width)
                         })
                         .collect();
+                    // The clef, key and time signature take the start of
+                    // every line: what is left is the room for bars.
+                    let (_, _, _, prefix_width) = prefix_renderer::calculate_prefix_width(
+                        self.config.spatium,
+                        true,
+                        true,
+                        prevailing_fifths_at(chart, section_idx, 0),
+                        true,
+                    );
                     self.group_measures_into_systems(
                         chart_section.measures(),
-                        content_width,
+                        content_width - prefix_width,
                         &measured,
                     )
                 }
@@ -3114,6 +3142,14 @@ impl ChartLayoutEngine {
                 // Measures now start directly at measure 1.
 
                 let mut system_skyline = notation_renderer::MeasureSkyline::new();
+                // One chord-symbol baseline for the line, raised for any
+                // articulations on it.
+                let system_artic_lift = chord_renderer::system_articulation_lift(
+                    measure_indices
+                        .iter()
+                        .filter_map(|&i| chart_section.measures().get(i)),
+                    self.config.spatium,
+                );
                 for (local_measure_idx, &measure_idx) in measure_indices.iter().enumerate() {
                     if let Some(measure) = chart_section.measures().get(measure_idx) {
                         let melody_data = melody_data_map.get(&measure_idx);
@@ -3129,8 +3165,9 @@ impl ChartLayoutEngine {
                                 .0
                             })
                             .unwrap_or(0.0);
-                        let this_chord_y =
-                            staff_y + constants::CHORD_Y_OFFSET - this_measure_extra_above;
+                        let this_chord_y = staff_y + constants::CHORD_Y_OFFSET
+                            - this_measure_extra_above
+                            - system_artic_lift;
 
                         // Get distributed width for this measure
                         let this_measure_width = distributed_widths
@@ -3309,6 +3346,7 @@ impl ChartLayoutEngine {
                             section_name: &chart_section.section.section_type.full_name(),
                             segment_positions: &segment_positions,
                             segment_ticks: &segment_ticks,
+                            articulation_lift: system_artic_lift,
                             tied_in: measure_idx
                                 .checked_sub(1)
                                 .and_then(|prev| chart_section.measures().get(prev))
@@ -3722,8 +3760,7 @@ impl ChartLayoutEngine {
             .collect();
         // A system always holds at least one measure, however wide it is —
         // better one cramped bar than an empty line and the same cramped bar.
-        // The clef, key and time signature take the start of every line.
-        let usable = (content_width - self.config.spatium * 8.0).max(1.0);
+        let usable = content_width.max(1.0);
 
         // A section of written notes keeps one grid: the same number of bars
         // on every line, as many as every line can hold. Greedy packing would

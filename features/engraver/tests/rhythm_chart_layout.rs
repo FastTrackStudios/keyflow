@@ -234,6 +234,37 @@ fn a_chord_tied_over_the_barline_draws_a_tie_and_is_not_named_again() {
     );
 }
 
+fn render(source: &str) -> ChartLayoutResult {
+    let chart = keyflow_lang::text::chart::parse_chart(source).expect("the chart parses");
+    ChartPipeline::shared()
+        .expect("the pipeline builds")
+        .layout_preset(&chart, Preset::Page, PresetOptions::for_export())
+}
+
+#[test]
+fn one_value_filling_the_bar_is_a_hold() {
+    // Silent Night's End bar: `A_2.` in 3/4, with a fermata.
+    let result = render("End\n#A 90bpm 3/4\n\nOUT 1\nA_2. \\fermata\n");
+    assert_eq!(
+        beats(&result, 0).iter().map(|b| b.tick).collect::<Vec<_>>(),
+        vec![0],
+        "one held value, not three beat slashes"
+    );
+    assert_eq!(count_glyphs(&result.scene, WHITE_HALF_SLASH), 1);
+    assert_eq!(count_glyphs(&result.scene, '\u{E1E7}'), 1, "with its dot");
+    assert_eq!(
+        count_glyphs(&result.scene, '\u{E4C0}'),
+        1,
+        "and the fermata over it"
+    );
+}
+
+#[test]
+fn a_marcato_chord_draws_the_wedge() {
+    let result = render("Hit\n#C 120bpm 4/4\n\nVS 1\nC_4 \\marcato r4 G_2\n");
+    assert_eq!(count_glyphs(&result.scene, '\u{E4AC}'), 1);
+}
+
 #[test]
 fn a_held_dotted_half_shows_its_dot_clear_of_the_head() {
     // Silent Night's end: `A_2. r4`.
