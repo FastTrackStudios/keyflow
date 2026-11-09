@@ -4766,7 +4766,7 @@ dependencies = [
 
 [[package]]
 name = "editor-keyflow"
-version = "0.0.1-alpha"
+version = "0.3.0"
 dependencies = [
  "allsorts",
  "dioxus",
@@ -4885,7 +4885,7 @@ checksum = "66b7e2430c6dff6a955451e2cfc438f09cea1965a9d6f87f7e3b90decc014099"
 
 [[package]]
 name = "engraver"
-version = "0.0.1-alpha"
+version = "0.3.0"
 dependencies = [
  "anyrender",
  "anyrender_vello_cpu",
@@ -7929,7 +7929,7 @@ dependencies = [
 
 [[package]]
 name = "keyflow"
-version = "0.0.1-alpha"
+version = "0.3.0"
 dependencies = [
  "color-eyre",
  "colored",
@@ -7949,11 +7949,11 @@ dependencies = [
 
 [[package]]
 name = "keyflow-annotate"
-version = "0.0.1-alpha"
+version = "0.3.0"
 
 [[package]]
 name = "keyflow-cli"
-version = "0.0.1-alpha"
+version = "0.3.0"
 dependencies = [
  "clap",
  "dawfile-reaper",
@@ -7973,7 +7973,7 @@ dependencies = [
 
 [[package]]
 name = "keyflow-daw-analysis"
-version = "0.0.1-alpha"
+version = "0.3.0"
 dependencies = [
  "architect",
  "daw",
@@ -7986,7 +7986,7 @@ dependencies = [
 
 [[package]]
 name = "keyflow-lang"
-version = "0.0.1-alpha"
+version = "0.3.0"
 dependencies = [
  "candle-core",
  "candle-nn",
@@ -15232,7 +15232,7 @@ dependencies = [
 
 [[package]]
 name = "tree-sitter-keyflow"
-version = "0.0.1-alpha"
+version = "0.3.0"
 dependencies = [
  "cc",
  "tree-sitter-language",

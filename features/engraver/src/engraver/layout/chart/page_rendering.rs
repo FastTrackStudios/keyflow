@@ -272,7 +272,7 @@ pub fn add_snippet_background(
     )]));
 }
 
-/// Add page footer with "Created with FastTrackStudio" text.
+/// Add page footer: "Created with Keyflow – FastTrackStudio" and the version.
 pub fn add_page_footer(
     root: &mut SceneNode,
     page_x: f64,
@@ -280,8 +280,8 @@ pub fn add_page_footer(
     page_width: f64,
     page_height: f64,
 ) {
-    let footer_text = "Created with FastTrackStudio";
-    let version_text = concat!("v.alpha.", env!("CARGO_PKG_VERSION"));
+    let footer_text = "Created with Keyflow – FastTrackStudio";
+    let version_text = concat!("v", env!("CARGO_PKG_VERSION"));
     let font_size = 8.0;
     let version_font_size = 6.0;
     let footer_y = page_y + page_height - 15.0; // 15 points from bottom
