@@ -281,6 +281,30 @@ impl Default for NoteParams {
     }
 }
 
+/// How wide a note's head is, in staff spaces.
+///
+/// The hollow half and whole slashes are a good deal wider than the filled
+/// slash every other value uses; sizing them as one put a dotted half's dot
+/// inside its own head, where nobody could see it.
+fn notehead_width_spaces(params: &NoteParams, ctx: &LayoutContext) -> f64 {
+    use crate::engraver::fonts::Glyph;
+    let white_slash = |glyph: Glyph, fallback: f64| {
+        ctx.font
+            .advance_width(glyph)
+            .map_or(fallback, |w| w.0)
+            .max(params.head_type.width())
+    };
+    match (params.head_type, params.slash_long_style, params.duration) {
+        (NoteHeadType::Slash, SlashLongStyle::WhiteSlash, NoteDuration::Half) => {
+            white_slash(Glyph::NoteheadSlashWhiteHalf, 2.6)
+        }
+        (NoteHeadType::Slash, SlashLongStyle::WhiteSlash, NoteDuration::Whole) => {
+            white_slash(Glyph::NoteheadSlashWhiteWhole, 3.4)
+        }
+        _ => params.head_type.width(),
+    }
+}
+
 /// Layout a single note.
 ///
 /// # Returns
@@ -306,7 +330,7 @@ pub fn layout_note(params: &NoteParams, ctx: &LayoutContext) -> (LayoutData, Sce
 
     let mut commands = Vec::new();
     let mut left_extent: f64 = 0.0;
-    let notehead_width = spatium * params.head_type.width();
+    let notehead_width = spatium * notehead_width_spaces(params, ctx);
     let mut right_extent = notehead_width;
 
     // Draw accidental if present

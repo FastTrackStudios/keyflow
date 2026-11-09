@@ -184,6 +184,51 @@ fn rhythm_figures_print_as_written_and_groove_bars_as_beat_slashes() {
     );
 }
 
+fn glyph_xs(node: &SceneNode, parent: Affine, glyph: char, out: &mut Vec<f64>) {
+    let t = parent * node.transform;
+    for command in &node.commands {
+        if let PaintCommand::Glyph {
+            codepoint,
+            position,
+            ..
+        } = command
+            && *codepoint == glyph
+        {
+            out.push((t * *position).x);
+        }
+    }
+    for child in &node.children {
+        glyph_xs(child, t, glyph, out);
+    }
+}
+
+#[test]
+fn a_held_dotted_half_shows_its_dot_clear_of_the_head() {
+    // Silent Night's end: `A_2. r4`.
+    let chart = keyflow_lang::text::chart::parse_chart("End\n#A 90bpm 4/4\n\nVS 1\nA_2. r4\n")
+        .expect("the chart parses");
+    let result = ChartPipeline::shared()
+        .expect("the pipeline builds")
+        .layout_preset(&chart, Preset::Page, PresetOptions::for_export());
+    let (mut heads, mut dots) = (Vec::new(), Vec::new());
+    glyph_xs(
+        &result.scene,
+        Affine::IDENTITY,
+        WHITE_HALF_SLASH,
+        &mut heads,
+    );
+    glyph_xs(&result.scene, Affine::IDENTITY, '\u{E1E7}', &mut dots);
+    assert_eq!(heads.len(), 1, "one held half");
+    assert_eq!(dots.len(), 1, "and its augmentation dot");
+    // The hollow half slash is about 2.8 spaces wide (5pt spaces).
+    assert!(
+        dots[0] - heads[0] > 2.5 * 5.0,
+        "the dot sits past the head, not inside it: head x={:.1} dot x={:.1}",
+        heads[0],
+        dots[0]
+    );
+}
+
 #[test]
 fn slashes_written_with_a_slash_stay_beat_slashes_inside_a_figure() {
     // Writing `/` is the writer saying "groove", even in a bar with a hit.
