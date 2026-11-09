@@ -39,6 +39,12 @@ pub enum ChartSetting {
     /// (`4` after `4maj7` is `4maj7`). OFF by default — a chord is what is
     /// written; `\chord_memory = true` turns it on for a chart.
     ChordMemory,
+    /// When a chord symbol that repeats the one before it is printed.
+    /// `auto` (default): a bar that only restates the previous bar's held
+    /// chord prints no symbol; after a bar with chord changes, at the start
+    /// of a line, or in a bar of its own changes, the symbol prints.
+    /// `always`: every chord prints its symbol.
+    RepeatChordSymbols,
 }
 
 /// One writable directive, described once so everything downstream can read
@@ -116,6 +122,12 @@ pub const DIRECTIVES: &[DirectiveSpec] = &[
         summary: "a bare root recalls the quality its degree last had",
     },
     DirectiveSpec {
+        key: "repeat_chord_symbols",
+        label: "Repeat chord symbols",
+        example: "\\repeat_chord_symbols = always",
+        summary: "print a chord's symbol even when it repeats the last one",
+    },
+    DirectiveSpec {
         key: "alias",
         label: "Alias",
         example: "\\alias name value",
@@ -138,6 +150,7 @@ impl ChartSetting {
             Self::PushAltersRhythm => "push_alters_rhythm",
             Self::Swing => "swing",
             Self::ChordMemory => "chord_memory",
+            Self::RepeatChordSymbols => "repeat_chord_symbols",
         }
     }
 
@@ -149,6 +162,7 @@ impl ChartSetting {
         Self::PushAltersRhythm,
         Self::Swing,
         Self::ChordMemory,
+        Self::RepeatChordSymbols,
     ];
 }
 
@@ -237,6 +251,19 @@ impl ChartSettings {
                     ChartSetting::PushAltersRhythm,
                     SettingValue::Bool(bool_value),
                 );
+                Ok(())
+            }
+            "REPEAT_CHORD_SYMBOLS" | "REPEATCHORDSYMBOLS" => {
+                let always = match value.to_lowercase().as_str() {
+                    "always" => true,
+                    "auto" => false,
+                    other => Self::parse_bool(other).map_err(|_| {
+                        format!(
+                            "Invalid repeat_chord_symbols value: '{value}'. Expected 'always' or 'auto'"
+                        )
+                    })?,
+                };
+                self.set(ChartSetting::RepeatChordSymbols, SettingValue::Bool(always));
                 Ok(())
             }
             "SWING" => {
@@ -370,6 +397,13 @@ impl ChartSettings {
         self.get_bool(ChartSetting::ChordMemory)
     }
 
+    /// Whether every chord prints its symbol, repeats included
+    /// (`\repeat_chord_symbols = always`). Default: off. See
+    /// [`ChartSetting::RepeatChordSymbols`].
+    pub fn repeat_chord_symbols_always(&self) -> bool {
+        self.get_bool(ChartSetting::RepeatChordSymbols)
+    }
+
     /// Check if auto rhythm slashes is enabled (default: true)
     ///
     /// When enabled, whole notes and half notes in rhythm charts are automatically
@@ -449,6 +483,7 @@ impl ChartSetting {
             ChartSetting::PushAltersRhythm => "PUSH_ALTERS_RHYTHM",
             ChartSetting::Swing => "SWING",
             ChartSetting::ChordMemory => "CHORD_MEMORY",
+            ChartSetting::RepeatChordSymbols => "REPEAT_CHORD_SYMBOLS",
         }
     }
 }
@@ -526,6 +561,25 @@ mod tests {
             .parse_setting_line("\\chord-memory = false")
             .unwrap();
         assert!(!settings.chord_memory());
+    }
+
+    #[test]
+    fn repeat_chord_symbols_is_auto_until_set_to_always() {
+        let mut settings = ChartSettings::new();
+        assert!(!settings.repeat_chord_symbols_always());
+        settings
+            .parse_setting_line("\\repeat_chord_symbols = always")
+            .unwrap();
+        assert!(settings.repeat_chord_symbols_always());
+        settings
+            .parse_setting_line("\\repeat_chord_symbols = auto")
+            .unwrap();
+        assert!(!settings.repeat_chord_symbols_always());
+        assert!(
+            settings
+                .parse_setting_line("\\repeat_chord_symbols = sometimes")
+                .is_err()
+        );
     }
 
     #[test]
