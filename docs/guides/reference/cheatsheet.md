@@ -158,6 +158,28 @@ VS 4
 Em D"hit"
 ```
 
+## Lyrics
+
+A `[lyrics]` line after a section's chords is its lyric lane. Stamp the words with where they are sung and they are drawn under the slashes, each word under its bar and beat:
+
+| Symbol | Means | Example |
+| --- | --- | --- |
+| `@` + bar | bar of the section, from 1 | `@2 world` |
+| `@` bar `:` beat | a beat in that bar; `.5` is the "and" | `@1:3.5 to` |
+| `-` | one word, sung over two places | `@3 re- @3:3 ceive` |
+
+A word without a stamp follows the one before it, and a word whose beat is already taken runs on after its neighbour, so a busy bar still reads. A section whose only line is its lane keeps the chords it would have recalled.
+
+```kf+
+VS 4
+G C D G
+[lyrics]
+@1 Sing @1:3 a @2 new @2:3 song
+@3 ev- @3:3 ery @4 day
+```
+
+`kf lyrics-lrc song.kf song.lrc --downbeat 12.4 -o out.kf` writes those lanes from an `.lrc`: bar 1 starts 12.4 seconds into the recording and the chart's tempo and meters place the rest, or `--sync sync.json` takes each bar's start from a Songsterr sync. Words go on the nearest eighth (`--grid 4` for beats), and every section gets a `[lyrics lrc]` lane that running it again replaces. Lines that start before bar 1 or after the last bar are reported, not dropped.
+
 ## Directives
 
 A line starting with `\` sets something for the chart. Backslash, not slash: a line starting with `/` is a bar of rhythm slashes, and the two would be impossible to tell apart. The editor's command menu offers these, and the parser rejects one it doesn't know — so the list here is the list.
