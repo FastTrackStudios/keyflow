@@ -1456,6 +1456,19 @@ impl ChartLayoutEngine {
                         key_signature,
                         include_time_sig,
                     );
+                // A key change on the line's first bar is printed in the
+                // prefix, naturals first: B to C cancels five sharps rather
+                // than silently dropping them.
+                let key_change_from: Option<i8> = measure_indices
+                    .first()
+                    .and_then(|m| key_changes_in_section.get(m))
+                    .and_then(|kc| kc.from_key.as_ref())
+                    .map(prefix_renderer::key_to_fifths);
+                let naturals_width = key_change_from.map_or(0.0, |prev| {
+                    prefix_renderer::naturals_width(prev, key_signature, self.config.spatium)
+                });
+                let key_sig_width = key_sig_width + naturals_width;
+                let prefix_width = prefix_width + naturals_width;
 
                 // Calculate measure width using spring-based distribution
                 let measures_area_width = content_width - prefix_width;
@@ -1651,6 +1664,7 @@ impl ChartLayoutEngine {
                     include_key_sig,
                     include_time_sig,
                     key_signature,
+                    prev_key_signature: key_change_from,
                     key_sig_color: system_starts_with_key_change.then(change_highlight_color),
                     time_signature: ts,
                     clef_width,
@@ -2948,6 +2962,19 @@ impl ChartLayoutEngine {
                         key_signature,
                         include_time_sig,
                     );
+                // A key change on the line's first bar is printed in the
+                // prefix, naturals first: B to C cancels five sharps rather
+                // than silently dropping them.
+                let key_change_from: Option<i8> = measure_indices
+                    .first()
+                    .and_then(|m| key_changes_in_section.get(m))
+                    .and_then(|kc| kc.from_key.as_ref())
+                    .map(prefix_renderer::key_to_fifths);
+                let naturals_width = key_change_from.map_or(0.0, |prev| {
+                    prefix_renderer::naturals_width(prev, key_signature, self.config.spatium)
+                });
+                let key_sig_width = key_sig_width + naturals_width;
+                let prefix_width = prefix_width + naturals_width;
 
                 // Calculate measure width using spring-based distribution
                 let measures_area_width = content_width - prefix_width;
@@ -3109,6 +3136,7 @@ impl ChartLayoutEngine {
                     include_key_sig,
                     include_time_sig,
                     key_signature,
+                    prev_key_signature: key_change_from,
                     key_sig_color: system_starts_with_key_change.then(change_highlight_color),
                     time_signature: ts,
                     clef_width,

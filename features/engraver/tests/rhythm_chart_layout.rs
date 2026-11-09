@@ -260,6 +260,17 @@ fn one_value_filling_the_bar_is_a_hold() {
 }
 
 #[test]
+fn a_key_change_at_a_line_start_cancels_the_old_key() {
+    // Sleigh Ride: B major, then a verse in C.
+    let result = render("K\n#B 86bpm 4/4\n\nVS 2\nB E\n\nVS 2 #C\nC F\n");
+    assert_eq!(
+        count_glyphs(&result.scene, '\u{E261}'),
+        5,
+        "five naturals cancel B major's sharps"
+    );
+}
+
+#[test]
 fn a_marcato_chord_draws_the_wedge() {
     let result = render("Hit\n#C 120bpm 4/4\n\nVS 1\nC_4 \\marcato r4 G_2\n");
     assert_eq!(count_glyphs(&result.scene, '\u{E4AC}'), 1);
