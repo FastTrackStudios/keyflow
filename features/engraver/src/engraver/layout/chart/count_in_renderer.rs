@@ -362,7 +362,13 @@ fn count_in_pulses_for_measure(
             .collect();
     }
 
-    let is_half_time = config.num_measures == 2 && measure_idx == 0;
+    // The big-beat first bar ("1 . 2 . | 1 2 3 4") is a duple-meter count:
+    // it halves a 4/4 bar into two big beats. A
+    // triple bar counts every beat both times — "1 2 3 | 1 2 3".
+    let is_half_time = config.num_measures == 2
+        && measure_idx == 0
+        && config.beats_per_measure == 4
+        && config.beat_unit == 4;
     (0..config.beats_per_measure as usize)
         .filter_map(|beat_index| {
             let label = if is_half_time {
@@ -732,6 +738,50 @@ mod tests {
         let codepoint = slash_glyph_for_ticks(480);
         // The codepoint should be a valid SMuFL slash notehead
         assert!(codepoint as u32 >= 0xE100); // SMuFL noteheads range
+    }
+
+    fn labels(config: &CountInSnippetConfig, measure_idx: usize) -> Vec<&'static str> {
+        count_in_pulses_for_measure(config, measure_idx)
+            .iter()
+            .filter_map(|p| p.label)
+            .collect()
+    }
+
+    fn two_bar(beats_per_measure: u8, beat_unit: u8) -> CountInSnippetConfig {
+        CountInSnippetConfig {
+            beats_per_measure,
+            beat_unit,
+            num_measures: 2,
+            spatium: 5.0,
+            scale: 1.0,
+            measure_numbers: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn three_four_count_in_counts_three_beats_in_both_bars() {
+        let config = two_bar(3, 4);
+        assert_eq!(labels(&config, 0), vec!["1", "2", "3"]);
+        assert_eq!(labels(&config, 1), vec!["1", "2", "3"]);
+        let ticks: u32 = count_in_pulses_for_measure(&config, 0)
+            .iter()
+            .map(|p| p.duration_ticks as u32)
+            .sum();
+        assert_eq!(ticks, 1440, "a full 3/4 bar, not two beats of one");
+    }
+
+    #[test]
+    fn four_four_count_in_keeps_the_big_beat_first_bar() {
+        let config = two_bar(4, 4);
+        assert_eq!(labels(&config, 0), vec!["1", "2"]);
+        assert_eq!(labels(&config, 1), vec!["1", "2", "3", "4"]);
+    }
+
+    #[test]
+    fn six_eight_count_in_counts_two_then_six() {
+        let config = two_bar(6, 8);
+        assert_eq!(labels(&config, 0), vec!["1", "2"]);
+        assert_eq!(labels(&config, 1), vec!["1", "2", "3", "4", "5", "6"]);
     }
 
     #[test]
