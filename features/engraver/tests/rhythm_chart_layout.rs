@@ -225,13 +225,12 @@ fn a_chord_tied_over_the_barline_draws_a_tie_and_is_not_named_again() {
     assert_eq!(ties(&tied.scene), 1, "the tie is drawn");
     assert_eq!(g_symbols(&tied), 1, "the held G is not re-attacked");
 
+    // Without the tie bar 2 strikes G again, but G is the harmony already
+    // sounding, so the repeat rule leaves its symbol off all the same: the
+    // tie is the only difference on the page.
     let struck = render("Joy\n#D 128bpm 4/4\n\nIN 2\nD_2. G_4\nG\n");
     assert_eq!(ties(&struck.scene), 0);
-    assert_eq!(
-        g_symbols(&struck),
-        2,
-        "without the tie, bar 2 strikes G again"
-    );
+    assert_eq!(g_symbols(&struck), 1);
 }
 
 fn render(source: &str) -> ChartLayoutResult {
@@ -396,11 +395,36 @@ fn printed_b_symbols(source: &str) -> usize {
 }
 
 #[test]
-fn a_bar_after_chord_changes_names_its_chord_even_when_it_repeats() {
+fn beat_one_is_named_when_the_harmony_changes_there() {
     // Bar 1 Bmaj7 G#m7, bar 2 C#m9 F#7, bar 3 Bmaj7, bar 4 Bmaj7 held.
-    // Bar 3 follows a bar of changes, so its Bmaj7 prints; bar 4 only
-    // restates the chord bar 3 held, so it does not.
+    // Bar 3's Bmaj7 is a change from the F#7 sounding before it; bar 4
+    // only restates the chord bar 3 held, so it does not print.
     assert_eq!(printed_b_symbols(CLUSTER_THEN_HELD), 2);
+}
+
+#[test]
+fn a_chord_still_sounding_over_the_barline_is_not_named_again() {
+    // Joy to the World: `D /// G /` then a bar of G. The G is still
+    // sounding, so the bar names nothing — even though the bar before it
+    // had a change.
+    let result = render("Joy\n#D 128bpm 4/4\n\nIN 2\nD /// G /\nG\n");
+    let g = symbols(&result.scene)
+        .iter()
+        .filter(|s| s.text == "G")
+        .count();
+    assert_eq!(g, 1);
+}
+
+#[test]
+fn a_bar_of_changes_names_its_first_chord_even_when_it_continues() {
+    // All I Want for Christmas: `G` then `G // B7 //` — a cluster bar names
+    // its beat-1 G.
+    let result = render("AIW\n#G 150bpm 4/4\n\nCH 2\nG\nG // B7 //\n");
+    let g = symbols(&result.scene)
+        .iter()
+        .filter(|s| s.text == "G")
+        .count();
+    assert_eq!(g, 2);
 }
 
 /// World y of every glyph `glyph` in the scene.

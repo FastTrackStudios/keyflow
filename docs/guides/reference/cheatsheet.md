@@ -182,7 +182,7 @@ VS 2
 G C D Em
 ```
 
-A chord symbol that repeats the one before it is left off only when the bar before held that one chord: a bar that follows a bar of changes, or starts a line, names its chord even when it is the same one (`Bmaj7 / G#m7 / C#m9 / F#7 / Bmaj7` prints the second `Bmaj7`). `\repeat_chord_symbols = always` prints every one; `auto` is the default.
+A bar's first chord is named when the harmony changes there, when the bar itself has changes (`Bmaj7 / G#m7 / C#m9 / F#7 /` names its `Bmaj7` even after a bar of `Bmaj7`), and at the start of every line or section. A chord still sounding from the bar before is not named again (`D /// G /` then `G`). `\repeat_chord_symbols = always` prints every one; `auto` is the default.
 
 A bar written with note values (`_2`, `_8`, `r4`) is drawn as rhythmic notation — a half is a stemmed half-note slash, an eighth a flagged one — and every chord symbol sits over the slash it is played on. A bar of plain chords (`G // C //`, or `G` for the whole bar) is drawn as beat slashes. Bars widen for their chord symbols rather than letting one drift off its beat; `kf pdf --chord-gap <pt>` (and `kf png`) sets the clear space kept between two symbols (default 3pt), so a smaller gap packs chord-dense bars onto fewer lines.
 

@@ -1593,16 +1593,6 @@ pub fn render_chord_symbols(
         })
         .collect();
 
-    // Only a bar that holds one chord lets the next bar's beat 1 go unnamed.
-    // After a bar of changes the reader's eye is on the last change, not on
-    // the harmony the bar ends in, so the next bar names its chord even when
-    // it is the same one (`Bmaj7 / G#m7 / C#m9 / F#7 /` then `Bmaj7`).
-    let last_chord_symbol = if bar_has_chord_changes(measure) {
-        None
-    } else {
-        last_chord_symbol
-    };
-
     ChordRenderResult {
         nodes,
         chord_bounds,
