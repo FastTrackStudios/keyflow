@@ -35,6 +35,9 @@ pub mod highlighting {
 
 pub mod api;
 
+/// Put an LRC's lyrics into a chart as timed `[lyrics lrc]` lanes.
+pub mod lyric_lane;
+
 /// IDE engine: structured diagnostics, completion, hover.
 ///
 /// See module docs for the design. Powers both the in-process Dioxus editor

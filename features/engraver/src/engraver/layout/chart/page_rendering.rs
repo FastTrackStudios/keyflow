@@ -318,6 +318,32 @@ pub fn add_page_footer(
     ]));
 }
 
+/// The transcriber's credit — "Transcribed by Cody Wright" — on its own
+/// line just above the footer, centred and in the footer's grey sans so it
+/// reads as part of it.
+pub fn add_transcriber_credit(
+    root: &mut SceneNode,
+    page_x: f64,
+    page_y: f64,
+    page_width: f64,
+    page_height: f64,
+    transcriber: &str,
+) {
+    let font_size = 8.0;
+    // The footer's baseline is 15pt up; one line above it.
+    let y = page_y + page_height - 15.0 - font_size * 1.35;
+    root.add_child(SceneNode::anonymous_leaf(vec![PaintCommand::Text {
+        text: format!("Transcribed by {transcriber}"),
+        font_family: "sans-serif".to_string(),
+        font_size,
+        position: kurbo::Point::new(page_x + page_width / 2.0, y),
+        color: Color::from_rgb8(160, 160, 160),
+        anchor: TextAnchor::Middle,
+        weight: FontWeight::Normal,
+        style: FontStyle::Normal,
+    }]));
+}
+
 /// Configuration for count-in snippet in header.
 #[derive(Debug, Clone, Default)]
 pub struct CountInHeaderConfig {

@@ -115,20 +115,27 @@ impl<'a> ChartParser<'a> {
                 continue;
             }
 
+            // The transcriber credit may sit among the directives, in any
+            // order with them (`\title` after it is common).
+            if let Some(name) = Self::transcriber_of(lines[idx].trim()) {
+                if !name.is_empty() {
+                    self.metadata.transcriber = Some(name.to_string());
+                }
+                idx += 1;
+                continue;
+            }
+
             break;
         }
 
-        // Check for "Transcribed By X" line (before metadata line)
-        // This becomes the subtitle if not already set from parentheses
+        // Check for "Transcribed By X" line (before metadata line). The
+        // name is a credit, printed above the page footer; it is not the
+        // subtitle (it used to overwrite one written in parentheses).
         if idx < lines.len() {
             let line = lines[idx].trim();
-            let line_lower = line.to_lowercase();
-            if line_lower.starts_with("transcribed by") {
-                // Extract the name after "Transcribed By"
-                let name = line[14..].trim(); // Skip "Transcribed By"
+            if let Some(name) = Self::transcriber_of(line) {
                 if !name.is_empty() {
-                    // Override subtitle with transcriber info
-                    self.metadata.subtitle = Some(format!("Transcribed By {}", name));
+                    self.metadata.transcriber = Some(name.to_string());
                 }
                 idx += 1;
             } else if !Self::looks_like_metadata_line(line)
@@ -383,9 +390,64 @@ impl<'a> ChartParser<'a> {
     }
 
     /// Parse a directive line (e.g. `\SMART_REPEATS=true`).
+    /// `Transcribed By Cody Wright` / `Transcribed by: Cody Wright` (any
+    /// case) → `Cody Wright`.
+    pub(super) fn transcriber_of(line: &str) -> Option<&str> {
+        const PREFIX: &str = "transcribed by";
+        let head = line.get(..PREFIX.len())?;
+        if !head.eq_ignore_ascii_case(PREFIX) {
+            return None;
+        }
+        let rest = &line[PREFIX.len()..];
+        // `Transcribed Byron` is not a credit.
+        if !(rest.is_empty() || rest.starts_with(|c: char| c.is_whitespace() || c == ':')) {
+            return None;
+        }
+        Some(rest.trim_start_matches(':').trim())
+    }
+
+    /// The text of `\title "…"` / `\subtitle "…"`: quotes optional.
+    fn directive_text(value: &str) -> String {
+        let v = value.trim();
+        v.strip_prefix('"')
+            .and_then(|v| v.strip_suffix('"'))
+            .unwrap_or(v)
+            .to_string()
+    }
+
     pub(super) fn parse_setting(&mut self, line: &str) -> Result<(), String> {
         if let Some((name, value)) = Self::parse_alias_declaration(line) {
             self.aliases.insert(name, value);
+            return Ok(());
+        }
+
+        // `\title "Joy To The World (Unspeakable Joy)"`: the title exactly as
+        // written, parentheses and all — the title line reads `(…)` as a
+        // subtitle. A subtitle the new title already carries in parentheses
+        // is dropped; any other (or a `\subtitle`) stays.
+        let trimmed = line.trim();
+        if let Some(value) = trimmed
+            .strip_prefix("\\title ")
+            .or_else(|| trimmed.strip_prefix("\\Title "))
+        {
+            let title = Self::directive_text(value);
+            if !title.is_empty() {
+                if let Some(sub) = &self.metadata.subtitle {
+                    let inner = format!("({})", sub.to_lowercase());
+                    if title.to_lowercase().contains(&inner) {
+                        self.metadata.subtitle = None;
+                    }
+                }
+                self.metadata.title = Some(title);
+            }
+            return Ok(());
+        }
+        if let Some(value) = trimmed
+            .strip_prefix("\\subtitle ")
+            .or_else(|| trimmed.strip_prefix("\\Subtitle "))
+        {
+            let subtitle = Self::directive_text(value);
+            self.metadata.subtitle = (!subtitle.is_empty()).then_some(subtitle);
             return Ok(());
         }
 

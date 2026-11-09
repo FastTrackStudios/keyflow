@@ -157,6 +157,11 @@ pub fn default_value(sid: Sid) -> StyleValue {
         Sid::LyricistFontFace => StyleValue::String("Chicago".to_string()),
         Sid::LyricistFontSize => StyleValue::Real(12.0),
         Sid::LyricistAlign => StyleValue::Align(HAlign::Left),
+        // A plain sans in italic: lyrics read as words to sing, apart from
+        // the chord symbols' jazz hand and the red direction text.
+        Sid::LyricsFontFace => StyleValue::String("FreeSans".to_string()),
+        Sid::LyricsFontSize => StyleValue::Real(2.0),
+        Sid::LyricsFontStyle => StyleValue::FontStyle(FontStyle::ITALIC),
 
         // Sentinel - should never be accessed
         Sid::Styles => StyleValue::Int(0),

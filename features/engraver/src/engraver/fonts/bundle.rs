@@ -18,7 +18,12 @@ static LELAND_FONT_BYTES: &[u8] = include_bytes!("../../../fonts/Leland.otf");
 static LELAND_METADATA_BYTES: &[u8] = include_bytes!("../../../fonts/leland_metadata.json");
 static LELAND_TEXT_FONT_BYTES: &[u8] = include_bytes!("../../../fonts/LelandText.otf");
 static BRAVURA_FONT_BYTES: &[u8] = include_bytes!("../../../fonts/Bravura.otf");
-static FREESANS_FONT_BYTES: &[u8] = include_bytes!("../../../fonts/FreeSans.ttf");
+pub(crate) static FREESANS_FONT_BYTES: &[u8] = include_bytes!("../../../fonts/FreeSans.ttf");
+/// FreeSans Oblique (same FreeFont release as FreeSans) — the lyric lane's
+/// italic. Its internal family is `FreeSans`, so `font-family="FreeSans"
+/// font-style="italic"` resolves to it wherever it is loaded.
+pub(crate) static FREESANS_OBLIQUE_FONT_BYTES: &[u8] =
+    include_bytes!("../../../fonts/FreeSansOblique.ttf");
 static MUSEJAZZ_FONT_BYTES: &[u8] = include_bytes!("../../../fonts/MuseJazz.otf");
 static MUSEJAZZ_TEXT_FONT_BYTES: &[u8] = include_bytes!("../../../fonts/MuseJazzText.otf");
 static CHICAGO_FLF_FONT_BYTES: &[u8] = include_bytes!("../../../fonts/ChicagoFLF.ttf");
@@ -56,6 +61,8 @@ pub struct ChartFontBundle {
     bravura_font_data: Arc<Vec<u8>>,
     /// FreeSans — kept as a generic sans-serif fallback
     freesans_font_data: Arc<Vec<u8>>,
+    /// FreeSans Oblique — lyrics (`FreeSans`, italic).
+    freesans_oblique_font_data: Arc<Vec<u8>>,
 }
 
 impl ChartFontBundle {
@@ -79,6 +86,7 @@ impl ChartFontBundle {
             leland_text_font_data: Arc::new(LELAND_TEXT_FONT_BYTES.to_vec()),
             bravura_font_data: Arc::new(BRAVURA_FONT_BYTES.to_vec()),
             freesans_font_data: Arc::new(FREESANS_FONT_BYTES.to_vec()),
+            freesans_oblique_font_data: Arc::new(FREESANS_OBLIQUE_FONT_BYTES.to_vec()),
         })
     }
 
@@ -135,6 +143,12 @@ impl ChartFontBundle {
     #[must_use]
     pub fn freesans_font_data(&self) -> &Arc<Vec<u8>> {
         &self.freesans_font_data
+    }
+
+    /// Get FreeSans Oblique font data (the lyric lane's italic).
+    #[must_use]
+    pub fn freesans_oblique_font_data(&self) -> &Arc<Vec<u8>> {
+        &self.freesans_oblique_font_data
     }
 
     /// Create a correctly-wired `ChartLayoutEngine`.
@@ -261,6 +275,13 @@ impl ChartFontBundle {
         // nothing, so both need a concrete face here.
         fonts.push(("sans-serif", self.aux_font_data.clone()));
         fonts.push(("serif", self.aux_font_data.clone()));
+        // `FreeSans` in italic (lyrics). A rasteriser picks faces by the
+        // font's own family and style, so this face answers it whatever it
+        // is filed under. Filed under its own label because the SVG
+        // `@font-face` rules built from this list are declared upright: as
+        // `FreeSans` it would replace the upright face in a browser. A
+        // browser slants FreeSans itself.
+        fonts.push(("FreeSans Oblique", self.freesans_oblique_font_data.clone()));
         fonts
     }
 

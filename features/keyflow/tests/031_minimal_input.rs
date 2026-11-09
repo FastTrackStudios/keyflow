@@ -212,11 +212,81 @@ fn the_same_holds_for_every_section_name() {
 fn a_real_subtitle_line_is_still_a_subtitle() {
     // The guard must not overshoot: a genuine second line that is not a
     // section header, chord content or metadata is still the subtitle.
-    let chart = parse("My Song\nTranscribed By Someone\n\nVS\nG C Em D\n").expect("parse");
+    let chart = parse("My Song\nLive at the Ryman\n\nVS\nG C Em D\n").expect("parse");
     assert_eq!(
         chart.metadata.subtitle.as_deref(),
-        Some("Transcribed By Someone")
+        Some("Live at the Ryman")
     );
+}
+
+#[test]
+fn a_transcriber_line_is_a_credit_not_the_subtitle() {
+    // Without a subtitle of its own: the credit does not become one.
+    let chart = parse("My Song\nTranscribed By Someone\n\nVS\nG C Em D\n").expect("parse");
+    assert_eq!(chart.metadata.subtitle, None);
+    assert_eq!(chart.metadata.transcriber.as_deref(), Some("Someone"));
+    assert_eq!(
+        format!("{:?}", chart.sections[0].section.section_type),
+        "Verse"
+    );
+
+    // With a subtitle in parentheses: the subtitle survives. It used to be
+    // overwritten by "Transcribed By …".
+    let chart = parse(
+        "Joy to the World (Unspeakable Joy) - Chris Tomlin\n\
+         transcribed BY: Cody Wright\n#D 128bpm 4/4\n\nVS 4\nD G A D\n",
+    )
+    .expect("parse");
+    assert_eq!(chart.metadata.subtitle.as_deref(), Some("Unspeakable Joy"));
+    assert_eq!(chart.metadata.transcriber.as_deref(), Some("Cody Wright"));
+    assert_eq!(
+        chart.tempo.map(|t| t.bpm),
+        Some(128.0),
+        "the metadata line is still read"
+    );
+}
+
+#[test]
+fn a_title_directive_keeps_its_parentheses() {
+    let chart = parse(
+        "Joy to the World (Unspeakable Joy) - Chris Tomlin\n\
+         \\title \"Joy To The World (Unspeakable Joy)\"\n#D 128bpm 4/4\n\nVS 4\nD G A D\n",
+    )
+    .expect("parse");
+    assert_eq!(
+        chart.metadata.title.as_deref(),
+        Some("Joy To The World (Unspeakable Joy)")
+    );
+    // The parenthesised subtitle is the title now, not printed twice.
+    assert_eq!(chart.metadata.subtitle, None);
+    assert_eq!(chart.metadata.artist.as_deref(), Some("Chris Tomlin"));
+
+    // In any order with the credit, and the metadata line after both is
+    // still the metadata line.
+    let chart = parse(
+        "Joy to the World (Unspeakable Joy) - Chris Tomlin\nTranscribed By Cody Wright\n\
+         \\title \"Joy To The World (Unspeakable Joy)\"\n#D 128bpm 4/4\n\nVS 4\nD G A D\n",
+    )
+    .expect("parse");
+    assert_eq!(
+        chart.metadata.title.as_deref(),
+        Some("Joy To The World (Unspeakable Joy)")
+    );
+    assert_eq!(chart.metadata.transcriber.as_deref(), Some("Cody Wright"));
+    assert_eq!(chart.tempo.map(|t| t.bpm), Some(128.0));
+    assert_eq!(
+        format!("{:?}", chart.sections[0].section.section_type),
+        "Verse"
+    );
+
+    // A subtitle given on its own stays.
+    let chart = parse(
+        "Joy - Chris Tomlin\n\\title \"Joy (Unspeakable)\"\n\\subtitle \"Live\"\n\
+         #D 128bpm 4/4\n\nVS 4\nD G A D\n",
+    )
+    .expect("parse");
+    assert_eq!(chart.metadata.title.as_deref(), Some("Joy (Unspeakable)"));
+    assert_eq!(chart.metadata.subtitle.as_deref(), Some("Live"));
 }
 
 #[test]

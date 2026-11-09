@@ -97,6 +97,12 @@ pub struct LyricLine {
 
     /// Optional musical part assignment, such as lead, harmony, or response.
     pub part: Option<String>,
+
+    /// True when every syllable's `measure_index` / `beat` is a real
+    /// placement written in the source (a timed lyric lane, see
+    /// [`LyricLine::parse_timed`]) rather than the zero default. Only timed
+    /// lines can be engraved under the bars they are sung over.
+    pub timed: bool,
 }
 
 impl LyricLine {
@@ -109,7 +115,99 @@ impl LyricLine {
             label: None,
             singer: None,
             part: None,
+            timed: false,
         }
+    }
+
+    /// Does this lyric text use the timed-lane form — words placed with
+    /// `@<bar>` / `@<bar>:<beat>` stamps?
+    pub fn is_timed_text(text: &str) -> bool {
+        text.split_whitespace()
+            .any(|tok| parse_stamp(tok).is_some())
+    }
+
+    /// Parse a **timed lyric lane**: words placed on bars and beats of the
+    /// section they sit in.
+    ///
+    /// ```text
+    /// @1:3 Joy @2 to @2:2.5 the @2:3 world
+    /// @5 Let earth re-ceive her King
+    /// ```
+    ///
+    /// `@<bar>` is a 1-based bar of the section, `@<bar>:<beat>` a 1-based
+    /// beat in it (`2.5` is the "and" of 2). A word without its own stamp
+    /// follows the previous word in the same place — the engraver flows it
+    /// after its neighbour. Each source line ends a lyric line
+    /// (`line_break_after`), and `re-ceive` splits into hyphenated
+    /// syllables the way [`LyricLine::parse_simple`] does.
+    ///
+    /// The stored `measure_index` is 0-based and `beat` 0-based (beat 1 is
+    /// `0.0`), matching [`LyricSyllable`].
+    pub fn parse_timed(text: &str) -> Self {
+        let mut syllables: Vec<LyricSyllable> = Vec::new();
+        let (mut measure, mut beat) = (0usize, 0.0f32);
+        for line in text.lines() {
+            let before = syllables.len();
+            for tok in line.split_whitespace() {
+                if let Some((bar, b)) = parse_stamp(tok) {
+                    measure = bar;
+                    beat = b;
+                    continue;
+                }
+                let parts: Vec<&str> = tok.split('-').filter(|p| !p.is_empty()).collect();
+                let parts = if parts.is_empty() { vec![tok] } else { parts };
+                let last = parts.len() - 1;
+                // `re-` before a stamp: the word goes on at the next place.
+                let carries_on = tok.len() > 1 && tok.ends_with('-');
+                let continues = syllables.last().is_some_and(|s| s.hyphen_after);
+                for (i, part) in parts.into_iter().enumerate() {
+                    let mut syl = LyricSyllable::with_timing(part, measure, beat);
+                    syl.word_initial = i == 0 && !continues;
+                    syl.hyphen_after = i < last || carries_on;
+                    syllables.push(syl);
+                }
+            }
+            if syllables.len() > before
+                && let Some(last) = syllables.last_mut()
+            {
+                last.line_break_after = true;
+            }
+        }
+        let mut line = Self::new(syllables).with_sync_level(LyricSyncLevel::Word);
+        line.timed = true;
+        line
+    }
+
+    /// Write a timed line back in the form [`LyricLine::parse_timed`] reads:
+    /// a stamp wherever a syllable's place differs from the one before it.
+    pub fn to_timed_text(&self) -> String {
+        let mut out = String::new();
+        let mut last_place: Option<(usize, f32)> = None;
+        let mut glue = false;
+        for syl in &self.syllables {
+            let place = (syl.measure_index, syl.beat);
+            if last_place != Some(place) {
+                if !out.is_empty() && !out.ends_with('\n') {
+                    out.push(' ');
+                }
+                out.push_str(&format_stamp(place.0, place.1));
+                glue = false;
+                last_place = Some(place);
+            }
+            if !glue && !out.is_empty() && !out.ends_with('\n') {
+                out.push(' ');
+            }
+            out.push_str(&syl.text);
+            glue = syl.hyphen_after;
+            if glue {
+                out.push('-');
+            }
+            if syl.line_break_after {
+                out.push('\n');
+                glue = false;
+            }
+        }
+        out.trim_end().to_string()
     }
 
     /// Create an empty lyric line
@@ -621,6 +719,46 @@ fn ends_with_strong_break(text: &str) -> bool {
         || text.ends_with(':')
 }
 
+/// `@3` → bar index 2, beat 0.0; `@3:2.5` → bar index 2, beat 1.5.
+/// Anything else (a word, `@vox`, `@0`, a beat below 1) is not a stamp.
+fn parse_stamp(tok: &str) -> Option<(usize, f32)> {
+    let body = tok.strip_prefix('@')?;
+    let (bar, beat) = match body.split_once(':') {
+        Some((bar, beat)) => (bar, Some(beat)),
+        None => (body, None),
+    };
+    if bar.is_empty() || !bar.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    let bar: usize = bar.parse().ok()?;
+    let beat: f32 = match beat {
+        Some(b) if !b.is_empty() && b.chars().all(|c| c.is_ascii_digit() || c == '.') => {
+            b.parse().ok()?
+        }
+        Some(_) => return None,
+        None => 1.0,
+    };
+    (bar >= 1 && beat >= 1.0).then(|| (bar - 1, beat - 1.0))
+}
+
+/// The inverse of [`parse_stamp`]: beat 1 is left off, and a beat is
+/// written with as few decimals as it needs.
+fn format_stamp(measure_index: usize, beat: f32) -> String {
+    let bar = measure_index + 1;
+    if beat.abs() < 1e-4 {
+        return format!("@{bar}");
+    }
+    let beat = ((beat + 1.0) * 1000.0).round() / 1000.0;
+    let mut b = format!("{beat:.3}");
+    while b.ends_with('0') {
+        b.pop();
+    }
+    if b.ends_with('.') {
+        b.pop();
+    }
+    format!("@{bar}:{b}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -718,5 +856,49 @@ mod tests {
         assert_eq!(syllables.len(), 2);
         assert_eq!(syllables[0].text, "A");
         assert_eq!(syllables[1].text, "ma");
+    }
+
+    #[test]
+    fn timed_lane_places_words_on_bars_and_beats() {
+        let line = LyricLine::parse_timed("@1:3 Sing @2 a new @2:2.5 song\n@4 hel-lo there");
+        assert!(line.timed);
+        let at: Vec<_> = line
+            .syllables
+            .iter()
+            .map(|s| (s.text.as_str(), s.measure_index, s.beat))
+            .collect();
+        assert_eq!(
+            at,
+            vec![
+                ("Sing", 0, 2.0),
+                ("a", 1, 0.0),
+                ("new", 1, 0.0), // no stamp of its own: shares the place before it
+                ("song", 1, 1.5),
+                ("hel", 3, 0.0),
+                ("lo", 3, 0.0),
+                ("there", 3, 0.0),
+            ]
+        );
+        assert!(line.syllables[3].line_break_after);
+        assert!(line.syllables[4].hyphen_after);
+        assert!(!line.syllables[5].word_initial);
+    }
+
+    #[test]
+    fn only_numeric_stamps_count_as_timing() {
+        assert!(LyricLine::is_timed_text("@3 word"));
+        assert!(LyricLine::is_timed_text("x @3:2.5 word"));
+        assert!(!LyricLine::is_timed_text("@vox word"));
+        assert!(!LyricLine::is_timed_text("@0 word"));
+        assert!(!LyricLine::is_timed_text("email me@3 now"));
+    }
+
+    #[test]
+    fn timed_lane_round_trips_through_text() {
+        let src = "@1:3 Sing @2 a new @2:2.5 song\n@4 hel-lo @4:4 there-\n@5 fore";
+        let line = LyricLine::parse_timed(src);
+        let again = LyricLine::parse_timed(&line.to_timed_text());
+        assert_eq!(line, again);
+        assert_eq!(line.to_timed_text(), src);
     }
 }

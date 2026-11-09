@@ -14,6 +14,7 @@ pub mod count_in_renderer;
 pub mod cursor;
 pub mod engine_helpers;
 pub mod layout_state;
+pub mod lyric_lane;
 pub mod measure_layout;
 pub mod measure_pass;
 pub mod measure_render;
@@ -1287,9 +1288,13 @@ impl ChartLayoutEngine {
                     .iter()
                     .filter_map(|idx| chart_section.measures().get(*idx).cloned())
                     .collect();
+                let system_lyrics = lyric_lane::system_has_lyrics(chart_section, measure_indices);
                 let system_bottom_reserve = if section_folded {
                     self.config.spatium * 1.0
-                } else if self.config.tight_system_spacing && !draws_below_staff(&system_measures) {
+                } else if self.config.tight_system_spacing
+                    && !draws_below_staff(&system_measures)
+                    && !system_lyrics
+                {
                     // Nothing hangs below the staff but the odd repeat arm.
                     self.config.spatium * 1.5
                 } else {
@@ -2398,6 +2403,34 @@ impl ChartLayoutEngine {
                     }
                 }
 
+                // The lyric lane goes under everything else below the staff.
+                if system_lyrics && !section_folded {
+                    let lyric_system = lyric_lane::LyricSystem {
+                        section: chart_section,
+                        measure_indices,
+                        first_measure_x: content_x + prefix_width,
+                        widths: &distributed_widths,
+                        staff_y,
+                        staff_height,
+                        spatium: self.config.spatium,
+                        style: self.style(),
+                    };
+                    for node in lyric_lane::place_system_lyrics(
+                        &mut system_skyline,
+                        &lyric_system,
+                        &text_metrics,
+                        &mut id_counter,
+                    ) {
+                        record_system_ink_bottom(
+                            &mut system_ink_bottom,
+                            &mut system_height_contributors,
+                            &node,
+                            "lyrics",
+                        );
+                        root.add_child(node);
+                    }
+                }
+
                 // Track system layout
                 let base_system_height = system_top_reserve + row_height;
                 let ink_system_height = system_ink_bottom - system_page_top;
@@ -2436,7 +2469,7 @@ impl ChartLayoutEngine {
                 if section_folded {
                     folded_systems.insert(global_system_index);
                 } else {
-                    if draws_below_staff(&system_measures) {
+                    if draws_below_staff(&system_measures) || system_lyrics {
                         systems_with_ink_below.insert(global_system_index);
                     }
                     if draws_above_staff(&system_measures) {
@@ -2500,6 +2533,7 @@ impl ChartLayoutEngine {
                     bare_system_gap(&self.config)
                 } else if self.config.tight_system_spacing
                     && !draws_below_staff(&system_measures)
+                    && !system_lyrics
                     && !next_system_draws_above()
                 {
                     bare_system_gap(&self.config)
@@ -2985,8 +3019,13 @@ impl ChartLayoutEngine {
                 } else {
                     self.config.spatium * 2.0
                 };
+                let system_lyrics = !section_folded
+                    && lyric_lane::system_has_lyrics(chart_section, measure_indices);
                 let system_bottom_reserve = if section_folded {
                     self.config.spatium * 1.0
+                } else if system_lyrics {
+                    // Room for the lyric line under any cues.
+                    self.config.spatium * 8.0
                 } else {
                     self.config.spatium * 4.5
                 };
@@ -3789,6 +3828,27 @@ impl ChartLayoutEngine {
                         }
 
                         global_measure_index += 1;
+                    }
+                }
+
+                if system_lyrics {
+                    let lyric_system = lyric_lane::LyricSystem {
+                        section: chart_section,
+                        measure_indices,
+                        first_measure_x: content_x + prefix_width,
+                        widths: &distributed_widths,
+                        staff_y,
+                        staff_height,
+                        spatium: self.config.spatium,
+                        style: self.style(),
+                    };
+                    for node in lyric_lane::place_system_lyrics(
+                        &mut system_skyline,
+                        &lyric_system,
+                        &text_metrics,
+                        &mut id_counter,
+                    ) {
+                        root.add_child(node);
                     }
                 }
 

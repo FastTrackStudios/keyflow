@@ -26,6 +26,9 @@ pub struct SongMetadata {
     pub part_name: Option<String>,
     /// Chart version (1, 2, 3, etc.) - defaults to 1 in rendering
     pub version: Option<u8>,
+    /// Who transcribed the chart (`Transcribed By X` in the header). Printed
+    /// as a credit line above the page footer, not as the subtitle.
+    pub transcriber: Option<String>,
 }
 
 impl SongMetadata {

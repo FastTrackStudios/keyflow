@@ -32,6 +32,8 @@ Rosalita (Come Out Tonight) - Bruce Springsteen
 #G 120bpm 4/4
 ```
 
+A line `Transcribed By Cody Wright` under the title (any case, a colon after *By* is fine) credits the transcriber: it prints as a small line above the page footer, on every page, and leaves the subtitle alone. To keep parentheses in the title itself, give it with `\title "Joy To The World (Unspeakable Joy)"` (and `\subtitle "…"` for a subtitle of its own).
+
 [[header|Header]] has the detail.
 
 ## Sections
@@ -158,6 +160,34 @@ VS 4
 Em D"hit"
 ```
 
+## Lyrics
+
+A `[lyrics]` line after a section's chords is its lyric lane. Stamp the words with where they are sung and they are drawn under the slashes, each word under its bar and beat:
+
+| Symbol | Means | Example |
+| --- | --- | --- |
+| `@` + bar | bar of the section, from 1 | `@2 world` |
+| `@` bar `:` beat | a beat in that bar; `.5` is the "and" | `@1:3.5 to` |
+| `-` | one word, sung over two places | `@3 re- @3:3 ceive` |
+| `_` | the word before is held here | `@1 night @2 _` |
+
+A word without a stamp follows the one before it, and a word whose beat is already taken runs on after its neighbour, so a busy bar still reads. The syllables of a word get a hyphen between them, and a held word a line out to the next one. A section whose only line is its lane keeps the chords it would have recalled. Bars are counted from the section's first bar; a `Count` in front of the chart is not one of them.
+
+```kf+
+VS 4
+G C D G
+[lyrics]
+@1 Sing @1:3 a @2 new @2:3 song
+@3 ev- @3:3 ery @4 day
+```
+
+Two commands write those lanes for you, as a `[lyrics lrc]` lane in each section that running them again replaces:
+
+- `kf lyrics-lrc song.kf song.lrc --downbeat 12.4 -o out.kf` reads an `.lrc`. Bar 1 starts 12.4 seconds into the recording and the chart's tempo and meters place the rest, or `--sync sync.json` takes each bar's start from a Songsterr sync (skipping its lead-in bar on its own). LRC lines are stamped a touch early, so they are moved a quarter second late; `--offset` changes that. Lines that start before bar 1 or after the last bar are reported, not dropped.
+- `kf lyrics-sheet song.kf sheet.txt -o out.kf` reads a chord-over-lyrics sheet, each chord one bar of the chart in order, and puts every word in the bar of the chord at or before it; `[Chorus]` moves on to the chart's next chorus. With `--map` it reads one `bar beat word` per line instead.
+
+Words go on the nearest eighth; `--grid 4` puts them on beats.
+
 ## Directives
 
 A line starting with `\` sets something for the chart. Backslash, not slash: a line starting with `/` is a bar of rhythm slashes, and the two would be impossible to tell apart. The editor's command menu offers these, and the parser rejects one it doesn't know — so the list here is the list.
@@ -173,6 +203,8 @@ A line starting with `\` sets something for the chart. Backslash, not slash: a l
 | `\chord_memory = true` | a bare root recalls the quality its degree last had |
 | `\repeat_chord_symbols = clusters` | `changes` (default), `clusters` or `always`: when a chord still sounding is named again |
 | `\progression G B C Cm` | the chords a section falls back to when it names none |
+| `\title "Joy To The World (Unspeakable Joy)"` | the title exactly as written, parentheses and all |
+| `\subtitle "Live at the Ryman"` | the line under the title |
 | `\alias name value` | give a name to a run of chart text |
 
 ```kf+

@@ -218,3 +218,46 @@ fn paper_still_carries_the_footer() {
         "a printed page lost its footer"
     );
 }
+
+#[test]
+fn the_transcriber_is_credited_above_the_footer_on_every_page() {
+    // `Transcribed By X` is a credit, not a subtitle: it prints as its own
+    // line just above "Created with Keyflow", on every page — and leaves a
+    // subtitle written in parentheses alone.
+    let pipeline = ChartPipeline::shared().expect("the pipeline builds");
+    let body = "VS 8\nD G A D\nD G A D\n\n".repeat(12);
+    let source = format!(
+        "Joy (Unspeakable Joy) - Chris Tomlin\nTranscribed By Cody Wright\n#D 128bpm 4/4\n\n{body}"
+    );
+    let result = pipeline.layout(&chart(&source), &LayoutMode::paginated_a4());
+    let pages = pipeline.export_svg_pages_linked(&result);
+    assert!(pages.len() > 1, "the fixture should run onto a second page");
+    for (i, page) in pages.iter().enumerate() {
+        let credit = page
+            .find("Transcribed by Cody Wright")
+            .unwrap_or_else(|| panic!("page {} has no transcriber credit", i + 1));
+        let footer = page
+            .find("Created with Keyflow")
+            .unwrap_or_else(|| panic!("page {} has no footer", i + 1));
+        // The `y` of the <text> element each string sits in.
+        let y = |at: usize| -> f64 {
+            let tag = &page[..at];
+            let start = tag.rfind(" y=\"").expect("text has a y") + 4;
+            let rest = &page[start..];
+            rest[..rest.find('"').unwrap()].parse().unwrap()
+        };
+        assert!(
+            y(credit) < y(footer),
+            "page {}: the credit is not above the footer",
+            i + 1
+        );
+    }
+    assert!(
+        pages[0].contains("Unspeakable Joy"),
+        "the subtitle was lost"
+    );
+    assert!(
+        !pages[0].contains("Transcribed By Cody Wright"),
+        "the credit is still the subtitle"
+    );
+}

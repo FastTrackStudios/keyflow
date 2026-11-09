@@ -455,6 +455,22 @@ impl PdfSerializer {
             );
         }
 
+        // The generic families the scene emits (`sans-serif` for the
+        // header's subtitle, artist, tempo and part name, the section
+        // labels and the footer) must resolve to a loaded face, as the
+        // multi-page path below does. Without this a ONE-page PDF dropped
+        // every one of those runs: usvg's default sans is a system font this
+        // database never loads.
+        let has = |family: &str| {
+            fontdb
+                .faces()
+                .any(|f| f.families.iter().any(|(name, _)| name == family))
+        };
+        if has("FreeSans") {
+            fontdb.set_sans_serif_family("FreeSans");
+            fontdb.set_serif_family("FreeSans");
+        }
+
         // Convert each SVG page to PDF bytes
         let mut pdf_chunks: Vec<Vec<u8>> = Vec::new();
 
