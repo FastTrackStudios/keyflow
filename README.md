@@ -93,7 +93,7 @@ the authority; daw's copies come out once its consumers are repointed.
 ## Build
 
 ```bash
-nix develop          # or direnv: `use flake`
+devenv shell         # or direnv: .envrc (`use devenv`)
 just check           # cargo check --workspace
 just test            # cargo nextest run --workspace
 just wasm-check      # the library crates for wasm32 — `just check` does NOT

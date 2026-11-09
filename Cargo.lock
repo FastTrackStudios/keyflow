@@ -660,13 +660,13 @@ dependencies = [
 [[package]]
 name = "architect"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc#8e0aed9e577868035508b86a9292328ef7f5f8cc"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=31f120f73819d35a954269b71bae7c790f5fc51f#31f120f73819d35a954269b71bae7c790f5fc51f"
 dependencies = [
  "architect-action-derive",
  "architect-derive",
  "architect-permissions",
  "architect-rpc-derive",
- "architect-workspace-hack 0.1.0 (git+https://www.github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc)",
+ "architect-workspace-hack",
  "async-channel",
  "eyre",
  "facet",
@@ -686,7 +686,7 @@ dependencies = [
 [[package]]
 name = "architect-action-derive"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc#8e0aed9e577868035508b86a9292328ef7f5f8cc"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=31f120f73819d35a954269b71bae7c790f5fc51f#31f120f73819d35a954269b71bae7c790f5fc51f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -696,12 +696,13 @@ dependencies = [
 [[package]]
 name = "architect-commands"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc#8e0aed9e577868035508b86a9292328ef7f5f8cc"
+source = "git+https://github.com/FastTrackStudios/architect?rev=31f120f73819d35a954269b71bae7c790f5fc51f#31f120f73819d35a954269b71bae7c790f5fc51f"
 dependencies = [
  "architect",
  "architect-input",
+ "architect-palette",
  "architect-shell",
- "architect-workspace-hack 0.1.0 (git+https://github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc)",
+ "architect-workspace-hack",
  "dioxus",
  "facet",
  "facet-json",
@@ -716,7 +717,7 @@ dependencies = [
 [[package]]
 name = "architect-derive"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc#8e0aed9e577868035508b86a9292328ef7f5f8cc"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=31f120f73819d35a954269b71bae7c790f5fc51f#31f120f73819d35a954269b71bae7c790f5fc51f"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -727,12 +728,12 @@ dependencies = [
 [[package]]
 name = "architect-devices"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc#8e0aed9e577868035508b86a9292328ef7f5f8cc"
+source = "git+https://github.com/FastTrackStudios/architect?rev=31f120f73819d35a954269b71bae7c790f5fc51f#31f120f73819d35a954269b71bae7c790f5fc51f"
 dependencies = [
  "architect",
  "architect-orgs",
  "architect-permissions",
- "architect-workspace-hack 0.1.0 (git+https://github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc)",
+ "architect-workspace-hack",
  "facet",
  "facet-json",
  "thiserror 2.0.20",
@@ -744,9 +745,9 @@ dependencies = [
 [[package]]
 name = "architect-input"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc#8e0aed9e577868035508b86a9292328ef7f5f8cc"
+source = "git+https://github.com/FastTrackStudios/architect?rev=31f120f73819d35a954269b71bae7c790f5fc51f#31f120f73819d35a954269b71bae7c790f5fc51f"
 dependencies = [
- "architect-workspace-hack 0.1.0 (git+https://github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc)",
+ "architect-workspace-hack",
  "dioxus",
  "facet",
  "gloo-timers 0.3.0",
@@ -759,9 +760,9 @@ dependencies = [
 [[package]]
 name = "architect-orgs"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc#8e0aed9e577868035508b86a9292328ef7f5f8cc"
+source = "git+https://github.com/FastTrackStudios/architect?rev=31f120f73819d35a954269b71bae7c790f5fc51f#31f120f73819d35a954269b71bae7c790f5fc51f"
 dependencies = [
- "architect-workspace-hack 0.1.0 (git+https://github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc)",
+ "architect-workspace-hack",
  "facet",
  "facet-json",
  "futures-util",
@@ -769,11 +770,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "architect-palette"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/architect?rev=31f120f73819d35a954269b71bae7c790f5fc51f#31f120f73819d35a954269b71bae7c790f5fc51f"
+dependencies = [
+ "architect-workspace-hack",
+ "facet",
+]
+
+[[package]]
 name = "architect-permissions"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc#8e0aed9e577868035508b86a9292328ef7f5f8cc"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=31f120f73819d35a954269b71bae7c790f5fc51f#31f120f73819d35a954269b71bae7c790f5fc51f"
 dependencies = [
- "architect-workspace-hack 0.1.0 (git+https://www.github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc)",
+ "architect-workspace-hack",
  "serde",
  "serde_json",
  "tracing",
@@ -782,7 +792,7 @@ dependencies = [
 [[package]]
 name = "architect-rpc-derive"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc#8e0aed9e577868035508b86a9292328ef7f5f8cc"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=31f120f73819d35a954269b71bae7c790f5fc51f#31f120f73819d35a954269b71bae7c790f5fc51f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -792,9 +802,10 @@ dependencies = [
 [[package]]
 name = "architect-shell"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc#8e0aed9e577868035508b86a9292328ef7f5f8cc"
+source = "git+https://github.com/FastTrackStudios/architect?rev=31f120f73819d35a954269b71bae7c790f5fc51f#31f120f73819d35a954269b71bae7c790f5fc51f"
 dependencies = [
- "architect-workspace-hack 0.1.0 (git+https://github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc)",
+ "architect-theme",
+ "architect-workspace-hack",
  "block2 0.6.2",
  "dioxus",
  "futures-channel",
@@ -813,16 +824,16 @@ dependencies = [
 [[package]]
 name = "architect-story-core"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc#8e0aed9e577868035508b86a9292328ef7f5f8cc"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=31f120f73819d35a954269b71bae7c790f5fc51f#31f120f73819d35a954269b71bae7c790f5fc51f"
 dependencies = [
- "architect-workspace-hack 0.1.0 (git+https://www.github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc)",
+ "architect-workspace-hack",
  "linkme",
 ]
 
 [[package]]
 name = "architect-story-macros"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc#8e0aed9e577868035508b86a9292328ef7f5f8cc"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=31f120f73819d35a954269b71bae7c790f5fc51f#31f120f73819d35a954269b71bae7c790f5fc51f"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -833,22 +844,37 @@ dependencies = [
 [[package]]
 name = "architect-story-runtime"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc#8e0aed9e577868035508b86a9292328ef7f5f8cc"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=31f120f73819d35a954269b71bae7c790f5fc51f#31f120f73819d35a954269b71bae7c790f5fc51f"
 dependencies = [
  "architect-story-core",
  "architect-story-macros",
- "architect-workspace-hack 0.1.0 (git+https://www.github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc)",
+ "architect-workspace-hack",
  "dioxus",
  "linkme",
 ]
 
 [[package]]
+name = "architect-theme"
+version = "0.1.0"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=31f120f73819d35a954269b71bae7c790f5fc51f#31f120f73819d35a954269b71bae7c790f5fc51f"
+dependencies = [
+ "architect-workspace-hack",
+ "dioxus",
+ "facet",
+ "facet-json",
+ "futures-channel",
+ "futures-util",
+ "tracing",
+]
+
+[[package]]
 name = "architect-ui"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc#8e0aed9e577868035508b86a9292328ef7f5f8cc"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=31f120f73819d35a954269b71bae7c790f5fc51f#31f120f73819d35a954269b71bae7c790f5fc51f"
 dependencies = [
  "architect-story-runtime",
- "architect-workspace-hack 0.1.0 (git+https://www.github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc)",
+ "architect-theme",
+ "architect-workspace-hack",
  "chrono",
  "clsx",
  "dioxus",
@@ -865,13 +891,14 @@ dependencies = [
 [[package]]
 name = "architect-workspace"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc#8e0aed9e577868035508b86a9292328ef7f5f8cc"
+source = "git+https://github.com/FastTrackStudios/architect?rev=31f120f73819d35a954269b71bae7c790f5fc51f#31f120f73819d35a954269b71bae7c790f5fc51f"
 dependencies = [
  "anyrender",
  "architect",
  "architect-commands",
  "architect-shell",
- "architect-workspace-hack 0.1.0 (git+https://github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc)",
+ "architect-theme",
+ "architect-workspace-hack",
  "blitz-dom",
  "blitz-traits",
  "crdt",
@@ -890,22 +917,19 @@ dependencies = [
 [[package]]
 name = "architect-workspace-hack"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc#8e0aed9e577868035508b86a9292328ef7f5f8cc"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=31f120f73819d35a954269b71bae7c790f5fc51f#31f120f73819d35a954269b71bae7c790f5fc51f"
 dependencies = [
  "aead",
  "aes-gcm",
  "ahash",
  "aho-corasick",
  "alloc-stdlib",
+ "allocator-api2",
  "anstyle",
  "anyrender_vello_hybrid",
  "approx",
  "arrayvec",
- "async-compression",
- "async-lock",
  "async-once-cell",
- "aws-lc-rs",
- "aws-lc-sys 0.44.0",
  "axum",
  "axum-extra",
  "axum-macros",
@@ -946,8 +970,6 @@ dependencies = [
  "clap_builder",
  "cmake",
  "color",
- "compression-codecs",
- "compression-core",
  "concurrent-queue",
  "const-str",
  "const_format",
@@ -956,6 +978,7 @@ dependencies = [
  "cookie",
  "coolor",
  "core-foundation 0.10.1",
+ "core-graphics 0.25.0",
  "crc32fast",
  "crossbeam-deque",
  "crossbeam-epoch",
@@ -1010,6 +1033,7 @@ dependencies = [
  "euclid",
  "event-listener",
  "event-listener-strategy",
+ "exr",
  "facet",
  "facet-core",
  "facet-error",
@@ -1044,7 +1068,6 @@ dependencies = [
  "getrandom 0.3.4",
  "getrandom 0.4.3",
  "gloo-net",
- "gloo-timers 0.4.0",
  "gloo-utils",
  "guillotiere",
  "h2",
@@ -1067,6 +1090,7 @@ dependencies = [
  "hyper-util",
  "icu_collections 2.4.0",
  "icu_locale_core",
+ "icu_locid",
  "icu_normalizer",
  "icu_properties",
  "icu_provider 2.4.0",
@@ -1077,24 +1101,28 @@ dependencies = [
  "inout",
  "inventory",
  "ipnet",
+ "iroh-base",
  "iroh-metrics",
  "itertools 0.12.1",
- "jiff",
- "jiff-core",
- "js-sys",
  "keyboard-types",
  "konst",
  "konst_macro_rules",
+ "kurbo 0.11.3",
+ "kurbo 0.13.1",
  "libc",
  "libsqlite3-sys",
- "libz-sys",
  "linebender_resource_handle",
  "linux-raw-sys 0.12.1",
+ "litemap 0.7.5",
  "litemap 0.8.3",
  "lock_api",
  "log",
+ "loro",
+ "loro-common",
+ "loro-internal",
  "manganis-core",
- "md-5",
+ "md-5 0.10.6",
+ "md-5 0.11.0",
  "memchr",
  "memmap2",
  "mime_guess",
@@ -1113,6 +1141,8 @@ dependencies = [
  "num-rational",
  "num-traits",
  "num_cpus",
+ "num_enum 0.5.11",
+ "num_enum_derive 0.5.11",
  "objc2 0.5.2",
  "objc2 0.6.5",
  "objc2-app-kit 0.2.2",
@@ -1148,15 +1178,19 @@ dependencies = [
  "percent-encoding",
  "petgraph 0.8.3",
  "phf 0.13.1",
+ "phf 0.14.0",
  "phf_generator 0.13.1",
  "phf_macros 0.13.1",
  "phf_shared 0.13.1",
+ "phf_shared 0.14.0",
  "pkcs8 0.11.0",
+ "polycool",
  "portable-atomic",
  "postcard",
  "potential_utf",
  "powerfmt",
  "ppv-lite86",
+ "proc-macro-crate 1.3.1",
  "proc-macro-error 0.4.12",
  "proc-macro-error-attr 0.4.12",
  "proc-macro-hack",
@@ -1169,6 +1203,7 @@ dependencies = [
  "pulp-wasm-simd-flag",
  "quick-xml",
  "quote",
+ "rand 0.10.3",
  "rand 0.8.8",
  "rand 0.9.5",
  "rand_chacha 0.3.1",
@@ -1193,7 +1228,7 @@ dependencies = [
  "rustls-native-certs",
  "rustls-pemfile",
  "rustls-pki-types",
- "same-file",
+ "rustls-webpki",
  "scopeguard",
  "sea-orm",
  "sea-orm-macros",
@@ -1201,11 +1236,8 @@ dependencies = [
  "sea-query-binder",
  "security-framework",
  "security-framework-sys",
- "seize",
  "semver",
- "send_wrapper",
  "serde",
- "serde-wasm-bindgen",
  "serde_core",
  "serde_json",
  "serde_qs",
@@ -1243,6 +1275,8 @@ dependencies = [
  "thiserror 2.0.20",
  "time",
  "time-macros",
+ "tiny-skia 0.12.0",
+ "tinystr 0.7.6",
  "tinystr 0.8.5",
  "tinyvec",
  "tokio",
@@ -1253,6 +1287,7 @@ dependencies = [
  "toml 0.8.2",
  "toml_datetime 0.6.3",
  "toml_datetime 1.1.1+spec-1.1.0",
+ "toml_edit 0.19.15",
  "toml_edit 0.20.2",
  "toml_parser",
  "tower 0.5.3",
@@ -1270,453 +1305,40 @@ dependencies = [
  "unicode-normalization",
  "unicode-properties",
  "url",
- "usvg 0.48.1",
  "uuid",
  "value-bag",
  "vello_gpu",
  "vello_gpu_shaders",
  "vox",
  "vte",
- "walkdir",
  "wasm-bindgen",
- "wasm-bindgen-futures",
- "wasm-bindgen-macro",
- "wasm-bindgen-macro-support",
- "wasm-bindgen-shared",
  "wasm-split-macro",
  "wasm-splitter",
- "wasm-streams 0.5.0",
+ "wayland-backend",
+ "wayland-protocols",
+ "wayland-sys",
  "web-sys",
  "web-time",
+ "winnow 0.5.40",
  "winnow 1.0.4",
  "writeable 0.6.4",
  "x11rb 0.13.2",
  "x11rb-protocol 0.13.2",
  "xterm-query",
  "xxhash-rust",
+ "yeslogic-fontconfig-sys",
+ "yoke 0.7.5",
  "yoke 0.8.4",
+ "yoke-derive 0.7.5",
  "zbus",
  "zerocopy",
  "zerofrom",
  "zeroize",
  "zerotrie",
+ "zerovec 0.10.4",
  "zerovec 0.11.9",
-]
-
-[[package]]
-name = "architect-workspace-hack"
-version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc#8e0aed9e577868035508b86a9292328ef7f5f8cc"
-dependencies = [
- "aead",
- "aes-gcm",
- "ahash",
- "aho-corasick",
- "alloc-stdlib",
- "anstyle",
- "anyrender_vello_hybrid",
- "approx",
- "arrayvec",
- "async-compression",
- "async-lock",
- "async-once-cell",
- "aws-lc-rs",
- "aws-lc-sys 0.44.0",
- "axum",
- "axum-extra",
- "axum-macros",
- "base16ct",
- "base64 0.22.1",
- "base64 0.23.1",
- "base64ct",
- "bigdecimal",
- "bit-set 0.8.0",
- "bit-vec 0.8.0",
- "bitflags 1.3.2",
- "bitflags 2.13.2",
- "blake2",
- "blake3",
- "blitz-dom",
- "blitz-paint",
- "blitz-shell",
- "block-buffer 0.12.1",
- "block-padding",
- "block2 0.5.1",
- "block2 0.6.2",
- "brotli-decompressor 5.0.3",
- "bstr",
- "bumpalo",
- "bytemuck",
- "byteorder",
- "bytes",
- "camino",
- "cc",
- "charset",
- "chrono",
- "ciborium",
- "ciborium-io",
- "ciborium-ll",
- "cipher",
- "clang-sys",
- "clap",
- "clap_builder",
- "cmake",
- "color",
- "compression-codecs",
- "compression-core",
- "concurrent-queue",
- "const-str",
- "const_format",
- "constant_time_eq",
- "content_disposition",
- "cookie",
- "coolor",
- "core-foundation 0.10.1",
- "crc32fast",
- "crossbeam-deque",
- "crossbeam-epoch",
- "crossbeam-utils",
- "crossterm",
- "crypto-common 0.1.7",
- "crypto-common 0.2.2",
- "ctutils",
- "curve25519-dalek",
- "darling 0.20.11",
- "darling 0.21.3",
- "darling_core 0.20.11",
- "darling_core 0.21.3",
- "dashmap 6.2.1",
- "data-encoding",
- "debug_timer 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "der 0.8.2",
- "deranged",
- "derive_more 2.1.1",
- "derive_more-impl 2.1.1",
- "digest 0.10.7",
- "digest 0.11.3",
- "dioxus",
- "dioxus-asset-resolver",
- "dioxus-cli-config",
- "dioxus-config-macro",
- "dioxus-config-macros",
- "dioxus-core",
- "dioxus-devtools",
- "dioxus-fullstack",
- "dioxus-fullstack-core",
- "dioxus-fullstack-macro",
- "dioxus-html",
- "dioxus-interpreter-js",
- "dioxus-native",
- "dioxus-primitives",
- "dioxus-router",
- "dioxus-server",
- "dioxus-vdom",
- "dioxus-vdom-template",
- "dioxus-web",
- "dispatch",
- "dispatch2",
- "displaydoc",
- "downcast-rs",
- "ed25519",
- "ed25519-dalek",
- "either",
- "env_filter",
- "env_logger",
- "errno",
- "euclid",
- "event-listener",
- "event-listener-strategy",
- "facet",
- "facet-core",
- "facet-error",
- "facet-format",
- "facet-path",
- "facet-pretty",
- "facet-styx",
- "fastrand",
- "figue",
- "figue-attrs",
- "flate2",
- "foldhash 0.1.5",
- "foldhash 0.2.0",
- "fontique 0.12.0",
- "foreign-types 0.3.2",
- "foreign-types-shared 0.1.1",
- "form_urlencoded",
- "fs_extra",
- "futures",
- "futures-channel",
- "futures-core",
- "futures-executor",
- "futures-io",
- "futures-lite",
- "futures-sink",
- "futures-task",
- "futures-util",
- "genawaiter",
- "genawaiter-macro",
- "genawaiter-proc-macro",
- "getrandom 0.2.17",
- "getrandom 0.3.4",
- "getrandom 0.4.3",
- "gloo-net",
- "gloo-timers 0.4.0",
- "gloo-utils",
- "guillotiere",
- "h2",
- "half",
- "hashbrown 0.14.5",
- "hashbrown 0.15.5",
- "hashbrown 0.16.1",
- "hashbrown 0.17.1",
- "headers",
- "headers-core",
- "heapless 0.8.0",
- "hmac 0.12.1",
- "hmac 0.13.0",
- "http",
- "httparse",
- "hybrid-array",
- "hyper",
- "hyper-rustls",
- "hyper-tls",
- "hyper-util",
- "icu_collections 2.4.0",
- "icu_locale_core",
- "icu_normalizer",
- "icu_properties",
- "icu_provider 2.4.0",
- "icu_segmenter 2.4.0",
- "idna",
- "image",
- "indexmap",
- "inout",
- "inventory",
- "ipnet",
- "iroh-metrics",
- "itertools 0.12.1",
- "jiff",
- "jiff-core",
- "js-sys",
- "keyboard-types",
- "konst",
- "konst_macro_rules",
- "libc",
- "libsqlite3-sys",
- "libz-sys",
- "linebender_resource_handle",
- "linux-raw-sys 0.12.1",
- "litemap 0.8.3",
- "lock_api",
- "log",
- "manganis-core",
- "md-5",
- "memchr",
- "memmap2",
- "mime_guess",
- "miniz_oxide 0.8.9",
- "mio",
- "moka",
- "multer",
- "naga 30.0.1",
- "naga-types",
- "native-tls",
- "nix",
- "nom 7.1.3",
- "num-bigint",
- "num-complex",
- "num-integer",
- "num-rational",
- "num-traits",
- "num_cpus",
- "objc2 0.5.2",
- "objc2 0.6.5",
- "objc2-app-kit 0.2.2",
- "objc2-app-kit 0.3.2",
- "objc2-cloud-kit 0.3.2",
- "objc2-core-data 0.3.2",
- "objc2-core-foundation",
- "objc2-core-graphics",
- "objc2-core-image 0.3.2",
- "objc2-core-text",
- "objc2-core-video",
- "objc2-foundation 0.2.2",
- "objc2-foundation 0.3.2",
- "objc2-quartz-core 0.3.2",
- "objc2-security",
- "objc2-ui-kit 0.3.2",
- "once_cell",
- "openssl",
- "openssl-probe",
- "openssl-src",
- "openssl-sys",
- "opentelemetry",
- "opentelemetry_sdk",
- "palette",
- "palette_math",
- "parking_lot",
- "parlance",
- "parley 0.12.0",
- "parley_engine",
- "pathdiff",
- "pem-rfc7468 1.0.0",
- "peniko 0.6.1",
- "percent-encoding",
- "petgraph 0.8.3",
- "phf 0.13.1",
- "phf_generator 0.13.1",
- "phf_macros 0.13.1",
- "phf_shared 0.13.1",
- "pkcs8 0.11.0",
- "portable-atomic",
- "postcard",
- "potential_utf",
- "powerfmt",
- "ppv-lite86",
- "proc-macro-error 0.4.12",
- "proc-macro-error-attr 0.4.12",
- "proc-macro-hack",
- "proc-macro2",
- "proc-macro2-diagnostics",
- "profiling",
- "psl-types",
- "publicsuffix",
- "pulp 0.22.3",
- "pulp-wasm-simd-flag",
- "quick-xml",
- "quote",
- "rand 0.8.8",
- "rand 0.9.5",
- "rand_chacha 0.3.1",
- "rand_chacha 0.9.0",
- "rand_core 0.6.4",
- "rand_distr",
- "raw-window-handle 0.6.2",
- "rayon",
- "rayon-core",
- "regex",
- "regex-automata",
- "regex-syntax",
- "reqwest 0.12.28",
- "reqwest 0.13.5",
- "rfd",
- "rgb",
- "ring",
- "rust_decimal",
- "rustc-hash 1.1.0",
- "rustix 1.1.5",
- "rustls",
- "rustls-native-certs",
- "rustls-pemfile",
- "rustls-pki-types",
- "same-file",
- "scopeguard",
- "sea-orm",
- "sea-orm-macros",
- "sea-query",
- "sea-query-binder",
- "security-framework",
- "security-framework-sys",
- "seize",
- "semver",
- "send_wrapper",
- "serde",
- "serde-wasm-bindgen",
- "serde_core",
- "serde_json",
- "serde_qs",
- "serde_spanned 0.6.9",
- "sha1",
- "sha2 0.10.9",
- "sha2 0.11.0",
- "signal-hook-mio",
- "signature 3.0.0",
- "simd-adler32",
- "simdutf8",
- "skrifa 0.44.0",
- "slab",
- "sledgehammer_bindgen",
- "sledgehammer_bindgen_macro",
- "slotmap",
- "smallvec 1.16.4",
- "spin 0.10.1",
- "spin 0.9.9",
- "spki 0.8.1",
- "sqlx",
- "stable_deref_trait",
- "static_assertions",
- "strip-ansi-escapes",
- "strum 0.26.3",
- "strum 0.28.0",
- "subtle",
- "syn 1.0.109",
- "syn 2.0.119",
- "syn 3.0.6",
- "syn-mid",
- "sync_wrapper",
- "tempfile",
- "terminal-light",
- "thiserror 2.0.20",
- "time",
- "time-macros",
- "tinystr 0.8.5",
- "tinyvec",
- "tokio",
- "tokio-rustls",
- "tokio-stream",
- "tokio-tungstenite",
- "tokio-util",
- "toml 0.8.2",
- "toml_datetime 0.6.3",
- "toml_datetime 1.1.1+spec-1.1.0",
- "toml_edit 0.20.2",
- "toml_parser",
- "tower 0.5.3",
- "tower-http",
- "tracing",
- "tracing-core",
- "tracing-futures",
- "tracing-log",
- "tracing-subscriber",
- "ttf-parser 0.25.1",
- "tungstenite",
- "twox-hash",
- "typenum",
- "ucd-trie",
- "unicode-normalization",
- "unicode-properties",
- "url",
- "usvg 0.48.1",
- "uuid",
- "value-bag",
- "vello_gpu",
- "vello_gpu_shaders",
- "vox",
- "vte",
- "walkdir",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "wasm-bindgen-macro",
- "wasm-bindgen-macro-support",
- "wasm-bindgen-shared",
- "wasm-split-macro",
- "wasm-splitter",
- "wasm-streams 0.5.0",
- "web-sys",
- "web-time",
- "winnow 1.0.4",
- "writeable 0.6.4",
- "x11rb 0.13.2",
- "x11rb-protocol 0.13.2",
- "xterm-query",
- "xxhash-rust",
- "yoke 0.8.4",
- "zbus",
- "zerocopy",
- "zerofrom",
- "zeroize",
- "zerotrie",
- "zerovec 0.11.9",
+ "zerovec-derive 0.10.4",
+ "zlib-rs",
 ]
 
 [[package]]
@@ -1751,6 +1373,9 @@ name = "arrayvec"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "arref"
@@ -1993,21 +1618,8 @@ version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "048006790404103c488e6c5616b3e7e702a71292aadda08e8f7698a9e0d2eb53"
 dependencies = [
- "aws-lc-sys 0.47.0",
+ "aws-lc-sys",
  "zeroize",
-]
-
-[[package]]
-name = "aws-lc-sys"
-version = "0.44.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f09fae7be8bb3174e05c6afdb34199e6dc0c7c04ba9fa237b1967adfbde27483"
-dependencies = [
- "cc",
- "cmake",
- "dunce",
- "fs_extra",
- "pkg-config",
 ]
 
 [[package]]
@@ -3471,13 +3083,13 @@ dependencies = [
 [[package]]
 name = "crdt"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc#8e0aed9e577868035508b86a9292328ef7f5f8cc"
+source = "git+https://github.com/FastTrackStudios/architect?rev=31f120f73819d35a954269b71bae7c790f5fc51f#31f120f73819d35a954269b71bae7c790f5fc51f"
 dependencies = [
  "architect",
  "architect-devices",
  "architect-orgs",
  "architect-permissions",
- "architect-workspace-hack 0.1.0 (git+https://github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc)",
+ "architect-workspace-hack",
  "async-trait",
  "chrono",
  "crc32fast",
@@ -3495,7 +3107,7 @@ dependencies = [
 [[package]]
 name = "crdt-derive"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=8e0aed9e577868035508b86a9292328ef7f5f8cc#8e0aed9e577868035508b86a9292328ef7f5f8cc"
+source = "git+https://github.com/FastTrackStudios/architect?rev=31f120f73819d35a954269b71bae7c790f5fc51f#31f120f73819d35a954269b71bae7c790f5fc51f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3856,6 +3468,26 @@ name = "data-encoding"
 version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4583a4551df46e2792f82ceeac45e850d2e2d5debba0b91f102385cda5b11f06"
+
+[[package]]
+name = "data-encoding-macro"
+version = "0.1.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6a127ecbb3c4632e1525380e04c0c3fcf8dcb44d32a79ea290d8a36906edcd8"
+dependencies = [
+ "data-encoding",
+ "data-encoding-macro-internal",
+]
+
+[[package]]
+name = "data-encoding-macro-internal"
+version = "0.1.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c54e03a951783e8b327515db3f2a2fd0e3bed362a96b066f341ce66ed49b4ead"
+dependencies = [
+ "data-encoding",
+ "syn 1.0.109",
+]
 
 [[package]]
 name = "data-url"
@@ -4808,7 +4440,7 @@ dependencies = [
 [[package]]
 name = "dioxus-test"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?rev=554b713a613d24b6deb69168c6e6a80d9da3f11c#554b713a613d24b6deb69168c6e6a80d9da3f11c"
+source = "git+https://github.com/FastTrackStudios/editor?rev=81451ea7d72069195ca28f66274411e525c11ae0#81451ea7d72069195ca28f66274411e525c11ae0"
 dependencies = [
  "anyrender",
  "anyrender_vello_cpu",
@@ -5124,6 +4756,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "editor-ext"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/editor?rev=81451ea7d72069195ca28f66274411e525c11ae0#81451ea7d72069195ca28f66274411e525c11ae0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "editor-keyflow"
 version = "0.0.1-alpha"
 dependencies = [
@@ -5149,8 +4790,9 @@ dependencies = [
 [[package]]
 name = "editor-state"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?rev=554b713a613d24b6deb69168c6e6a80d9da3f11c#554b713a613d24b6deb69168c6e6a80d9da3f11c"
+source = "git+https://github.com/FastTrackStudios/editor?rev=81451ea7d72069195ca28f66274411e525c11ae0#81451ea7d72069195ca28f66274411e525c11ae0"
 dependencies = [
+ "editor-ext",
  "editor-syntax",
  "ropey",
  "thiserror 2.0.20",
@@ -5162,7 +4804,7 @@ dependencies = [
 [[package]]
 name = "editor-syntax"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?rev=554b713a613d24b6deb69168c6e6a80d9da3f11c#554b713a613d24b6deb69168c6e6a80d9da3f11c"
+source = "git+https://github.com/FastTrackStudios/editor?rev=81451ea7d72069195ca28f66274411e525c11ae0#81451ea7d72069195ca28f66274411e525c11ae0"
 dependencies = [
  "arborium",
  "arborium-theme",
@@ -5172,7 +4814,7 @@ dependencies = [
 [[package]]
 name = "editor-view"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?rev=554b713a613d24b6deb69168c6e6a80d9da3f11c#554b713a613d24b6deb69168c6e6a80d9da3f11c"
+source = "git+https://github.com/FastTrackStudios/editor?rev=81451ea7d72069195ca28f66274411e525c11ae0#81451ea7d72069195ca28f66274411e525c11ae0"
 dependencies = [
  "dioxus",
  "editor-state",
@@ -5190,7 +4832,7 @@ dependencies = [
 [[package]]
 name = "editor-vim"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/editor?rev=554b713a613d24b6deb69168c6e6a80d9da3f11c#554b713a613d24b6deb69168c6e6a80d9da3f11c"
+source = "git+https://github.com/FastTrackStudios/editor?rev=81451ea7d72069195ca28f66274411e525c11ae0#81451ea7d72069195ca28f66274411e525c11ae0"
 dependencies = [
  "editor-state",
  "tracing",
@@ -7645,6 +7287,7 @@ dependencies = [
  "litemap 0.7.5",
  "tinystr 0.7.6",
  "writeable 0.5.5",
+ "zerovec 0.10.4",
 ]
 
 [[package]]
@@ -7907,6 +7550,8 @@ checksum = "cc4e190f5d26ca7051642629da2c52fc03bde85a03197c99408dcd291734c855"
 dependencies = [
  "equivalent",
  "hashbrown 0.17.1",
+ "serde",
+ "serde_core",
 ]
 
 [[package]]
@@ -7966,6 +7611,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "791930b43c0d5973160d90a8f3894509f2b273430f5c5c73b668636d0287c5c0"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "iroh-base"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "43b72366b16001af3a51574233df88ca6d62da0215807549a769e7de887da803"
+dependencies = [
+ "curve25519-dalek",
+ "data-encoding",
+ "data-encoding-macro",
+ "derive_more 2.1.1",
+ "ed25519-dalek",
+ "getrandom 0.4.3",
+ "n0-error",
+ "rand 0.10.3",
+ "serde",
+ "url",
+ "zeroize",
 ]
 
 [[package]]
@@ -8464,6 +8128,7 @@ dependencies = [
  "arrayvec",
  "euclid",
  "polycool",
+ "serde",
  "smallvec 1.16.4",
 ]
 
@@ -8758,6 +8423,9 @@ name = "litemap"
 version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23fb14cb19457329c82206317a5663005a4d404783dc74f4252769b0d5f42856"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "litemap"
@@ -8864,7 +8532,7 @@ dependencies = [
  "indexmap",
  "itoa 1.0.18",
  "log",
- "md-5",
+ "md-5 0.10.6",
  "nom 7.1.3",
  "nom_locate 4.2.0",
  "rangemap",
@@ -8890,7 +8558,7 @@ dependencies = [
  "itoa 1.0.18",
  "jiff",
  "log",
- "md-5",
+ "md-5 0.10.6",
  "nom 8.0.0",
  "nom_locate 5.0.0",
  "rand 0.9.5",
@@ -9338,6 +9006,16 @@ checksum = "d89e7ee0cfbedfc4da3340218492196241d89eefb6dab27de5df917a6d2e78cf"
 dependencies = [
  "cfg-if",
  "digest 0.10.7",
+]
+
+[[package]]
+name = "md-5"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69b6441f590336821bb897fb28fc622898ccceb1d6cea3fde5ea86b090c4de98"
+dependencies = [
+ "cfg-if",
+ "digest 0.11.3",
 ]
 
 [[package]]
@@ -9981,6 +9659,7 @@ version = "0.5.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dcbff9bc912032c62bf65ef1d5aea88983b420f4f839db1e9b0c281a25c9c799"
 dependencies = [
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 1.0.109",
@@ -13041,16 +12720,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "seize"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b55fb86dfd3a2f5f76ea78310a88f96c4ea21a3031f8d212443d56123fd0521"
-dependencies = [
- "libc",
- "windows-sys 0.61.2",
-]
-
-[[package]]
 name = "selectors"
 version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13922,7 +13591,7 @@ dependencies = [
  "hmac 0.12.1",
  "itoa 1.0.18",
  "log",
- "md-5",
+ "md-5 0.10.6",
  "memchr",
  "once_cell",
  "percent-encoding",
@@ -13966,7 +13635,7 @@ dependencies = [
  "home",
  "itoa 1.0.18",
  "log",
- "md-5",
+ "md-5 0.10.6",
  "memchr",
  "num-bigint",
  "once_cell",
@@ -15035,6 +14704,7 @@ dependencies = [
  "bytemuck",
  "cfg-if",
  "log",
+ "png 0.18.1",
  "tiny-skia-path 0.12.0",
 ]
 
@@ -15067,6 +14737,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9117f5d4db391c1cf6927e7bea3db74b9a1c1add8f7eda9ffd5364f40f57b82f"
 dependencies = [
  "displaydoc",
+ "serde",
+ "zerovec 0.10.4",
 ]
 
 [[package]]
@@ -15521,6 +15193,7 @@ dependencies = [
  "sharded-slab",
  "smallvec 1.16.4",
  "thread_local",
+ "time",
  "tracing",
  "tracing-core",
  "tracing-log",
@@ -16025,7 +15698,7 @@ dependencies = [
  "atomic",
  "getrandom 0.4.3",
  "js-sys",
- "md-5",
+ "md-5 0.10.6",
  "serde_core",
  "sha1_smol",
  "wasm-bindgen",
@@ -18532,6 +18205,7 @@ version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aa2b893d79df23bfb12d5461018d408ea19dfafe76c2c7ef6d4eba614f8ff079"
 dependencies = [
+ "serde",
  "yoke 0.7.5",
  "zerofrom",
  "zerovec-derive 0.10.4",

@@ -52,7 +52,7 @@ gloo-timers = { version = "0.3", features = ["futures"], optional = true }
 
 [dev-dependencies]
 png = "0.17"
-dioxus-test = { git = "https://github.com/FastTrackStudios/editor", rev = "554b713a613d24b6deb69168c6e6a80d9da3f11c" }
+dioxus-test = { git = "https://github.com/FastTrackStudios/editor", rev = "81451ea7d72069195ca28f66274411e525c11ae0" }
 dioxus-ssr = { workspace = true }
 tokio = { version = "1.49", features = ["macros", "rt", "time"] }
 

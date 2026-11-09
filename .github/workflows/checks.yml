@@ -7,9 +7,10 @@
 # instance's systemd CacheDirectory instead, which persists across runs
 # (and across restarts/reboots) the way a hosted-runner cache never could.
 #
-# Toolchain comes from the repo flake: every step runs under
-# `nix develop .#ci -c`. `--accept-flake-config` picks up the
-# fasttrackstudio.cachix.org substituter from flake.nix nixConfig.
+# Toolchain comes from the repo's devenv (devenv.yaml / devenv.nix, the
+# devenv-fleet modules): every `run` step runs in `devenv shell`, the same
+# nix rustc store path as a local shell, as architect's CI does. flake.nix
+# is packaging only and has no dev shell.
 #
 # Deliberately simpler than the monorepo gate it replaces: that one drove
 # `cargo rail plan` to pick affected crates out of a 238-member workspace.
@@ -27,16 +28,28 @@ concurrency:
   group: checks-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-env:
-  NIX_DEV: nix develop --accept-flake-config .#ci -c
-
 jobs:
   check:
     name: Build + test
     runs-on: [self-hosted, keyflow]
     timeout-minutes: 60
+    defaults:
+      run:
+        shell: devenv shell -- bash -e {0}
     steps:
       - uses: actions/checkout@v4
+      # The runner's PATH is bare (git, nix, curl, …): put devenv 2.4.0 on it
+      # from the nixpkgs revision devenv-fleet's pins.json names, as
+      # architect's .github/actions/shared-rust does. Plain bash, since the
+      # job default needs the devenv this step provides.
+      - name: devenv
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=$(nix build --no-link --print-out-paths \
+            github:NixOS/nixpkgs/e62746b0b472753ef019baceab6f1e2e52014980#devenv)
+          echo "$out/bin" >> "$GITHUB_PATH"
+          "$out/bin/devenv" version
       - name: Persistent target dir
         run: |
           dir="${CI_CACHE_DIR:-${CACHE_DIRECTORY:-$HOME/.cache}}/cargo-target"
@@ -44,17 +57,17 @@ jobs:
           echo "CARGO_TARGET_DIR=$dir" >> "$GITHUB_ENV"
           echo "target dir: $dir ($(du -sh "$dir" 2>/dev/null | cut -f1))"
       - name: Manifests + lockfile
-        run: ${NIX_DEV} cargo metadata --locked --format-version 1 > /dev/null
+        run: cargo metadata --locked --format-version 1 > /dev/null
       - name: cargo fmt --check
-        run: ${NIX_DEV} cargo fmt --all --check
+        run: cargo fmt --all --check
       - name: cargo check --workspace
-        run: ${NIX_DEV} cargo check --workspace
+        run: cargo check --workspace
       # Task's and Studio's web apps build these crates for the browser.
       # `--workspace` above builds them for the host, which does not
       # compile the WebGL surface or any `cfg(target_arch = "wasm32")`
       # block — so a browser-only break sails through without this step.
       # The recipe holds the exact package/feature set.
       - name: cargo check (wasm)
-        run: ${NIX_DEV} just wasm-check
+        run: just wasm-check
       - name: cargo nextest
-        run: ${NIX_DEV} cargo nextest run --workspace --no-fail-fast
+        run: cargo nextest run --workspace --no-fail-fast
