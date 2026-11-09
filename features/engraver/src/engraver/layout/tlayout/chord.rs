@@ -14,7 +14,9 @@ use crate::engraver::scene::node::SceneNode;
 use crate::engraver::scene::paint::PaintCommand;
 
 use super::LayoutData;
-use super::note::{Accidental, NoteDuration, NoteHeadType, NoteParams, layout_note};
+use super::note::{
+    Accidental, NoteDuration, NoteHeadType, NoteParams, SlashLongStyle, layout_note,
+};
 
 /// SMuFL codepoints for stems and flags.
 pub mod glyphs {
@@ -184,6 +186,11 @@ pub fn layout_chord(params: &ChordParams, ctx: &LayoutContext) -> (LayoutData, S
             offset_x: notehead_offsets[i],
             ledger_lines: i == 0 || i == sorted_notes.len() - 1, // Only top/bottom get ledgers
             accidental_column_width: column_width_param,
+            slash_long_style: if params.stemless {
+                SlashLongStyle::Diamond
+            } else {
+                SlashLongStyle::WhiteSlash
+            },
         };
 
         let (note_layout, note_node) = layout_note(&note_params, ctx);

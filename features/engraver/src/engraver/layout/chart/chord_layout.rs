@@ -21,6 +21,18 @@ pub fn get_chord_rest_positions(measure_scene: &MeasureScene) -> Vec<f64> {
         .collect()
 }
 
+/// Start ticks of the ChordRest segments in a MeasureScene, in the same
+/// order as [`get_chord_rest_positions`].
+#[must_use]
+pub fn get_chord_rest_ticks(measure_scene: &MeasureScene) -> Vec<i32> {
+    measure_scene
+        .segments
+        .iter()
+        .filter(|seg| seg.seg_type.contains(SegmentType::CHORD_REST))
+        .map(|seg| seg.tick)
+        .collect()
+}
+
 /// Convert a Keyflow ChordInstance to engraver HarmonyParams.
 ///
 /// Uses the chord's `full_symbol` string and parses it into HarmonyParams,

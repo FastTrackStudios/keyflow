@@ -142,8 +142,10 @@ G >C .Em 'D
 | `" "` | text under the staff | `"quiet" G` |
 | `^" "` | text above it | `^"Build" G` |
 | `" "` on a chord | text beside that chord | `G"hit"` |
-| `@` | a cue for one instrument group, on its own line | `@keys "pad"` |
+| `@` | a cue for one instrument group, on its own line; `@all` is everyone | `@keys "pad"` |
 | `< >` | an intensity marking, on its own line | `<Build>` |
+
+Words go under the staff unless you ask for above: plain `" "` text and every `@` cue (in its group's colour) sit below the bar, and only `^" "` puts text over it.
 
 ```kf+
 VS 4
@@ -165,6 +167,7 @@ A line starting with `\` sets something for the chart. Backslash, not slash: a l
 | `\auto_rhythm_slashes = true` | fill long chords with quarter-note slashes |
 | `\push_alters_rhythm = true` | a push changes the notation, not just the symbol |
 | `\chord_memory = true` | a bare root recalls the quality its degree last had |
+| `\repeat_chord_symbols = always` | print a chord's symbol even when it repeats the last one |
 | `\progression G B C Cm` | the chords a section falls back to when it names none |
 | `\alias name value` | give a name to a run of chart text |
 
@@ -174,6 +177,10 @@ A line starting with `\` sets something for the chart. Backslash, not slash: a l
 VS 2
 G C D Em
 ```
+
+A chord symbol that repeats the one before it is left off only when the bar before held that one chord: a bar that follows a bar of changes, or starts a line, names its chord even when it is the same one (`Bmaj7 / G#m7 / C#m9 / F#7 / Bmaj7` prints the second `Bmaj7`). `\repeat_chord_symbols = always` prints every one; `auto` is the default.
+
+A bar written with note values (`_2`, `_8`, `r4`) is drawn as rhythmic notation — a half is a stemmed half-note slash, an eighth a flagged one — and every chord symbol sits over the slash it is played on. A bar of plain chords (`G // C //`, or `G` for the whole bar) is drawn as beat slashes. Bars widen for their chord symbols rather than letting one drift off its beat; `kf pdf --chord-gap <pt>` (and `kf png`) sets the clear space kept between two symbols (default 3pt), so a smaller gap packs chord-dense bars onto fewer lines.
 
 ## Melody
 

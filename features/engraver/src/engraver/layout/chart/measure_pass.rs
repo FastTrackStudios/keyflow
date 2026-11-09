@@ -412,7 +412,18 @@ pub fn measure_measure(
     // Use the extended version with detected use_stems (no spillbacks at this stage)
     // Default to not being at a section boundary - caller should use measure_measure_with_config
     // directly if they need boundary-aware behavior.
-    measure_measure_with_config(measure, style, cache, has_triplet_push, None, false)
+    measure_measure_with_config(
+        measure,
+        style,
+        cache,
+        has_triplet_push,
+        None,
+        false,
+        super::symbol_spacing::SymbolSpacing::new(
+            super::constants::DEFAULT_SPATIUM,
+            super::config::DEFAULT_MIN_CHORD_SYMBOL_GAP,
+        ),
+    )
 }
 
 /// Measure a single measure's content with full configuration.
@@ -437,6 +448,7 @@ pub fn measure_measure_with_config(
     use_stems: bool,
     spillbacks: Option<&[super::PushSpillback]>,
     is_section_boundary: bool,
+    symbol_spacing: super::symbol_spacing::SymbolSpacing,
 ) -> MeasureMeasurements {
     let text_metrics = match style.text_font_metrics.as_ref() {
         Some(m) => m,
@@ -572,149 +584,43 @@ pub fn measure_measure_with_config(
 
     let rhythm_result = rhythm_builder::build_rhythm(source, &config);
     let num_segments = rhythm_result.len();
-    let mut segment_mins_for_log = Vec::new();
 
-    // Calculate minimum width from actual measurements using segment-based layout.
-    // This accounts for the fact that chords are placed at specific segments,
-    // so a wide chord might need more than its "fair share" of segment space.
-    //
-    // IMPORTANT: Minimum width is ONLY about preventing chord symbol collision.
-    // Rhythm notation (rests, noteheads, triplet brackets) can compress to fit
-    // whatever space is allocated. The spring distribution handles proportional
-    // spacing - min_width is just the floor below which chords would overlap.
+    // Minimum width from the symbols' rendered extents, each on its own
+    // onset: the same per-segment minimums the measure layout applies, plus
+    // a slash's room for every segment the symbols leave alone. Rhythm
+    // notation (rests, noteheads, triplet brackets) otherwise compresses to
+    // whatever space is allocated; the spring distribution handles
+    // proportional spacing — min_width is the floor below which symbols
+    // would have to leave their beats.
+    let segments = super::symbol_spacing::segments_from_lengths(
+        rhythm_result.entries.iter().map(|e| e.duration().ticks()),
+    );
+    let symbols = super::symbol_spacing::printed_symbols(
+        measure,
+        style,
+        measure.time_signature,
+        is_section_boundary,
+    );
+    let segment_mins_for_log =
+        super::symbol_spacing::symbol_segment_minimums(&segments, &symbols, symbol_spacing);
     let min_width = if num_segments == 0 {
         // No segments at all - shouldn't happen, but handle gracefully
         0.0
-    } else if chord_layouts.is_empty() {
+    } else if symbols.is_empty() {
         // No visible chords - rhythm notation can compress to any width
         // Use a small baseline to avoid zero-width measures
         font_size * 0.5
-    } else if chord_layouts.len() == 1 {
-        // Single chord - just need space for that chord symbol, no collision possible
-        // Chord can overhang into adjacent space, so minimal padding needed
-        chord_layouts[0].text_width + font_size * 0.3
     } else {
-        // Compute per-segment minimum widths.
-        // For slash notation, chord index typically maps directly to beat, and each beat
-        // may be 1 or 2 segments depending on triplets.
-        let mut segment_mins = vec![0.0_f64; num_segments];
-
-        // Build mapping from chord index to segment index
-        // For triplet beats, chord at beat N maps to segment 0 of that beat's triplet group
-        // This is a simplified mapping - actual positions depend on push/pull
-        let chord_to_segment: Vec<usize> = if has_explicit {
-            // For explicit rhythm, chord indices map directly to rhythm entry indices
-            (0..measure.chords.len()).collect()
-        } else {
-            measure
-                .chords
-                .iter()
-                .map(|chord| {
-                    let beat = chord.position.beats() as f64
-                        + chord.position.subdivisions() as f64 / 1000.0;
-                    let beats_per_segment =
-                        f64::from(measure.time_signature.0) / num_segments as f64;
-                    if beats_per_segment > 0.0 {
-                        (beat / beats_per_segment)
-                            .round()
-                            .clamp(0.0, (num_segments.saturating_sub(1)) as f64)
-                            as usize
-                    } else {
-                        0
-                    }
-                })
-                .collect()
-        };
-
-        // Update chord_layouts with correct segment indices
-        for layout in &mut chord_layouts {
-            if layout.chord_index < chord_to_segment.len() {
-                layout.segment_index = chord_to_segment[layout.chord_index];
-            }
-        }
-
-        // Build list of (segment_index, width) for visible chords
-        let visible_chord_info: Vec<(usize, f64)> = chord_layouts
-            .iter()
-            .map(|c| (c.segment_index, c.text_width))
-            .collect();
-
-        // For each pair of adjacent visible chords, compute segment minimums.
-        // With duration-proportional spacing, intermediate segments may have
-        // very different widths. We distribute the required collision-prevention
-        // space across the segments between two chords.
-        for i in 0..visible_chord_info.len() - 1 {
-            let (idx1, width1) = visible_chord_info[i];
-            let (idx2, _) = visible_chord_info[i + 1];
-
-            let segment_gap = idx2.saturating_sub(idx1);
-            if segment_gap == 0 {
-                continue; // Same segment, can't help
-            }
-
-            // The first chord can overhang left into the clef area, so we don't
-            // need to reserve its full width. Allow 50% overhang for segment 0.
-            let effective_width = if idx1 == 0 {
-                width1 * 0.5 // First chord can overhang 50% left
-            } else {
-                width1
-            };
-
-            // Required space for this chord + gap before next chord.
-            // NON_KERNING: chord symbols always maintain full padding.
-            let required_space = effective_width + min_gap;
-
-            // Distribute required_space across the segments between the two chords.
-            // With proportional spacing, putting all space on the first segment
-            // isn't sufficient — a short-duration first segment might get less
-            // actual width than its min. Instead, apply the requirement to the
-            // first segment (which positions the chord) and set a small baseline
-            // for intermediate segments so they contribute minimum space.
-            if idx1 < segment_mins.len() {
-                segment_mins[idx1] = segment_mins[idx1].max(required_space);
-            }
-
-            // For intermediate segments (between two chords), ensure a small
-            // baseline width so they're not zero-width in the min calculation.
-            // This prevents short-duration segments from being so narrow that
-            // their proportional contribution can't prevent chord collision.
-            let intermediate_baseline = min_gap * 0.5;
-            for seg_idx in (idx1 + 1)..idx2 {
-                if seg_idx < segment_mins.len() && segment_mins[seg_idx] == 0.0 {
-                    segment_mins[seg_idx] = segment_mins[seg_idx].max(intermediate_baseline);
-                }
-            }
-        }
-
-        // Handle the last visible chord: it has to fit inside the bar. Half
-        // its width was reserved here once, on the theory that a symbol may
-        // hang over the closing barline — but the next bar's first symbol
-        // starts at that barline, so what hangs over lands on it. A bar of
-        // Highway to Hell's intro printed `D/F#` into the `A` after it.
-        if let Some(&(last_idx, last_width)) = visible_chord_info.last()
-            && last_idx < segment_mins.len()
-        {
-            segment_mins[last_idx] = segment_mins[last_idx].max(last_width + min_gap);
-        }
-
-        // Sum segment minimums to get total min_width.
-        // ONLY segments with chord collisions contribute to min_width.
-        // Segments without chords (rests, spaces) contribute NOTHING because
-        // rhythm notation compresses to fit whatever space is allocated.
-        //
-        // Previous bug: baseline_segment_width was applied to ALL segments,
-        // causing triplet-heavy measures (r8t >Cm_8t r8t ...) to get huge
-        // min_widths even though most segments are just rests.
-
-        // Add minimal trailing padding for visual breathing room
-        let trailing_padding = font_size * 0.3;
-
-        // Only sum segments that have actual chord collision requirements
-        let segment_total: f64 = segment_mins.iter().filter(|&&m| m > 0.0).sum();
-        segment_mins_for_log = segment_mins;
-
-        segment_total + trailing_padding
+        super::symbol_spacing::symbol_body_min_width(&segments, &symbols, symbol_spacing)
     };
+    for layout in &mut chord_layouts {
+        if let Some(symbol) = symbols.iter().find(|s| s.chord_idx == layout.chord_index) {
+            layout.segment_index = segments
+                .iter()
+                .rposition(|(start, _)| *start <= symbol.onset)
+                .unwrap_or(0);
+        }
+    }
 
     if tracing::enabled!(
         target: "crate::engraver::layout::chart::spacing",
@@ -778,6 +684,7 @@ pub fn measure_chart<I, M>(
     sections: I,
     style: &HarmonyStyle,
     cache: &mut MeasurementCache,
+    symbol_spacing: super::symbol_spacing::SymbolSpacing,
 ) -> ChartMeasurements
 where
     I: Iterator<Item = M>,
@@ -806,6 +713,7 @@ where
                 has_triplet_push,
                 None,
                 is_section_boundary,
+                symbol_spacing,
             );
             measurements.push(measure_data);
         }

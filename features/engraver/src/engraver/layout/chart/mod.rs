@@ -24,6 +24,7 @@ pub mod prefix_renderer;
 pub mod rhythm_builder;
 pub mod section_layout;
 pub mod spacing;
+pub mod symbol_spacing;
 pub mod tie_pass;
 pub mod types;
 pub mod width_dist;
@@ -569,6 +570,9 @@ struct MeasureLayoutParams<'a> {
     ctx: &'a LayoutContext<'a>,
     id_base: u64,
     is_boundary: bool,
+    /// The harmony style the symbols render in, with its font metrics —
+    /// what the measure measures its symbols against.
+    harmony_style: &'a HarmonyStyle,
 }
 
 /// Red used to highlight mid-chart meter and key changes so they are obvious.
@@ -1095,6 +1099,10 @@ impl ChartLayoutEngine {
                 .map(|s| s.measures()),
             &harmony_style,
             &mut measurement_cache,
+            symbol_spacing::SymbolSpacing::new(
+                self.config.spatium,
+                self.config.min_chord_symbol_gap,
+            ),
         );
 
         debug!(
@@ -1727,6 +1735,7 @@ impl ChartLayoutEngine {
                             ts_changed && ts_run_len == 1 && prev_prevailing_ts == Some(measure_ts);
                         let highlight = ts_changed && !is_oneshot_revert;
                         let measure_result = self.layout_measure(MeasureLayoutParams {
+                            harmony_style: &harmony_style,
                             measure,
                             melody_data,
                             spillbacks,
@@ -1773,6 +1782,8 @@ impl ChartLayoutEngine {
                         // Get ChordRest segment x-positions (already in points after spacing)
                         let segment_positions: Vec<f64> =
                             self.get_chord_rest_positions(&measure_result);
+                        let segment_ticks: Vec<i32> =
+                            chord_layout::get_chord_rest_ticks(&measure_result);
 
                         let mut measure_container =
                             SceneNode::group(SemanticId::new(ElementType::Measure, id_counter));
@@ -1903,6 +1914,7 @@ impl ChartLayoutEngine {
                             local_measure_idx,
                             section_name: &chart_section.section.section_type.full_name(),
                             segment_positions: &segment_positions,
+                            segment_ticks: &segment_ticks,
                             internal_push_positions: &measure_result.internal_push_positions,
                             harmony_style: &harmony_style,
                             time_signature,
@@ -2697,6 +2709,10 @@ impl ChartLayoutEngine {
                 .map(|s| s.measures()),
             &harmony_style,
             &mut measurement_cache,
+            symbol_spacing::SymbolSpacing::new(
+                self.config.spatium,
+                self.config.min_chord_symbol_gap,
+            ),
         );
 
         // Prevailing meter, carried across sections/systems in playback order so a
@@ -3128,6 +3144,7 @@ impl ChartLayoutEngine {
                             ts_changed && ts_run_len == 1 && prev_prevailing_ts == Some(measure_ts);
                         let highlight = ts_changed && !is_oneshot_revert;
                         let measure_result = self.layout_measure(MeasureLayoutParams {
+                            harmony_style: &harmony_style,
                             measure,
                             melody_data,
                             spillbacks,
@@ -3173,6 +3190,8 @@ impl ChartLayoutEngine {
 
                         let segment_positions: Vec<f64> =
                             self.get_chord_rest_positions(&measure_result);
+                        let segment_ticks: Vec<i32> =
+                            chord_layout::get_chord_rest_ticks(&measure_result);
 
                         let mut measure_container =
                             SceneNode::group(SemanticId::new(ElementType::Measure, id_counter));
@@ -3279,6 +3298,7 @@ impl ChartLayoutEngine {
                             local_measure_idx,
                             section_name: &chart_section.section.section_type.full_name(),
                             segment_positions: &segment_positions,
+                            segment_ticks: &segment_ticks,
                             internal_push_positions: &measure_result.internal_push_positions,
                             harmony_style: &harmony_style,
                             time_signature,
@@ -3664,13 +3684,13 @@ impl ChartLayoutEngine {
         let mut current_system: Vec<usize> = Vec::new();
         let mut current_width = 0.0f64;
 
-        let text_metrics = TextFontMetrics::new(self.text_font_data.clone());
+        let harmony_style = self.measured_harmony_style();
         // A bar asks for the wider of what its chord symbols and its notes
         // need: a bar of beamed eighths is not as narrow as its one symbol.
         let widths: Vec<f64> = measures
             .iter()
             .map(|m| {
-                self.chord_symbol_width_needed(m, &text_metrics)
+                self.chord_symbol_width_needed(m, &harmony_style)
                     .max(self.melody_width_needed(m))
             })
             .collect();
@@ -3678,22 +3698,24 @@ impl ChartLayoutEngine {
         // better one cramped bar than an empty line and the same cramped bar.
         let usable = content_width.max(1.0);
 
-        // A section of written notes keeps one grid: as many bars a line as
-        // its widest bar allows, every line. Greedy packing would set one
-        // bar here and two there, and a chart is read by counting bars.
+        // A section of written notes keeps one grid: the same number of bars
+        // on every line, as many as every line can hold. Greedy packing would
+        // set one bar here and two there, and a chart is read by counting
+        // bars. The grid is checked line by line, not against the widest bar
+        // alone: a dense hook bar and the short turnaround after it share a
+        // line wherever the pair fits, even though two hook bars would not.
         if measures
             .iter()
             .any(|m| self.melody_width_needed(m) > 0.0 || is_dense_rhythm(m))
             && !measures.iter().any(|m| m.volta_start.is_some())
         {
-            let widest = widths
+            let needed: Vec<f64> = widths
                 .iter()
                 .zip(measured_min.iter().chain(std::iter::repeat(&0.0)))
-                .map(|(w, m)| w.max(*m))
-                .fold(0.0f64, f64::max)
-                .max(1.0);
-            let per_line = ((usable / widest).floor() as usize)
-                .clamp(1, self.config.max_measures_per_system.max(1));
+                .map(|(w, m)| w.max(*m).max(1.0))
+                .collect();
+            let per_line =
+                uniform_bars_per_line(&needed, usable, self.config.max_measures_per_system.max(1));
             return (0..measures.len())
                 .collect::<Vec<_>>()
                 .chunks(per_line)
@@ -3710,7 +3732,7 @@ impl ChartLayoutEngine {
         {
             let squeezed: f64 = measures
                 .iter()
-                .map(|measure| self.chord_symbol_width_floor(measure, &text_metrics))
+                .map(|measure| self.chord_symbol_width_floor(measure, &harmony_style))
                 .sum();
             if squeezed <= usable {
                 return vec![(0..measures.len()).collect()];
@@ -3828,18 +3850,10 @@ impl ChartLayoutEngine {
     fn chord_symbol_width_needed(
         &self,
         measure: &crate::chart::types::Measure,
-        text_metrics: &TextFontMetrics,
+        harmony_style: &HarmonyStyle,
     ) -> f64 {
-        let font_size = self.config.harmony_style.root_size;
-        let gap = self.config.min_chord_symbol_gap.max(1.0);
-        let symbols: f64 = measure
-            .chords
-            .iter()
-            .filter(|c| !c.full_symbol.is_empty() && c.full_symbol != "s")
-            .filter(|c| printed_symbol(measure, c))
-            .map(|c| text_metrics.horizontal_advance(&c.full_symbol, font_size) + gap)
-            .sum();
-        symbols.max(self.config.min_measure_width)
+        self.printed_symbols_width(measure, harmony_style)
+            .max(self.config.min_measure_width)
     }
 
     /// The narrowest this measure can honestly be drawn.
@@ -3854,20 +3868,61 @@ impl ChartLayoutEngine {
     fn chord_symbol_width_floor(
         &self,
         measure: &crate::chart::types::Measure,
-        text_metrics: &TextFontMetrics,
+        harmony_style: &HarmonyStyle,
     ) -> f64 {
-        let font_size = self.config.harmony_style.root_size;
-        let gap = self.config.min_chord_symbol_gap.max(1.0);
-        let symbols: f64 = measure
-            .chords
-            .iter()
-            .filter(|c| !c.full_symbol.is_empty() && c.full_symbol != "s")
-            .filter(|c| printed_symbol(measure, c))
-            .map(|c| text_metrics.horizontal_advance(&c.full_symbol, font_size) + gap)
-            .sum();
         // Four slashes and the space they need to read as four.
-        symbols.max(self.config.spatium * 8.0)
+        self.printed_symbols_width(measure, harmony_style)
+            .max(self.config.spatium * 8.0)
     }
+
+    /// The bar's printed symbols laid end to end at their rendered widths,
+    /// each with the clearance the renderer keeps between two symbols.
+    fn printed_symbols_width(
+        &self,
+        measure: &crate::chart::types::Measure,
+        harmony_style: &HarmonyStyle,
+    ) -> f64 {
+        let spacing = symbol_spacing::SymbolSpacing::new(
+            self.config.spatium,
+            self.config.min_chord_symbol_gap,
+        );
+        symbol_spacing::printed_symbols(measure, harmony_style, measure.time_signature, true)
+            .iter()
+            .map(|s| s.extent.left + s.extent.right + spacing.clearance)
+            .sum()
+    }
+
+    /// The configured harmony style with the engine's font metrics, so a
+    /// symbol measures as wide as it will print.
+    fn measured_harmony_style(&self) -> HarmonyStyle {
+        let text_metrics = TextFontMetrics::new(self.text_font_data.clone());
+        let symbol_metrics = if self.config.harmony_style.symbol_font_family.is_none() {
+            text_metrics.clone()
+        } else {
+            TextFontMetrics::new(self.symbol_font_data.clone())
+        };
+        self.config
+            .harmony_style
+            .clone()
+            .with_text_font_metrics(text_metrics)
+            .with_symbol_font_metrics(symbol_metrics)
+    }
+}
+
+/// The most bars a line can hold when every line holds the same number.
+///
+/// `needed` is each bar's width; bars are taken in order, `n` to a line, and
+/// `n` is the largest (up to `cap`) for which no line overflows `usable`.
+/// A bar wider than the line still gets a line to itself.
+fn uniform_bars_per_line(needed: &[f64], usable: f64, cap: usize) -> usize {
+    (1..=cap.max(1))
+        .rev()
+        .find(|&n| {
+            needed
+                .chunks(n)
+                .all(|line| line.iter().sum::<f64>() <= usable)
+        })
+        .unwrap_or(1)
 }
 
 /// How far past the bars-per-line cap a system may run to keep an ending with
@@ -3889,6 +3944,13 @@ fn rescue_orphan_bar(
     usable: f64,
     measures: &[crate::chart::types::Measure],
 ) {
+    // Only a section of one line and a bar is rebalanced. In a longer one the
+    // full lines above set the four-bar grid the reader counts by, and a
+    // short line just before the end would break it: seventeen bars read as
+    // four, four, four, four and one, not four, four, four, three and two.
+    if systems.len() != 2 {
+        return;
+    }
     let Some((last, rest)) = systems.split_last_mut() else {
         return;
     };
@@ -3934,25 +3996,6 @@ fn rescue_orphan_bar(
 /// A bar whose written chord rhythm has attacks shorter than a beat — a
 /// comp figure, not a chord held under slashes. It needs room like notes
 /// do, and its section keeps one grid.
-/// Whether `chord`'s symbol prints in its bar: a `.` repeat and a repeat of
-/// the bar's previous symbol print nothing, so they ask no room for one.
-fn printed_symbol(
-    measure: &crate::chart::types::Measure,
-    chord: &crate::chart::types::ChordInstance,
-) -> bool {
-    if chord.original_token == "." {
-        return false;
-    }
-    let idx = measure.chords.iter().position(|c| std::ptr::eq(c, chord));
-    !idx.is_some_and(|i| {
-        measure.chords[..i]
-            .iter()
-            .rev()
-            .find(|c| c.full_symbol != "r" && c.full_symbol != "s")
-            .is_some_and(|prev| prev.full_symbol == chord.full_symbol)
-    })
-}
-
 pub(crate) fn is_dense_rhythm(measure: &crate::chart::types::Measure) -> bool {
     let ts = crate::time::TimeSignature::new(
         measure.time_signature.0.into(),

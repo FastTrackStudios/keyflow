@@ -224,6 +224,9 @@ impl ChartLayoutConfig {
     pub fn with_chart_settings(mut self, settings: &crate::chart::ChartSettings) -> Self {
         self.auto_rhythm_slashes = settings.auto_rhythm_slashes();
         self.push_alters_rhythm = settings.push_alters_rhythm();
+        if settings.repeat_chord_symbols_always() {
+            self.hide_repeated_chords = false;
+        }
         self
     }
 

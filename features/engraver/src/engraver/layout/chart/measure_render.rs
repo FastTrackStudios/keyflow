@@ -40,6 +40,7 @@ impl ChartLayoutEngine {
             ctx,
             id_base,
             is_boundary,
+            harmony_style,
         } = params;
         // Check if this measure has melodies (from preprocessed data or raw measure)
         let has_melodies =
@@ -209,17 +210,62 @@ impl ChartLayoutEngine {
         // Convert measure width from points to spatiums for justification
         let width_spatiums = measure_width / self.config.spatium;
 
-        // Calculate number of rhythm segments (for chord min width calculation)
-        let num_segments = if let Some(ref entries) = rhythm_entries {
-            entries.len()
-        } else {
-            full_rhythm.len()
-        };
+        // A bar written with note values (`_2`, `_8`, rests) is rhythmic
+        // notation and is drawn as written: a half is a half-note slash, not
+        // two quarter slashes. Only plain slash bars (`C // F //`, a bare
+        // chord for the whole bar) are spelled out as beat slashes.
+        let written_rhythm = rhythm_builder::measure_has_explicit_chord_rhythm(measure);
 
-        // Compute minimum segment widths based on actual chord symbol layout bounds
-        // This ensures segments are wide enough to prevent chord symbol collisions
+        // Apply auto_rhythm_slashes: expand whole/half notes to quarter slashes
+        // This makes master rhythm charts easier to read by showing consistent quarter slashes
+        // instead of whole note diamonds for sustained chords
+        // Track whether we did auto-expansion (those slashes should be stemless)
+        let auto_expanded =
+            self.config.auto_rhythm_slashes && !has_melodies && !has_explicit_chord_rhythm;
+        let full_rhythm = if auto_expanded {
+            self.expand_rhythm_to_quarters(full_rhythm)
+        } else {
+            full_rhythm
+        };
+        // Expand half/whole note entries to quarter slashes when auto_rhythm_slashes is enabled.
+        // This converts diamond noteheads to slash noteheads for master rhythm chart style.
+        // Rests are preserved as-is (expand_entries_to_quarters keeps them unchanged).
+        let rhythm_entries = rhythm_entries.map(|entries| {
+            if self.config.auto_rhythm_slashes && !has_melodies && !written_rhythm {
+                self.expand_entries_to_quarters(entries)
+            } else {
+                entries
+            }
+        });
+
+        // The segments the builder will lay out, as (start tick, length).
+        let segments = super::symbol_spacing::segments_from_lengths(match &rhythm_entries {
+            Some(entries) => entries
+                .iter()
+                .map(|e| e.duration().ticks())
+                .collect::<Vec<_>>(),
+            None => full_rhythm.iter().map(Duration::ticks).collect(),
+        });
+
+        // Each segment wide enough that every chord symbol clears the next
+        // one while sitting on its own slash: the beats widen, the symbols
+        // stay put.
+        let symbol_spacing = super::symbol_spacing::SymbolSpacing::new(
+            self.config.spatium,
+            self.config.min_chord_symbol_gap,
+        );
+        let symbols = super::symbol_spacing::printed_symbols(
+            measure,
+            harmony_style,
+            time_signature,
+            is_boundary,
+        );
         let mut chord_min_widths =
-            self.compute_chord_min_widths(measure, num_segments, measure_width, ctx, is_boundary);
+            super::symbol_spacing::symbol_segment_minimums(&segments, &symbols, symbol_spacing);
+        // The last notehead needs room to render without crossing the barline.
+        if let Some(last) = chord_min_widths.last_mut() {
+            *last = last.max(self.config.spatium * 1.5);
+        }
         // A note tied to the next one in the bar needs room for the arc:
         // two sixteenths set head to head leave a tie nobody can see.
         if has_written_notes && let Some(data) = melody_data {
@@ -236,18 +282,6 @@ impl ChartLayoutEngine {
             }
         }
 
-        // Apply auto_rhythm_slashes: expand whole/half notes to quarter slashes
-        // This makes master rhythm charts easier to read by showing consistent quarter slashes
-        // instead of whole note diamonds for sustained chords
-        // Track whether we did auto-expansion (those slashes should be stemless)
-        let auto_expanded =
-            self.config.auto_rhythm_slashes && !has_melodies && !has_explicit_chord_rhythm;
-        let full_rhythm = if auto_expanded {
-            self.expand_rhythm_to_quarters(full_rhythm)
-        } else {
-            full_rhythm
-        };
-
         // Build the measure based on whether we have explicit rhythm entries or not
         let mut builder = MeasureBuilder::new()
             .id_base(id_base)
@@ -258,14 +292,6 @@ impl ChartLayoutEngine {
 
         // Set the rhythm using either entries (for explicit rhythms) or rhythm (for slash fills)
         if let Some(entries) = rhythm_entries {
-            // Expand half/whole note entries to quarter slashes when auto_rhythm_slashes is enabled.
-            // This converts diamond noteheads to slash noteheads for master rhythm chart style.
-            // Rests are preserved as-is (expand_entries_to_quarters keeps them unchanged).
-            let entries = if self.config.auto_rhythm_slashes && !has_melodies {
-                self.expand_entries_to_quarters(entries)
-            } else {
-                entries
-            };
             builder = builder.entries(entries);
         } else {
             builder = builder.rhythm(full_rhythm);
@@ -301,6 +327,11 @@ impl ChartLayoutEngine {
             if !self.config.use_stems && !has_explicit_chord_rhythm && !has_triplets {
                 // Pure stemless mode - no triplets, just make everything stemless
                 builder = builder.stemless();
+            } else if written_rhythm && !has_written_notes && self.config.use_stems {
+                // Written note values read as rhythmic notation: every
+                // attack keeps its stem, so a dotted quarter beside an
+                // eighth reads as the figure it is.
+                builder = builder.written_rhythm();
             } else if self.config.auto_rhythm_slashes && !has_melodies {
                 // Auto-rhythm slashes mode - use per-note auto_stemless()
                 // This makes plain quarters stemless but keeps triplet notes with stems

@@ -258,6 +258,10 @@ pub struct NoteParams {
     /// width). When `None`, the accidental is drawn flush at x = 0 (single-note
     /// behavior).
     pub accidental_column_width: Option<f64>,
+    /// Glyph family for half / whole slash heads. A stemless long slash is
+    /// the diamond of a held chord; a stemmed one is a written half note and
+    /// takes the hollow slash.
+    pub slash_long_style: SlashLongStyle,
 }
 
 impl Default for NoteParams {
@@ -272,6 +276,7 @@ impl Default for NoteParams {
             offset_x: 0.0,
             ledger_lines: true,
             accidental_column_width: None,
+            slash_long_style: SlashLongStyle::Diamond,
         }
     }
 }
@@ -322,7 +327,9 @@ pub fn layout_note(params: &NoteParams, ctx: &LayoutContext) -> (LayoutData, Sce
 
     // Draw notehead
     let notehead_x = params.offset_x;
-    let notehead_glyph = params.head_type.glyph(params.duration);
+    let notehead_glyph = params
+        .head_type
+        .glyph_with_slash_style(params.duration, params.slash_long_style);
 
     commands.push(PaintCommand::glyph(
         notehead_glyph,

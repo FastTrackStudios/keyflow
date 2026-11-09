@@ -434,6 +434,16 @@ pub fn layout_harmony(
     params: &HarmonyParams,
     _ctx: &LayoutContext<'_>,
 ) -> (HarmonyLayoutData, SceneNode) {
+    harmony_layout(params)
+}
+
+/// [`layout_harmony`] without the context it never reads.
+///
+/// A chord symbol's shape depends only on its params and its style's fonts,
+/// which is what lets the measuring pass ask how wide a symbol will print —
+/// before there is a context to hand — and get the answer the render gets.
+#[must_use]
+pub fn harmony_layout(params: &HarmonyParams) -> (HarmonyLayoutData, SceneNode) {
     let style = &params.style;
     let mut commands = Vec::new();
     // Layout at local origin - transform will position in world space

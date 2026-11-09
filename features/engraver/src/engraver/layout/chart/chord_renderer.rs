@@ -75,6 +75,11 @@ pub struct ChordRenderContext<'a> {
     pub section_name: &'a str,
     /// Segment positions from measure layout.
     pub segment_positions: &'a [f64],
+    /// Start tick of each segment in `segment_positions` (quarter = 480).
+    ///
+    /// A chord symbol sits over the segment that starts on its onset. Empty
+    /// when unknown, in which case the index-based mapping is used.
+    pub segment_ticks: &'a [i32],
     /// Internal push positions from rhythm builder.
     pub internal_push_positions: &'a [(usize, usize)],
     /// Harmony style for chord symbols.
@@ -173,7 +178,7 @@ pub struct ChordCollisionResult {
 /// 1. Compute the gap (left edge of B - right edge of A)
 /// 2. If gap < min_gap, compute the overlap amount
 /// 3. **Only shift the first chord left** - the second chord's notehead position
-///    is already correct because `compute_chord_min_widths()` set segment minimums
+///    is already correct because `symbol_spacing::symbol_segment_minimums()` set segment minimums
 ///
 /// The segment minimum widths ensure noteheads are positioned correctly.
 /// This function is a safety net that only moves the FIRST chord symbol left
@@ -361,7 +366,13 @@ fn create_push_marker(
 /// * `chord_y` - Y position of chord symbol baseline (used to derive staff position)
 /// * `spatium` - Staff space for sizing and positioning
 /// * `id` - Unique ID for the node
-fn create_accent_marker(segment_x: f64, chord_y: f64, spatium: f64, id: u64) -> SceneNode {
+fn create_accent_marker(
+    segment_x: f64,
+    chord_y: f64,
+    spatium: f64,
+    above_staccato: bool,
+    id: u64,
+) -> SceneNode {
     use super::constants::{ARTICULATION_MAG, ARTICULATION_MIN_DISTANCE_SPATIUMS, CHORD_Y_OFFSET};
 
     // SMuFL articAccentAbove: U+E4A0
@@ -380,6 +391,13 @@ fn create_accent_marker(segment_x: f64, chord_y: f64, spatium: f64, id: u64) -> 
     // Staff top line is at staff_y, we want the accent above that
     // Use minimal distance for a tighter appearance
     let accent_y = staff_y - ARTICULATION_MIN_DISTANCE_SPATIUMS * spatium;
+    // With a staccato on the same chord the dot sits nearest the staff and
+    // the accent stacks above it — drawn in one place, the accent hid the dot.
+    let accent_y = if above_staccato {
+        accent_y - STACCATO_STACK_SPATIUMS * spatium
+    } else {
+        accent_y
+    };
 
     // Horizontally center on the rhythm slash (segment position)
     // The segment_x is the left edge of the segment, add half a spatium to center on the slash
@@ -396,6 +414,9 @@ fn create_accent_marker(segment_x: f64, chord_y: f64, spatium: f64, id: u64) -> 
     node.set_element_type("accent");
     node
 }
+
+/// How far an accent rises to clear a staccato dot on the same chord.
+const STACCATO_STACK_SPATIUMS: f64 = 0.9;
 
 /// Create a staccato marker node for staccato chords.
 ///
@@ -939,73 +960,8 @@ fn chord_lift_bias_for_measure(
     normalize_chord_lifts(&lifts)
 }
 
-fn chord_symbol_anchor_offset(
-    params: &crate::engraver::layout::tlayout::HarmonyParams,
-    style: &HarmonyStyle,
-    use_compact_anchor: bool,
-) -> f64 {
-    if params.root_accidental.is_empty() || !use_compact_anchor {
-        return 0.0;
-    }
-
-    // In crowded chord runs, compact accidental roots like F#m7 and C#m can
-    // reclaim a root-letter width by putting the accidental near the beat.
-    // Isolated chords stay left-aligned to the beat.
-    let root_width = params.root.chars().count() as f64 * style.root_size * 0.56;
-    -root_width
-}
-
-fn has_nearby_following_visible_chord(
-    measure: &Measure,
-    chord_idx: usize,
-    current_beat: f64,
-    threshold_beats: f64,
-) -> bool {
-    measure
-        .chords
-        .iter()
-        .skip(chord_idx + 1)
-        .filter(|chord| !is_placeholder_chord(&chord.full_symbol))
-        .map(chord_beat_position)
-        .find(|beat| *beat > current_beat)
-        .is_some_and(|beat| beat - current_beat <= threshold_beats)
-}
-
-fn chord_beat_position(chord: &ChordInstance) -> f64 {
-    chord.position.beats() as f64 + chord.position.subdivisions() as f64 / 1000.0
-}
-
-/// Onset beat of the chord at `chord_idx` within its OWN measure, from the
-/// cumulative duration of the chords before it. Drift-free, unlike
-/// `position.beats()` (the absolute-timeline beat), which a short earlier
-/// measure can shift across a barline.
 fn chord_local_onset_beat(measure: &Measure, chord_idx: usize, time_signature: (u8, u8)) -> f64 {
-    let ts = TimeSignature::new(time_signature.0.into(), time_signature.1.into());
-    // Prefer rhythm_elements: continuation slashes ("A //// // D //") and
-    // rests occupy beats before the chord but never appear in `chords`.
-    if !measure.rhythm_elements.is_empty() {
-        let mut beats = 0.0;
-        let mut seen_chords = 0usize;
-        for elem in &measure.rhythm_elements {
-            match elem {
-                RhythmElement::Chord(c) => {
-                    if seen_chords == chord_idx {
-                        return beats;
-                    }
-                    beats += c.duration.to_beats(ts);
-                    seen_chords += 1;
-                }
-                RhythmElement::Space(s) => beats += s.duration.to_beats(ts),
-                RhythmElement::Rest(r) => beats += r.duration.to_beats(ts),
-            }
-        }
-    }
-    measure
-        .chords
-        .iter()
-        .take(chord_idx)
-        .map(|c| c.duration.to_beats(ts))
-        .sum()
+    super::symbol_spacing::chord_onset_beat(measure, chord_idx, time_signature)
 }
 
 fn chord_x_from_local_beat(ctx: &ChordRenderContext<'_>, local_beat: f64) -> f64 {
@@ -1131,29 +1087,53 @@ pub fn render_chord_symbols(
             && is_boundary;
 
         // Calculate segment index (needed for both chord rendering and accent markers)
-        let segment_idx = calculate_segment_index(
-            measure,
-            chord_idx,
-            chord,
-            ctx.segment_positions,
-            ctx.internal_push_positions,
-            is_first_real,
-            is_boundary,
-            ctx.time_signature,
-        );
-
-        // Get segment x position for metadata/collision context. Chord symbols
-        // themselves use their musical beat position below so a chord at beat 4
-        // still has a beat-4 anchor even when the melody only has one long note
-        // segment at beat 1.
-        let segment_x = ctx
-            .segment_positions
-            .get(segment_idx)
-            .copied()
-            .unwrap_or_else(|| ctx.segment_positions.first().copied().unwrap_or(0.0));
-
         let local_beat = chord_local_onset_beat(measure, chord_idx, ctx.time_signature);
-        let chord_x = chord_render_x(ctx, segment_idx, segment_x, local_beat);
+
+        // The segment that starts on the chord's onset carries it: the
+        // symbol's left edge goes over that slash or notehead. Pushed chords
+        // are placed by the rhythm builder's own positions instead (their
+        // attack is not their written onset).
+        let has_precomputed_position = ctx
+            .internal_push_positions
+            .iter()
+            .any(|(c_idx, _)| *c_idx == chord_idx);
+        let onset_segment = if is_pushed_at_boundary || has_precomputed_position {
+            None
+        } else {
+            let onset = (local_beat * super::symbol_spacing::ticks_per_beat(ctx.time_signature))
+                .round() as i32;
+            ctx.segment_ticks
+                .iter()
+                .position(|tick| *tick == onset)
+                .filter(|idx| *idx < ctx.segment_positions.len())
+        };
+
+        let (segment_idx, chord_x) = if let Some(idx) = onset_segment {
+            (idx, ctx.measure_x + ctx.segment_positions[idx])
+        } else {
+            let segment_idx = calculate_segment_index(
+                measure,
+                chord_idx,
+                chord,
+                ctx.segment_positions,
+                ctx.internal_push_positions,
+                is_first_real,
+                is_boundary,
+                ctx.time_signature,
+            );
+            // Chord symbols use their musical beat position when no segment
+            // carries it, so a chord at beat 4 still has a beat-4 anchor even
+            // when the melody only has one long note segment at beat 1.
+            let segment_x = ctx
+                .segment_positions
+                .get(segment_idx)
+                .copied()
+                .unwrap_or_else(|| ctx.segment_positions.first().copied().unwrap_or(0.0));
+            (
+                segment_idx,
+                chord_render_x(ctx, segment_idx, segment_x, local_beat),
+            )
+        };
 
         // Check if chord has regular accent (not AccentOnPush - that renders on spillback)
         let has_regular_accent = chord.commands.iter().any(|c| matches!(c, Command::Accent));
@@ -1170,8 +1150,13 @@ pub fn render_chord_symbols(
             last_chord_symbol = Some(current_symbol.clone());
 
             if has_regular_accent {
-                let accent_node =
-                    create_accent_marker(chord_x, ctx.chord_y, ctx.spatium, id_counter);
+                let accent_node = create_accent_marker(
+                    chord_x,
+                    ctx.chord_y,
+                    ctx.spatium,
+                    has_staccato,
+                    id_counter,
+                );
                 id_counter += 1;
                 nodes.push(accent_node);
             }
@@ -1280,7 +1265,10 @@ pub fn render_chord_symbols(
             ctx.spatium,
         ) - note_lift_bias)
             .max(0.0);
-        let chord_y_offset = if has_regular_accent || has_staccato {
+        let chord_y_offset = if has_regular_accent && has_staccato {
+            // Two marks stacked: lift past both.
+            -ctx.spatium * (0.5 + STACCATO_STACK_SPATIUMS)
+        } else if has_regular_accent || has_staccato {
             // Move chord up by 0.5 spatium to make room for articulation below
             -ctx.spatium * 0.5
         } else {
@@ -1299,21 +1287,16 @@ pub fn render_chord_symbols(
         } else {
             0.0
         };
-        let compact_anchor = has_nearby_following_visible_chord(
-            measure,
-            chord_idx,
-            chord_beat_position(chord),
-            1.25,
-        );
-        let chord_x_offset = chord_symbol_anchor_offset(&params, ctx.harmony_style, compact_anchor);
+        // The symbol's left edge is its beat. (Crowded runs used to hang an
+        // accidental root's letter left of the beat to save room; the bar
+        // now widens for its symbols instead, so nothing leaves its slash.)
+        let chord_x_offset = 0.0;
         tracing::debug!(
             target: "crate::engraver::layout::chart::chord",
             measure = ctx.measure_idx,
             chord_idx,
             symbol = current_symbol,
             beat_x = chord_x,
-            chord_x_offset,
-            compact_anchor,
             note_lift,
             note_lift_bias,
             vertical_bass_lift,
@@ -1390,7 +1373,8 @@ pub fn render_chord_symbols(
         // Add accent marker for regular accents (rendered in red above the chord)
         // AccentOnPush accents are rendered on the spillback chord instead
         if has_regular_accent {
-            let accent_node = create_accent_marker(chord_x, ctx.chord_y, ctx.spatium, id_counter);
+            let accent_node =
+                create_accent_marker(chord_x, ctx.chord_y, ctx.spatium, has_staccato, id_counter);
             id_counter += 1;
             nodes.push(accent_node);
         }
@@ -1489,12 +1473,35 @@ pub fn render_chord_symbols(
         })
         .collect();
 
+    // Only a bar that holds one chord lets the next bar's beat 1 go unnamed.
+    // After a bar of changes the reader's eye is on the last change, not on
+    // the harmony the bar ends in, so the next bar names its chord even when
+    // it is the same one (`Bmaj7 / G#m7 / C#m9 / F#7 /` then `Bmaj7`).
+    let last_chord_symbol = if bar_has_chord_changes(measure) {
+        None
+    } else {
+        last_chord_symbol
+    };
+
     ChordRenderResult {
         nodes,
         chord_bounds,
         last_chord_symbol,
         next_id: id_counter,
     }
+}
+
+/// Whether the bar changes chord: two or more different symbols in it.
+fn bar_has_chord_changes(measure: &Measure) -> bool {
+    let mut symbols = measure
+        .chords
+        .iter()
+        .map(|c| c.full_symbol.as_str())
+        .filter(|s| !is_placeholder_chord(s));
+    let Some(first) = symbols.next() else {
+        return false;
+    };
+    symbols.any(|s| s != first)
 }
 
 /// Render spillback chord symbols (from next measure pushing back).
@@ -1577,7 +1584,8 @@ pub fn render_spillback_chords(
         // Render accent if this spillback chord has AccentOnPush (>' syntax)
         // The accent appears on the pushed beat (previous measure)
         if spillback.has_accent {
-            let accent_node = create_accent_marker(chord_x, ctx.chord_y, ctx.spatium, id_counter);
+            let accent_node =
+                create_accent_marker(chord_x, ctx.chord_y, ctx.spatium, false, id_counter);
             id_counter += 1;
             nodes.push(accent_node);
         }
@@ -1761,83 +1769,6 @@ mod tests {
     }
 
     #[test]
-    fn chord_anchor_keeps_single_letter_roots_beat_left_aligned() {
-        let style = HarmonyStyle::default().with_root_size(20.0);
-
-        let b = parse_chord("B");
-        assert_eq!(chord_symbol_anchor_offset(&b, &style, false), 0.0);
-
-        let a_maj7 = parse_chord("Amaj7");
-        assert_eq!(chord_symbol_anchor_offset(&a_maj7, &style, false), 0.0);
-    }
-
-    #[test]
-    fn chord_anchor_keeps_isolated_accidental_roots_left_aligned() {
-        let style = HarmonyStyle::default().with_root_size(20.0);
-        let f_sharp_min = parse_chord("F#m7");
-
-        assert_eq!(chord_symbol_anchor_offset(&f_sharp_min, &style, false), 0.0);
-    }
-
-    #[test]
-    fn chord_anchor_places_accidental_near_beat_for_crowded_compact_accidental_roots() {
-        let style = HarmonyStyle::default().with_root_size(20.0);
-        let f_sharp_min = parse_chord("F#m7");
-        let offset = chord_symbol_anchor_offset(&f_sharp_min, &style, true);
-
-        assert!(
-            offset < -10.0,
-            "F#m7 should shift left so the # aligns near the beat; got {offset}"
-        );
-        assert!(
-            offset > -13.0,
-            "F#m7 anchor shift should be root-letter sized, not root+accidental+quality sized; got {offset}"
-        );
-
-        let c_sharp_min = parse_chord("C#m");
-        assert_eq!(
-            chord_symbol_anchor_offset(&c_sharp_min, &style, true),
-            offset
-        );
-    }
-
-    #[test]
-    fn nearby_following_chord_enables_compact_anchor() {
-        let measure = Measure {
-            chords: vec![
-                chord_at_chart_beat("C#m", 1, 0),
-                chord_at_chart_beat("B", 2, 0),
-            ],
-            ..Default::default()
-        };
-
-        assert!(has_nearby_following_visible_chord(
-            &measure,
-            0,
-            chord_beat_position(&measure.chords[0]),
-            1.25
-        ));
-    }
-
-    #[test]
-    fn distant_following_chord_keeps_left_anchor() {
-        let measure = Measure {
-            chords: vec![
-                chord_at_chart_beat("C#m", 1, 0),
-                chord_at_chart_beat("B", 4, 0),
-            ],
-            ..Default::default()
-        };
-
-        assert!(!has_nearby_following_visible_chord(
-            &measure,
-            0,
-            chord_beat_position(&measure.chords[0]),
-            1.25
-        ));
-    }
-
-    #[test]
     fn lotf_measure_7_chords_use_musical_beat_positions() {
         let segment_positions = vec![0.0, 120.0];
         let measure = Measure {
@@ -1898,6 +1829,7 @@ mod tests {
             min_chord_symbol_gap: 0.0,
             push_alters_rhythm: false,
             spatium: 5.0,
+            segment_ticks: &[],
             measure_measurements: None,
             spillback_positions: &[],
             note_line_stacks: &[],

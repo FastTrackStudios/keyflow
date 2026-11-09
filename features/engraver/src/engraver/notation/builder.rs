@@ -135,6 +135,8 @@ pub struct MeasureBuilder {
     id_base: u64,
     /// Whether notes should be stemless
     stemless: bool,
+    /// Written note values: every note keeps its stem (see [`Self::written_rhythm`]).
+    written_rhythm: bool,
     /// Tuplet group specifications
     tuplet_groups: Vec<TupletSpec>,
     /// Compact mode: use minimal left margin for tight spaces (count-in, etc.)
@@ -187,6 +189,7 @@ impl MeasureBuilder {
             justify: false,
             id_base: 1,
             stemless: false,
+            written_rhythm: false,
             tuplet_groups: Vec::new(),
             compact: false,
             segment_min_widths: Vec::new(),
@@ -327,6 +330,21 @@ impl MeasureBuilder {
         self
     }
 
+    /// Mark the rhythm as written note values rather than filler slashes.
+    ///
+    /// Rhythmic notation drawn as written: every note keeps its stem, and a
+    /// half note is a stemmed hollow slash, so `C_2 D_4 E_4` reads as a half
+    /// and two quarters. Without it, quarter-family and longer slashes are
+    /// drawn stemless, the beat-slash convention for a bar of plain chords.
+    #[must_use]
+    pub fn written_rhythm(mut self) -> Self {
+        if matches!(self.mode, NotationMode::Rhythmic) {
+            self.stemless = false;
+            self.written_rhythm = true;
+        }
+        self
+    }
+
     /// Add a tuplet group specification.
     ///
     /// Tuplet groups define which notes form a tuplet (triplet, quintuplet, etc.)
@@ -374,8 +392,8 @@ impl MeasureBuilder {
     fn compute_auto_stemless(&self) -> Vec<bool> {
         let mut result = vec![false; self.rhythm.len()];
 
-        // Only apply in rhythmic mode
-        if !matches!(self.mode, NotationMode::Rhythmic) {
+        // Only apply in rhythmic mode, and never to written note values
+        if !matches!(self.mode, NotationMode::Rhythmic) || self.written_rhythm {
             return result;
         }
 
