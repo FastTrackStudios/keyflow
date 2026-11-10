@@ -2,6 +2,7 @@
 
 use super::test_utils::*;
 use super::*;
+use crate::engraver::layout::text_metrics::TextFontMetrics;
 use crate::engraver::scene::id::ElementType;
 use crate::engraver::scene::id::SemanticId;
 use crate::engraver::scene::node::SceneNode;
