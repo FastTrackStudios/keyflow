@@ -35,6 +35,8 @@ pub mod highlighting {
 
 pub mod api;
 
+/// When each bar is played, in seconds of the chart's recording.
+pub mod bar_times;
 /// Put an LRC's lyrics into a chart as timed `[lyrics lrc]` lanes.
 pub mod lyric_lane;
 
