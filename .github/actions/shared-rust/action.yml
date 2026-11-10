@@ -1,0 +1,40 @@
+# Setup for a Rust job on a self-hosted runner (architect's shared-rust,
+# studio's shared-tools): devenv on PATH, a target dir per build kind and
+# runner slot outside the checkout, and the devenv shell evaluated once.
+#
+# CI_CACHE_DIR is this repo's durable cache: on the THEBATTLESHIP pool the
+# job gate sets it to /run/media/Development/ci/thebattleship/<owner>/<repo>
+# (and CARGO_HOME under it); on the keyflow runner it is that instance's own
+# cache dir. A target dir per kind and slot means two jobs never wait on one
+# cargo lock, and kache (RUSTC_WRAPPER, set on every runner unit) restores
+# what another slot or a local build already compiled.
+name: Shared Rust
+description: devenv on PATH, a slot-local target dir per build kind, the devenv shell evaluated.
+inputs:
+  kind:
+    description: Build kind (check, wasm, tests, lint), the target dir's name.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Slot target directory
+      shell: bash
+      env:
+        KIND: ${{ inputs.kind }}
+      run: |
+        set -euo pipefail
+        pool="${CI_CACHE_DIR:-${CACHE_DIRECTORY:-$HOME/.cache}}"
+        # Named `target` (kache keys a differently named dir per name).
+        dir="$pool/$KIND/$RUNNER_NAME/target"
+        mkdir -p "$dir"
+        echo "CARGO_TARGET_DIR=$dir" >> "$GITHUB_ENV"
+        echo "target dir: $dir ($(du -sh "$dir" 2>/dev/null | cut -f1)); pool ${CI_POOL:-per-repo runner}; kache: ${RUSTC_WRAPPER:-none}"
+    - name: devenv CLI
+      uses: ./.github/actions/devenv
+    # The dev shell every checkout gets (devenv.nix, devenv-fleet's `rust`):
+    # rust 1.99.1, the native libraries, mold, nextest, just. Evaluated once
+    # here so its cost shows as its own step; the job's steps then run inside
+    # it (`shell: devenv shell -- bash -e {0}`).
+    - name: dev shell
+      shell: bash
+      run: devenv shell -- bash -c 'rustc --version && cargo nextest --version && just --version'

@@ -1,22 +1,23 @@
-# keyflow — the one PR/push gate.
+# keyflow's full suite: fmt, cargo check --workspace, the wasm check and
+# nextest, one job each (studio's CI shape), and `CI passed`, the one status
+# that says they all succeeded. Branch protection requires it, with pr.yml's
+# `PR checks`.
 #
-# Runs on the org's self-hosted runner (THEBATTLESHIP, label `nix-host` —
-# see fasttrackstudio/.flake modules/selfhost/services/github-runner.nix):
-# nix and the toolchain live on the host already, so there is no installer
-# step and no rust-cache action — CARGO_TARGET_DIR points at the runner
-# instance's systemd CacheDirectory instead, which persists across runs
-# (and across restarts/reboots) the way a hosted-runner cache never could.
+# Where the builds run:
+#   - push to main, workflow_dispatch: the THEBATTLESHIP pool
+#     (`[self-hosted, thebattleship]`, 8 slots), the same pool as studio's
+#     and architect's CI, so the jobs run side by side and kache shares
+#     their artifacts with every other fleet repo and local build.
+#   - pull_request: the keyflow runner (`[self-hosted, keyflow]`). keyflow is
+#     public, and the pool's job gate refuses every pull_request event from
+#     a public repo; the per-repo runner takes them, one job at a time.
+# Either way nix and devenv live on the host: no installer, no rust-cache
+# (.github/actions/shared-rust). Every `run` step runs in the repo's devenv
+# shell, the same nix rustc store path as a local shell.
 #
-# Toolchain comes from the repo's devenv (devenv.yaml / devenv.nix, the
-# devenv-fleet modules): every `run` step runs in `devenv shell`, the same
-# nix rustc store path as a local shell, as architect's CI does. flake.nix
-# is packaging only and has no dev shell.
-#
-# Deliberately simpler than the monorepo gate it replaces: that one drove
-# `cargo rail plan` to pick affected crates out of a 238-member workspace.
-# These workspaces are small enough to just build.
-
-name: checks
+# No cargo-rail test selection (studio's Rail plan): this workspace builds
+# and tests in a few minutes warm, so every run is the full set.
+name: CI
 
 on:
   push:
@@ -24,50 +25,175 @@ on:
   pull_request:
   workflow_dispatch:
 
+# A PR's new push supersedes its old run; a push to main never cancels one,
+# so every main commit gets a verdict.
 concurrency:
-  group: checks-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
 
 jobs:
+  # Formatting, the lockfile and the workflows: hosted, compiles nothing.
+  # The same steps as pr.yml's `PR checks`, here so a push to main gets them.
+  gates:
+    name: Gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: toolchain
+        run: rustup show active-toolchain
+      - name: Restore cargo's dependencies
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-deps-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-deps-${{ runner.os }}-
+      - name: cargo fmt --check
+        run: cargo fmt --all --check
+      - name: Manifests + lockfile
+        if: ${{ !cancelled() }}
+        run: cargo metadata --locked --format-version 1 > /dev/null
+      - name: actionlint
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/actionlint.tar.gz" "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz"
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -color
+
+  # Saves the registry + git deps the hosted jobs restore, from main only
+  # (a PR's own copy would evict main's in the 10 GB cache budget).
+  deps-cache:
+    name: Dependency cache
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore cargo's dependencies
+        id: deps
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-deps-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-deps-${{ runner.os }}-
+      - name: Fetch cargo's dependencies
+        if: ${{ steps.deps.outputs.cache-hit != 'true' }}
+        run: cargo fetch --locked
+      - name: Save cargo's dependencies
+        if: ${{ steps.deps.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-deps-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+
   check:
-    name: Build + test
-    runs-on: [self-hosted, keyflow]
+    name: Check
+    runs-on: ${{ github.event_name == 'pull_request' && fromJSON('["self-hosted","keyflow"]') || fromJSON('["self-hosted","thebattleship"]') }}
     timeout-minutes: 60
     defaults:
       run:
         shell: devenv shell -- bash -e {0}
     steps:
       - uses: actions/checkout@v4
-      # The runner's PATH is bare (git, nix, curl, …): put devenv 2.4.0 on it
-      # from the nixpkgs revision devenv-fleet's pins.json names, as
-      # architect's .github/actions/shared-rust does. Plain bash, since the
-      # job default needs the devenv this step provides.
-      - name: devenv
-        shell: bash
-        run: |
-          set -euo pipefail
-          out=$(nix build --no-link --print-out-paths \
-            github:NixOS/nixpkgs/e62746b0b472753ef019baceab6f1e2e52014980#devenv)
-          echo "$out/bin" >> "$GITHUB_PATH"
-          "$out/bin/devenv" version
-      - name: Persistent target dir
-        run: |
-          dir="${CI_CACHE_DIR:-${CACHE_DIRECTORY:-$HOME/.cache}}/cargo-target"
-          mkdir -p "$dir"
-          echo "CARGO_TARGET_DIR=$dir" >> "$GITHUB_ENV"
-          echo "target dir: $dir ($(du -sh "$dir" 2>/dev/null | cut -f1))"
-      - name: Manifests + lockfile
-        run: cargo metadata --locked --format-version 1 > /dev/null
-      - name: cargo fmt --check
-        run: cargo fmt --all --check
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/shared-rust
+        with:
+          kind: check
       - name: cargo check --workspace
         run: cargo check --workspace
-      # Task's and Studio's web apps build these crates for the browser.
-      # `--workspace` above builds them for the host, which does not
-      # compile the WebGL surface or any `cfg(target_arch = "wasm32")`
-      # block — so a browser-only break sails through without this step.
-      # The recipe holds the exact package/feature set.
-      - name: cargo check (wasm)
+
+  # Task's and Studio's web apps build these crates for the browser.
+  # `--workspace` builds them for the host, which does not compile the
+  # WebGL surface or any `cfg(target_arch = "wasm32")` block, so a
+  # browser-only break sails through Check. The recipe holds the exact
+  # package/feature set.
+  wasm:
+    name: Wasm
+    runs-on: ${{ github.event_name == 'pull_request' && fromJSON('["self-hosted","keyflow"]') || fromJSON('["self-hosted","thebattleship"]') }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: devenv shell -- bash -e {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/shared-rust
+        with:
+          kind: wasm
+      - name: wasm check (just wasm-check)
         run: just wasm-check
+
+  # The whole workspace, the tree-sitter grammar's build script included.
+  # Doctests are `just test-doc` (nextest does not run them).
+  tests:
+    name: Tests
+    runs-on: ${{ github.event_name == 'pull_request' && fromJSON('["self-hosted","keyflow"]') || fromJSON('["self-hosted","thebattleship"]') }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: devenv shell -- bash -e {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/shared-rust
+        with:
+          kind: tests
       - name: cargo nextest
         run: cargo nextest run --workspace --no-fail-fast
+
+  # Advisory clippy, main only (studio's Lint): reports, never blocks, and
+  # is not part of `CI passed`.
+  lint:
+    name: Lint
+    if: ${{ github.event_name != 'pull_request' }}
+    runs-on: [self-hosted, thebattleship]
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: devenv shell -- bash -e {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/shared-rust
+        with:
+          kind: lint
+      - name: cargo clippy (advisory, does not block)
+        continue-on-error: true
+        run: cargo clippy --workspace --no-deps --all-targets --keep-going -- --cap-lints warn
+
+  # The status branch protection requires. It passes only when every job
+  # above succeeded; a skipped or cancelled job fails it.
+  ci-passed:
+    name: CI passed
+    if: ${{ always() }}
+    needs: [gates, check, wasm, tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every required job succeeded
+        env:
+          RESULTS: gates=${{ needs.gates.result }} check=${{ needs.check.result }} wasm=${{ needs.wasm.result }} tests=${{ needs.tests.result }}
+        run: |
+          echo "$RESULTS"
+          for r in $RESULTS; do [ "${r#*=}" = success ] || { echo "::error::${r%%=*}: ${r#*=}"; exit 1; }; done

@@ -1,0 +1,53 @@
+# A PR's fast checks, on a hosted runner in about a minute (studio's and
+# architect's pr.yml): format, the committed lockfile, the workflows. They
+# compile nothing. Branch protection requires this job (`PR checks`) and
+# checks.yml's `CI passed`, which builds and tests the PR.
+name: PR
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+# A PR's new push supersedes its old run.
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-checks:
+    name: PR checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      # rust-toolchain.toml's pin (1.99.1 + rustfmt); rustup reads it.
+      - name: toolchain
+        run: rustup show active-toolchain
+      # The registry and git deps main's `Dependency cache` job saved
+      # (checks.yml): resolving them is most of this job's time when cold.
+      - name: Restore cargo's dependencies
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-deps-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-deps-${{ runner.os }}-
+      - name: fmt
+        run: cargo fmt --all --check
+      # The committed lockfile is the one cargo resolves: a merge that left
+      # it stale fails here, not on main.
+      - name: Manifests + lockfile
+        if: ${{ !cancelled() }}
+        run: cargo metadata --locked --format-version 1 > /dev/null
+      - name: actionlint
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/actionlint.tar.gz" "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz"
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -color

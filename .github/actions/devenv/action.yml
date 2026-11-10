@@ -1,0 +1,28 @@
+# The devenv CLI at exactly 2.4.0 (devenv.yaml's require_version), on PATH for
+# the steps after it: cachix's v2.4.0 tag (fetched over git), built by nix. A
+# host that already has this version keeps it (the THEBATTLESHIP pool, the
+# keyflow runner), so a warm job spends no time here; anything else, including
+# a hosted runner, builds the tag's CLI. Studio's .github/actions/devenv.
+#
+# Called by shared-rust (self-hosted) and hosted-nix (hosted), before the
+# first step that enters the devenv shell.
+
+name: devenv CLI
+description: devenv 2.4.0 on PATH, from cachix's v2.4.0 tag unless the host has it.
+
+runs:
+  using: composite
+  steps:
+    - name: devenv 2.4.0 on PATH
+      shell: bash
+      run: |
+        set -euo pipefail
+        if command -v devenv >/dev/null && [[ "$(devenv --version)" == "devenv 2.4.0 "* ]]; then
+          devenv --version
+          exit 0
+        fi
+        # Over git, not `github:`: a `github:` ref is resolved through the
+        # GitHub API with no token, which rate-limits a shared runner.
+        out="$(nix build --accept-flake-config --no-link --print-out-paths 'git+https://github.com/cachix/devenv?ref=refs/tags/v2.4.0&shallow=1#devenv')"
+        echo "$out/bin" >> "$GITHUB_PATH"
+        "$out/bin/devenv" --version

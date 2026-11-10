@@ -1,0 +1,58 @@
+# Setup for a job on a GitHub-HOSTED runner (ubuntu-latest) that needs nix or
+# the devenv shell: free the image's disk, install nix, trust
+# fasttrackstudio.cachix.org, install the devenv CLI, and (optionally) realise
+# the devenv shell up front. Studio's .github/actions/hosted-nix.
+#
+# Only cache-devshell.yml uses it: the self-hosted jobs have nix and devenv
+# on the host already (shared-rust), and the hosted PR checks need only
+# rustup.
+
+name: hosted nix
+description: Free disk, install nix + the fasttrackstudio cachix and devenv, realise the devenv shell.
+
+inputs:
+  cachix-auth-token:
+    description: >-
+      A write token for fasttrackstudio.cachix.org. Empty (the default) =
+      read only: nothing this job builds is pushed.
+    required: false
+    default: ""
+  devenv-shell:
+    description: Realise the devenv shell up front ("true") or not ("false").
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    # The image's preinstalled SDKs we never use (the toolchain comes from
+    # nix): ~25 GB back, in the background.
+    - name: Free disk (background)
+      shell: bash
+      run: |
+        df -h / | tail -n 1
+        nohup sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+          /usr/local/.ghcup /opt/hostedtoolcache /usr/share/swift \
+          /usr/local/share/powershell /usr/local/share/chromium \
+          /usr/local/share/boost /opt/microsoft /opt/google \
+          </dev/null >/dev/null 2>&1 &
+    - name: Install nix
+      uses: cachix/install-nix-action@v31
+      with:
+        # Flake inputs come from the GitHub API; unauthenticated, 60/h per IP.
+        github_access_token: ${{ github.token }}
+        extra_nix_config: |
+          accept-flake-config = true
+    - name: fasttrackstudio cachix
+      uses: cachix/cachix-action@v17
+      with:
+        name: fasttrackstudio
+        authToken: ${{ inputs.cachix-auth-token }}
+        skipPush: ${{ inputs.cachix-auth-token == '' }}
+    - name: devenv CLI
+      if: ${{ inputs.devenv-shell == 'true' }}
+      uses: ./.github/actions/devenv
+    - name: Realise the devenv shell
+      if: ${{ inputs.devenv-shell == 'true' }}
+      shell: bash
+      run: devenv shell -- true
