@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.1 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
+<score-partwise version="3.1">
+  <work><work-title>Fixture Tune</work-title></work>
+  <identification><creator type="composer">Anon</creator></identification>
+  <part-list><score-part id="P1"><part-name>Lead</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>1</divisions>
+        <key><fifths>-2</fifths></key>
+        <time><beats>3</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <harmony>
+        <root><root-step>B</root-step><root-alter>-1</root-alter></root>
+        <kind>major-seventh</kind>
+      </harmony>
+      <note><rest/><duration>3</duration></note>
+    </measure>
+    <measure number="2">
+      <harmony>
+        <root><root-step>G</root-step></root>
+        <kind text="min7">minor-seventh</kind>
+      </harmony>
+      <note><rest/><duration>3</duration></note>
+    </measure>
+    <measure number="3">
+      <harmony>
+        <root><root-step>C</root-step></root>
+        <kind>dominant</kind>
+        <bass><bass-step>E</bass-step></bass>
+      </harmony>
+      <note><rest/><duration>3</duration></note>
+    </measure>
+    <measure number="4">
+      <harmony>
+        <root><root-step>F</root-step><root-alter>1</root-alter></root>
+        <kind>half-diminished</kind>
+      </harmony>
+      <harmony>
+        <root><root-step>B</root-step></root>
+        <kind>augmented</kind>
+      </harmony>
+      <note><rest/><duration>3</duration></note>
+    </measure>
+    <measure number="5">
+      <note><rest/><duration>3</duration></note>
+    </measure>
+  </part>
+</score-partwise>
