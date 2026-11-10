@@ -23,6 +23,7 @@
 //! filesystem access is needed at runtime.
 
 use engraver::api::pipeline::ChartPipeline;
+use engraver::export::follow::{Follow, add_follow};
 use engraver::layout::chart::LayoutMode;
 use thiserror::Error;
 
@@ -154,10 +155,17 @@ fn render_inner(source: &str, embed_fonts: bool) -> Result<String, RenderError> 
     let pipeline = pipeline()?;
     let result = pipeline.layout(&chart, &mode);
 
-    Ok(if embed_fonts {
+    let svg = if embed_fonts {
         pipeline.export_svg_snippet_embedded(&result, SNIPPET_PADDING)
     } else {
         pipeline.export_svg_snippet(&result, SNIPPET_PADDING)
+    };
+    // A chart that names its recording's downbeat or file (`\downbeat`,
+    // `\media`) carries each bar's time, so a page playing the recording
+    // follows it; any other chart renders exactly as before.
+    Ok(match Follow::from_header(&chart) {
+        Some(follow) => add_follow(&svg, &result, &follow, None),
+        None => svg,
     })
 }
 
@@ -197,6 +205,32 @@ mod tests {
     use super::*;
 
     const SIMPLE: &str = "Test Chart - Demo\n4/4 120bpm #C\n\nVS\nC | F | G | C\n";
+
+    /// A chart whose header names its recording draws a block a playing
+    /// page follows: the root marked, a `data-at` per bar as played (a
+    /// repeat once per pass). Without the header, no trace of it.
+    #[test]
+    fn a_timed_chart_follows_the_playhead() {
+        let plain = render_svg_live(SIMPLE).expect("render ok");
+        assert!(!plain.contains("data-follow-playhead") && !plain.contains("data-at"));
+
+        let timed = "Test Chart - Demo\n4/4 60bpm #C\n\\downbeat = 0.5\n\\media = \"demo.mp3\"\n\n\
+                     VS 4\n|: C | F :| G C\n";
+        let svg = render_svg_live(timed).expect("render ok");
+        assert!(svg.contains("<svg data-follow-playhead=\"\" data-media=\"demo.mp3\" "));
+        let at: Vec<&str> = svg
+            .match_indices("data-at=\"")
+            .map(|(i, _)| {
+                let rest = &svg[i + 9..];
+                &rest[..rest.find('"').unwrap()]
+            })
+            .collect();
+        // 60 bpm in 4/4: four seconds a bar; bars 1–2 twice, then 3 and 4.
+        assert_eq!(
+            at,
+            ["0.500", "4.500", "8.500", "12.500", "16.500", "20.500"]
+        );
+    }
 
     #[test]
     fn renders_a_simple_chart() {

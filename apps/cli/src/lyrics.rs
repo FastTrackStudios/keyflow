@@ -41,7 +41,7 @@ pub struct LyricsSheetOpts<'a> {
 
 /// Bar start times from a Songsterr `sync.json`: the first `main` video's
 /// `bars[].start_s` (or its raw `points`).
-fn read_sync(path: &Path) -> Result<Vec<f64>, String> {
+pub(crate) fn read_sync(path: &Path) -> Result<Vec<f64>, String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let json: serde_json::Value =
         serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -78,7 +78,7 @@ fn read_sync(path: &Path) -> Result<Vec<f64>, String> {
 
 /// The sync bar that is the chart's bar 1: skip a lead-in bar that is
 /// clearly shorter than the one after it (a 2/4 pickup before 4/4).
-fn guess_first_sync_bar(starts: &[f64]) -> usize {
+pub(crate) fn guess_first_sync_bar(starts: &[f64]) -> usize {
     match starts {
         [a, b, c, ..] if (b - a) < 0.75 * (c - b) => 1,
         _ => 0,
