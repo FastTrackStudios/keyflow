@@ -15,6 +15,13 @@ pub struct ChartSettings {
     pub push_mode: PushPullBase,
     /// Swing ratio for MIDI playback (0.5 = straight, 0.6667 = triplet)
     pub swing: Option<f64>,
+    /// Seconds into the chart's recording where bar 1 starts
+    /// (`\downbeat = 1.25`). With it, an engraving can carry each bar's
+    /// time, so a page playing the recording can follow the chart.
+    pub downbeat: Option<f64>,
+    /// The recording the chart's times belong to (`\media = "song.mp3"`),
+    /// as a path or URL relative to where the chart is shown.
+    pub media: Option<String>,
 }
 
 /// Available chart settings
@@ -66,9 +73,10 @@ pub struct DirectiveSpec {
 
 /// Every directive a chart may carry, in the order a menu should show them.
 ///
-/// Includes the five that are not [`ChartSetting`]s: `\duration`,
+/// Includes the ones that are not [`ChartSetting`]s: `\duration`,
 /// `\progression`, `\title` and `\subtitle`, which the text parser reads
-/// before settings get a look, and `\alias`, which is a naming form rather
+/// before settings get a look, `\downbeat` and `\media`, which are plain
+/// fields of [`ChartSettings`], and `\alias`, which is a naming form rather
 /// than a setting.
 pub const DIRECTIVES: &[DirectiveSpec] = &[
     DirectiveSpec {
@@ -136,6 +144,18 @@ pub const DIRECTIVES: &[DirectiveSpec] = &[
         label: "Repeat chord symbols",
         example: "\\repeat_chord_symbols = clusters",
         summary: "changes (default), clusters, or always: when a still-sounding chord is named again",
+    },
+    DirectiveSpec {
+        key: "downbeat",
+        label: "Downbeat",
+        example: "\\downbeat = 1.25",
+        summary: "seconds into the recording where bar 1 starts; a page playing it follows the chart",
+    },
+    DirectiveSpec {
+        key: "media",
+        label: "Recording",
+        example: "\\media = \"song.mp3\"",
+        summary: "the recording the chart's bar times belong to",
     },
     DirectiveSpec {
         key: "alias",
@@ -240,6 +260,8 @@ impl ChartSettings {
             settings,
             push_mode: PushPullBase::Standard,
             swing: None,
+            downbeat: None,
+            media: None,
         }
     }
 
@@ -260,7 +282,12 @@ impl ChartSettings {
             // No '=' found - try space-separated format for PUSH/SWING
             let parts: Vec<&str> = line.split_whitespace().collect();
             let upper = parts.first().map(|s| s.to_uppercase());
-            if parts.len() >= 2 && matches!(upper.as_deref(), Some("PUSH") | Some("SWING")) {
+            if parts.len() >= 2
+                && matches!(
+                    upper.as_deref(),
+                    Some("PUSH") | Some("SWING") | Some("DOWNBEAT") | Some("MEDIA")
+                )
+            {
                 (upper.unwrap(), parts[1..].join(" "))
             } else {
                 return Err(format!(
@@ -313,6 +340,25 @@ impl ChartSettings {
                     ChartSetting::RepeatChordSymbols,
                     SettingValue::String(mode.as_str().to_string()),
                 );
+                Ok(())
+            }
+            "DOWNBEAT" => {
+                let seconds = value
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|s| s.is_finite())
+                    .ok_or_else(|| {
+                        format!("Invalid downbeat: '{value}'. Expected seconds, e.g. 1.25")
+                    })?;
+                self.downbeat = Some(seconds);
+                Ok(())
+            }
+            "MEDIA" => {
+                let media = value.trim().trim_matches('"').trim();
+                if media.is_empty() {
+                    return Err("Invalid media: expected a file name, e.g. \"song.mp3\"".into());
+                }
+                self.media = Some(media.to_string());
                 Ok(())
             }
             "SWING" => {
@@ -508,6 +554,8 @@ impl ChartSettings {
             settings: self.settings.clone(),
             push_mode: self.push_mode,
             swing: self.swing,
+            downbeat: self.downbeat,
+            media: self.media.clone(),
         }
     }
 
@@ -517,6 +565,8 @@ impl ChartSettings {
         self.settings = checkpoint.settings;
         self.push_mode = checkpoint.push_mode;
         self.swing = checkpoint.swing;
+        self.downbeat = checkpoint.downbeat;
+        self.media = checkpoint.media;
     }
 }
 
@@ -527,6 +577,8 @@ pub struct ChartSettingsCheckpoint {
     settings: HashMap<ChartSetting, SettingValue>,
     push_mode: PushPullBase,
     swing: Option<f64>,
+    downbeat: Option<f64>,
+    media: Option<String>,
 }
 
 impl ChartSetting {
@@ -879,5 +931,20 @@ mod tests {
         // Verify restoration
         assert!(matches!(settings.push_mode, PushPullBase::Triplet));
         assert!(settings.smart_repeats());
+    }
+
+    #[test]
+    fn downbeat_and_media_are_read_in_both_forms() {
+        let mut settings = ChartSettings::new();
+        settings.parse_setting_line("\\downbeat = 1.25").unwrap();
+        settings
+            .parse_setting_line("\\media \"Joy To The World.mp3\"")
+            .unwrap();
+        assert_eq!(settings.downbeat, Some(1.25));
+        assert_eq!(settings.media.as_deref(), Some("Joy To The World.mp3"));
+        settings.parse_setting_line("\\downbeat 0").unwrap();
+        assert_eq!(settings.downbeat, Some(0.0));
+        assert!(settings.parse_setting_line("\\downbeat = soon").is_err());
+        assert!(settings.parse_setting_line("\\media = \"\"").is_err());
     }
 }
