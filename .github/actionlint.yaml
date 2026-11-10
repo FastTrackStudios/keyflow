@@ -1,0 +1,5 @@
+# The org's self-hosted runner labels (THEBATTLESHIP), for actionlint.
+self-hosted-runner:
+  labels:
+    - thebattleship
+    - keyflow

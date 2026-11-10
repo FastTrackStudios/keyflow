@@ -1,0 +1,50 @@
+# Seeds fasttrackstudio.cachix.org with keyflow's devenv shell (studio's
+# cache-devshell.yml), so a host that does not have it yet (a fresh runner
+# slot, a hosted job, a new machine) substitutes the shell instead of
+# building it. Runs when the shell's inputs change on main, or by hand.
+name: cache-devshell
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - devenv.nix
+      - devenv.yaml
+      - devenv.lock
+      - .github/workflows/cache-devshell.yml
+
+concurrency:
+  group: cache-devshell
+  cancel-in-progress: true
+
+jobs:
+  seed:
+    name: Seed the devenv shell
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/hosted-nix
+        with:
+          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      # The shell's profile: every package and the toolchain it puts on PATH.
+      # cachix pushes its whole closure.
+      - name: The devenv shell's profile
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2016 # expanded inside the devenv shell
+          profile="$(devenv shell -- bash -c 'readlink -f "$DEVENV_PROFILE"')"
+          profile="$(printf '%s\n' "$profile" | grep '^/nix/store/' | tail -n 1)"
+          [ -n "$profile" ] || { echo "::error::no DEVENV_PROFILE in the devenv shell"; exit 1; }
+          echo "$profile" | tee devshell-paths.txt
+      - name: Push to cachix
+        env:
+          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+        run: |
+          if [ -z "${CACHIX_AUTH_TOKEN}" ]; then
+            echo "CACHIX_AUTH_TOKEN not set — would push:"
+            cat devshell-paths.txt
+            exit 0
+          fi
+          xargs -a devshell-paths.txt cachix push fasttrackstudio
