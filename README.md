@@ -74,7 +74,8 @@ vendor ── architect ── task
      FastTrackStudio
 ```
 
-Cross-repo dependencies are git deps pinned to a tag. To co-develop
+Cross-repo dependencies are git deps pinned to a tag (the editor crates
+by `rev`). To co-develop
 against a sibling repo, override the tag with a local checkout rather
 than pushing a tag to test:
 

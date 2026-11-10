@@ -6,6 +6,9 @@ target-*/
 dist/
 node_modules/
 .DS_Store
+# The removed keyflow web app. Old checkouts keep an untracked leftover
+# here; nothing in this workspace builds a web app any more.
+apps/web/
 .direnv/
 # devenv: state, eval cache and per-user overrides.
 .devenv/

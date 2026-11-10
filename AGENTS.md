@@ -6,17 +6,16 @@ the `architect` / `daw` / `vendor` splits before it.
 
 | repo | holds | consumed as |
 |---|---|---|
-| **keyflow** (here) | the chart language, its formats, the LSP + grammar, Engraver, and the keyflow site | — |
-| [daw](https://github.com/FastTrackStudios/daw) | the DAW platform and shared substrate | git dep, tag `v0.0.2` |
-| [architect](https://github.com/FastTrackStudios/architect) | the framework (entity/RPC, atom, form, auth, permissions, crdt), `architect-ui` | git dep, tag `v0.10.0` (same tag task pins) |
+| **keyflow** (here) | the chart language, its formats, the LSP + grammar, and Engraver | — |
+| [daw](https://github.com/FastTrackStudios/daw) | the DAW platform and shared substrate | git dep, tag `v0.0.7` |
+| [architect](https://github.com/FastTrackStudios/architect) | the framework (entity/RPC, atom, form, auth, permissions, crdt), `architect-ui` | git dep, tag `v0.11.2` (same tag studio pins) |
 | [session](https://github.com/FastTrackStudios/session) | the musical/production vocabulary and the Session app | consumes this repo |
-| [editor](https://github.com/FastTrackStudios/editor) | the embeddable text/markdown editor — sits BELOW this repo | git dep, tag `v0.1.0` |
-| [task](https://github.com/FastTrackStudios/task) | the Task product and the vault/wiki layer | git dep (`view-knowledge-graph`, site only) |
+| [editor](https://github.com/FastTrackStudios/editor) | the embeddable text/markdown editor — sits BELOW this repo | git dep, pinned by `rev` (`81451ea`) |
 
 One root Cargo workspace, one lockfile, one `target/`, one flake.
 Intra-repo dependencies are path deps in root `[workspace.dependencies]`,
 consumed as `x.workspace = true`. Cross-repo dependencies are **git deps
-pinned to a tag**.
+pinned to a tag** (the editor crates are pinned by `rev`).
 
 **Co-developing across repos**: override the tag with a local checkout
 rather than pushing a tag to test:
@@ -78,7 +77,7 @@ though nothing in this workspace builds an app for either target.
 **Defaults and the root entry.** `keyflow-lang` and `engraver` default to
 every native feature, so `cargo test -p <crate>` covers all of it. The
 root `[workspace.dependencies]` entries turn defaults OFF, so a consumer
-builds only the features it names — the wasm site must never pull
+builds only the features it names — a wasm consumer must never pull
 `sync`, `lsp` or `pdf`. Integration tests for a feature start with
 `#![cfg(feature = "…")]`.
 
