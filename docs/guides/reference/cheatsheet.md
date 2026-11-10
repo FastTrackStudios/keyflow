@@ -205,6 +205,8 @@ A line starting with `\` sets something for the chart. Backslash, not slash: a l
 | `\progression G B C Cm` | the chords a section falls back to when it names none |
 | `\title "Joy To The World (Unspeakable Joy)"` | the title exactly as written, parentheses and all |
 | `\subtitle "Live at the Ryman"` | the line under the title |
+| `\downbeat = 1.25` | seconds into the recording where bar 1 starts; a page playing it follows the chart |
+| `\media = "song.mp3"` | the recording the chart's bar times belong to |
 | `\alias name value` | give a name to a run of chart text |
 
 ```kf+
@@ -215,6 +217,12 @@ G C D Em
 ```
 
 A bar's first chord is named when the harmony changes there and at the start of every line or section. A chord still sounding from the bar before is not named again — not after `D /// G /` then `G`, and not in a bar of changes that starts on it (`Bmaj7` then `Bmaj7 / G#m7 / C#m9 / F#7 /` names only the G#m7, C#m9 and F#7). That is `\repeat_chord_symbols = changes`, the default. `clusters` also names a bar of changes' first chord when the bar before held that one chord (the second `Bmaj7` above prints); `always` prints every symbol.
+
+### Following a recording
+
+A chart drawn on a page that plays its recording (an Architect share page or site) can mark the bar being played, scroll to it, and seek when a bar is clicked. `\downbeat = 12.4` says bar 1 (the first bar after any `Count`) starts 12.4 seconds into the recording; `\media = "song.mp3"` names the recording, relative to the page, when the page plays more than one. With either, the engraving carries each bar's time: `data-follow-playhead` (and `data-media`) on the `<svg>`, and an invisible `<rect class="kf-bar" data-at="…">` over every bar as it is played. The page does the rest; the current bar gets `aria-current="time"`.
+
+Times come from the chart: its tempo, every `->140bpm` (also inside a bar) and every meter change, with `|: … :|` spans played once per pass and first and second endings on their own passes. A repeated bar has one rect per pass, at the same place. `kf svg song.kf --follow` does the same from the command line, where `--downbeat` and `--media` override the chart and `--sync sync.json` takes each bar's start from a Songsterr sync instead, for a recording that drifts. A chart with neither directive engraves exactly as before.
 
 A bar written with note values (`_2`, `_8`, `r4`) is drawn as rhythmic notation — a half is a stemmed half-note slash, an eighth a flagged one — and every chord symbol sits over the slash it is played on. A bar of plain chords (`G // C //`, or `G` for the whole bar) is drawn as beat slashes. Bars widen for their chord symbols rather than letting one drift off its beat; `kf pdf --chord-gap <pt>` (and `kf png`) sets the clear space kept between two symbols (default 3pt), so a smaller gap packs chord-dense bars onto fewer lines.
 
