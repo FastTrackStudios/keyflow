@@ -140,6 +140,23 @@ impl ChordFamily {
             consumed = 0;
         }
 
+        // `△7` is maj7, and `△9` / `△11` / `△13` imply it under the extension
+        // (the number is left for the extensions parser, as after `maj`).
+        if consumed < tokens.len()
+            && let TokenType::Triangle = tokens[consumed].token_type
+            && let Some(TokenType::Number(n)) = tokens.get(consumed + 1).map(|t| &t.token_type)
+        {
+            let family = match quality {
+                ChordQuality::Minor => ChordFamily::MinorMajor7,
+                _ => ChordFamily::Major7,
+            };
+            match n.as_str() {
+                "7" => return Ok((Some(family), 2)),
+                "9" | "11" | "13" => return Ok((Some(family), 1)),
+                _ => {}
+            }
+        }
+
         // Check for "dim7" or "o7" (fully diminished seventh)
         if consumed < tokens.len() {
             if let TokenType::Letter('d') = tokens[consumed].token_type

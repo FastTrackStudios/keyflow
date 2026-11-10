@@ -1,0 +1,14 @@
+[ti:Sample Song]
+[ar:The Examples]
+[al:Fixtures]
+[by:Fixture Author]
+[length:03:20]
+[re:hand-written test fixture]
+
+[00:12.00]First verse, first line
+[00:16.50]First verse, second line
+[00:30.00][01:30.00][02:30.50]This is the chorus
+[00:45.00]
+[01:00.00]Second verse comes here
+[00:20.25]Out of order, but a verse line
+[03:00.00]

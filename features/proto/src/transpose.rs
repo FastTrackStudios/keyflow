@@ -495,7 +495,8 @@ fn notate_root(note: &MusicalNote, ctx: &Ctx) -> RootNotation {
                 RootNotation::from_note_name(note.clone())
             } else {
                 let transposed = (note.semitone + ctx.letters_delta) % 12;
-                let spelled = spell_in_key(ctx.display_key, transposed);
+                let spelled = spell_by_interval(note, ctx, transposed)
+                    .unwrap_or_else(|| spell_in_key(ctx.display_key, transposed));
                 RootNotation::from_note_name(spelled)
             }
         }
@@ -748,6 +749,30 @@ fn spell_in_key(key: &Key, semitone: u8) -> MusicalNote {
     let is_major = key.mode == ScaleMode::ionian();
     let spelling = KeySpelling::new(&key.root, is_major);
     spelling.spell(semitone, SpellingMode::Relaxed).to_note()
+}
+
+/// Spell a transposed note by moving its LETTER as far as the key's letter
+/// moved, so a chord keeps its function: `Ab` in C is bVI, and in D it is
+/// `Bb`, not the `A#` a semitone-only respelling picks in a sharp key.
+/// Diatonic notes land on the target key's own spelling either way.
+///
+/// `None` where the result needs a double accidental or one of the notes
+/// chord spelling avoids (`E#`, `B#`, `Cb`, `Fb`) — [`spell_in_key`] then
+/// decides, as it always did.
+fn spell_by_interval(note: &MusicalNote, ctx: &Ctx, transposed: u8) -> Option<MusicalNote> {
+    let steps = (MusicalNote::letter_index(ctx.display_key.root.letter()) + 7
+        - MusicalNote::letter_index(ctx.song_key.root.letter()))
+        % 7;
+    let letter = MusicalNote::letter_from_index(MusicalNote::letter_index(note.letter()) + steps);
+    let natural = MusicalNote::from_letter_and_accidental(letter, None).semitone;
+    let accidental = match (transposed + 12 - natural) % 12 {
+        0 => None,
+        1 => Some(Accidental::Sharp),
+        11 => Some(Accidental::Flat),
+        _ => return None,
+    };
+    let spelled = MusicalNote::from_letter_and_accidental(letter, accidental);
+    (!matches!(spelled.name.as_str(), "E#" | "B#" | "Cb" | "Fb")).then_some(spelled)
 }
 
 /// The scale degree (1-7) and any accidental of `note` relative to `key`.

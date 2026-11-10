@@ -576,7 +576,23 @@ impl Chord {
 
             TokenType::Minus => Ok((ChordQuality::Minor, 1)),
 
+            // `△7` / `△9` is the major-seventh family, as `maj7` is: leave
+            // the triangle for the family parser. Read as a bare major marker
+            // it left `7` behind, and `C△7` came out a dominant seventh.
+            TokenType::Triangle
+                if matches!(
+                    tokens.get(1).map(|t| &t.token_type),
+                    Some(TokenType::Number(_))
+                ) =>
+            {
+                Ok((ChordQuality::Major, 0))
+            }
             TokenType::Triangle => Ok((ChordQuality::Major, 1)),
+
+            // `ø` names a half-diminished seventh, whose triad is diminished.
+            // The family parser consumes the sign; without this the triad
+            // defaulted to major and `Bø7` sounded B D# F# A.
+            TokenType::HalfDiminished => Ok((ChordQuality::Diminished, 0)),
 
             // Diminished: "dim", "o", "°"
             // Note: 'd' could also be part of "add" in other contexts.
@@ -1144,14 +1160,14 @@ impl std::fmt::Display for Chord {
             {
                 // For maj9, maj11, maj13: show "maj" + highest extension
                 write!(f, "maj")?;
-                // Show only the highest extension number (e.g., "13" not "9 11 13")
-                if self.extensions.thirteenth.is_some() {
-                    write!(f, "13")?;
-                } else if self.extensions.eleventh.is_some() {
-                    write!(f, "11")?;
-                } else if self.extensions.ninth.is_some() {
-                    write!(f, "9")?;
-                }
+                // Show only the highest natural extension number (e.g.,
+                // "13" not "9 11 13"). With none natural (`maj7#11`), the
+                // seventh itself is the number.
+                write!(
+                    f,
+                    "{}",
+                    highest_natural_extension(&self.extensions).unwrap_or("7")
+                )?;
                 // Show altered extensions separately
                 if let Some(qual) = self.extensions.ninth
                     && qual != ExtensionQuality::Natural
@@ -1192,12 +1208,8 @@ impl std::fmt::Display for Chord {
                 // Extensions - show only the highest natural extension number
                 if self.extensions.has_any() {
                     // Show highest natural extension number
-                    if self.extensions.thirteenth.is_some() {
-                        write!(f, "13")?;
-                    } else if self.extensions.eleventh.is_some() {
-                        write!(f, "11")?;
-                    } else if self.extensions.ninth.is_some() {
-                        write!(f, "9")?;
+                    if let Some(number) = highest_natural_extension(&self.extensions) {
+                        write!(f, "{number}")?;
                     }
                     // Show altered extensions separately
                     if let Some(qual) = self.extensions.ninth
@@ -1233,12 +1245,8 @@ impl std::fmt::Display for Chord {
             // No family, just show extensions (with same masking logic)
             if self.extensions.has_any() {
                 // Show highest natural extension number
-                if self.extensions.thirteenth.is_some() {
-                    write!(f, "13")?;
-                } else if self.extensions.eleventh.is_some() {
-                    write!(f, "11")?;
-                } else if self.extensions.ninth.is_some() {
-                    write!(f, "9")?;
+                if let Some(number) = highest_natural_extension(&self.extensions) {
+                    write!(f, "{number}")?;
                 }
                 // Show altered extensions separately
                 if let Some(qual) = self.extensions.ninth
@@ -1331,6 +1339,23 @@ impl std::fmt::Display for Chord {
         }
 
         Ok(())
+    }
+}
+
+/// The highest *natural* extension's number, which masks the seventh and
+/// the lower naturals (`C13`, not `C7 9 11 13`). An altered extension is
+/// not one: `C7b9` writes its `b9` separately, so counting it here printed
+/// `C79b9`.
+fn highest_natural_extension(extensions: &Extensions) -> Option<&'static str> {
+    let natural = |q: Option<ExtensionQuality>| q == Some(ExtensionQuality::Natural);
+    if natural(extensions.thirteenth) {
+        Some("13")
+    } else if natural(extensions.eleventh) {
+        Some("11")
+    } else if natural(extensions.ninth) {
+        Some("9")
+    } else {
+        None
     }
 }
 

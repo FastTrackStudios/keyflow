@@ -55,15 +55,14 @@ impl Key {
     }
 
     /// Get all notes in the scale
+    ///
+    /// Spelled as [`Self::get_scale_degree`] spells them. This used to pick
+    /// sharps only when the root itself had a `#`, the rule that method
+    /// retired, so G major listed its seventh as `Gb`.
     pub fn notes(&self) -> Vec<MusicalNote> {
-        let pattern = self.mode.interval_pattern();
-        pattern
-            .iter()
-            .map(|&semitones| {
-                let note_semitone = (self.root.semitone() + semitones) % 12;
-                let prefer_sharp = self.root.name().contains('#');
-                MusicalNote::from_semitone(note_semitone, prefer_sharp)
-            })
+        let degrees = self.mode.interval_pattern().len() as u8;
+        (1..=degrees)
+            .filter_map(|degree| self.get_scale_degree(degree))
             .collect()
     }
 

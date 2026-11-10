@@ -134,11 +134,16 @@ impl PositionInQuarterNotes {
         PositionInSeconds::from_seconds(seconds)
     }
 
-    /// Convert to musical position using time signature
+    /// Convert to musical position using time signature.
+    ///
+    /// A beat is the signature's unit (an eighth in 6/8, a half in 2/2), so
+    /// a 6/8 bar is three quarter notes long, not six.
     pub fn to_musical(&self, time_signature: TimeSignature) -> MusicalPosition {
-        let beats_per_measure = time_signature.numerator() as f64;
-        let measure = (self.quarter_notes / beats_per_measure).floor() as i32;
-        let beats_in_measure = self.quarter_notes % beats_per_measure;
+        let qn_per_measure = time_signature.quarter_notes_per_measure();
+        let qn_per_beat = 4.0 / time_signature.denominator() as f64;
+        let measure = (self.quarter_notes / qn_per_measure).floor();
+        let beats_in_measure = (self.quarter_notes - measure * qn_per_measure) / qn_per_beat;
+        let measure = measure as i32;
         let beat = beats_in_measure.floor() as i32;
         let subdivision = ((beats_in_measure - beat as f64) * 1000.0).round() as i32;
 
@@ -202,12 +207,13 @@ impl MusicalPosition {
         PositionInSeconds::from_seconds(seconds)
     }
 
-    /// Convert to quarter notes using time signature
+    /// Convert to quarter notes using time signature. The inverse of
+    /// [`PositionInQuarterNotes::to_musical`]: beats are the signature's
+    /// unit, so this used to count a 6/8 bar as six quarter notes.
     pub fn to_quarter_notes(&self, time_signature: TimeSignature) -> PositionInQuarterNotes {
-        let beats_per_measure = time_signature.numerator() as f64;
-        let total_qn = self.measure as f64 * beats_per_measure
-            + self.beat as f64
-            + self.subdivision as f64 / 1000.0;
+        let qn_per_beat = 4.0 / time_signature.denominator() as f64;
+        let total_qn = self.measure as f64 * time_signature.quarter_notes_per_measure()
+            + (self.beat as f64 + self.subdivision as f64 / 1000.0) * qn_per_beat;
         PositionInQuarterNotes::from_quarter_notes(total_qn)
     }
 }
