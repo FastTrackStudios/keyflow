@@ -150,6 +150,18 @@ pub fn parse(text: &str) -> Lrc {
         }
     }
 
+    // `[offset:+500]` means the lyrics come in half a second SOONER. The
+    // tag may sit anywhere in the header, so it is applied once at the end.
+    if lrc.offset != 0.0 {
+        let shift = |t: f32| (t - lrc.offset).max(0.0);
+        for line in &mut lrc.lines {
+            line.start = shift(line.start);
+            for word in &mut line.words {
+                word.start = shift(word.start);
+            }
+        }
+    }
+
     lrc.lines.sort_by(|a, b| {
         a.start
             .partial_cmp(&b.start)
