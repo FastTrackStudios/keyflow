@@ -534,6 +534,65 @@ pub struct PageLayoutMetrics {
     pub margins: PageMargins,
 }
 
+/// A debug summary of the page layout (similar to LilyPond debug mode).
+impl std::fmt::Display for PageLayoutMetrics {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "=== Page {} Layout Metrics ===", self.page_number)?;
+        writeln!(
+            f,
+            "Page size: {:.1} × {:.1} points",
+            self.page_width, self.page_height
+        )?;
+        writeln!(
+            f,
+            "Margins: top={:.1}, bottom={:.1}, left={:.1}, right={:.1}",
+            self.margins.top, self.margins.bottom, self.margins.left, self.margins.right
+        )?;
+        writeln!(f, "Available height: {:.1} points", self.available_height)?;
+        writeln!(f, "Systems: {}", self.system_count)?;
+        writeln!(f)?;
+
+        if !self.system_y_positions.is_empty() {
+            writeln!(f, "System positions (from page top):")?;
+            for (i, y) in self.system_y_positions.iter().enumerate() {
+                writeln!(f, "  System {}: y={:.1}", i + 1, y)?;
+            }
+            writeln!(f)?;
+        }
+
+        if !self.inter_system_spacing.is_empty() {
+            writeln!(f, "Inter-system spacing:")?;
+            for (i, spacing) in self.inter_system_spacing.iter().enumerate() {
+                writeln!(
+                    f,
+                    "  Between {} and {}: {:.1} points",
+                    i + 1,
+                    i + 2,
+                    spacing
+                )?;
+            }
+            writeln!(f)?;
+        }
+
+        writeln!(
+            f,
+            "Top margin to first system: {:.1} points",
+            self.top_margin_to_first_system
+        )?;
+        writeln!(
+            f,
+            "Last system to bottom: {:.1} points",
+            self.last_system_to_bottom
+        )?;
+        writeln!(f, "Total content height: {:.1} points", self.content_height)?;
+        writeln!(
+            f,
+            "Remaining space: {:.1} points",
+            self.available_height - self.content_height
+        )
+    }
+}
+
 impl PageLayoutMetrics {
     /// Create metrics from a PageLayout.
     pub fn from_page(page: &PageLayout) -> Self {
@@ -590,53 +649,6 @@ impl PageLayoutMetrics {
             available_height,
             margins: page.margins,
         }
-    }
-
-    /// Print a debug summary of the page layout (similar to LilyPond debug mode).
-    pub fn print_debug(&self) {
-        println!("=== Page {} Layout Metrics ===", self.page_number);
-        println!(
-            "Page size: {:.1} × {:.1} points",
-            self.page_width, self.page_height
-        );
-        println!(
-            "Margins: top={:.1}, bottom={:.1}, left={:.1}, right={:.1}",
-            self.margins.top, self.margins.bottom, self.margins.left, self.margins.right
-        );
-        println!("Available height: {:.1} points", self.available_height);
-        println!("Systems: {}", self.system_count);
-        println!();
-
-        if !self.system_y_positions.is_empty() {
-            println!("System positions (from page top):");
-            for (i, y) in self.system_y_positions.iter().enumerate() {
-                println!("  System {}: y={:.1}", i + 1, y);
-            }
-            println!();
-        }
-
-        if !self.inter_system_spacing.is_empty() {
-            println!("Inter-system spacing:");
-            for (i, spacing) in self.inter_system_spacing.iter().enumerate() {
-                println!("  Between {} and {}: {:.1} points", i + 1, i + 2, spacing);
-            }
-            println!();
-        }
-
-        println!(
-            "Top margin to first system: {:.1} points",
-            self.top_margin_to_first_system
-        );
-        println!(
-            "Last system to bottom: {:.1} points",
-            self.last_system_to_bottom
-        );
-        println!("Total content height: {:.1} points", self.content_height);
-        println!(
-            "Remaining space: {:.1} points",
-            self.available_height - self.content_height
-        );
-        println!();
     }
 
     /// Check if the page has reasonable spacing.

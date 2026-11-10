@@ -1210,7 +1210,7 @@ C G Am F x8
     let metrics = result.page_metrics(1).expect("Should have page 1");
 
     println!("\n=== Inter-System Spacing Test ===");
-    metrics.print_debug();
+    println!("{metrics}");
 
     // All inter-system spacing should be equal (within 0.1 points)
     if metrics.inter_system_spacing.len() >= 2 {
@@ -1256,7 +1256,7 @@ C G Am F x8
             "\n=== Page {} Bottom Margin Test ===",
             page_metrics.page_number
         );
-        page_metrics.print_debug();
+        println!("{page_metrics}");
 
         // Last system should not overflow the bottom margin
         assert!(
@@ -1302,7 +1302,7 @@ C G Am F x4
     let warnings = metrics.check_spacing(20.0, 60.0);
 
     println!("\n=== Spacing Check Test ===");
-    metrics.print_debug();
+    println!("{metrics}");
 
     if warnings.is_empty() {
         println!("No spacing warnings - all systems properly spaced");
@@ -1366,7 +1366,7 @@ Em7 Am7 D7 Gmaj7
     println!();
 
     for metrics in result.all_page_metrics() {
-        metrics.print_debug();
+        println!("{metrics}");
 
         // Also show check results
         let warnings = metrics.check_spacing(15.0, 50.0);
