@@ -261,6 +261,10 @@ impl<'a> ChartParser<'a> {
                 self.section_beats_offset =
                     measures.iter().map(|m| f64::from(m.time_signature.0)).sum();
                 self.carried_measure = measures.last().cloned();
+                // A `->140bpm` inside the line records the bar it falls in
+                // counted from the line's start; shifted below to the
+                // section's count, which is what a reader of the chart means.
+                let tempo_changes_before = self.tempo_changes.len();
                 let mut line_measures = self.parse_chord_line_with_default_chord_length(
                     line,
                     section_type,
@@ -291,6 +295,10 @@ impl<'a> ChartParser<'a> {
                     line_measures[0].hairpins.append(&mut pending_hairpins);
                 }
 
+                let line_base = i32::try_from(measures.len()).unwrap_or(i32::MAX);
+                for change in &mut self.tempo_changes[tempo_changes_before..] {
+                    change.position.total_duration.measure += line_base;
+                }
                 measures.extend(line_measures);
             }
         }

@@ -15,6 +15,7 @@ use std::path::PathBuf;
 
 mod book;
 mod docs;
+mod follow;
 mod lyrics;
 mod orchestra;
 mod parts;
@@ -157,6 +158,29 @@ enum Commands {
         /// Output SVG path (page number appended for multi-page)
         #[arg(short, long, default_value = "chart.svg")]
         output: PathBuf,
+        /// Mark every bar with its time in the recording, so a page that
+        /// plays it follows the chart: `data-follow-playhead` on the SVG,
+        /// a `data-at` (seconds) rect over each bar as played. On by
+        /// itself when the chart sets `\downbeat` or `\media`, or with
+        /// any of the options below.
+        #[arg(long)]
+        follow: bool,
+        /// Seconds into the recording where bar 1 starts (overrides the
+        /// chart's `\downbeat`). The chart's tempo and meters place the rest.
+        #[arg(long, allow_hyphen_values = true)]
+        downbeat: Option<f64>,
+        /// The recording the times belong to (`data-media`; overrides the
+        /// chart's `\media`), relative to the page that shows the chart.
+        #[arg(long)]
+        media: Option<String>,
+        /// A Songsterr `sync.json`: each bar's measured start, in place of
+        /// the chart's tempo.
+        #[arg(long)]
+        sync: Option<PathBuf>,
+        /// The sync bar (0-based) that is the chart's bar 1. Default: 1 when
+        /// the sync opens with a short lead-in bar, else 0.
+        #[arg(long, requires = "sync")]
+        sync_first_bar: Option<usize>,
     },
     /// Render chart to SVG and print to stdout (for quick inspection)
     Render {
@@ -1388,6 +1412,19 @@ fn svg_to_png(svg: &str, scale: f32, font_bundle: &ChartFontBundle) -> Result<Ve
 /// Exits the process with status 1 on error (CLI semantics). Tracing/log
 /// setup is the caller's job — the `kf` binary installs an env-filter
 /// subscriber, `fts` installs its own.
+/// `kf svg`: the chart's A4 pages, each with its bars' times when
+/// following is asked for (by the options or the chart's header).
+fn svg_pages(source: &str, args: &follow::FollowArgs<'_>) -> Result<Vec<String>, String> {
+    let chart = parse_chart(source)?;
+    let pipeline = LayoutPipeline::new()?;
+    let layout = pipeline.layout(&chart);
+    let pages = pipeline.export_svg_pages(&layout);
+    Ok(match follow::follow_for(&chart, args)? {
+        Some(f) => keyflow::engraver::export::follow::add_follow_pages(&pages, &layout, &f),
+        None => pages,
+    })
+}
+
 pub fn cli_main<I, T>(args: I)
 where
     I: IntoIterator<Item = T>,
@@ -1575,13 +1612,26 @@ fn run(cli: Cli) -> Result<(), String> {
             Ok(())
         }
 
-        Commands::Svg { input, output } => {
+        Commands::Svg {
+            input,
+            output,
+            follow,
+            downbeat,
+            media,
+            sync,
+            sync_first_bar,
+        } => {
             let source = read_source(&input)?;
-            let chart = parse_chart(&source)?;
-            let pipeline = LayoutPipeline::new()?;
-            let layout = pipeline.layout(&chart);
-
-            let svg_pages = pipeline.export_svg_pages(&layout);
+            let svg_pages = svg_pages(
+                &source,
+                &follow::FollowArgs {
+                    follow,
+                    downbeat,
+                    media: media.as_deref(),
+                    sync: sync.as_deref(),
+                    sync_first_bar,
+                },
+            )?;
 
             if svg_pages.len() == 1 {
                 std::fs::write(&output, &svg_pages[0])
@@ -2458,7 +2508,79 @@ fn chordsheet_import(
 
 #[cfg(test)]
 mod tests {
-    use super::{melody_is_audible, melody_note_signature};
+    use super::{follow::FollowArgs, melody_is_audible, melody_note_signature, svg_pages};
+
+    /// `(bar, data-at)` of every follow rect, in document order.
+    fn bar_times(svg: &str) -> Vec<(u32, f64)> {
+        svg.split("<rect class=\"kf-bar\"")
+            .skip(1)
+            .map(|rect| {
+                let attr = |name: &str| {
+                    let i = rect.find(&format!("{name}=\"")).unwrap() + name.len() + 2;
+                    rect[i..i + rect[i..].find('"').unwrap()].to_owned()
+                };
+                (
+                    attr("data-bar").parse().unwrap(),
+                    attr("data-at").parse().unwrap(),
+                )
+            })
+            .collect()
+    }
+
+    /// `kf svg` on a chart with no timing asked for draws no follow marks.
+    #[test]
+    fn svg_without_follow_has_no_playhead_attributes() {
+        let pages = svg_pages(
+            "Song - Artist\n120bpm 4/4 #C\n\nVS 4\nC F G C\n",
+            &FollowArgs::default(),
+        )
+        .unwrap();
+        assert!(
+            pages
+                .iter()
+                .all(|p| !p.contains("data-follow-playhead") && !p.contains("data-at"))
+        );
+    }
+
+    /// The chart's header asks to follow; each bar is marked with its own
+    /// time, a repeat once per pass, and the tempo change moves the rest.
+    #[test]
+    fn svg_follow_marks_each_bar_with_its_time() {
+        let src = "Song - Artist\n120bpm 4/4 #C\n\\downbeat = 2\n\\media = \"song.mp3\"\n\n\
+                   Count 1\n\nVS 4\n|: C | G :| F C\n\nCH 2\n->60bpm F G\n";
+        let pages = svg_pages(src, &FollowArgs::default()).unwrap();
+        assert_eq!(pages.len(), 1);
+        let svg = &pages[0];
+        assert!(svg.contains("<svg data-follow-playhead=\"\" data-media=\"song.mp3\" "));
+        assert_eq!(
+            bar_times(svg),
+            vec![
+                (1, 2.0),
+                (2, 4.0),
+                (1, 6.0),
+                (2, 8.0),
+                (3, 10.0),
+                (4, 12.0),
+                (5, 14.0),
+                (6, 18.0),
+            ]
+        );
+    }
+
+    /// The command line overrides the header's downbeat and media.
+    #[test]
+    fn svg_follow_options_override_the_header() {
+        let src = "Song - Artist\n60bpm 3/4 #C\n\\downbeat = 5\n\nVS 2\nC G\n";
+        let args = FollowArgs {
+            downbeat: Some(1.0),
+            media: Some("take 2.mp3"),
+            ..FollowArgs::default()
+        };
+        let svg = &svg_pages(src, &args).unwrap()[0];
+        assert!(svg.contains("data-media=\"take 2.mp3\""));
+        assert_eq!(bar_times(svg), vec![(1, 1.0), (2, 4.0)]);
+    }
+
     use keyflow::chart::melody::{Melody, MelodyNote};
 
     /// A note is the same musical event whether or not it sits in the middle of
