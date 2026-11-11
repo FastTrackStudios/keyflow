@@ -182,7 +182,7 @@ pub fn add_follow_pages(
 
 /// The bars are invisible until current; a click anywhere on one lands on
 /// it (`pointer-events: all` on a fill nobody sees).
-const STYLE: &str = "  <style>.kf-bar{fill:#f5a623;fill-opacity:0;pointer-events:all;cursor:pointer}.kf-bar[aria-current=\"time\"]{fill-opacity:0.18}</style>\n";
+const STYLE: &str = "  <style>.kf-bar{fill:#f5a623;fill-opacity:0;pointer-events:all;cursor:pointer}.kf-bar[aria-current=time]{fill-opacity:0.18}</style>\n";
 
 fn escape_attr(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
