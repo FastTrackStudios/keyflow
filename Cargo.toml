@@ -34,7 +34,7 @@ members = [
 
 [workspace.package]
 # Tracks the release tag. Bump this with the tag.
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 rust-version = "1.87"
 authors = ["FastTrack Studio"]
@@ -75,9 +75,13 @@ engraver = { path = "features/engraver", default-features = false }
 # engrave; editor-state knows nothing about keyflow, which is what keeps
 # the graph acyclic.
 # Not the markdown fences (Typst, Mermaid): nothing here renders them.
-editor-state = { git = "https://github.com/FastTrackStudios/editor", rev = "81451ea7d72069195ca28f66274411e525c11ae0", default-features = false }
-editor-view = { git = "https://github.com/FastTrackStudios/editor", rev = "81451ea7d72069195ca28f66274411e525c11ae0", default-features = false }
-editor-vim = { git = "https://github.com/FastTrackStudios/editor", rev = "81451ea7d72069195ca28f66274411e525c11ae0" }
+# Pinned at the revision architect v0.12.0 pins, on the `www.` host: its
+# workspace-hack names `editor-view` there, so any other source or revision
+# would be a second editor in the graph (and in studio's). Move with
+# architect's pin.
+editor-state = { git = "https://www.github.com/FastTrackStudios/editor", rev = "6817dc2c709fbb5a7858229592bbbc85eed49528", default-features = false }
+editor-view = { git = "https://www.github.com/FastTrackStudios/editor", rev = "6817dc2c709fbb5a7858229592bbbc85eed49528", default-features = false }
+editor-vim = { git = "https://www.github.com/FastTrackStudios/editor", rev = "6817dc2c709fbb5a7858229592bbbc85eed49528" }
 
 # ── features/editor — this repo's half of the editor integration ──────
 # It needs `editor-state` from below and `keyflow-lang`/`engraver` from
@@ -120,16 +124,16 @@ vox = { version = "0.10.0-rc.7", default-features = false, features = ["runtime"
 # a split revision checks that repo out twice, and cargo treats the two
 # checkouts as different crates whose traits then refuse to unify.
 #
-# architect v0.11.2, by tag: studio pins the same tag, and a `rev` of the
+# architect v0.12.0, by tag: studio pins the same tag, and a `rev` of the
 # same commit would be a second architect source in studio's lock.
-architect = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.11.2" }
+architect = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.12.0" }
 
 # The shared musical vocabulary — section colours and the canonical
 # palettes `keyflow-proto` engraves section cards with.
 music-catalog = { git = "https://github.com/FastTrackStudios/music-convention", tag = "v0.1.0" }
 color-palette = { git = "https://github.com/FastTrackStudios/music-convention", tag = "v0.1.0" }
 # The Dioxus primitive library (was libs/ui/fts-ui, renamed on the split).
-architect-ui = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.11.2" }
+architect-ui = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.12.0" }
 # ── MusicXML parsing (keyflow) ─────────────────────────────────────────
 musicxml = "1.1"
 
@@ -239,19 +243,19 @@ dioxus-vdom = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.7.
 # lets it patch the plain one; a same-host patch is refused. Bump this revision
 # with the pins above; drop the block once keyflow takes daw from studio.
 [patch."https://github.com/FastTrackStudios/architect"]
-architect = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.11.2" }
-architect-action-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.11.2" }
-architect-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.11.2" }
-architect-permissions = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.11.2" }
-architect-rpc-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.11.2" }
-architect-story-core = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.11.2" }
-architect-story-macros = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.11.2" }
-architect-story-runtime = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.11.2" }
-architect-ui = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.11.2" }
+architect = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.12.0" }
+architect-action-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.12.0" }
+architect-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.12.0" }
+architect-permissions = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.12.0" }
+architect-rpc-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.12.0" }
+architect-story-core = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.12.0" }
+architect-story-macros = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.12.0" }
+architect-story-runtime = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.12.0" }
+architect-ui = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.12.0" }
 # Reached both through the patched crates above and through the unpatched
 # ones (architect-workspace, -shell): unpatched, each lands twice in the lock.
-architect-theme = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.11.2" }
-architect-workspace-hack = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.11.2" }
+architect-theme = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.12.0" }
+architect-workspace-hack = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.12.0" }
 
 [workspace.lints.rust]
 # Flipped from "allow" 2026-07-28 (task cleanup): the blanket allows are
