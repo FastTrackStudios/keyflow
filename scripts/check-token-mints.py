@@ -123,10 +123,16 @@ def check(root: Path) -> tuple[list[str], list[str]]:
                     continue
                 keys = step_keys(lines, i)
                 repos = tuple(r for r in re.split(r"[,\s]+", keys.get("repositories", "")) if r)
-                if repos != tuple(rule["repos"]):
-                    bad.append(f"{where}: repositories must be {','.join(rule['repos'])}, is {','.join(repos) or 'missing'}")
-                if len(repos) != 1 and not rule.get("legacy"):
-                    bad.append(f"{where}: a bot token is minted for exactly one repository")
+                # A bot mint names exactly one of its job's repositories (a job
+                # that wakes three repos mints three tokens); a LEGACY one
+                # names exactly its listed set.
+                if rule.get("legacy"):
+                    if repos != tuple(rule["repos"]):
+                        bad.append(f"{where}: repositories must be {','.join(rule['repos'])}, is {','.join(repos) or 'missing'}")
+                elif len(repos) != 1:
+                    bad.append(f"{where}: a bot token is minted for exactly one repository, is {','.join(repos) or 'missing'}")
+                elif repos[0] not in rule["repos"]:
+                    bad.append(f"{where}: repository {repos[0]} is not one of {','.join(rule['repos'])}")
                 asked = {k[len("permission-"):]: v for k, v in keys.items() if k.startswith("permission-")}
                 if not asked:
                     bad.append(f"{where}: no permission-* (the token would get every permission the App has)")
