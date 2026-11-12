@@ -29,6 +29,24 @@ fmt:
 fmt-check:
     cargo fmt --all --check
 
+# ── The Architect pin ────────────────────────────────────────────────
+# Move every Architect pin to TAG: the [workspace.dependencies] pins, the
+# [patch] table, features/ui's architect-workspace, the comments and
+# AGENTS.md lines that name the tag, and Cargo.lock (cargo resolves the
+# edit; nothing compiles). `--version X.Y.Z` also sets the workspace
+# version, for a keyflow release. Exit 3: done, but Architect moved a pin
+# this repo follows (editor, dioxus, blitz) and a person must move it.
+# The bot (.github/workflows/bump-architect.yml) runs exactly this.
+# Move every Architect pin and Cargo.lock to TAG (e.g. v0.12.5)
+bump-architect TAG *ARGS:
+    python3 scripts/bump-architect.py {{TAG}} {{ARGS}}
+
+# keyflow#67's replay must equal the merged commit, Cargo.lock included;
+# keyflow#61's must say "needs a person".
+# Test the bump script against real bumps (keyflow#67, #61)
+bump-architect-test:
+    bash scripts/bump-architect-replay.sh
+
 # ── wasm ─────────────────────────────────────────────────────────────
 # Task's and Studio's web apps build these crates for the browser, and
 # `cargo check --workspace` builds them for the host, where every

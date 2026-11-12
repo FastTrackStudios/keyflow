@@ -27,6 +27,23 @@ daw = { path = "../daw/crates/daw/daw" }
 
 Never commit those overrides — the paths are machine-specific.
 
+## Moving the Architect pin
+
+`just bump-architect vX.Y.Z` moves every Architect pin (the
+`[workspace.dependencies]` entries, the `[patch]` table, `features/ui`'s
+`architect-workspace`, the comments and the table above) and `Cargo.lock`
+in one go; `--version X.Y.Z` also sets the workspace version for a keyflow
+release. It exits 3 when Architect moved a pin this repo follows (the
+editor revision, dioxus, blitz): the rest is done, and a person moves that
+one. `just bump-architect-test` replays keyflow#67 and #61.
+
+When Architect releases a stable tag, `.github/workflows/bump-architect.yml`
+runs the same command and opens `bump/architect-<tag>`; a mechanical bump
+merges itself once `PR checks` and `CI passed` are green, and a failing one
+stays open with the failed jobs named. It is inert until the repo variable
+`ARCHITECT_BUMP` is `on` (the header of the workflow lists what else it
+needs). It never tags: a keyflow release is still a person's step.
+
 ## Layout
 
 One directory per crate under `features/`, named for the feature. A crate

@@ -1,0 +1,233 @@
+# The Architect pin bump, by the bot: when Architect releases a stable tag,
+# a PR here moves every Architect pin to it (scripts/bump-architect.py, the
+# same `just bump-architect vX.Y.Z` a person runs) and merges itself once
+# its checks are green, if the bump was mechanical.
+#
+#   prepare  (no secrets) resolves the tag (the input, or Architect's latest
+#            stable release), runs the script, and hands the diff on as an
+#            artifact. Exit 3 from the script (Architect moved a pin this
+#            repo follows: the editor, dioxus, blitz) still opens the PR,
+#            without auto-merge, with the reasons in its body.
+#   open     (environment `pin-bump`) mints a short-lived fts-forge token
+#            for THIS repo only (contents + pull-requests write), pushes
+#            `bump/architect-<tag>`, opens or updates the PR, and turns on
+#            auto-merge (squash) when the bump is mechanical. Branch
+#            protection holds the merge until `PR checks` and `CI passed`.
+#   explain  when CI fails on a bump branch: turns auto-merge off and says
+#            which jobs failed. A failing bump stays open for a person.
+#
+# Triggers: Architect's release dispatches it (`gh workflow run
+# bump-architect.yml -f tag=vX.Y.Z`, architect release.yml job `dispatch`);
+# an hourly run catches a missed dispatch; by hand from the Actions tab.
+#
+# INERT until the owner sets, on this repo:
+#   - variable ARCHITECT_BUMP = on
+#   - variable FORGE_APP_ID   = the fts-forge App's id
+#   - environment `pin-bump`, deployment branches: main only, with the
+#     secret FORGE_APP_PRIVATE_KEY (the fts-forge App's key)
+#   - Settings > General > "Allow auto-merge" (off today)
+# Without ARCHITECT_BUMP every job is skipped. Nothing here creates a tag:
+# a keyflow release stays a person's step.
+name: bump-architect
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Architect release tag (vX.Y.Z); empty = Architect's latest stable release
+        required: false
+        type: string
+  schedule:
+    - cron: "17 * * * *"
+  workflow_run:
+    workflows: [CI, PR]
+    types: [completed]
+    branches: ["bump/architect-*"]
+
+permissions: {}
+
+concurrency:
+  group: bump-architect-${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || 'open' }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare the bump
+    if: ${{ vars.ARCHITECT_BUMP == 'on' && github.event_name != 'workflow_run' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      changed: ${{ steps.bump.outputs.changed }}
+      status: ${{ steps.bump.outputs.status }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Which tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          tag="${INPUT_TAG:-}"
+          if [ -z "$tag" ]; then
+            # `releases/latest` is the newest release that is neither a
+            # draft nor a pre-release.
+            tag="$(gh api repos/FastTrackStudios/architect/releases/latest --jq .tag_name)"
+          fi
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::'$tag' is not a stable release tag (vX.Y.Z): no bump"
+            exit 1
+          fi
+          pre="$(gh api "repos/FastTrackStudios/architect/releases/tags/$tag" --jq '.prerelease or .draft')"
+          if [ "$pre" != false ]; then
+            echo "::error::$tag is a draft or a pre-release on GitHub: no bump"
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: toolchain
+        run: rustup show active-toolchain
+      - name: Restore cargo's dependencies
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-deps-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-deps-${{ runner.os }}-
+      - name: just bump-architect
+        id: bump
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -uo pipefail
+          status=0
+          python3 scripts/bump-architect.py "$TAG" --report "$RUNNER_TEMP/report.md" || status=$?
+          if [ "$status" -ne 0 ] && [ "$status" -ne 3 ]; then
+            echo "::error::bump-architect refused $TAG (exit $status)"
+            exit 1
+          fi
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          mkdir -p "$RUNNER_TEMP/bump"
+          git diff --binary > "$RUNNER_TEMP/bump/bump.patch"
+          touch "$RUNNER_TEMP/report.md"
+          cp "$RUNNER_TEMP/report.md" "$RUNNER_TEMP/bump/report.md"
+          if [ -s "$RUNNER_TEMP/bump/bump.patch" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "already on $TAG: nothing to do" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: ${{ steps.bump.outputs.changed == 'true' }}
+        with:
+          name: bump
+          path: ${{ runner.temp }}/bump
+          retention-days: 7
+
+  open:
+    name: Open the bump PR
+    needs: prepare
+    if: ${{ needs.prepare.outputs.changed == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: pin-bump
+    permissions: {}
+    steps:
+      - name: fts-forge token (this repo only)
+        id: forge
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.FORGE_APP_ID }}
+          private-key: ${{ secrets.FORGE_APP_PRIVATE_KEY }}
+          owner: FastTrackStudios
+          repositories: keyflow
+          permission-contents: write
+          permission-pull-requests: write
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ steps.forge.outputs.token }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: bump
+          path: ${{ runner.temp }}/bump
+      - name: Push the branch, open the PR
+        env:
+          GH_TOKEN: ${{ steps.forge.outputs.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          STATUS: ${{ needs.prepare.outputs.status }}
+        run: |
+          set -euo pipefail
+          git apply --index "$RUNNER_TEMP/bump/bump.patch"
+          branch="bump/architect-$TAG"
+          title="build(deps): architect $TAG by tag"
+          export GIT_AUTHOR_NAME="fts-forge[bot]" GIT_COMMITTER_NAME="fts-forge[bot]"
+          export GIT_AUTHOR_EMAIL="345159799+fts-forge[bot]@users.noreply.github.com" GIT_COMMITTER_EMAIL="345159799+fts-forge[bot]@users.noreply.github.com"
+          git commit -qm "$title" -m "Every Architect pin (and the [patch] table) moves to $TAG: scripts/bump-architect.py $TAG, run by bump-architect.yml."
+          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/$branch"
+          if [ "$STATUS" = 0 ]; then
+            verdict="Mechanical: only the pins, the comments that name them and \`Cargo.lock\` changed. Auto-merge is on: it merges once \`PR checks\` and \`CI passed\` are green. If CI fails, the bump needs source changes and stays open for a person."
+          else
+            verdict="**Needs a person** (auto-merge is off):"$'\n\n'"$(cat "$RUNNER_TEMP/bump/report.md")"
+          fi
+          body="Moves every Architect pin to [$TAG](https://github.com/FastTrackStudios/architect/releases/tag/$TAG) (\`just bump-architect $TAG\`)."$'\n\n'"$verdict"$'\n\n'"Opened by \`.github/workflows/bump-architect.yml\` (run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID). No keyflow release is cut: tagging stays a person's step."
+          pr="$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$pr" ]; then
+            gh pr edit "$pr" --title "$title" --body "$body"
+          else
+            gh pr create --base main --head "$branch" --title "$title" --body "$body"
+            pr="$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')"
+          fi
+          if [ "$STATUS" = 0 ]; then
+            gh pr merge "$pr" --auto --squash
+          else
+            gh pr merge "$pr" --disable-auto 2>/dev/null || true
+          fi
+          echo "PR #$pr ($branch), $([ "$STATUS" = 0 ] && echo 'auto-merge on' || echo 'needs a person')" >> "$GITHUB_STEP_SUMMARY"
+
+  explain:
+    name: A failed bump stays open
+    if: >-
+      vars.ARCHITECT_BUMP == 'on' &&
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      startsWith(github.event.workflow_run.head_branch, 'bump/architect-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: pin-bump
+    permissions: {}
+    steps:
+      - name: fts-forge token (this repo only)
+        id: forge
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.FORGE_APP_ID }}
+          private-key: ${{ secrets.FORGE_APP_PRIVATE_KEY }}
+          owner: FastTrackStudios
+          repositories: keyflow
+          permission-pull-requests: write
+          permission-actions: read
+          permission-contents: write
+      - name: Auto-merge off, say why
+        env:
+          GH_TOKEN: ${{ steps.forge.outputs.token }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          WORKFLOW: ${{ github.event.workflow_run.name }}
+        run: |
+          set -euo pipefail
+          pr="$(gh pr list -R "$GITHUB_REPOSITORY" --head "$BRANCH" --state open --json number,author --jq '.[] | select(.author.login == "app/fts-forge") | .number' | head -1)"
+          [ -n "$pr" ] || { echo "no open bot PR from $BRANCH"; exit 0; }
+          gh pr merge "$pr" -R "$GITHUB_REPOSITORY" --disable-auto 2>/dev/null || true
+          failed="$(gh run view "$RUN_ID" -R "$GITHUB_REPOSITORY" --json jobs --jq '.jobs[] | select(.conclusion == "failure") | "- \(.name)"')"
+          gh pr comment "$pr" -R "$GITHUB_REPOSITORY" --body "$WORKFLOW failed on this bump ($RUN_URL), so it is not mechanical: auto-merge is off and it waits for a person (a source change on this branch, or a keyflow fix first)."$'\n\n'"Failed jobs:"$'\n'"${failed:-(none reported)}"
