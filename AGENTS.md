@@ -8,9 +8,9 @@ the `architect` / `daw` / `vendor` splits before it.
 |---|---|---|
 | **keyflow** (here) | the chart language, its formats, the LSP + grammar, and Engraver | — |
 | [daw](https://github.com/FastTrackStudios/daw) | the DAW platform and shared substrate | git dep, tag `v0.0.7` |
-| [architect](https://github.com/FastTrackStudios/architect) | the framework (entity/RPC, atom, form, auth, permissions, crdt), `architect-ui` | git dep, tag `v0.12.0` (same tag studio pins) |
+| [architect](https://github.com/FastTrackStudios/architect) | the framework (entity/RPC, atom, form, auth, permissions, crdt), `architect-ui` | git dep, tag `v0.12.2` (same tag studio pins) |
 | [session](https://github.com/FastTrackStudios/session) | the musical/production vocabulary and the Session app | consumes this repo |
-| [editor](https://github.com/FastTrackStudios/editor) | the embeddable text/markdown editor — sits BELOW this repo | git dep, pinned by `rev` (`6817dc2`, architect v0.12.0's) |
+| [editor](https://github.com/FastTrackStudios/editor) | the embeddable text/markdown editor — sits BELOW this repo | git dep, pinned by `rev` (`6817dc2`, architect v0.12.2's) |
 
 One root Cargo workspace, one lockfile, one `target/`, one flake.
 Intra-repo dependencies are path deps in root `[workspace.dependencies]`,
