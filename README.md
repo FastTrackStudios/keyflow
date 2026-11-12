@@ -91,6 +91,21 @@ Never commit those overrides — the paths are machine-specific.
 against them. Keyflow's own `keyflow-proto` (with `syntax` folded in) is
 the authority; daw's copies come out once its consumers are repointed.
 
+## Run it
+
+Keyflow's charts show on Studio's node (a shared setlist's charts, a
+song's workspace), so these run Studio's local stack (`../studio`, or
+`LOCAL_STACK_STUDIO_PATH`) with THIS checkout as its Keyflow
+(`studio:docs/local-stack.md`):
+
+```bash
+just dev       # everything, rebuilt on save: an engraver change shows on the share page
+just demo      # the quickest look, nothing watched
+just website   # says where the website lives (Architect's apps/site) and how to run it
+```
+
+The same names mean the same in Studio and Architect.
+
 ## Build
 
 ```bash

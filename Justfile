@@ -1,9 +1,35 @@
 # keyflow — root workspace recipes
 # Run commands: just <recipe-name>
 
-# List recipes by default
+# List recipes by default: the three that run it first (file order).
 default:
-    @just --list
+    @just --list --unsorted
+
+# ── Run it: Studio's local stack (docs/local-stack.md in Studio) ──
+# The same three recipes, with the same meaning, in Keyflow, Studio and
+# Architect. Keyflow has no app of its own: its charts show on Studio's
+# node (a share page's charts, a song's workspace), so `dev` and `demo`
+# run Studio's stack with THIS checkout as its Keyflow (`keyflow=local`).
+# Studio's checkout: LOCAL_STACK_STUDIO_PATH, else ../studio. Arguments go
+# to Studio's `just dev` (architect=local, desktop=on, watch=off).
+
+# Everything locally, rebuilt on save: Studio's node with this Keyflow (charts on its share page), issuer, web app, site
+dev *ARGS:
+    @bash scripts/run-it.sh dev {{ARGS}}
+
+# See it working, quickly: Studio's node with this Keyflow on the test vault and its share link, no watchers
+demo *ARGS:
+    @bash scripts/run-it.sh demo {{ARGS}}
+
+# The public website lives in Architect (apps/site): says how to run it
+website:
+    @echo "Keyflow has no website of its own: the public site is Architect's (apps/site)."
+    @echo "Run it from Architect:   cd ../architect && just website"
+    @echo "or from Studio's stack:  cd ../studio && just website"
+
+# The running Studio stack's node on this tailnet over HTTPS for a phone (tailscale serve, never funnel); `just phone off`
+phone *ARGS:
+    @bash scripts/run-it.sh phone {{ARGS}}
 
 # ── Build / test ─────────────────────────────────────────────────────────
 
