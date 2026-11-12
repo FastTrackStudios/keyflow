@@ -157,10 +157,19 @@ def lock_packages(text: str) -> dict[tuple[str, str], str]:
     return out
 
 
+CRATES_IO = {"registry+https://github.com/rust-lang/crates.io-index", "sparse+https://index.crates.io/"}
+
+
 def git_repos(packages: dict[tuple[str, str], str]) -> set[str]:
-    """The git repositories a lock's packages come from (host-insensitive)."""
-    return {re.sub(r"^git\+https://(www\.)?", "", src).split("?")[0].split("#")[0].lower()
-            for src in packages.values() if src.startswith("git+")}
+    """Every non-crates.io source of a lock (scripts/lock-sources.sh's rule):
+    git of any scheme or host spelling, or another registry."""
+    out = set()
+    for src in packages.values():
+        if not src or src in CRATES_IO:
+            continue
+        s = re.split(r"[?#]", src)[0].replace("://www.", "://")
+        out.add(re.sub(r"\.git$", "", s).lower())
+    return out
 
 
 def seed_from_upstream(before: dict, upstream_lock: str) -> list[str]:
@@ -285,7 +294,7 @@ def main() -> int:
                 print(f"  seeded: {note}")
         new_repos = git_repos(lock_packages((ROOT / "Cargo.lock").read_text())) - git_repos(before)
         if new_repos:
-            moves.append("Cargo.lock gained git source repositories it did not have: "
+            moves.append("Cargo.lock gained sources other than crates.io it did not have: "
                          + ", ".join(sorted(new_repos)) + " (unreviewed code: a person looks first)")
         stale = [line for line in (ROOT / "Cargo.lock").read_text().splitlines()
                  if f"{ARCHITECT}?tag={old}#" in line]

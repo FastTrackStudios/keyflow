@@ -252,9 +252,10 @@ jobs:
           set -euo pipefail
           if [ -n "$PR_HEAD" ]; then
             # Only over the bot's own commit: a branch a person pushed to is theirs.
-            author="$(gh api "repos/$GITHUB_REPOSITORY/commits/$PR_HEAD" --jq '.author.login // ""')"
-            if [ "$author" != "fts-forge[bot]" ]; then
-              echo "PR #$PR's head is $author's commit: left alone" | tee -a "$GITHUB_STEP_SUMMARY"; exit 0
+            read -r pusher pushed < <(gh api "repos/$GITHUB_REPOSITORY/activity?ref=refs/heads/$BRANCH&per_page=1" \
+              --jq '.[0] | "\(.actor.login) \(.after)"')
+            if [ "$pusher" != "fts-forge[bot]" ] || [ "$pushed" != "$PR_HEAD" ]; then
+              echo "PR #$PR's head was pushed by $pusher: left alone" | tee -a "$GITHUB_STEP_SUMMARY"; exit 0
             fi
           fi
           git apply --index "$RUNNER_TEMP/bump/bump.patch"
@@ -309,6 +310,7 @@ jobs:
       contents: read
       pull-requests: write
       actions: read
+      checks: read
     steps:
       - name: Runs in the pin-bump environment, with its key
         env:
@@ -319,6 +321,12 @@ jobs:
             echo "::error::this job must run in the 'pin-bump' environment (variable BOT_ENVIRONMENT=pin-bump, secret PIN_BUMP_APP_KEY); got '${BOT_ENVIRONMENT:-}', key set: $KEY_SET"
             exit 1
           fi
+      # main's scripts only (never the bump branch's).
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: main
+          sparse-checkout: scripts
+          persist-credentials: false
       - name: Green, marked, the bot's, on the allow-list?
         id: judge
         env:
@@ -346,17 +354,28 @@ jobs:
             gh pr edit "$pr" -R "$GITHUB_REPOSITORY" --body "${body//<!-- bump:mechanical -->/}"
             exit 0
           fi
-          [ "$WORKFLOW" = CI ] || { echo "$WORKFLOW passed; CI decides"; exit 0; }
-          [ "$(jq -r .headRefOid <<<"$pr_json")" = "$HEAD_SHA" ] || { echo "CI ran on $HEAD_SHA, not the PR's head"; exit 0; }
+          [ "$(jq -r .headRefOid <<<"$pr_json")" = "$HEAD_SHA" ] || { echo "$WORKFLOW ran on $HEAD_SHA, not the PR's head"; exit 0; }
+          # Both required checks green on this head, whichever finished last
+          # (this job runs on either one's completion; the later one merges).
+          for check in "PR checks" "CI passed"; do
+            c="$(gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/check-runs?per_page=100" \
+              --jq "[.check_runs[] | select(.name == \"$check\")] | sort_by(.completed_at) | last | .conclusion // \"pending\"")"
+            [ "$c" = success ] || { echo "'$check' is $c on $HEAD_SHA: waiting for it"; exit 0; }
+          done
           jq -e '.body | contains("<!-- bump:mechanical -->")' <<<"$pr_json" >/dev/null || { echo "not marked mechanical: a person merges it"; exit 0; }
           if jq -e '.labels | map(.name) | index("hold")' <<<"$pr_json" >/dev/null; then echo "labelled hold"; exit 0; fi
-          author="$(gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA" --jq '.author.login // ""')"
-          [ "$author" = "fts-forge[bot]" ] || { echo "the head is $author's commit: a person merges it"; exit 0; }
+          # Who PUSHED the head (the repository's activity, not the commit's
+          # free-text author email): the bot, and nobody after it.
+          read -r pusher pushed < <(gh api "repos/$GITHUB_REPOSITORY/activity?ref=refs/heads/$BRANCH&per_page=1" \
+            --jq '.[0] | "\(.actor.login) \(.after)"')
+          [ "$pusher" = "fts-forge[bot]" ] && [ "$pushed" = "$HEAD_SHA" ] \
+            || { echo "the last push to $BRANCH was $pusher's ($pushed): a person merges it"; exit 0; }
           others="$(gh pr diff "$pr" -R "$GITHUB_REPOSITORY" --name-only | grep -vxE 'Cargo\.toml|.*/Cargo\.toml|Cargo\.lock|AGENTS\.md' || true)"
           [ -z "$others" ] || { echo "files outside the allow-list: $others"; exit 0; }
-          repos() { sed -n 's|.*source = "git+https://\(www\.\)\{0,1\}\([^?#"]*\).*|\2|p' | tr '[:upper:]' '[:lower:]' | sort -u; }
-          gh api -H "Accept: application/vnd.github.raw" "repos/$GITHUB_REPOSITORY/contents/Cargo.lock?ref=main" | repos > "$RUNNER_TEMP/main-repos"
-          gh api -H "Accept: application/vnd.github.raw" "repos/$GITHUB_REPOSITORY/contents/Cargo.lock?ref=$HEAD_SHA" | repos > "$RUNNER_TEMP/pr-repos"
+          # Every source that is not crates.io (scripts/lock-sources.sh, from
+          # main): git of any scheme or spelling, or another registry.
+          gh api -H "Accept: application/vnd.github.raw" "repos/$GITHUB_REPOSITORY/contents/Cargo.lock?ref=main" | bash scripts/lock-sources.sh > "$RUNNER_TEMP/main-repos"
+          gh api -H "Accept: application/vnd.github.raw" "repos/$GITHUB_REPOSITORY/contents/Cargo.lock?ref=$HEAD_SHA" | bash scripts/lock-sources.sh > "$RUNNER_TEMP/pr-repos"
           added="$(comm -13 "$RUNNER_TEMP/main-repos" "$RUNNER_TEMP/pr-repos")"
           [ -z "$added" ] || { echo "new git sources in Cargo.lock: $added"; exit 0; }
           { echo "merge=true"; echo "pr=$pr"; } >> "$GITHUB_OUTPUT"
