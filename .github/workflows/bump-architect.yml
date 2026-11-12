@@ -20,14 +20,29 @@
 # bump-architect.yml -f tag=vX.Y.Z`, architect release.yml job `dispatch`);
 # an hourly run catches a missed dispatch; by hand from the Actions tab.
 #
+# A PATCH release (v0.12.4 -> v0.12.5) only keeps keyflow's own CI on the
+# newest Architect: Studio does not wait for it (it patches keyflow's
+# www-spelled pins to its own tag). A MINOR also sets the next keyflow
+# version (`--version auto`), because Studio needs a keyflow release on it:
+# after the merge, a person runs `just release-tag` (scripts/release-tag.sh).
+#
+# Tokens (the fts-forge App is broad, so each token is narrowed when it is
+# minted, and lives in one step's environment only: never a file, an
+# output or an artifact; checkouts use the workflow's own GITHUB_TOKEN):
+#   open     FastTrackStudios/keyflow only: contents write (push the
+#            branch), pull-requests write (open the PR, arm auto-merge: the
+#            merge it makes must be the App's, or main's CI would not run).
+#   explain  no App token: GITHUB_TOKEN (pull-requests write, actions read).
+# scripts/check-token-mints.py (pr.yml) fails a mint outside that list.
+#
 # INERT until the owner sets, on this repo:
 #   - variable ARCHITECT_BUMP = on
-#   - variable FORGE_APP_ID   = the fts-forge App's id
+#   - variable FORGE_APP_ID = the fts-forge App's id
 #   - environment `pin-bump`, deployment branches: main only, with the
-#     secret FORGE_APP_PRIVATE_KEY (the fts-forge App's key)
+#     secret FORGE_APP_PRIVATE_KEY (the fts-forge App's key, in this
+#     environment only, never a repo or org secret shared with keyflow)
 #   - Settings > General > "Allow auto-merge" (off today)
-# Without ARCHITECT_BUMP every job is skipped. Nothing here creates a tag:
-# a keyflow release stays a person's step.
+# Without ARCHITECT_BUMP every job is skipped. Nothing here creates a tag.
 name: bump-architect
 
 on:
@@ -62,6 +77,7 @@ jobs:
       tag: ${{ steps.tag.outputs.tag }}
       changed: ${{ steps.bump.outputs.changed }}
       status: ${{ steps.bump.outputs.status }}
+      kind: ${{ steps.bump.outputs.kind }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -108,7 +124,13 @@ jobs:
         run: |
           set -uo pipefail
           status=0
-          python3 scripts/bump-architect.py "$TAG" --report "$RUNNER_TEMP/report.md" || status=$?
+          cur="$(sed -n 's/^architect = .*tag = "\(v[^"]*\)".*/\1/p' Cargo.toml)"
+          extra=()
+          kind="patch"
+          # A minor (vX.Y changes) needs a keyflow release: set its version.
+          if [ "${cur%.*}" != "${TAG%.*}" ]; then kind="minor"; extra=(--version auto); fi
+          echo "kind=$kind" >> "$GITHUB_OUTPUT"
+          python3 scripts/bump-architect.py "$TAG" "${extra[@]}" --report "$RUNNER_TEMP/report.md" || status=$?
           if [ "$status" -ne 0 ] && [ "$status" -ne 3 ]; then
             echo "::error::bump-architect refused $TAG (exit $status)"
             exit 1
@@ -138,7 +160,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: pin-bump
-    permissions: {}
+    permissions:
+      contents: read
     steps:
       - name: fts-forge token (this repo only)
         id: forge
@@ -153,7 +176,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
-          token: ${{ steps.forge.outputs.token }}
           persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
@@ -164,6 +186,7 @@ jobs:
           GH_TOKEN: ${{ steps.forge.outputs.token }}
           TAG: ${{ needs.prepare.outputs.tag }}
           STATUS: ${{ needs.prepare.outputs.status }}
+          KIND: ${{ needs.prepare.outputs.kind }}
         run: |
           set -euo pipefail
           git apply --index "$RUNNER_TEMP/bump/bump.patch"
@@ -178,7 +201,12 @@ jobs:
           else
             verdict="**Needs a person** (auto-merge is off):"$'\n\n'"$(cat "$RUNNER_TEMP/bump/report.md")"
           fi
-          body="Moves every Architect pin to [$TAG](https://github.com/FastTrackStudios/architect/releases/tag/$TAG) (\`just bump-architect $TAG\`)."$'\n\n'"$verdict"$'\n\n'"Opened by \`.github/workflows/bump-architect.yml\` (run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID). No keyflow release is cut: tagging stays a person's step."
+          body="Moves every Architect pin to [$TAG](https://github.com/FastTrackStudios/architect/releases/tag/$TAG) (\`just bump-architect $TAG\`)."$'\n\n'"$verdict"$'\n\n'"Opened by \`.github/workflows/bump-architect.yml\` (run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
+          if [ "$KIND" = minor ]; then
+            body="$body"$'\n\n'"**An Architect minor:** this sets the next keyflow version. Studio needs a keyflow release on it: after the merge, run \`just release-tag\`."
+          else
+            body="$body"$'\n\n'"An Architect patch release: Studio takes it without a keyflow release (it patches keyflow's www-spelled pins). This bump only keeps keyflow's own CI current; no tag needed."
+          fi
           pr="$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')"
           if [ -n "$pr" ]; then
             gh pr edit "$pr" --title "$title" --body "$body"
@@ -203,23 +231,15 @@ jobs:
       startsWith(github.event.workflow_run.head_branch, 'bump/architect-')
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    environment: pin-bump
-    permissions: {}
+    # No App token: the workflow's own token can comment, turn auto-merge
+    # off and read the failed run.
+    permissions:
+      pull-requests: write
+      actions: read
     steps:
-      - name: fts-forge token (this repo only)
-        id: forge
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ vars.FORGE_APP_ID }}
-          private-key: ${{ secrets.FORGE_APP_PRIVATE_KEY }}
-          owner: FastTrackStudios
-          repositories: keyflow
-          permission-pull-requests: write
-          permission-actions: read
-          permission-contents: write
       - name: Auto-merge off, say why
         env:
-          GH_TOKEN: ${{ steps.forge.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
           BRANCH: ${{ github.event.workflow_run.head_branch }}
           RUN_ID: ${{ github.event.workflow_run.id }}
           RUN_URL: ${{ github.event.workflow_run.html_url }}

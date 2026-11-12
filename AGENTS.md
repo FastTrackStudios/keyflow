@@ -8,7 +8,7 @@ the `architect` / `daw` / `vendor` splits before it.
 |---|---|---|
 | **keyflow** (here) | the chart language, its formats, the LSP + grammar, and Engraver | — |
 | [daw](https://github.com/FastTrackStudios/daw) | the DAW platform and shared substrate | git dep, tag `v0.0.7` |
-| [architect](https://github.com/FastTrackStudios/architect) | the framework (entity/RPC, atom, form, auth, permissions, crdt), `architect-ui` | git dep, tag `v0.12.4` (same tag studio pins) |
+| [architect](https://github.com/FastTrackStudios/architect) | the framework (entity/RPC, atom, form, auth, permissions, crdt), `architect-ui` | git dep, tag `v0.12.4`, on the **`www.github.com`** spelling (Studio patches it to its own tag) |
 | [session](https://github.com/FastTrackStudios/session) | the musical/production vocabulary and the Session app | consumes this repo |
 | [editor](https://github.com/FastTrackStudios/editor) | the embeddable text/markdown editor — sits BELOW this repo | git dep, pinned by `rev` (`6817dc2`, architect v0.12.4's) |
 
@@ -29,20 +29,43 @@ Never commit those overrides — the paths are machine-specific.
 
 ## Moving the Architect pin
 
+Every Architect dependency here is spelled `https://www.github.com/FastTrackStudios/architect`,
+on purpose. Cargo treats that spelling as a different source from the plain
+URL, so Studio can patch exactly these pins to its own tag:
+`[patch."https://www.github.com/FastTrackStudios/architect"]` in Studio's
+Cargo.toml. In Studio's graph, keyflow's Architect tag is then not used.
+
+- **An Architect patch release** (v0.12.4 → v0.12.5) needs **no keyflow
+  release**. Studio takes it alone. The bot still bumps the pin here so
+  keyflow's own CI builds on the newest Architect; no tag is needed.
+- **An Architect minor** (v0.12 → v0.13) needs one: it may break this code,
+  and so far every minor moved the editor, dioxus or blitz revisions this
+  repo follows. Run `just bump-architect vX.Y.0 --version auto`, merge, then
+  `just release-tag`. The bot sets `--version auto` on a minor by itself.
+- **A new direct Architect dependency of a keyflow crate** must also go into
+  Studio's www `[patch]` table, or Studio's lock gets a second Architect
+  source. Studio's `just bump-architect` refuses a lock with one. Keep every
+  Architect entry here on the www spelling.
+
 `just bump-architect vX.Y.Z` moves every Architect pin (the
 `[workspace.dependencies]` entries, the `[patch]` table, `features/ui`'s
-`architect-workspace`, the comments and the table above) and `Cargo.lock`
-in one go; `--version X.Y.Z` also sets the workspace version for a keyflow
-release. It exits 3 when Architect moved a pin this repo follows (the
-editor revision, dioxus, blitz): the rest is done, and a person moves that
-one. `just bump-architect-test` replays keyflow#67 and #61.
+`architect-workspace`, the comments and the table above) and `Cargo.lock`.
+It exits 3 when Architect moved a pin this repo follows (editor, dioxus,
+blitz): the rest is done, and a person moves that one.
+`just bump-architect-test` replays keyflow#67 and #61.
 
 When Architect releases a stable tag, `.github/workflows/bump-architect.yml`
-runs the same command and opens `bump/architect-<tag>`; a mechanical bump
-merges itself once `PR checks` and `CI passed` are green, and a failing one
+runs the same command and opens `bump/architect-<tag>`. A mechanical bump
+merges itself once `PR checks` and `CI passed` are green; a failing one
 stays open with the failed jobs named. It is inert until the repo variable
-`ARCHITECT_BUMP` is `on` (the header of the workflow lists what else it
-needs). It never tags: a keyflow release is still a person's step.
+`ARCHITECT_BUMP` is `on`. Its App token is minted for this repo only
+(contents and pull-requests write). `just check-token-mints` (in `PR
+checks`) fails any workflow that mints a wider one.
+
+**Tagging** is `just release-tag`: it tags `origin/main` as
+`v<workspace version>` once `CI passed` is green there. Only admins and the
+fts-forge App may create `v*` tags once `scripts/tag-ruleset.sh --apply`
+has been run (by the owner).
 
 ## Layout
 

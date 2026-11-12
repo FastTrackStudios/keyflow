@@ -696,7 +696,7 @@ dependencies = [
 [[package]]
 name = "architect-commands"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?tag=v0.12.4#ba255b1f861c592713ab48e18599d2aa4d84026e"
+source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.12.4#ba255b1f861c592713ab48e18599d2aa4d84026e"
 dependencies = [
  "architect",
  "architect-input",
@@ -728,7 +728,7 @@ dependencies = [
 [[package]]
 name = "architect-devices"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?tag=v0.12.4#ba255b1f861c592713ab48e18599d2aa4d84026e"
+source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.12.4#ba255b1f861c592713ab48e18599d2aa4d84026e"
 dependencies = [
  "architect",
  "architect-orgs",
@@ -745,7 +745,7 @@ dependencies = [
 [[package]]
 name = "architect-input"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?tag=v0.12.4#ba255b1f861c592713ab48e18599d2aa4d84026e"
+source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.12.4#ba255b1f861c592713ab48e18599d2aa4d84026e"
 dependencies = [
  "architect-workspace-hack",
  "dioxus",
@@ -760,7 +760,7 @@ dependencies = [
 [[package]]
 name = "architect-orgs"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?tag=v0.12.4#ba255b1f861c592713ab48e18599d2aa4d84026e"
+source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.12.4#ba255b1f861c592713ab48e18599d2aa4d84026e"
 dependencies = [
  "architect-workspace-hack",
  "facet",
@@ -772,7 +772,7 @@ dependencies = [
 [[package]]
 name = "architect-palette"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?tag=v0.12.4#ba255b1f861c592713ab48e18599d2aa4d84026e"
+source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.12.4#ba255b1f861c592713ab48e18599d2aa4d84026e"
 dependencies = [
  "architect-workspace-hack",
  "facet",
@@ -802,7 +802,7 @@ dependencies = [
 [[package]]
 name = "architect-shell"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?tag=v0.12.4#ba255b1f861c592713ab48e18599d2aa4d84026e"
+source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.12.4#ba255b1f861c592713ab48e18599d2aa4d84026e"
 dependencies = [
  "architect-theme",
  "architect-workspace-hack",
@@ -891,7 +891,7 @@ dependencies = [
 [[package]]
 name = "architect-workspace"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?tag=v0.12.4#ba255b1f861c592713ab48e18599d2aa4d84026e"
+source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.12.4#ba255b1f861c592713ab48e18599d2aa4d84026e"
 dependencies = [
  "anyrender",
  "architect",
@@ -3084,7 +3084,7 @@ dependencies = [
 [[package]]
 name = "crdt"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?tag=v0.12.4#ba255b1f861c592713ab48e18599d2aa4d84026e"
+source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.12.4#ba255b1f861c592713ab48e18599d2aa4d84026e"
 dependencies = [
  "architect",
  "architect-devices",
@@ -3108,7 +3108,7 @@ dependencies = [
 [[package]]
 name = "crdt-derive"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?tag=v0.12.4#ba255b1f861c592713ab48e18599d2aa4d84026e"
+source = "git+https://www.github.com/FastTrackStudios/architect?tag=v0.12.4#ba255b1f861c592713ab48e18599d2aa4d84026e"
 dependencies = [
  "proc-macro2",
  "quote",

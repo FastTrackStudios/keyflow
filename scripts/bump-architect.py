@@ -3,6 +3,12 @@
 
     just bump-architect v0.12.5                  # the pins, the comments, Cargo.lock
     just bump-architect v0.12.5 --version 0.5.4  # and the workspace version (a keyflow release)
+    just bump-architect v0.13.0 --version auto   # the next patch version: what a MINOR needs
+
+An Architect PATCH release needs no keyflow release: Studio patches this
+repo's (www-spelled) Architect pins to its own tag. A MINOR does: bump with
+`--version auto`, merge, then `just release-tag` (Cargo.toml's architect
+comment says why).
 
 What it changes, and nothing else:
   - every `tag = "<old>"` on a FastTrackStudios/architect git dependency, in
@@ -149,6 +155,11 @@ def main() -> int:
             if rewrite(path, old, new, "architect"):
                 changed.append(path)
 
+    if args.version == "auto":
+        cur = re.search(r'\[workspace\.package\][^\[]*?\nversion = "(\d+)\.(\d+)\.(\d+)"', manifest.read_text())
+        if not cur:
+            sys.exit("bump-architect: no [workspace.package] version in Cargo.toml")
+        args.version = f"{cur.group(1)}.{cur.group(2)}.{int(cur.group(3)) + 1}"
     if args.version:
         text = manifest.read_text()
         out, n = re.subn(r'(\[workspace\.package\][^\[]*?\nversion = ")[^"]+(")',
@@ -171,7 +182,11 @@ def main() -> int:
 
     for path in sorted(set(changed)):
         print(f"  {path.relative_to(ROOT)}")
-    print(f"bump-architect: architect {old} -> {new}" + (f", version {args.version}" if args.version else ""))
+    kind = "minor" if version(new)[:2] != version(old)[:2] else "patch"
+    print(f"bump-architect: architect {old} -> {new} ({kind})" + (f", version {args.version}" if args.version else ""))
+    if kind == "minor":
+        print("bump-architect: a MINOR: Studio needs a keyflow release on it: merge, then `just release-tag`"
+              + ("" if args.version else " (after setting the version: --version auto)"))
     if moves:
         msg = "Needs a person: " + "\n".join(["", *[f"- {m}" for m in moves]])
         print(msg, file=sys.stderr)

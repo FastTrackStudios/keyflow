@@ -57,6 +57,8 @@ replay() {
 
 # keyflow#66 merged (v0.12.3, 0.5.2) -> keyflow#67 merged (v0.12.4, 0.5.3)
 replay d8797252670917f13ef69ab0863df20c460512c4 v0.12.4 0 b71833eddacf8763a3d5d1f95ad999235f6ebbec --version 0.5.3
+# the same bump with --version auto: 0.5.2 -> 0.5.3, as #67 set by hand
+replay d8797252670917f13ef69ab0863df20c460512c4 v0.12.4 0 b71833eddacf8763a3d5d1f95ad999235f6ebbec --version auto
 # keyflow#60 merged (v0.11.2) -> v0.12.0, which moved the editor to 6817dc2
 replay 44865fcd3bfdc56ebfdfe871a001e4e478d2d9ce v0.12.0 3 fasttrackstudios/editor --no-lock
 

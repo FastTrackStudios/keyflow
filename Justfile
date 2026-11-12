@@ -47,6 +47,17 @@ bump-architect TAG *ARGS:
 bump-architect-test:
     bash scripts/bump-architect-replay.sh
 
+# Tag origin/main as v<workspace version> once its CI passed is green: only
+# needed for an Architect MINOR (or keyflow's own changes); `--dry-run` first.
+# Tag a keyflow release (v<workspace version>) on a green main
+release-tag *ARGS:
+    bash scripts/release-tag.sh {{ARGS}}
+
+# Every workflow's App token: one repository, only its hop's permissions
+check-token-mints:
+    python3 scripts/check-token-mints.py --self-test
+    python3 scripts/check-token-mints.py
+
 # ── wasm ─────────────────────────────────────────────────────────────
 # Task's and Studio's web apps build these crates for the browser, and
 # `cargo check --workspace` builds them for the host, where every
