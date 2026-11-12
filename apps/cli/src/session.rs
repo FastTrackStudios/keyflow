@@ -12,7 +12,9 @@
 //!   "end": 171.9,
 //!   "sections": [{"name": "Chorus 1", "bar": 4}, …],
 //!   "lyrics": [{"text": "Now", "bar": 3, "beat": 3.0}, …],
-//!   "tempo": 104.0
+//!   "tempo": 104.0,
+//!   "count_in": 2,
+//!   "video": "Media/Espresso.mp4"
 //! }
 //! ```
 //!
@@ -22,6 +24,11 @@
 //! `=START` / `SONGSTART` / `SONGEND` / `=END` markers, a region per section,
 //! and a lyrics MIDI track placed by bar and beat (MIDI follows the tempo
 //! map, so the words land on the recording).
+//!
+//! `count_in` is the fewest count-in bars to give (a chart's `Count 2`;
+//! more when the recording has more before its first bar). `video` puts the
+//! recording's video on a "Video" track beside the audio, at the same place,
+//! its item silent (the audio track carries the sound).
 
 use std::path::Path;
 
@@ -45,6 +52,12 @@ pub struct Spec {
     /// The written tempo, for the chart header.
     #[serde(default)]
     pub tempo: Option<f64>,
+    /// The fewest count-in bars (the chart's `Count N`); default 1.
+    #[serde(default)]
+    pub count_in: Option<usize>,
+    /// The recording's video, relative to the output folder, on its own track.
+    #[serde(default)]
+    pub video: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -90,7 +103,7 @@ fn timeline(spec: &Spec) -> Result<Timeline, String> {
         .max(0.1);
     // Count-in bars so the audio before the song fits and the song's first
     // bar lands on a barline; at least one, for a count-in.
-    let count_in_bars = ((t0 / first_bar_len).ceil() as usize).max(1);
+    let count_in_bars = ((t0 / first_bar_len).ceil() as usize).max(spec.count_in.unwrap_or(1).max(1));
     let offset = count_in_bars as f64 * first_bar_len - t0;
     let mut bar_times: Vec<f64> = spec.bars.iter().map(|b| b.start + offset).collect();
     bar_times.push(spec.end + offset);
@@ -181,6 +194,17 @@ fn build_rpp(spec: &Spec, tl: &Timeline) -> String {
             i.name("Reference").source_wave(&spec.audio)
         })
     });
+    if let Some(video) = &spec.video {
+        // Same place and length as the audio; the item silent (trim 0), so
+        // REAPER shows the picture and the Reference track carries the sound.
+        builder = builder.track("Video", |t| {
+            t.item(tl.audio_pos, audio_len, |i| {
+                i.name("Video")
+                    .take(video.clone(), dawfile_reaper::types::item::SourceType::Video)
+                    .gain(0.0)
+            })
+        });
+    }
 
     // Lyrics: a MIDI item from the song's first bar, one note per syllable
     // at its bar + beat (in quarters from the first bar).
@@ -401,6 +425,8 @@ mod tests {
             }],
             lyrics: vec![],
             tempo: Some(120.0),
+            count_in: None,
+            video: None,
         }
     }
 
@@ -410,6 +436,26 @@ mod tests {
         assert_eq!(tl.count_in_bars, 1);
         assert!((tl.bar_times[0] - 2.0).abs() < 1e-9);
         assert!((tl.audio_pos - 1.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_count_in_is_at_least_what_the_chart_asks() {
+        let mut s = spec();
+        s.count_in = Some(2);
+        let tl = timeline(&s).unwrap();
+        assert_eq!(tl.count_in_bars, 2);
+        assert!((tl.bar_times[0] - 4.0).abs() < 1e-9);
+        assert!((tl.audio_pos - 3.5).abs() < 1e-9);
+    }
+
+    #[cfg(feature = "reaper")]
+    #[test]
+    fn the_video_sits_on_its_own_silent_track() {
+        let mut s = spec();
+        s.video = Some("Media/t.mp4".into());
+        let rpp = build_rpp(&s, &timeline(&s).unwrap());
+        assert!(rpp.contains("<SOURCE VIDEO"), "{rpp}");
+        assert!(rpp.contains("Media/t.mp4"), "{rpp}");
     }
 
     #[test]
