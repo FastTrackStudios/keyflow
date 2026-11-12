@@ -114,12 +114,25 @@ def github(path: str) -> dict:
         return json.load(r)
 
 
+def commit_of(repo: str, tag: str) -> str:
+    """The commit TAG names (refs/tags/<tag>, peeled): never a branch that
+    happens to share a tag's name."""
+    out = subprocess.run(["git", "ls-remote", f"https://github.com/{repo}", f"refs/tags/{tag}", f"refs/tags/{tag}^{{}}"],
+                         check=True, capture_output=True, text=True).stdout.split("\n")
+    shas = {line.split("\t")[1]: line.split("\t")[0] for line in out if "\t" in line}
+    sha = shas.get(f"refs/tags/{tag}^{{}}") or shas.get(f"refs/tags/{tag}")
+    if not sha:
+        sys.exit(f"bump-architect: {repo} has no tag {tag}")
+    return sha
+
+
 def on_main(repo: str, tag: str) -> bool:
-    """Is `tag`'s commit on `repo`'s main (main contains it)?"""
+    """Is the commit of `tag` (resolved as refs/tags/) on `repo`'s main?"""
+    sha = commit_of(repo, tag)
     try:
-        return github(f"repos/{repo}/compare/main...{tag}").get("status") in ("behind", "identical")
+        return github(f"repos/{repo}/compare/main...{sha}").get("status") in ("behind", "identical")
     except Exception as e:  # noqa: BLE001
-        sys.exit(f"bump-architect: cannot tell whether {repo} {tag} is on main ({e})")
+        sys.exit(f"bump-architect: cannot tell whether {repo} {tag} ({sha}) is on main ({e})")
 
 
 def jump(old: str, new: str) -> str | None:

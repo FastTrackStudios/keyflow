@@ -55,9 +55,10 @@ blitz): the rest is done, and a person moves that one.
 `just bump-architect-test` replays keyflow#67 and #61.
 
 When Architect releases a stable tag, `.github/workflows/bump-architect.yml`
-runs the same command and opens `bump/architect-<tag>`. A mechanical bump
-merges itself once `PR checks` and `CI passed` are green; a failing one
-stays open with the failed jobs named, and is never re-armed. To hold one
+runs the same command and opens `bump/architect-<tag>`. When `CI` is green
+on the bot's own head, the bot merges a mechanical bump, checking the files,
+the head's author and new git sources again at merge time. A failing one
+stays open with the failed jobs named and never merges itself. To hold one
 release, close its bump PR (or label it `hold`): the bot never reopens or
 re-pushes it. It refuses a tag whose commit is not on Architect's `main`,
 and a major change, a minor jump of more than one, or a new git source in
