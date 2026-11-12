@@ -8,9 +8,9 @@ the `architect` / `daw` / `vendor` splits before it.
 |---|---|---|
 | **keyflow** (here) | the chart language, its formats, the LSP + grammar, and Engraver | — |
 | [daw](https://github.com/FastTrackStudios/daw) | the DAW platform and shared substrate | git dep, tag `v0.0.7` |
-| [architect](https://github.com/FastTrackStudios/architect) | the framework (entity/RPC, atom, form, auth, permissions, crdt), `architect-ui` | git dep, tag `v0.12.4`, on the **`www.github.com`** spelling (Studio patches it to its own tag) |
+| [architect](https://github.com/FastTrackStudios/architect) | the framework (entity/RPC, atom, form, auth, permissions, crdt), `architect-ui` | git dep, tag `v0.12.6`, on the **`www.github.com`** spelling (Studio patches it to its own tag) |
 | [session](https://github.com/FastTrackStudios/session) | the musical/production vocabulary and the Session app | consumes this repo |
-| [editor](https://github.com/FastTrackStudios/editor) | the embeddable text/markdown editor — sits BELOW this repo | git dep, pinned by `rev` (`6817dc2`, architect v0.12.4's) |
+| [editor](https://github.com/FastTrackStudios/editor) | the embeddable text/markdown editor — sits BELOW this repo | git dep, pinned by `rev` (`6817dc2`, architect v0.12.6's) |
 
 One root Cargo workspace, one lockfile, one `target/`, one flake.
 Intra-repo dependencies are path deps in root `[workspace.dependencies]`,
@@ -35,7 +35,7 @@ URL, so Studio can patch exactly these pins to its own tag:
 `[patch."https://www.github.com/FastTrackStudios/architect"]` in Studio's
 Cargo.toml. In Studio's graph, keyflow's Architect tag is then not used.
 
-- **An Architect patch release** (v0.12.4 → v0.12.5) needs **no keyflow
+- **An Architect patch release** (v0.12.6 → v0.12.5) needs **no keyflow
   release**. Studio takes it alone. The bot still bumps the pin here so
   keyflow's own CI builds on the newest Architect; no tag is needed.
 - **An Architect minor** (v0.12 → v0.13) needs one: it may break this code,
