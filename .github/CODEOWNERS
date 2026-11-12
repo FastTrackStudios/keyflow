@@ -1,0 +1,5 @@
+# Changes to what the release chain trusts need the owner's review once the
+# `codeowners` ruleset is applied (architect's scripts/github-rulesets.sh
+# codeowners keyflow --apply). Without it this file only requests the review.
+/.github/ @Codys-Wright
+/scripts/ @Codys-Wright
