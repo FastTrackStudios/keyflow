@@ -73,6 +73,16 @@ checks`) fails any workflow that mints a wider one.
 fts-forge App may create `v*` tags once `scripts/tag-ruleset.sh --apply`
 has been run (by the owner).
 
+## Run it
+
+`just dev` runs Studio's local stack with this checkout as its Keyflow
+(`scripts/run-it.sh`; Studio's checkout beside this one, or
+`LOCAL_STACK_STUDIO_PATH`): the charts on a share page and in a song's
+workspace, rebuilt on save. `just demo` is the quick look, nothing
+watched; `just website` says where the site lives (Architect). Verify
+engraver or chart-clock changes that reach a share page on that stack,
+with screenshots at 390 px wide, before opening a PR.
+
 ## Layout
 
 One directory per crate under `features/`, named for the feature. A crate
