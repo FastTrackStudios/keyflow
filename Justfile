@@ -39,7 +39,7 @@ fmt-check:
 # The bot (.github/workflows/bump-architect.yml) runs exactly this.
 # Move every Architect pin and Cargo.lock to TAG (e.g. v0.12.5)
 bump-architect TAG *ARGS:
-    python3 scripts/bump-architect.py {{TAG}} {{ARGS}}
+    python3 scripts/bump-architect.py "{{TAG}}" {{ARGS}}
 
 # keyflow#67's replay must equal the merged commit, Cargo.lock included;
 # keyflow#61's must say "needs a person".

@@ -57,9 +57,14 @@ blitz): the rest is done, and a person moves that one.
 When Architect releases a stable tag, `.github/workflows/bump-architect.yml`
 runs the same command and opens `bump/architect-<tag>`. A mechanical bump
 merges itself once `PR checks` and `CI passed` are green; a failing one
-stays open with the failed jobs named. It is inert until the repo variable
+stays open with the failed jobs named, and is never re-armed. To hold one
+release, close its bump PR (or label it `hold`): the bot never reopens or
+re-pushes it. It refuses a tag whose commit is not on Architect's `main`,
+and a major change, a minor jump of more than one, or a new git source in
+`Cargo.lock` is never mechanical. It is inert until the repo variable
 `ARCHITECT_BUMP` is `on`. Its App token is minted for this repo only
-(contents and pull-requests write). `just check-token-mints` (in `PR
+(contents and pull-requests write), from the `pin-bump` environment's own
+secret `PIN_BUMP_APP_KEY`. `just check-token-mints` (in `PR
 checks`) fails any workflow that mints a wider one.
 
 **Tagging** is `just release-tag`: it tags `origin/main` as

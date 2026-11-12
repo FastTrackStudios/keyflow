@@ -39,8 +39,9 @@
 #   - variable ARCHITECT_BUMP = on
 #   - variable FORGE_APP_ID = the fts-forge App's id
 #   - environment `pin-bump`, deployment branches: main only, with the
-#     secret FORGE_APP_PRIVATE_KEY (the fts-forge App's key, in this
-#     environment only, never a repo or org secret shared with keyflow)
+#     environment variable BOT_ENVIRONMENT = pin-bump and the secret
+#     PIN_BUMP_APP_KEY (the fts-forge App's key under a name nothing else
+#     uses: a job outside its environment gets nothing, never an org secret)
 #   - Settings > General > "Allow auto-merge" (off today)
 # Without ARCHITECT_BUMP every job is skipped. Nothing here creates a tag.
 name: bump-architect
@@ -73,13 +74,17 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+      pull-requests: read
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
+      branch: ${{ steps.state.outputs.branch }}
+      pr: ${{ steps.state.outputs.pr }}
+      head: ${{ steps.state.outputs.head }}
       changed: ${{ steps.bump.outputs.changed }}
       status: ${{ steps.bump.outputs.status }}
       kind: ${{ steps.bump.outputs.kind }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: main
           persist-credentials: false
@@ -109,7 +114,7 @@ jobs:
       - name: toolchain
         run: rustup show active-toolchain
       - name: Restore cargo's dependencies
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cargo/registry/index
@@ -117,10 +122,41 @@ jobs:
             ~/.cargo/git/db
           key: cargo-deps-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: cargo-deps-${{ runner.os }}-
+      - name: Held, merged or open already?
+        id: state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          branch="bump/architect-$TAG"
+          prs="$(gh pr list --head "$branch" --state all --json number,state,author,headRefOid,labels \
+            --jq '[.[] | select(.author.login == "app/fts-forge")]')"
+          # A person's hold wins: closing the bump PR (or labelling it
+          # `hold`) is THE way to hold one release; the bot never reopens it.
+          if [ "$(jq '[.[] | select(.state != "OPEN")] | length' <<<"$prs")" != 0 ]; then
+            echo "held or done: a closed or merged bot PR for $branch exists" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "go=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          open="$(jq -c '[.[] | select(.state == "OPEN")][0] // {}' <<<"$prs")"
+          if jq -e '(.labels // []) | map(.name) | index("hold")' <<<"$open" >/dev/null; then
+            echo "held: PR #$(jq .number <<<"$open") is labelled hold" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "go=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          {
+            echo "go=true"
+            echo "branch=$branch"
+            echo "pr=$(jq -r '.number // empty' <<<"$open")"
+            echo "head=$(jq -r '.headRefOid // empty' <<<"$open")"
+          } >> "$GITHUB_OUTPUT"
       - name: just bump-architect
         id: bump
+        if: ${{ steps.state.outputs.go == 'true' }}
         env:
+          GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.tag.outputs.tag }}
+          PR: ${{ steps.state.outputs.pr }}
+          PR_HEAD: ${{ steps.state.outputs.head }}
         run: |
           set -uo pipefail
           status=0
@@ -135,18 +171,31 @@ jobs:
             echo "::error::bump-architect refused $TAG (exit $status)"
             exit 1
           fi
+          set -e
           echo "status=$status" >> "$GITHUB_OUTPUT"
+          # Only the paths a bump may touch.
+          git add -- Cargo.toml '*/Cargo.toml' Cargo.lock AGENTS.md
+          if [ -n "$(git status --porcelain --untracked-files=all | grep -v '^[AM]  ' || true)" ]; then
+            echo "::error::the bump changed paths outside its allow-list:"; git status --porcelain; exit 1
+          fi
           mkdir -p "$RUNNER_TEMP/bump"
-          git diff --binary > "$RUNNER_TEMP/bump/bump.patch"
+          git diff --cached --binary > "$RUNNER_TEMP/bump/bump.patch"
           touch "$RUNNER_TEMP/report.md"
           cp "$RUNNER_TEMP/report.md" "$RUNNER_TEMP/bump/report.md"
-          if [ -s "$RUNNER_TEMP/bump/bump.patch" ]; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          else
+          if [ ! -s "$RUNNER_TEMP/bump/bump.patch" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "already on $TAG: nothing to do" >> "$GITHUB_STEP_SUMMARY"
+            echo "already on $TAG: nothing to do" >> "$GITHUB_STEP_SUMMARY"; exit 0
           fi
-      - uses: actions/upload-artifact@v4
+          # An open bot PR that already carries exactly this: no push, no churn.
+          if [ -n "$PR_HEAD" ]; then
+            git fetch -q --depth 1 origin "$PR_HEAD"
+            if git diff --cached --quiet "$PR_HEAD" -- Cargo.toml '*/Cargo.toml' Cargo.lock AGENTS.md; then
+              echo "changed=false" >> "$GITHUB_OUTPUT"
+              echo "PR #$PR already carries this bump: nothing to do" >> "$GITHUB_STEP_SUMMARY"; exit 0
+            fi
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: ${{ steps.bump.outputs.changed == 'true' }}
         with:
           name: bump
@@ -163,63 +212,88 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Runs in the pin-bump environment, with its key
+        env:
+          BOT_ENVIRONMENT: ${{ vars.BOT_ENVIRONMENT }}
+          KEY_SET: ${{ secrets.PIN_BUMP_APP_KEY != '' }}
+        run: |
+          if [ "${BOT_ENVIRONMENT:-}" != pin-bump ] || [ "$KEY_SET" != true ]; then
+            echo "::error::this job must run in the 'pin-bump' environment (variable BOT_ENVIRONMENT=pin-bump, secret PIN_BUMP_APP_KEY); got '${BOT_ENVIRONMENT:-}', key set: $KEY_SET"
+            exit 1
+          fi
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: bump
+          path: ${{ runner.temp }}/bump
       - name: fts-forge token (this repo only)
         id: forge
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
         with:
           app-id: ${{ vars.FORGE_APP_ID }}
-          private-key: ${{ secrets.FORGE_APP_PRIVATE_KEY }}
+          private-key: ${{ secrets.PIN_BUMP_APP_KEY }}
           owner: FastTrackStudios
           repositories: keyflow
           permission-contents: write
           permission-pull-requests: write
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-          persist-credentials: false
-      - uses: actions/download-artifact@v4
-        with:
-          name: bump
-          path: ${{ runner.temp }}/bump
       - name: Push the branch, open the PR
         env:
           GH_TOKEN: ${{ steps.forge.outputs.token }}
           TAG: ${{ needs.prepare.outputs.tag }}
           STATUS: ${{ needs.prepare.outputs.status }}
           KIND: ${{ needs.prepare.outputs.kind }}
+          BRANCH: ${{ needs.prepare.outputs.branch }}
+          PR: ${{ needs.prepare.outputs.pr }}
+          PR_HEAD: ${{ needs.prepare.outputs.head }}
         run: |
           set -euo pipefail
+          if [ -n "$PR_HEAD" ]; then
+            # Only over the bot's own commit: a branch a person pushed to is theirs.
+            author="$(gh api "repos/$GITHUB_REPOSITORY/commits/$PR_HEAD" --jq '.author.login // ""')"
+            if [ "$author" != "fts-forge[bot]" ]; then
+              echo "PR #$PR's head is $author's commit: left alone" | tee -a "$GITHUB_STEP_SUMMARY"; exit 0
+            fi
+          fi
           git apply --index "$RUNNER_TEMP/bump/bump.patch"
-          branch="bump/architect-$TAG"
           title="build(deps): architect $TAG by tag"
           export GIT_AUTHOR_NAME="fts-forge[bot]" GIT_COMMITTER_NAME="fts-forge[bot]"
           export GIT_AUTHOR_EMAIL="345159799+fts-forge[bot]@users.noreply.github.com" GIT_COMMITTER_EMAIL="345159799+fts-forge[bot]@users.noreply.github.com"
           git commit -qm "$title" -m "Every Architect pin (and the [patch] table) moves to $TAG: scripts/bump-architect.py $TAG, run by bump-architect.yml."
-          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/$branch"
+          git push -q --force-with-lease="refs/heads/$BRANCH:$PR_HEAD" \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/$BRANCH"
           if [ "$STATUS" = 0 ]; then
             verdict="Mechanical: only the pins, the comments that name them and \`Cargo.lock\` changed. Auto-merge is on: it merges once \`PR checks\` and \`CI passed\` are green. If CI fails, the bump needs source changes and stays open for a person."
           else
             verdict="**Needs a person** (auto-merge is off):"$'\n\n'"$(cat "$RUNNER_TEMP/bump/report.md")"
           fi
-          body="Moves every Architect pin to [$TAG](https://github.com/FastTrackStudios/architect/releases/tag/$TAG) (\`just bump-architect $TAG\`)."$'\n\n'"$verdict"$'\n\n'"Opened by \`.github/workflows/bump-architect.yml\` (run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
+          body="Moves every Architect pin to [$TAG](https://github.com/FastTrackStudios/architect/releases/tag/$TAG) (\`just bump-architect $TAG\`)."$'\n\n'"$verdict"$'\n\n'"To hold this release: close this PR, or label it \`hold\`. Opened by \`.github/workflows/bump-architect.yml\` (run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
           if [ "$KIND" = minor ]; then
             body="$body"$'\n\n'"**An Architect minor:** this sets the next keyflow version. Studio needs a keyflow release on it: after the merge, run \`just release-tag\`."
           else
             body="$body"$'\n\n'"An Architect patch release: Studio takes it without a keyflow release (it patches keyflow's www-spelled pins). This bump only keeps keyflow's own CI current; no tag needed."
           fi
-          pr="$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')"
+          pr="$PR"
           if [ -n "$pr" ]; then
             gh pr edit "$pr" --title "$title" --body "$body"
           else
-            gh pr create --base main --head "$branch" --title "$title" --body "$body"
-            pr="$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')"
+            gh pr create --base main --head "$BRANCH" --title "$title" --body "$body"
+            pr="$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number')"
           fi
-          if [ "$STATUS" = 0 ]; then
-            gh pr merge "$pr" --auto --squash
+          # Auto-merge only for a mechanical bump that touches only the
+          # bump's paths, and never again once CI went red on it (explain's
+          # comment): a person decides after that.
+          others="$(gh pr diff "$pr" --name-only | grep -vxE 'Cargo\.toml|.*/Cargo\.toml|Cargo\.lock|AGENTS\.md' || true)"
+          red="$(gh api "repos/$GITHUB_REPOSITORY/issues/$pr/comments" --jq '[.[] | select(.body | startswith("<!-- bump:red -->"))] | length')"
+          if [ "$STATUS" = 0 ] && [ -z "$others" ] && [ "$red" = 0 ]; then
+            gh pr merge "$pr" --auto --squash --match-head-commit "$(git rev-parse HEAD)"
+            echo "PR #$pr ($BRANCH): auto-merge on" >> "$GITHUB_STEP_SUMMARY"
           else
             gh pr merge "$pr" --disable-auto 2>/dev/null || true
+            echo "PR #$pr ($BRANCH): needs a person${others:+ (files outside the allow-list: $others)}" >> "$GITHUB_STEP_SUMMARY"
           fi
-          echo "PR #$pr ($branch), $([ "$STATUS" = 0 ] && echo 'auto-merge on' || echo 'needs a person')" >> "$GITHUB_STEP_SUMMARY"
 
   explain:
     name: A failed bump stays open
@@ -237,7 +311,7 @@ jobs:
       pull-requests: write
       actions: read
     steps:
-      - name: Auto-merge off, say why
+      - name: Auto-merge off, say why (one comment, edited in place)
         env:
           GH_TOKEN: ${{ github.token }}
           BRANCH: ${{ github.event.workflow_run.head_branch }}
@@ -250,4 +324,10 @@ jobs:
           [ -n "$pr" ] || { echo "no open bot PR from $BRANCH"; exit 0; }
           gh pr merge "$pr" -R "$GITHUB_REPOSITORY" --disable-auto 2>/dev/null || true
           failed="$(gh run view "$RUN_ID" -R "$GITHUB_REPOSITORY" --json jobs --jq '.jobs[] | select(.conclusion == "failure") | "- \(.name)"')"
-          gh pr comment "$pr" -R "$GITHUB_REPOSITORY" --body "$WORKFLOW failed on this bump ($RUN_URL), so it is not mechanical: auto-merge is off and it waits for a person (a source change on this branch, or a keyflow fix first)."$'\n\n'"Failed jobs:"$'\n'"${failed:-(none reported)}"
+          note="<!-- bump:red -->"$'\n'"$WORKFLOW failed on this bump ($RUN_URL), so it is not mechanical: auto-merge is off and stays off; it waits for a person (a source change on this branch, or a keyflow fix first)."$'\n\n'"Failed jobs:"$'\n'"${failed:-(none reported)}"
+          cid="$(gh api "repos/$GITHUB_REPOSITORY/issues/$pr/comments" --jq '[.[] | select(.body | startswith("<!-- bump:red -->"))][0].id // empty')"
+          if [ -n "$cid" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$cid" -f body="$note" >/dev/null
+          else
+            gh pr comment "$pr" -R "$GITHUB_REPOSITORY" --body "$note"
+          fi

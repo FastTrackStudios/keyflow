@@ -25,8 +25,13 @@ Exit status:
      once CI is green.
   3  the bump is done, but needs a person: Architect moved a pin this repo
      follows (the editor, dioxus or blitz revision), which the script does
-     not move. The reasons are printed and, with --report FILE, written there.
-  1  refused (not a stable tag, a downgrade, split pins, no such tag).
+     not move; a major change or a minor jump of more than one (a mistaken
+     high tag must not merge itself); or Cargo.lock gained a git source
+     repository it did not have. The reasons are printed and, with
+     --report FILE, written there.
+  1  refused (not a stable tag, a downgrade, split pins, no such tag, or a
+     tag whose commit is not on Architect's main: anyone who can push a tag
+     can make the tag's own release workflow sign it).
 
 Already on the tag: exit 0 with nothing changed.
 The CI bot (.github/workflows/bump-architect.yml) runs exactly this.
@@ -34,6 +39,8 @@ The CI bot (.github/workflows/bump-architect.yml) runs exactly this.
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import re
 import subprocess
 import sys
@@ -79,6 +86,14 @@ def pins(text: str) -> dict[str, set[str]]:
     return found
 
 
+def fetch_text(url: str) -> str | None:
+    try:
+        with urllib.request.urlopen(url, timeout=60) as r:
+            return r.read().decode()
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def architect_manifest(tag: str) -> str:
     url = f"https://raw.githubusercontent.com/{ARCHITECT}/refs/tags/{tag}/Cargo.toml"
     try:
@@ -87,6 +102,77 @@ def architect_manifest(tag: str) -> str:
     except Exception as e:  # noqa: BLE001 - any failure means "no such tag"
         sys.exit(f"bump-architect: cannot read {ARCHITECT} {tag}'s Cargo.toml ({e})")
 
+
+
+def github(path: str) -> dict:
+    req = urllib.request.Request(f"https://api.github.com/{path}",
+                                 headers={"Accept": "application/vnd.github+json"})
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    if token:
+        req.add_header("Authorization", f"Bearer {token}")
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.load(r)
+
+
+def on_main(repo: str, tag: str) -> bool:
+    """Is `tag`'s commit on `repo`'s main (main contains it)?"""
+    try:
+        return github(f"repos/{repo}/compare/main...{tag}").get("status") in ("behind", "identical")
+    except Exception as e:  # noqa: BLE001
+        sys.exit(f"bump-architect: cannot tell whether {repo} {tag} is on main ({e})")
+
+
+def jump(old: str, new: str) -> str | None:
+    """Why moving old -> new is not mechanical, if it is not."""
+    (omaj, omin, _), (nmaj, nmin, _) = version(old), version(new)
+    if nmaj != omaj:
+        return f"a major version change ({old} -> {new})"
+    if nmin - omin > 1:
+        return f"a minor jump of {nmin - omin} ({old} -> {new})"
+    return None
+
+
+def lock_packages(text: str) -> dict[tuple[str, str], str]:
+    """(name, version) -> source, for every [[package]] of a Cargo.lock."""
+    out = {}
+    for block in text.split("[[package]]")[1:]:
+        name = re.search(r'^name = "([^"]+)"', block, re.M)
+        ver = re.search(r'^version = "([^"]+)"', block, re.M)
+        src = re.search(r'^source = "([^"]+)"', block, re.M)
+        if name and ver:
+            out[(name.group(1), ver.group(1))] = src.group(1) if src else ""
+    return out
+
+
+def git_repos(packages: dict[tuple[str, str], str]) -> set[str]:
+    """The git repositories a lock's packages come from (host-insensitive)."""
+    return {re.sub(r"^git\+https://(www\.)?", "", src).split("?")[0].split("#")[0].lower()
+            for src in packages.values() if src.startswith("git+")}
+
+
+def seed_from_upstream(before: dict, upstream_lock: str) -> list[str]:
+    """New registry crates the resolve added: take Architect's own versions.
+
+    cargo picks the newest compatible version of a crate it has not locked
+    before; Architect's Cargo.lock at the tag says which one Architect
+    built and tested. Where they differ, `cargo update --precise` moves the
+    new crate to Architect's (best effort: a version cargo cannot take
+    there stays, and is reported)."""
+    after = lock_packages((ROOT / "Cargo.lock").read_text())
+    theirs: dict[str, set[str]] = defaultdict(set)
+    for (name, ver), src in lock_packages(upstream_lock).items():
+        if src.startswith("registry+"):
+            theirs[name].add(ver)
+    notes = []
+    for (name, ver), src in sorted(after.items()):
+        if (name, ver) in before or not src.startswith("registry+") or not theirs.get(name) or ver in theirs[name]:
+            continue
+        want = max(theirs[name], key=lambda v: [int(x) if x.isdigit() else 0 for x in re.split(r"[.+-]", v)])
+        r = subprocess.run(["cargo", "update", "-p", f"{name}@{ver}", "--precise", want], cwd=ROOT,
+                           capture_output=True, text=True)
+        notes.append(f"{name} {ver} -> {want} (Architect's)" if r.returncode == 0
+                     else f"{name} {ver} kept (Architect has {want}; cargo refused --precise)")
+    return notes
 
 def token(tag: str) -> re.Pattern[str]:
     # The tag as a whole token: v0.12.3 but not v0.12.30 or v0.12.3.1.
@@ -145,8 +231,12 @@ def main() -> int:
     if version(new) < version(old) and not args.allow_downgrade:
         sys.exit(f"bump-architect: {new} is older than the current pin {old} (--allow-downgrade)")
 
+    if old != new and not on_main(ARCHITECT, new):
+        sys.exit(f"bump-architect: {ARCHITECT} {new} is not on its main: a tag pushed off main is never taken")
     arch_old, arch_new = architect_manifest(old), architect_manifest(new)
     moves = followed_moves(manifest.read_text(), arch_old, arch_new)
+    if old != new and (why := jump(old, new)):
+        moves.append(why + ": a person checks it is meant")
 
     changed = []
     if old != new:
@@ -171,10 +261,19 @@ def main() -> int:
             changed.append(manifest)
 
     if not args.no_lock:
+        before = lock_packages((ROOT / "Cargo.lock").read_text())
         # Resolve the edited manifests: cargo rewrites only the entries the
         # edit changes (the architect sources, the members' version).
         subprocess.run(["cargo", "metadata", "--format-version", "1"], cwd=ROOT, check=True,
                        stdout=subprocess.DEVNULL)
+        upstream_lock = fetch_text(f"https://raw.githubusercontent.com/{ARCHITECT}/refs/tags/{new}/Cargo.lock")
+        if upstream_lock:
+            for note in seed_from_upstream(before, upstream_lock):
+                print(f"  seeded: {note}")
+        new_repos = git_repos(lock_packages((ROOT / "Cargo.lock").read_text())) - git_repos(before)
+        if new_repos:
+            moves.append("Cargo.lock gained git source repositories it did not have: "
+                         + ", ".join(sorted(new_repos)) + " (unreviewed code: a person looks first)")
         stale = [line for line in (ROOT / "Cargo.lock").read_text().splitlines()
                  if f"{ARCHITECT}?tag={old}#" in line]
         if old != new and stale:

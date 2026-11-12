@@ -7,6 +7,9 @@
 #   2. keyflow#61 (v0.11.2 -> v0.12.0): Architect moved the editor revision
 #      this repo follows, which the script does not move. It must exit 3
 #      (needs a person) and say so.
+#   3. v0.10.0 -> v0.12.4: a minor jump of two must exit 3.
+# Not hermetic: it reads GitHub (the tags, Architect's manifests and lock,
+# whether a tag is on Architect's main), so it is a manual check, not CI.
 #
 # Each case checks the base out in a scratch worktree and runs THIS
 # checkout's scripts/bump-architect.py there. Needs the network (Architect's
@@ -61,5 +64,8 @@ replay d8797252670917f13ef69ab0863df20c460512c4 v0.12.4 0 b71833eddacf8763a3d5d1
 replay d8797252670917f13ef69ab0863df20c460512c4 v0.12.4 0 b71833eddacf8763a3d5d1f95ad999235f6ebbec --version auto
 # keyflow#60 merged (v0.11.2) -> v0.12.0, which moved the editor to 6817dc2
 replay 44865fcd3bfdc56ebfdfe871a001e4e478d2d9ce v0.12.0 3 fasttrackstudios/editor --no-lock
+# a keyflow on architect v0.10.0 asked for v0.12.4: a minor jump of 2 is
+# not mechanical (a mistaken high tag must not merge itself)
+replay de637060846a089a9fdae10ad95e164a7d86c185 v0.12.4 3 "minor jump of 2" --no-lock
 
 exit "$fail"
