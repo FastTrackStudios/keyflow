@@ -494,7 +494,12 @@ impl ChartLayoutEngine {
             .any(|melody| !melody.notes.is_empty())
         {
             melody_density_weight(measure, slope)
-        } else if super::is_dense_rhythm(measure) {
+        } else if super::is_dense_rhythm(measure)
+            && measure.chords.len() > usize::from(measure.time_signature.0)
+        {
+            // Only a bar with more attacks than beats is spaced like notes;
+            // `A/E_4. A/E_8 B/F#_8 C/G_4.` fits a normal bar, and its
+            // symbols still reserve their own room through the min widths.
             use crate::time::MusicalPositionExt as _;
             // A written comp rhythm (`G#m_8 . . . …`) is spaced like notes:
             // each attack, rest or space by its own value, so a bar of eight

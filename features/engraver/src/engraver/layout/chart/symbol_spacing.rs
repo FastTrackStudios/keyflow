@@ -43,6 +43,22 @@ pub struct PrintedSymbol {
     pub onset: i32,
     /// Printed extent.
     pub extent: SymbolExtent,
+    /// 1.0 when a slash chord prints as a vertical fraction, else 0.0 — see
+    /// [`slash_stack_for_span`].
+    pub stack: f64,
+}
+
+/// Whether a slash chord prints as a vertical fraction (1.0) or inline
+/// (0.0), from the time it has before the next symbol (or the barline), in
+/// ticks (quarter = 480). Less than a beat and it stacks: `A` over a rule
+/// over `E`, as a hand-written chart would squeeze it.
+#[must_use]
+pub fn slash_stack_for_span(span_ticks: i32) -> f64 {
+    if f64::from(span_ticks) < constants::TICKS_PER_QUARTER {
+        1.0
+    } else {
+        0.0
+    }
 }
 
 /// How much room symbols ask for, beyond their own ink.
@@ -125,7 +141,18 @@ pub fn chord_onset_tick(measure: &Measure, chord_idx: usize, time_signature: (u8
 /// The printed extent of `chord`'s symbol in `style`.
 #[must_use]
 pub fn symbol_extent(chord: &ChordInstance, style: &HarmonyStyle) -> SymbolExtent {
-    let params = chord_layout::chord_to_harmony_params(chord, style);
+    stacked_symbol_extent(chord, style, 0.0)
+}
+
+/// [`symbol_extent`] with a slash chord folded `stack` of the way toward a
+/// vertical fraction. Symbols without a bass ignore `stack`.
+#[must_use]
+pub fn stacked_symbol_extent(
+    chord: &ChordInstance,
+    style: &HarmonyStyle,
+    stack: f64,
+) -> SymbolExtent {
+    let params = chord_layout::chord_to_harmony_params(chord, style).with_bass_stack(stack);
     let (layout, _) = harmony_layout(&params);
     SymbolExtent {
         left: (params.position.x - layout.bounds.x0).max(0.0),
@@ -174,10 +201,64 @@ pub fn printed_symbols(
             chord_idx,
             onset,
             extent: symbol_extent(chord, style),
+            stack: 0.0,
         });
     }
     printed.sort_by_key(|s| s.onset);
+
+    // A slash chord crowded by the next symbol folds toward a fraction, and
+    // takes the narrower width it will print at.
+    let bar_ticks = (f64::from(time_signature.0) * ticks_per_beat(time_signature)).round() as i32;
+    let onsets: Vec<i32> = printed.iter().map(|p| p.onset).collect();
+    for (i, symbol) in printed.iter_mut().enumerate() {
+        let chord = &measure.chords[symbol.chord_idx];
+        if !chord.full_symbol.contains('/') {
+            continue;
+        }
+        let next = onsets.get(i + 1).copied().unwrap_or(bar_ticks);
+        symbol.stack = slash_stack_for_span(next - symbol.onset);
+    }
+    let is_slash: Vec<bool> = printed
+        .iter()
+        .map(|p| measure.chords[p.chord_idx].full_symbol.contains('/'))
+        .collect();
+    let mut stacks: Vec<f64> = printed.iter().map(|p| p.stack).collect();
+    spread_stacking(&onsets, &is_slash, &mut stacks);
+    for (symbol, stack) in printed.iter_mut().zip(stacks) {
+        symbol.stack = stack;
+        if stack > 0.0 {
+            let chord = &measure.chords[symbol.chord_idx];
+            symbol.extent = stacked_symbol_extent(chord, style, stack);
+        }
+    }
     printed
+}
+
+/// How near (ticks) another slash chord must be to a stacked one to stack
+/// with it: two beats.
+pub const STACK_NEIGHBOUR_TICKS: i32 = (constants::TICKS_PER_QUARTER as i32) * 2;
+
+/// Once one slash chord in a bar stacks, the bar's other slash chords within
+/// [`STACK_NEIGHBOUR_TICKS`] of it stack too, so neighbours read alike
+/// (`A/E … B/F# C/G` all as fractions) rather than mixing the two forms.
+/// `onsets`, `is_slash` and `stacks` run in print order.
+pub fn spread_stacking(onsets: &[i32], is_slash: &[bool], stacks: &mut [f64]) {
+    let seeds: Vec<i32> = onsets
+        .iter()
+        .zip(stacks.iter())
+        .filter(|(_, s)| **s > 0.0)
+        .map(|(o, _)| *o)
+        .collect();
+    for (i, stack) in stacks.iter_mut().enumerate() {
+        if *stack == 0.0
+            && is_slash.get(i).copied().unwrap_or(false)
+            && seeds
+                .iter()
+                .any(|seed| (seed - onsets[i]).abs() <= STACK_NEIGHBOUR_TICKS)
+        {
+            *stack = 1.0;
+        }
+    }
 }
 
 /// Rhythm segments as `(start tick, length in ticks)`, from their lengths.
@@ -322,6 +403,7 @@ mod tests {
             chord_idx: 0,
             onset,
             extent: SymbolExtent { left: 0.0, right },
+            stack: 0.0,
         }
     }
 
@@ -390,5 +472,29 @@ mod tests {
             .map(|i| chord_onset_tick(measure, i, (4, 4)))
             .collect();
         assert_eq!(onsets, vec![0, 240, 960]);
+    }
+}
+
+#[cfg(test)]
+mod spread_stacking_tests {
+    use super::spread_stacking;
+
+    #[test]
+    fn near_slash_chords_stack_with_a_crowded_one() {
+        // A/E @1, B/F# @3 (stacked), C/G @3.5, D @4 — beats in ticks.
+        let onsets = [0, 960, 1200, 1440];
+        let is_slash = [true, true, true, false];
+        let mut stacks = [0.0, 1.0, 0.0, 0.0];
+        spread_stacking(&onsets, &is_slash, &mut stacks);
+        assert_eq!(stacks, [1.0, 1.0, 1.0, 0.0]);
+    }
+
+    #[test]
+    fn a_far_slash_chord_stays_inline() {
+        let onsets = [0, 1680];
+        let is_slash = [true, true];
+        let mut stacks = [0.0, 1.0];
+        spread_stacking(&onsets, &is_slash, &mut stacks);
+        assert_eq!(stacks, [0.0, 1.0]);
     }
 }
