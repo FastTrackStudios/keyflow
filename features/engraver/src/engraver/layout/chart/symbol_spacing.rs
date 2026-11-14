@@ -166,12 +166,20 @@ pub fn stacked_symbol_extent(
 /// chord that spills back into the previous bar (unless the bar starts a
 /// line or section, where it prints here too, on beat 1), a `.` repeat, and
 /// the bar's previous symbol restated.
+///
+/// `push_onsets` (`(chord_idx, tick)`, from
+/// [`RhythmBuildResult::internal_push_onsets`](super::rhythm_builder::RhythmBuildResult::internal_push_onsets))
+/// says where the rhythm builder drew a chord pushed inside the bar. The
+/// renderer prints that chord over its anticipation, so the bar is spaced
+/// for it there and not on its written beat. Pass `&[]` when only widths
+/// matter.
 #[must_use]
 pub fn printed_symbols(
     measure: &Measure,
     style: &HarmonyStyle,
     time_signature: (u8, u8),
     is_boundary: bool,
+    push_onsets: &[(usize, i32)],
 ) -> Vec<PrintedSymbol> {
     let mut printed = Vec::new();
     let mut last_in_bar: Option<&str> = None;
@@ -192,8 +200,14 @@ pub fn printed_symbols(
         }
         last_in_bar = Some(chord.full_symbol.as_str());
 
+        let pushed_onset = push_onsets
+            .iter()
+            .find(|(c_idx, _)| *c_idx == chord_idx)
+            .map(|&(_, tick)| tick);
         let onset = if is_pushed && is_first_real {
             0
+        } else if let Some(tick) = pushed_onset.filter(|_| is_pushed) {
+            tick
         } else {
             chord_onset_tick(measure, chord_idx, time_signature)
         };

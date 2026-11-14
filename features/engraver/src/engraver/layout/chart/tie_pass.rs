@@ -89,6 +89,62 @@ impl ChartLayoutEngine {
             node.set_element_type("chord_tie");
             measure_result.scene.add_child(node);
         }
+
+        // A chord pushed inside the bar (`C // 'G //`) is struck on the
+        // anticipation the rhythm builder carved for it and keeps sounding
+        // through its written beat. Without a tie the slash on that beat
+        // reads as a second attack, so tie the anticipation into it.
+        for &(chord_idx, entry_idx) in &measure_result.internal_push_positions {
+            let Some(chord) = measure.chords.get(chord_idx) else {
+                continue;
+            };
+            if !chord
+                .push_pull
+                .as_ref()
+                .is_some_and(|(is_push, _)| *is_push)
+            {
+                continue; // staccato chords share the map; they don't sustain
+            }
+            // The rhythm builder writes the rest of a pushed chord after its
+            // anticipation only when the chord outlasts the beat it was
+            // pushed from (`rhythm_builder::build_rhythm`); a one-beat push
+            // is all anticipation, and the next entry is another chord.
+            use crate::time::MusicalPositionExt as _;
+            let chord_ticks = (chord.duration.to_beats(time_sig) * per_beat).round() as i32;
+            if chord_ticks <= super::rhythm_builder::PUSH_CARVE_TICKS {
+                continue;
+            }
+            let (Some(from), Some(to)) = (
+                chord_segments.get(entry_idx),
+                chord_segments.get(entry_idx + 1),
+            ) else {
+                continue;
+            };
+            if to.tick <= from.tick {
+                continue;
+            }
+            let start = SlurEndpoint {
+                x: from.x + spatium,
+                y: staff_y,
+                stem_up: false,
+            };
+            let end = SlurEndpoint {
+                x: to.x,
+                y: staff_y,
+                stem_up: false,
+            };
+            let tie_layout = layout_tie(
+                &start,
+                &end,
+                SlurDirection::Down,
+                3500 + entry_idx as u64,
+                spatium,
+                &tie_config,
+            );
+            let mut node = SceneNode::anonymous_leaf(tie_layout.commands);
+            node.set_element_type("push_tie");
+            measure_result.scene.add_child(node);
+        }
     }
     /// Tie arcs on melody notes: a tie into the next note of the same bar
     /// ends at that note; one into the next bar (a note split at the

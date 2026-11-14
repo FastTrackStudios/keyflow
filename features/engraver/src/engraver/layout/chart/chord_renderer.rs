@@ -1259,10 +1259,17 @@ pub fn render_chord_symbols(
                 .get(segment_idx)
                 .copied()
                 .unwrap_or_else(|| ctx.segment_positions.first().copied().unwrap_or(0.0));
-            (
-                segment_idx,
-                chord_render_x(ctx, segment_idx, segment_x, local_beat),
-            )
+            // A pushed (or staccato) chord's segment is the one the rhythm
+            // builder carved for it: exact by construction. Checking it
+            // against the chord's *written* beat would reject a push (its
+            // anticipation sits before that beat) and fall back to the
+            // written beat, printing the symbol past its note.
+            let chord_x = if has_precomputed_position && segment_idx < ctx.segment_positions.len() {
+                ctx.measure_x + segment_x
+            } else {
+                chord_render_x(ctx, segment_idx, segment_x, local_beat)
+            };
+            (segment_idx, chord_x)
         };
 
         let has_fermata = chord.commands.iter().any(|c| matches!(c, Command::Fermata));

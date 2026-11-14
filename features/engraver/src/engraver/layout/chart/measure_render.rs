@@ -179,6 +179,9 @@ impl ChartLayoutEngine {
         let spillback_positions = rhythm_result.spillback_positions.clone();
         let note_pitches = rhythm_result.note_pitches.clone();
         let note_pitch_stacks = rhythm_result.note_pitch_stacks.clone();
+        // Where pushed chords are drawn, before the entries are re-split
+        // below (so the ticks hold whatever the segments become).
+        let push_onsets = rhythm_result.internal_push_onsets();
 
         // Convert RhythmBuildResult to the format expected by MeasureBuilder
         let (rhythm_entries, full_rhythm, _rhythm_ticks, tuplet_specs, internal_push_positions) =
@@ -270,6 +273,7 @@ impl ChartLayoutEngine {
             harmony_style,
             time_signature,
             is_boundary,
+            &push_onsets,
         );
         let mut chord_min_widths =
             super::symbol_spacing::symbol_segment_minimums(&segments, &symbols, symbol_spacing);
