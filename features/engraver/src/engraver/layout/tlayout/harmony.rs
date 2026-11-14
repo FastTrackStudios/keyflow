@@ -313,6 +313,12 @@ pub struct HarmonyParams {
     pub bass_accidental: String,
     /// How the bass note is laid out relative to the main symbol.
     pub bass_arrangement: BassArrangement,
+    /// How far an [`BassArrangement::Inline`] slash chord folds toward the
+    /// vertical fraction, from `0.0` (`B/F#` on one line) to `1.0` (root over
+    /// a rule over bass). In between, the bass drops and slides under the
+    /// root and the slash tilts toward the rule, so a crowded symbol gets
+    /// narrower a little at a time instead of jumping to the fraction.
+    pub bass_stack: f64,
     /// Position (baseline left of root)
     pub position: Point,
     /// Style configuration
@@ -331,6 +337,7 @@ impl Default for HarmonyParams {
             bass: None,
             bass_accidental: String::new(),
             bass_arrangement: BassArrangement::default(),
+            bass_stack: 0.0,
             position: Point::ZERO,
             style: HarmonyStyle::default(),
         }
@@ -366,6 +373,14 @@ impl HarmonyParams {
             extension: extension.to_string(),
             ..Default::default()
         }
+    }
+
+    /// Fold an inline slash chord toward the vertical fraction (see
+    /// [`HarmonyParams::bass_stack`]).
+    #[must_use]
+    pub fn with_bass_stack(mut self, stack: f64) -> Self {
+        self.bass_stack = stack.clamp(0.0, 1.0);
+        self
     }
 
     /// Set position and return self for chaining.
@@ -435,6 +450,16 @@ pub fn layout_harmony(
     _ctx: &LayoutContext<'_>,
 ) -> (HarmonyLayoutData, SceneNode) {
     harmony_layout(params)
+}
+
+/// Extra room (in cap heights) between an inline slash and the bass letter.
+/// Letters that open with a straight vertical stem sit flush against the
+/// slash's upper tip without it; round and slanted ones need only a little.
+fn slash_bass_kern(bass: &str) -> f64 {
+    match bass.chars().next() {
+        Some('B' | 'D' | 'E' | 'F' | 'H' | 'K' | 'L' | 'M' | 'N' | 'P' | 'R') => 0.12,
+        _ => 0.04,
+    }
 }
 
 /// [`layout_harmony`] without the context it never reads.
@@ -682,13 +707,25 @@ pub fn harmony_layout(params: &HarmonyParams) -> (HarmonyLayoutData, SceneNode) 
         }
     }
 
+    // How far a partly stacked bass hangs below the baseline, for bounds.
+    let mut stacked_bass_bottom: Option<f64> = None;
+
     // 5. Bass note (slash chord) — two arrangements:
     //    Inline  : "B/C#"  — slash + bass appended to the right of the main symbol.
     //    Vertical: stacked top-to-bottom as a fraction (root / line / bass).
     if let Some(bass) = &params.bass {
         let bass_size = style.root_size * style.bass_scale;
 
-        match params.bass_arrangement {
+        // A crowded inline slash chord prints as the full vertical fraction
+        // (root over a rule over the bass) — no in-between diagonal.
+        let folded =
+            params.bass_stack > 0.0 && matches!(params.bass_arrangement, BassArrangement::Inline);
+        let arrangement = if folded {
+            BassArrangement::Vertical
+        } else {
+            params.bass_arrangement
+        };
+        match arrangement {
             BassArrangement::Inline => {
                 // Move slightly left before slash (m:-0.014:0 in MuseScore - unscaled)
                 cursor_x += space_before_slash;
@@ -703,6 +740,9 @@ pub fn harmony_layout(params: &HarmonyParams) -> (HarmonyLayoutData, SceneNode) 
                 ));
                 cursor_x += slash_width;
                 cursor_x += space_after_slash;
+                // The slash leans right at the top, so a bass letter with a
+                // straight left stem (D, B, E…) would touch its tip.
+                cursor_x += slash_bass_kern(bass) * cap_height;
 
                 let bass_width = measure_text_width(bass, bass_size, false);
                 commands.push(PaintCommand::text(
@@ -792,6 +832,9 @@ pub fn harmony_layout(params: &HarmonyParams) -> (HarmonyLayoutData, SceneNode) 
                 }
 
                 cursor_x = stack_width;
+                if folded {
+                    stacked_bass_bottom = Some(bass_y + bass_size * 0.2);
+                }
             }
         }
     }
@@ -799,19 +842,17 @@ pub fn harmony_layout(params: &HarmonyParams) -> (HarmonyLayoutData, SceneNode) 
     // Calculate bounds in local coordinates
     let total_width = cursor_x;
     let total_height = style.root_size * 1.2; // Include superscript height
-    let local_bounds = Rect::new(
-        0.0,
-        baseline_y - style.root_size,
-        cursor_x,
-        baseline_y + style.root_size * 0.2,
-    );
+    let bottom = stacked_bass_bottom
+        .unwrap_or(baseline_y + style.root_size * 0.2)
+        .max(baseline_y + style.root_size * 0.2);
+    let local_bounds = Rect::new(0.0, baseline_y - style.root_size, cursor_x, bottom);
 
     // World bounds for layout data (offset by position)
     let world_bounds = Rect::new(
         params.position.x,
         params.position.y - style.root_size,
         params.position.x + cursor_x,
-        params.position.y + style.root_size * 0.2,
+        params.position.y + bottom,
     );
 
     let layout_data = HarmonyLayoutData {
@@ -1669,6 +1710,75 @@ mod tests {
         assert_eq!(
             format_quality("dim", ChordNotation::Standard, SymbolSet::MuseJazz),
             "dim"
+        );
+    }
+}
+
+#[cfg(test)]
+mod bass_stack_tests {
+    use super::*;
+
+    fn slash_chord(stack: f64) -> HarmonyParams {
+        HarmonyParams::major("B")
+            .with_bass("F")
+            .with_bass_stack(stack)
+    }
+
+    fn sharp_bass(mut p: HarmonyParams) -> HarmonyParams {
+        p.bass_accidental = "#".to_string();
+        p
+    }
+
+    #[test]
+    fn any_stack_prints_the_whole_fraction() {
+        let mut fraction = sharp_bass(slash_chord(0.0));
+        fraction.bass_arrangement = BassArrangement::Vertical;
+        let fraction = harmony_layout(&fraction).0.width;
+        for stack in [0.2, 0.5, 1.0] {
+            let w = harmony_layout(&sharp_bass(slash_chord(stack))).0.width;
+            assert!(
+                (w - fraction).abs() < 1e-6,
+                "stack {stack}: {w} vs fraction {fraction}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_stem_letter_bass_gets_more_room_after_the_slash() {
+        // D's straight left stem touches the slash's upper tip without the
+        // extra space; A's slanted side clears it on its own.
+        assert!(slash_bass_kern("D") > slash_bass_kern("A"));
+        assert!(slash_bass_kern("B") > slash_bass_kern("G"));
+    }
+
+    #[test]
+    fn full_stack_is_as_wide_as_the_fraction() {
+        let stacked = harmony_layout(&sharp_bass(slash_chord(1.0))).0.width;
+        let mut fraction = sharp_bass(slash_chord(0.0));
+        fraction.bass_arrangement = BassArrangement::Vertical;
+        let fraction = harmony_layout(&fraction).0.width;
+        assert!(
+            (stacked - fraction).abs() < 1e-6,
+            "stack 1.0 = {stacked}, fraction = {fraction}"
+        );
+    }
+
+    #[test]
+    fn no_stack_draws_the_inline_slash_unchanged() {
+        let plain = HarmonyParams::major("B").with_bass("F");
+        let (a, na) = harmony_layout(&sharp_bass(plain));
+        let (b, nb) = harmony_layout(&sharp_bass(slash_chord(0.0)));
+        assert_eq!(a.width, b.width);
+        assert_eq!(na.commands.len(), nb.commands.len());
+    }
+
+    #[test]
+    fn a_stacked_bass_hangs_inside_the_bounds() {
+        let flat = harmony_layout(&sharp_bass(slash_chord(0.0))).0.bounds;
+        let stacked = harmony_layout(&sharp_bass(slash_chord(1.0))).0.bounds;
+        assert!(
+            stacked.y1 > flat.y1,
+            "the dropped bass must extend the bounds down"
         );
     }
 }

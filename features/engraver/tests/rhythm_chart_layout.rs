@@ -130,7 +130,10 @@ fn the_chorus_figure_puts_each_symbol_on_its_own_attack() {
         (beat.measure, beat.tick)
     };
     assert_eq!(on("F"), (CHORUS_FIGURE, 240), "F is played on the and of 1");
-    assert_eq!(on("C/F").0, CHORUS_FIGURE, "C/F starts the chorus figure");
+    // C/F has an eighth before F, so it folds toward a vertical fraction:
+    // its slash is drawn as a stroke, not a `/` glyph, and its text runs
+    // are just the root and the bass.
+    assert_eq!(on("CF").0, CHORUS_FIGURE, "C/F starts the chorus figure");
     let b7 = symbols
         .iter()
         .find(|s| s.text.starts_with('B') && s.text.contains('5'))
@@ -756,5 +759,66 @@ fn the_last_bar_closes_with_a_final_barline() {
         thick.len(),
         1,
         "one thick line, the final barline: {lines:?}"
+    );
+}
+
+/// A slash chord with an eighth before the next symbol folds toward a
+/// vertical fraction: the bass drops below the root's baseline and the slash
+/// becomes a stroke. One with a beat or more stays inline.
+#[test]
+fn a_crowded_slash_chord_folds_and_a_roomy_one_does_not() {
+    let chart = keyflow_lang::text::chart::parse_chart(
+        "T - X\n#E 116bpm 4/4\n\nVS 2\nA/E_4. A/E_8 B/F#_8 C/G_4.\nD/F# // G/B //\n",
+    )
+    .expect("parses");
+    let result = ChartPipeline::shared()
+        .expect("the pipeline builds")
+        .layout_preset(&chart, Preset::Page, PresetOptions::for_export());
+
+    fn find<'a>(node: &'a SceneNode, root: &str, bass: &str) -> Option<&'a SceneNode> {
+        if node.metadata.get("element_type").map(String::as_str) == Some("chord") {
+            let texts: Vec<&str> = node
+                .commands
+                .iter()
+                .filter_map(|c| match c {
+                    PaintCommand::Text { text, .. } => Some(text.as_str()),
+                    _ => None,
+                })
+                .collect();
+            if texts.first() == Some(&root) && texts.iter().any(|t| t.starts_with(bass)) {
+                return Some(node);
+            }
+        }
+        node.children.iter().find_map(|c| find(c, root, bass))
+    }
+    let baselines = |node: &SceneNode| -> Vec<f64> {
+        node.commands
+            .iter()
+            .filter_map(|c| match c {
+                PaintCommand::Text { position, .. } => Some(position.y),
+                _ => None,
+            })
+            .collect()
+    };
+    let has_stroke = |node: &SceneNode| {
+        node.commands
+            .iter()
+            .any(|c| matches!(c, PaintCommand::Line { .. }))
+    };
+
+    let crowded = find(&result.scene, "B", "F").expect("the B/F# symbol");
+    let ys = baselines(crowded);
+    assert!(has_stroke(crowded), "B/F# on an eighth folds: {crowded:?}");
+    assert!(
+        ys.last().copied().unwrap_or(0.0) > ys[0] + 1.0,
+        "its bass sits below the root: {ys:?}"
+    );
+
+    let roomy = find(&result.scene, "D", "F").expect("the D/F# symbol");
+    assert!(!has_stroke(roomy), "D/F# on two beats stays inline");
+    let ys = baselines(roomy);
+    assert!(
+        ys.iter().all(|y| (y - ys[0]).abs() < 1e-6),
+        "one baseline: {ys:?}"
     );
 }
