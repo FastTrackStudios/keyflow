@@ -494,7 +494,12 @@ impl ChartLayoutEngine {
             .any(|melody| !melody.notes.is_empty())
         {
             melody_density_weight(measure, slope)
-        } else if super::is_dense_rhythm(measure) {
+        } else if super::is_dense_rhythm(measure)
+            && measure.chords.len() > usize::from(measure.time_signature.0)
+        {
+            // Only a bar with more attacks than beats is spaced like notes;
+            // `A/E_4. A/E_8 B/F#_8 C/G_4.` fits a normal bar, and its
+            // symbols still reserve their own room through the min widths.
             use crate::time::MusicalPositionExt as _;
             // A written comp rhythm (`G#m_8 . . . …`) is spaced like notes:
             // each attack, rest or space by its own value, so a bar of eight
@@ -916,6 +921,32 @@ mod tests {
     fn test_harmony_style() -> HarmonyStyle {
         let font_data = Arc::new(crate::engraver::fonts::EMPTY_FONT_DATA_FOR_TESTS.to_vec());
         HarmonyStyle::default().with_text_font_metrics(TextFontMetrics::new(font_data))
+    }
+
+    /// A written comp rhythm with no more attacks than beats wants a normal
+    /// bar; one with more is spaced like notes and wants more.
+    #[test]
+    fn a_few_written_attacks_weigh_like_a_plain_bar() {
+        let chart = keyflow_lang::text::chart::parse_chart(
+            "T - X\n#E 116bpm 4/4\n\nIN 3\nA\nA/E_4. A/E_8 B/F#_8 C/G_4.\n\
+             E_8 E_8 E_8 E_8 E_8 E_8 E_8 E_8\n",
+        )
+        .expect("parses");
+        let measures = chart.sections[0].measures();
+        let engine = test_engine();
+        let metrics = TextFontMetrics::new(Arc::new(
+            crate::engraver::fonts::EMPTY_FONT_DATA_FOR_TESTS.to_vec(),
+        ));
+        let weight = |i: usize| engine.estimate_measure_content_weight(&measures[i], &metrics);
+        let (plain, sparse, dense) = (weight(0), weight(1), weight(2));
+        assert!(
+            (sparse - plain).abs() < 1e-9,
+            "four attacks in 4/4 weigh like a plain bar: {sparse} vs {plain}"
+        );
+        assert!(
+            dense > plain,
+            "eight eighths are spaced like notes: {dense} vs {plain}"
+        );
     }
 
     #[test]
