@@ -66,7 +66,7 @@ impl ChartLayoutEngine {
             let start_x = from.x + spatium;
             let end_x = match to {
                 Some(seg) => seg.x,
-                None => measure_result.width + spatium * 0.5,
+                None => measure_result.width + spatium * 1.2,
             };
             let start = SlurEndpoint {
                 x: start_x,
@@ -166,7 +166,7 @@ impl ChartLayoutEngine {
                 stem_up: false,
             };
             let end = SlurEndpoint {
-                x: measure_result.width + spatium * 0.5,
+                x: measure_result.width + spatium * 1.2,
                 y: tie_y,
                 stem_up: false,
             };

@@ -225,9 +225,9 @@ fn a_chord_tied_over_the_barline_draws_a_tie_and_is_not_named_again() {
             .filter(|s| s.text == "G")
             .count()
     };
-    // Both halves: out of the G at the barline, and into the next bar
-    // (so a tie over a line break still shows on the new line).
-    assert_eq!(ties(&tied.scene), 2, "the tie is drawn, both halves");
+    // Mid-line the tie is one arc; its second half is drawn only when the
+    // next bar starts a new line.
+    assert_eq!(ties(&tied.scene), 1, "the tie is drawn once");
     assert_eq!(g_symbols(&tied), 1, "the held G is not re-attacked");
 
     // Without the tie bar 2 strikes G again, but G is the harmony already
