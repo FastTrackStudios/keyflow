@@ -119,7 +119,32 @@ pub struct RhythmBuildResult {
     pub note_pitch_stacks: Vec<Vec<(i32, Accidental)>>,
 }
 
+/// How much of the beat before an internal push the anticipation is carved
+/// from (a quarter). A pushed chord longer than this keeps sounding after its
+/// anticipation, so its remaining entries follow it (and are tied to it).
+pub(super) const PUSH_CARVE_TICKS: i32 = 480;
+
 impl RhythmBuildResult {
+    /// Where each chord in [`Self::internal_push_positions`] is drawn, as
+    /// `(chord_idx, onset tick within the bar)`: the start of the rhythm entry
+    /// the builder carved for it. A pushed chord plays (and prints) there, an
+    /// anticipation before its written beat.
+    #[must_use]
+    pub fn internal_push_onsets(&self) -> Vec<(usize, i32)> {
+        self.internal_push_positions
+            .iter()
+            .map(|&(chord_idx, entry_idx)| {
+                let onset = self
+                    .entries
+                    .iter()
+                    .take(entry_idx)
+                    .map(|e| e.duration().ticks())
+                    .sum();
+                (chord_idx, onset)
+            })
+            .collect()
+    }
+
     /// Returns true if any triplet groups were detected.
     #[must_use]
     pub fn has_triplets(&self) -> bool {
@@ -333,7 +358,7 @@ fn extract_from_explicit(
                 // Now add the remaining duration of the push chord itself
                 // (the slash beats that follow the push)
                 let push_chord_ticks = duration.ticks();
-                if push_chord_ticks > QUARTER_TICKS {
+                if push_chord_ticks > PUSH_CARVE_TICKS {
                     // The push chord has more duration beyond the push beat
                     let extra_ticks = push_chord_ticks - QUARTER_TICKS;
                     let extra_dur = ticks_to_duration(extra_ticks);

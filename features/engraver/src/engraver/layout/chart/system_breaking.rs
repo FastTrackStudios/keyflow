@@ -226,7 +226,7 @@ impl ChartLayoutEngine {
             self.config.spatium,
             self.config.min_chord_symbol_gap,
         );
-        symbol_spacing::printed_symbols(measure, harmony_style, measure.time_signature, true)
+        symbol_spacing::printed_symbols(measure, harmony_style, measure.time_signature, true, &[])
             .iter()
             .map(|s| s.extent.left + s.extent.right + spacing.clearance)
             .sum()

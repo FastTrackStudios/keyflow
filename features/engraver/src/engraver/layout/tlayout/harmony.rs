@@ -313,10 +313,11 @@ pub struct HarmonyParams {
     pub bass_accidental: String,
     /// How the bass note is laid out relative to the main symbol.
     pub bass_arrangement: BassArrangement,
-    /// Whether an [`BassArrangement::Inline`] slash chord prints stacked:
-    /// `0.0` keeps `B/F#` on one line, anything above it prints the vertical
-    /// fraction (root over a rule over bass), as a crowded chord would be
-    /// squeezed by hand.
+    /// How far an [`BassArrangement::Inline`] slash chord folds toward the
+    /// vertical fraction, from `0.0` (`B/F#` on one line) to `1.0` (root over
+    /// a rule over bass). In between, the bass drops and slides under the
+    /// root and the slash tilts toward the rule, so a crowded symbol gets
+    /// narrower a little at a time instead of jumping to the fraction.
     pub bass_stack: f64,
     /// Position (baseline left of root)
     pub position: Point,
@@ -374,7 +375,7 @@ impl HarmonyParams {
         }
     }
 
-    /// Stack an inline slash chord into the vertical fraction (see
+    /// Fold an inline slash chord toward the vertical fraction (see
     /// [`HarmonyParams::bass_stack`]).
     #[must_use]
     pub fn with_bass_stack(mut self, stack: f64) -> Self {
