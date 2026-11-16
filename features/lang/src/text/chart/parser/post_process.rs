@@ -28,6 +28,12 @@ impl<'a> ChartParser<'a> {
         for (i, section) in sections_to_number.iter().enumerate() {
             self.sections[i].section.number = section.number;
             self.sections[i].section.split_letter = section.split_letter;
+            // An explicit label (`CH 2A`) is the badge, not a note under it.
+            if keyflow_proto::sections::numbering::explicit_label(section.comment.as_deref())
+                .is_some()
+            {
+                self.sections[i].section.comment = None;
+            }
         }
 
         // Set ending key

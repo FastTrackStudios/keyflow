@@ -100,6 +100,20 @@ impl SectionNumberer {
         // The section the next one may continue (a break in between is skipped).
         let mut previous: Option<usize> = None;
         for i in 0..sections.len() {
+            // An explicit label in the header (`CH 2A 8`, `CH 2B 4`) wins: the
+            // section takes that number and letter, and the numbering carries
+            // on from it (the next chorus after CH 2B is CH 3).
+            if let Some((n, letter)) = explicit_label(sections[i].comment.as_deref()) {
+                let key = sections[i].section_type.full_name();
+                let count = self.counters.entry(key).or_insert(0);
+                *count = (*count).max(n);
+                sections[i].number = Some(n);
+                sections[i].split_letter = Some(letter);
+                self.last_section = None;
+                self.pending_split = None;
+                previous = Some(i);
+                continue;
+            }
             let numbered =
                 self.process_section(sections[i].section_type.clone(), sections[i].measure_count);
             sections[i].number = numbered.number;
@@ -143,6 +157,18 @@ impl SectionNumberer {
             }
         }
     }
+}
+
+/// A header's explicit section label: a number and a letter (`2A`, `2b`).
+#[must_use]
+pub fn explicit_label(comment: Option<&str>) -> Option<(u32, char)> {
+    let c = comment?.trim();
+    let letter = c.chars().last()?;
+    if !letter.is_ascii_alphabetic() {
+        return None;
+    }
+    let n: u32 = c[..c.len() - 1].parse().ok()?;
+    Some((n, letter.to_ascii_lowercase()))
 }
 
 impl Default for SectionNumberer {

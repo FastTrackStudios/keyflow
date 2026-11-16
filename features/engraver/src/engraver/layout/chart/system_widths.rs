@@ -121,6 +121,22 @@ impl ChartLayoutEngine {
 
         // For width calculation, just use the regular measure count
         let effective_measure_count = num_measures as f64;
+        // The line's length in 4/4 bars: a 5/4 bar is a bar and a quarter, so
+        // a short line holding it gets that much more room.
+        let bar_lengths: f64 = bars
+            .measure_indices
+            .iter()
+            .filter_map(|&i| bars.measures.get(i))
+            .map(|m| {
+                let (num, den) = m.time_signature;
+                f64::from(num) / f64::from(den.max(1))
+            })
+            .sum();
+        let bar_lengths = if bar_lengths > 0.0 {
+            bar_lengths
+        } else {
+            effective_measure_count
+        };
         // Snippet mode always treated as short system (no stretching)
         let is_short_system =
             self.config.snippet_mode || effective_measure_count < max_measures as f64;
@@ -142,8 +158,16 @@ impl ChartLayoutEngine {
         // Distribute width proportionally using spring physics
         // For full systems, distribute the entire measures_area_width
         // For short systems, distribute only the proportional amount
-        let has_spacing_expansion =
-            self.has_spacing_expander(&measure_weights, &measure_min_widths, base_measure_width);
+        // A bar of four or more chord changes is dense whatever its estimated
+        // minimum says (the estimate leaves out a meter change's glyph): on a
+        // short line it gets the dense bar's room.
+        let has_busy_bar = bars
+            .measure_indices
+            .iter()
+            .filter_map(|&i| bars.measures.get(i))
+            .any(|m| m.chords.len() >= 4);
+        let has_spacing_expansion = has_busy_bar
+            || self.has_spacing_expander(&measure_weights, &measure_min_widths, base_measure_width);
         let total_width_to_distribute = if self.config.snippet_mode {
             // Snippet mode: use duration-proportional natural widths
             // No justification stretching — just natural widths
@@ -154,11 +178,11 @@ impl ChartLayoutEngine {
             // stretches edge to edge no longer reads as one bar.
             let needed: f64 = measure_min_widths.iter().sum::<f64>() * SHORT_LINE_AIR;
             needed
-                .max(num_measures as f64 * base_measure_width * SHORT_LINE_DENSE_BARS)
+                .max(bar_lengths * base_measure_width * SHORT_LINE_DENSE_BARS)
                 .min(measures_area_width)
         } else if is_short_system {
-            // Short system: only use width proportional to measure count
-            num_measures as f64 * base_measure_width
+            // Short system: only use width proportional to the bars' lengths
+            (bar_lengths * base_measure_width).min(measures_area_width)
         } else {
             measures_area_width
         };
