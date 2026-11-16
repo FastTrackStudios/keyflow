@@ -29,7 +29,7 @@ use crate::chart::commands::Command;
 use crate::chart::types::{ChordInstance, Measure, RhythmElement};
 use crate::chord::ChordRhythm;
 use crate::engraver::layout::context::LayoutContext;
-use crate::engraver::layout::tlayout::{HarmonyStyle, layout_harmony, parse_chord};
+use crate::engraver::layout::tlayout::{HarmonyParams, HarmonyStyle, layout_harmony, parse_chord};
 use crate::engraver::scene::id::{ElementType, SemanticId};
 use crate::engraver::scene::node::{SceneNode, metadata_keys};
 use crate::engraver::scene::paint::PaintCommand;
@@ -780,6 +780,9 @@ pub fn render_text_cues(
     nodes
 }
 
+/// A vertical (fraction) slash chord's lift, in root sizes.
+const VERTICAL_BASS_LIFT_ROOTS: f64 = 0.65;
+
 /// How far a system's chord symbols rise to clear the articulation marks
 /// between them and the staff: the most any chord on the line needs, so the
 /// line keeps one baseline.
@@ -1153,6 +1156,11 @@ pub fn render_chord_symbols(
 ) -> ChordRenderResult {
     let mut nodes = Vec::new();
     let mut chord_bounds_info: Vec<ChordBoundsInfo> = Vec::new();
+    // The harmony params of each inline slash chord in `chord_bounds_info`
+    // (None for any other symbol), so a crowded one can be stacked later.
+    let mut stackable: Vec<Option<HarmonyParams>> = Vec::new();
+    // Onset tick of each symbol in `chord_bounds_info`.
+    let mut symbol_onsets: Vec<i32> = Vec::new();
     let mut last_chord_symbol = previous_chord_symbol.map(String::from);
     // The symbol last printed in this bar.
     let mut same_bar_symbol: Option<String> = None;
@@ -1433,7 +1441,7 @@ pub fn render_chord_symbols(
         // stacked slash chords in the chord lane instead of letting them float
         // into the previous system.
         let vertical_bass_lift = if chord.parsed.bass_vertical {
-            ctx.harmony_style.root_size * 0.65
+            ctx.harmony_style.root_size * VERTICAL_BASS_LIFT_ROOTS
         } else {
             0.0
         };
@@ -1478,6 +1486,17 @@ pub fn render_chord_symbols(
             original_x: chord_x,
             world_bounds: collision_bounds,
         });
+        symbol_onsets.push(
+            (local_beat * super::symbol_spacing::ticks_per_beat(ctx.time_signature)).round() as i32,
+        );
+        stackable.push(
+            (params.bass.is_some()
+                && matches!(
+                    params.bass_arrangement,
+                    crate::engraver::layout::tlayout::BassArrangement::Inline
+                ))
+            .then(|| params.clone()),
+        );
 
         // Add metadata
         if let Some(page) = ctx.page_number {
@@ -1562,6 +1581,16 @@ pub fn render_chord_symbols(
         }
     }
 
+    // A slash chord with too little room before the next symbol stacks into
+    // a vertical fraction before any symbol is pushed off its beat.
+    stack_crowded_slash_chords(
+        ctx,
+        &mut nodes,
+        &mut chord_bounds_info,
+        &stackable,
+        &symbol_onsets,
+    );
+
     // Perform collision detection and resolution if enabled
     if !chord_bounds_info.is_empty() {
         tracing::debug!(
@@ -1626,6 +1655,128 @@ pub fn render_chord_symbols(
         chord_bounds,
         last_chord_symbol,
         next_id: id_counter,
+    }
+}
+
+/// How much room past a slash chord's inline width counts as comfortable.
+/// Below it the chord stacks. Zero: the bar was already spaced for the
+/// stacking its rhythm calls for, so the renderer only stacks another when
+/// a symbol truly does not fit.
+const SLASH_COMFORT_SPATIUMS: f64 = 0.0;
+
+/// Whether (1.0) or not (0.0) a slash chord stacks into the vertical
+/// fraction for its room. `available` is the room from its beat to the next
+/// symbol, less the gap; it stacks when its inline form (plus `comfort`)
+/// does not fit there and the fraction is narrower.
+#[must_use]
+pub fn slash_stack_amount(
+    inline_width: f64,
+    fraction_width: f64,
+    available: f64,
+    comfort: f64,
+) -> f64 {
+    if inline_width > fraction_width && inline_width + comfort > available {
+        1.0
+    } else {
+        0.0
+    }
+}
+
+/// Re-lay every crowded inline slash chord in the bar as a vertical fraction
+/// (see [`slash_stack_amount`] and
+/// [`spread_stacking`](super::symbol_spacing::spread_stacking)), raised so
+/// its bass clears the staff while the bar's other symbols stay put.
+fn stack_crowded_slash_chords(
+    ctx: &ChordRenderContext<'_>,
+    nodes: &mut [SceneNode],
+    chord_bounds_info: &mut [ChordBoundsInfo],
+    stackable: &[Option<HarmonyParams>],
+    onsets: &[i32],
+) {
+    use crate::engraver::layout::tlayout::harmony_layout;
+
+    let bar_ticks = (f64::from(ctx.time_signature.0)
+        * super::symbol_spacing::ticks_per_beat(ctx.time_signature))
+    .round() as i32;
+
+    let pad = ctx.spatium * super::symbol_spacing::COLLISION_PADDING_SPATIUMS;
+    let comfort = ctx.spatium * SLASH_COMFORT_SPATIUMS;
+    let bar_end = ctx.measure_x + ctx.measure_width;
+    let mut stacks = vec![0.0; chord_bounds_info.len()];
+    for i in 0..chord_bounds_info.len() {
+        let Some(params) = stackable.get(i).and_then(Option::as_ref) else {
+            continue;
+        };
+        let x = chord_bounds_info[i].original_x;
+        let limit = chord_bounds_info
+            .get(i + 1)
+            .map_or(bar_end, |next| next.original_x - ctx.min_chord_symbol_gap);
+        let inline_width = chord_bounds_info[i].world_bounds.width() - 2.0 * pad;
+        let fraction_width = harmony_layout(&params.clone().with_bass_stack(1.0)).0.width;
+        // The width the bar was spaced for (the time to the next symbol)
+        // decides first; a bar that still came out tight stacks too.
+        let span = onsets
+            .get(i + 1)
+            .copied()
+            .unwrap_or(bar_ticks)
+            .saturating_sub(onsets.get(i).copied().unwrap_or(0));
+        stacks[i] = slash_stack_amount(inline_width, fraction_width, limit - x, comfort)
+            .max(super::symbol_spacing::slash_stack_for_span(span));
+    }
+    let is_slash: Vec<bool> = (0..chord_bounds_info.len())
+        .map(|i| stackable.get(i).is_some_and(Option::is_some))
+        .collect();
+    let onsets_in_order: Vec<i32> = (0..chord_bounds_info.len())
+        .map(|i| onsets.get(i).copied().unwrap_or(0))
+        .collect();
+    super::symbol_spacing::spread_stacking(&onsets_in_order, &is_slash, &mut stacks);
+
+    for i in 0..chord_bounds_info.len() {
+        let Some(params) = stackable.get(i).and_then(Option::as_ref) else {
+            continue;
+        };
+        let stack = stacks[i];
+        if stack <= 0.0 {
+            continue;
+        }
+        let x = chord_bounds_info[i].original_x;
+        let limit = chord_bounds_info
+            .get(i + 1)
+            .map_or(bar_end, |next| next.original_x - ctx.min_chord_symbol_gap);
+        let inline_width = chord_bounds_info[i].world_bounds.width() - 2.0 * pad;
+        let fraction_width = harmony_layout(&params.clone().with_bass_stack(1.0)).0.width;
+        // Only the stacked symbol rises, the bar's other symbols keep the
+        // line's baseline. It rises until the bass letter stands where an
+        // unstacked symbol's letters do, so it clears the staff by the same
+        // gap every chord does.
+        let mut lifted = params.clone().with_bass_stack(stack);
+        let lift = {
+            let (unlifted, _) = harmony_layout(&lifted);
+            let bass_size = lifted.style.root_size * lifted.style.bass_scale;
+            // `bounds.y1` is the bass baseline plus a descender allowance.
+            (unlifted.bounds.y1 - bass_size * 0.2 - lifted.position.y).max(0.0)
+        };
+        lifted.position.y -= lift;
+        let (layout, mut node) = harmony_layout(&lifted);
+        let old = &nodes[chord_bounds_info[i].node_idx];
+        node.metadata = old.metadata.clone();
+        node.transform = old.transform.then_translate(Vec2::new(0.0, -lift));
+        tracing::debug!(
+            target: "crate::engraver::layout::chart::chord",
+            measure = ctx.measure_idx,
+            inline_width,
+            fraction_width,
+            available = limit - x,
+            stack,
+            "[chord-placement] slash chord stacks into a fraction"
+        );
+        nodes[chord_bounds_info[i].node_idx] = node;
+        chord_bounds_info[i].world_bounds = Rect::new(
+            layout.bounds.x0 - pad,
+            layout.bounds.y0,
+            layout.bounds.x1 + pad,
+            layout.bounds.y1,
+        );
     }
 }
 
