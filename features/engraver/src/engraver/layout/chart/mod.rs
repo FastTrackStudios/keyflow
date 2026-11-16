@@ -278,6 +278,24 @@ struct MeasureLayoutParams<'a> {
     /// The harmony style the symbols render in, with its font metrics —
     /// what the measure measures its symbols against.
     harmony_style: &'a HarmonyStyle,
+    /// The bar before (same section) ends on a chord tied into this one:
+    /// the tie's second half comes in from this bar's start, so a tie that
+    /// crosses a line break still shows on the new line.
+    tied_in: bool,
+}
+
+/// Whether `section`'s bar before `measure_idx` ends on a tied chord.
+pub(super) fn tied_into(section: &crate::chart::types::ChartSection, measure_idx: usize) -> bool {
+    measure_idx
+        .checked_sub(1)
+        .and_then(|prev| section.measures().get(prev))
+        .and_then(|prev| {
+            prev.chords
+                .iter()
+                .rev()
+                .find(|c| !chord_renderer::is_placeholder_chord(&c.full_symbol))
+        })
+        .is_some_and(|c| c.rhythm.is_tied())
 }
 
 /// Chart layout engine.

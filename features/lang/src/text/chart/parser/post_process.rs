@@ -222,17 +222,25 @@ impl<'a> ChartParser<'a> {
             // Sync rhythm_elements with updated chord durations
             // We update the chord durations in rhythm_elements while preserving Space and Rest elements
             // Match by chord symbol since space insertions can shift indices
+            // The n-th element of a symbol takes the n-th chord of that symbol:
+            // a bar of hits on one chord (`Gb_2 >Gb_8 >Gb_8 r8 >Db_8`) must
+            // not give every Gb the first one's length, which moved each later
+            // hit (and its accent and symbol) late.
             for measure in section.measures_mut() {
+                let mut seen: std::collections::HashMap<String, usize> =
+                    std::collections::HashMap::new();
                 for element in &mut measure.rhythm_elements {
                     if let RhythmElement::Chord(chord_el) = element {
-                        // Find the matching chord by symbol (skip spaces which have symbol "s")
+                        let nth = seen.entry(chord_el.full_symbol.clone()).or_insert(0);
                         if let Some(matching_chord) = measure
                             .chords
                             .iter()
-                            .find(|c| c.full_symbol == chord_el.full_symbol)
+                            .filter(|c| c.full_symbol == chord_el.full_symbol)
+                            .nth(*nth)
                         {
                             chord_el.duration = matching_chord.duration;
                         }
+                        *nth += 1;
                     }
                 }
             }

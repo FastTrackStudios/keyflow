@@ -13,6 +13,13 @@ use crate::text::parsing::Lexer;
 use crate::text::time::{AbsolutePosition, MusicalDuration, MusicalPosition, MusicalPositionExt};
 use keyflow_proto::chart::RepeatMark;
 
+/// How far a bar's beat tally may sit from the meter and still count as
+/// full. Durations are kept to a thousandth of a beat, so a triplet rounds
+/// (a quarter-note triplet is 0.667): six of them tally 4.002 in 4/4. A
+/// tight epsilon (0.001) pushed the last hit of a full triplet bar into a
+/// bar of its own.
+const BAR_EPSILON: f64 = 0.01;
+
 impl<'a> ChartParser<'a> {
     /// A run of rhythm slashes (`/`, `//`, `//.`): set, extend or continue the
     /// previous chord's duration. Returns `false` when the run is left for the
@@ -86,7 +93,7 @@ impl<'a> ChartParser<'a> {
                     st.measure_has_slash_rhythm = true;
 
                     if !st.just_processed_separator
-                        && (st.current_measure_beats - st.beats_per_measure).abs() < 0.001
+                        && (st.current_measure_beats - st.beats_per_measure).abs() < BAR_EPSILON
                     {
                         st.measures.push(st.current_measure.clone());
                         st.current_measure = Self::fresh_measure(st.time_sig);
@@ -161,7 +168,7 @@ impl<'a> ChartParser<'a> {
                             .map(|c| c.duration.to_beats(st.time_sig))
                             .sum();
 
-                        if prev_measure_beats < st.beats_per_measure - 0.001 {
+                        if prev_measure_beats < st.beats_per_measure - BAR_EPSILON {
                             st.current_measure = st.measures.pop().unwrap();
                             st.current_measure_beats = prev_measure_beats;
                             st.measure_has_slash_rhythm = true;
@@ -322,7 +329,7 @@ impl<'a> ChartParser<'a> {
                                     // captured before the `&mut last_chord` borrow above.
                                     let other_beats = prev_other_beats;
                                     if other_beats + f64::from(new_count)
-                                        > st.beats_per_measure + 0.001
+                                        > st.beats_per_measure + BAR_EPSILON
                                     {
                                         // Setting the fill chord to `new_count` would
                                         // overflow its already-full bar (e.g. the trailing
@@ -423,7 +430,7 @@ impl<'a> ChartParser<'a> {
                             let prev_measure_beats =
                                 Self::measure_beats(st.measures.last().unwrap(), st.time_sig);
 
-                            if prev_measure_beats < st.beats_per_measure - 0.001 {
+                            if prev_measure_beats < st.beats_per_measure - BAR_EPSILON {
                                 // Previous measure now has room - pop it back to current_measure
                                 // so subsequent chords can be added to it
                                 st.current_measure = st.measures.pop().unwrap();
@@ -575,7 +582,7 @@ impl<'a> ChartParser<'a> {
 
                 // Check if we need to start a new measure
                 if !st.just_processed_separator
-                    && st.current_measure_beats + chord_beats > st.beats_per_measure + 0.001
+                    && st.current_measure_beats + chord_beats > st.beats_per_measure + BAR_EPSILON
                 {
                     if !st.current_measure.chords.is_empty()
                         || !st.current_measure.rhythm_elements.is_empty()
@@ -618,7 +625,7 @@ impl<'a> ChartParser<'a> {
                 st.current_measure_beats += chord_beats;
 
                 // Check if measure is complete
-                if (st.current_measure_beats - st.beats_per_measure).abs() < 0.001 {
+                if (st.current_measure_beats - st.beats_per_measure).abs() < BAR_EPSILON {
                     st.measures.push(st.current_measure.clone());
                     st.current_measure = Measure::new();
                     st.current_measure.time_signature =
@@ -649,7 +656,7 @@ impl<'a> ChartParser<'a> {
 
                 // Check if we need to start a new measure
                 if !st.just_processed_separator
-                    && st.current_measure_beats + chord_beats > st.beats_per_measure + 0.001
+                    && st.current_measure_beats + chord_beats > st.beats_per_measure + BAR_EPSILON
                 {
                     if !st.current_measure.chords.is_empty()
                         || !st.current_measure.rhythm_elements.is_empty()
@@ -692,7 +699,7 @@ impl<'a> ChartParser<'a> {
                 st.current_measure_beats += chord_beats;
 
                 // Check if measure is complete
-                if (st.current_measure_beats - st.beats_per_measure).abs() < 0.001 {
+                if (st.current_measure_beats - st.beats_per_measure).abs() < BAR_EPSILON {
                     st.measures.push(st.current_measure.clone());
                     st.current_measure = Measure::new();
                     st.current_measure.time_signature =
@@ -749,7 +756,7 @@ impl<'a> ChartParser<'a> {
 
                 // Handle measure boundaries (same logic as regular chord)
                 if !st.just_processed_separator
-                    && st.current_measure_beats + chord_beats > st.beats_per_measure + 0.001
+                    && st.current_measure_beats + chord_beats > st.beats_per_measure + BAR_EPSILON
                 {
                     if !st.current_measure.chords.is_empty()
                         || !st.current_measure.rhythm_elements.is_empty()
@@ -772,7 +779,7 @@ impl<'a> ChartParser<'a> {
 
                 // Auto-advance measure if full
                 if !st.just_processed_separator
-                    && (st.current_measure_beats - st.beats_per_measure).abs() < 0.001
+                    && (st.current_measure_beats - st.beats_per_measure).abs() < BAR_EPSILON
                 {
                     st.measures.push(st.current_measure.clone());
                     st.current_measure = Measure::new();
@@ -799,7 +806,7 @@ impl<'a> ChartParser<'a> {
         // Don't create another one automatically
         if !st.just_processed_separator {
             // Check if adding this chord would exceed the measure
-            if st.current_measure_beats + chord_beats > st.beats_per_measure + 0.001 {
+            if st.current_measure_beats + chord_beats > st.beats_per_measure + BAR_EPSILON {
                 // Look ahead to see if slashes are coming for this chord
                 // If so, fill remaining beats instead of creating a new measure
                 let slashes_coming = tokens_str[token_idx + 1..]
@@ -818,7 +825,7 @@ impl<'a> ChartParser<'a> {
                 let remaining_beats = st.beats_per_measure - st.current_measure_beats;
                 if (st.measure_has_slash_rhythm || slashes_coming)
                     && chord.rhythm == ChordRhythm::Default
-                    && remaining_beats > 0.001
+                    && remaining_beats > BAR_EPSILON
                 {
                     // Adjust chord to fill remaining beats (duration only)
                     // IMPORTANT: Keep rhythm as Default so actual slashes can override.

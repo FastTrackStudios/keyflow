@@ -49,10 +49,16 @@ fn pull_marker_color() -> Color {
     Color::from_rgba8(0x00, 0x00, 0xCC, 0xFF)
 }
 
-/// Articulation marks (accent, marcato, staccato) are notation, drawn in
-/// the staff's black like the slashes they sit on.
+/// Accents, marcatos and staccatos mark the band's hits, so they draw in
+/// the chart's marker red (the push/key-change red) where a player's eye
+/// catches them.
 fn accent_marker_color() -> Color {
-    Color::BLACK
+    Color::from_rgb8(0xCC, 0x00, 0x00)
+}
+
+/// Staccato hits are hits too: the same red.
+fn staccato_marker_color() -> Color {
+    accent_marker_color()
 }
 
 /// Context for rendering chord symbols in a measure.
@@ -533,7 +539,7 @@ fn create_staccato_marker(segment_x: f64, chord_y: f64, spatium: f64, id: u64) -
 
     // SMuFL articStaccatoAbove: U+E4A2
     let staccato_glyph = '\u{E4A2}';
-    let color = accent_marker_color();
+    let color = staccato_marker_color();
 
     // Size relative to spatium (with articulation magnification factor)
     let font_size = spatium * 1.2 * ARTICULATION_MAG;
@@ -1251,10 +1257,16 @@ pub fn render_chord_symbols(
                 .get(segment_idx)
                 .copied()
                 .unwrap_or_else(|| ctx.segment_positions.first().copied().unwrap_or(0.0));
-            (
-                segment_idx,
-                chord_render_x(ctx, segment_idx, segment_x, local_beat),
-            )
+            // A pushed chord's slot comes from the rhythm builder (the
+            // eighth before the beat it is written on). Trust it: the
+            // even-spacing check in `chord_render_x` would compare the slot
+            // with the WRITTEN beat and move the symbol there instead.
+            let x = if has_precomputed_position && segment_idx < ctx.segment_positions.len() {
+                ctx.measure_x + segment_x
+            } else {
+                chord_render_x(ctx, segment_idx, segment_x, local_beat)
+            };
+            (segment_idx, x)
         };
 
         let has_fermata = chord.commands.iter().any(|c| matches!(c, Command::Fermata));
