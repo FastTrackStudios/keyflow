@@ -130,7 +130,7 @@ fn the_chorus_figure_puts_each_symbol_on_its_own_attack() {
         (beat.measure, beat.tick)
     };
     assert_eq!(on("F"), (CHORUS_FIGURE, 240), "F is played on the and of 1");
-    // C/F has an eighth before F, so it stacks into a vertical fraction:
+    // C/F has an eighth before F, so it folds toward a vertical fraction:
     // its slash is drawn as a stroke, not a `/` glyph, and its text runs
     // are just the root and the bass.
     assert_eq!(on("CF").0, CHORUS_FIGURE, "C/F starts the chorus figure");
@@ -762,11 +762,11 @@ fn the_last_bar_closes_with_a_final_barline() {
     );
 }
 
-/// A slash chord with an eighth before the next symbol stacks into a
+/// A slash chord with an eighth before the next symbol folds toward a
 /// vertical fraction: the bass drops below the root's baseline and the slash
 /// becomes a stroke. One with a beat or more stays inline.
 #[test]
-fn a_crowded_slash_chord_stacks_and_a_roomy_one_does_not() {
+fn a_crowded_slash_chord_folds_and_a_roomy_one_does_not() {
     let chart = keyflow_lang::text::chart::parse_chart(
         "T - X\n#E 116bpm 4/4\n\nVS 2\nA/E_4. A/E_8 B/F#_8 C/G_4.\nD/F# // G/B //\n",
     )
@@ -808,7 +808,7 @@ fn a_crowded_slash_chord_stacks_and_a_roomy_one_does_not() {
 
     let crowded = find(&result.scene, "B", "F").expect("the B/F# symbol");
     let ys = baselines(crowded);
-    assert!(has_stroke(crowded), "B/F# on an eighth stacks: {crowded:?}");
+    assert!(has_stroke(crowded), "B/F# on an eighth folds: {crowded:?}");
     assert!(
         ys.last().copied().unwrap_or(0.0) > ys[0] + 1.0,
         "its bass sits below the root: {ys:?}"

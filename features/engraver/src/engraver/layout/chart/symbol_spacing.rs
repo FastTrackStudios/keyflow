@@ -144,8 +144,8 @@ pub fn symbol_extent(chord: &ChordInstance, style: &HarmonyStyle) -> SymbolExten
     stacked_symbol_extent(chord, style, 0.0)
 }
 
-/// [`symbol_extent`] with a slash chord stacked into the vertical fraction
-/// when `stack` is above zero. Symbols without a bass ignore `stack`.
+/// [`symbol_extent`] with a slash chord folded `stack` of the way toward a
+/// vertical fraction. Symbols without a bass ignore `stack`.
 #[must_use]
 pub fn stacked_symbol_extent(
     chord: &ChordInstance,
@@ -206,7 +206,7 @@ pub fn printed_symbols(
     }
     printed.sort_by_key(|s| s.onset);
 
-    // A slash chord crowded by the next symbol stacks into a fraction, and
+    // A slash chord crowded by the next symbol folds toward a fraction, and
     // takes the narrower width it will print at.
     let bar_ticks = (f64::from(time_signature.0) * ticks_per_beat(time_signature)).round() as i32;
     let onsets: Vec<i32> = printed.iter().map(|p| p.onset).collect();

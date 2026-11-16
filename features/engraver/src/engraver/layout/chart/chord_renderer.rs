@@ -1157,7 +1157,7 @@ pub fn render_chord_symbols(
     let mut nodes = Vec::new();
     let mut chord_bounds_info: Vec<ChordBoundsInfo> = Vec::new();
     // The harmony params of each inline slash chord in `chord_bounds_info`
-    // (None for any other symbol), so a crowded one can be stacked later.
+    // (None for any other symbol), so a crowded one can be folded later.
     let mut stackable: Vec<Option<HarmonyParams>> = Vec::new();
     // Onset tick of each symbol in `chord_bounds_info`.
     let mut symbol_onsets: Vec<i32> = Vec::new();
@@ -1581,9 +1581,10 @@ pub fn render_chord_symbols(
         }
     }
 
-    // A slash chord with too little room before the next symbol stacks into
-    // a vertical fraction before any symbol is pushed off its beat.
-    stack_crowded_slash_chords(
+    // A slash chord with too little room before the next symbol folds toward
+    // a vertical fraction — as far as it has to and no further — before any
+    // symbol is pushed off its beat.
+    fold_crowded_slash_chords(
         ctx,
         &mut nodes,
         &mut chord_bounds_info,
@@ -1659,9 +1660,9 @@ pub fn render_chord_symbols(
 }
 
 /// How much room past a slash chord's inline width counts as comfortable.
-/// Below it the chord stacks. Zero: the bar was already spaced for the
-/// stacking its rhythm calls for, so the renderer only stacks another when
-/// a symbol truly does not fit.
+/// Below it the chord starts to fold toward a fraction. Zero: the bar was
+/// already spaced for the fold its rhythm calls for, so the renderer only
+/// folds further when a symbol truly does not fit.
 const SLASH_COMFORT_SPATIUMS: f64 = 0.0;
 
 /// Whether (1.0) or not (0.0) a slash chord stacks into the vertical
@@ -1682,11 +1683,9 @@ pub fn slash_stack_amount(
     }
 }
 
-/// Re-lay every crowded inline slash chord in the bar as a vertical fraction
-/// (see [`slash_stack_amount`] and
-/// [`spread_stacking`](super::symbol_spacing::spread_stacking)), raised so
-/// its bass clears the staff while the bar's other symbols stay put.
-fn stack_crowded_slash_chords(
+/// Re-lay every crowded inline slash chord in the bar with the stack amount
+/// its room calls for (see [`slash_stack_amount`]).
+fn fold_crowded_slash_chords(
     ctx: &ChordRenderContext<'_>,
     nodes: &mut [SceneNode],
     chord_bounds_info: &mut [ChordBoundsInfo],
@@ -1768,7 +1767,7 @@ fn stack_crowded_slash_chords(
             fraction_width,
             available = limit - x,
             stack,
-            "[chord-placement] slash chord stacks into a fraction"
+            "[chord-placement] slash chord folds toward a fraction"
         );
         nodes[chord_bounds_info[i].node_idx] = node;
         chord_bounds_info[i].world_bounds = Rect::new(
