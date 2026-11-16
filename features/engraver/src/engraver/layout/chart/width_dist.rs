@@ -923,6 +923,32 @@ mod tests {
         HarmonyStyle::default().with_text_font_metrics(TextFontMetrics::new(font_data))
     }
 
+    /// A written comp rhythm with no more attacks than beats wants a normal
+    /// bar; one with more is spaced like notes and wants more.
+    #[test]
+    fn a_few_written_attacks_weigh_like_a_plain_bar() {
+        let chart = keyflow_lang::text::chart::parse_chart(
+            "T - X\n#E 116bpm 4/4\n\nIN 3\nA\nA/E_4. A/E_8 B/F#_8 C/G_4.\n\
+             E_8 E_8 E_8 E_8 E_8 E_8 E_8 E_8\n",
+        )
+        .expect("parses");
+        let measures = chart.sections[0].measures();
+        let engine = test_engine();
+        let metrics = TextFontMetrics::new(Arc::new(
+            crate::engraver::fonts::EMPTY_FONT_DATA_FOR_TESTS.to_vec(),
+        ));
+        let weight = |i: usize| engine.estimate_measure_content_weight(&measures[i], &metrics);
+        let (plain, sparse, dense) = (weight(0), weight(1), weight(2));
+        assert!(
+            (sparse - plain).abs() < 1e-9,
+            "four attacks in 4/4 weigh like a plain bar: {sparse} vs {plain}"
+        );
+        assert!(
+            dense > plain,
+            "eight eighths are spaced like notes: {dense} vs {plain}"
+        );
+    }
+
     #[test]
     #[ignore = "the reference chart corpus is not in the repo: `features/examples/png-project-charts`. Drop a local copy in and run `cargo test -- --ignored`."]
     fn written_rest_weight_is_sparser_than_visible_chord_content() {
