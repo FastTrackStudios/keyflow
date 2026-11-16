@@ -386,6 +386,7 @@ pub(super) fn key_change_indicator_node(
     measure_x: f64,
     staff_y: f64,
     spatium: f64,
+    clef: crate::engraver::layout::tlayout::clef::ClefType,
     ctx: &LayoutContext,
     id: u64,
 ) -> SceneNode {
@@ -399,7 +400,7 @@ pub(super) fn key_change_indicator_node(
     let params = KeySigParams {
         id,
         key: KeySigType::Standard(to_fifths),
-        clef: ClefContext::Treble,
+        clef: ClefContext::from(clef),
         show_naturals: prev_fifths.is_some(),
         prev_key: prev_fifths.map(KeySigType::Standard),
         color: Some(change_highlight_color()),
