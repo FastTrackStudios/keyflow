@@ -127,6 +127,14 @@ pub fn compute_section_letters(sections: &[crate::ChartSection]) -> HashMap<usiz
         runs.push((type_key, vec![idx]));
     }
 
+    // A letter the section numbering gave (an explicit `CH 2B`, or a run a
+    // break sits inside) is the one printed.
+    for (idx, chart_section) in sections.iter().enumerate() {
+        if let Some(l) = chart_section.section.split_letter {
+            letters.insert(idx, l.to_ascii_uppercase());
+        }
+    }
+
     // Assign letters to runs with 2+ sections
     for (_, indices) in runs {
         if indices.len() >= 2 {
@@ -135,7 +143,7 @@ pub fn compute_section_letters(sections: &[crate::ChartSection]) -> HashMap<usiz
                 // Support up to Z (26 letters)
                 if i < 26 {
                     let letter = (b'A' + i as u8) as char;
-                    letters.insert(*idx, letter);
+                    letters.entry(*idx).or_insert(letter);
                 }
             }
         }
