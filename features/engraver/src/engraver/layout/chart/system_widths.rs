@@ -132,7 +132,11 @@ impl ChartLayoutEngine {
                 f64::from(num) / f64::from(den.max(1))
             })
             .sum();
-        let bar_lengths = if bar_lengths > 0.0 { bar_lengths } else { effective_measure_count };
+        let bar_lengths = if bar_lengths > 0.0 {
+            bar_lengths
+        } else {
+            effective_measure_count
+        };
         // Snippet mode always treated as short system (no stretching)
         let is_short_system =
             self.config.snippet_mode || effective_measure_count < max_measures as f64;
