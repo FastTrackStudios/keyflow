@@ -274,6 +274,18 @@ impl ChartLayoutEngine {
             } else {
                 stem_up && !mixed
             };
+            // A melody space draws as a rhythm slash, and a tie on it is a
+            // slash tie: under the staff's middle, where `add_slash_ties`
+            // draws the chord lane's. So a chord tied over the barline into
+            // a space (`>F_8 ~` | `m{ ~s2 … }`) meets its other half and
+            // reads as one tie, not two curving apart.
+            let on_slash = segment.is_space()
+                || (segment.tie_to_next
+                    && melody_data
+                        .segments
+                        .get(i + 1)
+                        .is_some_and(|n| n.is_space() && n.tie_from_previous));
+            let below = below || on_slash;
             let direction = if below {
                 SlurDirection::Down
             } else {
@@ -281,12 +293,16 @@ impl ChartLayoutEngine {
             };
             // A tie sits off the heads on its side (y grows downward), not
             // through their middles.
-            let tie_y = note_y
-                + if below {
-                    0.55 * spatium
-                } else {
-                    -0.55 * spatium
-                };
+            let tie_y = if on_slash {
+                2.0 * spatium
+            } else {
+                note_y
+                    + if below {
+                        0.55 * spatium
+                    } else {
+                        -0.55 * spatium
+                    }
+            };
             let Some(seg) = chord_segments.get(i) else {
                 continue;
             };

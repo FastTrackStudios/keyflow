@@ -49,11 +49,15 @@ fn pull_marker_color() -> Color {
     Color::from_rgba8(0x00, 0x00, 0xCC, 0xFF)
 }
 
-/// Accents, marcatos and staccatos mark the band's hits, so they draw in
-/// the chart's marker red (the push/key-change red) where a player's eye
-/// catches them.
+/// Accent and marcato marks draw in the marker red pushes use, so a hit
+/// stands out on the page (a theme remaps it with `chart.marker`).
 fn accent_marker_color() -> Color {
-    Color::from_rgb8(0xCC, 0x00, 0x00)
+    push_marker_color()
+}
+
+/// The staccato dot stays in the staff's black, like the slash it sits on.
+fn staccato_marker_color() -> Color {
+    Color::BLACK
 }
 
 /// Context for rendering chord symbols in a measure.
@@ -534,7 +538,7 @@ fn create_staccato_marker(segment_x: f64, chord_y: f64, spatium: f64, id: u64) -
 
     // SMuFL articStaccatoAbove: U+E4A2
     let staccato_glyph = '\u{E4A2}';
-    let color = accent_marker_color();
+    let color = staccato_marker_color();
 
     // Size relative to spatium (with articulation magnification factor)
     let font_size = spatium * 1.2 * ARTICULATION_MAG;
@@ -1736,6 +1740,7 @@ fn fold_crowded_slash_chords(
     let onsets_in_order: Vec<i32> = (0..chord_bounds_info.len())
         .map(|i| onsets.get(i).copied().unwrap_or(0))
         .collect();
+    super::symbol_spacing::stack_adjacent_slash_chords(&onsets_in_order, &is_slash, &mut stacks);
     super::symbol_spacing::spread_stacking(&onsets_in_order, &is_slash, &mut stacks);
 
     for i in 0..chord_bounds_info.len() {
