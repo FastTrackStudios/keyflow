@@ -600,6 +600,7 @@ pub fn measure_measure_with_config(
         style,
         measure.time_signature,
         is_section_boundary,
+        &rhythm_result.internal_push_onsets(),
     );
     let segment_mins_for_log =
         super::symbol_spacing::symbol_segment_minimums(&segments, &symbols, symbol_spacing);
