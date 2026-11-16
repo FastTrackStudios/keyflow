@@ -401,6 +401,18 @@ impl Chord {
             additions.0, consumed
         );
 
+        // A sus after a 6 (`B6sus4`), as after a 7 above: without this the
+        // sus was left unread and the chord came out a plain B6.
+        if consumed < tokens.len()
+            && !matches!(quality, ChordQuality::Suspended(_))
+            && let Ok((sus_quality, sus_consumed)) =
+                Self::parse_suspended_suffix(&tokens[consumed..])
+            && matches!(sus_quality, ChordQuality::Suspended(_))
+        {
+            quality = sus_quality;
+            consumed += sus_consumed;
+        }
+
         // Step 8: Parse omissions (no3, no5) if present
         let omissions = if consumed < tokens.len() {
             trace!("Parsing omissions from remaining tokens");
