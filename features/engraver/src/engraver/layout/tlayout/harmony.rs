@@ -1310,6 +1310,9 @@ fn parse_quality_and_extensions(s: &str, params: &mut HarmonyParams) {
         ("9", "", "9"),
         ("7", "", "7"),
         ("69", "", "69"),
+        ("6sus4", "", "6sus4"),
+        ("6sus2", "", "6sus2"),
+        ("6sus", "", "6sus4"),
         ("6", "", "6"),
         // Power chord
         ("5", "5", ""),

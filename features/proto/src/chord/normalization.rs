@@ -52,6 +52,8 @@ impl Chord {
         let is_sixth_chord = self.additions.contains(&ChordDegree::Sixth) && self.family.is_none();
         let is_suspended = matches!(self.quality, ChordQuality::Suspended(_));
         let is_suspended_with_seventh = is_suspended && self.family.is_some();
+        // A suspended sixth reads 6sus4 (`B6sus4`), like 7sus4: the sus after the 6.
+        let is_suspended_sixth = is_suspended && is_sixth_chord;
 
         // Check if the family already includes the quality in its symbol
         // FullyDiminished.symbol() = "dim7", so we shouldn't output "dim" first
@@ -68,8 +70,8 @@ impl Chord {
             && (self.family.is_some() || self.extensions.has_any() || self.bass.is_some());
 
         // For suspended chords with seventh (7sus4, 9sus4), defer quality until after family
-        if is_suspended_with_seventh {
-            // Quality will be written after family/extensions
+        if is_suspended_with_seventh || is_suspended_sixth {
+            // Quality will be written after family/extensions (or after the 6)
         } else if family_includes_quality {
             // Skip quality output - the family symbol already includes it
         } else if power_is_redundant {
@@ -194,6 +196,9 @@ impl Chord {
             for addition in &self.additions {
                 if *addition == ChordDegree::Sixth && is_sixth_chord {
                     desc.push('6');
+                    if is_suspended_sixth {
+                        desc.push_str(&self.quality.to_string());
+                    }
                 } else {
                     desc.push_str(&format!("add{}", addition_value(addition)));
                 }
