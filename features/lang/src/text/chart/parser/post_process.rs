@@ -221,18 +221,25 @@ impl<'a> ChartParser<'a> {
 
             // Sync rhythm_elements with updated chord durations
             // We update the chord durations in rhythm_elements while preserving Space and Rest elements
-            // Match by chord symbol since space insertions can shift indices
+            // Match by chord symbol since space insertions can shift indices —
+            // and by occurrence, so the second `A/E` in `A/E_4. A/E_8` takes
+            // the second chord's eighth, not the first one's dotted quarter.
             for measure in section.measures_mut() {
+                let mut seen: std::collections::HashMap<String, usize> =
+                    std::collections::HashMap::new();
                 for element in &mut measure.rhythm_elements {
                     if let RhythmElement::Chord(chord_el) = element {
+                        let nth = seen.entry(chord_el.full_symbol.clone()).or_insert(0);
                         // Find the matching chord by symbol (skip spaces which have symbol "s")
                         if let Some(matching_chord) = measure
                             .chords
                             .iter()
-                            .find(|c| c.full_symbol == chord_el.full_symbol)
+                            .filter(|c| c.full_symbol == chord_el.full_symbol)
+                            .nth(*nth)
                         {
                             chord_el.duration = matching_chord.duration;
                         }
+                        *nth += 1;
                     }
                 }
             }
