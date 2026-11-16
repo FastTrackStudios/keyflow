@@ -41,6 +41,7 @@ impl ChartLayoutEngine {
             id_base,
             is_boundary,
             harmony_style,
+            tied_in,
         } = params;
         // Check if this measure has melodies (from preprocessed data or raw measure)
         let has_melodies =
@@ -416,7 +417,7 @@ impl ChartLayoutEngine {
         }
 
         // Rhythm-slash ties (chord-side, independent of melody ties).
-        self.add_slash_ties(&mut result, measure, ctx);
+        self.add_slash_ties(&mut result, measure, ctx, tied_in);
 
         // A simile bar swaps its ink for the mark, and keeps everything else.
         //

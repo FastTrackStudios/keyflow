@@ -191,9 +191,30 @@ impl<'a> ChartParser<'a> {
             )
         };
 
+        // A number chord's explicit major marker (`3M`, `6M7`) says the chord
+        // is NOT its diatonic quality — in Ab, `3` is Cm and `3M` is C. The
+        // normalized symbol drops the `M` (major is the unmarked quality for a
+        // letter), which turned `3M` into `3`: the minor chord.
+        if root_from_token
+            .trim_start_matches(['b', '#'])
+            .starts_with(|c: char| c.is_ascii_digit())
+            && chord_part[root_from_token.len().min(chord_part.len())..].starts_with('M')
+            && !chord_part[root_from_token.len().min(chord_part.len())..].starts_with("Maj")
+            && !full_symbol[root_from_token.len().min(full_symbol.len())..].starts_with('M')
+            && full_symbol.starts_with(root_from_token.as_str())
+        {
+            full_symbol.insert(root_from_token.len(), 'M');
+        }
+
         // Append bass note to full_symbol for slash chords (e.g., "F" + "/C" -> "F/C")
         if let Some(bass) = &chord.bass {
-            full_symbol = format!("{}/{}", full_symbol, bass);
+            // The normalized symbol of a number chord over an altered degree
+            // (`3M/#5`) already carries its bass; appending it again printed
+            // `3M/#5/#5`.
+            let tail = format!("/{bass}");
+            if !full_symbol.ends_with(&tail) {
+                full_symbol = format!("{}/{}", full_symbol, bass);
+            }
         } else if let Some(target) = &applied_suffix {
             full_symbol = format!("{}/{}", full_symbol, target);
         }
