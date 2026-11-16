@@ -109,13 +109,23 @@ pub fn chord_onset_beat(measure: &Measure, chord_idx: usize, time_signature: (u8
     if !measure.rhythm_elements.is_empty() {
         let mut beats = 0.0;
         let mut seen_chords = 0usize;
-        for elem in &measure.rhythm_elements {
+        for (elem_idx, elem) in measure.rhythm_elements.iter().enumerate() {
             match elem {
                 RhythmElement::Chord(c) => {
                     if seen_chords == chord_idx {
                         return beats;
                     }
                     beats += c.duration.to_beats(ts);
+                    // A chord pushed over the barline (`'6m // 5 //`) gave its
+                    // anticipation to the bar before, which shortened it here,
+                    // but in this bar it still fills its written beats: add the
+                    // push back, or the next chord (the 5 on beat 3) lands half
+                    // a beat early.
+                    if elem_idx == 0
+                        && let Some((true, amount)) = c.push_pull
+                    {
+                        beats += amount.to_beats();
+                    }
                     seen_chords += 1;
                 }
                 RhythmElement::Space(s) => beats += s.duration.to_beats(ts),
