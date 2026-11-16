@@ -246,6 +246,9 @@ fn extract_from_explicit(
     let mut result = RhythmBuildResult::default();
     let mut triplet_group_start: Option<usize> = None;
     let mut triplet_group_ticks: i32 = 0;
+    // A bracket spans three of its notes: one beat for eighth triplets,
+    // two for quarter triplets, the bar for half triplets.
+    let mut triplet_group_target: i32 = 0;
     let mut chord_count: usize = 0;
 
     // Triplets are grouped by beat: 3 triplet eighths = 480 ticks (one quarter note)
@@ -376,6 +379,7 @@ fn extract_from_explicit(
             if triplet_group_start.is_none() {
                 triplet_group_start = Some(result.entries.len());
                 triplet_group_ticks = 0;
+                triplet_group_target = (duration.ticks() * 3).max(TRIPLET_BEAT_TICKS);
             }
             triplet_group_ticks += duration.ticks();
         } else if let Some(start) = triplet_group_start {
@@ -416,7 +420,7 @@ fn extract_from_explicit(
 
         // Close triplet group if we've hit a beat boundary
         if is_triplet
-            && triplet_group_ticks >= TRIPLET_BEAT_TICKS
+            && triplet_group_ticks >= triplet_group_target
             && let Some(start) = triplet_group_start
         {
             result

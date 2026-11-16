@@ -546,6 +546,7 @@ impl ChartLayoutEngine {
                             ctx: &ctx,
                             id_base: id_counter,
                             is_boundary: is_section_boundary,
+                            tied_in: super::tied_into(chart_section, measure_idx),
                         });
                         id_counter += 10;
 

@@ -29,6 +29,7 @@ impl ChartLayoutEngine {
         measure_result: &mut MeasureScene,
         measure: &crate::chart::types::Measure,
         ctx: &LayoutContext<'_>,
+        tied_in: bool,
     ) {
         let spatium = ctx.spatium();
         let tie_config = SlurTieConfig::default();
@@ -123,14 +124,17 @@ impl ChartLayoutEngine {
             if to.tick <= from.tick {
                 continue;
             }
+            // From the tops of the heads, curving down between them: the
+            // anticipation's stem and beam hang below the heads.
+            let tie_y = staff_y - 1.0 * spatium;
             let start = SlurEndpoint {
-                x: from.x + spatium,
-                y: staff_y,
+                x: from.x + 0.9 * spatium,
+                y: tie_y,
                 stem_up: false,
             };
             let end = SlurEndpoint {
-                x: to.x,
-                y: staff_y,
+                x: to.x + 0.3 * spatium,
+                y: tie_y,
                 stem_up: false,
             };
             let tie_layout = layout_tie(
@@ -143,6 +147,34 @@ impl ChartLayoutEngine {
             );
             let mut node = SceneNode::anonymous_leaf(tie_layout.commands);
             node.set_element_type("push_tie");
+            measure_result.scene.add_child(node);
+        }
+
+        // The incoming half of a tie from the bar before: from just left of
+        // this bar's start to its first slash. On a new line this is the
+        // only sign the chord is still held; mid-line it meets the outgoing
+        // half at the barline.
+        if tied_in && let Some(first) = chord_segments.first() {
+            let start = SlurEndpoint {
+                x: -spatium * 0.5,
+                y: staff_y,
+                stem_up: false,
+            };
+            let end = SlurEndpoint {
+                x: first.x - 0.1 * spatium,
+                y: staff_y,
+                stem_up: false,
+            };
+            let tie_layout = layout_tie(
+                &start,
+                &end,
+                SlurDirection::Down,
+                3999,
+                spatium,
+                &tie_config,
+            );
+            let mut node = SceneNode::anonymous_leaf(tie_layout.commands);
+            node.set_element_type("chord_tie");
             measure_result.scene.add_child(node);
         }
     }
