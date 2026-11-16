@@ -49,10 +49,11 @@ fn pull_marker_color() -> Color {
     Color::from_rgba8(0x00, 0x00, 0xCC, 0xFF)
 }
 
-/// Articulation marks (accent, marcato, staccato) are notation, drawn in
-/// the staff's black like the slashes they sit on.
+/// Accents, marcatos and staccatos mark the band's hits, so they draw in
+/// the chart's marker red (the push/key-change red) where a player's eye
+/// catches them.
 fn accent_marker_color() -> Color {
-    Color::BLACK
+    Color::from_rgb8(0xCC, 0x00, 0x00)
 }
 
 /// Context for rendering chord symbols in a measure.

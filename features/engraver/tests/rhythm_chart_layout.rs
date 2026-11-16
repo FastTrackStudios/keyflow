@@ -225,7 +225,9 @@ fn a_chord_tied_over_the_barline_draws_a_tie_and_is_not_named_again() {
             .filter(|s| s.text == "G")
             .count()
     };
-    assert_eq!(ties(&tied.scene), 1, "the tie is drawn");
+    // Both halves: out of the G at the barline, and into the next bar
+    // (so a tie over a line break still shows on the new line).
+    assert_eq!(ties(&tied.scene), 2, "the tie is drawn, both halves");
     assert_eq!(g_symbols(&tied), 1, "the held G is not re-attacked");
 
     // Without the tie bar 2 strikes G again, but G is the harmony already
@@ -716,7 +718,7 @@ fn glyph_colors(node: &SceneNode, glyph: char, out: &mut Vec<peniko::Color>) {
 }
 
 #[test]
-fn every_accent_draws_in_black_even_on_a_chord_named_once() {
+fn every_accent_draws_in_marker_red_even_on_a_chord_named_once() {
     // All I Want for Christmas: `>Am7b5/D_4 >Am7b5/D_4 r2` names the chord
     // once and accents both attacks.
     let result = render("AIW\n#G 150bpm 4/4\n\nOUT 1\n>Am7b5/D_4 >Am7b5/D_4 r2\n");
@@ -724,8 +726,10 @@ fn every_accent_draws_in_black_even_on_a_chord_named_once() {
     glyph_colors(&result.scene, '\u{E4A0}', &mut accents);
     assert_eq!(accents.len(), 2, "both attacks are accented");
     assert!(
-        accents.iter().all(|c| *c == peniko::Color::BLACK),
-        "accents are black: {accents:?}"
+        accents
+            .iter()
+            .all(|c| *c == peniko::Color::from_rgb8(0xCC, 0x00, 0x00)),
+        "accents are the marker red (hits): {accents:?}"
     );
 }
 

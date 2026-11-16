@@ -133,6 +133,14 @@ const COMMENT_PRESETS: &[(&str, &str)] = &[
 ];
 
 impl SectionType {
+    /// A `[Break]`: a bar or two where the band stops, inside a section rather
+    /// than between two. VS / Break / VS is one verse in two parts (VS 1 A,
+    /// VS 1 B), so numbering and A/B letters look straight through it.
+    #[must_use]
+    pub fn is_break(&self) -> bool {
+        matches!(self, SectionType::Custom(name) if name.trim().eq_ignore_ascii_case("break"))
+    }
+
     /// Get a lowercase key for this section type.
     ///
     /// Useful for caching, config lookup, or CSS class names.

@@ -1200,7 +1200,18 @@ pub fn parse_chord(chord_str: &str) -> HarmonyParams {
     // Parse bass note
     if let Some(bass) = bass_part {
         let bass_chars: Vec<char> = bass.chars().collect();
-        if !bass_chars.is_empty() {
+        // After a slash a Roman numeral is the chord an applied chord
+        // leans on (`V/vi`): keep the whole numeral, or `vi` prints as `v`.
+        if let Some(len) = roman_numeral_root_len(&bass_chars) {
+            params.bass = Some(bass_chars[..len].iter().collect());
+        } else if bass_chars.len() >= 2
+            && (bass_chars[0] == '#' || bass_chars[0] == 'b')
+            && bass_chars[1].is_ascii_digit()
+        {
+            // An altered degree in the bass (`3M/#5`): the accidental comes
+            // before the number, as on a number root — keep both, in order.
+            params.bass = Some(bass_chars[..2].iter().collect());
+        } else if !bass_chars.is_empty() {
             params.bass = Some(bass_chars[0].to_string());
             if bass_chars.len() > 1 && (bass_chars[1] == '#' || bass_chars[1] == 'b') {
                 params.bass_accidental = bass_chars[1].to_string();

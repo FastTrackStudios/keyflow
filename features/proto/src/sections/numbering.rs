@@ -32,6 +32,11 @@ impl SectionNumberer {
     ) -> Section {
         let mut section = Section::new(section_type.clone());
 
+        // A break sits inside a run: it neither takes a number nor ends one.
+        if section_type.is_break() {
+            return section;
+        }
+
         // Only number sections that should be numbered
         if !section_type.should_number() {
             self.last_section = None; // Reset consecutive tracking
@@ -92,6 +97,8 @@ impl SectionNumberer {
 
     /// Auto-number a list of sections
     pub fn number_sections(&mut self, sections: &mut [Section]) {
+        // The section the next one may continue (a break in between is skipped).
+        let mut previous: Option<usize> = None;
         for i in 0..sections.len() {
             let numbered =
                 self.process_section(sections[i].section_type.clone(), sections[i].measure_count);
@@ -99,9 +106,14 @@ impl SectionNumberer {
             sections[i].split_letter = numbered.split_letter;
 
             // If we just detected a consecutive section, retroactively add 'a' to the previous one
-            if self.has_pending_split() && i > 0 {
-                sections[i - 1].split_letter = Some('a');
+            if self.has_pending_split()
+                && let Some(p) = previous
+            {
+                sections[p].split_letter = Some('a');
                 self.pending_split = None; // Clear the pending flag
+            }
+            if !sections[i].section_type.is_break() {
+                previous = Some(i);
             }
         }
 

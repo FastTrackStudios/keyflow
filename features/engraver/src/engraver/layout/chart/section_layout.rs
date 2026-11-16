@@ -98,6 +98,11 @@ pub fn compute_section_letters(sections: &[crate::ChartSection]) -> HashMap<usiz
             continue;
         }
 
+        // A break is inside the run around it (VS 1 A / Break / VS 1 B).
+        if section_type.is_break() {
+            continue;
+        }
+
         // Non-numbered section types (Intro, Inst, Solo, etc.) take no
         // letter themselves, but they do sit between the sections around
         // them: VS / INST / VS is two verses, VS 1 and VS 2, not one run
