@@ -296,6 +296,17 @@ pub(super) fn tied_into(section: &crate::chart::types::ChartSection, measure_idx
                 .find(|c| !chord_renderer::is_placeholder_chord(&c.full_symbol))
         })
         .is_some_and(|c| c.rhythm.is_tied())
+        // A chord pushed over the barline (`'4 ////`) was struck on the last
+        // eighth of the bar before and is held into this one: same tie.
+        || (measure_idx > 0
+            && section
+                .measures()
+                .get(measure_idx)
+                .and_then(|m| m.rhythm_elements.first())
+                .is_some_and(|el| {
+                    matches!(el, crate::chart::types::RhythmElement::Chord(c)
+                        if c.push_pull.as_ref().is_some_and(|(is_push, _)| *is_push))
+                }))
 }
 
 /// Chart layout engine.

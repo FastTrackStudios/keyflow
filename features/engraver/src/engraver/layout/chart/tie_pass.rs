@@ -70,12 +70,12 @@ impl ChartLayoutEngine {
             };
             let start = SlurEndpoint {
                 x: start_x,
-                y: staff_y,
+                y: staff_y - 1.0 * spatium,
                 stem_up: false,
             };
             let end = SlurEndpoint {
                 x: end_x,
-                y: staff_y,
+                y: staff_y - 1.0 * spatium,
                 stem_up: false,
             };
             let tie_layout = layout_tie(
@@ -106,15 +106,8 @@ impl ChartLayoutEngine {
             {
                 continue; // staccato chords share the map; they don't sustain
             }
-            // The rhythm builder writes the rest of a pushed chord after its
-            // anticipation only when the chord outlasts the beat it was
-            // pushed from (`rhythm_builder::build_rhythm`); a one-beat push
-            // is all anticipation, and the next entry is another chord.
-            use crate::time::MusicalPositionExt as _;
-            let chord_ticks = (chord.duration.to_beats(time_sig) * per_beat).round() as i32;
-            if chord_ticks <= super::rhythm_builder::PUSH_CARVE_TICKS {
-                continue;
-            }
+            // Every push is held into the beat it was written on (`C // 'G / F /`:
+            // the G sounds from the and of 2 through beat 3), so every one ties.
             let (Some(from), Some(to)) = (
                 chord_segments.get(entry_idx),
                 chord_segments.get(entry_idx + 1),
@@ -150,6 +143,37 @@ impl ChartLayoutEngine {
             measure_result.scene.add_child(node);
         }
 
+        // A chord the next bar pushes back onto this one's last eighth is
+        // held over the barline: its outgoing half runs to the bar's end (the
+        // next bar draws the incoming half, see `tied_into`).
+        for (seg_idx, _symbol) in &measure_result.spillback_positions {
+            let Some(from) = chord_segments.get(*seg_idx) else {
+                continue;
+            };
+            let tie_y = staff_y - 1.0 * spatium;
+            let start = SlurEndpoint {
+                x: from.x + 0.9 * spatium,
+                y: tie_y,
+                stem_up: false,
+            };
+            let end = SlurEndpoint {
+                x: measure_result.width + spatium * 0.5,
+                y: tie_y,
+                stem_up: false,
+            };
+            let tie_layout = layout_tie(
+                &start,
+                &end,
+                SlurDirection::Down,
+                3700 + *seg_idx as u64,
+                spatium,
+                &tie_config,
+            );
+            let mut node = SceneNode::anonymous_leaf(tie_layout.commands);
+            node.set_element_type("push_tie");
+            measure_result.scene.add_child(node);
+        }
+
         // The incoming half of a tie from the bar before: from just left of
         // this bar's start to its first slash. On a new line this is the
         // only sign the chord is still held; mid-line it meets the outgoing
@@ -157,12 +181,12 @@ impl ChartLayoutEngine {
         if tied_in && let Some(first) = chord_segments.first() {
             let start = SlurEndpoint {
                 x: -spatium * 0.5,
-                y: staff_y,
+                y: staff_y - 1.0 * spatium,
                 stem_up: false,
             };
             let end = SlurEndpoint {
                 x: first.x - 0.1 * spatium,
-                y: staff_y,
+                y: staff_y - 1.0 * spatium,
                 stem_up: false,
             };
             let tie_layout = layout_tie(
