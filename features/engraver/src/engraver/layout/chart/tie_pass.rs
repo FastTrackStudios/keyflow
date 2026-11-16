@@ -106,8 +106,17 @@ impl ChartLayoutEngine {
             {
                 continue; // staccato chords share the map; they don't sustain
             }
-            // Every push is held into the beat it was written on (`C // 'G / F /`:
-            // the G sounds from the and of 2 through beat 3), so every one ties.
+            // A push written with slashes (`C // 'G / F /`) keeps a slash on the
+            // beat it was written on (the G sounds from the and of 2 through
+            // beat 3): always tied. One written with a note value is all
+            // anticipation when it lasts no longer than the carve (`'G_4 Am_4`:
+            // the next note is Am's), so only a longer one ties.
+            let slash_written = matches!(chord.rhythm, crate::chord::ChordRhythm::Slashes { .. });
+            use crate::time::MusicalPositionExt as _;
+            let chord_ticks = (chord.duration.to_beats(time_sig) * per_beat).round() as i32;
+            if !slash_written && chord_ticks <= super::rhythm_builder::PUSH_CARVE_TICKS {
+                continue;
+            }
             let (Some(from), Some(to)) = (
                 chord_segments.get(entry_idx),
                 chord_segments.get(entry_idx + 1),
