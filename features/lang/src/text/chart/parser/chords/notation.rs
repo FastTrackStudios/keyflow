@@ -79,19 +79,30 @@ impl<'a> ChartParser<'a> {
     /// `b17` — an optional accidental, a degree digit 1-7, then more digits.
     /// The `:` separator (`1:7`) is the readable form; this is the terse one.
     pub(super) fn is_merged_degree(token: &str) -> bool {
+        Self::merged_degree_at(token).is_some()
+    }
+
+    /// Where a merged degree's digit sits in `token`, past any leading
+    /// accent, staccato, override or push marks (`>`, `.`, `!`, `'`) and the
+    /// degree's own accidental — so `'37` (a pushed 3⁷) splits like `37`
+    /// instead of being thrown away.
+    fn merged_degree_at(token: &str) -> Option<usize> {
         let b = token.as_bytes();
-        let i = usize::from(matches!(b.first(), Some(b'#' | b'b')));
-        matches!(b.get(i), Some(d) if (b'1'..=b'7').contains(d))
-            && b.get(i + 1).is_some_and(u8::is_ascii_digit)
+        let mut i = b
+            .iter()
+            .take_while(|c| matches!(c, b'>' | b'.' | b'!' | b'\''))
+            .count();
+        i += usize::from(matches!(b.get(i), Some(b'#' | b'b')));
+        (matches!(b.get(i), Some(d) if (b'1'..=b'7').contains(d))
+            && b.get(i + 1).is_some_and(u8::is_ascii_digit))
+        .then_some(i)
     }
 
     /// Insert the implicit `:` into a merged degree (`17` -> `1:7`), so the
     /// digit after the degree is parsed as the quality, not eaten as a figure.
     /// Tokens that aren't a merged degree are returned unchanged.
     pub(super) fn split_merged_degree(token: &str) -> String {
-        if Self::is_merged_degree(token) {
-            let b = token.as_bytes();
-            let i = usize::from(matches!(b.first(), Some(b'#' | b'b')));
+        if let Some(i) = Self::merged_degree_at(token) {
             let (head, tail) = token.split_at(i + 1);
             format!("{head}:{tail}")
         } else {
