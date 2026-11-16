@@ -54,6 +54,14 @@ impl SystemWidths {
     }
 }
 
+/// How much wider than its bars' minimum widths a short line with a dense
+/// bar is drawn.
+const SHORT_LINE_AIR: f64 = 1.25;
+
+/// A short line with a dense bar is at least this many normal bars wide
+/// per bar, so its symbols keep their room.
+const SHORT_LINE_DENSE_BARS: f64 = 1.75;
+
 impl ChartLayoutEngine {
     /// === PASS 1: MEASURE ===
     /// Pre-measure all chord symbols to get accurate widths for layout:
@@ -141,7 +149,13 @@ impl ChartLayoutEngine {
             // No justification stretching — just natural widths
             num_measures as f64 * base_measure_width
         } else if is_short_system && has_spacing_expansion {
-            measures_area_width
+            // A short line with a dense bar gets the room its bars need (with
+            // a little air), not the whole line: a one-bar pre-chorus that
+            // stretches edge to edge no longer reads as one bar.
+            let needed: f64 = measure_min_widths.iter().sum::<f64>() * SHORT_LINE_AIR;
+            needed
+                .max(num_measures as f64 * base_measure_width * SHORT_LINE_DENSE_BARS)
+                .min(measures_area_width)
         } else if is_short_system {
             // Short system: only use width proportional to measure count
             num_measures as f64 * base_measure_width
