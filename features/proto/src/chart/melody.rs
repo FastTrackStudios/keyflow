@@ -343,6 +343,19 @@ impl MelodyNote {
         let (pitch_part, duration, dotted, triplet, _underscore_form) =
             Self::split_pitch_and_duration(s)?;
 
+        // `/8`, `/4.`: a rhythm slash inside a melody line, so a bar can play
+        // its chord as slashes (hits) and then switch to written notes. It
+        // has no pitch; the engraver draws a slash head on the middle line.
+        if pitch_part == "/" {
+            let mut note = Self::new("/", duration);
+            note.dotted = dotted;
+            note.triplet = triplet;
+            note.tie_start = tie_start;
+            note.tie_stop = tie_stop;
+            note.articulations = articulations;
+            return Ok(note);
+        }
+
         if let Some((group_modifier, inner)) = split_chord_note_group_pitch_part(pitch_part) {
             let mut pitches = split_melody_tokens(inner);
             let first = pitches

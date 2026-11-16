@@ -629,7 +629,10 @@ fn extract_from_melody(data: &MeasureMelodyData) -> RhythmBuildResult {
                 result.note_pitch_stacks.push(Vec::new());
             }
         }
-        result.head_type_overrides.push(None);
+        // A `/` in the melody is a rhythm slash: a slash head, no pitch.
+        result
+            .head_type_overrides
+            .push((segment.pitch == "/").then_some(NoteHeadOverride::Slash));
     }
 
     result.total_ticks = result.entries.iter().map(|e| e.duration().ticks()).sum();
