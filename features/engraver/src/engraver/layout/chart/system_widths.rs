@@ -267,6 +267,31 @@ impl ChartLayoutEngine {
         base_measure_width: f64,
         is_short_system: bool,
     ) -> Vec<f64> {
+        // A chart reads in even bars: when every bar's symbols and rhythm fit
+        // in an equal share, every bar gets that share. Only a bar that truly
+        // needs more room (a dense run of symbols) pulls width from the rest;
+        // a bar of hits is not wider than a bar of slashes just for having
+        // more attacks in it.
+        let n = measure_weights.len();
+        if n > 0 {
+            let share = total_width_to_distribute / n as f64;
+            if measure_min_widths.iter().all(|w| *w <= share + 0.01) {
+                let widths = vec![share; n];
+                self.log_system_width_decisions(
+                    bars.section_idx,
+                    bars.sys_idx,
+                    bars.measure_indices,
+                    bars.measures,
+                    measure_weights,
+                    measure_min_widths,
+                    &widths,
+                    total_width_to_distribute,
+                    base_measure_width,
+                    is_short_system,
+                );
+                return widths;
+            }
+        }
         let distributed_widths = self.distribute_measure_widths(
             measure_weights,
             0, // No count-in measures in first system (now rendered in header)
