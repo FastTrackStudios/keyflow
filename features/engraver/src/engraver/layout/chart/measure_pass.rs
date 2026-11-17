@@ -915,7 +915,17 @@ mod tests {
 
         let measured = measure_measure(&measure, &style, &mut cache);
         assert_eq!(measured.visible_chord_count, 4);
-        let symbols: f64 = measured.chord_widths.iter().sum();
+        // The symbols as they print: a one-beat D/F# stacks into a fraction,
+        // narrower than its inline estimate in `chord_widths`.
+        let printed = super::super::symbol_spacing::printed_symbols(
+            &measure,
+            &style,
+            measure.time_signature,
+            false,
+            &[],
+        );
+        assert_eq!(printed.len(), 4);
+        let symbols: f64 = printed.iter().map(|s| s.extent.left + s.extent.right).sum();
         assert!(
             measured.min_width >= symbols,
             "the bar must be wide enough for every symbol: min_width={} symbols={symbols}",

@@ -50,11 +50,12 @@ pub struct PrintedSymbol {
 
 /// Whether a slash chord prints as a vertical fraction (1.0) or inline
 /// (0.0), from the time it has before the next symbol (or the barline), in
-/// ticks (quarter = 480). Less than a beat and it stacks: `A` over a rule
-/// over `E`, as a hand-written chart would squeeze it.
+/// ticks (quarter = 480). A beat or less and it stacks: `A` over a rule
+/// over `E`, as a hand-written chart would squeeze a walk of one chord per
+/// beat (`Eb7 Eb7/Db Cm Eb7/Bb`).
 #[must_use]
 pub fn slash_stack_for_span(span_ticks: i32) -> f64 {
-    if f64::from(span_ticks) < constants::TICKS_PER_QUARTER {
+    if f64::from(span_ticks) <= constants::TICKS_PER_QUARTER {
         1.0
     } else {
         0.0
@@ -519,7 +520,15 @@ mod tests {
 
 #[cfg(test)]
 mod spread_stacking_tests {
-    use super::{spread_stacking, stack_adjacent_slash_chords};
+    use super::{constants, slash_stack_for_span, spread_stacking, stack_adjacent_slash_chords};
+
+    #[test]
+    fn a_slash_chord_held_one_beat_stacks_and_a_longer_one_does_not() {
+        let beat = constants::TICKS_PER_QUARTER as i32;
+        assert_eq!(slash_stack_for_span(beat), 1.0);
+        assert_eq!(slash_stack_for_span(beat / 2), 1.0);
+        assert_eq!(slash_stack_for_span(beat * 2), 0.0);
+    }
 
     #[test]
     fn slash_chords_a_beat_apart_stack_together() {
