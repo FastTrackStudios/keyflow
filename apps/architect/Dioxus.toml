@@ -1,0 +1,9 @@
+# dx config: `just app` runs `dx serve` from this folder, so a save is
+# hot-patched into the running window (Rust through dx's subsecond, rsx
+# hot-reloaded), the extension's code with it: it is compiled into this
+# app. As Architect's own apps/desktop.
+[application]
+
+[bundle]
+identifier = "app.fasttrackstudio.keyflow-dev"
+publisher = "FastTrackStudio"

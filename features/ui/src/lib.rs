@@ -67,6 +67,8 @@ pub mod native_chart_editor;
 
 pub mod catalog;
 pub mod chart_renderer;
+/// What is selected on a chart, and how clicks change it (MuseScore's model).
+pub mod selection;
 pub mod components;
 pub mod examples;
 pub mod layouts;

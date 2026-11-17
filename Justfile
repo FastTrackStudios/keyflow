@@ -74,6 +74,27 @@ wasm-check:
         -p editor-keyflow -p keyflow -p keyflow-ui --no-default-features \
         --features editor-keyflow/render,keyflow/text,keyflow/svg,keyflow/highlighting,keyflow-ui/wasm-graphics
 
+# ── The app ─────────────────────────────────────────────────────────
+# Keyflow's development window: the Architect app with the Keyflow
+# extension compiled in (apps/architect), its own config folder
+# (keyflow-dev), under `dx serve`: a save is hot-patched into the running
+# window, the extension's code included. `devenv up` runs it beside the
+# telemetry stack. Its vault is devenv's state copy of
+# apps/architect/vault, seeded on the first run: edits made in the app
+# never touch the repo. Delete .devenv/state/keyflow-vault to start again
+# from the seed.
+app *ARGS:
+    cd apps/architect && \
+    ARCHITECT_VAULT="${ARCHITECT_VAULT:-${DEVENV_STATE:-{{justfile_directory()}}/.devenv/state}/keyflow-vault}" \
+    ARCHITECT_VAULT_SEED="${ARCHITECT_VAULT_SEED:-${DEVENV_ROOT:-{{justfile_directory()}}}/apps/architect/vault}" \
+    dx serve --platform desktop --renderer native --hot-patch true {{ARGS}}
+
+# The same window built and run plainly (`cargo run`), no hot patching.
+app-plain *ARGS:
+    ARCHITECT_VAULT="${ARCHITECT_VAULT:-${DEVENV_STATE:-{{justfile_directory()}}/.devenv/state}/keyflow-vault}" \
+    ARCHITECT_VAULT_SEED="${ARCHITECT_VAULT_SEED:-${DEVENV_ROOT:-{{justfile_directory()}}}/apps/architect/vault}" \
+    cargo run -p keyflow-architect -- {{ARGS}}
+
 # ── Keyflow CLI ──────────────────────────────────────────────────────────
 
 # Parse / render a .kf chart — `just kf render examples/foo.kf`

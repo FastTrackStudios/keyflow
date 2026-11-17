@@ -8,9 +8,9 @@ the `architect` / `daw` / `vendor` splits before it.
 |---|---|---|
 | **keyflow** (here) | the chart language, its formats, the LSP + grammar, and Engraver | — |
 | [daw](https://github.com/FastTrackStudios/daw) | the DAW platform and shared substrate | git dep, tag `v0.0.7` |
-| [architect](https://github.com/FastTrackStudios/architect) | the framework (entity/RPC, atom, form, auth, permissions, crdt), `architect-ui` | git dep, tag `v0.12.6` (same tag studio pins) |
+| [architect](https://github.com/FastTrackStudios/architect) | the framework (entity/RPC, atom, form, auth, permissions, crdt), `architect-ui` | git dep, tag `v0.13.1` (same tag studio pins) |
 | [session](https://github.com/FastTrackStudios/session) | the musical/production vocabulary and the Session app | consumes this repo |
-| [editor](https://github.com/FastTrackStudios/editor) | the embeddable text/markdown editor — sits BELOW this repo | git dep, pinned by `rev` (`6817dc2`, architect v0.12.6's) |
+| [editor](https://github.com/FastTrackStudios/editor) | the embeddable text/markdown editor — sits BELOW this repo | git dep, pinned by `rev` (`6817dc2`, architect v0.13.1's) |
 
 One root Cargo workspace, one lockfile, one `target/`, one flake.
 Intra-repo dependencies are path deps in root `[workspace.dependencies]`,
@@ -69,6 +69,10 @@ features/ui/          keyflow-ui — the Dioxus chart components
 features/editor/      editor-keyflow — this repo's half of the editor
                       integration: the fence renderer (`render`) and `lang`
                       (decorations, hover, highlight)
+features/extension/   keyflow-extension — Keyflow as an Architect extension
+                      (`extension.toml`, id `keyflow`): the chart pane, the
+                      `keyflow.chart` document kind, the `KEYFLOW_*` actions.
+                      Linked into Architect and Studio, or run as a process
 features/tree-sitter/ the grammar
 apps/cli/             the `kf` command line tool (Studio depends on it)
 docs/guides/          the language guide
@@ -76,13 +80,25 @@ docs/spec/            tracey-tracked spec (score-engraving)
 ```
 
 The layers, bottom up: proto → lang → engraver → keyflow → ui / editor /
-cli. `annotate` sits beside proto; `daw-analysis` above the facade.
+cli → extension. `annotate` sits beside proto; `daw-analysis` above the
+facade.
 
-**There is no Keyflow app.** The standalone web site and iOS app were
-removed: Keyflow's editor, chart library and guide ship inside Studio,
-which builds these crates for desktop, iOS and the browser. So the
-library crates keep their `wasm32` and `target_os = "ios"` support even
-though nothing in this workspace builds an app for either target.
+**There is no Keyflow app; there is a Keyflow extension.** The standalone
+web site and iOS app were removed. Keyflow ships inside the apps that load
+`keyflow-extension` (Architect, Studio), which build these crates for
+desktop, iOS and the browser. So the library crates keep their `wasm32`
+and `target_os = "ios"` support even though nothing in this workspace
+builds an app for either target.
+
+**The chart is the editor.** The direction (2026-11) is a full sheet
+music editor on the engraved chart: select on the chart, edit with keys
+and toolbars, every edit an action. `.kf` text is an input method (type a
+bar in, import a file) and the chart's storage, not a pane beside it. A
+chart is a document of the app's, a CRDT replica, so several people edit
+it at once: an extension edit goes through the host (`edit_document`) as
+one commit and one undo step. Reach the app only through the host
+(`linked::Handle::host`), never through Rust handles into it — that is
+what lets one crate run linked, as a process, and in every host app.
 
 **Defaults and the root entry.** `keyflow-lang` and `engraver` default to
 every native feature, so `cargo test -p <crate>` covers all of it. The

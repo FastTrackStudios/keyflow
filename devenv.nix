@@ -144,8 +144,45 @@ in
     fi
   '';
 
+  # dx on the app's own Dioxus line (0.8.0-alpha.3, DioxusLabs/dioxus
+  # 430cfb56, the revision Architect pins), with the fleet's
+  # DX_NO_RUSTC_WRAPPER patch. The fleet's dx (pins.json, 0.8.0-alpha.0)
+  # is a protocol behind: `dx serve --hot-patch` refuses the app as
+  # incompatible, and a save restarts the window instead of patching it.
+  # `fleet.dioxus.package` is the module's per-repo door while moving
+  # between dx revisions; this moves to devenv-fleet's pins.json.
+  fleet.dioxus.package =
+    let
+      pkgsDx = import inputs.nixpkgs-dx { inherit (pkgs.stdenv) system; };
+    in
+    pkgsDx.dioxus-cli.overrideAttrs (old: rec {
+      version = "0.8.0-alpha.3";
+      src = pkgsDx.fetchFromGitHub {
+        owner = "DioxusLabs";
+        repo = "dioxus";
+        rev = "430cfb563f1b70602ef387f0c80f171d84527b41";
+        hash = "sha256-ZWqLFm5apsJu24ishMsilTkndLrlRmb0JQRyVXSBt50=";
+      };
+      cargoDeps = pkgsDx.rustPlatform.fetchCargoVendor {
+        inherit src;
+        name = "dioxus-cli-${version}-vendor";
+        hash = "sha256-ITAru/fdxXM03irEstnahGFK+eJwEgrlmQzYBshDajQ=";
+      };
+      buildAndTestSubdir = "packages/cli";
+      patches = [ "${inputs.devenv-fleet}/pkgs/dx-no-rustc-wrapper.patch" ];
+      doCheck = false;
+      doInstallCheck = false;
+    });
+
+  # `devenv up`: Keyflow's development window beside the telemetry stack.
+  # apps/architect is the Architect app with the Keyflow extension compiled
+  # in, in a config folder of its own (keyflow-dev), its vault seeded from
+  # apps/architect/vault. `just app` is the same without the stack.
+  processes.keyflow.exec = "just app";
+
   fleet.banner = ''
-    Keyflow: just check / just test / just ci, just kf --help (the keyflow CLI)
+    Keyflow: devenv up (or just app) opens the editor window
+    just check / just test / just ci, just kf --help (the keyflow CLI)
     just graph (re)builds the repo knowledge graph
   '';
 }

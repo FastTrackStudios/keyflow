@@ -1,0 +1,429 @@
+# Keyflow (features/extension/src/lib.rs): the chart editor as an
+# Architect extension. One Rust value (`Keyflow`, a linked::Extension)
+# runs it two ways: Architect and Studio link it in as a built-in, and its
+# program (src/main.rs) serves the same value as a process, this
+# manifest's [entry], when a development copy runs
+# (EXT_CLONE {"id":"keyflow"}).
+#
+# A chart is a `.kf` document in the app's documents, which are CRDT
+# replicas: an edit made through the host (`edit_document`) is one commit
+# and one undo step that merges with everyone else's.
+id = "keyflow"
+name = "Keyflow"
+version = "0.1.0"
+kind = "process"
+api = "0.1"
+description = "Chord charts and lead sheets: open a .kf chart and it is engraved in its pane, following the app's theme; zoom with Ctrl and the wheel, pan with the middle button."
+authors = ["FastTrackStudios"]
+
+[entry]
+path = "keyflow-extension"
+
+# EXT_CLONE writes this crate to the development folder and builds its
+# program, which then overrides the linked copy under the same id.
+[source]
+git = "https://github.com/FastTrackStudios/keyflow"
+rev = "main"
+path = "features/extension"
+
+[capabilities]
+effect = "mutating"
+# A chart's text: read to engrave it.
+reads = ["documents"]
+
+[[actions]]
+id = "KEYFLOW_STATE"
+name = "Keyflow: open charts"
+description = "Every chart open in a pane: its `path`, whether it parsed (`error` when not), its zoom (`null` fits the page to the width) and scroll ([x, y], logical pixels), whether the charts are `dark`, and the toolbar's tools that are on (`tools_on`)."
+group = "Keyflow"
+effect = "read_only"
+
+[[actions]]
+id = "KEYFLOW_CHART_VIEW"
+name = "Keyflow: set the chart's view"
+description = "Zooms and pans the open charts (`path`: only that one): `zoom` (1.0 is 100%, clamped to 0.25 to 4.0; `null` fits the page to the width), and `scrollX` / `scrollY` from the chart's top-left, in logical pixels."
+group = "Keyflow"
+effect = "mutating"
+params = '{"type":"object","properties":{"path":{"type":"string"},"zoom":{"type":["number","null"]},"scrollX":{"type":"number"},"scrollY":{"type":"number"}}}'
+
+[[actions]]
+id = "KEYFLOW_SET_CHART_THEME"
+name = "Keyflow: set the chart's theme"
+description = "Draws the charts on dark paper (`dark: true`) or light, the default whatever the app's theme; `follow: true` draws them in the app's theme instead."
+group = "Keyflow"
+effect = "mutating"
+params = '{"type":"object","properties":{"dark":{"type":"boolean"},"follow":{"type":"boolean"}}}'
+
+[[actions]]
+id = "KEYFLOW_RELOAD"
+name = "Keyflow: reload the chart"
+description = "Reads the open charts (`path`: only that one) from their documents again and engraves them."
+group = "Keyflow"
+effect = "read_only"
+params = '{"type":"object","properties":{"path":{"type":"string"}}}'
+
+# The note-input toolbar's tools (src/tools.rs `TOOLS`): each an action of
+# its own, lit while on (state `checked`), so ⌘K, keys and MCP reach it too.
+
+[[actions]]
+id = "KEYFLOW_NOTE_INPUT"
+name = "Keyflow: note input"
+description = "Note input on or off: entry on the chart, with the duration, accidental and marks chosen here."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_DURATION_64TH"
+name = "Keyflow: 64th note"
+description = "The duration the next entry or the selection takes."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_DURATION_32ND"
+name = "Keyflow: 32nd note"
+description = "The duration the next entry or the selection takes."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_DURATION_16TH"
+name = "Keyflow: 16th note"
+description = "The duration the next entry or the selection takes."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_DURATION_EIGHTH"
+name = "Keyflow: eighth note"
+description = "The duration the next entry or the selection takes."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_DURATION_QUARTER"
+name = "Keyflow: quarter note"
+description = "The duration the next entry or the selection takes."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_DURATION_HALF"
+name = "Keyflow: half note"
+description = "The duration the next entry or the selection takes."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_DURATION_WHOLE"
+name = "Keyflow: whole note"
+description = "The duration the next entry or the selection takes."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_DOT"
+name = "Keyflow: augmentation dot"
+description = "Dots the duration chosen."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_REST"
+name = "Keyflow: rest"
+description = "The next entry is a rest."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_DOUBLE_FLAT"
+name = "Keyflow: double flat"
+description = "The accidental the next note takes; chosen again, none."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_FLAT"
+name = "Keyflow: flat"
+description = "The accidental the next note takes; chosen again, none."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_NATURAL"
+name = "Keyflow: natural"
+description = "The accidental the next note takes; chosen again, none."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_SHARP"
+name = "Keyflow: sharp"
+description = "The accidental the next note takes; chosen again, none."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_DOUBLE_SHARP"
+name = "Keyflow: double sharp"
+description = "The accidental the next note takes; chosen again, none."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_TIE"
+name = "Keyflow: tie"
+description = "Ties the next entry to the one before."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_ACCENT"
+name = "Keyflow: accent"
+description = "The mark the next entry or the selected chord takes."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_MARCATO"
+name = "Keyflow: marcato"
+description = "The mark the next entry or the selected chord takes."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_TENUTO"
+name = "Keyflow: tenuto"
+description = "The mark the next entry or the selected chord takes."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_STACCATO"
+name = "Keyflow: staccato"
+description = "The mark the next entry or the selected chord takes."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_PUSH"
+name = "Keyflow: push"
+description = "The next chord is pushed (anticipated): `'` in the chart."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_PALETTES"
+name = "Keyflow: palettes"
+description = "Shows or hides the palettes beside the chart."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+# The note-input toolbar, on the chart's own pane: it goes wherever the
+# view is docked. Its glyphs are the chart's music font (src/icons.rs).
+[[toolbars]]
+id = "note-input"
+title = "Note input"
+where = "view:keyflow/chart"
+
+[[toolbars.items]]
+action = "KEYFLOW_NOTE_INPUT"
+icon = "pencil"
+label = "Note input"
+hide_label = true
+
+[[toolbars.items]]
+kind = "separator"
+
+[[toolbars.items]]
+action = "KEYFLOW_DURATION_64TH"
+image = "icons/E1DD.svg"
+label = "64th note"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_DURATION_32ND"
+image = "icons/E1DB.svg"
+label = "32nd note"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_DURATION_16TH"
+image = "icons/E1D9.svg"
+label = "16th note"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_DURATION_EIGHTH"
+image = "icons/E1D7.svg"
+label = "Eighth note"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_DURATION_QUARTER"
+image = "icons/E1D5.svg"
+label = "Quarter note"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_DURATION_HALF"
+image = "icons/E1D3.svg"
+label = "Half note"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_DURATION_WHOLE"
+image = "icons/E1D2.svg"
+label = "Whole note"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_DOT"
+image = "icons/E1E7.svg"
+label = "Augmentation dot"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_REST"
+image = "icons/E4E5.svg"
+label = "Rest"
+hide_label = true
+
+[[toolbars.items]]
+kind = "separator"
+
+[[toolbars.items]]
+action = "KEYFLOW_DOUBLE_FLAT"
+image = "icons/E264.svg"
+label = "Double flat"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_FLAT"
+image = "icons/E260.svg"
+label = "Flat"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_NATURAL"
+image = "icons/E261.svg"
+label = "Natural"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_SHARP"
+image = "icons/E262.svg"
+label = "Sharp"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_DOUBLE_SHARP"
+image = "icons/E263.svg"
+label = "Double sharp"
+hide_label = true
+
+[[toolbars.items]]
+kind = "separator"
+
+[[toolbars.items]]
+action = "KEYFLOW_TIE"
+icon = "spline"
+label = "Tie"
+hide_label = true
+
+[[toolbars.items]]
+kind = "separator"
+
+[[toolbars.items]]
+action = "KEYFLOW_ACCENT"
+image = "icons/E4A0.svg"
+label = "Accent"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_MARCATO"
+image = "icons/E4AC.svg"
+label = "Marcato"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_TENUTO"
+image = "icons/E4A4.svg"
+label = "Tenuto"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_STACCATO"
+image = "icons/E4A2.svg"
+label = "Staccato"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_PUSH"
+icon = "chevrons-left"
+label = "Push"
+hide_label = true
+
+[[toolbars.items]]
+kind = "separator"
+
+[[toolbars.items]]
+action = "KEYFLOW_PALETTES"
+icon = "panel-left"
+label = "Palettes"
+hide_label = true
+
+[[views]]
+id = "chart"
+title = "Chart"
+
+# A .kf file is a document the app reads and edits (`read_document`,
+# `edit_document`): without this the documents service serves only notes.
+# Its body is text, not markdown.
+[[file_types]]
+extension = "kf"
+name = "Keyflow chart"
+icon = "music"
+note_type = "keyflow-chart"
+body = "text"
+
+[[doc_kinds]]
+id = "keyflow.chart"
+name = "Keyflow chart"
+files = ["kf"]
+icon = "music"
+view = "chart"
+
+[[openers]]
+id = "kf"
+title = "Keyflow chart"
+files = ["kf"]
+view = "chart"
+
+# A chart saved elsewhere (another person, another device, another
+# extension) is read again.
+[[hooks]]
+on = "doc.saved"
+action = "KEYFLOW_RELOAD"
