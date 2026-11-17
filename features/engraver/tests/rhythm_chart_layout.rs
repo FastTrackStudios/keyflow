@@ -864,15 +864,26 @@ fn a_melody_space_draws_as_the_rhythm_slash_before_written_notes() {
 fn an_accidental_lasts_to_the_barline_so_a_later_plain_note_gets_its_natural() {
     // All I Want for Christmas walk-up in G: G A B♭ B — the B after the B♭
     // needs a natural, and a second B♭ in a bar needs no second flat.
-    let walk = render(
-        "AIW\n#G 150bpm 4/4\n\nCH 1\n<< G_4 G_4 G_4 G_4 ; m{ G:24 A:24 Bb:24 B:24 } >>\n",
+    let walk =
+        render("AIW\n#G 150bpm 4/4\n\nCH 1\n<< G_4 G_4 G_4 G_4 ; m{ G:24 A:24 Bb:24 B:24 } >>\n");
+    assert_eq!(
+        count_glyphs(&walk.scene, '\u{E260}'),
+        1,
+        "one flat, on the B♭"
     );
-    assert_eq!(count_glyphs(&walk.scene, '\u{E260}'), 1, "one flat, on the B♭");
-    assert_eq!(count_glyphs(&walk.scene, '\u{E261}'), 1, "one natural, on the B");
+    assert_eq!(
+        count_glyphs(&walk.scene, '\u{E261}'),
+        1,
+        "one natural, on the B"
+    );
 
     let repeat = render(
         "TC\nbF 93bpm 4/4\n\nVS 1\n<< Ebmaj9_4 Ebmaj9_4 Ebmaj9_2 ; m{ Eb:34 Eb:34 Eb:32 } >>\n",
     );
     // Two flats: the key signature's B♭ and the first E♭ — not one per E♭.
-    assert_eq!(count_glyphs(&repeat.scene, '\u{E260}'), 2, "the flat prints once per bar");
+    assert_eq!(
+        count_glyphs(&repeat.scene, '\u{E260}'),
+        2,
+        "the flat prints once per bar"
+    );
 }

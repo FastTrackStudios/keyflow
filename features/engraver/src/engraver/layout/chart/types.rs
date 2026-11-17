@@ -900,7 +900,13 @@ impl BarAccidentals {
     /// key and what the bar has already shown; records it. `tied_in` is a
     /// note tied over the barline from the last bar, which prints none but
     /// sets the line for the rest of this bar.
-    pub fn display(&mut self, pitch: &str, line: i32, key_signature: i8, tied_in: bool) -> Accidental {
+    pub fn display(
+        &mut self,
+        pitch: &str,
+        line: i32,
+        key_signature: i8,
+        tied_in: bool,
+    ) -> Accidental {
         let Some((class, alteration, explicit)) = parse_melody_pitch(pitch) else {
             return Accidental::None;
         };

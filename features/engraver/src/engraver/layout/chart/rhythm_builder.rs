@@ -609,7 +609,8 @@ fn extract_from_melody(data: &MeasureMelodyData) -> RhythmBuildResult {
                     data.clef,
                     data.key_signature,
                 );
-                let acc = bar_accidentals.display(&segment.pitch, line, data.key_signature, tied_in);
+                let acc =
+                    bar_accidentals.display(&segment.pitch, line, data.key_signature, tied_in);
                 result.note_pitches.push(Some((line, acc)));
                 let mut stack: Vec<(i32, Accidental)> =
                     Vec::with_capacity(segment.extra_pitches.len());
