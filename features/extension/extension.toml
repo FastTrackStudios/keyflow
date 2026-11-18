@@ -28,11 +28,18 @@ path = "features/extension"
 
 # A chart in a session (pane state `session:<id>`) is read from the session
 # this copy hosts. A chart alone needs no session.
-# Keyflow is a session's first host (and so does not `[uses]` the service:
-# its chart reads the sessions it holds directly): it provides `fts.session` to every
-# extension (KEYFLOW_READ / _WRITE / _STRUCTURE, run as the caller).
+# Keyflow is a session's first host: it provides `fts.session` to every
+# extension (KEYFLOW_READ / _WRITE / _STRUCTURE, run as the caller), and
+# its chart reads the sessions it holds directly.
 [provides]
 "fts.session" = "0.1.0"
+
+# And uses it: KEYFLOW_SESSION_FOLLOW reads the session another provider
+# answers for (the DAW engine's, studio#522, chosen with architect#872's
+# EXT_SERVICE_USE), which the host allows only for a service named here.
+# Providing and using one service together is valid since architect#873.
+[uses]
+"fts.session" = "^0.1"
 
 # A session file (`.session`) is a document of the vault: the node opens it,
 # syncs it through the org, and Keyflow edits the node's copy
