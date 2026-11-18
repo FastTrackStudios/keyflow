@@ -150,16 +150,7 @@ impl Score {
                 // Only a copy note for note (not transposed or cut short).
                 replays.filter(|&g| {
                     all.get(g).is_some_and(|src| {
-                        // An `x2` copy of a line's last bar is the bar but
-                        // for the `x2` itself, which that bar carries.
-                        let same = if m.plays_back.is_some() {
-                            let mut copy = (**m).clone();
-                            copy.repeat_count = src.repeat_count;
-                            super::commit::same_music(&copy, src)
-                        } else {
-                            super::commit::same_music(m, src)
-                        };
-                        same && src.source_span.is_some()
+                        super::commit::plays_again(m, src) && src.source_span.is_some()
                     })
                 })
             })

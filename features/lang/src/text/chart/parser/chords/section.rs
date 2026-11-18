@@ -341,6 +341,33 @@ impl<'a> ChartParser<'a> {
                 }
             }
         }
+        // A `<< chords ; m{ … } >>` block that is one bar: the line is its
+        // text, as a melody line's is, so a section that replays this one
+        // finds the bar it plays.
+        // (A cue may be written before the block: `"Stop groove" << … >>`.)
+        let trimmed = line.trim();
+        let mut block = trimmed;
+        while let Some(rest) = block
+            .strip_prefix("^\"")
+            .or_else(|| block.strip_prefix("_\""))
+            .or_else(|| block.strip_prefix('"'))
+        {
+            let Some(end) = rest.find('"') else { break };
+            block = rest[end + 1..].trim_start();
+        }
+        if let [only] = measures
+            && only.source_span.is_none()
+            && block.starts_with("<<")
+            && block.ends_with(">>")
+        {
+            let lead = line.len() - line.trim_start().len();
+            only.source_span = Some(crate::text::parsing::TextSpan::with_location(
+                lead,
+                trimmed.len(),
+                0,
+                0,
+            ));
+        }
         if measures.iter().all(|m| m.source_span.is_none()) {
             return;
         }
