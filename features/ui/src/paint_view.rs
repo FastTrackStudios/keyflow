@@ -69,6 +69,28 @@ pub struct ChartSnapshot {
     pub input: Option<InputOverlay>,
 }
 
+/// What a frame reads of a [`ChartSnapshot`]: everything but the chart,
+/// which only a layout needs.
+struct Frame {
+    revision: u64,
+    playhead_secs: Option<f64>,
+    theme: Option<ChartTheme>,
+    view: ChartView,
+    input: Option<InputOverlay>,
+}
+
+impl Frame {
+    fn of(s: &ChartSnapshot) -> Self {
+        Self {
+            revision: s.revision,
+            playhead_secs: s.playhead_secs,
+            theme: s.theme.clone(),
+            view: s.view,
+            input: s.input,
+        }
+    }
+}
+
 /// Where note input's next entry goes, as the pane draws it: MuseScore's
 /// note-input cursor over the span of the bar the next note will fill, and
 /// the shadow note, the note that would be entered, at its pitch.
@@ -525,29 +547,28 @@ impl ChartPaintView {
         })
     }
 
-    fn update_layout(&mut self, snapshot: &ChartSnapshot) {
+    /// The layout for `revision` taken up when it lands, and asked for
+    /// when it is not there yet. The chart is copied only for the job: a
+    /// frame (a scroll, a hover) reads the snapshot's small fields and
+    /// leaves the chart where it is.
+    fn update_layout(&mut self, data: &HostData<ChartSnapshot>, revision: u64) {
         if let Some(layout) = self.worker.poll() {
-            if layout.key() == snapshot.revision {
+            if layout.key() == revision {
                 self.view.apply_precomputed_layout(layout);
             }
             self.requested = None;
         }
-        if self.view.needs_layout(snapshot.revision) && self.requested != Some(snapshot.revision) {
-            self.worker.submit(
-                self.view
-                    .layout_job(snapshot.chart.clone(), snapshot.revision),
-            );
-            self.requested = Some(snapshot.revision);
+        if self.view.needs_layout(revision) && self.requested != Some(revision) {
+            let chart = data.read(|s| s.chart.clone());
+            self.worker.submit(self.view.layout_job(chart, revision));
+            self.requested = Some(revision);
         }
     }
 
     /// The host's theme, or the pane's tokens', set on the engraver when
     /// it changed.
-    fn update_theme(&mut self, ctx: &ViewCtx, snapshot: &ChartSnapshot) {
-        let theme = snapshot
-            .theme
-            .clone()
-            .unwrap_or_else(|| ChartTheme::from_tokens(|name| chart_token(ctx, name)));
+    fn update_theme(&mut self, ctx: &ViewCtx, theme: Option<ChartTheme>) {
+        let theme = theme.unwrap_or_else(|| ChartTheme::from_tokens(|name| chart_token(ctx, name)));
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         format!("{theme:?}").hash(&mut hasher);
         let hash = hasher.finish();
@@ -646,10 +667,10 @@ impl ChartPaintView {
         &mut self,
         ctx: &ViewCtx,
         data: &HostData<ChartSnapshot>,
-        snapshot: &ChartSnapshot,
+        frame: &Frame,
         view: ChartView,
     ) -> ChartView {
-        let (Some(secs), None) = (snapshot.playhead_secs, snapshot.input.as_ref()) else {
+        let (Some(secs), None) = (frame.playhead_secs, frame.input.as_ref()) else {
             self.followed_playhead = None;
             return view;
         };
@@ -1458,9 +1479,11 @@ impl PaintView for ChartPaintView {
 
     fn layers(&mut self, ctx: &ViewCtx) -> Option<Vec<(LayerKey, Layer)>> {
         let data = ctx.data::<ChartSnapshot>()?;
-        let snapshot = data.get();
-        self.update_theme(ctx, &snapshot);
-        self.update_layout(&snapshot);
+        // What a frame reads of the snapshot, not the chart: copying it
+        // every frame was most of what a wheel notch cost (architect#839).
+        let snapshot = data.read(Frame::of);
+        self.update_theme(ctx, snapshot.theme.clone());
+        self.update_layout(&data, snapshot.revision);
         self.record_pages();
         self.adopt_selection(ctx);
         if let Some(size) = self.view.content_size() {
