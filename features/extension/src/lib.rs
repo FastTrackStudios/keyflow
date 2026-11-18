@@ -44,8 +44,8 @@ use keyflow::edit::{self, Mode, Op, Pos, Score};
 use keyflow::engraver::renderer::ChartTheme;
 use keyflow_session::ChartSource;
 use keyflow_ui::paint_view::{
-    ChartGesture, ChartGestures, ChartSelection, ChartSnapshot, ChartView, InputOverlay,
-    PointerShadow, ShadowNote, chart_mount_with,
+    ChartGesture, ChartGestures, ChartPaintStatus, ChartSelection, ChartSnapshot, ChartView,
+    InputOverlay, PointerShadow, ShadowNote, chart_mount_with,
 };
 use serde_json::{Value as Json, json};
 use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
@@ -202,6 +202,16 @@ impl Extension for Keyflow {
             }
         });
         ext.action("KEYFLOW_CHORD_EDIT", |_| async { chord_edit().await });
+        // The chart's zoom from the keyboard, MuseScore's keys: a step of
+        // the wheel's, 100%, or the pane's width.
+        for (name, step) in [
+            ("KEYFLOW_ZOOM_IN", ZoomTo::Step(1.0)),
+            ("KEYFLOW_ZOOM_OUT", ZoomTo::Step(-1.0)),
+            ("KEYFLOW_ZOOM_100", ZoomTo::Exactly(1.0)),
+            ("KEYFLOW_ZOOM_FIT", ZoomTo::Fit),
+        ] {
+            ext.action(name, move |_| async move { Ok(zoom_chart(step)) });
+        }
         // MuseScore's "Input by duration mode cursor" preference: the
         // above-staff ruler or the classic cursor.
         ext.action("KEYFLOW_DURATION_RULER", |_| async {
@@ -257,6 +267,8 @@ struct Open {
     selection: HostData<ChartSelection>,
     /// Its pane's frames: how long the view took to give each one.
     stats: architect_workspace::paint::FrameStats,
+    /// What its view reports: the zoom in effect and the pane's size.
+    status: HostData<ChartPaintStatus>,
     wake: PaintWake,
     error: Option<String>,
     /// Tells the pane something changed (from any thread: an action's).
@@ -275,6 +287,8 @@ enum Msg {
     Gesture(ChartGesture),
     /// Time to keep the view, if it changed.
     Keep,
+    /// Time to show the zoom in effect, if it changed.
+    Zoom,
 }
 
 /// Note input: one person's, for the app, as MuseScore's (the tools and
@@ -397,6 +411,8 @@ fn ChartPane() -> Element {
     let mut draft = use_signal(String::new);
     let mut chord = use_signal(|| None::<String>);
     let mut field = use_signal(|| 0_u64);
+    // The zoom in effect, as the status bar shows it.
+    let mut zoom_label = use_signal(String::new);
     // The pane's place as its pane keeps it (architect#859): the latest,
     // for the keeper below to write through, and what was kept, given back
     // once (the pane's input reaches a process just after its first render,
@@ -467,6 +483,14 @@ fn ChartPane() -> Element {
                     }
                     // The pane's place kept, once what was kept is given back
                     // (a starting view would write its defaults over it).
+                    Msg::Zoom => {
+                        if let Some(o) = open_charts().get(&key).cloned() {
+                            let text = zoom_text(&o);
+                            if *zoom_label.peek() != text {
+                                zoom_label.set(text);
+                            }
+                        }
+                    }
                     Msg::Keep => {
                         if give_back_place(key).await
                             && let Some(kept) = place.borrow().clone()
@@ -489,6 +513,17 @@ fn ChartPane() -> Element {
         std::thread::spawn(move || {
             while tell.send(Msg::Keep).is_ok() {
                 std::thread::sleep(std::time::Duration::from_millis(700));
+            }
+        });
+    });
+    // The zoom readout kept up with the wheel and the keys: looked at
+    // often, drawn again only when it changes.
+    #[cfg(not(target_family = "wasm"))]
+    use_hook(|| {
+        let tell = tell.clone();
+        std::thread::spawn(move || {
+            while tell.send(Msg::Zoom).is_ok() {
+                std::thread::sleep(std::time::Duration::from_millis(120));
             }
         });
     });
@@ -517,6 +552,7 @@ fn ChartPane() -> Element {
                 data,
                 selection: mount.selection.clone(),
                 stats: mount.mount.frame_stats(),
+                status: mount.status.clone(),
                 wake: mount.wake.clone(),
                 error: None,
                 tell: tell.clone(),
@@ -695,9 +731,23 @@ fn ChartPane() -> Element {
                             "{target().name()}"
                         }
                     }
-                    span { style: "opacity:0.8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;",
+                    span { style: "opacity:0.8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0;",
                         // The mode is the chip's: the line goes on from it.
                         "{shown_status}"
+                    }
+                    // The zoom in effect; a click fits the page to the pane
+                    // (⌘= ⌘- ⌘0 and ⌥⌘0 from the keyboard).
+                    if !zoom_label().is_empty() {
+                        span {
+                            style: "padding:1px 8px; border-radius:9px; border:1px solid var(--border, #8886); white-space:nowrap; opacity:0.85; cursor:pointer;",
+                            title: "Zoom: ⌘= in, ⌘- out, ⌘0 100%, ⌥⌘0 fit the page to the width (click)",
+                            onclick: move |_| {
+                                spawn(async move {
+                                    let _ = dispatch("KEYFLOW_ZOOM_FIT", json!({})).await;
+                                });
+                            },
+                            "{zoom_label}"
+                        }
                     }
                 }
             }
@@ -1538,6 +1588,65 @@ async fn gesture(g: ChartGesture) {
             };
             let _ = dispatch("KEYFLOW_INPUT_MOVE", args).await;
         }
+    }
+}
+
+/// Where a zoom key takes the chart's zoom.
+#[derive(Clone, Copy)]
+enum ZoomTo {
+    /// Steps of the wheel's (in, positive; out, negative).
+    Step(f64),
+    Exactly(f64),
+    /// The page fitted to the pane's width (the view's `None`).
+    Fit,
+}
+
+/// The active chart zoomed as `to` says, about the middle of its pane:
+/// the chart there stays there.
+fn zoom_chart(to: ZoomTo) -> Json {
+    let Some(o) = active_chart().and_then(|(k, _)| open_charts().get(&k).cloned()) else {
+        return json!({ "zoomed": false });
+    };
+    let (now, (w, h)) = o
+        .status
+        .read(|s| (if s.zoom > 0.0 { s.zoom } else { 1.0 }, s.pane));
+    let next = match to {
+        ZoomTo::Step(n) => Some(keyflow_ui::paint_view::clamp_zoom(
+            now * keyflow_ui::paint_view::wheel_zoom_factor(-20.0 * n),
+        )),
+        ZoomTo::Exactly(z) => Some(keyflow_ui::paint_view::clamp_zoom(z)),
+        ZoomTo::Fit => None,
+    };
+    o.data.update(|s| {
+        let after = next.unwrap_or(now);
+        // The chart point at the pane's middle, kept there.
+        let middle = (
+            s.view.scroll.0 + w / 2.0 / now,
+            s.view.scroll.1 + h / 2.0 / now,
+        );
+        let scroll = if next.is_none() {
+            (0.0, s.view.scroll.1 + h / 2.0 / now - h / 2.0 / after)
+        } else {
+            (middle.0 - w / 2.0 / after, middle.1 - h / 2.0 / after)
+        };
+        s.view = ChartView {
+            zoom: next,
+            scroll: (scroll.0.max(0.0), scroll.1.max(0.0)),
+        };
+    });
+    o.wake.wake();
+    json!({ "zoom": next })
+}
+
+/// The zoom readout: `110%`, or `Fit · 64%` when the page fits the pane.
+fn zoom_text(o: &Open) -> String {
+    let zoom = o.status.read(|s| s.zoom);
+    let fit = o.data.read(|s| s.view.zoom.is_none());
+    let percent = (zoom * 100.0).round();
+    if fit {
+        format!("Fit · {percent}%")
+    } else {
+        format!("{percent}%")
     }
 }
 
