@@ -153,6 +153,7 @@ mod tests {
             selected: Some(Pos { bar: 11, tick: 0 }),
             target: Target::Notes,
             voice: 2,
+            repitch: false,
         };
         let back = input_from(&input_json(&i));
         assert_eq!(back, i);

@@ -101,8 +101,11 @@ impl Extension for Keyflow {
                     let e = edit_state();
                     (e.input.mode, e.input.selected.is_some())
                 };
-                let idle = (mode == Mode::Normal && !selected && name != "KEYFLOW_ESCAPE")
-                    || (mode == Mode::Syntax && name != "KEYFLOW_ESCAPE");
+                // (The re-pitch method is chosen in any mode, for the next
+                // note input, as MuseScore's input methods are.)
+                let always = matches!(name, "KEYFLOW_ESCAPE" | "KEYFLOW_REPITCH");
+                let idle = (mode == Mode::Normal && !selected && !always)
+                    || (mode == Mode::Syntax && !always);
                 if idle {
                     return Ok(input_state());
                 }
@@ -124,6 +127,11 @@ impl Extension for Keyflow {
                 _ => None,
             };
             let select = args.get("select").and_then(Json::as_bool).unwrap_or(true);
+            let voice = args
+                .get("voice")
+                .and_then(Json::as_u64)
+                .and_then(|v| u8::try_from(v).ok())
+                .filter(|v| *v < 4);
             let out = run_op(move |score| {
                 let length = score.bars.get(bar).map_or(0, |b| b.length);
                 let at = Op::MoveTo(Pos {
@@ -141,7 +149,10 @@ impl Extension for Keyflow {
                     }
                     t => t,
                 });
-                target.map_or_else(|| vec![at], |t| vec![Op::Target(t), at])
+                let mut ops: Vec<Op> = target.map(Op::Target).into_iter().collect();
+                ops.extend(voice.map(Op::Voice));
+                ops.push(at);
+                ops
             })
             .await;
             if !select {
@@ -191,6 +202,14 @@ impl Extension for Keyflow {
             }
         });
         ext.action("KEYFLOW_CHORD_EDIT", |_| async { chord_edit().await });
+        // MuseScore's "Input by duration mode cursor" preference: the
+        // above-staff ruler or the classic cursor.
+        ext.action("KEYFLOW_DURATION_RULER", |_| async {
+            let on = !DURATION_RULER.load(Ordering::Relaxed);
+            DURATION_RULER.store(on, Ordering::Relaxed);
+            rerender_input().await;
+            Ok(json!({ "ruler": on }))
+        });
         ext.action("KEYFLOW_TARGET_SWITCH", |_| async {
             let next = match edit_state().input.target {
                 edit::Target::Chords => edit::Target::Notes,
@@ -1293,6 +1312,7 @@ fn overlay(
             selected: Some(selected),
             pointer: None,
             voice: input.voice,
+            ruler: false,
         });
     }
     let bar = input.cursor.bar.min(last);
@@ -1345,8 +1365,15 @@ fn overlay(
         },
         pointer,
         voice: input.voice,
+        // Input by duration's cursor: the ruler or the box, as chosen.
+        ruler: input.mode == Mode::Duration && DURATION_RULER.load(Ordering::Relaxed),
     })
 }
+
+/// Whether input by duration shows MuseScore's above-staff ruler rather
+/// than the box cursor (`KEYFLOW_DURATION_RULER`): the ruler, as
+/// MuseScore's handbook shows it.
+static DURATION_RULER: AtomicBool = AtomicBool::new(true);
 
 /// The staff step of the top line of bar `bar`'s staff, by its clef.
 fn top_line(chart: &keyflow::Chart, bar: usize) -> i32 {
@@ -1443,6 +1470,7 @@ async fn gesture(g: ChartGesture) {
             fraction,
             kind,
             below_top,
+            voice,
         } => {
             let (mode, target) = {
                 let mut e = edit_state();
@@ -1460,6 +1488,8 @@ async fn gesture(g: ChartGesture) {
                 Mode::Normal => json!({
                     "bar": bar, "fraction": fraction,
                     "target": target_of, "select": target_of.is_some(),
+                    // A note or rest of another voice clicked: that voice's.
+                    "voice": voice,
                 }),
                 // Entering notes: a click on the staff enters the note there.
                 Mode::NoteName if target == edit::Target::Notes => {

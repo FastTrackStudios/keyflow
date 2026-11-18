@@ -85,10 +85,14 @@ pub struct Selectable {
     /// root: what a highlight draws again in another colour. `None` for a
     /// bar, which is the layout's box, not a node.
     pub node: Option<Vec<usize>>,
+    /// The voice a note or rest is in, from 0 (voice 1), when the layout
+    /// marked it (`SceneNode::set_voice`): what it is highlighted in the
+    /// colour of, as MuseScore does. `None` for other elements.
+    pub voice: Option<u8>,
 }
 
-/// One element found on the walk: its kind, bounds, span and node.
-type Found = (Kind, Rect, Option<TextSpan>, Option<Vec<usize>>);
+/// One element found on the walk: its kind, bounds, span, node and voice.
+type Found = (Kind, Rect, Option<TextSpan>, Option<Vec<usize>>, Option<u8>);
 
 /// The metadata keys that name an element, and its kind.
 const MARKED: &[(&str, Kind)] = &[
@@ -145,7 +149,13 @@ pub fn kind_of(node: &SceneNode) -> Option<Kind> {
 #[must_use]
 pub fn selectables(layout: &ChartLayoutResult) -> Vec<Selectable> {
     let mut found: Vec<Found> = Vec::new();
-    walk(&layout.scene, Affine::IDENTITY, &mut Vec::new(), &mut found);
+    walk(
+        &layout.scene,
+        Affine::IDENTITY,
+        &mut Vec::new(),
+        None,
+        &mut found,
+    );
 
     // Every bar, from the layout's own boxes: a measure that wraps is one
     // per system it sits on. The count-in's beats (negative ticks, their
@@ -167,9 +177,9 @@ pub fn selectables(layout: &ChartLayoutResult) -> Vec<Selectable> {
         );
         let seen = found
             .iter()
-            .any(|(kind, r, _, _)| *kind == Kind::Bar && *r == rect);
+            .any(|(kind, r, _, _, _)| *kind == Kind::Bar && *r == rect);
         if !seen && rect.width() > 0.0 {
-            found.push((Kind::Bar, rect, None, None));
+            found.push((Kind::Bar, rect, None, None, None));
         }
     }
 
@@ -210,7 +220,7 @@ pub fn selectables(layout: &ChartLayoutResult) -> Vec<Selectable> {
         .collect();
     found
         .into_iter()
-        .map(|(kind, bounds, span, node)| {
+        .map(|(kind, bounds, span, node, voice)| {
             let key = if kind == Kind::Bar {
                 let measure = bars
                     .iter()
@@ -237,6 +247,8 @@ pub fn selectables(layout: &ChartLayoutResult) -> Vec<Selectable> {
                 bounds,
                 span,
                 node,
+                // A note or rest not marked is voice 1's.
+                voice: matches!(kind, Kind::Note | Kind::Rest).then(|| voice.unwrap_or(0)),
             }
         })
         .collect()
@@ -244,16 +256,24 @@ pub fn selectables(layout: &ChartLayoutResult) -> Vec<Selectable> {
 
 /// Collects every named element under `node`; an element inside another
 /// (a note in a measure's group) is one of its own.
-fn walk(node: &SceneNode, parent: Affine, path: &mut Vec<usize>, found: &mut Vec<Found>) {
+fn walk(
+    node: &SceneNode,
+    parent: Affine,
+    path: &mut Vec<usize>,
+    voice: Option<u8>,
+    found: &mut Vec<Found>,
+) {
     if !node.visible {
         return;
     }
     let transform = parent * node.transform;
+    // The voice of what is inside a node marked with one.
+    let voice = node.get_voice().or(voice);
     if let Some(kind) = kind_of(node)
         && let Some(bounds) = scene_ink_bounds(node, parent)
     {
         let span = node.get_json_metadata::<TextSpan>(metadata_keys::SOURCE_SPAN);
-        found.push((kind, bounds, span, Some(path.clone())));
+        found.push((kind, bounds, span, Some(path.clone()), voice));
         // A chord symbol's own parts (its quality, its bass) are it.
         if kind == Kind::Chord {
             return;
@@ -261,7 +281,7 @@ fn walk(node: &SceneNode, parent: Affine, path: &mut Vec<usize>, found: &mut Vec
     }
     for (i, child) in node.children.iter().enumerate() {
         path.push(i);
-        walk(child, transform, path, found);
+        walk(child, transform, path, voice, found);
         path.pop();
     }
 }
@@ -347,6 +367,7 @@ mod tests {
             bounds: Rect::new(r.0, r.1, r.2, r.3),
             span: None,
             node: None,
+            voice: None,
         }
     }
 

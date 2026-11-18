@@ -158,3 +158,31 @@ fn a_chord_entered_at_the_cursor_is_written_in_the_bar_the_cursor_is_drawn_in() 
     let drawn = chord_over(&items, bar_box(&items, input.selected.unwrap().bar));
     assert_eq!(line_of(COUNT_IN, drawn), changed[0].0);
 }
+
+/// A selected note or rest is drawn in its voice's colour, as MuseScore's
+/// are: each knows its voice, voice 1's notes from 0 and voice 2's from 1.
+#[test]
+fn each_note_and_rest_knows_its_voice() {
+    let items =
+        selectables("Voices\n#C 4/4\n\nVS 1\n<< C_1 ; m{ G:44 G:44 G:42 } ; m{ C:42 r2 } >>\n");
+    let voices: Vec<(Kind, Option<u8>)> = items
+        .iter()
+        .filter(|s| matches!(s.kind, Kind::Note | Kind::Rest))
+        .map(|s| (s.kind, s.voice))
+        .collect();
+    assert!(
+        voices.iter().filter(|v| v.1 == Some(0)).count() >= 3,
+        "voice 1's three notes: {voices:?}"
+    );
+    assert!(
+        voices.iter().any(|v| v.1 == Some(1)),
+        "voice 2's note and rest: {voices:?}"
+    );
+    // A chord symbol has no voice.
+    assert!(
+        items
+            .iter()
+            .filter(|s| s.kind == Kind::Chord)
+            .all(|s| s.voice.is_none())
+    );
+}
