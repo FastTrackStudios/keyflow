@@ -309,6 +309,13 @@ async fn read_chart(path: &str) -> Result<keyflow::Chart, String> {
     // The pane's state names a document (the chart alone) or a session
     // (`session:<id>`, the chart as Keyflow's data there).
     let source = ChartSource::of_pane_state(path);
+    // A session this copy hosts is read directly.
+    #[cfg(not(target_family = "wasm"))]
+    if let ChartSource::Session { doc } = &source
+        && let Some(text) = session_host::local_chart(doc)
+    {
+        return keyflow::parse(&text).map_err(|e| e.to_string());
+    }
     let text = match source.read_call().map_err(|e| e.to_string())? {
         None => handle
             .host(HostRequest::ReadDocument {

@@ -257,6 +257,14 @@ fn state() -> Json {
     })
 }
 
+/// The chart of session `id` if this copy holds it: what the chart pane
+/// reads directly instead of asking the host for its own service.
+#[must_use]
+pub fn local_chart(id: &str) -> Option<String> {
+    let id = Uuid::parse_str(id).ok()?;
+    sessions().charts.get(&id).map(ChartSession::chart)
+}
+
 /// Registers the session host's actions.
 pub fn build(ext: &mut Builder) {
     ext.action_in("KEYFLOW_READ", |args, cx| async move {
