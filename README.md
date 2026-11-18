@@ -68,3 +68,15 @@ Recorded on Keyflow `feat/handbook-differences` `b275efa` (Keyflow `main` `31645
 | `recording/round6/input-via-syntax.mp4` | 21 s | A click on the blank chart's first bar, then K. `Am7 / D7 / \| Gmaj7` typed: each keystroke previewed on the chart before Enter writes it. Enter; then `Em7 / A7 / \| Dmaj7` and Enter; Esc. The chart has four bars. |
 | `recording/round6/input-by-note-name.mp4` | 21 s | A click on bar 1, then N, Y (notes), 5 (a quarter), C, E, G: each entered at the cursor, which moves on. Alt+3 adds B, a third above the G. `+` arms a sharp, F enters F♯, and J respells it G♭. Esc: the status line describes the selected note ("Normal mode · Note G♭3 · quarter · voice 1 · bar 1, beat 4"). |
 | `recording/round6/input-by-duration.mp4` | 20 s | A click on bar 2, then M and Y (notes). 5 enters a quarter at the pitch cursor (shown as a shadow note in the voice's colour); ↑ moves the pitch, 5 enters again. ← goes back to the last note, D picks the pitch, and 5 at that note's length adds D to its chord rather than writing over it. Esc: "Normal mode · Chord C4 D4 · quarter · voice 1 · bar 2, beat 3". |
+
+## Round 7: the input modes with MuseScore's remaining behaviours
+
+Recorded on Keyflow `feat/voice-colour-selection` `b82c34f` (Keyflow `main` `b0b4044` plus voice colours, the above-staff ruler, re-pitch and intervals below) as a process extension in Architect `main` `48d3894e`, the app's chrome shown, in an isolated headless Loft session (2536 × 1510 window, encoded at 1280 px). The chart is a two-voice demo: bar 1 is `<< C_1 ; m{ E:44 G:44 C:52 } ; m{ C:42 r2 } >>` (voice 1's stems up, voice 2's down), then three bars of slashes. Each recording starts where the one before left the chart.
+
+| file | length | what it shows |
+|---|---:|---|
+| `recording/round7/input-via-syntax.mp4` | 15 s | A click on bar 3, then K. `Am7 / D7 / \| Gmaj7` typed: previewed on the chart as it is typed, Enter writes bars 3 and 4, Esc. |
+| `recording/round7/input-by-note-name.mp4` | 23 s | A click on voice 2's half rest: it is selected in voice 2's colour (green), and the status line says "Rest · half · voice 2". N: note input enters voice 2 there, C then E, in green; Alt+3 adds a third above the E. Esc. A click on voice 1's quarter note (beat 2), N, then ⇧⌘I (re-pitch): A and G re-pitch voice 1's quarter and half, their lengths kept, and F finds no note left in the bar and says so. ⇧⌘I off, Esc. |
+| `recording/round7/input-by-duration.mp4` | 16 s | A click on voice 1's note at beat 2, then M: input by duration's cursor is the above-staff ruler (a pin in the voice's colour where the next note goes, a tick a duration on to the barline), with the pitch cursor as a shadow note. ↑ ↑ move the pitch; 5 (a quarter, the note there's length) adds it to that note's chord rather than writing over it. ↑ and 6 (a half) do the same to the half note. Esc. |
+
+The chart's bar 1 after all three: `<< C_1 ; m{ E:44 <G:4 A:4>4 <G:4 A:4>2 } ; m{ C:42 C:44 <E:4 G:4>4 } >>`.
