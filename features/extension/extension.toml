@@ -565,6 +565,13 @@ group = "Keyflow"
 effect = "mutating"
 
 [[actions]]
+id = "KEYFLOW_RESPELL"
+name = "Keyflow: respell the note"
+description = "The selected note spelled the next way that sounds the same (J): C♯ becomes D♭, then B𝄪, then C♯ again, as MuseScore's respell."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
 id = "KEYFLOW_INTERVAL_1"
 name = "Keyflow: add unison above"
 description = "A note a unison above the selected note's chord (its top note) added to it, spelled in the key (Alt+1): MuseScore's add interval."
@@ -1276,6 +1283,11 @@ when = "view:chart"
 [[keys]]
 chord = "⌥↓"
 action = "KEYFLOW_QUALITY_DOWN"
+when = "view:chart"
+
+[[keys]]
+chord = "J"
+action = "KEYFLOW_RESPELL"
 when = "view:chart"
 
 [[keys]]

@@ -61,6 +61,7 @@ pub const OP_ACTIONS: &[OpAction] = &[
     // A chord symbol's quality, as ↑ ↓ step its root.
     op("KEYFLOW_QUALITY_UP", Op::Quality(true), "⌥↑"),
     op("KEYFLOW_QUALITY_DOWN", Op::Quality(false), "⌥↓"),
+    op("KEYFLOW_RESPELL", Op::Respell, "J"),
     // MuseScore's add interval: Alt+1–9, a unison to a ninth above.
     op("KEYFLOW_INTERVAL_1", Op::Interval(1), "⌥1"),
     op("KEYFLOW_INTERVAL_2", Op::Interval(2), "⌥2"),

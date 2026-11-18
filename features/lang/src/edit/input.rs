@@ -381,6 +381,9 @@ pub enum Op {
     Target(Target),
     /// Shift+A–G: a note added above the selected note's chord.
     AddToChord(char),
+    /// J: the selected note spelled the next way that sounds the same
+    /// (`C#` → `Db`), MuseScore's respell.
+    Respell,
     /// Alt+1–9: a note that interval above the selected note's chord (its
     /// top note) added to it, in the key: MuseScore's "add interval".
     Interval(u8),
@@ -475,6 +478,7 @@ impl Op {
             | Self::Delete
             | Self::AddToChord(_)
             | Self::Interval(_)
+            | Self::Respell
             | Self::EnterStep(_)
             | Self::Double
             | Self::Halve
@@ -723,6 +727,12 @@ impl InputState {
             }
             Op::AddToChord(letter) => self.add_to_chord(score, letter),
             Op::Interval(n) => self.add_interval(score, n),
+            Op::Respell => {
+                if self.target == Target::Chords {
+                    return Outcome::refuse("J respells a note: switch to entering notes");
+                }
+                self.repitch(score, Pitch::respelled)
+            }
             Op::Voice(voice) => {
                 if voice > 3 {
                     return Outcome::refuse("There are four voices");
@@ -1396,6 +1406,62 @@ impl InputState {
         Some((pos.bar, i))
     }
 
+    /// The selected element as MuseScore's status bar describes it: what
+    /// it is, its pitch or symbol, its duration, its voice, its bar and beat
+    /// (`Note C4 · quarter · voice 1 · bar 3, beat 2`).
+    fn describe_selected(&self, score: &Score, p: Pos) -> String {
+        let beat_ticks = TICKS_PER_WHOLE / 4;
+        let beat = |tick: u32| {
+            let b = f64::from(tick) / f64::from(beat_ticks) + 1.0;
+            if b.fract() == 0.0 {
+                format!("{b:.0}")
+            } else {
+                format!("{b:.2}").trim_end_matches('0').to_owned()
+            }
+        };
+        if self.target == Target::Chords {
+            if let Some((bar, i)) = self.selected_chord(score) {
+                let c = &score.chords[bar];
+                let at = c.starts().get(i).copied().unwrap_or(p.tick);
+                let e = &c.events[i];
+                let what = match &e.slot {
+                    Slot::Chord(t) => format!("Chord symbol {t}"),
+                    Slot::Rest => "No chord".to_owned(),
+                    Slot::Hold => "The chord before, held".to_owned(),
+                };
+                return format!(
+                    "{what} · {} · bar {}, beat {}",
+                    e.duration.name().to_lowercase(),
+                    bar + 1,
+                    beat(at)
+                );
+            }
+        } else if let Some((bar, i)) = self.selected_event(score) {
+            let b = &score.bars[bar];
+            let at = b.starts().get(i).copied().unwrap_or(p.tick);
+            let e = &b.events[i];
+            let what = match e.pitch() {
+                Some(pitch) => {
+                    let above: Vec<String> = e.above.iter().flatten().map(|q| q.name()).collect();
+                    if above.is_empty() {
+                        format!("Note {}", pitch.name())
+                    } else {
+                        format!("Chord {} {}", pitch.name(), above.join(" "))
+                    }
+                }
+                None => "Rest".to_owned(),
+            };
+            return format!(
+                "{what} · {} · voice {} · bar {}, beat {}",
+                e.duration.name().to_lowercase(),
+                self.voice + 1,
+                bar + 1,
+                beat(at)
+            );
+        }
+        format!("bar {} selected", p.bar + 1)
+    }
+
     /// What the status line says: the mode, what the next key enters, and
     /// where.
     #[must_use]
@@ -1448,8 +1514,8 @@ impl InputState {
         match self.mode {
             Mode::Normal => match self.selected {
                 Some(p) => format!(
-                    "Normal mode · bar {} selected · N: input by note name · M: input by duration",
-                    p.bar + 1
+                    "Normal mode · {} · N: input by note name · M: input by duration",
+                    self.describe_selected(score, p)
                 ),
                 None => "Normal mode · N: input by note name · M: input by duration".to_owned(),
             },
@@ -1465,7 +1531,7 @@ impl InputState {
                     .unwrap_or_default()
             ),
             Mode::NoteName => format!(
-                "Input by note name · notes · voice {} · {} {what}{accidental} · next at {at} · A–G enter, Shift+A–G or Alt+1–9 add to the chord, 0 rest, T tie, Y: chord symbols instead, Esc leave{locked}",
+                "Input by note name · notes · voice {} · {} {what}{accidental} · next at {at} · A–G enter, Shift+A–G or Alt+1–9 add to the chord, J respell, 0 rest, T tie, Y: chord symbols instead, Esc leave{locked}",
                 self.voice + 1,
                 self.duration.name()
             ),
@@ -1618,6 +1684,39 @@ mod tests {
         // As chord symbols, Shift+letter says what it is for.
         i.target = Target::Chords;
         assert!(i.apply(&mut s, Op::AddToChord('B')).refused.is_some());
+    }
+
+    #[test]
+    fn normal_mode_s_status_line_describes_the_selection() {
+        let mut s = score(1);
+        let mut i = input(Mode::NoteName);
+        i.apply(&mut s, Op::Duration(Quarter));
+        i.apply(&mut s, Op::Letter('C'));
+        i.apply(&mut s, Op::Letter('E'));
+        i.apply(&mut s, Op::Escape);
+        // The last note entered stays selected, as MuseScore leaves it.
+        let line = i.status(&s);
+        assert!(line.starts_with("Normal mode · Note E"), "{line}");
+        assert!(line.contains("quarter · voice 1 · bar 1, beat 2"), "{line}");
+    }
+
+    #[test]
+    fn j_respells_the_selected_note_the_next_way_that_sounds_the_same() {
+        let spell = |p: Pitch| p.respelled().name();
+        assert_eq!(spell(Pitch::new('C', 1, 4)), "D♭4");
+        assert_eq!(spell(Pitch::new('D', -1, 4)), "B𝄪3");
+        assert_eq!(spell(Pitch::new('B', 2, 3)), "C♯4");
+        assert_eq!(spell(Pitch::new('E', 0, 4)), "F♭4");
+        let mut s = score(1);
+        let mut i = input(Mode::NoteName);
+        i.apply(&mut s, Op::Duration(Half));
+        i.apply(&mut s, Op::Accidental(1));
+        i.apply(&mut s, Op::Letter('C'));
+        let before = s.bars[0].events[0].pitch().unwrap();
+        i.apply(&mut s, Op::Respell);
+        let after = s.bars[0].events[0].pitch().unwrap();
+        assert_eq!(after.midi(), before.midi(), "it sounds the same");
+        assert_eq!((after.letter, after.alter), ('D', -1));
     }
 
     #[test]
