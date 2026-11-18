@@ -257,6 +257,33 @@ impl Pitch {
         self
     }
 
+    /// The next way to spell it, sounding the same (MuseScore's J): its
+    /// spellings with no more than a double sharp or flat, the plainest
+    /// first (`C#` → `Db` → `B##` → `C#`; `E` → `Fb` → `D##` → `E`).
+    #[must_use]
+    pub fn respelled(self) -> Self {
+        let midi = self.midi();
+        let mut all: Vec<Self> = Vec::new();
+        for letter in LETTERS.chars() {
+            for alter in -2..=2_i8 {
+                for octave in self.octave - 1..=self.octave + 1 {
+                    let p = Self::new(letter, alter, octave);
+                    if p.midi() == midi {
+                        all.push(p);
+                    }
+                }
+            }
+        }
+        all.sort_by_key(|p| (p.alter.abs(), p.alter < 0, p.step()));
+        let at = all
+            .iter()
+            .position(|p| {
+                p.letter == self.letter && p.alter == self.alter && p.octave == self.octave
+            })
+            .unwrap_or(0);
+        all[(at + 1) % all.len()]
+    }
+
     /// Its MIDI number (C4 = 60).
     #[must_use]
     pub fn midi(self) -> i32 {
