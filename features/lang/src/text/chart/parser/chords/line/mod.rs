@@ -902,10 +902,12 @@ impl<'a> ChartParser<'a> {
                 &original_token_spans,
                 st.measures.len(),
             );
-            for (measure, (span, why)) in st.measures.iter_mut().zip(spans) {
+            for (measure, (span, why, own)) in st.measures.iter_mut().zip(spans) {
                 measure.source_span =
                     span.map(|(start, len)| TextSpan::with_location(start, len, 0, 0));
                 measure.read_only = why;
+                measure.own_part =
+                    own.map(|(start, len)| TextSpan::with_location(start, len, 0, 0));
             }
         }
         let written = st.measures.len();
@@ -971,7 +973,11 @@ fn bar_spans(
     tokens: &[&str],
     spans: &[TextSpan],
     bars: usize,
-) -> Vec<(Option<(usize, usize)>, Option<String>)> {
+) -> Vec<(
+    Option<(usize, usize)>,
+    Option<String>,
+    Option<(usize, usize)>,
+)> {
     const SHARED: &str =
         "it shares a chord with the bar before it (a chord pushed or held over the barline)";
     let mut range: Vec<Option<(usize, usize)>> = vec![None; bars];
@@ -1008,36 +1014,55 @@ fn bar_spans(
             None => (s, e),
         });
     }
-    let mut out: Vec<(Option<(usize, usize)>, Option<String>)> = range
-        .into_iter()
-        .zip(spilled)
-        .map(|(r, spill)| {
-            if spill {
-                (None, Some(SHARED.to_owned()))
-            } else {
-                (r, None)
-            }
-        })
-        .collect();
-    // Bars follow one another in the line: two that overlap (a mark read
-    // into the bar before it) are not one text each; a `%3`'s bars share
-    // one on purpose.
-    let mut last: Option<(usize, (usize, usize))> = None;
-    for i in 0..out.len() {
-        if let Some((a, b)) = out[i].0 {
-            if let Some((j, (pa, pb))) = last
-                && a < pb
-                && !(shared[i] && (a, b) == (pa, pb))
-            {
-                out[i] = (None, Some(SHARED.to_owned()));
-                out[j] = (None, Some(SHARED.to_owned()));
-            }
-            if let Some(r) = out[i].0 {
-                last = Some((i, r));
-            }
+    // A bar a chord ran into from the bar before (held or pushed over the
+    // barline) is joined to it; so are two whose texts overlap (a mark read
+    // into the bar before). A `%3`'s bars share one text on purpose.
+    let mut joined = spilled;
+    for i in 1..bars {
+        if let (Some((a, _)), Some((_, pb))) = (range[i], range[i - 1])
+            && a < pb
+            && !(shared[i] && range[i] == range[i - 1])
+        {
+            joined[i] = true;
         }
     }
+    // Each run of joined bars is one text: every bar in it has the whole
+    // run's text, which an edit writes out bar by bar (`commit`). A bar
+    // with nothing written of its own anywhere in the run has none.
+    let mut out: Vec<(
+        Option<(usize, usize)>,
+        Option<String>,
+        Option<(usize, usize)>,
+    )> = range.iter().map(|r| (*r, None, None)).collect();
+    let mut i = 0;
+    while i < bars {
+        let mut j = i + 1;
+        while j < bars && joined[j] {
+            j += 1;
+        }
+        if j - i > 1 {
+            let whole =
+                range[i..j]
+                    .iter()
+                    .flatten()
+                    .fold(None, |acc: Option<(usize, usize)>, &(a, b)| {
+                        Some(acc.map_or((a, b), |(x, y)| (x.min(a), y.max(b))))
+                    });
+            for (k, slot) in out[i..j].iter_mut().enumerate() {
+                *slot = match whole {
+                    Some(r) => (
+                        Some(r),
+                        None,
+                        // Its own part: offset from the run's start, length.
+                        range[i + k].map(|(a, b)| (a - r.0, b - a)),
+                    ),
+                    None => (None, Some(SHARED.to_owned()), None),
+                };
+            }
+        }
+        i = j;
+    }
     out.into_iter()
-        .map(|(r, why)| (r.map(|(a, b)| (a, b - a)), why))
+        .map(|(r, why, own)| (r.map(|(a, b)| (a, b - a)), why, own))
         .collect()
 }

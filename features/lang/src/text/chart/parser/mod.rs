@@ -343,7 +343,42 @@ impl<'a> ChartParser<'a> {
             (line, col)
         };
         let line_texts = std::mem::take(&mut self.line_texts);
+        // Each bar's text as read, before it is placed: a section with no
+        // bars of its own replays an earlier one's, copies with the same
+        // text as read. The first bar read with a text is where it is.
+        let read_as: Vec<Option<(u32, usize, usize)>> = self
+            .sections
+            .iter()
+            .flat_map(|s| s.measures().iter())
+            .map(|m| {
+                m.source_span
+                    .filter(|s| s.line == 0)
+                    .map(|s| (s.column, s.start, s.len))
+            })
+            .collect();
+        // The bars first read with each text, in order (a run of bars a
+        // chord is held across shares one text): those of the first section
+        // that has them. A copy's n-th bar with a text plays its n-th.
+        let section_of: Vec<usize> = self
+            .sections
+            .iter()
+            .enumerate()
+            .flat_map(|(i, s)| std::iter::repeat_n(i, s.measures().len()))
+            .collect();
+        let mut first_read: std::collections::HashMap<(u32, usize, usize), Vec<usize>> =
+            std::collections::HashMap::new();
+        for (g, key) in read_as.iter().enumerate() {
+            if let Some(key) = key {
+                let bars = first_read.entry(*key).or_default();
+                if bars.first().is_none_or(|&f| section_of[f] == section_of[g]) {
+                    bars.push(g);
+                }
+            }
+        }
+        let mut bars_before = 0usize;
         for (i, section) in self.sections.iter_mut().enumerate() {
+            let first_bar = bars_before;
+            bars_before += section.measures().len();
             let body = section.source_span.as_ref().map(|header| {
                 let from = input[header.start..]
                     .find('\n')
@@ -356,6 +391,10 @@ impl<'a> ChartParser<'a> {
                     .unwrap_or(input.len());
                 (from, to)
             });
+            let count_in = matches!(
+                section.section.section_type,
+                crate::text::sections::SectionType::CountIn
+            );
             let measures = section.measures_mut();
             // A bar read with its line's id (`tag_line_spans`): its line
             // found in the section's text, in order, and its text checked.
@@ -411,14 +450,35 @@ impl<'a> ChartParser<'a> {
             let section_body = &input[from..to];
             let end = lyric_start(section_body);
             let cells = bar_cells(&blank_directives(&section_body[..end]));
-            let why = if cells.is_empty() {
+            let why = if cells.is_empty() && count_in {
+                "it is a count-in bar (`Count 2`): it has no chords to edit"
+            } else if cells.is_empty() {
                 "its section has no bars of its own: it plays an earlier section's bars again; edit that one"
             } else {
                 "its text could not be found in the chart's text (a `<< >>` block written over several lines)"
             };
             if cells.len() != measures.len() {
-                for m in measures.iter_mut().filter(|m| m.source_span.is_none()) {
+                for (k, m) in measures.iter_mut().enumerate() {
+                    if m.source_span.is_some() {
+                        continue;
+                    }
                     m.read_only.get_or_insert_with(|| why.to_owned());
+                    // The bar it plays again, when it is a copy of one: the
+                    // n-th of this section's bars read with its text plays
+                    // the n-th first read with it.
+                    if cells.is_empty()
+                        && let Some(key) = read_as.get(first_bar + k).copied().flatten()
+                    {
+                        let nth = read_as[first_bar..first_bar + k]
+                            .iter()
+                            .filter(|r| **r == Some(key))
+                            .count();
+                        m.replays = first_read
+                            .get(&key)
+                            .and_then(|bars| bars.get(nth))
+                            .copied()
+                            .filter(|&g| g < first_bar);
+                    }
                 }
                 continue;
             }

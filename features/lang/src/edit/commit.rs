@@ -228,6 +228,7 @@ pub fn bars_text(
     changed: &[usize],
 ) -> Result<(String, Vec<usize>), String> {
     let measures = measures(chart);
+    let prefixes = prefixes(source, chart);
     let mut cells: Vec<(usize, String)> = Vec::new();
     let mut bars: Vec<usize> = changed.to_vec();
     bars.sort_unstable();
@@ -242,8 +243,9 @@ pub fn bars_text(
             return Err(format!("There is no bar {}", index + 1));
         };
         // A `%` bar is written out as the bar it repeats, then edited.
-        let mut own =
-            written_out(source, &measures, index).unwrap_or_else(|| source[a..b].to_owned());
+        let mut own = written_out(source, &measures, index)
+            .or_else(|| own_text(source, &measures, &prefixes, index))
+            .unwrap_or_else(|| source[a..b].to_owned());
         if *chords != ChordBar::from_measure(was) {
             own = with_chords(&own, &chords.to_text()?);
         }
@@ -259,7 +261,7 @@ pub fn bars_text(
         }
         cells.push((index, own));
     }
-    let text = splice(source, placed(source, &measures, cells)?);
+    let text = splice(source, placed(source, &measures, &prefixes, cells)?);
     Ok((text, bars))
 }
 
@@ -297,7 +299,8 @@ pub fn splice_syntax(
         .enumerate()
         .map(|(k, cell)| (from + k, (*cell).to_owned()))
         .collect();
-    let mut edits = placed(source, &measures, new)?;
+    let prefixes = prefixes(source, chart);
+    let mut edits = placed(source, &measures, &prefixes, new)?;
     edits.extend(appended(source, chart, &measures, &cells[fit..]));
     let text = splice(source, edits);
     let written: Vec<usize> = (from..from + cells.len()).collect();
@@ -352,13 +355,16 @@ fn appended(
 fn placed(
     source: &str,
     measures: &[&Measure],
+    prefixes: &[String],
     mut cells: Vec<(usize, String)>,
 ) -> Result<Vec<(usize, usize, String)>, String> {
     // The `%` bars right after an edited bar repeated it as it was: they
     // are written out as that, so they keep their music.
     let edited: Vec<usize> = cells
         .iter()
-        .filter(|(i, text)| own_text(source, measures, *i).is_some_and(|own| own != *text))
+        .filter(|(i, text)| {
+            own_text(source, measures, prefixes, *i).is_some_and(|own| own != *text)
+        })
         .map(|c| c.0)
         .collect();
     let all: Vec<usize> = cells.iter().map(|c| c.0).collect();
@@ -388,7 +394,7 @@ fn placed(
                 let s = m.source_span.as_ref()?;
                 let (s, e) = (s.start, s.start + s.len);
                 (s >= line.0 && e <= line.1).then(|| {
-                    let own = own_text(source, measures, i).unwrap_or_default();
+                    let own = own_text(source, measures, prefixes, i).unwrap_or_default();
                     let text = cells
                         .iter()
                         .find(|(j, _)| *j == i)
@@ -406,20 +412,41 @@ fn placed(
         }
         // One item per text in the line: a `%3`'s bars share theirs, and
         // are written out one `%` each, barlined, when one of them changes.
+        // And a run of bars a chord is held across shares its text: written
+        // out bar by bar when one of them changes (each other bar as it
+        // reads alone, `alone`), kept as written when none does.
         let mut items: Vec<(usize, usize, String, bool)> = Vec::new();
+        // The first bar of each item with no text alone, if any.
+        let mut silent: Vec<Option<usize>> = Vec::new();
         for x in &on_line {
+            let changed = x.3 != x.4;
+            let none = x.3.is_empty().then_some(x.0);
             match items.last_mut() {
                 Some(last) if last.0 == x.1 && last.1 == x.2 => {
                     last.2.push_str(" | ");
                     last.2.push_str(&x.3);
-                    last.3 = true;
+                    last.3 |= changed;
+                    if let Some(s) = silent.last_mut() {
+                        *s = s.or(none);
+                    }
                 }
-                _ => items.push((x.1, x.2, x.3.clone(), false)),
+                _ => {
+                    items.push((x.1, x.2, x.3.clone(), changed));
+                    silent.push(none);
+                }
+            }
+        }
+        for (item, none) in items.iter().zip(&silent) {
+            if item.3
+                && let Some(bar) = none
+            {
+                return Err(format!("Bar {} is read-only: {PUSHED_OVER}", bar + 1));
             }
         }
         for item in &mut items {
-            // A group untouched keeps its `%3`.
-            if item.3 && item.2.split(" | ").all(|t| t.trim() == "%") {
+            // A text no bar of which changes stays as written (a `%3`, a
+            // chord held across bars).
+            if !item.3 {
                 item.2 = source[item.0..item.1].to_owned();
             }
         }
@@ -458,8 +485,10 @@ fn is_repeat_text(text: &str) -> bool {
             .is_some_and(|n| n.chars().all(|c| c.is_ascii_digit()))
 }
 
-/// A bar's text as written alone: a `%3`'s bars are each `%`.
-fn own_text(source: &str, measures: &[&Measure], i: usize) -> Option<String> {
+/// A bar's text as written alone: a `%3`'s bars are each `%`; a bar a
+/// chord is held into from the bar before (or out of, into the next) is
+/// the text it reads the same as alone ([`alone`]), if it has one.
+fn own_text(source: &str, measures: &[&Measure], prefixes: &[String], i: usize) -> Option<String> {
     let (a, b) = span(measures, i).ok()?;
     let text = &source[a..b];
     let shared = measures.iter().enumerate().any(|(j, m)| {
@@ -467,11 +496,273 @@ fn own_text(source: &str, measures: &[&Measure], i: usize) -> Option<String> {
             && m.source_span
                 .is_some_and(|s| s.start == a && s.start + s.len == b)
     });
-    Some(if shared {
-        "%".to_owned()
+    if !shared {
+        return Some(text.to_owned());
+    }
+    if is_repeat_text(text) {
+        return Some("%".to_owned());
+    }
+    // The run it is in: the bars before and after it with this text.
+    let has = |j: usize| {
+        measures[j]
+            .source_span
+            .is_some_and(|s| s.start == a && s.start + s.len == b)
+    };
+    let first = (0..=i).rev().take_while(|&j| has(j)).last()?;
+    let last = (i..measures.len()).take_while(|&j| has(j)).last()?;
+    let run: Vec<&Measure> = measures[first..=last].to_vec();
+    let prefix = prefixes.get(i)?;
+    // This bar as it reads alone, between rest bars, if it does: what holds
+    // whichever bar of the run is edited. Else as the whole run reads
+    // written out (a push that takes its time from the bar before). An
+    // edit is read back whole either way, and refused when another bar
+    // would change.
+    write_out_run(prefix, text, &[measures[i]])
+        .and_then(|mut t| t.pop())
+        .or_else(|| write_out_run(prefix, text, &run)?.get(i - first).cloned())
+}
+
+/// Why a bar of a run that shares one text cannot be edited, when it has
+/// no text alone: in these charts, always a chord pushed over its barline.
+pub const PUSHED_OVER: &str = "a chord is pushed over its barline (`'6m` on the and of 4, anticipating the next bar), and written out bar by bar the push would read differently: it stays as written for now";
+
+/// The bars of `chart` (read from `source`) that share one text and have
+/// none alone, read-only with why: those an edit is refused for.
+#[must_use]
+pub fn read_only_runs(source: &str, chart: &Chart) -> Vec<Option<String>> {
+    let measures = measures(chart);
+    let prefixes = prefixes(source, chart);
+    (0..measures.len())
+        .map(|i| {
+            let shared = measures[i].source_span.is_some_and(|s| {
+                measures
+                    .iter()
+                    .enumerate()
+                    .any(|(j, o)| j != i && o.source_span == Some(s))
+            });
+            (shared && own_text(source, &measures, &prefixes, i).is_none())
+                .then(|| PUSHED_OVER.to_owned())
+        })
+        .collect()
+}
+
+/// Bar `i`'s text as it would be written alone (a `%3`'s bars each `%`,
+/// a bar a chord is held into the text it reads the same as alone), or
+/// `None` when it has none.
+#[must_use]
+pub fn bar_text(source: &str, chart: &Chart, i: usize) -> Option<String> {
+    own_text(source, &measures(chart), &prefixes(source, chart), i)
+}
+
+/// For each bar, a chart of one bar in its place: the chart's header (its
+/// key, meter, tempo) and its section's header, made one bar long. What
+/// [`alone`] reads a bar's text in.
+fn prefixes(source: &str, chart: &Chart) -> Vec<String> {
+    let first = chart
+        .sections
+        .iter()
+        .find_map(|s| s.source_span.as_ref().map(|sp| sp.start))
+        .unwrap_or(0);
+    let header = source[..first].trim_end();
+    chart
+        .sections
+        .iter()
+        .flat_map(|s| {
+            let line = s.source_span.as_ref().map_or("VS", |sp| {
+                let (a, b) = line_of(source, sp.start);
+                source[a..b].trim()
+            });
+            // Its bar count left to fill in (`\u{0}`): a run, and a rest bar
+            // each side for what is pushed or held over its barlines.
+            let mut done = false;
+            let one: Vec<String> = line
+                .split_whitespace()
+                .map(|w| {
+                    if !done && w.chars().all(|c| c.is_ascii_digit()) {
+                        done = true;
+                        "\u{0}".to_owned()
+                    } else {
+                        w.to_owned()
+                    }
+                })
+                .collect();
+            let mut line = one.join(" ");
+            if !done {
+                line.push_str(" \u{0}");
+            }
+            let prefix = format!("{header}\n\n{line}\n");
+            std::iter::repeat_n(prefix, s.measures().len())
+        })
+        .collect()
+}
+
+/// The texts `m` might be written as alone, best first: what was written
+/// in it (`part`), its chords one after another with beat slashes
+/// (`E /// G#m`), with their values (`E_2. G#m_4`); each with its cue
+/// before it too, when it has one the text does not.
+fn candidates(m: &Measure, part: Option<&str>) -> Vec<String> {
+    let mut out: Vec<String> = part.map(str::to_owned).into_iter().collect();
+    let chords = ChordBar::from_measure(m);
+    let runs = if chords.locked.is_some() {
+        Vec::new()
     } else {
-        text.to_owned()
-    })
+        chords.folded()
+    };
+    let beat = super::music::TICKS_PER_WHOLE / u32::from(m.time_signature.1.max(1));
+    // Beat slashes: every chord but the last a whole number of beats.
+    if !runs.is_empty()
+        && runs
+            .iter()
+            .all(|(slot, _)| matches!(slot, super::chords::Slot::Chord(_)))
+        && runs[..runs.len() - 1]
+            .iter()
+            .all(|(_, t)| beat > 0 && t % beat == 0)
+    {
+        let words: Vec<String> = runs
+            .iter()
+            .enumerate()
+            .filter_map(|(k, (slot, t))| {
+                let super::chords::Slot::Chord(token) = slot else {
+                    return None;
+                };
+                Some(if k + 1 == runs.len() {
+                    token.clone()
+                } else {
+                    format!("{token} {}", "/".repeat((t / beat) as usize))
+                })
+            })
+            .collect();
+        out.push(words.join(" "));
+    }
+    if chords.locked.is_none()
+        && let Ok(text) = chords.to_text()
+    {
+        out.push(text);
+    }
+    let cues: String = m
+        .staff_text
+        .iter()
+        .map(|t| format!("\"{}\" ", t.text))
+        .collect();
+    let mut seen = std::collections::HashSet::new();
+    out.into_iter()
+        .flat_map(|c| {
+            if cues.is_empty() || c.contains('"') {
+                vec![c]
+            } else {
+                vec![format!("{cues}{c}"), c]
+            }
+        })
+        .filter(|c| seen.insert(c.clone()))
+        .collect()
+}
+
+/// Whether `b` (read back) is `m`'s music. Its repeats, barlines, line
+/// cues (`@bass "Bass in"`) and dynamics (`dyn mp`) are written around a
+/// run's text, not in it,
+/// and stay as they are; the write is read back whole, cues and all, so
+/// this only picks the text.
+fn same_in_run(m: &Measure, b: &Measure) -> bool {
+    let mut x = m.clone();
+    x.text_cues.clone_from(&b.text_cues);
+    x.dynamics.clone_from(&b.dynamics);
+    x.classical_dynamics.clone_from(&b.classical_dynamics);
+    x.hairpins.clone_from(&b.hairpins);
+    x.repeat_count = b.repeat_count;
+    x.start_repeat = b.start_repeat;
+    x.end_repeat = b.end_repeat;
+    x.end_barline = b.end_barline;
+    x.volta_start.clone_from(&b.volta_start);
+    music_of(&x, false) == music_of(b, false)
+}
+
+thread_local! {
+    /// Runs already written out, by their chart prefix and text.
+    static RUNS: std::cell::RefCell<std::collections::HashMap<(String, String), Option<Vec<String>>>> =
+        std::cell::RefCell::default();
+}
+
+/// A run of bars that share one text (a chord held or pushed over their
+/// barlines) written out bar by bar so that each reads as it did, read in
+/// `prefix` ([`prefixes`]) between a rest bar each side: the text that
+/// starts in each bar, barlined, if that reads the same; else, bar by bar,
+/// another way of writing the ones that do not. `None` when some bar has
+/// no way (one that starts on the chord before it, which no token says
+/// alone).
+fn write_out_run(prefix: &str, text: &str, run: &[&Measure]) -> Option<Vec<String>> {
+    // The run's own parts too: a bar alone and its whole run share a text.
+    let parts_key: String = run
+        .iter()
+        .map(|m| {
+            format!(
+                "{:?}{};",
+                m.own_part.as_ref().map(|p| (p.start, p.len)),
+                music_of(m, false)
+            )
+        })
+        .collect();
+    let key = (prefix.to_owned(), format!("{text}\u{1}{parts_key}"));
+    if let Some(done) = RUNS.with(|r| r.borrow().get(&key).cloned()) {
+        return done;
+    }
+    let parts: Vec<Option<&str>> = run
+        .iter()
+        .map(|m| {
+            m.own_part.as_ref().and_then(|p| {
+                text.get(p.start..p.start + p.len)
+                    .map(str::trim)
+                    .filter(|t| !t.is_empty())
+            })
+        })
+        .collect();
+    let options: Vec<Vec<String>> = run
+        .iter()
+        .zip(&parts)
+        .map(|(m, p)| candidates(m, *p))
+        .collect();
+    let result = (|| {
+        if options.iter().any(Vec::is_empty) {
+            return None;
+        }
+        let prefix = prefix.replace('\u{0}', &(run.len() + 2).to_string());
+        // Every way of writing the run, those nearest to as written first
+        // (the fewest bars written another way), at most so many.
+        let mut combos: Vec<Vec<usize>> = vec![Vec::new()];
+        for o in &options {
+            combos = combos
+                .into_iter()
+                .flat_map(|c| {
+                    (0..o.len()).map(move |k| {
+                        let mut c = c.clone();
+                        c.push(k);
+                        c
+                    })
+                })
+                .take(4096)
+                .collect();
+        }
+        combos.sort_by_key(|c| {
+            (
+                c.iter().filter(|&&k| k > 0).count(),
+                c.iter().sum::<usize>(),
+            )
+        });
+        combos.into_iter().take(256).find_map(|pick| {
+            let cells: Vec<&str> = pick
+                .iter()
+                .zip(&options)
+                .map(|(k, o)| o[*k].as_str())
+                .collect();
+            let chart =
+                parse_chart(&format!("{prefix}| r1 | {} | r1 |\n", cells.join(" | "))).ok()?;
+            let bars = measures(&chart);
+            (bars.len() == run.len() + 2
+                && (0..run.len()).all(|k| same_in_run(run[k], bars[k + 1])))
+            .then(|| cells.into_iter().map(str::to_owned).collect())
+        })
+    })();
+    RUNS.with(|r| r.borrow_mut().insert(key, result.clone()));
+    result
 }
 
 /// Bar `i`'s text with a `%` written out: the text of the bar it repeats
@@ -541,7 +832,11 @@ fn check(
             x.simile = false;
             music_of(&x, false) == music_of(b, false)
         };
-        if !written.contains(&i) && !written_out && !same_music(a, b) {
+        // A bar that plays a written bar again follows it.
+        let follows = a.replays.is_some_and(|g| {
+            written.contains(&g) && measures.get(g).is_some_and(|w| same_music(w, b))
+        });
+        if !written.contains(&i) && !written_out && !follows && !same_music(a, b) {
             return Err(format!(
                 "That would change bar {} as well, so it was not written",
                 i + 1
@@ -766,6 +1061,111 @@ mod tests {
     }
 
     #[test]
+    fn a_bar_a_push_crosses_into_is_read_only_and_says_why() {
+        // `'6m` anticipates bar 2's downbeat from bar 1's last eighth: the
+        // two bars share one text, which written out bar by bar would read
+        // the push differently.
+        // Know Me's intro: a push across a barline lengthens the chord
+        // before it, which written out bar by bar reads differently.
+        let text = "Edit - Test\n#E 127bpm 4/4\n\nIN 8\n4 '6m 4 '6m // 5 //\n4 '6m // 5 // 2m 2m // 2m_8 1/3_4.\n";
+        let chart = parse_chart(text).unwrap();
+        let score = Score::from_text(text, &chart);
+        let at = score
+            .read_only
+            .iter()
+            .position(|r| r.as_deref() == Some(PUSHED_OVER))
+            .unwrap_or_else(|| panic!("{:?}", score.read_only));
+        let mut score = score;
+        let mut input = InputState {
+            mode: Mode::NoteName,
+            ..InputState::default()
+        };
+        input.apply(
+            &mut score,
+            Op::MoveTo(crate::edit::Pos { bar: at, tick: 0 }),
+        );
+        let out = input.apply(&mut score, Op::Letter('C'));
+        assert!(
+            out.refused
+                .is_some_and(|r| r.contains("pushed over its barline"))
+        );
+    }
+
+    #[test]
+    fn an_entry_on_a_replayed_bar_is_written_where_the_bar_it_plays_is() {
+        // The second VS has no bars of its own: it plays the first's.
+        let text = "Edit - Test\n4/4\n\nVS 2\n| C | G |\n\nCH 1\n| F |\n\nVS\n";
+        let chart = parse_chart(text).unwrap();
+        let mut score = Score::from_text(text, &chart);
+        assert_eq!(score.replays, [None, None, None, Some(0), Some(1)]);
+        let mut input = InputState {
+            mode: Mode::NoteName,
+            ..InputState::default()
+        };
+        input.apply(&mut score, Op::MoveTo(crate::edit::Pos { bar: 4, tick: 0 }));
+        assert!(input.status(&score).contains("plays bar 2 again"));
+        input.apply(&mut score, Op::Duration(Value::Whole));
+        let out = input.apply(&mut score, Op::Letter('A'));
+        assert_eq!(out.changed, [1]);
+        assert!(out.note.is_some_and(|n| n.contains("Bar 5 plays bar 2")));
+        let new = write_bars(text, &chart, &score, &out.changed).unwrap();
+        assert!(new.contains("| C | A_1 |"), "{new}");
+        // Read again, the replay plays the new bar.
+        let back = parse_chart(&new).unwrap();
+        assert_eq!(
+            ChordBar::from_measure(measures(&back)[4])
+                .to_text()
+                .unwrap(),
+            "A_1"
+        );
+    }
+
+    #[test]
+    fn a_chord_is_retyped_or_its_quality_stepped_without_the_bar() {
+        let text = "Edit - Test\n4/4\n\nVS 2\n| C / G / | !Am / / / |\n";
+        let chart = parse_chart(text).unwrap();
+        let mut score = Score::from_text(text, &chart);
+        let mut input = InputState::default();
+        // The G (from beat 2: `C /` is one beat), selected: retyped, its
+        // length kept.
+        input.selected = Some(crate::edit::Pos { bar: 0, tick: 192 });
+        assert_eq!(input.selected_symbol(&score).as_deref(), Some("G"));
+        let out = input.set_chord(&mut score, "Gsus4");
+        let new = write_bars(text, &chart, &score, &out.changed).unwrap();
+        assert!(new.contains("C_4 Gsus4_2. | !Am / / /"), "{new}");
+        // The accented Am: its quality stepped, its accent kept.
+        let chart = parse_chart(&new).unwrap();
+        let mut score = Score::from_text(&new, &chart);
+        input.selected = Some(crate::edit::Pos { bar: 1, tick: 0 });
+        let out = input.apply(&mut score, Op::Quality(true));
+        let newer = write_bars(&new, &chart, &score, &out.changed).unwrap();
+        assert!(newer.contains("!A7"), "{newer}");
+    }
+
+    #[test]
+    fn a_replay_of_a_held_chord_run_plays_each_of_its_bars() {
+        // The second VS replays the first, whose line holds G#m and C#sus2
+        // over barlines: its n-th bar plays the n-th, and follows an edit.
+        let text =
+            "Held\n4/4\n\nVS 4\nE /// G#m / G#m B /// C#sus2 / C#sus2\n\nCH 2\n| A | B |\n\nVS\n";
+        let chart = parse_chart(text).unwrap();
+        let mut score = Score::from_text(text, &chart);
+        assert_eq!(&score.replays[6..], [Some(0), Some(1), Some(2), Some(3)]);
+        let mut input = InputState {
+            mode: Mode::NoteName,
+            ..InputState::default()
+        };
+        input.apply(&mut score, Op::MoveTo(crate::edit::Pos { bar: 1, tick: 0 }));
+        input.apply(&mut score, Op::Duration(Value::Whole));
+        let out = input.apply(&mut score, Op::Letter('A'));
+        let new = write_bars(text, &chart, &score, &out.changed).unwrap();
+        assert!(
+            new.contains("E /// G#m | A_1 | B /// C#sus2 / C#sus2"),
+            "{new}"
+        );
+    }
+
+    #[test]
     fn a_triplet_is_made_and_filled_and_written() {
         let (chart, mut score) = setup();
         let mut input = InputState {
@@ -880,16 +1280,52 @@ mod tests {
     }
 
     #[test]
-    fn a_bar_whose_chord_runs_over_the_barline_is_refused() {
-        // G#m_2. starts in bar 1 and ends in bar 2: neither has text alone.
+    fn a_bar_that_cannot_be_written_alone_keeps_its_line_as_written() {
+        // `C_2 G_2. D_4` in two bars: the G does not fit bar 1 and moves to
+        // bar 2, leaving bar 1 half full, which no bar of its own says.
         let text = "Edit - Test\n4/4\n\nVS 2\nC_2 G_2. D_4\n";
         let chart = parse_chart(text).unwrap();
-        let score = Score::from_chart(&chart);
-        let err = write_bars(text, &chart, &score, &[1]).unwrap_err();
+        let mut score = Score::from_chart(&chart);
+        let mut input = InputState {
+            mode: Mode::NoteName,
+            ..InputState::default()
+        };
+        input.apply(&mut score, Op::MoveTo(crate::edit::Pos { bar: 1, tick: 0 }));
+        let out = input.apply(&mut score, Op::Letter('A'));
+        let err = write_bars(text, &chart, &score, &out.changed).unwrap_err();
+        assert!(err.contains("over its barline"), "{err}");
+    }
+
+    #[test]
+    fn a_bar_a_chord_is_held_into_is_edited_and_its_line_written_out() {
+        // G#m on beat 4 held into the next bar: the four bars share one
+        // line's text. An edit to the second writes the line out bar by
+        // bar, every other bar reading exactly as it did.
+        let text = "Edit - Test\n4/4\n\nIN 4\nE /// G#m / G#m B /// C#sus2 / C#sus2\n";
+        let chart = parse_chart(text).unwrap();
         assert!(
-            err.contains("read-only") && err.contains("over the barline"),
-            "{err}"
+            measures(&chart).iter().all(|m| m.read_only.is_none()),
+            "every bar editable"
         );
+        let mut score = Score::from_chart(&chart);
+        let mut input = InputState {
+            mode: Mode::NoteName,
+            ..InputState::default()
+        };
+        input.apply(&mut score, Op::MoveTo(crate::edit::Pos { bar: 1, tick: 0 }));
+        let mut changed = Vec::new();
+        for op in [Op::Duration(Value::Whole), Op::Letter('A')] {
+            changed.extend(input.apply(&mut score, op).changed);
+        }
+        let new = write_bars(text, &chart, &score, &changed).unwrap();
+        // The other run (C#sus2 held into bar 4) keeps its text.
+        assert!(
+            new.contains("E /// G#m | A_1 | B /// C#sus2 / C#sus2"),
+            "{new}"
+        );
+        // Unchanged, typed back over itself: the text stays as written.
+        let (same, _) = splice_syntax(text, &chart, 1, "G#m").unwrap();
+        assert_eq!(same, text);
     }
 
     #[test]

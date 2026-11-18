@@ -14,7 +14,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::print_stdout)]
 
-use keyflow_lang::edit::commit::{same_music, splice_syntax, write_bars};
+use keyflow_lang::edit::commit::{bar_text, same_music, splice_syntax, write_bars};
 use keyflow_lang::edit::{InputState, Mode, Op, Pos, Score, Target, Value};
 use keyflow_lang::text::chart::parse_chart;
 use keyflow_proto::Chart;
@@ -71,15 +71,36 @@ fn every_bar_of_the_vault_is_found_and_written_back_unchanged() {
     let mut chord_refused = std::collections::BTreeMap::<String, usize>::new();
     let mut read_only = std::collections::BTreeMap::<String, usize>::new();
     let mut chorded = 0;
+    let mut replayed = 0;
     let mut failures = Vec::new();
     for (name, source) in charts() {
         let Ok(chart) = parse_chart(&source) else {
             continue;
         };
         let measures = bars(&chart);
-        let score = Score::from_chart(&chart);
+        let score = Score::from_text(&source, &chart);
         let (mut f, mut e, mut c) = (0, 0, 0);
         for (i, m) in measures.iter().enumerate() {
+            // A bar that plays an earlier one again is edited there: a chord
+            // entered on it is written at that bar, and it follows.
+            if let Some(src) = score.replays[i] {
+                let mut s = score.clone();
+                let mut input = InputState {
+                    mode: Mode::NoteName,
+                    ..InputState::default()
+                };
+                input.apply(&mut s, Op::MoveTo(Pos { bar: i, tick: 0 }));
+                let out = input.apply(&mut s, Op::Letter('C'));
+                if out.changed.contains(&src) {
+                    match write_bars(&source, &chart, &s, &out.changed) {
+                        Ok(_) => {
+                            replayed += 1;
+                            continue;
+                        }
+                        Err(why) => *chord_refused.entry(why).or_insert(0) += 1,
+                    }
+                }
+            }
             let Some(span) = m.source_span.as_ref() else {
                 // Read-only, and says why.
                 match &m.read_only {
@@ -88,19 +109,18 @@ fn every_bar_of_the_vault_is_found_and_written_back_unchanged() {
                 }
                 continue;
             };
-            f += 1;
-            // A `%3`'s bars share its text; each alone is `%`.
-            let shared = measures.iter().enumerate().any(|(j, o)| {
-                j != i
-                    && o.source_span
-                        .is_some_and(|t| t.start == span.start && t.len == span.len)
-            });
-            let own = if shared {
-                "%"
-            } else {
-                &source[span.start..span.start + span.len]
+            // Its text alone: a `%3`'s bars each `%`; a bar a chord is held
+            // into, the text it reads the same as alone. A bar of such a run
+            // with none is read-only, and says why.
+            let _ = span;
+            let Some(own) = bar_text(&source, &chart, i) else {
+                *read_only
+                    .entry(keyflow_lang::edit::commit::PUSHED_OVER.to_owned())
+                    .or_insert(0) += 1;
+                continue;
             };
-
+            let own = own.as_str();
+            f += 1;
             // Unchanged: its own text typed over it.
             match splice_syntax(&source, &chart, i, own) {
                 Ok((text, 1)) if text == source => {}
@@ -175,7 +195,7 @@ fn every_bar_of_the_vault_is_found_and_written_back_unchanged() {
         edited += e;
     }
     println!(
-        "VAULT: {found} of {total} bars found; {edited} took a note and {chorded} a chord symbol, written back"
+        "VAULT: {found} of {total} bars found; {edited} took a note and {chorded} a chord symbol, written back; {replayed} more replay a bar and are edited there"
     );
     for (why, n) in &read_only {
         println!("READ-ONLY {n:4} {why}");

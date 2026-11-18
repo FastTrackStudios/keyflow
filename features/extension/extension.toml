@@ -403,7 +403,7 @@ params = '{"type":"object","required":["bar"],"properties":{"bar":{"type":"integ
 [[actions]]
 id = "KEYFLOW_SYNTAX_WRITE"
 name = "Keyflow: write bars in Keyflow syntax"
-description = "Bars typed in Keyflow's syntax (`text`: `C / / / | Am7 / F G`) written over the active chart's bars from the input cursor on, and the cursor moved past them; refused, with why, when they do not read or run past the chart's end."
+description = "Bars typed in Keyflow's syntax (`text`: `C / / / | Am7 / F G`) written over the active chart's bars from the input cursor on, and the cursor moved past them; bars typed past the chart's end are added after it; refused, with why, when they do not read."
 group = "Keyflow"
 effect = "mutating"
 params = '{"type":"object","required":["text"],"properties":{"text":{"type":"string"}}}'
@@ -533,6 +533,35 @@ name = "Keyflow: last bar"
 description = "The cursor to the chart's last bar (Ctrl+End)."
 group = "Keyflow"
 effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_QUALITY_UP"
+name = "Keyflow: next chord quality"
+description = "The selected chord symbol's quality stepped on (Alt+↑): G, Gm, G7, Gm7, Gmaj7, Gsus4 …, its root and bass kept."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_QUALITY_DOWN"
+name = "Keyflow: previous chord quality"
+description = "The selected chord symbol's quality stepped back (Alt+↓)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_CHORD_EDIT"
+name = "Keyflow: retype chord symbol"
+description = "Retype the selected chord symbol (Enter): a bar under the chart shows it; type the new symbol and Enter, or Esc to keep it."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_CHORD_SET"
+name = "Keyflow: set chord symbol"
+description = "The selected chord symbol made `text` (its length kept, and its push or accent marks when the text has none)."
+group = "Keyflow"
+effect = "mutating"
+params = '{"type":"object","required":["text"],"properties":{"text":{"type":"string"}}}'
 
 [[actions]]
 id = "KEYFLOW_TARGET_SWITCH"
@@ -926,6 +955,24 @@ key = "keyflow.keys.last_bar"
 title = "Last bar"
 control = "shortcut"
 default = "⌘End"
+
+[[sections.settings]]
+key = "keyflow.keys.quality_up"
+title = "Next chord quality"
+control = "shortcut"
+default = "⌥↑"
+
+[[sections.settings]]
+key = "keyflow.keys.quality_down"
+title = "Previous chord quality"
+control = "shortcut"
+default = "⌥↓"
+
+[[sections.settings]]
+key = "keyflow.keys.chord_edit"
+title = "Retype chord symbol"
+control = "shortcut"
+default = "↩"
 
 [[sections.settings]]
 key = "keyflow.keys.tie"
