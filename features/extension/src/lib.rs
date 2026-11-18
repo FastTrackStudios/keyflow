@@ -22,6 +22,8 @@ pub mod icons;
 pub mod input;
 pub mod keep;
 pub mod palette;
+#[cfg(not(target_family = "wasm"))]
+pub mod session_host;
 pub mod tools;
 
 use std::collections::BTreeMap;
@@ -36,6 +38,7 @@ use architect_workspace::{HostData, PaintWake};
 use dioxus::prelude::*;
 use keyflow::edit::{self, Mode, Op, Pos, Score};
 use keyflow::engraver::renderer::ChartTheme;
+use keyflow_session::ChartSource;
 use keyflow_ui::paint_view::{
     ChartGesture, ChartGestures, ChartSelection, ChartSnapshot, ChartView, InputOverlay,
     PointerShadow, ShadowNote, chart_mount_with,
@@ -61,6 +64,9 @@ impl Extension for Keyflow {
 
     fn build(&self, ext: &mut Builder) {
         *HANDLE.lock().unwrap_or_else(PoisonError::into_inner) = Some(ext.handle());
+        // `fts.session`: Keyflow as a session's host (native only).
+        #[cfg(not(target_family = "wasm"))]
+        session_host::build(ext);
         for tool in tools::TOOLS {
             let command = tool.command;
             ext.action(tool.action, move |_| async move {
@@ -697,8 +703,17 @@ fn active_chart() -> Option<(u64, String)> {
         .filter(|(_, path)| !path.is_empty())
 }
 
-/// A document's text, through the host.
+/// A chart's text, through the host: the document at `path`, or, when the
+/// pane names a session (`session:<id>`), Keyflow's chart there through
+/// `fts.session`, as this extension.
 async fn read_text(handle: &Handle, path: &str) -> Result<String, String> {
+    if let Some(call) = ChartSource::of_pane_state(path)
+        .read_call()
+        .map_err(|e| e.to_string())?
+    {
+        let reply = ask_session(handle, &call).await?;
+        return ChartSource::chart_of(&reply).map_err(|e| e.to_string());
+    }
     let answer = handle
         .host(HostRequest::ReadDocument {
             path: path.to_owned(),
@@ -711,10 +726,23 @@ async fn read_text(handle: &Handle, path: &str) -> Result<String, String> {
         .ok_or_else(|| "the document is not text".to_owned())
 }
 
-/// `text` made the document's text at `path`: one commit, one undo step
-/// named `name` (the host makes the edits that differ, so another
-/// person's typing elsewhere in it stays).
+/// `text` made the chart's text at `path`: for a document, one commit, one
+/// undo step named `name` (the host makes the edits that differ, so another
+/// person's typing elsewhere in it stays); for a session, the one splice
+/// between what the session holds now and `text`, through `fts.session`,
+/// so it merges per character the same way.
 async fn write_text(handle: &Handle, path: &str, text: String, name: &str) -> Result<(), String> {
+    let source = ChartSource::of_pane_state(path);
+    if let ChartSource::Session { .. } = source {
+        let now = read_text(handle, path).await?;
+        let Some(call) = source
+            .replace_call(&now, &text)
+            .map_err(|e| e.to_string())?
+        else {
+            return Ok(());
+        };
+        return ask_session(handle, &call).await.map(|_| ());
+    }
     handle
         .host(HostRequest::EditDocument {
             path: path.to_owned(),
@@ -1288,14 +1316,38 @@ async fn read_chart(path: &str) -> Result<keyflow::Chart, String> {
         .unwrap_or_else(PoisonError::into_inner)
         .clone()
         .ok_or("the extension is not loaded")?;
-    let answer = handle
-        .host(HostRequest::ReadDocument {
-            path: path.to_owned(),
-        })
+    // The pane's state names a document (the chart alone) or a session
+    // (`session:<id>`, the chart as Keyflow's data there).
+    let text = read_text(&handle, path).await?;
+    keyflow::parse(&text).map_err(|e| e.to_string())
+}
+
+/// A `fts.session` call, as this extension: answered here when this copy
+/// hosts the session (an extension cannot `[uses]` the service it
+/// provides), else through the host. The reply as JSON text.
+async fn ask_session(
+    handle: &Handle,
+    call: &keyflow_session::ServiceCall,
+) -> Result<String, String> {
+    #[cfg(not(target_family = "wasm"))]
+    if let Some(reply) = session_host::local_answer(call) {
+        return reply;
+    }
+    handle
+        .host(service_request(call)?)
         .await
-        .map_err(|e| format!("{e:?}"))?;
-    let source = answer.as_str().ok_or("the document is not text")?;
-    keyflow::parse(source).map_err(|e| e.to_string())
+        .map(|reply| reply.to_string())
+        .map_err(|e| format!("{e:?}"))
+}
+
+/// A `fts.session` call as the host request that makes it (the host runs
+/// the provider's action as this extension).
+fn service_request(call: &keyflow_session::ServiceCall) -> Result<HostRequest, String> {
+    Ok(HostRequest::Service {
+        service: call.service.to_owned(),
+        method: call.method.to_owned(),
+        args: serde_json::from_str(&call.args).map_err(|e| e.to_string())?,
+    })
 }
 
 /// The open charts, for `KEYFLOW_STATE`.
