@@ -58,3 +58,13 @@ Taken on Keyflow `main` `bc59f0b` (after #113–#116) as a process extension in 
 |---|---|
 | `round5/chart-pane-palette-applied-dark.png` | The whole chart pane, from the app's own render (`APP_SHOT`): the toolbar, the palettes, and bar 22's Bdim selected with two palette cells applied, `m7♭5` then the accent, so it reads `>Bm7b5`. The file's line went from `C // Bdim //` to `C // >Bm7b5 //`, keeping its beat slashes (#116). The status line names the selected bar; the palettes' foot names the last cell chosen. Bar 19's G△7 is an earlier `maj7` from the same palette. |
 | `round5/palettes-tempo-glyphs-dark-2x.png` | The palettes at 2×: the Tempo cells' quarter notes, the articulations, segno and coda, inked in the theme's text colour (#114), and the accent cell just used. |
+
+## Round 6: the three input modes
+
+Recorded on Keyflow `feat/handbook-differences` `b275efa` (Keyflow `main` `3164597` plus J and the status line's description) as a process extension in Architect `main` `48d3894e`, the app's chrome shown, in an isolated headless Loft session (2536 × 1510 window, encoded at 1280 px). Each starts where the one before left the chart, a blank chart (`Sketch`, `4/4`).
+
+| file | length | what it shows |
+|---|---:|---|
+| `recording/round6/input-via-syntax.mp4` | 21 s | A click on the blank chart's first bar, then K. `Am7 / D7 / \| Gmaj7` typed: each keystroke previewed on the chart before Enter writes it. Enter; then `Em7 / A7 / \| Dmaj7` and Enter; Esc. The chart has four bars. |
+| `recording/round6/input-by-note-name.mp4` | 21 s | A click on bar 1, then N, Y (notes), 5 (a quarter), C, E, G: each entered at the cursor, which moves on. Alt+3 adds B, a third above the G. `+` arms a sharp, F enters F♯, and J respells it G♭. Esc: the status line describes the selected note ("Normal mode · Note G♭3 · quarter · voice 1 · bar 1, beat 4"). |
+| `recording/round6/input-by-duration.mp4` | 20 s | A click on bar 2, then M and Y (notes). 5 enters a quarter at the pitch cursor (shown as a shadow note in the voice's colour); ↑ moves the pitch, 5 enters again. ← goes back to the last note, D picks the pitch, and 5 at that note's length adds D to its chord rather than writing over it. Esc: "Normal mode · Chord C4 D4 · quarter · voice 1 · bar 2, beat 3". |
