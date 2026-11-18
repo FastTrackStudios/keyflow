@@ -16678,14 +16678,10 @@ name = "session"
 version = "0.1.0"
 source = "git+https://github.com/FastTrackStudios/session?rev=a8ec37a454c767c0558973412c4d321746066d02#a8ec37a454c767c0558973412c4d321746066d02"
 dependencies = [
- "architect",
- "architect-permissions",
  "crdt",
  "facet",
  "facet-json",
  "loro",
- "thiserror 2.0.20",
- "vox",
  "web-time",
 ]
 
