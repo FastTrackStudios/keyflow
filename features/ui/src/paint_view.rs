@@ -459,6 +459,8 @@ pub struct ChartPaintView {
     adopted: Option<u64>,
     /// Note input's cursor as last followed: `(bar, from)`.
     followed: Option<(usize, u64)>,
+    /// The playhead's measure as last followed while it plays.
+    followed_playhead: Option<usize>,
     /// The modifiers held at the last key event: a press on a region
     /// carries none, so a Shift- or Cmd-click reads them from here.
     mods: Vec<&'static str>,
@@ -494,6 +496,7 @@ impl ChartPaintView {
             regions_cover: false,
             adopted: None,
             followed: None,
+            followed_playhead: None,
             pointer: (0.0, 0.0),
             panning: false,
             theme: None,
@@ -604,6 +607,44 @@ impl ChartPaintView {
             b.x1 * px,
             (b.y1 + b.height() * 0.75) * px,
         );
+        let zoom = self.effective_zoom(view.zoom, ctx.geometry.width);
+        let (w, h) = pane_size(ctx);
+        let scroll = clamp_scroll(view.scroll, self.content, (w, h), zoom);
+        let next = follow(scroll, target, (w / zoom, h / zoom));
+        if next == scroll {
+            return view;
+        }
+        let next = clamp_scroll(next, self.content, (w, h), zoom);
+        data.update(|s| s.view.scroll = next);
+        ChartView {
+            scroll: next,
+            ..view
+        }
+    }
+
+    /// The chart scrolled, when the playhead moved into a measure out of
+    /// sight, just far enough to show it (a page turned as it plays). Not
+    /// while note input has a cursor: the person typing leads the view.
+    fn follow_playhead(
+        &mut self,
+        ctx: &ViewCtx,
+        data: &HostData<ChartSnapshot>,
+        snapshot: &ChartSnapshot,
+        view: ChartView,
+    ) -> ChartView {
+        let (Some(secs), None) = (snapshot.playhead_secs, snapshot.input.as_ref()) else {
+            self.followed_playhead = None;
+            return view;
+        };
+        let Some((measure, (x0, y0, x1, y1))) = self.view.playhead_box(secs) else {
+            return view;
+        };
+        if self.followed_playhead == Some(measure) {
+            return view;
+        }
+        self.followed_playhead = Some(measure);
+        let px = points_to_px(1.0);
+        let target = Rect::new(x0 * px, y0 * px, x1 * px, y1 * px);
         let zoom = self.effective_zoom(view.zoom, ctx.geometry.width);
         let (w, h) = pane_size(ctx);
         let scroll = clamp_scroll(view.scroll, self.content, (w, h), zoom);
@@ -1356,6 +1397,7 @@ impl PaintView for ChartPaintView {
             self.content = (size.0 * points_to_px(1.0), size.1 * points_to_px(1.0));
         }
         let view = self.follow_cursor(ctx, &data, snapshot.input, snapshot.view);
+        let view = self.follow_playhead(ctx, &data, &snapshot, view);
         let at = self.placement(ctx, view);
         let mut layers: Vec<(LayerKey, Layer)> = self
             .recorded
