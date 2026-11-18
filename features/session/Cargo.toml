@@ -1,0 +1,25 @@
+[package]
+name = "keyflow-session"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Keyflow in a session: a chart as Keyflow's data in a `.session` (an Architect document), synced, bound to an editor, and served to the chart view as `fts.session`"
+publish = false
+
+[dependencies]
+# The session primitive (FastTrackStudios/session): its document and the
+# extension service. Pinned by rev until it is tagged (session#179, #181,
+# #182).
+session = { workspace = true, features = ["architect", "service", "extension"] }
+crdt = { workspace = true, features = ["vox"] }
+facet-json = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+architect = { workspace = true, features = ["vox", "local"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true
