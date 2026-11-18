@@ -1,0 +1,60 @@
+Last Christmas (Key of F) - Wham!
+Transcribed By Cody Wright
+bF 107bpm 4/4
+
+Count 1
+
+IN 8
+dyn mf
+@keys "Synth hook"
+F % Dm7 % Gm7 % C %
+[lyrics lrc]
+@8:4 Last
+
+CH 16
+dyn f
+F % Dm7 % Gm7 % C %
+F % Dm7 % Gm7 % C %
+[lyrics lrc]
+@1 Christmas, I gave you my heart…
+
+INST 8
+dyn mf
+@keys "Synth hook"
+F % Dm7 % Gm7 % C %
+
+VS 16
+dyn mf
+F % Dm7 % Gm7 % C %
+F % Dm7 % Gm7 % C %
+[lyrics lrc]
+@1 Once bitten and twice shy…
+
+CH 16
+dyn f
+F % Dm7 % Gm7 % C %
+F % Dm7 % Gm7 % C %
+
+INST 8
+dyn mf
+@keys "Synth hook"
+F % Dm7 % Gm7 % C %
+
+VS 16
+dyn mf
+F % Dm7 % Gm7 % C %
+F % Dm7 % Gm7 % C %
+[lyrics lrc]
+@1 A crowded room, friends with tired eyes…
+
+CH 16
+dyn ff
+F % Dm7 % Gm7 % C %
+F % Dm7 % Gm7 % C %
+
+OUT 9
+dyn f
+F % Dm7 % Gm7 % C %
+F_1 \fermata
+[lyrics lrc]
+@1 A face on a lover with a fire in his heart…

@@ -163,6 +163,10 @@ impl<'a> ChartParser<'a> {
         // name (`VS` → `Verse 1a`).
         self.assign_section_source_spans(input);
 
+        // Phase 3.7: each bar written out in a section's text gets its span
+        // (`bar_cells`), so an edit made on the chart can write that bar back.
+        self.assign_measure_source_spans(input);
+
         let _ = line_idx; // Suppress unused warning
 
         Ok(())
@@ -295,6 +299,112 @@ impl<'a> ChartParser<'a> {
             let Some(h) = headers.get(hi) else { break };
             section.source_span = Some(TextSpan::with_location(h.0, h.1, h.2, h.3));
             hi += 1;
+        }
+    }
+
+    /// Assign **document-absolute** `source_span`s to the bars of every
+    /// section whose bars are written out in its text: each bar's span is
+    /// its cell between barlines ([`bar_cells`]), so an edit made on the
+    /// chart (note input) can replace that bar's text and nothing else.
+    ///
+    /// Conservative: a section gets spans only when its text holds exactly
+    /// as many cells as it has bars, in order. A section whose bars come
+    /// from elsewhere (a recalled template, a repeat the parser unrolled)
+    /// keeps `None`, and an editor says so rather than writing a wrong bar.
+    fn assign_measure_source_spans(&mut self, input: &str) {
+        use crate::text::parsing::TextSpan;
+
+        let starts: Vec<Option<usize>> = self
+            .sections
+            .iter()
+            .map(|s| s.source_span.as_ref().map(|t| t.start))
+            .collect();
+        let line_col = |off: usize| -> (u32, u32) {
+            let upto = &input[..off];
+            let line = upto.bytes().filter(|&b| b == b'\n').count() as u32 + 1;
+            let col = (off - upto.rfind('\n').map_or(0, |n| n + 1)) as u32 + 1;
+            (line, col)
+        };
+        let line_texts = std::mem::take(&mut self.line_texts);
+        for (i, section) in self.sections.iter_mut().enumerate() {
+            let body = section.source_span.as_ref().map(|header| {
+                let from = input[header.start..]
+                    .find('\n')
+                    .map_or(input.len(), |n| header.start + n + 1);
+                let to = starts[i + 1..]
+                    .iter()
+                    .flatten()
+                    .copied()
+                    .find(|&s| s >= from)
+                    .unwrap_or(input.len());
+                (from, to)
+            });
+            let measures = section.measures_mut();
+            // A bar read with its line's id (`tag_line_spans`): its line
+            // found in the section's text, in order, and its text checked.
+            let mut cursor = body.map_or(0, |b| b.0);
+            let mut placed: Option<(u32, usize)> = None;
+            for m in measures.iter_mut() {
+                let Some(span) = m.source_span else { continue };
+                if span.line != 0 {
+                    continue;
+                }
+                m.source_span = None;
+                let (Some((_, to)), Some(text)) = (
+                    body,
+                    line_texts
+                        .get(span.column as usize - 1)
+                        .filter(|_| span.column > 0),
+                ) else {
+                    continue;
+                };
+                let line_start = match placed {
+                    Some((id, at)) if id == span.column => Some(at),
+                    _ => find_line(input, cursor, to, text),
+                };
+                let Some(line_start) = line_start else {
+                    continue;
+                };
+                if placed.is_none_or(|(id, _)| id != span.column) {
+                    // The next line is looked for after this one: two lines
+                    // alike are two places.
+                    cursor = line_start + text.len();
+                }
+                placed = Some((span.column, line_start));
+                let abs = line_start + span.start;
+                let want = text.get(span.start..span.start + span.len);
+                if want.is_some() && input.get(abs..abs + span.len) == want {
+                    let (line, col) = line_col(abs);
+                    m.source_span = Some(TextSpan::with_location(abs, span.len, line, col));
+                }
+            }
+            // What is left, by the cells between barlines, when they are
+            // exactly the section's bars.
+            let Some((from, to)) = body else { continue };
+            if measures.iter().all(|m| m.source_span.is_some()) {
+                continue;
+            }
+            let section_body = &input[from..to];
+            let end = lyric_start(section_body);
+            let cells = bar_cells(&blank_directives(&section_body[..end]));
+            if cells.len() != measures.len() {
+                continue;
+            }
+            for (measure, (start, len)) in measures.iter_mut().zip(cells) {
+                if measure.source_span.is_none() {
+                    let (line, col) = line_col(from + start);
+                    measure.source_span =
+                        Some(TextSpan::with_location(from + start, len, line, col));
+                }
+            }
+        }
+        // A bar of a section with no written header has no place to find.
+        for section in self.sections.iter_mut() {
+            for m in section.measures_mut().iter_mut() {
+                if m.source_span.is_some_and(|s| s.line == 0) {
+                    m.source_span = None;
+                }
+            }
         }
     }
 
@@ -619,6 +729,133 @@ impl<'a> ChartParser<'a> {
 // endregion: --- Parser Entry Point
 
 // region:    --- Tests
+
+/// Where `text` (a trimmed section line) starts in `input[from..to]`: the
+/// first line there whose text, trimmed, begins with it.
+fn find_line(input: &str, from: usize, to: usize, text: &str) -> Option<usize> {
+    let mut offset = from;
+    for line in input[from..to].split_inclusive('\n') {
+        let lead = line.len() - line.trim_start().len();
+        if line.trim_start().starts_with(text) {
+            return Some(offset + lead);
+        }
+        offset += line.len();
+    }
+    None
+}
+
+/// Where a section's body stops holding bars: its first lyric line (a
+/// `[lyrics …]` block, or an `@` timed lyric), or its end.
+fn lyric_start(body: &str) -> usize {
+    let mut offset = 0;
+    for line in body.split_inclusive('\n') {
+        let t = line.trim_start();
+        let timed_lyric = t
+            .strip_prefix('@')
+            .is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_digit()));
+        if timed_lyric || t.to_ascii_lowercase().starts_with("[lyrics") {
+            return offset;
+        }
+        offset += line.len();
+    }
+    body.len()
+}
+
+/// `body` with the lines that direct rather than hold bars blanked (a cue
+/// `@drums "Drums in"`, a dynamic `dyn mf`), offsets kept.
+fn blank_directives(body: &str) -> String {
+    let mut out = String::with_capacity(body.len());
+    for line in body.split_inclusive('\n') {
+        let t = line.trim_start();
+        let cue = t
+            .strip_prefix('@')
+            .is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_alphabetic()));
+        let dynamic = t.starts_with("dyn ");
+        if cue || dynamic {
+            out.extend(line.chars().map(|c| if c == '\n' { '\n' } else { ' ' }));
+            // a multi-byte char blanked to one space would shift offsets
+            let diff = line.len() - line.chars().count();
+            out.extend(std::iter::repeat_n(' ', diff));
+        } else {
+            out.push_str(line);
+        }
+    }
+    out
+}
+
+/// The bars written in a section's `body`, as (byte offset, length) of
+/// each bar's text, trimmed: the cells between barlines (`|`, `||`, `|:`,
+/// `:|`, `:|x2`) and line ends. A barline inside a melody block (`m{ }`)
+/// or a parallel container (`<< >>`) is not one, and a `;` outside them
+/// starts a comment to the end of its line.
+#[must_use]
+pub fn bar_cells(body: &str) -> Vec<(usize, usize)> {
+    let bytes = body.as_bytes();
+    let mut cells = Vec::new();
+    let mut depth = 0i32;
+    let mut start = 0usize;
+    let push = |a: usize, b: usize, cells: &mut Vec<(usize, usize)>| {
+        let text = &body[a..b];
+        let lead = text.len() - text.trim_start().len();
+        let len = text.trim().len();
+        if len > 0 {
+            cells.push((a + lead, len));
+        }
+    };
+    let mut i = 0;
+    while i < bytes.len() {
+        let c = bytes[i];
+        match c {
+            b'{' => depth += 1,
+            b'}' => depth = (depth - 1).max(0),
+            b'<' if bytes.get(i + 1) == Some(&b'<') => {
+                depth += 1;
+                i += 1;
+            }
+            b'>' if bytes.get(i + 1) == Some(&b'>') => {
+                depth = (depth - 1).max(0);
+                i += 1;
+            }
+            b';' if depth == 0 => {
+                push(start, i, &mut cells);
+                while i < bytes.len() && bytes[i] != b'\n' {
+                    i += 1;
+                }
+                start = i;
+                continue;
+            }
+            b'\n' if depth == 0 => {
+                push(start, i, &mut cells);
+                start = i + 1;
+            }
+            b'|' | b':' if depth == 0 => {
+                // A barline: `:`s and `|`s together, then a repeat count.
+                let is_bar = c == b'|' || bytes.get(i + 1) == Some(&b'|');
+                if is_bar {
+                    push(start, i, &mut cells);
+                    while i < bytes.len() && matches!(bytes[i], b'|' | b':') {
+                        i += 1;
+                    }
+                    if i < bytes.len() && bytes[i] == b'x' {
+                        let digits = bytes[i + 1..]
+                            .iter()
+                            .take_while(|b| b.is_ascii_digit())
+                            .count();
+                        if digits > 0 {
+                            i += 1 + digits;
+                        }
+                    }
+                    start = i;
+                    continue;
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    push(start, bytes.len(), &mut cells);
+    cells
+}
 
 #[cfg(test)]
 mod tests {

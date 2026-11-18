@@ -1,0 +1,225 @@
+She's American
+Transcribed By Cody Wright
+\title "She's American"
+bDb 116bpm 4/4
+
+Count 2
+
+; The 1975 - She's American, in this show's arrangement (the record's key and tempo, cut and with a slowed bridge).
+; Source: the show's Ableton set, beats 864-1352 (122 bars; count-in 856-864, SONG END 1352): SECTIONS +CC,
+; tempo map (116; 95 from the turnaround; ramp 95->116 across the instrumental), FoH/Count Ins cues,
+; the record's stems in the set (bass, piano, synths, guitar). Songsterr bass tab (song 712407) confirms
+; the riffs (Gb-Eb-Gb | Ab-Bb) and the bridge bass (Gb | F-Bb, Cb). Ab-Bbm cells: Ab on 1, Bbm on 3.
+; The set's intro starts at the tab's bar 6 (the record's 5-bar opening is cut).
+
+IN 8
+Gb
+Ab // Bbm //
+Gb
+Ab // Bbm //
+Gb
+Ab // Bbm //
+Eb7sus4 // Ab //
+Ab
+[lyrics lrc]
+@8:4.5 A big town
+
+VS 16
+Bbm
+Bbm
+Gb
+Gb // Ab //
+Bbm
+Bbm/Ab
+Gb
+Gb // Ab //
+Bbm
+Bbm
+Gb
+Gb // Ab //
+Bbm
+Ab
+Gb
+Gb
+[lyrics lrc]
+@1:4.5 Synthetic apparitions of not being lonely
+@4:4 Look, he's…
+@5:3.5 Oh what a let down, a shame, I think he might die
+@9 Oh, she's dancing enthralling, I guess I gotta wait my turn
+@12:3 I said, don't fall in love…
+@14 She said I've got a lot to learn
+@16:4.5 You know I'm in…
+
+; LOW CONFIDENCE bar 2 (Fm7: stems show F bass under C Eb G).
+PRE 4
+Eb7sus4
+Fm7
+Gb // Ab //
+Ab
+[lyrics lrc]
+@1:4.5 But the green is…
+@3 And I just look pathetic now
+@4:4.5 If she likes it 'cause we…
+
+CH 16
+Gb
+Ab // Bbm //
+Gb
+Ab // Bbm //
+Gb
+Ab // Bbm //
+Gb
+Ab // Bbm //
+Gb
+Ab // Bbm //
+Gb
+Ab // Bbm //
+Gb
+Ab // Bbm //
+Eb7sus4 // Ab //
+Ab
+[lyrics lrc]
+@2:2.5 And we're so intelligent, she's American
+@4:4 If she says I've got to fix my…
+@6:2.5 Then she's so American (she's American)
+@8:3 And if she likes it 'cause we…
+@10:2 And we're socially relevant, she's American
+@12:4 If she says I've got to…
+@14:2 Then she's so American (she's American)
+
+VS 16
+Bbm
+Bbm
+Gb
+Gb // Ab //
+Bbm
+Ab
+Gb
+Gb // Ab //
+Bbm
+Bbm
+Gb
+Gb // Ab //
+Bbm
+Eb7sus4
+Gb
+Gb
+[lyrics lrc]
+@1:2 She's inducing sleep to avoid pain
+@4:2 And I think she's got a gun divinely decreed and custom made
+@8:4 She calls on the phone like the old days, expecting the world
+@12:3 Don't fall in love with…
+@14 And think you're in love with the girl
+@16:3 There's no more water…
+
+PRE 4
+Eb7sus4
+Fm7
+Gb // Ab //
+Ab
+[lyrics lrc]
+@1:4 But be careful or…
+@2:4 You think you've got it figured out
+@4:4 If she likes it 'cause we…
+
+; Last bar: the set slows to 95 on its 4th beat (tempo map 1182.75).
+CH 16
+Gb
+Ab // Bbm //
+Gb
+Ab // Bbm //
+Gb
+Ab // Bbm //
+Gb
+Ab // Bbm //
+Gb
+Ab // Bbm //
+Gb
+Ab // Bbm //
+Gb
+Ab // Bbm //
+Bbm // Ab //
+Ab
+[lyrics lrc]
+@2:2 And we're so intelligent, she's American
+@4:3 If she says I've got to fix my…
+@6:2 Then she's so American (she's American)
+@8:3 And if she likes it 'cause we…
+@10 And we're socially relevant, she's American
+@12:4 If she says I've got to fix…
+@14:2 Then she's so American (she's American)
+
+; Turnaround + bridge at 95 bpm (FoH: "TEMPO CHANGE"). Cb6/9 = B bass under Eb Gb Ab Db.
+[Turnaround] 2
+"Slower: ♩ = 95" Cb6add9
+Cb6add9
+[lyrics lrc]
+@2:3 Well, your face has got a hold on me
+
+BR 8
+Gbmaj9
+Bbm7/F / Bbm7 ///
+Gbmaj9
+Bbm7/F / Bbm7 ///
+Gbmaj9
+Bbm7/F / Bbm7 ///
+Cb6add9
+Cb6add9
+[lyrics lrc]
+@2:3 But your brain is proper weird
+@4:2 I feel Insane
+@5:3 You just keep nodding at me looking vacant
+
+; Instrumental: tempo ramps 95 -> 116 from beat 2 of bar 1 to the start of bar 11 (tempo map 1224.5-1264).
+; Bars 11-12: Cb6/9 then Eb7sus4 (stems), into the last chorus.
+INST 12
+"Speed up to ♩ = 116 by bar 11" Gb
+Ab // Bbm //
+Gb
+Ab // Bbm //
+Gb
+Ab // Bbm //
+Gb
+Ab // Bbm //
+Gb
+Ab // Bbm //
+Cb6add9
+Eb7sus4
+[lyrics lrc]
+@7:4 She's American
+@11:3 She's American
+@12:4 If she likes it 'cause we…
+
+; FoH: "CHORD CHANGE" at bar 9 (beat 1304): Gb | Db/F-Bbm7 from there.
+CH 14
+Gb
+Ab // Bbm //
+Gb
+Ab // Bbm //
+Gb
+Ab // Bbm //
+Gb
+Ab // Bbm //
+"Chord change" Gb
+Db/F // Bbm7 //
+Gb
+Db/F // Bbm7 //
+Gb
+Db/F // Bbm7 //
+[lyrics lrc]
+@2:2 And we're so intelligent, she's American
+@4:3 If she says I've got to fix my…
+@6:2 Then she's so American (she's American)
+@8:3 If she likes it 'cause we just…
+@10:2 And we're socially relevant, she's American
+@12:3 If she says I've got to fix my…
+@14:2 Then she's so American (she's American)
+
+; END: the band stops; Cb6/9 rings from the tracks for ~3 bars, then silence to SONG END.
+[End] 6
+"Let ring" Cb6add9
+Cb6add9
+Cb6add9
+Cb6add9
+r1
+r1

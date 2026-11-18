@@ -1,0 +1,64 @@
+Sirius / Eye In The Sky - The Alan Parsons Project
+#Bm 112bpm 4/4
+\subtitle "Live edit"
+
+[Sirius Loop] 2
+@keys "Synth loop alone"
+Bm %
+
+[Kick] 2
+@drums "Kick quarters join"
+Bm %
+
+[Crunches] 8
+@gtr "Power chords"
+Bm % Gmaj7 % Em7 % Bm %
+
+[Groove] 8
+@drums "Full groove, snare 2 & 4"
+Bm % Gmaj7 % Em7 % Bm %
+
+[Wind Down] 8
+^"Full groove, winding down" Bm % Gmaj7 %
+Bm % Gmaj7 %
+
+IN 8
+^"Smoldering, down low" Bm % Gmaj7 %
+Bm % Gmaj7 %
+
+VS 16
+Dsus2 // 'D // Dsus2 // 'D // Bm %
+Dsus2 // 'D // Dsus2 // 'D // Bm %
+G6 Gm6 Bm7 E7
+D Gmaj7 D %
+
+VS 16
+
+CH 10
+D % F#m %
+D % F#m %
+G6 Gm6 !STOP
+
+INT 8
+^"Intro groove" Bm % Gmaj7 %
+Bm % Gmaj7 %
+[lyrics]
+@2:2 I can read your mind
+
+VS 16
+
+CH 10
+
+INT 8
+[lyrics]
+@2:3 I can read your mind
+
+SOLO 4
+|: ^"Guitar solo" Bm //// | Bm //// | Gmaj7 //// | Gmaj7 //// :|x5
+
+OUT 5
+^"6th time" Bm
+Bm_8 Bm_8 Bm_8 Bm_8 Bm_8 Bm_8 r8 >Gmaj7_8 ~
+^"Stop groove" Gmaj7_1 ~
+^"Tom fill" Gmaj7_2 r8 >F#5_8 >F#5_8 >F#5_8
+^"Band in unison" >A5_8 >B5_8 >A5_8 >B5_8 r2

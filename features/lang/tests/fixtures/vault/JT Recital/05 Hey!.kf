@@ -1,0 +1,174 @@
+Hey!
+Transcribed By Cody Wright
+\title "Hey!"
+#E 87bpm 4/4
+
+Count 1
+
+; Source: the show's Ableton set, beats 2677-3037 (89 bars + a 3-beat END; count-in is ONE bar, 2673-2677):
+; SECTIONS +CC, tempo map (87), meter map (one 5/4 bar at 2965), stems (Bass - Live/Synth, guitars) + reference.
+; Chords: Cody's notes (Vs 1maj7, hits 6 3 4 / 6 5 4; PRE 6 5 4 3 2; CH 1 37 6 4 x2, 1 2 3 5 V/6 6, 5 4 cut
+; "All I ever say is"; Pre 3 ends on b7, b7 into the double chorus; hits 3 5 6, 7 1 4, 4 3).
+; 2026-11-15 (Cody): written in Nashville numbers (G#/B# as 3M/#5, as in For You); essential lyric cues.
+; Verse hits (Cody, 2026-11-15): 6 // '3 // '4 //// in eighths = 6m on 1, 3m (or 5) on the a of 1 (a sixteenth push),
+; 4 pushed to the and of 2, tied to a quarter on 3, then a quarter on 4 (the band keeps grooving).
+; The set has no separate Pre: its 1-bar "Tag" before each chorus is the notes' PRE (6 5 4 3 2 in one bar).
+
+IN 2
+"Kalimba + tracks" 1maj7
+1maj7
+
+; Verse 1a: sparse in the reference (kalimba, no bass); written as the verse. LOW CONFIDENCE on the hits here.
+VS 8
+1maj7
+1maj7
+>6m_8. >3m_8. >4_8 ~ 4_4 4_4
+>6m_8. >5_8. >4_8 ~ 4_4 4_4
+1maj7
+1maj7
+>6m_8. >3m_8. >4_8 ~ 4_4 4_4
+>6m_8. >5_8. >4_8 ~ 4_4 4_4
+[lyrics lrc]
+@1:2 Hey
+
+; Break: the reference is silent for 2 bars (a synth-bass pickup at the end).
+[Break] 2
+"Band out" r1
+r1
+
+VS 8
+1maj7
+1maj7
+>6m_8. >3m_8. >4_8 ~ 4_4 4_4
+>6m_8. >5_8. >4_8 ~ 4_4 4_4
+1maj7
+1maj7
+>6m_8. >3m_8. >4_8 ~ 4_4 4_4
+>6m_8. >5_8. >4_8 ~ 4_4 4_4
+[lyrics lrc]
+@1:2.5 Hey
+
+PRE 1
+6m_8. 5_8. 4_8. 3m_8. 2m_4
+
+; V/6 = G#, bass B# (stems) leading to C#m. Last bar: A, then the band cuts ("All I ever say is").
+CH 8
+r4 1 // '37 /
+6m /// '4 /
+1 /// '37 /
+6m /// '4 /
+1 // 2m //
+3m // 5 / 3M/#5 /
+6m // 5 //
+4 // r2
+[lyrics lrc]
+@1:2 Hey! / I love and I hate your name
+@8:2.5 But all I ever say is…
+
+[Break] 2
+"Band out" r1
+r1
+
+VS 8
+1maj7
+1maj7
+>6m_8. >3m_8. >4_8 ~ 4_4 4_4
+>6m_8. >5_8. >4_8 ~ 4_4 4_4
+1maj7
+1maj7
+>6m_8. >3m_8. >4_8 ~ 4_4 4_4
+>6m_8. >5_8. >4_8 ~ 4_4 4_4
+[lyrics lrc]
+@1:2.5 Hey
+
+PRE 1
+6m_8. 5_8. 4_8. 3m_8. 2m_4
+[lyrics lrc]
+@1 Days we used to say
+
+CH 2A 8
+r4 1 // '37 /
+6m /// '4 /
+1 /// '37 /
+6m /// '4 /
+1 // 2m //
+3m // 5 / 3M/#5 /
+6m // 5 //
+@drums "Drum Fill"
+4 // r2
+[lyrics lrc]
+@1:2 Hey! / I love and I hate your name
+@8:2.5 But all I ever say is…
+
+INST 4
+1 /// '37 /
+6m /// '4 /
+1 /// '37 /
+6m /// '4 /
+
+CH 2B 4
+1 // 2m //
+3m // 5 / 3M/#5 /
+6m // 5 //
+"Riff Follows Melody" 4 // r2
+[lyrics lrc]
+@1:2 Color me in…
+@4:2.5 But all I ever…
+
+VS 16
+1maj7
+1maj7
+>6m_8. >3m_8. >4_8 ~ 4_4 4_4
+>6m_8. >5_8. >4_8 ~ 4_4 4_4
+1maj7
+1maj7
+>6m_8. >3m_8. >4_8 ~ 4_4 4_4
+>6m_8. >5_8. >4_8 ~ 4_4 4_4
+1maj7
+1maj7
+>6m_8. >3m_8. >4_8 ~ 4_4 4_4
+>6m_8. >5_8. >4_8 ~ 4_4 4_4
+1maj7
+1maj7
+>6m_8. >3m_8. >4_8 ~ 4_4 4_4
+>6m_8. >5_8. >4_8 ~ 4_4 4_4
+[lyrics lrc]
+@1:2 Hey
+@9:2.5 Prince Charming to…
+
+; Pre (Cody, 2026-11-15): 6m on 1, 5 on the a of 1, 4 on the and of 2, 3m on the e of 3, 2m on 4.
+; Pre 3: the set's one 5/4 bar, the same figure ending on b7 (D), held 2 beats.
+PRE 1
+!T5/4 6m_8. 5_8. 4_8. 3m_8. b7_2
+[lyrics lrc]
+@1 The days we used to say
+
+; Double chorus: pass 1 ends on D (b7, stems: a whole bar of D) into pass 2.
+; OPEN: the notes' "Hits 3 5 6, 7 1 4, 4 3" - placement not found in the set. The ending here: A then
+; the band cuts, and the END hit is G#m7 (the stems' chord on "Hey!", = the notes' "4 3").
+CH 16
+r4 1 // '37 /
+6m /// '4 /
+1 /// '37 /
+6m /// '4 /
+1 // 2m //
+3m // 5 / 3M/#5 /
+6m // 5 //
+b7
+1 /// '37 /
+6m /// '4 /
+1 /// '37 /
+6m /// '4 /
+1 // 2m //
+3m // 5 / 3M/#5 /
+6m // 5 //
+4 // r2
+[lyrics lrc]
+@1:2 Hey! / I love and I hate your name
+@9:1.5 Hey! / I love and I hate your name
+@16:2.5 But all I…
+
+[End] 1
+!T3/4 >3m7_4 r2
+[lyrics lrc]
+@1 Hey!

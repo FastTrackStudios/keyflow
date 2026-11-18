@@ -21,12 +21,14 @@ use std::time::{Duration, Instant};
 use architect::action::{ActionCaller, ActionList};
 use architect_scene::ops::{Receiver, Sender};
 use architect_workspace::paint::peniko::kurbo::Affine;
-use architect_workspace::paint::{Layer, LayerKey, PaintView, Scene};
+use architect_workspace::paint::{Layer, LayerKey, PaintView, RegionEvent, Scene};
 use architect_workspace::{
     Button, FrameClock, Geometry, HostData, KindId, PaneId, Placement, ViewCtx, ViewHost, ViewInput,
 };
 use keyflow::engraver::renderer::{self, ChartTheme, points_to_px};
-use keyflow_ui::paint_view::{ChartSelection, ChartSnapshot, ChartView, chart_mount};
+use keyflow_ui::paint_view::{
+    ChartSelection, ChartSnapshot, ChartView, HighlightColours, chart_mount,
+};
 
 const WIDTH: u32 = 900;
 const HEIGHT: u32 = 1200;
@@ -66,6 +68,7 @@ fn pane(text: &str) -> Pane {
         playhead_secs: None,
         theme: Some(ChartTheme::default()),
         view: ChartView::default(),
+        input: None,
     });
     let mount = chart_mount(data.clone());
     let ctx = ViewCtx::new(
@@ -209,8 +212,8 @@ fn measure(name: &str) {
     let first = send(&layers, &mut receiver);
 
     // Composed by the host from what crossed, against the engraver's own.
-    let mut composed = Scene::new();
-    receiver.layers().compose(&mut composed, Affine::IDENTITY);
+    let mut from_host = Scene::new();
+    receiver.layers().compose(&mut from_host, Affine::IDENTITY);
     let mut linked = Scene::new();
     let mut held = architect_scene::Layers::new();
     for (key, layer) in &layers {
@@ -218,7 +221,7 @@ fn measure(name: &str) {
     }
     held.compose(&mut linked, Affine::IDENTITY);
     let (host, local, engraved) = (
-        raster(&composed),
+        raster(&from_host),
         raster(&linked),
         raster(&whole_chart(&text)),
     );
@@ -271,24 +274,40 @@ fn measure(name: &str) {
             None,
         );
         let page_w = view.page(1).unwrap().2;
-        let chord = view
+        let mut chords = view
             .selectables()
             .into_iter()
-            .find(|s| s.key.starts_with("chord"))
-            .expect("a chord to select");
+            .filter(|s| s.key.starts_with("chord"));
+        let chord = chords.next().expect("a chord to select");
+        let other = chords.next().expect("a second chord to hover");
         (
             (f64::from(WIDTH) / (page_w * points_to_px(1.0))).min(1.0),
             chord,
+            other,
         )
     };
     pane.data.update(|s| s.view.scroll = (0.0, 0.0));
     let _ = send(&pane.settled(), &mut receiver);
-    let (zoom, chord) = fit;
-    let c = chord.bounds.center();
-    let at = (
-        (c.x * points_to_px(1.0) * zoom) as f32,
-        (c.y * points_to_px(1.0) * zoom) as f32,
+    let plain = composed(&receiver);
+    // The colours the view draws them in: with no theme tokens given, its
+    // fallbacks, made to read on the default paper.
+    let colours = HighlightColours::from_tokens(
+        |_| None,
+        architect_workspace::paint::peniko::Color::WHITE,
+        architect_workspace::paint::peniko::Color::BLACK,
     );
+    let rgb = |c: architect_workspace::paint::peniko::Color| {
+        let c = c.to_rgba8();
+        [c.r, c.g, c.b]
+    };
+    let (zoom, chord, other) = fit;
+    let to_pane = |p: kurbo::Point| {
+        (
+            (p.x * points_to_px(1.0) * zoom) as f32,
+            (p.y * points_to_px(1.0) * zoom) as f32,
+        )
+    };
+    let at = to_pane(chord.bounds.center());
     for input in [
         ViewInput::PointerDown {
             x: at.0,
@@ -312,6 +331,57 @@ fn measure(name: &str) {
         "{name}: the click selected"
     );
     let select = send(&pane.settled(), &mut receiver);
+    recoloured(name, &plain, &receiver, rgb(colours.selection));
+    let selected = composed(&receiver);
+
+    // A hover: the pointer onto another chord, which is drawn again as
+    // itself in the hover colour, in a layer of its own; then a move
+    // within it (nothing), then off onto the margin (the layer goes).
+    // A hover, as the host gives it: the pages carry a region for every
+    // element, the host hit-tests them itself (no pointer move reaches the
+    // view for it) and tells the view which it entered and left. Onto
+    // another chord, it is drawn again as itself in a layer of its own.
+    let layers = pane.settled();
+    let o = other.bounds.center();
+    let inside = kurbo::Point::new(o.x * points_to_px(1.0), o.y * points_to_px(1.0));
+    let regions: usize = layers.iter().map(|(_, l)| l.region_count()).sum();
+    let hit = layers
+        .iter()
+        .filter(|(k, _)| *k < (1 << 32))
+        .filter_map(|(_, l)| l.regions.as_deref())
+        .flat_map(|r| r.iter())
+        .filter(|r| match r.shape {
+            architect_workspace::paint::region::Shape::Rect(rect) => rect.contains(inside),
+            _ => false,
+        })
+        .last()
+        .map(|r| r.id)
+        .expect("a region over the second chord");
+    let mut region =
+        |pane: &mut Pane, event: RegionEvent, receiver: &mut Receiver| -> (usize, Duration) {
+            let started = Instant::now();
+            pane.view.region(&pane.ctx, &event);
+            let layers = pane.view.layers(&pane.ctx).expect("a view of layers");
+            let bytes = send(&layers, receiver);
+            (bytes, started.elapsed())
+        };
+    let (hover_on, hover_time) = region(&mut pane, RegionEvent::Enter(hit), &mut receiver);
+    assert_eq!(
+        pane.selection.read(|s| s.hover.clone()),
+        Some(other.key.clone()),
+        "{name}: the pointer hovers the second chord"
+    );
+    recoloured(name, &selected, &receiver, rgb(colours.hover));
+    // A move within it: the host does not even tell the view, so only a
+    // frame asked of it again, which sends nothing.
+    let (hover_off, _) = region(&mut pane, RegionEvent::Leave(hit), &mut receiver);
+    let (hover_within, within_time) = (0usize, Duration::ZERO);
+    assert_eq!(
+        pane.selection.read(|s| s.hover.clone()),
+        None,
+        "{name}: left, nothing is hovered"
+    );
+    println!("{name}: {regions} regions on the pages");
 
     // An edit to one bar: laid out again, only the pages that changed cross.
     pane.data.update(|s| {
@@ -331,11 +401,21 @@ fn measure(name: &str) {
 
     println!(
         "{name}: {pages} page(s), {runs} glyph runs in {} fonts ({font_bytes} bytes of them); bytes sent: \
-         first paint {first} ({} past the fonts), scroll {scroll}, selection {select}, one bar edited {edit}; \
-         pixels off the whole chart {:.4}%",
+         first paint {first} ({} past the fonts), scroll {scroll}, selection {select}, \
+         hover onto a chord {hover_on} in {hover_time:?}, a move within it {hover_within} in {within_time:?}, \
+         hover off {hover_off}, one bar edited {edit}; pixels off the whole chart {:.4}%",
         fonts.len(),
         first.saturating_sub(font_bytes),
         as_before * 100.0
+    );
+    assert!(hover_on > 0, "{name}: the hover drew nothing");
+    assert_eq!(
+        hover_within, 0,
+        "{name}: a move within one element sent bytes"
+    );
+    assert!(
+        hover_on < first / 20,
+        "{name}: a hover sent {hover_on} of {first}: it re-sent the pages"
     );
     assert!(scroll > 0, "{name}: the scroll moved nothing");
     // Each page moves on its own (the layer tree is flat): a transform
@@ -344,6 +424,71 @@ fn measure(name: &str) {
     assert!(
         select < first / 20,
         "{name}: a selection sent {select} of {first}"
+    );
+}
+
+/// What the host composes from what crossed, rasterised.
+fn composed(receiver: &Receiver) -> Vec<u8> {
+    let mut scene = Scene::new();
+    receiver.layers().compose(&mut scene, Affine::IDENTITY);
+    raster(&scene)
+}
+
+/// One element highlighted as the host composes it: its ink in `rgb`
+/// (the view's own colours for it), and only its
+/// ink: the pixels in that colour are few and do not fill the box around
+/// them, so it is the element recoloured, not a box laid over it.
+fn recoloured(name: &str, before: &[u8], receiver: &Receiver, rgb: [u8; 3]) {
+    let pixels = composed(receiver);
+    if std::env::var_os("KEYFLOW_SHOTS").is_some() {
+        let out =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/runtime-layers");
+        std::fs::create_dir_all(&out).unwrap();
+        let file = out.join(format!(
+            "{}-{:02x}{:02x}{:02x}.png",
+            name.replace(['/', ' '], "_"),
+            rgb[0],
+            rgb[1],
+            rgb[2]
+        ));
+        let mut encoder = png::Encoder::new(std::fs::File::create(&file).unwrap(), WIDTH, HEIGHT);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        encoder
+            .write_header()
+            .unwrap()
+            .write_image_data(&pixels)
+            .unwrap();
+    }
+    // What the highlight changed, and what of that is its colour.
+    let close = |p: &[u8]| p.iter().zip(rgb).all(|(a, b)| a.abs_diff(b) < 30);
+    let inked: Vec<(u32, u32)> = pixels
+        .chunks(4)
+        .zip(before.chunks(4))
+        .enumerate()
+        .filter(|(_, (p, q))| p != q && close(p))
+        .map(|(i, _)| (i as u32 % WIDTH, i as u32 / WIDTH))
+        .collect();
+    assert!(inked.len() > 10, "{name}: nothing drawn in {rgb:?}");
+    let (x0, x1) = (
+        inked.iter().map(|p| p.0).min().unwrap(),
+        inked.iter().map(|p| p.0).max().unwrap(),
+    );
+    let (y0, y1) = (
+        inked.iter().map(|p| p.1).min().unwrap(),
+        inked.iter().map(|p| p.1).max().unwrap(),
+    );
+    let area = ((x1 - x0 + 1) * (y1 - y0 + 1)) as usize;
+    assert!(
+        area < 80 * 40,
+        "{name}: the {rgb:?} pixels span {}x{}: more than one element",
+        x1 - x0 + 1,
+        y1 - y0 + 1
+    );
+    assert!(
+        inked.len() * 10 < area * 7,
+        "{name}: {} of the {area} pixels around it are {rgb:?}: a box, not ink",
+        inked.len()
     );
 }
 

@@ -1,7 +1,7 @@
 //! Native source editor and live chart in a workspace pane.
 
-use architect_workspace::paint::PaintPane;
 use architect_workspace::HostData;
+use architect_workspace::paint::PaintPane;
 use dioxus::prelude::*;
 use editor_keyflow::view::KeyflowEditor;
 
