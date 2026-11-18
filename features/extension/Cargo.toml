@@ -47,3 +47,7 @@ tokio = { workspace = true, features = ["sync", "rt", "time"] }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+# A chart file to make a session from (session_host tests).
+tempfile = { workspace = true }

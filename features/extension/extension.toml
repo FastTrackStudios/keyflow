@@ -1220,10 +1220,10 @@ params = '{"type":"object","properties":{"doc":{"type":"string"},"request":{}},"
 [[actions]]
 id = "KEYFLOW_SESSION_OPEN"
 name = "Session: open"
-description = "Opens a `.session` file (`path`; made with `chart` when it is not there) and serves it as fts.session. Answers `{id, pane}`."
+description = "Opens a `.session` file (`path`; when it is not there, made with the chart read from `chart_path`, or with `chart`, Keyflow source; either must read as a chart) and serves it as fts.session. Answers `{id, pane}`."
 group = "Session"
 effect = "mutating"
-params = '{"type":"object","properties":{"path":{"type":"string"},"chart":{"type":"string"}},"required":["path"]}'
+params = '{"type":"object","properties":{"path":{"type":"string"},"chart":{"type":"string"},"chart_path":{"type":"string"}},"required":["path"]}'
 
 [[actions]]
 id = "KEYFLOW_SESSION_SERVE"
@@ -1232,6 +1232,14 @@ description = "Serves open session `id` (document sync, presence, the session cl
 group = "Session"
 effect = "mutating"
 params = '{"type":"object","properties":{"id":{"type":"string"},"bind":{"type":"string"}},"required":["id"]}'
+
+[[actions]]
+id = "KEYFLOW_SESSION_FOLLOW"
+name = "Session: follow"
+description = "Follows session `id` hosted elsewhere (the DAW engine's, another app's) at `url` (`ws://host:port/vox`): its transport and its host's clock, so the chart on `session:<id>` draws where it plays. Holds no copy and provides nothing: the chart is read and written through the host's fts.session."
+group = "Session"
+effect = "mutating"
+params = '{"type":"object","properties":{"url":{"type":"string"},"id":{"type":"string"}},"required":["url","id"]}'
 
 [[actions]]
 id = "KEYFLOW_SESSION_JOIN"
