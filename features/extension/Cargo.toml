@@ -41,7 +41,7 @@ architect-extensions = { workspace = true, features = ["guest", "doc-sync"] }
 # presence over vox on a WebSocket, the session's clock.
 architect = { workspace = true, features = ["vox", "host", "connect"] }
 crdt = { workspace = true, features = ["vox"] }
-session = { workspace = true, features = ["clock", "extension"] }
+session = { workspace = true, features = ["sync", "extension"] }
 uuid = { workspace = true }
 tokio = { workspace = true, features = ["sync", "rt", "time"] }
 
