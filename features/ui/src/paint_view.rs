@@ -743,7 +743,13 @@ impl ChartPaintView {
         let (bar, from, to, chords) = overlay?.selected?;
         let b = self.bar_box(bar)?;
         let (x0, x1) = (b.x0 + from * b.width(), b.x0 + to * b.width());
-        let near = b.inflate(0.0, b.height() * 3.0);
+        // Its staff and the chord symbols over it, not the line below.
+        let near = Rect::new(
+            b.x0,
+            b.y0 - b.height() * 2.5,
+            b.x1,
+            b.y1 + b.height() * 0.75,
+        );
         let keys: Vec<String> = self
             .recorded
             .selectables

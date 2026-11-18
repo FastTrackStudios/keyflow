@@ -79,8 +79,9 @@ pub const TOOL_KEYS: &[(&str, &str)] = &[
 /// Undo and redo of note input's own edits: keys in every mode.
 pub const HISTORY_KEYS: &[(&str, &str)] = &[("KEYFLOW_UNDO", "⌘Z"), ("KEYFLOW_REDO", "⇧⌘Z")];
 
-/// Tab: chord symbols or notes, what a letter enters.
-pub const TARGET_KEY: (&str, &str) = ("KEYFLOW_TARGET_SWITCH", "Tab");
+/// Y: chord symbols or notes, what a letter enters (not Tab, which the
+/// app keeps for moving focus).
+pub const TARGET_KEY: (&str, &str) = ("KEYFLOW_TARGET_SWITCH", "Y");
 
 /// Every action with a key, and its key by default.
 pub fn default_keys() -> impl Iterator<Item = (&'static str, &'static str)> {
