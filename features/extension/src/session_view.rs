@@ -1,22 +1,18 @@
-//! A chart on a session, beyond the engraving: its playhead and its text.
+//! A chart on a session: its playhead.
 //!
-//! - **The playhead.** A chart pane on `session:<id>` draws where the
-//!   session's leader is (`session_host::shown_now`: presence in the host's
-//!   clock), in the chart's own time: the session's seconds from the song's
-//!   bar 1 (`bar_one`, the end of a count-in), so bar 1 of the chart is the
-//!   song's bar 1 however the multitracks start. Read from the session this
-//!   copy holds, else through `fts.session`'s structure (whoever provides
-//!   it: Keyflow, or the DAW engine).
-//! - **The text beside it.** The `source` view edits the session's chart
-//!   as Keyflow source, both ways: typing writes the one splice between the
-//!   old and the new text through `fts.session` (`write_text`), and the
-//!   other side's edits arrive as the chart does.
+//! A chart pane on `session:<id>` draws where the session's leader is
+//! (`session_host::shown_now`: presence in the host's clock), in the
+//! chart's own time: the session's seconds from the song's bar 1
+//! (`bar_one`, the end of a count-in), so bar 1 of the chart is the song's
+//! bar 1 however the multitracks start. Read from the session this copy
+//! holds, else through `fts.session`'s structure (whoever provides it:
+//! Keyflow, or the DAW engine). The pane is otherwise the chart's own
+//! editor (palettes, toolbar, input modes), editing through `fts.session`.
 
 use std::collections::HashMap;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
-use dioxus::prelude::*;
 use keyflow_session::ChartSource;
 
 use crate::session_host;
@@ -105,89 +101,6 @@ async fn chart_start_elsewhere(doc: &str) -> Option<f64> {
     let handle = crate::handle().ok()?;
     let reply = crate::ask_session(&handle, &call).await.ok()?;
     ChartSource::chart_start_of(&reply).ok()
-}
-
-/// Waits `d` from a component, with no timer runtime needed: a thread
-/// sleeps and answers.
-async fn pause(d: Duration) {
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    std::thread::spawn(move || {
-        std::thread::sleep(d);
-        let _ = tx.send(());
-    });
-    let _ = rx.await;
-}
-
-/// The `source` view: the session chart's Keyflow source, edited in place.
-#[component]
-pub fn ChartSourcePane() -> Element {
-    let path = architect_extensions::linked::use_pane_state()
-        .map(|(_, state)| state)
-        .unwrap_or_default();
-    let mut text = use_signal(String::new);
-    let mut said = use_signal(String::new);
-    let mut typed_at = use_signal(|| None::<Instant>);
-    let read_path = path.clone();
-    // Read now, and again while nobody types here (the other side's
-    // edits, the chart's note input).
-    use_future(move || {
-        let path = read_path.clone();
-        async move {
-            loop {
-                let quiet = typed_at
-                    .peek()
-                    .is_none_or(|at| at.elapsed() > Duration::from_millis(1500));
-                if quiet
-                    && !path.is_empty()
-                    && let Ok(handle) = crate::handle()
-                {
-                    match crate::read_text(&handle, &path).await {
-                        Ok(now) if *text.peek() != now => text.set(now),
-                        Ok(_) => {}
-                        Err(e) => said.set(e),
-                    }
-                }
-                pause(Duration::from_millis(700)).await;
-            }
-        }
-    });
-    let write_path = path.clone();
-    let oninput = move |e: Event<FormData>| {
-        let value = e.value();
-        text.set(value.clone());
-        typed_at.set(Some(Instant::now()));
-        let path = write_path.clone();
-        spawn(async move {
-            let Ok(handle) = crate::handle() else { return };
-            match crate::write_text(&handle, &path, value, "Type").await {
-                Ok(()) => {
-                    said.set(String::new());
-                    crate::reload(Some(&path));
-                }
-                Err(e) => said.set(e),
-            }
-        });
-    };
-    if path.is_empty() {
-        return rsx! {
-            div { style: "flex: 1; padding: 20px; color: var(--muted-foreground); font-size: 13px;",
-                "Open a chart's source on a session: its pane state is session:<id>."
-            }
-        };
-    }
-    rsx! {
-        div { style: "flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0;",
-            textarea {
-                style: "flex: 1; min-height: 0; padding: 12px; border: none; outline: none; resize: none; font-family: monospace; font-size: 13px; line-height: 1.5; background: var(--background); color: var(--foreground);",
-                spellcheck: "false",
-                value: "{text}",
-                oninput,
-            }
-            if !said().is_empty() {
-                div { style: "padding: 6px 12px; font-size: 12px; color: var(--destructive);", "{said}" }
-            }
-        }
-    }
 }
 
 #[cfg(test)]

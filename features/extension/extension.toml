@@ -1115,12 +1115,6 @@ hide_label = true
 id = "chart"
 title = "Chart"
 
-# A chart on a session as Keyflow source, edited in place beside the chart
-# (pane state `session:<id>`): typing writes through fts.session.
-[[views]]
-id = "source"
-title = "Chart source"
-
 # A .kf file is a document the app reads and edits (`read_document`,
 # `edit_document`): without this the documents service serves only notes.
 # Its body is text, not markdown.
