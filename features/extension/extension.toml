@@ -565,6 +565,69 @@ group = "Keyflow"
 effect = "mutating"
 
 [[actions]]
+id = "KEYFLOW_INTERVAL_1"
+name = "Keyflow: add unison above"
+description = "A note a unison above the selected note's chord (its top note) added to it, spelled in the key (Alt+1): MuseScore's add interval."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_2"
+name = "Keyflow: add second above"
+description = "A note a second above the selected note's chord (its top note) added to it, spelled in the key (Alt+2): MuseScore's add interval."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_3"
+name = "Keyflow: add third above"
+description = "A note a third above the selected note's chord (its top note) added to it, spelled in the key (Alt+3): MuseScore's add interval."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_4"
+name = "Keyflow: add fourth above"
+description = "A note a fourth above the selected note's chord (its top note) added to it, spelled in the key (Alt+4): MuseScore's add interval."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_5"
+name = "Keyflow: add fifth above"
+description = "A note a fifth above the selected note's chord (its top note) added to it, spelled in the key (Alt+5): MuseScore's add interval."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_6"
+name = "Keyflow: add sixth above"
+description = "A note a sixth above the selected note's chord (its top note) added to it, spelled in the key (Alt+6): MuseScore's add interval."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_7"
+name = "Keyflow: add seventh above"
+description = "A note a seventh above the selected note's chord (its top note) added to it, spelled in the key (Alt+7): MuseScore's add interval."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_8"
+name = "Keyflow: add octave above"
+description = "A note an octave above the selected note's chord (its top note) added to it, spelled in the key (Alt+8): MuseScore's add interval."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_9"
+name = "Keyflow: add ninth above"
+description = "A note a ninth above the selected note's chord (its top note) added to it, spelled in the key (Alt+9): MuseScore's add interval."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
 id = "KEYFLOW_CHORD_EDIT"
 name = "Keyflow: retype chord symbol"
 description = "Retype the selected chord symbol (Enter): a bar under the chart shows it; type the new symbol and Enter, or Esc to keep it."
@@ -1213,6 +1276,51 @@ when = "view:chart"
 [[keys]]
 chord = "⌥↓"
 action = "KEYFLOW_QUALITY_DOWN"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥1"
+action = "KEYFLOW_INTERVAL_1"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥2"
+action = "KEYFLOW_INTERVAL_2"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥3"
+action = "KEYFLOW_INTERVAL_3"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥4"
+action = "KEYFLOW_INTERVAL_4"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥5"
+action = "KEYFLOW_INTERVAL_5"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥6"
+action = "KEYFLOW_INTERVAL_6"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥7"
+action = "KEYFLOW_INTERVAL_7"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥8"
+action = "KEYFLOW_INTERVAL_8"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥9"
+action = "KEYFLOW_INTERVAL_9"
 when = "view:chart"
 
 [[keys]]
