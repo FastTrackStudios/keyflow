@@ -150,7 +150,12 @@ impl<'a> ChartParser<'a> {
         let mut in_melody_block = false; // Track if we're inside a m{...} block
         let mut melody_search_offset = 0usize; // Cursor for finding successive m{ blocks in line_to_parse
         let mut line_melody_octave = default_melody_octave;
-        let mut last_chord: Option<ChordInstance> = None; // Track last chord for dot repeat
+        // Track last chord for dot repeat; one bar of a `<< >>` line starts
+        // from the bar before it in that line.
+        let mut last_chord: Option<ChordInstance> = self
+            .in_parallel_part
+            .then(|| self.carried_measure.as_ref()?.chords.last().cloned())
+            .flatten();
         let mut chord_length_override: Option<(ChordRhythm, MusicalDuration)> =
             default_chord_length.clone();
         // The declared default (`\duration`), which a written note value
@@ -897,9 +902,10 @@ impl<'a> ChartParser<'a> {
                 &original_token_spans,
                 st.measures.len(),
             );
-            for (measure, span) in st.measures.iter_mut().zip(spans) {
+            for (measure, (span, why)) in st.measures.iter_mut().zip(spans) {
                 measure.source_span =
                     span.map(|(start, len)| TextSpan::with_location(start, len, 0, 0));
+                measure.read_only = why;
             }
         }
         let written = st.measures.len();
@@ -915,6 +921,10 @@ impl<'a> ChartParser<'a> {
         // A repeat's copies (`x4`) are not written: only the first is.
         for copy in measures.iter_mut().skip(written) {
             copy.source_span = None;
+            copy.read_only = Some(
+                "it is a repeat of its line made by `x2` (or `x3`, `x4`…): edit the line's first time through"
+                    .to_owned(),
+            );
         }
         Ok(measures)
     }
@@ -953,70 +963,81 @@ impl TokenMark {
 
 /// Each bar's text in its line, as `(start, len)` line-relative: from its
 /// first token to its last. A barline belongs to no bar; `%` is the bar it
-/// adds. A bar a token ran into from the bar before (a chord over the
-/// barline, `%3`'s second bar) has no text of its own: `None`.
+/// adds, and `%3`'s three bars share its text. A bar a token ran into from
+/// the bar before (a chord pushed or held over the barline) has no text of
+/// its own, and says so.
 fn bar_spans(
     marks: &[TokenMark],
     tokens: &[&str],
     spans: &[TextSpan],
     bars: usize,
-) -> Vec<Option<(usize, usize)>> {
+) -> Vec<(Option<(usize, usize)>, Option<String>)> {
+    const SHARED: &str =
+        "it shares a chord with the bar before it (a chord pushed or held over the barline)";
     let mut range: Vec<Option<(usize, usize)>> = vec![None; bars];
+    let mut shared: Vec<bool> = vec![false; bars];
     let mut spilled = vec![false; bars];
     for ((mark, token), span) in marks.iter().zip(tokens).zip(spans) {
         let is_barline = !token.is_empty() && token.chars().all(|c| matches!(c, '|' | ':'));
         if is_barline {
             continue;
         }
-        let own = if token.starts_with('%') {
-            if mark.after > mark.before + 1 {
-                // `%3` (or `%` closing a bar with content first): its bars
-                // are not one text each.
-                for b in mark.before..mark.after.min(bars) {
-                    spilled[b] = true;
-                }
+        let (s, e) = (span.start, span.start + span.len);
+        if token.starts_with('%') {
+            // `%N`: the last N bars it pushed are its, one text for all.
+            let n = ChartParser::parse_measure_repeat(token).unwrap_or(1).max(1);
+            let first = mark.after.saturating_sub(n).max(mark.before);
+            for b in first..mark.after.min(bars) {
+                range[b] = Some((s, e));
+                shared[b] = n > 1;
             }
-            mark.after.saturating_sub(1)
-        } else {
-            for b in mark.before + 1..mark.after.min(bars) {
-                spilled[b] = true;
-            }
-            if mark.after > mark.before && mark.beats_after > 0.001 && mark.after < bars {
-                spilled[mark.after] = true;
-            }
-            mark.before
-        };
+            continue;
+        }
+        for b in mark.before + 1..mark.after.min(bars) {
+            spilled[b] = true;
+        }
+        if mark.after > mark.before && mark.beats_after > 0.001 && mark.after < bars {
+            spilled[mark.after] = true;
+        }
+        let own = mark.before;
         if own >= bars {
             continue;
         }
-        let (s, e) = (span.start, span.start + span.len);
         range[own] = Some(match range[own] {
             Some((a, b)) => (a.min(s), b.max(e)),
             None => (s, e),
         });
     }
-    let mut out: Vec<Option<(usize, usize)>> = range
+    let mut out: Vec<(Option<(usize, usize)>, Option<String>)> = range
         .into_iter()
         .zip(spilled)
-        .map(|(r, spill)| r.filter(|_| !spill))
+        .map(|(r, spill)| {
+            if spill {
+                (None, Some(SHARED.to_owned()))
+            } else {
+                (r, None)
+            }
+        })
         .collect();
     // Bars follow one another in the line: two that overlap (a mark read
-    // into the bar before it) are not one text each.
-    let mut last: Option<(usize, usize)> = None;
+    // into the bar before it) are not one text each; a `%3`'s bars share
+    // one on purpose.
+    let mut last: Option<(usize, (usize, usize))> = None;
     for i in 0..out.len() {
-        if let Some((a, _)) = out[i] {
-            if let Some((j, end)) = last
-                && a < end
+        if let Some((a, b)) = out[i].0 {
+            if let Some((j, (pa, pb))) = last
+                && a < pb
+                && !(shared[i] && (a, b) == (pa, pb))
             {
-                out[i] = None;
-                out[j] = None;
+                out[i] = (None, Some(SHARED.to_owned()));
+                out[j] = (None, Some(SHARED.to_owned()));
             }
-            if let Some(r) = out[i] {
-                last = Some((i, r.1));
+            if let Some(r) = out[i].0 {
+                last = Some((i, r));
             }
         }
     }
     out.into_iter()
-        .map(|r| r.map(|(a, b)| (a, b - a)))
+        .map(|(r, why)| (r.map(|(a, b)| (a, b - a)), why))
         .collect()
 }
