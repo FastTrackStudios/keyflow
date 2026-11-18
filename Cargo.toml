@@ -30,6 +30,7 @@ members = [
     "features/tree-sitter",
     "features/engraver",
     "features/editor",
+    "features/session",
 ]
 
 [workspace.package]
@@ -127,6 +128,15 @@ vox = { version = "0.10.0-rc.7", default-features = false, features = ["runtime"
 # architect v0.12.6, by tag: studio pins the same tag, and a `rev` of the
 # same commit would be a second architect source in studio's lock.
 architect = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.12.6" }
+# Architect's documents (`crdt`): the session is one. The same tag as
+# `architect`; the patch below lifts the crates it shares with it.
+crdt = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.12.6" }
+# The session primitive (FastTrackStudios/session): a chart is Keyflow's
+# data in a session (features/session). By rev until it is tagged.
+session = { git = "https://github.com/FastTrackStudios/session", rev = "b36a447e828349d1e143978e6f25e00689ef4a6b", default-features = false }
+uuid = { version = "1", features = ["v4"] }
+tokio = { version = "1", default-features = false }
+tempfile = "3"
 
 # The shared musical vocabulary — section colours and the canonical
 # palettes `keyflow-proto` engraves section cards with.

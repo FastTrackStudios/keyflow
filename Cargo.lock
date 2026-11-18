@@ -679,6 +679,8 @@ dependencies = [
  "tracing",
  "uuid",
  "vox",
+ "vox-core",
+ "vox-types",
  "wasm-bindgen-futures",
  "web-time",
 ]
@@ -740,6 +742,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+ "vox",
 ]
 
 [[package]]
@@ -3095,6 +3098,7 @@ dependencies = [
  "chrono",
  "crc32fast",
  "crdt-derive",
+ "facet",
  "loro",
  "loro-internal",
  "sha2 0.10.9",
@@ -3102,6 +3106,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+ "vox",
  "wasm-bindgen-futures",
 ]
 
@@ -8035,6 +8040,20 @@ dependencies = [
  "tracing",
  "uuid",
  "vox",
+]
+
+[[package]]
+name = "keyflow-session"
+version = "0.5.4"
+dependencies = [
+ "architect",
+ "crdt",
+ "facet-json",
+ "session",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -12990,6 +13009,17 @@ source = "git+https://github.com/nicoburns/stylo?rev=78734bf554bb40af9dc11c0eedb
 dependencies = [
  "serde",
  "stable_deref_trait",
+]
+
+[[package]]
+name = "session"
+version = "0.1.0"
+source = "git+https://github.com/FastTrackStudios/session?rev=b36a447e828349d1e143978e6f25e00689ef4a6b#b36a447e828349d1e143978e6f25e00689ef4a6b"
+dependencies = [
+ "crdt",
+ "facet",
+ "facet-json",
+ "loro",
 ]
 
 [[package]]
