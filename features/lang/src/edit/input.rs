@@ -561,7 +561,7 @@ impl InputState {
                     .chain(e.above.iter().flatten().copied())
             })
             .filter(|p| p.letter == letter && p.octave == octave)
-            .last()
+            .next_back()
             .map_or_else(|| score.key_alter(letter), |p| p.alter)
     }
 

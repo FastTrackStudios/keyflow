@@ -354,7 +354,7 @@ fn measure(name: &str) {
             architect_workspace::paint::region::Shape::Rect(rect) => rect.contains(inside),
             _ => false,
         })
-        .last()
+        .next_back()
         .map(|r| r.id)
         .expect("a region over the second chord");
     let mut region =
