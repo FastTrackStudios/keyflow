@@ -191,7 +191,12 @@ pub fn selectables(layout: &ChartLayoutResult) -> Vec<Selectable> {
         .iter()
         .map(|b| {
             (
-                Rect::new(b.measure_x0, b.staff_y, b.measure_x1, b.staff_y + b.staff_height),
+                Rect::new(
+                    b.measure_x0,
+                    b.staff_y,
+                    b.measure_x1,
+                    b.staff_y + b.staff_height,
+                ),
                 b.measure,
             )
         })
@@ -273,7 +278,10 @@ fn systems(layout: &ChartLayoutResult) -> Vec<(usize, f64, f64)> {
     let mut out: Vec<(usize, f64, f64)> = Vec::new();
     for b in &layout.beat_positions {
         let page = page_of(layout, Point::new(b.measure_x0, b.staff_y));
-        if !out.iter().any(|s| s.0 == page && (s.1 - b.staff_y).abs() < 0.5) {
+        if !out
+            .iter()
+            .any(|s| s.0 == page && (s.1 - b.staff_y).abs() < 0.5)
+        {
             out.push((page, b.staff_y, b.staff_height));
         }
     }
@@ -341,8 +349,16 @@ mod tests {
             item("bar#0", Kind::Bar, (0.0, 0.0, 100.0, 40.0)),
             item("chord#0", Kind::Chord, (10.0, 5.0, 30.0, 15.0)),
         ];
-        assert_eq!(pick(&items, Point::new(20.0, 10.0), 0.0), Some(1), "the chord");
-        assert_eq!(pick(&items, Point::new(60.0, 30.0), 0.0), Some(0), "the bar");
+        assert_eq!(
+            pick(&items, Point::new(20.0, 10.0), 0.0),
+            Some(1),
+            "the chord"
+        );
+        assert_eq!(
+            pick(&items, Point::new(60.0, 30.0), 0.0),
+            Some(0),
+            "the bar"
+        );
         assert_eq!(pick(&items, Point::new(200.0, 30.0), 0.0), None);
         assert_eq!(pick(&items, Point::new(31.0, 10.0), 2.0), Some(1), "slop");
     }

@@ -357,7 +357,9 @@ impl InputState {
     fn move_to(&mut self, score: &Score, pos: Pos) {
         let bar = pos.bar.min(score.bars.len() - 1);
         let b = &score.bars[bar];
-        let i = b.index_at(pos.tick.min(b.length.saturating_sub(1))).unwrap_or(0);
+        let i = b
+            .index_at(pos.tick.min(b.length.saturating_sub(1)))
+            .unwrap_or(0);
         let tick = b.starts().get(i).copied().unwrap_or(0);
         self.cursor = Pos { bar, tick };
         self.selected = Some(self.cursor);
@@ -458,7 +460,8 @@ impl InputState {
         self.accidental = None;
         let mut outcome = Outcome::bars(changed);
         if len > room && !spills {
-            outcome.refused = Some("Cut at the barline: there is no bar after it to tie into".into());
+            outcome.refused =
+                Some("Cut at the barline: there is no bar after it to tie into".into());
         }
         outcome
     }
@@ -648,7 +651,11 @@ mod tests {
         i.apply(&mut s, Op::Duration(Half));
         i.apply(&mut s, Op::Letter('E'));
         assert_eq!(notes(&s.bars[0]), ["C54", "D54", "E52"]);
-        assert_eq!(i.cursor, Pos { bar: 1, tick: 0 }, "the cursor moved to the next bar");
+        assert_eq!(
+            i.cursor,
+            Pos { bar: 1, tick: 0 },
+            "the cursor moved to the next bar"
+        );
     }
 
     #[test]
@@ -676,7 +683,10 @@ mod tests {
         i.apply(&mut s, Op::Letter('B'));
         let n = notes(&s.bars[0]);
         assert_eq!(&n[..3], ["F♯44", "F44", "B♭44"]);
-        assert_eq!(i.accidental, None, "an accidental is used up by the note it armed");
+        assert_eq!(
+            i.accidental, None,
+            "an accidental is used up by the note it armed"
+        );
     }
 
     #[test]
@@ -694,7 +704,13 @@ mod tests {
         assert_eq!(out.changed, vec![0, 1]);
         assert_eq!(notes(&s.bars[0]), ["r2", "r4", "C54~"]);
         assert_eq!(notes(&s.bars[1])[0], "C58");
-        assert_eq!(i.cursor, Pos { bar: 1, tick: Eighth.ticks() });
+        assert_eq!(
+            i.cursor,
+            Pos {
+                bar: 1,
+                tick: Eighth.ticks()
+            }
+        );
     }
 
     #[test]
@@ -731,7 +747,10 @@ mod tests {
         let mut i = InputState::default();
         i.apply(&mut s, Op::Mode(Mode::Duration));
         i.apply(&mut s, Op::Letter('A'));
-        assert!(s.bars[0].events.iter().all(|e| e.pitch().is_none()), "a letter enters nothing");
+        assert!(
+            s.bars[0].events.iter().all(|e| e.pitch().is_none()),
+            "a letter enters nothing"
+        );
         i.apply(&mut s, Op::Semitone(true)); // a step up: B
         let out = i.apply(&mut s, Op::Duration(Half));
         assert_eq!(out.changed, vec![0]);

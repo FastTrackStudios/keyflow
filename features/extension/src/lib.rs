@@ -33,8 +33,8 @@ use architect_extensions::linked::{Builder, Extension, Handle, PaintPane, use_pa
 use architect_workspace::paint::peniko::Color;
 use architect_workspace::{HostData, PaintWake};
 use dioxus::prelude::*;
-use keyflow::engraver::renderer::ChartTheme;
 use keyflow::edit::{self, Mode, Op, Pos, Score};
+use keyflow::engraver::renderer::ChartTheme;
 use keyflow_ui::paint_view::{
     ChartGesture, ChartGestures, ChartSelection, ChartSnapshot, ChartView, InputOverlay,
     ShadowNote, chart_mount_with,
@@ -78,10 +78,16 @@ impl Extension for Keyflow {
         }
         for action in input::OP_ACTIONS {
             let op = action.op;
-            ext.action(action.action, move |_| async move { run_op(move |_| op).await });
+            ext.action(
+                action.action,
+                move |_| async move { run_op(move |_| op).await },
+            );
         }
         ext.action("KEYFLOW_INPUT_MOVE", |args| async move {
-            let bar = args.get("bar").and_then(Json::as_u64).ok_or("bar: a number")? as usize;
+            let bar = args
+                .get("bar")
+                .and_then(Json::as_u64)
+                .ok_or("bar: a number")? as usize;
             let fraction = args.get("fraction").and_then(Json::as_f64).unwrap_or(0.0);
             run_op(move |score| {
                 let length = score.bars.get(bar).map_or(0, |b| b.length);
@@ -506,7 +512,12 @@ static UNDO: Mutex<Vec<Step>> = Mutex::new(Vec::new());
 static REDO: Mutex<Vec<Step>> = Mutex::new(Vec::new());
 
 /// An edit made: kept to undo, and what was undone is no longer redone.
-fn remember(path: &str, before: String, after: String, input: (edit::InputState, edit::InputState)) {
+fn remember(
+    path: &str,
+    before: String,
+    after: String,
+    input: (edit::InputState, edit::InputState),
+) {
     let mut undo = UNDO.lock().unwrap_or_else(PoisonError::into_inner);
     undo.push(Step {
         path: path.to_owned(),
@@ -527,7 +538,12 @@ async fn history(undo: bool) -> Result<Json, String> {
     let _one = ONE_AT_A_TIME.lock().await;
     let (from, to) = if undo { (&UNDO, &REDO) } else { (&REDO, &UNDO) };
     let Some(step) = from.lock().unwrap_or_else(PoisonError::into_inner).pop() else {
-        return Err(if undo { "Nothing to undo" } else { "Nothing to redo" }.to_owned());
+        return Err(if undo {
+            "Nothing to undo"
+        } else {
+            "Nothing to redo"
+        }
+        .to_owned());
     };
     let handle = handle()?;
     let now = read_text(&handle, &step.path).await?;
@@ -539,7 +555,13 @@ async fn history(undo: bool) -> Result<Json, String> {
             return Err(why);
         }
     };
-    write_text(&handle, &step.path, write.clone(), if undo { "Undo" } else { "Redo" }).await?;
+    write_text(
+        &handle,
+        &step.path,
+        write.clone(),
+        if undo { "Undo" } else { "Redo" },
+    )
+    .await?;
     reload(Some(&step.path));
     let chart = keyflow::text::chart::parse_chart(&write)?;
     edit_state().input = if undo {
@@ -675,14 +697,19 @@ fn show_input(chart: &keyflow::Chart, score: &Score, refused: Option<String>) {
     };
     for open in open_charts().values() {
         let on = path.as_deref() == Some(open.path.as_str());
-        open.data.update(|s| s.input = if on { overlay } else { None });
+        open.data
+            .update(|s| s.input = if on { overlay } else { None });
         open.wake.wake();
     }
     publish_input();
 }
 
 /// Note input's cursor and shadow note, as the pane draws them.
-fn overlay(input: &edit::InputState, chart: &keyflow::Chart, score: &Score) -> Option<InputOverlay> {
+fn overlay(
+    input: &edit::InputState,
+    chart: &keyflow::Chart,
+    score: &Score,
+) -> Option<InputOverlay> {
     if !input.mode.is_input() {
         return None;
     }
@@ -793,7 +820,10 @@ async fn gesture(g: ChartGesture) {
             if mode == Mode::Normal && input::mode_of(&action).is_none() && !history {
                 return;
             }
-            if mode == Mode::Syntax && action != "KEYFLOW_ESCAPE" && input::mode_of(&action).is_none() {
+            if mode == Mode::Syntax
+                && action != "KEYFLOW_ESCAPE"
+                && input::mode_of(&action).is_none()
+            {
                 return;
             }
             let _ = dispatch(&action, json!({})).await;
@@ -805,7 +835,11 @@ async fn gesture(g: ChartGesture) {
                 e.input.mode.is_input()
             };
             if input {
-                let _ = dispatch("KEYFLOW_INPUT_MOVE", json!({ "bar": bar, "fraction": fraction })).await;
+                let _ = dispatch(
+                    "KEYFLOW_INPUT_MOVE",
+                    json!({ "bar": bar, "fraction": fraction }),
+                )
+                .await;
             }
         }
     }
@@ -985,8 +1019,14 @@ mod tests {
     #[test]
     fn undo_takes_an_edit_back_only_over_what_it_left() {
         let s = step();
-        assert_eq!(step_text(&s, &s.after, true).as_deref(), Ok(s.before.as_str()));
-        assert_eq!(step_text(&s, &s.before, false).as_deref(), Ok(s.after.as_str()));
+        assert_eq!(
+            step_text(&s, &s.after, true).as_deref(),
+            Ok(s.before.as_str())
+        );
+        assert_eq!(
+            step_text(&s, &s.before, false).as_deref(),
+            Ok(s.after.as_str())
+        );
         // Someone else's edit since: not undone over.
         assert!(step_text(&s, "| D / / / |", true).is_err());
     }

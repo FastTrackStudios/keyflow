@@ -700,7 +700,9 @@ fn blank_directives(body: &str) -> String {
     let mut out = String::with_capacity(body.len());
     for line in body.split_inclusive('\n') {
         let t = line.trim_start();
-        let cue = t.strip_prefix('@').is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_alphabetic()));
+        let cue = t
+            .strip_prefix('@')
+            .is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_alphabetic()));
         let dynamic = t.starts_with("dyn ");
         if cue || dynamic {
             out.extend(line.chars().map(|c| if c == '\n' { '\n' } else { ' ' }));
@@ -768,7 +770,10 @@ pub fn bar_cells(body: &str) -> Vec<(usize, usize)> {
                         i += 1;
                     }
                     if i < bytes.len() && bytes[i] == b'x' {
-                        let digits = bytes[i + 1..].iter().take_while(|b| b.is_ascii_digit()).count();
+                        let digits = bytes[i + 1..]
+                            .iter()
+                            .take_while(|b| b.is_ascii_digit())
+                            .count();
                         if digits > 0 {
                             i += 1 + digits;
                         }

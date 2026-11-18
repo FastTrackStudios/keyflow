@@ -393,10 +393,16 @@ mod tests {
         let map = InkMap::solid(blue);
         assert_eq!(map.map(Color::BLACK, InkRole::Fill), blue);
         assert_eq!(map.map(Color::BLACK, InkRole::Line), blue);
-        assert_eq!(map.map(MARKER_COLOR, InkRole::Fill), blue, "a red push marker too");
+        assert_eq!(
+            map.map(MARKER_COLOR, InkRole::Fill),
+            blue,
+            "a red push marker too"
+        );
         assert_eq!(map.map(Color::WHITE, InkRole::Fill), Color::TRANSPARENT);
         assert_eq!(
-            map.map(Color::from_rgba8(0, 0, 0, 128), InkRole::Fill).to_rgba8().a,
+            map.map(Color::from_rgba8(0, 0, 0, 128), InkRole::Fill)
+                .to_rgba8()
+                .a,
             128,
             "its alpha is kept"
         );

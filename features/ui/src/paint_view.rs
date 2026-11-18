@@ -277,11 +277,7 @@ impl HighlightColours {
     /// token too close to the paper (a dark theme's light accent on a
     /// chart pinned to light paper) is mixed toward `ink` until it does.
     #[must_use]
-    pub fn from_tokens(
-        token: impl Fn(&str) -> Option<Color>,
-        paper: Color,
-        ink: Color,
-    ) -> Self {
+    pub fn from_tokens(token: impl Fn(&str) -> Option<Color>, paper: Color, ink: Color) -> Self {
         let pick = |names: [&str; 2], fallback: Color| {
             names.iter().find_map(|n| token(n)).unwrap_or(fallback)
         };
@@ -608,10 +604,7 @@ impl ChartPaintView {
     /// colour: drawn again only when the pointer moves onto another. A
     /// selected element shows as selected, not hovered.
     fn hover_layer(&mut self) -> Option<Layer> {
-        let key = self
-            .hover
-            .clone()
-            .filter(|k| !self.selection.contains(k))?;
+        let key = self.hover.clone().filter(|k| !self.selection.contains(k))?;
         let drawn_for = (key, self.colours.hover);
         if let Some((drawn, layer)) = &self.recorded.hover
             && *drawn == drawn_for
@@ -1017,7 +1010,12 @@ fn draw_shadow(scene: &mut Scene, shadow: ShadowNote, x: f64, bar: Rect, colour:
     let head_w = space * 1.3;
     let cx = x + space * 0.5 + head_w / 2.0;
     if shadow.rest {
-        let r = Rect::new(cx - space * 0.4, bar.y0 + space * 1.5, cx + space * 0.4, bar.y0 + space * 2.5);
+        let r = Rect::new(
+            cx - space * 0.4,
+            bar.y0 + space * 1.5,
+            cx + space * 0.4,
+            bar.y0 + space * 2.5,
+        );
         scene.fill(
             Fill::NonZero,
             Affine::IDENTITY,
@@ -1049,7 +1047,11 @@ fn draw_shadow(scene: &mut Scene, shadow: ShadowNote, x: f64, bar: Rect, colour:
         );
         scene.stroke(&ledger, Affine::IDENTITY, colour, None, &line);
     }
-    let head = Ellipse::new((cx * px, y * px), (head_w / 2.0 * px, space / 2.0 * px), -0.35);
+    let head = Ellipse::new(
+        (cx * px, y * px),
+        (head_w / 2.0 * px, space / 2.0 * px),
+        -0.35,
+    );
     if shadow.open {
         scene.stroke(&Stroke::new(1.6), Affine::IDENTITY, colour, None, &head);
     } else {
@@ -1183,7 +1185,11 @@ mod tests {
         // A theme's own chart tokens win over the app's.
         let red = Color::from_rgb8(0xb9, 0x1c, 0x1c);
         let c = HighlightColours::from_tokens(
-            |name| (name == "chart.select").then_some(red).or_else(|| tokens(name)),
+            |name| {
+                (name == "chart.select")
+                    .then_some(red)
+                    .or_else(|| tokens(name))
+            },
             white,
             black,
         );

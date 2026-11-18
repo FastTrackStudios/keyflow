@@ -194,7 +194,8 @@ mod tests {
     use crate::edit::input::{InputState, Mode, Op};
     use crate::edit::music::Value;
 
-    const CHART: &str = "Edit - Test\n4/4\n\nVS 4\n| C / / / | Am7 / / / | << F ; m{ a:44 r2. } >> | G / / / |\n";
+    const CHART: &str =
+        "Edit - Test\n4/4\n\nVS 4\n| C / / / | Am7 / / / | << F ; m{ a:44 r2. } >> | G / / / |\n";
 
     fn setup() -> (Chart, Score) {
         let chart = parse_chart(CHART).unwrap();
@@ -212,7 +213,10 @@ mod tests {
                 &CHART[s.start..s.start + s.len]
             })
             .collect();
-        assert_eq!(texts, ["C / / /", "Am7 / / /", "<< F ; m{ a:44 r2. } >>", "G / / /"]);
+        assert_eq!(
+            texts,
+            ["C / / /", "Am7 / / /", "<< F ; m{ a:44 r2. } >>", "G / / /"]
+        );
     }
 
     #[test]
@@ -235,7 +239,9 @@ mod tests {
         }
         let text = write_bars(CHART, &chart, &score, &changed).unwrap();
         assert!(
-            text.contains("| C / / / | << Am7 / / / ; m{ E:54 G:54 r2 } >> | << F ; m{ a:44 r2. } >> |"),
+            text.contains(
+                "| C / / / | << Am7 / / / ; m{ E:54 G:54 r2 } >> | << F ; m{ a:44 r2. } >> |"
+            ),
             "{text}"
         );
         // And it reads back as entered.
@@ -261,7 +267,10 @@ mod tests {
         let (chart, _) = setup();
         let (text, n) = splice_syntax(CHART, &chart, 1, "Dm7 / G7 / | Cmaj7").unwrap();
         assert_eq!(n, 2);
-        assert!(text.contains("| C / / / | Dm7 / G7 / | Cmaj7 | G / / / |"), "{text}");
+        assert!(
+            text.contains("| C / / / | Dm7 / G7 / | Cmaj7 | G / / / |"),
+            "{text}"
+        );
         let err = splice_syntax(CHART, &chart, 3, "C | D").unwrap_err();
         assert!(err.contains("only 1"), "{err}");
         let err = splice_syntax(CHART, &chart, 0, "  ").unwrap_err();

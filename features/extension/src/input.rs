@@ -80,7 +80,10 @@ pub fn default_keys() -> impl Iterator<Item = (&'static str, &'static str)> {
 /// The setting that holds `action`'s key.
 #[must_use]
 pub fn setting_key(action: &str) -> String {
-    format!("keyflow.keys.{}", action.trim_start_matches("KEYFLOW_").to_lowercase())
+    format!(
+        "keyflow.keys.{}",
+        action.trim_start_matches("KEYFLOW_").to_lowercase()
+    )
 }
 
 /// The operation `action` applies, if it is one of [`OP_ACTIONS`].
@@ -135,7 +138,9 @@ pub fn chord(key: &str, mods: &[&str]) -> String {
     };
     // A typed symbol (`+`, `.`): Shift is how it was typed, not a chord.
     let symbol = name.chars().count() == 1
-        && name.chars().all(|c| c.is_ascii() && !c.is_ascii_alphanumeric());
+        && name
+            .chars()
+            .all(|c| c.is_ascii() && !c.is_ascii_alphanumeric());
     // Off a Mac, Ctrl is the command key (the app's ⌘ shortcuts are Ctrl).
     let command = mods.contains(&"Mod") || (!cfg!(target_os = "macos") && mods.contains(&"Ctrl"));
     let has = |m: &str| mods.contains(&m);
@@ -164,7 +169,11 @@ mod tests {
     fn a_key_is_written_as_its_shortcut() {
         assert_eq!(chord("c", &[]), "C");
         assert_eq!(chord("C", &["Shift"]), "⇧C", "Shift+C is not C");
-        assert_eq!(chord("+", &["Shift"]), "+", "a symbol's Shift is how it is typed");
+        assert_eq!(
+            chord("+", &["Shift"]),
+            "+",
+            "a symbol's Shift is how it is typed"
+        );
         assert_eq!(chord("ArrowUp", &["Mod", "Ctrl"]), "⌘↑");
         assert_eq!(chord("ArrowUp", &["Shift"]), "⇧↑");
         assert_eq!(chord("Escape", &[]), "⎋");

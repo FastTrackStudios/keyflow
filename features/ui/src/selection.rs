@@ -171,7 +171,11 @@ mod tests {
         assert_eq!(s.items(), [30]);
         assert_eq!(s.state(), State::Range);
         s.extend(50, &ORDER);
-        assert_eq!(s.items(), [30, 40, 50], "anchor to the click, in reading order");
+        assert_eq!(
+            s.items(),
+            [30, 40, 50],
+            "anchor to the click, in reading order"
+        );
         s.extend(10, &ORDER);
         assert_eq!(s.items(), [10, 20, 30], "back past the anchor");
     }

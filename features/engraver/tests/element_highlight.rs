@@ -34,7 +34,10 @@ fn laid_out() -> (ChartView, keyflow::Chart) {
 fn every_selectable_but_a_bar_names_the_node_that_draws_it() {
     let (view, _) = laid_out();
     let items = view.selectables();
-    assert!(items.iter().any(|s| s.kind == Kind::Chord), "chords to select");
+    assert!(
+        items.iter().any(|s| s.kind == Kind::Chord),
+        "chords to select"
+    );
     let root = view.layout_scene().expect("a layout");
     for item in &items {
         match (&item.node, item.kind) {

@@ -329,7 +329,10 @@ impl Bar {
         let length = bar_ticks(time);
         Self {
             length,
-            events: Duration::split(length).into_iter().map(Event::rest).collect(),
+            events: Duration::split(length)
+                .into_iter()
+                .map(Event::rest)
+                .collect(),
             written: false,
             locked: None,
         }
@@ -359,7 +362,11 @@ impl Bar {
             return bar;
         }
         // A line shorter than its bar ends in rest.
-        events.extend(Duration::split(bar.length - filled).into_iter().map(Event::rest));
+        events.extend(
+            Duration::split(bar.length - filled)
+                .into_iter()
+                .map(Event::rest),
+        );
         bar.events = events;
         bar
     }
@@ -552,7 +559,11 @@ mod tests {
     fn pitches_move_as_musescore_moves_them() {
         let c4 = Pitch::new('C', 0, 4);
         assert_eq!(c4.midi(), 60);
-        assert_eq!(c4.semitone(true), Pitch::new('C', 1, 4), "up spells with sharps");
+        assert_eq!(
+            c4.semitone(true),
+            Pitch::new('C', 1, 4),
+            "up spells with sharps"
+        );
         assert_eq!(c4.semitone(false), Pitch::new('B', 0, 3), "down to B");
         assert_eq!(
             Pitch::new('E', 0, 4).semitone(false),

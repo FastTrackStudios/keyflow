@@ -337,20 +337,21 @@ fn measure(name: &str) {
     // A hover: the pointer onto another chord, which is drawn again as
     // itself in the hover colour, in a layer of its own; then a move
     // within it (nothing), then off onto the margin (the layer goes).
-    let mut hover_move = |pane: &mut Pane, p: (f32, f32), receiver: &mut Receiver| -> (usize, Duration) {
-        let started = Instant::now();
-        pane.view.input(
-            &pane.ctx,
-            &ViewInput::PointerMove {
-                x: p.0,
-                y: p.1,
-                mods: vec![],
-            },
-        );
-        let layers = pane.view.layers(&pane.ctx).expect("a view of layers");
-        let bytes = send(&layers, receiver);
-        (bytes, started.elapsed())
-    };
+    let mut hover_move =
+        |pane: &mut Pane, p: (f32, f32), receiver: &mut Receiver| -> (usize, Duration) {
+            let started = Instant::now();
+            pane.view.input(
+                &pane.ctx,
+                &ViewInput::PointerMove {
+                    x: p.0,
+                    y: p.1,
+                    mods: vec![],
+                },
+            );
+            let layers = pane.view.layers(&pane.ctx).expect("a view of layers");
+            let bytes = send(&layers, receiver);
+            (bytes, started.elapsed())
+        };
     let o = other.bounds.center();
     let (hover_on, hover_time) = hover_move(&mut pane, to_pane(o), &mut receiver);
     assert_eq!(
@@ -359,10 +360,17 @@ fn measure(name: &str) {
         "{name}: the pointer hovers the second chord"
     );
     recoloured(name, &selected, &receiver, rgb(colours.hover));
-    let (hover_within, within_time) =
-        hover_move(&mut pane, to_pane(kurbo::Point::new(o.x + 0.3, o.y)), &mut receiver);
+    let (hover_within, within_time) = hover_move(
+        &mut pane,
+        to_pane(kurbo::Point::new(o.x + 0.3, o.y)),
+        &mut receiver,
+    );
     let (hover_off, _) = hover_move(&mut pane, (2.0, 2.0), &mut receiver);
-    assert_eq!(pane.selection.read(|s| s.hover.clone()), None, "{name}: the margin is nothing");
+    assert_eq!(
+        pane.selection.read(|s| s.hover.clone()),
+        None,
+        "{name}: the margin is nothing"
+    );
 
     // An edit to one bar: laid out again, only the pages that changed cross.
     pane.data.update(|s| {
@@ -390,7 +398,10 @@ fn measure(name: &str) {
         as_before * 100.0
     );
     assert!(hover_on > 0, "{name}: the hover drew nothing");
-    assert_eq!(hover_within, 0, "{name}: a move within one element sent bytes");
+    assert_eq!(
+        hover_within, 0,
+        "{name}: a move within one element sent bytes"
+    );
     assert!(
         hover_on < first / 20,
         "{name}: a hover sent {hover_on} of {first}: it re-sent the pages"
@@ -432,7 +443,11 @@ fn recoloured(name: &str, before: &[u8], receiver: &Receiver, rgb: [u8; 3]) {
         let mut encoder = png::Encoder::new(std::fs::File::create(&file).unwrap(), WIDTH, HEIGHT);
         encoder.set_color(png::ColorType::Rgba);
         encoder.set_depth(png::BitDepth::Eight);
-        encoder.write_header().unwrap().write_image_data(&pixels).unwrap();
+        encoder
+            .write_header()
+            .unwrap()
+            .write_image_data(&pixels)
+            .unwrap();
     }
     // What the highlight changed, and what of that is its colour.
     let close = |p: &[u8]| p.iter().zip(rgb).all(|(a, b)| a.abs_diff(b) < 30);
