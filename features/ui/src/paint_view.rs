@@ -259,6 +259,17 @@ const HOVER_LAYER: LayerKey = SELECTION_LAYER + 3;
 const INPUT_LAYER: LayerKey = SELECTION_LAYER + 4;
 const ENTRY_LAYER: LayerKey = SELECTION_LAYER + 5;
 const POINTER_LAYER: LayerKey = SELECTION_LAYER + 6;
+/// Each element's own hover layer, from here by its place among the
+/// selectables: sent once, hidden, and shown by the host while its region
+/// is hovered (`Region::hover_layer`, architect#860), with no round trip.
+const ELEMENT_HOVER: LayerKey = 1 << 33;
+/// How many elements get a hover layer of their own: what a pane's layers
+/// leave room for after the pages and the overlays. An element past it is
+/// hovered as before, its layer sent when the pointer is on it.
+const ELEMENT_HOVER_BUDGET: usize = PANE_LAYERS - 256;
+/// The layers a pane takes (`architect_scene::ops::MAX_LAYERS`; a test
+/// holds them equal).
+const PANE_LAYERS: usize = 4096;
 
 /// The layers' stacking over the pages (z 0).
 const HOVER_Z: i32 = 1;
@@ -442,6 +453,11 @@ struct Recorded {
     playhead: Option<(u64, Option<Layer>)>,
     /// The laid-out chart's selectables, at that generation.
     selectables: Vec<Selectable>,
+    /// Each element's hover layer (hidden; the host shows it), the colour
+    /// they were drawn in, and which elements have one.
+    hovers: Vec<(LayerKey, Layer)>,
+    hovers_colour: Option<Color>,
+    hovered_by_host: Vec<bool>,
 }
 
 /// An in-process chart view for `PaintMount`.
@@ -461,9 +477,10 @@ pub struct ChartPaintView {
     followed: Option<(usize, u64)>,
     /// The playhead's measure as last followed while it plays.
     followed_playhead: Option<usize>,
-    /// The modifiers held at the last key event: a press on a region
-    /// carries none, so a Shift- or Cmd-click reads them from here.
-    mods: Vec<&'static str>,
+    /// The modifiers held as a region was last pressed (the host's
+    /// `RegionEvent::Modifiers`, just before its `Press`): its region, and
+    /// whether Shift and Mod were held.
+    press_mods: Option<(u64, bool, bool)>,
     /// The pointer's last position in the pane, from its pointer events.
     pointer: (f64, f64),
     /// Whether a middle-button drag is in progress.
@@ -492,7 +509,7 @@ impl ChartPaintView {
             requested: None,
             content: (0.0, 0.0),
             ctrl: false,
-            mods: Vec::new(),
+            press_mods: None,
             regions_cover: false,
             adopted: None,
             followed: None,
@@ -673,11 +690,26 @@ impl ChartPaintView {
         self.recorded.generation = Some(generation);
         self.recorded.selectables = self.view.selectables();
         let selectables = &self.recorded.selectables;
+        // Which elements have a hover layer of their own: those drawn by a
+        // scene node, as many as the pane's layers leave room for.
+        let mut budget = ELEMENT_HOVER_BUDGET.saturating_sub(pages.len());
+        self.recorded.hovered_by_host = selectables
+            .iter()
+            .map(|s| {
+                let has = s.node.is_some() && budget > 0;
+                if has {
+                    budget -= 1;
+                }
+                has
+            })
+            .collect();
+        self.recorded.hovers_colour = None;
+        let hovered = &self.recorded.hovered_by_host;
         let mut cover = true;
         self.recorded.pages = pages
             .into_iter()
             .map(|page| {
-                let regions = page_regions(selectables, page.rect);
+                let regions = page_regions(selectables, page.rect, hovered);
                 cover &= regions.len() <= architect_workspace::paint::region::MAX_LAYER_REGIONS;
                 (
                     LayerKey::from(page.number),
@@ -778,6 +810,17 @@ impl ChartPaintView {
     /// selected element shows as selected, not hovered.
     fn hover_layer(&mut self) -> Option<Layer> {
         let key = self.hover.clone().filter(|k| !self.selection.contains(k))?;
+        // The host draws it (its region's hover layer).
+        let index = self.recorded.selectables.iter().position(|s| s.key == key);
+        if index.is_some_and(|i| {
+            self.recorded
+                .hovered_by_host
+                .get(i)
+                .copied()
+                .unwrap_or(false)
+        }) {
+            return None;
+        }
         let drawn_for = (key, self.colours.hover);
         if let Some((drawn, layer)) = &self.recorded.hover
             && *drawn == drawn_for
@@ -787,6 +830,39 @@ impl ChartPaintView {
         let layer = self.highlight(std::slice::from_ref(&drawn_for.0), drawn_for.1, HOVER_Z);
         self.recorded.hover = Some((drawn_for, layer.clone()));
         Some(layer)
+    }
+
+    /// Every element's hover layer, hidden: each drawn as itself in the
+    /// hover colour, once per layout and colour; the host shows one while
+    /// the pointer is on its element.
+    fn element_hovers(&mut self) -> &[(LayerKey, Layer)] {
+        let colour = self.colours.hover;
+        if self.recorded.hovers_colour != Some(colour) {
+            let keys: Vec<(usize, String)> = self
+                .recorded
+                .selectables
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| {
+                    self.recorded
+                        .hovered_by_host
+                        .get(*i)
+                        .copied()
+                        .unwrap_or(false)
+                })
+                .map(|(i, s)| (i, s.key.clone()))
+                .collect();
+            self.recorded.hovers = keys
+                .into_iter()
+                .map(|(i, key)| {
+                    let mut layer = self.highlight(std::slice::from_ref(&key), colour, HOVER_Z);
+                    layer.visible = false;
+                    (ELEMENT_HOVER + i as LayerKey, layer)
+                })
+                .collect();
+            self.recorded.hovers_colour = Some(colour);
+        }
+        &self.recorded.hovers
     }
 
     /// The bar's box (chart points) the chart's bar `bar` is drawn in: its
@@ -1165,20 +1241,28 @@ impl ChartPaintView {
                         below_top,
                     });
                 }
-                let mods = self.mods.clone();
+                // The keys held, as the host said just before the press.
+                let (shift, command) = match self.press_mods.take() {
+                    Some((pressed, shift, command)) if pressed == id => (shift, command),
+                    _ => (false, false),
+                };
                 let order: Vec<String> = self
                     .recorded
                     .selectables
                     .iter()
                     .map(|s| s.key.clone())
                     .collect();
-                match Gesture::of(mods.contains(&"Shift"), mods.contains(&"Mod")) {
+                match Gesture::of(shift, command) {
                     Gesture::Single => self.selection.click(key),
                     Gesture::Range => self.selection.extend(key, &order),
                     Gesture::Toggle => self.selection.toggle(key),
                 }
                 self.publish(ctx);
                 true
+            }
+            RegionEvent::Modifiers(id, mods) => {
+                self.press_mods = Some((id, mods.has("Shift"), mods.has("Mod")));
+                false
             }
             _ => false,
         }
@@ -1231,28 +1315,6 @@ impl PaintView for ChartPaintView {
                 modifiers,
             } => {
                 self.ctrl = modifiers.contains(&"Ctrl");
-                // A modifier key's own event: held while down, gone when up.
-                let mut held = modifiers.clone();
-                let name = match key.as_str() {
-                    "Shift" => Some("Shift"),
-                    "Control" => Some("Ctrl"),
-                    "Meta" | "Super" => Some("Mod"),
-                    "Alt" => Some("Alt"),
-                    _ => None,
-                };
-                if let Some(name) = name {
-                    held.retain(|m| *m != name);
-                    if *down {
-                        held.push(name);
-                    }
-                    if name == "Ctrl" && !cfg!(target_os = "macos") {
-                        held.retain(|m| *m != "Mod");
-                        if *down {
-                            held.push("Mod");
-                        }
-                    }
-                }
-                self.mods = held;
                 // The host's keymap reads it: the view binds no keys.
                 if *down && let Some(gestures) = ctx.extras.get::<ChartGestures>() {
                     (gestures.0)(ChartGesture::Key {
@@ -1267,6 +1329,14 @@ impl PaintView for ChartPaintView {
                 self.panning = false;
                 self.press = None;
                 true
+            }
+            // The pointer left the pane: nothing under it is hovered.
+            ViewInput::PointerLeave => {
+                if self.hover.take().is_some() {
+                    self.publish(ctx);
+                    return true;
+                }
+                false
             }
             ViewInput::PointerDown {
                 x, y, button, mods, ..
@@ -1405,6 +1475,10 @@ impl PaintView for ChartPaintView {
             .iter()
             .map(|(key, page)| (*key, page.clone().at(at)))
             .collect();
+        // Each element's hover layer, as it was recorded: the host draws one
+        // in its region's layer's space (the page's, placed there), so its
+        // own placement is never used and a scroll sends nothing of them.
+        layers.extend(self.element_hovers().iter().cloned());
         if let Some(hover) = self.hover_layer() {
             layers.push((HOVER_LAYER, hover.at(at)));
         }
@@ -1443,7 +1517,7 @@ impl PaintView for ChartPaintView {
 /// the largest to the smallest, so the host's hit (the last region under
 /// the pointer) is the smallest element there, as `pick` chooses. A page
 /// with more than a layer may carry keeps its smallest.
-fn page_regions(items: &[Selectable], page: Rect) -> Vec<Region> {
+fn page_regions(items: &[Selectable], page: Rect, hovered: &[bool]) -> Vec<Region> {
     let px = points_to_px(1.0);
     let mut on: Vec<(usize, &Selectable)> = items
         .iter()
@@ -1463,10 +1537,15 @@ fn page_regions(items: &[Selectable], page: Rect) -> Vec<Region> {
         .skip(skip)
         .map(|(i, s)| {
             let b = s.bounds.inflate(PICK_SLOP, PICK_SLOP);
-            Region::new(
+            let region = Region::new(
                 i as u64,
                 Shape::Rect(Rect::new(b.x0 * px, b.y0 * px, b.x1 * px, b.y1 * px)),
-            )
+            );
+            if hovered.get(i).copied().unwrap_or(false) {
+                region.hover_layer(ELEMENT_HOVER + i as LayerKey)
+            } else {
+                region
+            }
         })
         .collect()
 }
@@ -1743,6 +1822,11 @@ mod tests {
         );
         assert_close(fit_zoom(4000.0, Some(100.0)), 1.0);
         assert_close(fit_zoom(400.0, None), 1.0);
+    }
+
+    #[test]
+    fn the_pane_layer_limit_is_the_host_s() {
+        assert_eq!(PANE_LAYERS, architect_scene::ops::MAX_LAYERS);
     }
 
     #[test]
