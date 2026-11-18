@@ -65,6 +65,24 @@ fn melody_range(cell: &str) -> Option<(usize, usize)> {
 /// `cell` with its chord symbols made `chords` (`F#m_2 B_2`): the chords
 /// of `<< chords ; m{ … } >>` replaced, a melody alone given chords beside
 /// it, and text written before a bar's chords (`"Build" F`) kept.
+/// `new` (the bar `was` written again) still tied into the next bar when
+/// `was` was (`>Fadd2_8 ~`) and still ends on the chord that was tied:
+/// the bar's chord line has no tie of its own to write.
+fn with_tie(was: &str, new: String) -> String {
+    let last_chord = |t: &str| {
+        t.split_whitespace()
+            .rev()
+            .find(|w| *w != "~")
+            .map(|w| w.split('_').next().unwrap_or(w).to_owned())
+    };
+    let tied = was.trim_end().ends_with('~');
+    if tied && !new.trim_end().ends_with('~') && last_chord(was) == last_chord(&new) {
+        format!("{} ~", new.trim_end())
+    } else {
+        new
+    }
+}
+
 /// `chords` in beat slashes (`Gmaj7 ////`, `C // Bdim //`: a chord, then a
 /// slash a beat), when the bar `was` written so (slashes, no values) and
 /// each chord is a whole number of beats.
@@ -103,12 +121,25 @@ fn with_chords(cell: &str, chords: &str) -> String {
     if trimmed.starts_with("m{") || trimmed.starts_with("m {") {
         return format!("<< {chords} ; {trimmed} >>");
     }
-    // Quoted text and cues written before the chords stay before them.
+    // Quoted text and cues written before the chords stay before them:
+    // `"…"`, and above or below the staff, `^"…"` and `_"…"`.
     let mut keep = String::new();
     let mut rest = trimmed;
-    while let Some(after) = rest.strip_prefix('"') {
+    loop {
+        // A one-bar meter (`!T3/4`) written before them stays too.
+        if rest.starts_with("!T") {
+            let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+            keep.push_str(&rest[..end]);
+            keep.push(' ');
+            rest = rest[end..].trim_start();
+            continue;
+        }
+        let mark = usize::from(rest.starts_with("^\"") || rest.starts_with("_\""));
+        let Some(after) = rest[mark..].strip_prefix('"') else {
+            break;
+        };
         let Some(end) = after.find('"') else { break };
-        keep.push_str(&rest[..end + 2]);
+        keep.push_str(&rest[..mark + end + 2]);
         keep.push(' ');
         rest = after[end + 1..].trim_start();
     }
@@ -299,7 +330,7 @@ fn bars_text_in(
                 .then(|| in_slashes(&own, chords, beat))
                 .flatten()
                 .map_or_else(|| chords.to_text(), Ok)?;
-            own = with_chords(&own, &written);
+            own = with_tie(&own, with_chords(&own, &written));
         }
         let _ = bar;
         for voice in 0..4u8 {
@@ -495,19 +526,27 @@ fn placed(
                 return Err(format!("Bar {} is read-only: {PUSHED_OVER}", bar + 1));
             }
         }
-        for item in &mut items {
-            // A text no bar of which changes stays as written (a `%3`, a
-            // chord held across bars).
-            if !item.3 {
-                item.2 = source[item.0..item.1].to_owned();
-            }
-        }
         let beat_counted = items.len() > 1
             && items.windows(2).all(|w| {
                 source
                     .get(w[0].1..w[1].0)
                     .is_some_and(|gap| !gap.contains('|'))
             });
+        for item in &mut items {
+            // A text no bar of which changes stays as written (a `%3`, a
+            // chord held across bars). But a line counted by beats is
+            // written barlined when a bar of it changes, and between
+            // barlines `%3` is a three-bar repeat, not the bar before three
+            // times: its bars stay `% | % | %`.
+            let text = &source[item.0..item.1];
+            let multi_repeat = text
+                .trim()
+                .strip_prefix('%')
+                .is_some_and(|n| n.parse::<u32>().is_ok_and(|n| n > 1));
+            if !item.3 && !(beat_counted && multi_repeat) {
+                item.2 = text.to_owned();
+            }
+        }
         if beat_counted {
             let first = items[0].0;
             let last = items[items.len() - 1].1;
@@ -825,8 +864,25 @@ fn written_out(source: &str, measures: &[&Measure], i: usize) -> Option<String> 
     (0..i).rev().find_map(|k| {
         let (a, b) = span(measures, k).ok()?;
         let text = source[a..b].trim();
-        (!is_repeat_text(text)).then(|| text.to_owned())
+        // Its music: a cue written before the bar it repeats is that bar's.
+        (!is_repeat_text(text)).then(|| without_cues(text).to_owned())
     })
+}
+
+/// `text` without the cues written before its music (`"…"`, `^"…"`,
+/// `_"…"`).
+fn without_cues(text: &str) -> &str {
+    let mut rest = text.trim();
+    loop {
+        let mark = usize::from(rest.starts_with("^\"") || rest.starts_with("_\""));
+        let Some(after) = rest[mark..].strip_prefix('"') else {
+            return rest;
+        };
+        let Some(end) = after.find('"') else {
+            return rest;
+        };
+        rest = after[end + 1..].trim_start();
+    }
 }
 
 /// The line of `source` that byte `at` is on: `(start, end)`.
@@ -888,14 +944,7 @@ fn check(
         // (An `x2` copy of a line's last bar is it but for the `x2`, which
         // that bar carries.)
         let follows = replays.get(i).copied().flatten().is_some_and(|g| {
-            written.contains(&g)
-                && measures.get(g).is_some_and(|w| {
-                    let mut copy = (*b).clone();
-                    if b.plays_back.is_some() {
-                        copy.repeat_count = w.repeat_count;
-                    }
-                    same_music(w, &copy)
-                })
+            written.contains(&g) && measures.get(g).is_some_and(|w| plays_again(b, w))
         });
         if !written.contains(&i) && !written_out && !follows && !same_music(a, b) {
             return Err(format!(
@@ -905,6 +954,24 @@ fn check(
         }
     }
     more(&measures)
+}
+
+/// Whether bar `copy` plays bar `src` again. An `x2` copy of a line plays
+/// its first time through but for what is written once on it: the `x2`
+/// itself (its last bar's), and the dynamics and cues at the line's start.
+#[must_use]
+pub fn plays_again(copy: &Measure, src: &Measure) -> bool {
+    if copy.plays_back.is_none() {
+        return same_music(copy, src);
+    }
+    let mut c = copy.clone();
+    c.repeat_count = src.repeat_count;
+    c.dynamics.clone_from(&src.dynamics);
+    c.classical_dynamics.clone_from(&src.classical_dynamics);
+    c.hairpins.clone_from(&src.hairpins);
+    c.text_cues.clone_from(&src.text_cues);
+    c.staff_text.clone_from(&src.staff_text);
+    same_music(&c, src)
 }
 
 /// Whether two bars hold the same music, however it is written: the same
@@ -1336,6 +1403,130 @@ mod tests {
         let mut score = Score::from_text(&text, &chart);
         let out = none.set_quality(&mut score, "m7");
         assert!(out.changed.is_empty() && out.refused.is_some());
+    }
+
+    #[test]
+    fn a_bar_the_header_counts_but_the_text_does_not_write_takes_an_entry() {
+        // `CH 4` over three bars written: the fourth, which the parser adds
+        // empty, is written after the third when an entry is made on it.
+        let text = "T - A\n4/4\n\nCH 4\nD E\n\"Drum fill\" >F#m_8 !STOP r8 r2.\n\nVS 1\nA\n";
+        let chart = parse_chart(text).unwrap();
+        let mut score = Score::from_text(text, &chart);
+        assert_eq!(score.read_only[3], None);
+        let mut input = InputState {
+            mode: Mode::NoteName,
+            ..InputState::default()
+        };
+        input.apply(&mut score, Op::MoveTo(crate::edit::Pos { bar: 3, tick: 0 }));
+        input.apply(&mut score, Op::Duration(Value::Whole));
+        let out = input.apply(&mut score, Op::Letter('G'));
+        let new = write_bars(text, &chart, &score, &out.changed).unwrap();
+        assert!(new.contains("r2. | G_1\n\nVS 1\nA"), "{new}");
+    }
+
+    #[test]
+    fn a_one_bar_block_with_a_cue_before_it_is_found_by_its_replay() {
+        // A section that replays one whose bar is a `<< >>` line with a cue
+        // before it plays that bar.
+        let text = "T - A\n4/4\n\nIN 1\n\"Stop groove\" << F_1 ; m{ C:41 } >>\n\nCH 1\nG\n\nIN\n";
+        let chart = parse_chart(text).unwrap();
+        let score = Score::from_text(text, &chart);
+        assert_eq!(score.replays, [None, None, Some(0)]);
+    }
+
+    #[test]
+    fn a_one_bar_meter_stays_on_its_bar_when_edited() {
+        let text = "T - A\n4/4\n\nVS 2\nC_1 !T3/4 Fadd2 // Dm /\n";
+        let chart = parse_chart(text).unwrap();
+        let mut score = Score::from_text(text, &chart);
+        let mut input = InputState {
+            mode: Mode::NoteName,
+            ..InputState::default()
+        };
+        input.apply(&mut score, Op::MoveTo(crate::edit::Pos { bar: 1, tick: 0 }));
+        input.apply(&mut score, Op::Duration(Value::Quarter));
+        let out = input.apply(&mut score, Op::Letter('G'));
+        let new = write_bars(text, &chart, &score, &out.changed).unwrap();
+        assert!(new.contains("!T3/4 G"), "{new}");
+    }
+
+    #[test]
+    fn a_bar_tied_into_the_next_keeps_its_tie_when_edited() {
+        let text = "T - A\nbF 4/4\n\nVS 2\nBbmaj7_8 Ebmaj7_8 Am7_16 Dm7_8. Abmaj9_8 Bbmaj7_8 Ebmaj7_8 >Fadd2_8 ~\nFadd2_1\n";
+        let chart = parse_chart(text).unwrap();
+        let mut score = Score::from_text(text, &chart);
+        let mut input = InputState {
+            mode: Mode::NoteName,
+            ..InputState::default()
+        };
+        input.apply(&mut score, Op::MoveTo(crate::edit::Pos { bar: 0, tick: 0 }));
+        let out = input.apply(&mut score, Op::Letter('C'));
+        let new = write_bars(text, &chart, &score, &out.changed).unwrap();
+        assert!(
+            new.contains("C_4 Am7_16 Dm7_8. Abmaj9_8 Bbmaj7_8 Ebmaj7_8 >Fadd2_8 ~\n"),
+            "{new}"
+        );
+    }
+
+    #[test]
+    fn a_line_with_a_cue_before_it_is_edited_and_the_cue_stays() {
+        // `^"Intro groove" Bm % Gmaj7 %`: written barlined after an edit,
+        // the cue stays on the first bar, takes no beat of it, and a `%`
+        // written out is the bar's music without its cue.
+        let text = "T - A\n#Bm 4/4\n\nINT 4\n^\"Intro groove\" Bm % Gmaj7 %\n";
+        let chart = parse_chart(text).unwrap();
+        for (at, want) in [
+            (0usize, "^\"Intro groove\" C_1 | Bm | Gmaj7 | %"),
+            (2, "^\"Intro groove\" Bm | % | C_1 | Gmaj7"),
+        ] {
+            let mut score = Score::from_text(text, &chart);
+            let mut input = InputState {
+                mode: Mode::NoteName,
+                ..InputState::default()
+            };
+            input.apply(
+                &mut score,
+                Op::MoveTo(crate::edit::Pos { bar: at, tick: 0 }),
+            );
+            input.apply(&mut score, Op::Duration(Value::Whole));
+            let out = input.apply(&mut score, Op::Letter('C'));
+            let new = write_bars(text, &chart, &score, &out.changed)
+                .unwrap_or_else(|e| panic!("bar {}: {e}", at + 1));
+            assert!(new.contains(want), "{new}");
+        }
+    }
+
+    #[test]
+    fn a_bar_beside_a_percent_three_is_edited_and_the_repeat_kept() {
+        // `Dm7 %3 Fmaj7/G %3`: Dm7 four times, Fmaj7/G four times. An edit
+        // writes the line barlined, where `%3` would repeat three bars: the
+        // other `%3` is written `% | % | %`, the bar before three times.
+        let text = "T - A\n#C 4/4\n\nCH 8\nDm7 %3 Fmaj7/G %3\n";
+        let chart = parse_chart(text).unwrap();
+        for at in [0usize, 4] {
+            let mut score = Score::from_text(text, &chart);
+            let mut input = InputState {
+                mode: Mode::NoteName,
+                ..InputState::default()
+            };
+            input.apply(
+                &mut score,
+                Op::MoveTo(crate::edit::Pos { bar: at, tick: 0 }),
+            );
+            input.apply(&mut score, Op::Duration(Value::Whole));
+            let out = input.apply(&mut score, Op::Letter('C'));
+            let new = write_bars(text, &chart, &score, &out.changed)
+                .unwrap_or_else(|e| panic!("bar {}: {e}", at + 1));
+            let back = parse_chart(&new).unwrap();
+            let chords: Vec<String> = measures(&back)
+                .iter()
+                .map(|m| ChordBar::from_measure(m).to_text().unwrap())
+                .collect();
+            let mut want = vec!["Dm7_1"; 4];
+            want.extend(["Fmaj7/G_1"; 4]);
+            want[at] = "C_1";
+            assert_eq!(chords, want, "{new}");
+        }
     }
 
     #[test]

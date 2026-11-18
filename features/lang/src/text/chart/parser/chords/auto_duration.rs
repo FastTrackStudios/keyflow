@@ -146,6 +146,8 @@ impl<'a> ChartParser<'a> {
                         && !t.starts_with('/')
                         && !t.starts_with('@')
                         && !t.starts_with('"')
+                        && !t.starts_with("^\"")
+                        && !t.starts_with("_\"")
                         && !t.starts_with('$')
                         && **t != "%"
                         && Command::parse_stop_token(t).is_none()
@@ -174,6 +176,8 @@ impl<'a> ChartParser<'a> {
                             && !t.starts_with('/')
                             && !t.starts_with('@')
                             && !t.starts_with('"')
+                        && !t.starts_with("^\"")
+                        && !t.starts_with("_\"")
                             && !t.starts_with('$')
                             && **t != "%"
                             && !t.contains('_')

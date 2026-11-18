@@ -457,6 +457,27 @@ impl<'a> ChartParser<'a> {
             } else {
                 "its text could not be found in the chart's text (a `<< >>` block written over several lines)"
             };
+            // Bars its header counts that its text does not write (`CH 8`
+            // over seven bars): the parser adds them empty, after the last
+            // bar written. Each has an empty place right after that bar's
+            // text, where an entry on it is written (and read as the next
+            // bar, the one written before it being full).
+            if !cells.is_empty()
+                && let Some(last) = measures.iter().rposition(|m| m.source_span.is_some())
+                && last + 1 < measures.len()
+                && measures[..=last].iter().all(|m| m.source_span.is_some())
+                && measures[last + 1..]
+                    .iter()
+                    .all(|m| m.chords.iter().all(|c| c.full_symbol == "s"))
+            {
+                let end = measures[last].source_span.map_or(0, |s| s.start + s.len);
+                let (line, col) = line_col(end);
+                for m in &mut measures[last + 1..] {
+                    m.source_span = Some(TextSpan::with_location(end, 0, line, col));
+                    m.read_only = None;
+                }
+                continue;
+            }
             if cells.len() != measures.len() {
                 for (k, m) in measures.iter_mut().enumerate() {
                     if m.source_span.is_some() {
