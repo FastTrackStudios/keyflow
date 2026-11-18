@@ -41,6 +41,15 @@ path = "features/extension"
 [uses]
 "fts.session" = "^0.1"
 
+# A session file (`.session`) is a document of the vault: the node opens it,
+# syncs it through the org, and Keyflow edits the node's copy
+# (KEYFLOW_SESSION_DOCUMENT).
+[[doc_kinds]]
+id = "fts.session"
+name = "Session"
+files = ["session"]
+schema = 1
+
 [capabilities]
 effect = "mutating"
 # A chart's text: read to engrave it, and written by note input (each
@@ -1255,6 +1264,14 @@ description = "Makes bar `bar` of session `id` (one this copy holds) the song's 
 group = "Session"
 effect = "mutating"
 params = '{"type":"object","properties":{"id":{"type":"string"},"bar":{"type":"integer","minimum":1}},"required":["id"]}'
+
+[[actions]]
+id = "KEYFLOW_SESSION_DOCUMENT"
+name = "Session: open a vault's session"
+description = "Opens the session that is the vault document at `path` (a `.session` file of the vault): the node's copy, edited through the host and synced through the org like any document, served as fts.session. Keyflow holds no file and runs no host for it. Answers `{id, pane, path, writable}`."
+group = "Session"
+effect = "mutating"
+params = '{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}'
 
 [[actions]]
 id = "KEYFLOW_SESSION_JOIN"
