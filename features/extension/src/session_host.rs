@@ -42,7 +42,7 @@ use session::clock::{
     ClockHost, SessionClockClient, SharedClock, serve as serve_clock,
     session_clock_rpc_service_descriptor,
 };
-use session::doc::transport_of;
+use session::doc::{SessionDoc, transport_of};
 use session::sync::Tracker;
 use session::sync::clock::now_micros_f64;
 use uuid::Uuid;
@@ -60,6 +60,10 @@ struct Sessions {
     /// Per session, the subscription that re-reads its chart panes when
     /// another replica's edit arrives.
     watches: HashMap<Uuid, crdt::loro::Subscription>,
+    /// Sessions that are vault documents, held as the node's copy through
+    /// the host (`KEYFLOW_SESSION_DOCUMENT`): no file of this extension's
+    /// and no host of its own; the node syncs them like any document.
+    documents: HashMap<Uuid, (architect_extensions::live::Replica, SessionDoc)>,
 }
 
 fn sessions() -> std::sync::MutexGuard<'static, Sessions> {
@@ -150,16 +154,28 @@ async fn open(args: Json) -> Result<Json, String> {
 async fn serve(args: Json) -> Result<Json, String> {
     let id = id_of(&args)?;
     let bind = text(&args, "bind").unwrap_or_else(|_| "0.0.0.0:4142".into());
-    let doc = sessions()
-        .charts
-        .get(&id)
-        .map(ChartSession::crdt)
-        .ok_or("open the session first (KEYFLOW_SESSION_OPEN)")?;
-    let router = LayerRouter::new()
-        .with(
+    // A session file this copy holds is served whole (its content too); a
+    // vault document's content travels through the node and the org, so
+    // only its transport is served here: presence and the host's clock.
+    let (file, document) = {
+        let s = sessions();
+        (
+            s.charts.get(&id).map(ChartSession::crdt),
+            s.documents.contains_key(&id),
+        )
+    };
+    if file.is_none() && !document {
+        return Err("open the session first (KEYFLOW_SESSION_OPEN or _DOCUMENT)".to_owned());
+    }
+    let router = LayerRouter::new();
+    let router = match file {
+        Some(doc) => router.with(
             doc_sync_service_descriptor(),
             DocSyncDispatcher::new(DocSyncHost::new(id, doc)),
-        )
+        ),
+        None => router,
+    };
+    let router = router
         .with(
             doc_presence_service_descriptor(),
             DocPresenceDispatcher::new(PresenceHost::new(id, 30_000)),
@@ -256,14 +272,20 @@ fn set_bar_one(args: &Json) -> Result<Json, String> {
         .and_then(|b| i32::try_from(b).ok())
         .filter(|b| *b > 1);
     let s = sessions();
-    let chart = s
+    // A session file held here, or a vault document held as the node's copy.
+    let session = s
         .charts
         .get(&id)
-        .ok_or("this copy does not hold that session (KEYFLOW_SESSION_OPEN or _JOIN)")?;
-    let session = chart.session();
+        .map(|chart| chart.session().clone())
+        .or_else(|| s.documents.get(&id).map(|(_, session)| session.clone()))
+        .ok_or("this copy does not hold that session (KEYFLOW_SESSION_OPEN, _JOIN or _DOCUMENT)")?;
+    drop(s);
     let at = bar.map(|b| session.tempo().at_bar(b, 1, 0.0));
     session.set_bar_one(at).map_err(|e| e.to_string())?;
-    Ok(json!({ "bar_one": bar.unwrap_or(1), "chart_start_seconds": chart.chart_start() }))
+    let start = session
+        .bar_one()
+        .map_or(0.0, |at| at.seconds(&session.tempo()));
+    Ok(json!({ "bar_one": bar.unwrap_or(1), "chart_start_seconds": start }))
 }
 
 /// Where the followed session's leader is now, session seconds, and
@@ -292,7 +314,47 @@ pub fn shown_now() -> Option<(f64, bool)> {
 #[must_use]
 pub fn held_chart_start(doc: &str) -> Option<f64> {
     let id = Uuid::parse_str(doc).ok()?;
-    sessions().charts.get(&id).map(ChartSession::chart_start)
+    let s = sessions();
+    if let Some(chart) = s.charts.get(&id) {
+        return Some(chart.chart_start());
+    }
+    s.documents.get(&id).map(|(_, session)| {
+        session
+            .bar_one()
+            .map_or(0.0, |at| at.seconds(&session.tempo()))
+    })
+}
+
+/// Opens the session that is the vault document at `path` (a `.session`
+/// of the vault, synced through the org like any document): the node's
+/// copy, edited through the host (`Handle::document`), and serves it as
+/// `fts.session`. Keyflow holds no file and runs no host for it.
+async fn document(args: Json) -> Result<Json, String> {
+    let path = text(&args, "path")?;
+    let handle = crate::handle()?;
+    let lane = handle.document(&path).await.map_err(|e| format!("{e:?}"))?;
+    let id = lane.doc().doc_id;
+    let writable = lane.doc().writable;
+    let replica = lane.replica();
+    replica.attached().await?;
+    let session = SessionDoc::from_doc(replica.doc().loro().clone());
+    let pane = format!("session:{id}");
+    let watch = {
+        let pane = pane.clone();
+        replica
+            .doc()
+            .loro()
+            .subscribe_root(std::sync::Arc::new(move |event| {
+                if matches!(event.triggered_by, crdt::loro::EventTriggerKind::Import) {
+                    crate::reload(Some(&pane));
+                }
+            }))
+    };
+    let mut s = sessions();
+    s.provider.open_doc(id, session.clone());
+    s.watches.insert(id, watch);
+    s.documents.insert(id, (replica, session));
+    Ok(json!({ "id": id.to_string(), "pane": pane, "path": path, "writable": writable }))
 }
 
 async fn join(args: Json) -> Result<Json, String> {
@@ -405,7 +467,7 @@ pub fn local_answer(call: &keyflow_session::ServiceCall) -> Option<Result<String
     let args: Json = serde_json::from_str(&call.args).ok()?;
     let id = Uuid::parse_str(args.get("doc")?.as_str()?).ok()?;
     let sessions = sessions();
-    if !sessions.charts.contains_key(&id) {
+    if !sessions.charts.contains_key(&id) && !sessions.documents.contains_key(&id) {
         return None;
     }
     Some(
@@ -431,6 +493,7 @@ pub fn build(ext: &mut Builder) {
     .action("KEYFLOW_SESSION_SERVE", serve)
     .action("KEYFLOW_SESSION_JOIN", join)
     .action("KEYFLOW_SESSION_FOLLOW", follow)
+    .action("KEYFLOW_SESSION_DOCUMENT", document)
     .action("KEYFLOW_SESSION_BAR_ONE", |args| async move {
         set_bar_one(&args)
     })

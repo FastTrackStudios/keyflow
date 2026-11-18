@@ -107,6 +107,9 @@ impl Extension for Keyflow {
                 run_op(move |_| vec![op]).await
             });
         }
+        // `bar`: the chart's bars from 0 as the engraver numbers them
+        // (`bar#N`, what a click hands over; a count-in is not one of
+        // them, `edit::bars`), `fraction` of the way across it.
         ext.action("KEYFLOW_INPUT_MOVE", |args| async move {
             let bar = args
                 .get("bar")
@@ -1345,7 +1348,7 @@ fn top_line(chart: &keyflow::Chart, bar: usize) -> i32 {
     let mut n = 0;
     // The engraver's default: a chart that declares no clef is in bass.
     let mut clef = chart.initial_clef.unwrap_or(ChartClef::Bass);
-    for section in &chart.sections {
+    for section in edit::sections(chart) {
         let count = section.measures().len();
         if bar < n + count {
             clef = section.clef.unwrap_or(clef);

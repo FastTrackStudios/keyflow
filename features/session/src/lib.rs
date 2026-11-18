@@ -284,6 +284,18 @@ impl Provider {
             .open(chart.id().to_string(), chart.session().clone());
     }
 
+    /// Serves session `doc` (a session held other than as this crate's
+    /// file: the node's copy of a vault document, through the host).
+    pub fn open_doc(&self, id: Uuid, doc: SessionDoc) {
+        self.sessions.open(id.to_string(), doc);
+    }
+
+    /// Whether it serves session `id`.
+    #[must_use]
+    pub fn holds(&self, id: Uuid) -> bool {
+        self.sessions.get(&id.to_string()).is_some()
+    }
+
     /// Stops serving session `id`.
     pub fn close(&self, id: Uuid) {
         self.sessions.close(&id.to_string());
