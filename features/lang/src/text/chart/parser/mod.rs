@@ -981,6 +981,32 @@ mod tests {
     }
 
     #[test]
+    fn a_bar_s_text_takes_in_its_slashes_and_its_tie() {
+        // A chord that fills its bar opens the next one; the slashes, tie
+        // or command written after it are still its bar's text, not the
+        // next bar's (an edit wrote `Gmaj7_1 ////`: a bar too many).
+        for (text, want) in [
+            ("T - A\n4/4\n\nVS 2\nG ////\nC ////\n", ["G ////", "C ////"]),
+            ("T - A\n4/4\n\nVS 2\nG //// C ////\n", ["G ////", "C ////"]),
+            ("T - A\n4/4\n\nVS 2\nG_1 ~\nG ////\n", ["G_1 ~", "G ////"]),
+            (
+                "T - A\n4/4\n\nVS 2\nD_1 \\fermata\nC ////\n",
+                ["D_1 \\fermata", "C ////"],
+            ),
+        ] {
+            let chart = parse_chart(text).expect("parse");
+            let bars: Vec<&str> = crate::edit::bars(&chart)
+                .iter()
+                .map(|m| {
+                    let s = m.source_span.as_ref().expect("a bar's text");
+                    &text[s.start..s.end()]
+                })
+                .collect();
+            assert_eq!(bars, want, "{text:?}");
+        }
+    }
+
+    #[test]
     fn chord_source_spans_are_document_absolute() {
         // The two `5` tokens sit at their literal document offsets (20 and 27),
         // not the line-relative offsets the parser emits internally (2 and 9).

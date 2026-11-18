@@ -983,7 +983,10 @@ fn bar_spans(
     let mut range: Vec<Option<(usize, usize)>> = vec![None; bars];
     let mut shared: Vec<bool> = vec![false; bars];
     let mut spilled = vec![false; bars];
-    for ((mark, token), span) in marks.iter().zip(tokens).zip(spans) {
+    // The bar a run of such tokens went back to: the bar after it, which
+    // the next of them would otherwise open on.
+    let mut carried: Option<usize> = None;
+    for (index, ((mark, token), span)) in marks.iter().zip(tokens).zip(spans).enumerate() {
         let is_barline = !token.is_empty() && token.chars().all(|c| matches!(c, '|' | ':'));
         if is_barline {
             continue;
@@ -1005,7 +1008,26 @@ fn bar_spans(
         if mark.after > mark.before && mark.beats_after > 0.001 && mark.after < bars {
             spilled[mark.after] = true;
         }
-        let own = mark.before;
+        let mut own = mark.before;
+        // What goes on with the chord before it (its slashes, `G ////`; a
+        // tie, `Dm_8 ~`; a command, `\fermata`) is that chord's bar's, even
+        // when the chord filled the bar and so opened the next one: a token
+        // that put nothing in the bar it opened on, after one that ended a
+        // bar exactly.
+        let continues = token.chars().all(|c| matches!(c, '/' | '.'))
+            || *token == "~"
+            || token.starts_with('\\');
+        let added_nothing = mark.after == mark.before && mark.beats_after < 0.001;
+        let ended_bar = index
+            .checked_sub(1)
+            .and_then(|i| marks.get(i))
+            .is_some_and(|p| p.after == mark.before && p.after > p.before && p.beats_after < 0.001);
+        if continues && added_nothing && (ended_bar || carried == Some(mark.before)) {
+            own = mark.before - 1;
+            carried = Some(mark.before);
+        } else {
+            carried = None;
+        }
         if own >= bars {
             continue;
         }
