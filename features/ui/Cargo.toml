@@ -1,7 +1,7 @@
 [package]
 name = "keyflow-ui"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
 license.workspace = true
 description = "Dioxus UI components for Keyflow chart editing"
 
@@ -19,7 +19,7 @@ keyflow = { workspace = true, features = ["text", "svg", "highlighting"] }
 architect-ui = { workspace = true }
 editor-keyflow = { workspace = true, features = ["native"], optional = true }
 # Provisional integration checkpoint until the next Architect tag.
-architect-workspace = { git = "https://github.com/FastTrackStudios/architect", rev = "3783cb25d03a9f6de68a4d91e4604d2167e08eec", features = ["paint-ui"], optional = true }
+architect-workspace = { git = "https://github.com/FastTrackStudios/architect", rev = "f0c0491658bb5e66c8836bbad2793ab658e97241", features = ["paint-ui"], optional = true }
 
 # Backend-agnostic rendering abstraction — one stack with the workspace
 # (anyrender 0.11 / anyrender_vello 0.12, paired with blitz-git dioxus-native).
@@ -66,6 +66,16 @@ tokio = { version = "1.49", features = ["time"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 gloo-timers = { version = "0.3", features = ["futures"] }
+
+[dev-dependencies]
+# tests/runtime_layers.rs: the chart's layers through the same
+# `architect_scene::ops` a process sends them with, composed and
+# rasterised on the CPU against the engraver's own paint.
+architect = { workspace = true, features = ["action-list"] }
+architect-scene = { workspace = true }
+anyrender = { workspace = true }
+anyrender_vello_cpu = "0.18"
+png = "0.17"
 
 [features]
 default = ["web"]

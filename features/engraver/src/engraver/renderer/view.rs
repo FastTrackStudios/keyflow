@@ -62,6 +62,7 @@ use crate::engraver::layout::chart::{
 use crate::engraver::renderer::cursor_renderer::render_cursor_commands;
 use crate::engraver::renderer::scene_renderer::SceneRenderBuilder;
 use crate::engraver::renderer::theme::{ArtworkLayer, ChartTheme, InkMap};
+use crate::engraver::scene::SceneNode;
 use crate::engraver::style::MStyle;
 
 /// 96 CSS px per 72pt inch — the engraver's own scale between points (its
@@ -77,6 +78,18 @@ const DPI_SCALE: f64 = 96.0 / 72.0;
 #[must_use]
 pub fn points_to_px(scale: f64) -> f64 {
     DPI_SCALE * scale
+}
+
+/// One page of a laid-out chart, recorded on its own
+/// ([`ChartView::record_pages`]).
+#[derive(Clone, Debug)]
+pub struct PageRecording {
+    /// Its number, 1-indexed, as the layout counts pages.
+    pub number: u32,
+    /// Where it is, in chart pixels at 100%.
+    pub rect: Rect,
+    /// What it draws, in the same pixels.
+    pub commands: Vec<anyrender::recording::RenderCommand>,
 }
 
 /// One measure's box on the laid-out chart, in chart points.
@@ -108,6 +121,9 @@ pub struct ChartView {
     /// look, which then paints exactly as laid out.
     ink_map: Option<InkMap>,
     cached: Option<Cached>,
+    /// Moves on every change to what [`ChartView::record_pages`] records:
+    /// a layout installed, a theme set.
+    generation: u64,
 }
 
 /// keyflow-ui's own style, built once and shared by every view that has
@@ -281,6 +297,7 @@ impl ChartView {
             theme: ChartTheme::default(),
             ink_map: None,
             cached: None,
+            generation: 0,
         })
     }
 
@@ -325,6 +342,15 @@ impl ChartView {
         self.ink_map = InkMap::from_render_config(&theme.render);
         self.theme = theme;
         self.apply_cursor_theme();
+        self.generation = self.generation.wrapping_add(1);
+    }
+
+    /// What it would draw now, as a number that moves whenever that may
+    /// have changed (a layout installed, a theme set): a host that keeps
+    /// [`ChartView::record_pages`]'s recordings records again only then.
+    #[must_use]
+    pub const fn generation(&self) -> u64 {
+        self.generation
     }
 
     /// The current theme.
@@ -405,6 +431,7 @@ impl ChartView {
             layout: prepared.layout,
             spatium: prepared.spatium,
         });
+        self.generation = self.generation.wrapping_add(1);
         true
     }
 
@@ -458,6 +485,7 @@ impl ChartView {
                 layout,
                 spatium: config.spatium,
             });
+            self.generation = self.generation.wrapping_add(1);
         }
         self.paint_cached(scene, scale, zoom, scroll_pt, playhead_secs)
             .unwrap_or((0.0, 0.0))
@@ -559,6 +587,136 @@ impl ChartView {
         }
 
         Some((cached.layout.total_width, cached.layout.total_height))
+    }
+
+    /// The laid-out chart a page at a time, each its own recording in
+    /// chart pixels at 100% ([`points_to_px`]`(1.0)` per point): its paper,
+    /// its artwork and the music on it, as [`ChartView::paint_cached`]
+    /// draws them at zoom 1 and no scroll. `None` before the first layout.
+    ///
+    /// What a host that keeps layers draws: a page whose recording is
+    /// unchanged is drawn again without being sent again, and a pan or a
+    /// zoom moves them all with one transform.
+    ///
+    /// The layout's root holds its elements flat; each goes to the page
+    /// its `page` metadata names, or, without one, to the page its ink is
+    /// on (the first, when it has none).
+    #[must_use]
+    pub fn record_pages(&self) -> Option<Vec<PageRecording>> {
+        use crate::engraver::layout::chart::notation_renderer::scene_ink_bounds;
+        let cached = self.cached.as_ref()?;
+        let layout = &cached.layout;
+        let numbered: Vec<(u32, Rect)> = if layout.pages.is_empty() {
+            vec![(
+                1,
+                Rect::new(0.0, 0.0, layout.total_width, layout.total_height),
+            )]
+        } else {
+            layout
+                .pages
+                .iter()
+                .map(|p| {
+                    (
+                        p.number,
+                        Rect::new(
+                            p.x_offset,
+                            p.y_offset,
+                            p.x_offset + p.width,
+                            p.y_offset + p.height,
+                        ),
+                    )
+                })
+                .collect()
+        };
+        let root = &layout.scene;
+        let mut on: Vec<Vec<&SceneNode>> = vec![Vec::new(); numbered.len()];
+        for child in &root.children {
+            let by_number = child
+                .metadata
+                .get("page")
+                .and_then(|n| n.parse::<u32>().ok())
+                .and_then(|n| numbered.iter().position(|(number, _)| *number == n));
+            let by_ink = || {
+                let ink = scene_ink_bounds(child, root.transform)?;
+                let centre = ink.center();
+                numbered.iter().position(|(_, rect)| rect.contains(centre))
+            };
+            let at = by_number.or_else(by_ink).unwrap_or(0);
+            if let Some(page) = on.get_mut(at) {
+                page.push(child);
+            }
+        }
+        let transform = Affine::scale(DPI_SCALE);
+        let bundle = self.pipeline.fonts();
+        let rects: Vec<Rect> = numbered.iter().map(|(_, r)| *r).collect();
+        let under = self
+            .theme
+            .artwork
+            .iter()
+            .any(|a| a.layer == ArtworkLayer::UnderMusic);
+        let paper = self.theme.render.background_color;
+        let mut out = Vec::with_capacity(numbered.len());
+        for (((number, rect), nodes), _) in numbered.iter().zip(&on).zip(&rects) {
+            let mut scene = anyrender::Scene::new();
+            scene.fill(Fill::NonZero, transform, paper, None, rect);
+            self.paint_artwork(&mut scene, transform, &[*rect], ArtworkLayer::UnderMusic);
+            let base = SceneRenderBuilder::new()
+                .spatium(cached.spatium)
+                .build()
+                .with_ink_map(self.ink_map.clone())
+                .with_host_paper(if under { vec![*rect] } else { Vec::new() });
+            let mut renderer = bundle.configure_renderer(base);
+            for (from, to) in &self.theme.typography.font_aliases {
+                renderer = renderer.with_font_alias(from.clone(), to.clone());
+            }
+            if root.visible {
+                for node in nodes {
+                    renderer.render_with_transform(&mut scene, node, transform * root.transform);
+                }
+            }
+            self.paint_artwork(&mut scene, transform, &[*rect], ArtworkLayer::OverMusic);
+            out.push(PageRecording {
+                number: *number,
+                rect: transform.transform_rect_bbox(*rect),
+                commands: scene.commands,
+            });
+        }
+        Some(out)
+    }
+
+    /// The playback cursor at `playhead_secs` (chart time) into `scene`,
+    /// in chart pixels at 100%, as [`ChartView::paint_cached`] draws it:
+    /// whether there was one to draw.
+    pub fn paint_playhead(&self, scene: &mut impl PaintScene, playhead_secs: f64) -> bool {
+        let Some(cached) = self.cached.as_ref() else {
+            return false;
+        };
+        let Some(state) = self.cursor.compute_at_time(&cached.layout, playhead_secs) else {
+            return false;
+        };
+        let font = self.pipeline.fonts().smufl_font();
+        render_cursor_commands(scene, &state.commands, Affine::scale(DPI_SCALE), Some(font));
+        true
+    }
+
+    /// The laid-out chart's size in points (`total_width`,
+    /// `total_height`). `None` before the first layout.
+    #[must_use]
+    pub fn content_size(&self) -> Option<(f64, f64)> {
+        self.cached
+            .as_ref()
+            .map(|c| (c.layout.total_width, c.layout.total_height))
+    }
+
+    /// What can be selected on the laid-out chart, in reading order, its
+    /// bounds in chart points (`layout::chart::select`). Empty before the
+    /// first layout.
+    #[must_use]
+    pub fn selectables(&self) -> Vec<crate::engraver::layout::chart::select::Selectable> {
+        self.cached
+            .as_ref()
+            .map(|c| crate::engraver::layout::chart::select::selectables(&c.layout))
+            .unwrap_or_default()
     }
 
     fn paint_artwork(

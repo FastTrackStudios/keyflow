@@ -34,7 +34,7 @@ reads = ["documents"]
 [[actions]]
 id = "KEYFLOW_STATE"
 name = "Keyflow: open charts"
-description = "Every chart open in a pane: its `path`, whether it parsed (`error` when not), its zoom (`null` fits the page to the width) and scroll ([x, y], logical pixels), whether the charts are `dark`, and the toolbar's tools that are on (`tools_on`)."
+description = "Every chart open in a pane: its `path`, whether it parsed (`error` when not), its zoom (`null` fits the page to the width) and scroll ([x, y], logical pixels), what is selected on it (`selection`, the selectables' keys in reading order) and its pane's frame times (`frames`: count, p50, p99, slowest), whether the charts are `dark`, and the toolbar's tools that are on (`tools_on`)."
 group = "Keyflow"
 effect = "read_only"
 

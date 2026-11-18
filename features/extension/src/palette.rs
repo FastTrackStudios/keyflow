@@ -249,10 +249,25 @@ pub fn Palettes() -> Element {
     let q = query();
     let foot = chosen().map_or_else(
         || "Choose a cell to apply it to what is selected.".to_owned(),
-        |i| format!("{} ({}): select a bar or a chord on the chart to apply it.", i.name, i.token),
+        |i| {
+            format!(
+                "{} ({}): select a bar or a chord on the chart to apply it.",
+                i.name, i.token
+            )
+        },
     );
+    // A process's view has no document head for `document::Style` to
+    // reach: its sheet goes inline, where its host's document reads it.
+    #[cfg(not(target_family = "wasm"))]
+    let inline = architect_extensions::guest::in_process();
+    #[cfg(target_family = "wasm")]
+    let inline = false;
     rsx! {
-        document::Style { {CSS} }
+        if inline {
+            style { {CSS} }
+        } else {
+            document::Style { {CSS} }
+        }
         div { class: "kf-palettes",
             div { class: "kf-palettes-head",
                 div { class: "kf-palettes-title", "Palettes" }

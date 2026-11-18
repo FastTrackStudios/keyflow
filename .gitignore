@@ -62,3 +62,7 @@ features/tree-sitter/src/parser.c
 # own chordsheet backup, which is committed at examples/chordsheet-compat/.
 # Drop a local copy in and run `cargo test -- --ignored`.
 features/examples/
+
+# The extension's program, built into its folder for a development copy
+# (`just app-from`): the manifest's `[entry] path`.
+features/extension/keyflow-extension

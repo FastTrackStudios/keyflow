@@ -16,7 +16,9 @@ path = "src/main.rs"
 [dependencies]
 # The trait (`linked-core`): linked into an app, a browser's too. The app
 # that links it turns on `linked` / `paint-ui` in its own copy.
-architect-extensions = { workspace = true, features = ["linked-core", "paint"] }
+# `paint-pane`: the chart's `PaintPane`, the same code linked in or as a
+# process (`linked::PaintPane`), and its pane's state (`use_pane_state`).
+architect-extensions = { workspace = true, features = ["linked-core", "paint-pane"] }
 # The chart pane: PaintPane, HostData, the pane it is drawn in.
 architect-workspace = { workspace = true, features = ["paint-ui"] }
 # The app's theme, which the chart follows.

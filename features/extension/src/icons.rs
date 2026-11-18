@@ -2,7 +2,9 @@
 //! music font (`ChartFontBundle`), each drawn as an SVG, so a button shows
 //! the same quarter note the chart engraves. Made once, from the font in
 //! the binary, and handed to the app as the package's files
-//! (`Extension::files`): a toolbar item's `image` names one.
+//! (`Extension::files`): a toolbar item's `image` names one. The same
+//! files are in the package's folder (`icons/`), where a process copy's
+//! host and an installed package read them; a test keeps them equal.
 
 use std::sync::OnceLock;
 
@@ -69,12 +71,35 @@ pub fn files() -> &'static [(&'static str, &'static str)] {
 mod tests {
     use super::*;
 
+    /// The icons are the package's files on disk too (`icons/`), where a
+    /// process copy's host and an installed package read them. They are
+    /// these, made from the font: `KEYFLOW_WRITE_ICONS=1` writes them again.
+    #[test]
+    fn the_packages_icon_files_are_the_fonts_glyphs() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let write = std::env::var_os("KEYFLOW_WRITE_ICONS").is_some();
+        for (path, svg) in files() {
+            let file = dir.join(path);
+            if write {
+                std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+                std::fs::write(&file, svg).unwrap();
+            }
+            let on_disk = std::fs::read_to_string(&file)
+                .unwrap_or_else(|e| panic!("{path}: {e} (KEYFLOW_WRITE_ICONS=1 writes it)"));
+            assert_eq!(on_disk, *svg, "{path} differs from the font's glyph");
+        }
+    }
+
     #[test]
     fn every_glyph_tool_has_an_icon_from_the_music_font() {
         for t in TOOLS {
             if let Face::Glyph(g) = t.face {
                 let svg = svg(g).unwrap_or_else(|| panic!("{}: no glyph {g:?}", t.action));
-                assert!(svg.starts_with("<svg") && svg.contains(" d=\"M"), "{}", t.action);
+                assert!(
+                    svg.starts_with("<svg") && svg.contains(" d=\"M"),
+                    "{}",
+                    t.action
+                );
             }
         }
         let glyphs = TOOLS

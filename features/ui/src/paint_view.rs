@@ -6,9 +6,19 @@
 //! The framing ([`ChartView`]) is shared both ways: the pane writes the
 //! wheel and a middle-button drag into it, and a host reads or sets it.
 
-use architect_workspace::paint::{PaintMount, PaintView, PaintWake, Scene};
+use std::hash::{Hash as _, Hasher as _};
+use std::sync::Arc;
+
+use architect_workspace::paint::peniko::kurbo::{Affine, Point, Rect, RoundedRect, Stroke};
+use architect_workspace::paint::peniko::{Color, Fill};
+use architect_workspace::paint::{
+    Layer, LayerKey, PaintMount, PaintScene as _, PaintView, PaintWake, Scene,
+};
 use architect_workspace::{Button, Extras, HostData, ViewCtx, ViewInput};
-use keyflow::engraver::renderer::{self, points_to_px, ChartTheme, LayoutWorker};
+use keyflow::engraver::layout::chart::select::{Selectable, in_box, pick};
+use keyflow::engraver::renderer::{self, ChartTheme, LayoutWorker, points_to_px};
+
+use crate::selection::{Gesture, Selection};
 
 /// The zoom a host's `Some(zoom)` is clamped to.
 const MIN_ZOOM: f64 = 0.25;
@@ -69,6 +79,8 @@ pub struct ChartMount {
     pub mount: PaintMount,
     pub wake: PaintWake,
     pub status: HostData<ChartPaintStatus>,
+    /// What is selected on the chart, as the pane last wrote it.
+    pub selection: HostData<ChartSelection>,
 }
 
 impl PartialEq for ChartMount {
@@ -83,6 +95,7 @@ impl PartialEq for ChartMount {
 #[must_use]
 pub fn chart_mount(data: HostData<ChartSnapshot>) -> ChartMount {
     let status = HostData::new(ChartPaintStatus::default());
+    let selection = HostData::new(ChartSelection::default());
     let mount = PaintMount::new(|ctx| {
         let result = ChartPaintView::new();
         if let Some(status) = ctx.data::<ChartPaintStatus>() {
@@ -92,12 +105,18 @@ pub fn chart_mount(data: HostData<ChartSnapshot>) -> ChartMount {
         }
         MountedChart(result.ok())
     })
-    .extras(Extras::default().with_data(data).with_data(status.clone()));
+    .extras(
+        Extras::default()
+            .with_data(data)
+            .with_data(status.clone())
+            .with_data(selection.clone()),
+    );
     let wake = mount.wake_handle();
     ChartMount {
         mount,
         wake,
         status,
+        selection,
     }
 }
 
@@ -114,9 +133,60 @@ impl PaintView for MountedChart {
         }
     }
 
+    fn layers(&mut self, ctx: &ViewCtx) -> Option<Vec<(LayerKey, Layer)>> {
+        self.0.as_mut().and_then(|view| view.layers(ctx))
+    }
+
     fn animating(&self, ctx: &ViewCtx) -> bool {
         self.0.as_ref().is_some_and(|view| view.animating(ctx))
     }
+}
+
+/// What is selected on the chart: the selectables' keys
+/// (`keyflow::engraver::layout::chart::select`), in reading order. The
+/// pane writes it as it changes, when its host gave it one in its extras.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ChartSelection {
+    pub keys: Vec<String>,
+}
+
+/// The layers a chart is drawn in, by key. Each page is its own (its
+/// number), so an edit re-sends only the pages it changed; the
+/// selection, a lasso and the playhead are each one more, over the pages.
+const SELECTION_LAYER: LayerKey = 1 << 32;
+const LASSO_LAYER: LayerKey = SELECTION_LAYER + 1;
+const PLAYHEAD_LAYER: LayerKey = SELECTION_LAYER + 2;
+
+/// How far, in chart points, a click may miss what it selects.
+const PICK_SLOP: f64 = 3.0;
+
+/// The selection's wash and edge, and the lasso's.
+const HIGHLIGHT: Color = Color::from_rgba8(46, 125, 230, 56);
+const HIGHLIGHT_EDGE: Color = Color::from_rgba8(46, 125, 230, 220);
+
+/// A press that may become a lasso: where it started, in pane pixels, and
+/// whether it adds to the selection.
+#[derive(Clone, Copy)]
+struct Press {
+    from: (f64, f64),
+    to: (f64, f64),
+    add: bool,
+    moved: bool,
+}
+
+/// What it last recorded, kept while what it shows is the same: a pan or
+/// a zoom is a new transform on the same recordings.
+#[derive(Default)]
+struct Recorded {
+    /// The engraver's generation the pages were recorded at.
+    generation: Option<u64>,
+    pages: Vec<(LayerKey, Layer)>,
+    /// The selection's keys it was drawn for, and its layer.
+    selection: Option<(Vec<String>, Layer)>,
+    /// The playhead's time it was drawn at, and its layer.
+    playhead: Option<(u64, Option<Layer>)>,
+    /// The laid-out chart's selectables, at that generation.
+    selectables: Vec<Selectable>,
 }
 
 /// An in-process chart view for `PaintMount`.
@@ -132,6 +202,12 @@ pub struct ChartPaintView {
     pointer: (f64, f64),
     /// Whether a middle-button drag is in progress.
     panning: bool,
+    /// The theme last set, by its debug text's hash: set again only when
+    /// it changed, so the recordings are kept.
+    theme: Option<u64>,
+    recorded: Recorded,
+    selection: Selection<String>,
+    press: Option<Press>,
 }
 
 impl ChartPaintView {
@@ -148,6 +224,10 @@ impl ChartPaintView {
             ctrl: false,
             pointer: (0.0, 0.0),
             panning: false,
+            theme: None,
+            recorded: Recorded::default(),
+            selection: Selection::default(),
+            press: None,
         })
     }
 
@@ -164,6 +244,22 @@ impl ChartPaintView {
                     .layout_job(snapshot.chart.clone(), snapshot.revision),
             );
             self.requested = Some(snapshot.revision);
+        }
+    }
+
+    /// The host's theme, or the pane's tokens', set on the engraver when
+    /// it changed.
+    fn update_theme(&mut self, ctx: &ViewCtx, snapshot: &ChartSnapshot) {
+        let theme = snapshot
+            .theme
+            .clone()
+            .unwrap_or_else(|| ChartTheme::from_tokens(|name| ctx.theme.color(name)));
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        format!("{theme:?}").hash(&mut hasher);
+        let hash = hasher.finish();
+        if self.theme != Some(hash) {
+            self.theme = Some(hash);
+            self.view.set_theme(theme);
         }
     }
 
@@ -190,6 +286,204 @@ impl ChartPaintView {
             snapshot.view = edit(snapshot.view, zoom);
         });
     }
+
+    /// Chart pixels at 100% to the pane's logical pixels, for `snapshot`'s
+    /// framing in a pane `ctx` measures.
+    fn placement(&self, ctx: &ViewCtx, view: ChartView) -> Affine {
+        let zoom = self.effective_zoom(view.zoom, ctx.geometry.width);
+        let (x, y) = clamp_scroll(view.scroll, self.content, pane_size(ctx), zoom);
+        Affine::scale(zoom) * Affine::translate((-x, -y))
+    }
+
+    /// The pages recorded again when the engraver's layout or theme
+    /// changed; the same `Arc`s otherwise.
+    fn record_pages(&mut self) {
+        let generation = self.view.generation();
+        if self.recorded.generation == Some(generation) {
+            return;
+        }
+        let Some(pages) = self.view.record_pages() else {
+            return;
+        };
+        self.recorded.generation = Some(generation);
+        self.recorded.pages = pages
+            .into_iter()
+            .map(|page| {
+                (
+                    LayerKey::from(page.number),
+                    Layer::new(Arc::new(page.commands)),
+                )
+            })
+            .collect();
+        self.recorded.selectables = self.view.selectables();
+        // A new layout renumbers what can be selected: what was selected
+        // and is still there stays.
+        let keys: Vec<String> = self
+            .recorded
+            .selectables
+            .iter()
+            .map(|s| s.key.clone())
+            .collect();
+        let kept: Vec<String> = self
+            .selection
+            .items()
+            .iter()
+            .filter(|k| keys.contains(k))
+            .cloned()
+            .collect();
+        if kept.len() != self.selection.items().len() {
+            self.selection.lasso(kept, false);
+        }
+        self.recorded.selection = None;
+        self.recorded.playhead = None;
+    }
+
+    /// The selection's highlight, in chart pixels at 100%: drawn again
+    /// only when the selection or the layout changed.
+    fn selection_layer(&mut self) -> Option<Layer> {
+        let keys = self.selection.items().to_vec();
+        if keys.is_empty() {
+            self.recorded.selection = None;
+            return None;
+        }
+        if let Some((drawn, layer)) = &self.recorded.selection
+            && *drawn == keys
+        {
+            return Some(layer.clone());
+        }
+        let mut scene = Scene::new();
+        let px = points_to_px(1.0);
+        for item in self
+            .recorded
+            .selectables
+            .iter()
+            .filter(|s| keys.contains(&s.key))
+        {
+            let b = item.bounds.inflate(1.5, 1.5);
+            let rect = Rect::new(b.x0 * px, b.y0 * px, b.x1 * px, b.y1 * px);
+            let shape = RoundedRect::from_rect(rect, 2.0);
+            scene.fill(Fill::NonZero, Affine::IDENTITY, HIGHLIGHT, None, &shape);
+            scene.stroke(
+                &Stroke::new(1.0),
+                Affine::IDENTITY,
+                HIGHLIGHT_EDGE,
+                None,
+                &shape,
+            );
+        }
+        let layer = Layer::new(Arc::new(scene.commands)).z(1);
+        self.recorded.selection = Some((keys, layer.clone()));
+        Some(layer)
+    }
+
+    /// The playhead at `secs`, in chart pixels at 100%: drawn again only
+    /// when the time moved.
+    fn playhead_layer(&mut self, secs: Option<f64>) -> Option<Layer> {
+        let secs = secs?;
+        let bits = secs.to_bits();
+        if let Some((at, layer)) = &self.recorded.playhead
+            && *at == bits
+        {
+            return layer.clone();
+        }
+        let mut scene = Scene::new();
+        let layer = self
+            .view
+            .paint_playhead(&mut scene, secs)
+            .then(|| Layer::new(Arc::new(scene.commands)).z(2));
+        self.recorded.playhead = Some((bits, layer.clone()));
+        layer
+    }
+
+    /// The lasso being drawn, in the pane's pixels.
+    fn lasso_layer(&self) -> Option<Layer> {
+        let press = self.press.filter(|p| p.moved)?;
+        let rect = Rect::from_points(press.from, press.to);
+        let mut scene = Scene::new();
+        scene.fill(Fill::NonZero, Affine::IDENTITY, HIGHLIGHT, None, &rect);
+        scene.stroke(
+            &Stroke::new(1.0),
+            Affine::IDENTITY,
+            HIGHLIGHT_EDGE,
+            None,
+            &rect,
+        );
+        Some(Layer::new(Arc::new(scene.commands)).z(3))
+    }
+
+    /// A pane point in chart points, under `snapshot`'s framing.
+    fn chart_point(&self, ctx: &ViewCtx, view: ChartView, at: (f64, f64)) -> Point {
+        let px = self.placement(ctx, view).inverse() * Point::new(at.0, at.1);
+        let per = points_to_px(1.0);
+        Point::new(px.x / per, px.y / per)
+    }
+
+    /// A press of the main button at `at` with `mods` held: what it
+    /// selects, as MuseScore's view does (Shift a range, Cmd/Ctrl one
+    /// more). A press on nothing starts a lasso.
+    fn press(&mut self, ctx: &ViewCtx, view: ChartView, at: (f64, f64), mods: &[&str]) -> bool {
+        let shift = mods.contains(&"Shift");
+        let command = mods.contains(&"Mod");
+        let point = self.chart_point(ctx, view, at);
+        let hit = pick(&self.recorded.selectables, point, PICK_SLOP)
+            .and_then(|i| self.recorded.selectables.get(i))
+            .map(|s| s.key.clone());
+        let Some(key) = hit else {
+            self.press = Some(Press {
+                from: at,
+                to: at,
+                add: shift || command,
+                moved: false,
+            });
+            return false;
+        };
+        let order: Vec<String> = self
+            .recorded
+            .selectables
+            .iter()
+            .map(|s| s.key.clone())
+            .collect();
+        match Gesture::of(shift, command) {
+            Gesture::Single => self.selection.click(key),
+            Gesture::Range => self.selection.extend(key, &order),
+            Gesture::Toggle => self.selection.toggle(key),
+        }
+        true
+    }
+
+    /// The press let go: a lasso selects what it covers; a click on
+    /// nothing clears the selection.
+    fn release(&mut self, ctx: &ViewCtx, view: ChartView) -> bool {
+        let Some(press) = self.press.take() else {
+            return false;
+        };
+        if !press.moved {
+            if press.add || self.selection.is_empty() {
+                return false;
+            }
+            self.selection.clear();
+            return true;
+        }
+        let a = self.chart_point(ctx, view, press.from);
+        let b = self.chart_point(ctx, view, press.to);
+        let covered: Vec<String> = in_box(&self.recorded.selectables, Rect::from_points(a, b))
+            .into_iter()
+            .filter_map(|i| self.recorded.selectables.get(i))
+            .map(|s| s.key.clone())
+            .collect();
+        self.selection.lasso(covered, press.add);
+        true
+    }
+
+    /// The selection out to the host, when it asked for it.
+    fn publish(&self, ctx: &ViewCtx) {
+        if let Some(out) = ctx.data::<ChartSelection>() {
+            let keys = self.selection.items().to_vec();
+            if out.read(|s| s.keys != keys) {
+                out.set(ChartSelection { keys });
+            }
+        }
+    }
 }
 
 impl PaintView for ChartPaintView {
@@ -206,24 +500,54 @@ impl PaintView for ChartPaintView {
             ViewInput::Focus(false) => {
                 self.ctrl = false;
                 self.panning = false;
-                false
+                self.press = None;
+                true
             }
-            ViewInput::PointerDown { x, y, button } => {
+            ViewInput::PointerDown {
+                x, y, button, mods, ..
+            } => {
                 self.pointer = point(*x, *y);
-                if *button == Button::Middle {
-                    self.panning = true;
+                match button {
+                    Button::Middle => {
+                        self.panning = true;
+                        false
+                    }
+                    Button::Primary => {
+                        let view = data.read(|s| s.view);
+                        let changed = self.press(ctx, view, self.pointer, mods);
+                        if changed {
+                            self.publish(ctx);
+                        }
+                        changed
+                    }
+                    Button::Secondary => false,
                 }
-                false
             }
-            ViewInput::PointerUp { x, y, button } => {
+            ViewInput::PointerUp { x, y, button, .. } => {
                 self.pointer = point(*x, *y);
-                if *button == Button::Middle {
-                    self.panning = false;
+                match button {
+                    Button::Middle => {
+                        self.panning = false;
+                        false
+                    }
+                    _ => {
+                        let view = data.read(|s| s.view);
+                        let changed = self.release(ctx, view);
+                        if changed {
+                            self.publish(ctx);
+                        }
+                        changed
+                    }
                 }
-                false
             }
-            ViewInput::PointerMove { x, y } => {
+            ViewInput::PointerMove { x, y, .. } => {
                 let from = std::mem::replace(&mut self.pointer, point(*x, *y));
+                if let Some(press) = &mut self.press {
+                    press.to = self.pointer;
+                    let (dx, dy) = (press.to.0 - press.from.0, press.to.1 - press.from.1);
+                    press.moved |= dx.hypot(dy) > 3.0;
+                    return press.moved;
+                }
                 if !self.panning {
                     return false;
                 }
@@ -253,29 +577,44 @@ impl PaintView for ChartPaintView {
     }
 
     fn paint(&mut self, ctx: &ViewCtx, scene: &mut Scene) {
-        let Some(data) = ctx.data::<ChartSnapshot>() else {
-            return;
-        };
-        let snapshot = data.get();
-        self.view.set_theme(
-            snapshot
-                .theme
-                .clone()
-                .unwrap_or_else(|| ChartTheme::from_tokens(|name| ctx.theme.color(name))),
-        );
-        self.update_layout(&snapshot);
-        let zoom = self.effective_zoom(snapshot.view.zoom, ctx.geometry.width);
-        let (scroll_x, scroll_y) =
-            clamp_scroll(snapshot.view.scroll, self.content, pane_size(ctx), zoom);
-        // The renderer pans in points, so convert the view's logical pixels.
-        let scroll_pt = (scroll_x / points_to_px(1.0), scroll_y / points_to_px(1.0));
-        // The host scales the scene to physical pixels; paint in logical pixels.
-        if let Some((width, height)) =
-            self.view
-                .paint_cached(scene, 1.0, zoom, scroll_pt, snapshot.playhead_secs)
-        {
-            self.content = (width * points_to_px(1.0), height * points_to_px(1.0));
+        // A host that composes no layers: the same layers, composed here.
+        if let Some(layers) = self.layers(ctx) {
+            let mut sorted = layers;
+            sorted.sort_by_key(|(key, layer)| (layer.z, *key));
+            for (_, layer) in sorted {
+                let mut content = Scene::new();
+                content.commands.clone_from(&layer.commands);
+                scene.append_scene(content, layer.transform);
+            }
         }
+    }
+
+    fn layers(&mut self, ctx: &ViewCtx) -> Option<Vec<(LayerKey, Layer)>> {
+        let data = ctx.data::<ChartSnapshot>()?;
+        let snapshot = data.get();
+        self.update_theme(ctx, &snapshot);
+        self.update_layout(&snapshot);
+        self.record_pages();
+        if let Some(size) = self.view.content_size() {
+            self.content = (size.0 * points_to_px(1.0), size.1 * points_to_px(1.0));
+        }
+        let at = self.placement(ctx, snapshot.view);
+        let mut layers: Vec<(LayerKey, Layer)> = self
+            .recorded
+            .pages
+            .iter()
+            .map(|(key, page)| (*key, page.clone().at(at)))
+            .collect();
+        if let Some(selection) = self.selection_layer() {
+            layers.push((SELECTION_LAYER, selection.at(at)));
+        }
+        if let Some(playhead) = self.playhead_layer(snapshot.playhead_secs) {
+            layers.push((PLAYHEAD_LAYER, playhead.at(at)));
+        }
+        if let Some(lasso) = self.lasso_layer() {
+            layers.push((LASSO_LAYER, lasso));
+        }
+        Some(layers)
     }
 
     fn animating(&self, _ctx: &ViewCtx) -> bool {

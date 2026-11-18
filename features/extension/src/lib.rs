@@ -28,12 +28,12 @@ use std::sync::{Mutex, PoisonError};
 
 use architect_extensions::contrib::{StateKind, StateWrite};
 use architect_extensions::hostcall::HostRequest;
-use architect_extensions::linked::{Builder, Extension, Handle};
+use architect_extensions::linked::{Builder, Extension, Handle, PaintPane, use_pane_state};
 use architect_workspace::paint::peniko::Color;
-use architect_workspace::{HostData, PaintPane, PaintWake, use_pane};
+use architect_workspace::{HostData, PaintWake};
 use dioxus::prelude::*;
 use keyflow::engraver::renderer::ChartTheme;
-use keyflow_ui::paint_view::{ChartSnapshot, ChartView, chart_mount};
+use keyflow_ui::paint_view::{ChartSelection, ChartSnapshot, ChartView, chart_mount};
 use serde_json::{Value as Json, json};
 use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 
@@ -92,6 +92,10 @@ static HANDLE: Mutex<Option<Handle>> = Mutex::new(None);
 struct Open {
     path: String,
     data: HostData<ChartSnapshot>,
+    /// What is selected on it, as its pane writes it.
+    selection: HostData<ChartSelection>,
+    /// Its pane's frames: how long the view took to give each one.
+    stats: architect_workspace::paint::FrameStats,
     wake: PaintWake,
     error: Option<String>,
     /// Tells the pane something changed (from any thread: an action's).
@@ -119,12 +123,21 @@ fn input() -> std::sync::MutexGuard<'static, tools::InputState> {
 /// Lights each tool's button as the input state says, and tells the panes.
 fn publish_input() {
     let state = input().clone();
-    if let Some(handle) = HANDLE.lock().unwrap_or_else(PoisonError::into_inner).clone() {
+    if let Some(handle) = HANDLE
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone()
+    {
         for tool in tools::TOOLS {
             handle.set_state(StateWrite {
                 key: tool.action.to_owned(),
                 kind: StateKind::Checked,
-                text: if state.is_on(tool.command) { "on" } else { "off" }.to_owned(),
+                text: if state.is_on(tool.command) {
+                    "on"
+                } else {
+                    "off"
+                }
+                .to_owned(),
                 ..StateWrite::default()
             });
         }
@@ -160,7 +173,8 @@ fn open_charts() -> std::sync::MutexGuard<'static, BTreeMap<u64, Open>> {
 /// The chart pane: the chart at the pane's path, engraved.
 #[component]
 fn ChartPane() -> Element {
-    let path = use_pane().state();
+    // Its pane's state, linked in or as a process (its host tells it).
+    let path = use_pane_state().map(|(_, state)| state).unwrap_or_default();
     let key = use_hook(|| NEXT.fetch_add(1, Ordering::Relaxed));
     let mut reads = use_signal(|| 0_u64);
     let mut error = use_signal(|| None::<String>);
@@ -195,6 +209,8 @@ fn ChartPane() -> Element {
             Open {
                 path: path.clone(),
                 data,
+                selection: mount.selection.clone(),
+                stats: mount.mount.frame_stats(),
                 wake: mount.wake.clone(),
                 error: None,
                 tell: tell.clone(),
@@ -300,11 +316,20 @@ fn state() -> Json {
         .values()
         .map(|o| {
             let view = o.data.read(|s| s.view);
+            let frames = o.stats.summary();
+            let ms = |d: std::time::Duration| (d.as_secs_f64() * 100_000.0).round() / 100.0;
             json!({
                 "path": o.path,
                 "error": o.error,
                 "zoom": view.zoom,
                 "scroll": [view.scroll.0, view.scroll.1],
+                "selection": o.selection.read(|s| s.keys.clone()),
+                "frames": {
+                    "count": frames.frames,
+                    "p50_ms": ms(frames.p50),
+                    "p99_ms": ms(frames.p99),
+                    "max_ms": ms(frames.max),
+                },
             })
         })
         .collect();
