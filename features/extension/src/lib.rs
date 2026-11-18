@@ -293,6 +293,10 @@ struct EditState {
     /// Syntax typed and not yet written: the bars it would write from the
     /// cursor, shown on the chart as they would be.
     preview: Option<usize>,
+    /// How the previewed bars' chords were read (`bar 21: Em7 1 beat, A7
+    /// 3 beats`): Keyflow's `/` is a beat and the chord none, so what was
+    /// typed is shown before Enter writes it.
+    preview_read: Option<String>,
     /// A chord symbol being retyped (↩ on a selected chord): the symbol
     /// it starts from, in the field under the chart.
     chord_draft: Option<String>,
@@ -608,7 +612,7 @@ fn ChartPane() -> Element {
                             input {
                                 key: "{generation}",
                                 style: "flex:1; min-width:0; font-family:ui-monospace, monospace; font-size:13px; padding:4px 6px; border-radius:4px; border:1px solid var(--border, #8886); background:var(--background, transparent); color:var(--foreground, inherit);",
-                                placeholder: if chord().is_some() { "Gsus4" } else { "C / / / | Am7 / F G" },
+                                placeholder: if chord().is_some() { "Gsus4" } else { "C // Am7 // | F // G //   (a / is a beat)" },
                                 value: chord().unwrap_or_default(),
                                 autofocus: true,
                                 oninput: move |e| {
@@ -1194,6 +1198,16 @@ async fn syntax_preview(typed: &str) -> Result<Json, String> {
     let refused = match keyflow::edit::commit::splice_syntax(&text, &chart, from, typed) {
         Ok((new, bars)) => {
             if let Ok(preview) = keyflow::text::chart::parse_chart(&new) {
+                let read: Vec<String> = keyflow::edit::bars(&preview)
+                    .iter()
+                    .enumerate()
+                    .skip(from)
+                    .take(bars)
+                    .filter_map(|(i, m)| {
+                        keyflow::edit::chords::beats_read(m).map(|r| format!("bar {}: {r}", i + 1))
+                    })
+                    .collect();
+                edit_state().preview_read = (!read.is_empty()).then(|| read.join(" · "));
                 for open in open_charts().values().filter(|o| o.path == path) {
                     open.data.update(|s| {
                         s.chart = preview.clone();
@@ -1207,6 +1221,7 @@ async fn syntax_preview(typed: &str) -> Result<Json, String> {
         }
         Err(why) => {
             edit_state().preview = None;
+            edit_state().preview_read = None;
             Some(why)
         }
     };
@@ -1245,9 +1260,12 @@ fn show_input(chart: &keyflow::Chart, score: &Score, refused: Option<String>) {
                 "Retyping the chord symbol · Enter sets it (its length kept), Esc keeps it as it was · Alt+↑ ↓ step its quality instead".to_owned()
             }
             Some(n) if e.input.mode == Mode::Syntax => format!(
-                "Preview: {n} bar{} from bar {}, shown on the chart · Enter writes {}, Esc drops {}",
-                if n == 1 { "" } else { "s" },
-                e.input.cursor.bar + 1,
+                "Read as {} · Enter writes {}, Esc drops {} (`/` is a beat: `Em7 // A7 //` is two each)",
+                e.preview_read.clone().unwrap_or_else(|| format!(
+                    "{n} bar{} from bar {}",
+                    if n == 1 { "" } else { "s" },
+                    e.input.cursor.bar + 1
+                )),
                 if n == 1 { "it" } else { "them" },
                 if n == 1 { "it" } else { "them" },
             ),

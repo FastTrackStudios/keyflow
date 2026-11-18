@@ -455,9 +455,62 @@ pub fn with_mark(token: &str, mark: &str) -> Option<String> {
     ))
 }
 
+/// How `measure`'s chords were read, beat by beat, in the words a
+/// musician checks a typed bar against: `Em7 1 beat, A7 3 beats`. A beat is
+/// the meter's (a quarter in 4/4); a part of one is written as a fraction
+/// (`1½ beats`). `None` for a bar whose chords cannot be told apart.
+#[must_use]
+pub fn beats_read(measure: &Measure) -> Option<String> {
+    let bar = ChordBar::from_measure(measure);
+    if bar.locked.is_some() {
+        return None;
+    }
+    let beat = TICKS_PER_WHOLE / u32::from(measure.time_signature.1.max(1));
+    let beats = |ticks: u32| -> String {
+        let whole = ticks / beat;
+        let part = match (ticks % beat) * 4 / beat.max(1) {
+            1 => "¼",
+            2 => "½",
+            3 => "¾",
+            _ => "",
+        };
+        let n = if whole == 0 && !part.is_empty() {
+            part.to_owned()
+        } else {
+            format!("{whole}{part}")
+        };
+        let one = whole == 1 && part.is_empty();
+        format!("{n} beat{}", if one { "" } else { "s" })
+    };
+    let parts: Vec<String> = bar
+        .folded()
+        .iter()
+        .map(|(slot, ticks)| match slot {
+            Slot::Chord(t) => format!("{t} {}", beats(*ticks)),
+            Slot::Rest => format!("no chord {}", beats(*ticks)),
+            Slot::Hold => format!("the chord before {}", beats(*ticks)),
+        })
+        .collect();
+    Some(parts.join(", "))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_bar_s_chords_are_read_back_beat_by_beat() {
+        // `/` is a beat and the chord itself none: `Em7 / A7 /` is one beat
+        // and the three left, as Keyflow reads it; `Em7 // A7 //` is two each.
+        let read = |text: &str| {
+            let chart = parse_chart(&format!("T - A\n4/4\n\nVS 1\n{text}\n")).unwrap();
+            beats_read(&chart.sections[0].measures()[0]).unwrap()
+        };
+        assert_eq!(read("Em7 / A7 /"), "Em7 1 beat, A7 3 beats");
+        assert_eq!(read("Em7 // A7 //"), "Em7 2 beats, A7 2 beats");
+        assert_eq!(read("Dmaj7"), "Dmaj7 4 beats");
+        assert_eq!(read("C_4. G_8 F_2"), "C 1½ beats, G ½ beats, F 2 beats");
+    }
 
     #[test]
     fn a_palette_cell_sets_a_chord_s_quality_or_puts_a_mark_on_and_off() {
