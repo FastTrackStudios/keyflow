@@ -448,6 +448,13 @@ pub struct Measure {
     /// An editor shows it and keeps the bar read-only.
     #[facet(default)]
     pub read_only: Option<String>,
+    /// When it shares `source_span` with the bars around it (a chord held
+    /// or pushed over a barline joins them), the part of that text that
+    /// starts in this bar: its start as an offset from `source_span`'s, and
+    /// its length. What it is written as alone, first, when the run is
+    /// written out bar by bar.
+    #[facet(default)]
+    pub own_part: Option<TextSpan>,
 
     /// Source measure number when imported from MusicXML — the value of
     /// `<measure number="...">`. `None` for keyflow-text-authored charts.
@@ -486,6 +493,7 @@ impl Measure {
             source_measure_number: None,
             source_measure_width: None,
             read_only: None,
+            own_part: None,
         }
     }
 

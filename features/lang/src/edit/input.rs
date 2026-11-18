@@ -125,6 +125,23 @@ impl Score {
         }
     }
 
+    /// `chart`'s score, as [`Self::from_chart`], and its bars that share
+    /// one text with no text alone read-only with why (the text tells).
+    #[must_use]
+    pub fn from_text(source: &str, chart: &Chart) -> Self {
+        let mut score = Self::from_chart(chart);
+        for (slot, why) in score
+            .read_only
+            .iter_mut()
+            .zip(super::commit::read_only_runs(source, chart))
+        {
+            if slot.is_none() {
+                *slot = why;
+            }
+        }
+        score
+    }
+
     /// The key signature's alteration of `letter`.
     #[must_use]
     pub fn key_alter(&self, letter: char) -> i8 {

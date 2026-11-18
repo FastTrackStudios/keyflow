@@ -14,7 +14,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::print_stdout)]
 
-use keyflow_lang::edit::commit::{same_music, splice_syntax, write_bars};
+use keyflow_lang::edit::commit::{bar_text, same_music, splice_syntax, write_bars};
 use keyflow_lang::edit::{InputState, Mode, Op, Pos, Score, Target, Value};
 use keyflow_lang::text::chart::parse_chart;
 use keyflow_proto::Chart;
@@ -88,19 +88,18 @@ fn every_bar_of_the_vault_is_found_and_written_back_unchanged() {
                 }
                 continue;
             };
-            f += 1;
-            // A `%3`'s bars share its text; each alone is `%`.
-            let shared = measures.iter().enumerate().any(|(j, o)| {
-                j != i
-                    && o.source_span
-                        .is_some_and(|t| t.start == span.start && t.len == span.len)
-            });
-            let own = if shared {
-                "%"
-            } else {
-                &source[span.start..span.start + span.len]
+            // Its text alone: a `%3`'s bars each `%`; a bar a chord is held
+            // into, the text it reads the same as alone. A bar of such a run
+            // with none is read-only, and says why.
+            let _ = span;
+            let Some(own) = bar_text(&source, &chart, i) else {
+                *read_only
+                    .entry(keyflow_lang::edit::commit::PUSHED_OVER.to_owned())
+                    .or_insert(0) += 1;
+                continue;
             };
-
+            let own = own.as_str();
+            f += 1;
             // Unchanged: its own text typed over it.
             match splice_syntax(&source, &chart, i, own) {
                 Ok((text, 1)) if text == source => {}

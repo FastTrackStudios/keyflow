@@ -866,7 +866,7 @@ async fn history(undo: bool) -> Result<Json, String> {
         step.input.1.clone()
     };
     to.lock().unwrap_or_else(PoisonError::into_inner).push(step);
-    let score = Score::from_chart(&chart);
+    let score = Score::from_text(&write, &chart);
     show_input(&chart, &score, None);
     Ok(input_state())
 }
@@ -930,7 +930,7 @@ async fn run_op(make: impl FnOnce(&Score) -> Vec<Op>) -> Result<Json, String> {
     let handle = handle()?;
     let text = read_text(&handle, &path).await?;
     let chart = keyflow::text::chart::parse_chart(&text)?;
-    let mut score = Score::from_chart(&chart);
+    let mut score = Score::from_text(&text, &chart);
     let ops = make(&score);
     let Some(&op) = ops.last() else {
         return Ok(input_state());
@@ -1023,7 +1023,7 @@ async fn syntax_write(typed: &str) -> Result<Json, String> {
         }
         Err(why) => Some(why),
     };
-    let score = Score::from_chart(&chart);
+    let score = Score::from_text(&text, &chart);
     show_input(&chart, &score, refused);
     Ok(input_state())
 }
@@ -1040,7 +1040,7 @@ async fn syntax_preview(typed: &str) -> Result<Json, String> {
     let text = read_text(&handle, &path).await?;
     let chart = keyflow::text::chart::parse_chart(&text)?;
     let from = edit_state().input.cursor.bar;
-    let score = Score::from_chart(&chart);
+    let score = Score::from_text(&text, &chart);
     if typed.trim().is_empty() {
         edit_state().preview = None;
         reload(Some(&path));
@@ -1082,7 +1082,7 @@ async fn rerender_input() {
     let Ok(chart) = keyflow::text::chart::parse_chart(&text) else {
         return;
     };
-    let score = Score::from_chart(&chart);
+    let score = Score::from_text(&text, &chart);
     let refused = edit_state().refused.clone();
     show_input(&chart, &score, refused);
 }
