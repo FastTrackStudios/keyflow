@@ -39,6 +39,27 @@ fn what_it_builds_is_what_its_manifest_declares() {
 }
 
 #[test]
+fn a_song_s_session_file_is_the_session_kind_and_studio_s_project_is_not() {
+    // `<song>.fts-session` is the session (studio#522); `<song>.session`
+    // beside it is Studio's SQLite project, which the vault must leave be.
+    let m = manifest();
+    let session = m
+        .contributes
+        .doc_kinds
+        .iter()
+        .find(|k| k.id == "fts.session")
+        .expect("the fts.session document kind");
+    assert_eq!(session.files, ["fts-session"]);
+    assert!(
+        m.contributes
+            .doc_kinds
+            .iter()
+            .all(|k| !k.files.iter().any(|f| f == "session")),
+        "no kind claims Studio's .session"
+    );
+}
+
+#[test]
 fn a_kf_file_opens_in_the_chart_view() {
     let m = manifest();
     let kinds = &m.contributes.doc_kinds;
