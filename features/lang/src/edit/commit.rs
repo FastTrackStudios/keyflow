@@ -1187,7 +1187,7 @@ mod tests {
         let out = input.apply(&mut score, Op::Letter('A'));
         let new = write_bars(text, &chart, &score, &out.changed).unwrap();
         assert!(
-            new.contains("E /// G#m | A_1 | B /// C#sus2 / C#sus2"),
+            new.contains("E /// G#m / | A_1 | B /// C#sus2 / C#sus2"),
             "{new}"
         );
     }
@@ -1347,7 +1347,7 @@ mod tests {
         let new = write_bars(text, &chart, &score, &changed).unwrap();
         // The other run (C#sus2 held into bar 4) keeps its text.
         assert!(
-            new.contains("E /// G#m | A_1 | B /// C#sus2 / C#sus2"),
+            new.contains("E /// G#m / | A_1 | B /// C#sus2 / C#sus2"),
             "{new}"
         );
         // Unchanged, typed back over itself: the text stays as written.
