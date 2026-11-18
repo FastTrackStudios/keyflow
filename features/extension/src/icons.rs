@@ -28,6 +28,13 @@ pub fn path_of(glyph: char) -> String {
 /// box: none when the font has no such glyph.
 #[must_use]
 pub fn svg(glyph: char) -> Option<String> {
+    svg_inked(glyph, INK)
+}
+
+/// [`svg`] in `ink`, a colour of its own: for an `<img>`, where
+/// `currentColor` has nothing to inherit and draws black (the palettes).
+#[must_use]
+pub fn svg_inked(glyph: char, ink: &str) -> Option<String> {
     let bundle = ChartFontBundle::shared().ok()?;
     let path = bundle.smufl_font().get_glyph_path(glyph, 100.0)?;
     // Font outlines are y-up; SVG is y-down.
@@ -44,7 +51,7 @@ pub fn svg(glyph: char) -> Option<String> {
     let side = b.width().max(b.height()).max(MIN_SIDE) * 1.15;
     let (x, y) = (b.center().x - side / 2.0, b.center().y - side / 2.0);
     Some(format!(
-        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="{x:.2} {y:.2} {side:.2} {side:.2}"><path fill="{INK}" d="{}"/></svg>"#,
+        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="{x:.2} {y:.2} {side:.2} {side:.2}"><path fill="{ink}" d="{}"/></svg>"#,
         path.to_svg()
     ))
 }
