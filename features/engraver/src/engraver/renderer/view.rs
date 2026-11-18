@@ -740,6 +740,27 @@ impl ChartView {
         true
     }
 
+    /// Where the playback cursor at `playhead_secs` (chart time) is: its
+    /// measure (0-indexed, global) and a box around it, in chart points
+    /// (`x0, y0, x1, y1`: the staff and room above it for chord symbols),
+    /// for a view that keeps the playhead in sight. `None` before the first
+    /// layout or outside the chart's time.
+    #[must_use]
+    pub fn playhead_box(&self, playhead_secs: f64) -> Option<(usize, (f64, f64, f64, f64))> {
+        let cached = self.cached.as_ref()?;
+        let state = self.cursor.compute_at_time(&cached.layout, playhead_secs)?;
+        let h = state.cursor_height;
+        Some((
+            state.measure,
+            (
+                state.cursor_x - h,
+                h.mul_add(-2.5, state.cursor_y),
+                state.cursor_x + h,
+                h.mul_add(1.75, state.cursor_y),
+            ),
+        ))
+    }
+
     /// The laid-out chart's size in points (`total_width`,
     /// `total_height`). `None` before the first layout.
     #[must_use]

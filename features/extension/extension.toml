@@ -1245,10 +1245,18 @@ params = '{"type":"object","properties":{"id":{"type":"string"},"bind":{"type":"
 [[actions]]
 id = "KEYFLOW_SESSION_FOLLOW"
 name = "Session: follow"
-description = "Follows session `id` hosted elsewhere (the DAW engine's, another app's) at `url` (`ws://host:port/vox`): its transport and its host's clock, so the chart on `session:<id>` draws where it plays. Holds no copy and provides nothing: the chart is read and written through the host's fts.session."
+description = "Follows session `id` hosted elsewhere (the DAW engine's, another app's) at `url` (`ws://host:port/vox`): its transport and its host's clock, so the chart on `session:<id>` draws where it plays. Holds no copy and provides nothing: the chart is read and written through the host's fts.session. With `chart_path` (a .kf), the chart is written into the session when it holds none yet."
 group = "Session"
 effect = "mutating"
-params = '{"type":"object","properties":{"url":{"type":"string"},"id":{"type":"string"}},"required":["url","id"]}'
+params = '{"type":"object","properties":{"url":{"type":"string"},"id":{"type":"string"},"chart_path":{"type":"string"}},"required":["url","id"]}'
+
+[[actions]]
+id = "KEYFLOW_SESSION_BAR_ONE"
+name = "Session: the song's bar 1"
+description = "Makes bar `bar` of session `id` (one this copy holds) the song's bar 1, where the chart's bar 1 is after a count-in (session bar_one); 1 or none: the session's start. A session the DAW engine holds is the engine's to set."
+group = "Session"
+effect = "mutating"
+params = '{"type":"object","properties":{"id":{"type":"string"},"bar":{"type":"integer","minimum":1}},"required":["id"]}'
 
 [[actions]]
 id = "KEYFLOW_SESSION_DOCUMENT"
