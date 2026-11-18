@@ -325,32 +325,85 @@ impl<'a> ChartParser<'a> {
             let col = (off - upto.rfind('\n').map_or(0, |n| n + 1)) as u32 + 1;
             (line, col)
         };
+        let line_texts = std::mem::take(&mut self.line_texts);
         for (i, section) in self.sections.iter_mut().enumerate() {
-            let Some(header) = section.source_span.as_ref() else {
-                continue;
-            };
-            // The body: after the header line, up to the next written header.
-            let from = input[header.start..]
-                .find('\n')
-                .map_or(input.len(), |n| header.start + n + 1);
-            let to = starts[i + 1..]
-                .iter()
-                .flatten()
-                .copied()
-                .find(|&s| s >= from)
-                .unwrap_or(input.len());
-            // A section's lyrics (`[lyrics …]` to its end, `@` lines) are
-            // not bars: the bars are what comes before them.
-            let body = &input[from..to];
-            let end = lyric_start(body);
-            let cells = bar_cells(&blank_directives(&body[..end]));
+            let body = section.source_span.as_ref().map(|header| {
+                let from = input[header.start..]
+                    .find('\n')
+                    .map_or(input.len(), |n| header.start + n + 1);
+                let to = starts[i + 1..]
+                    .iter()
+                    .flatten()
+                    .copied()
+                    .find(|&s| s >= from)
+                    .unwrap_or(input.len());
+                (from, to)
+            });
             let measures = section.measures_mut();
+            // A bar read with its line's id (`tag_line_spans`): its line
+            // found in the section's text, in order, and its text checked.
+            let mut cursor = body.map_or(0, |b| b.0);
+            let mut placed: Option<(u32, usize)> = None;
+            for m in measures.iter_mut() {
+                let Some(span) = m.source_span else { continue };
+                if span.line != 0 {
+                    continue;
+                }
+                m.source_span = None;
+                let (Some((_, to)), Some(text)) = (
+                    body,
+                    line_texts
+                        .get(span.column as usize - 1)
+                        .filter(|_| span.column > 0),
+                ) else {
+                    continue;
+                };
+                let line_start = match placed {
+                    Some((id, at)) if id == span.column => Some(at),
+                    _ => find_line(input, cursor, to, text),
+                };
+                let Some(line_start) = line_start else {
+                    continue;
+                };
+                if placed.is_none_or(|(id, _)| id != span.column) {
+                    // The next line is looked for after this one: two lines
+                    // alike are two places.
+                    cursor = line_start + text.len();
+                }
+                placed = Some((span.column, line_start));
+                let abs = line_start + span.start;
+                let want = text.get(span.start..span.start + span.len);
+                if want.is_some() && input.get(abs..abs + span.len) == want {
+                    let (line, col) = line_col(abs);
+                    m.source_span = Some(TextSpan::with_location(abs, span.len, line, col));
+                }
+            }
+            // What is left, by the cells between barlines, when they are
+            // exactly the section's bars.
+            let Some((from, to)) = body else { continue };
+            if measures.iter().all(|m| m.source_span.is_some()) {
+                continue;
+            }
+            let section_body = &input[from..to];
+            let end = lyric_start(section_body);
+            let cells = bar_cells(&blank_directives(&section_body[..end]));
             if cells.len() != measures.len() {
                 continue;
             }
             for (measure, (start, len)) in measures.iter_mut().zip(cells) {
-                let (line, col) = line_col(from + start);
-                measure.source_span = Some(TextSpan::with_location(from + start, len, line, col));
+                if measure.source_span.is_none() {
+                    let (line, col) = line_col(from + start);
+                    measure.source_span =
+                        Some(TextSpan::with_location(from + start, len, line, col));
+                }
+            }
+        }
+        // A bar of a section with no written header has no place to find.
+        for section in self.sections.iter_mut() {
+            for m in section.measures_mut().iter_mut() {
+                if m.source_span.is_some_and(|s| s.line == 0) {
+                    m.source_span = None;
+                }
             }
         }
     }
@@ -676,6 +729,20 @@ impl<'a> ChartParser<'a> {
 // endregion: --- Parser Entry Point
 
 // region:    --- Tests
+
+/// Where `text` (a trimmed section line) starts in `input[from..to]`: the
+/// first line there whose text, trimmed, begins with it.
+fn find_line(input: &str, from: usize, to: usize, text: &str) -> Option<usize> {
+    let mut offset = from;
+    for line in input[from..to].split_inclusive('\n') {
+        let lead = line.len() - line.trim_start().len();
+        if line.trim_start().starts_with(text) {
+            return Some(offset + lead);
+        }
+        offset += line.len();
+    }
+    None
+}
 
 /// Where a section's body stops holding bars: its first lyric line (a
 /// `[lyrics …]` block, or an `@` timed lyric), or its end.

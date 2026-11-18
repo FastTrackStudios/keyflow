@@ -162,6 +162,9 @@ pub struct Pitch {
     pub letter: char,
     pub alter: i8,
     pub octave: i8,
+    /// A natural sign written on it (`Bn`): a courtesy, or cancelling an
+    /// accidental earlier in the bar. Only with `alter` 0.
+    pub natural: bool,
 }
 
 const LETTERS: &str = "CDEFGAB";
@@ -186,7 +189,15 @@ impl Pitch {
             letter,
             alter,
             octave,
+            natural: false,
         }
+    }
+
+    /// It with a natural sign written on it.
+    #[must_use]
+    pub const fn with_natural(mut self, natural: bool) -> Self {
+        self.natural = natural && self.alter == 0;
+        self
     }
 
     /// Its MIDI number (C4 = 60).
@@ -270,6 +281,18 @@ pub enum EventKind {
     Rest,
 }
 
+/// The articulations a melody note can carry, by name, as the melody
+/// model writes them (`-.` staccato, `->` accent …): bit `i` is `MARKS[i]`.
+pub const MARKS: [&str; 7] = [
+    "staccato",
+    "accent",
+    "tenuto",
+    "marcato",
+    "staccatissimo",
+    "fall",
+    "fermata",
+];
+
 /// One note or rest of a bar's line.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Event {
@@ -277,6 +300,8 @@ pub struct Event {
     pub duration: Duration,
     /// Tied into the next note.
     pub tie: bool,
+    /// Its articulations ([`MARKS`], a bit each).
+    pub marks: u8,
 }
 
 impl Event {
@@ -286,6 +311,7 @@ impl Event {
             kind: EventKind::Rest,
             duration,
             tie: false,
+            marks: 0,
         }
     }
 
@@ -295,6 +321,7 @@ impl Event {
             kind: EventKind::Note(pitch),
             duration,
             tie: false,
+            marks: 0,
         }
     }
 
@@ -462,6 +489,7 @@ fn new_events(kind: EventKind, len: u32, tie_last: bool) -> Vec<Event> {
             kind,
             duration: d,
             tie: matches!(kind, EventKind::Note(_)) && (i + 1 < n || tie_last),
+            marks: 0,
         })
         .collect()
 }
@@ -485,8 +513,19 @@ fn event_of(note: &MelodyNote) -> Result<Event, String> {
         value,
         dots: u8::from(note.dotted),
     };
+    let mut marks = 0u8;
+    for name in &note.articulations {
+        let bit = MARKS
+            .iter()
+            .position(|m| m == name)
+            .ok_or_else(|| format!("its `{name}` mark is not one note input keeps yet"))?;
+        marks |= 1 << bit;
+    }
     if note.is_rest() || note.pitch == "s" {
-        return Ok(Event::rest(duration));
+        return Ok(Event {
+            marks,
+            ..Event::rest(duration)
+        });
     }
     let mut chars = note.pitch.chars();
     let letter = chars
@@ -494,16 +533,19 @@ fn event_of(note: &MelodyNote) -> Result<Event, String> {
         .map(|c| c.to_ascii_uppercase())
         .filter(|c| ('A'..='G').contains(c))
         .ok_or_else(|| format!("`{}` is not a pitch note input edits", note.pitch))?;
-    let alter = chars.fold(0i8, |a, c| match c {
+    let rest: String = chars.collect();
+    let alter = rest.chars().fold(0i8, |a, c| match c {
         '#' => a + 1,
         'b' => a - 1,
         _ => a,
     });
+    let natural = rest.contains('n');
     let octave = note.octave.ok_or("a note without a resolved octave")?;
     Ok(Event {
-        kind: EventKind::Note(Pitch::new(letter, alter, octave as i8)),
+        kind: EventKind::Note(Pitch::new(letter, alter, octave as i8).with_natural(natural)),
         duration,
         tie: note.tie_start,
+        marks,
     })
 }
 
@@ -518,6 +560,7 @@ fn melody_note(event: &Event) -> MelodyNote {
                 1 => "#",
                 -1 => "b",
                 -2 => "bb",
+                _ if p.natural => "n",
                 _ => "",
             };
             let mut n = MelodyNote::new(format!("{}{accidental}", p.letter), d.value.lilypond());
@@ -528,6 +571,12 @@ fn melody_note(event: &Event) -> MelodyNote {
         }
     };
     note.dotted = d.dots > 0;
+    note.articulations = MARKS
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| event.marks & (1 << i) != 0)
+        .map(|(_, m)| (*m).to_owned())
+        .collect();
     note
 }
 

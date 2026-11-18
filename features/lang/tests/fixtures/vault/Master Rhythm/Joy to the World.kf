@@ -1,0 +1,83 @@
+Joy to the World (Unspeakable Joy) - Chris Tomlin
+Transcribed By Cody Wright
+#C 128bpm 4/4
+
+Count 2
+
+IN 8
+dyn ff
+@guitar "Guitar hook"
+C /// F /
+F C /// F / F
+C /// F / F C /// F / F
+
+VS 19
+dyn mf
+C C F // G // Am
+F G Am Am
+F C F C
+Am Am G G
+F Dm7 G
+[lyrics lrc]
+@1 Joy to the world, the Lord is come…
+
+IN 4
+dyn ff
+@guitar "Guitar hook"
+C /// F /
+F C /// F / F
+
+VS 19
+dyn mf
+C C F // G // Am
+F G Am Am
+F C F C
+Am Am G G
+F Dm7 G
+[lyrics lrc]
+@1 Joy to the world, the Savior reigns…
+
+[Build] 4
+hairpin < 1..+3
+C C
+C C
+[lyrics lrc]
+@2:3 Here we go
+
+CH 16
+dyn ff
+F F C C G G F F
+F F C C G G Dm F
+[lyrics lrc]
+@1 Joy, unspeakable joy…
+
+VS 19 #D
+dyn mp
+D D
+G // A // Bm
+dyn f
+G A Bm Bm
+G G/F# G G/F#
+Bm Bm A A
+G Em7 A
+[lyrics lrc]
+@1:1.5 He rules the world…
+
+[Build 2 (2 Bars)] 2
+dyn ff
+D D
+[lyrics lrc]
+@2:3 Joy!
+
+CH 16
+G G D D A A G G
+G G D D A A Em G
+
+
+OUT 7
+dyn f
+@guitar "Guitar hook"
+D /// G /
+G D /// G / G
+D /// G / G
+"Ring out" D_1 \fermata
