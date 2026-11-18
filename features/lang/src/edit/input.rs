@@ -1260,7 +1260,7 @@ impl InputState {
             && score.chords[bar].starts().get(i) == Some(&0)
         {
             return Outcome::refuse(
-                "A push on a bar's first chord sounds in the bar before: push a chord after the downbeat",
+                "A push on a bar's first chord sounds in the bar before, so it is not put on or taken off here: push a chord after the downbeat",
             );
         }
         self.rechord(score, |old| super::chords::with_mark(old, mark))

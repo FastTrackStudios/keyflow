@@ -986,6 +986,18 @@ fn bar_spans(
     let mut range: Vec<Option<(usize, usize)>> = vec![None; bars];
     let mut shared: Vec<bool> = vec![false; bars];
     let mut spilled = vec![false; bars];
+    // A pushed chord opens the bar it pushes from and the parser takes it
+    // back after: a token read then is marked as starting in a bar it
+    // ended before. It is the bar it ended in.
+    let marks: Vec<TokenMark> = marks
+        .iter()
+        .map(|m| TokenMark {
+            before: m.before.min(m.after),
+            after: m.after,
+            beats_after: m.beats_after,
+        })
+        .collect();
+    let marks = marks.as_slice();
     // The bar a run of such tokens went back to: the bar after it, which
     // the next of them would otherwise open on.
     let mut carried: Option<usize> = None;

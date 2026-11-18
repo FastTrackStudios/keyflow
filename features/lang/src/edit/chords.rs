@@ -35,6 +35,19 @@ pub struct ChordBar {
     pub locked: Option<String>,
 }
 
+/// How far before the beat it is written on `c` sounds: an eighth for one
+/// apostrophe, a sixteenth for two, a thirty-second for three. None for a
+/// chord not pushed, or pushed by a tuplet's value.
+fn push_ticks(c: &keyflow_proto::chart::types::ChordInstance) -> u32 {
+    use keyflow_proto::chord::PushPullBase;
+    match &c.push_pull {
+        Some((true, amount)) if matches!(amount.base, PushPullBase::Standard) => {
+            TICKS_PER_WHOLE >> (2 + u32::from(amount.level.min(3)))
+        }
+        _ => 0,
+    }
+}
+
 /// Ticks of `d` (beats as the measure counts them) in `time`.
 fn ticks_of(d: &MusicalDuration, time: (u8, u8)) -> u32 {
     use keyflow_proto::time::MusicalPositionExt as _;
@@ -87,10 +100,17 @@ impl ChordBar {
         if !rhythm_fills {
             // A chord sounds until the next one: each lasts from where it
             // starts to where the next starts (the last, to the barline).
+            // Each chord where it is written: a pushed one (`'G`) sounds an
+            // eighth or a sixteenth before that, and its mark pushes it
+            // again when the bar is read back; one pushed onto the downbeat
+            // sounds in the bar before, and is this bar's first.
             let starts: Vec<u32> = measure
                 .chords
                 .iter()
-                .map(|c| ticks_of(&c.position.total_duration, time) % length.max(1))
+                .map(|c| {
+                    let sounds = ticks_of(&c.position.total_duration, time);
+                    (sounds + push_ticks(c)) % length.max(1)
+                })
                 .collect();
             if starts.windows(2).any(|w| w[1] <= w[0]) {
                 bar.locked = Some("its chords are not one after another".to_owned());
@@ -122,28 +142,6 @@ impl ChordBar {
                         slots.push((Slot::Hold, ticks_of(&s.duration, time)))
                     }
                 }
-            }
-        }
-        // A pushed chord (`'G`, `''G`) sounds an eighth or a sixteenth
-        // before the beat it is written on: put back on that beat, with the
-        // slot before it as much longer, it is its written place, which its
-        // mark pushes again when the bar is read back. (One pushed onto the
-        // bar's downbeat sounds in the bar before: not here.)
-        for i in 1..slots.len() {
-            let push = match &slots[i].0 {
-                Slot::Chord(t) => {
-                    parts(t).map_or(0, |p| p.0.chars().filter(|c| *c == '\'').count())
-                }
-                _ => 0,
-            };
-            let ticks = match push {
-                1 => TICKS_PER_WHOLE / 8,
-                2 => TICKS_PER_WHOLE / 16,
-                _ => 0,
-            };
-            if ticks > 0 && slots[i].1 > ticks {
-                slots[i].1 -= ticks;
-                slots[i - 1].1 += ticks;
             }
         }
         let total: u32 = slots.iter().map(|s| s.1).sum();

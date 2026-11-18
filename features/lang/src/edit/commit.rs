@@ -1122,34 +1122,44 @@ mod tests {
     }
 
     #[test]
-    fn a_bar_a_push_crosses_into_is_read_only_and_says_why() {
-        // `'6m` anticipates bar 2's downbeat from bar 1's last eighth: the
-        // two bars share one text, which written out bar by bar would read
-        // the push differently.
-        // Know Me's intro: a push across a barline lengthens the chord
-        // before it, which written out bar by bar reads differently.
+    fn a_bar_a_push_crosses_into_has_its_own_text_and_is_edited() {
+        // Know Me's intro: `'6m` anticipates the next bar's downbeat from
+        // the bar before's last eighth. Each bar has its own text (the
+        // parser opens and takes back a bar as it reads a push), so a bar
+        // is written in place, and the push stays across its barline.
         let text = "Edit - Test\n#E 127bpm 4/4\n\nIN 8\n4 '6m 4 '6m // 5 //\n4 '6m // 5 // 2m 2m // 2m_8 1/3_4.\n";
         let chart = parse_chart(text).unwrap();
         let score = Score::from_text(text, &chart);
-        let at = score
-            .read_only
-            .iter()
-            .position(|r| r.as_deref() == Some(PUSHED_OVER))
-            .unwrap_or_else(|| panic!("{:?}", score.read_only));
-        let mut score = score;
-        let mut input = InputState {
-            mode: Mode::NoteName,
-            ..InputState::default()
-        };
-        input.apply(
-            &mut score,
-            Op::MoveTo(crate::edit::Pos { bar: at, tick: 0 }),
-        );
-        let out = input.apply(&mut score, Op::Letter('C'));
         assert!(
-            out.refused
-                .is_some_and(|r| r.contains("pushed over its barline"))
+            score.read_only.iter().all(Option::is_none),
+            "{:?}",
+            score.read_only
         );
+        let b = (0..measures(&chart).len())
+            .find(|&i| bar_text(text, &chart, i).as_deref() == Some("'6m // 5 //"))
+            .expect("a bar written `'6m // 5 //`");
+        // The 5 after the pushed 6m: made a 5maj7, written in place.
+        let mut score = score;
+        let mut input = InputState::default();
+        assert!(score.chords[b].locked.is_none(), "{:?}", score.chords[b]);
+        let at = score.chords[b].starts()[1];
+        input.selected = Some(crate::edit::Pos { bar: b, tick: at });
+        let out = input.set_quality(&mut score, "maj7");
+        let new = write_bars(text, &chart, &score, &out.changed).unwrap();
+        assert!(new.contains("'6m // 5maj7 //"), "{new}");
+        // The pushed 6m retyped 2m: its push kept, the bar before as it was.
+        let chart = parse_chart(&new).unwrap();
+        let mut score = Score::from_text(&new, &chart);
+        input.selected = Some(crate::edit::Pos { bar: b, tick: 0 });
+        let out = input.set_chord(&mut score, "2m");
+        let new = write_bars(&new, &chart, &score, &out.changed).unwrap();
+        assert!(new.contains("'2m // 5maj7 //"), "{new}");
+        // Its push taken off would change the bar before: refused, and why.
+        let chart = parse_chart(&new).unwrap();
+        let mut score = Score::from_text(&new, &chart);
+        let out = input.toggle_mark(&mut score, "'");
+        assert!(out.changed.is_empty());
+        assert!(out.refused.is_some_and(|r| r.contains("bar before")));
     }
 
     #[test]
@@ -1346,7 +1356,7 @@ mod tests {
         let out = input.apply(&mut score, Op::Letter('A'));
         let new = write_bars(text, &chart, &score, &out.changed).unwrap();
         assert!(
-            new.contains("E /// G#m / | A_1 | B /// C#sus2 / C#sus2"),
+            new.contains("E /// G#m / | A_1 | B /// C#sus2 / | C#sus2"),
             "{new}"
         );
     }
@@ -1506,7 +1516,7 @@ mod tests {
         let new = write_bars(text, &chart, &score, &changed).unwrap();
         // The other run (C#sus2 held into bar 4) keeps its text.
         assert!(
-            new.contains("E /// G#m / | A_1 | B /// C#sus2 / C#sus2"),
+            new.contains("E /// G#m / | A_1 | B /// C#sus2 / | C#sus2"),
             "{new}"
         );
         // Unchanged, typed back over itself: the text stays as written.
