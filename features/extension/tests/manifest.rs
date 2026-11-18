@@ -100,19 +100,30 @@ fn every_tool_is_a_toggle_on_the_chart_s_own_toolbar() {
 }
 
 #[test]
-fn every_key_of_note_input_is_a_setting_with_musescore_s_default() {
+fn every_key_of_note_input_is_bound_in_the_chart_s_view_with_musescore_s_chord() {
     let m = manifest();
-    let settings: Vec<_> = m.sections.iter().flat_map(|s| s.settings.iter()).collect();
-    for (action, key) in keyflow_extension::input::default_keys() {
-        let id = keyflow_extension::input::setting_key(action);
-        let setting = settings
-            .iter()
-            .find(|s| s.key == id)
-            .unwrap_or_else(|| panic!("no setting {id} for {action}"));
-        assert_eq!(setting.control, "shortcut", "{id}");
-        assert_eq!(setting.default.as_str(), Some(key), "{id}");
+    let mut want: Vec<(String, String)> = keyflow_extension::input::default_keys()
+        .flat_map(|(action, key)| {
+            keyflow_extension::input::chords(key)
+                .into_iter()
+                .map(move |chord| (chord, action.to_owned()))
+        })
+        .collect();
+    let mut have: Vec<(String, String)> = m
+        .contributes
+        .key_bindings
+        .iter()
+        .map(|k| {
+            assert_eq!(k.when, "view:chart", "{} {}", k.chord, k.action);
+            (k.chord.clone(), k.action.clone())
+        })
+        .collect();
+    want.sort();
+    have.sort();
+    assert_eq!(have, want, "the [[keys]] are input.rs's, ⌘ chords ⌃ too");
+    for (_, action) in &want {
         assert!(
-            m.actions.iter().any(|a| a.id == action),
+            m.actions.iter().any(|a| a.id == *action),
             "{action} is declared"
         );
     }
