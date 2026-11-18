@@ -598,6 +598,7 @@ fn ChartPane() -> Element {
         }
     });
 
+    let shown_status = without_mode(&status(), mode());
     rsx! {
         div { style: "display:flex; flex-direction:row; width:100%; height:100%; min-height:0;",
             if palettes() {
@@ -695,7 +696,8 @@ fn ChartPane() -> Element {
                         }
                     }
                     span { style: "opacity:0.8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;",
-                        "{status}"
+                        // The mode is the chip's: the line goes on from it.
+                        "{shown_status}"
                     }
                 }
             }
@@ -1537,6 +1539,16 @@ async fn gesture(g: ChartGesture) {
             let _ = dispatch("KEYFLOW_INPUT_MOVE", args).await;
         }
     }
+}
+
+/// `status` without the mode it starts with (`Normal mode · …`), which
+/// the status bar's chip shows: `KEYFLOW_INPUT_STATE` keeps it whole.
+fn without_mode(status: &str, mode: Mode) -> String {
+    status
+        .strip_prefix(mode.name())
+        .and_then(|rest| rest.strip_prefix(" · "))
+        .unwrap_or(status)
+        .to_owned()
 }
 
 /// What a chart's tab is called: its title (`"Drive To LA"`), else its
