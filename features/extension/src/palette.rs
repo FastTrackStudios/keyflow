@@ -256,18 +256,10 @@ pub fn Palettes() -> Element {
             )
         },
     );
-    // A process's view has no document head for `document::Style` to
-    // reach: its sheet goes inline, where its host's document reads it.
-    #[cfg(not(target_family = "wasm"))]
-    let inline = architect_extensions::guest::in_process();
-    #[cfg(target_family = "wasm")]
-    let inline = false;
     rsx! {
-        if inline {
-            style { {CSS} }
-        } else {
-            document::Style { {CSS} }
-        }
+        // Its sheet, in the document head: a process view's too, which its
+        // host applies (architect#861).
+        document::Style { {CSS} }
         div { class: "kf-palettes",
             div { class: "kf-palettes-head",
                 div { class: "kf-palettes-title", "Palettes" }

@@ -640,7 +640,8 @@ group = "Keyflow"
 effect = "read_only"
 
 # The note-input toolbar, on the chart's own pane: it goes wherever the
-# view is docked. Its glyphs are the chart's music font (src/icons.rs).
+# view is docked. Its glyphs are the chart's music font (src/icons.rs),
+# drawn in the item's ink (`tint = true`), so they follow the theme.
 [[toolbars]]
 id = "note-input"
 title = "Note input"
@@ -682,54 +683,63 @@ kind = "separator"
 [[toolbars.items]]
 action = "KEYFLOW_DURATION_64TH"
 image = "icons/E1DD.svg"
+tint = true
 label = "64th note"
 hide_label = true
 
 [[toolbars.items]]
 action = "KEYFLOW_DURATION_32ND"
 image = "icons/E1DB.svg"
+tint = true
 label = "32nd note"
 hide_label = true
 
 [[toolbars.items]]
 action = "KEYFLOW_DURATION_16TH"
 image = "icons/E1D9.svg"
+tint = true
 label = "16th note"
 hide_label = true
 
 [[toolbars.items]]
 action = "KEYFLOW_DURATION_EIGHTH"
 image = "icons/E1D7.svg"
+tint = true
 label = "Eighth note"
 hide_label = true
 
 [[toolbars.items]]
 action = "KEYFLOW_DURATION_QUARTER"
 image = "icons/E1D5.svg"
+tint = true
 label = "Quarter note"
 hide_label = true
 
 [[toolbars.items]]
 action = "KEYFLOW_DURATION_HALF"
 image = "icons/E1D3.svg"
+tint = true
 label = "Half note"
 hide_label = true
 
 [[toolbars.items]]
 action = "KEYFLOW_DURATION_WHOLE"
 image = "icons/E1D2.svg"
+tint = true
 label = "Whole note"
 hide_label = true
 
 [[toolbars.items]]
 action = "KEYFLOW_DOT"
 image = "icons/E1E7.svg"
+tint = true
 label = "Augmentation dot"
 hide_label = true
 
 [[toolbars.items]]
 action = "KEYFLOW_REST"
 image = "icons/E4E5.svg"
+tint = true
 label = "Rest"
 hide_label = true
 
@@ -739,30 +749,35 @@ kind = "separator"
 [[toolbars.items]]
 action = "KEYFLOW_DOUBLE_FLAT"
 image = "icons/E264.svg"
+tint = true
 label = "Double flat"
 hide_label = true
 
 [[toolbars.items]]
 action = "KEYFLOW_FLAT"
 image = "icons/E260.svg"
+tint = true
 label = "Flat"
 hide_label = true
 
 [[toolbars.items]]
 action = "KEYFLOW_NATURAL"
 image = "icons/E261.svg"
+tint = true
 label = "Natural"
 hide_label = true
 
 [[toolbars.items]]
 action = "KEYFLOW_SHARP"
 image = "icons/E262.svg"
+tint = true
 label = "Sharp"
 hide_label = true
 
 [[toolbars.items]]
 action = "KEYFLOW_DOUBLE_SHARP"
 image = "icons/E263.svg"
+tint = true
 label = "Double sharp"
 hide_label = true
 
@@ -781,24 +796,28 @@ kind = "separator"
 [[toolbars.items]]
 action = "KEYFLOW_ACCENT"
 image = "icons/E4A0.svg"
+tint = true
 label = "Accent"
 hide_label = true
 
 [[toolbars.items]]
 action = "KEYFLOW_MARCATO"
 image = "icons/E4AC.svg"
+tint = true
 label = "Marcato"
 hide_label = true
 
 [[toolbars.items]]
 action = "KEYFLOW_TENUTO"
 image = "icons/E4A4.svg"
+tint = true
 label = "Tenuto"
 hide_label = true
 
 [[toolbars.items]]
 action = "KEYFLOW_STACCATO"
 image = "icons/E4A2.svg"
+tint = true
 label = "Staccato"
 hide_label = true
 
