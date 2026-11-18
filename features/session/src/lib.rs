@@ -31,6 +31,7 @@
 use std::path::Path;
 
 use crdt::file::{DiskStorage, MAIN};
+use crdt::persistence::Persistence as _;
 use crdt::{CrdtDoc, DocFile, TextBinding};
 use session::doc::SessionDoc;
 use session::extension::{call_json, response_of};
@@ -62,7 +63,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct ChartSession {
     id: Uuid,
     // Kept open: the file the document's persistence writes to.
-    _file: DocFile,
+    file: DocFile,
     doc: CrdtDoc,
     session: SessionDoc,
 }
@@ -122,7 +123,7 @@ impl ChartSession {
         let session = SessionDoc::from_doc(doc.loro().clone());
         Ok(Self {
             id,
-            _file: file,
+            file,
             doc,
             session,
         })
@@ -211,13 +212,31 @@ impl ChartSession {
             }))
     }
 
-    /// Folds the file's records into one: every edit, this device's and
-    /// every one received through [`Self::synced`], is on disk already.
+    /// Writes everything the session holds to its file and folds the
+    /// file's records into one.
+    ///
+    /// A local edit reaches the file through the document's own writer, a
+    /// task of its own that appends each commit when it runs; folding
+    /// alone (`CrdtDoc::compact` on a file branch folds only what is on
+    /// disk) could miss the newest edits, and a file opened again before
+    /// that task ran had lost them. So the whole state is written as a
+    /// step first: the writer's later copies of the same commits change
+    /// nothing (an update already in the document is a no-op).
     ///
     /// # Errors
     ///
     /// The file could not be written.
     pub async fn save(&self) -> Result<()> {
+        let state = self
+            .doc
+            .loro()
+            .export(crdt::loro::ExportMode::Snapshot)
+            .map_err(|e| Error::Doc(e.to_string()))?;
+        self.file
+            .persistence(MAIN)
+            .write_snapshot(self.id, &state)
+            .await
+            .map_err(|e| Error::File(e.to_string()))?;
         self.doc
             .compact(self.id)
             .await

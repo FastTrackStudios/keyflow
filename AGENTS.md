@@ -201,6 +201,11 @@ just ci              # what CI runs, in CI's order
 just grammar         # regenerate the tree-sitter C parser (gitignored)
 ```
 
+GitHub runs CI on ready PRs only: on a draft, `PR checks` and `CI passed`
+are skipped. To get checks, mark the PR ready (`gh pr ready`); they run
+then and on every push after. An agent waiting for green marks its PR ready
+first.
+
 ### The corpus tests are `#[ignore]`d
 
 `just test` is green on a clean clone. Twenty-nine tests that read

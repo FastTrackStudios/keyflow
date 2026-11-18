@@ -82,6 +82,31 @@ async fn a_chart_alone_lives_in_its_session_file() {
     assert_eq!(ids, [EXTENSION]);
 }
 
+/// What was set and saved is in the file when it is opened again, however
+/// the document's own writer task is scheduled. On one thread that task
+/// never runs between the edit and the reopen, so a save that only folded
+/// what the writer had already appended lost the edit every time (it was
+/// one run in three on many threads).
+#[tokio::test(flavor = "current_thread")]
+async fn a_saved_chart_is_in_its_file_before_the_writer_task_runs() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("Belief.session");
+    for round in 0..5 {
+        let text = format!("{VERSE}Chorus {round}: F G C\n");
+        {
+            let chart = if round == 0 {
+                ChartSession::create(&path, VERSE).await.unwrap()
+            } else {
+                ChartSession::open(&path).await.unwrap()
+            };
+            chart.set_chart(&text).unwrap();
+            chart.save().await.unwrap();
+        }
+        let chart = ChartSession::open(&path).await.unwrap();
+        assert_eq!(chart.chart(), text, "round {round}");
+    }
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn two_keyflows_share_a_session_and_type_into_it() {
     // The host the two sync through: Architect's sync service, as an org

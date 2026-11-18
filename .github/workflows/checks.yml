@@ -23,6 +23,9 @@ on:
   push:
     branches: [main]
   pull_request:
+    # A draft runs nothing (every job below is skipped); marking it ready
+    # starts the run.
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
 # A PR's new push supersedes its old run; a push to main never cancels one,
@@ -40,6 +43,7 @@ jobs:
   # The same steps as pr.yml's `PR checks`, here so a push to main gets them.
   gates:
     name: Gates
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -105,6 +109,7 @@ jobs:
 
   check:
     name: Check
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     runs-on: ${{ github.event_name == 'pull_request' && fromJSON('["self-hosted","keyflow"]') || fromJSON('["self-hosted","thebattleship"]') }}
     timeout-minutes: 60
     defaults:
@@ -127,6 +132,7 @@ jobs:
   # package/feature set.
   wasm:
     name: Wasm
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     runs-on: ${{ github.event_name == 'pull_request' && fromJSON('["self-hosted","keyflow"]') || fromJSON('["self-hosted","thebattleship"]') }}
     timeout-minutes: 60
     defaults:
@@ -146,6 +152,7 @@ jobs:
   # Doctests are `just test-doc` (nextest does not run them).
   tests:
     name: Tests
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     runs-on: ${{ github.event_name == 'pull_request' && fromJSON('["self-hosted","keyflow"]') || fromJSON('["self-hosted","thebattleship"]') }}
     timeout-minutes: 60
     defaults:
@@ -183,10 +190,11 @@ jobs:
         run: cargo clippy --workspace --no-deps --all-targets --keep-going -- --cap-lints warn
 
   # The status branch protection requires. It passes only when every job
-  # above succeeded; a skipped or cancelled job fails it.
+  # above succeeded; a skipped or cancelled job fails it. Skipped itself on a
+  # draft PR, with the jobs it needs.
   ci-passed:
     name: CI passed
-    if: ${{ always() }}
+    if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.draft == false) }}
     needs: [gates, check, wasm, tests]
     runs-on: ubuntu-latest
     timeout-minutes: 5
