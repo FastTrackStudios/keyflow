@@ -1,34 +1,11 @@
-//! The view kept over a reload: each chart's zoom, scroll and selection,
-//! and note input's mode, tools and cursor, written to the extension's own
-//! data (`set_data`, kept for it by the host) as they change and read back
-//! when a chart pane mounts.
-//!
-//! A rebuilt development copy is a new process: until the host hands a
-//! process extension its state over a reload (architect#844), this is how
-//! the person (or the agent) keeps their place. It is the person's view of
-//! the charts, not the charts: nothing here is shared with another peer.
-
-use std::sync::{Mutex, PoisonError};
+//! The view as its pane keeps it (`use_view_state`, architect#859): each
+//! chart's zoom, scroll and selection, and note input's mode, tools and
+//! cursor, as JSON, given back when the view starts again (its program
+//! restarted, its pane moved, the app reopened). It is the person's view
+//! of the chart, not the chart: nothing here is shared with another peer.
 
 use keyflow::edit::{Duration, InputState, Mode, Pitch, Pos, Target, Value};
 use serde_json::{Value as Json, json};
-
-/// The key it is kept under.
-pub const KEY: &str = "view";
-
-/// What was last written, so an unchanged view is not written again.
-static LAST: Mutex<String> = Mutex::new(String::new());
-
-/// Whether this is new since the last write (and is now the last).
-pub fn changed(state: &Json) -> bool {
-    let text = state.to_string();
-    let mut last = LAST.lock().unwrap_or_else(PoisonError::into_inner);
-    if *last == text {
-        return false;
-    }
-    *last = text;
-    true
-}
 
 fn mode_name(m: Mode) -> &'static str {
     match m {
@@ -193,13 +170,5 @@ mod tests {
             (Some(1.5), (10.0, 200.0), vec!["chord#3".to_owned()])
         );
         assert_eq!(chart_from(&chart_json(None, (0.0, 0.0), &[])).0, None);
-    }
-
-    #[test]
-    fn an_unchanged_view_is_not_written_again() {
-        let v = json!({ "a": 1 });
-        assert!(changed(&v));
-        assert!(!changed(&v));
-        assert!(changed(&json!({ "a": 2 })));
     }
 }
