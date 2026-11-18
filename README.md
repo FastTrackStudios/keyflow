@@ -49,3 +49,12 @@ Taken on Keyflow `feat/chart-selection-and-input-modes` after keyflow#92, in the
 |---|---|
 | `captures/round4/kf1280-blank-chart.png` | a blank chart (`Sketch\n4/4\n`) opened: its title and an empty first system, framed as a page |
 | `captures/round4/kf1280-retype-chord-and-replay.png` | *Held* (`E /// G#m / G#m B /// C#sus2 / C#sus2`, then CH, then a bare `VS`): bar 2 of the held-chord line edited to D (the line written out as `E /// G#m \| D_1 \| B /// C#sus2 / C#sus2`), the D retyped as `Dsus4` in the bar under the chart, and VS 2 playing VS 1's bars, D included |
+
+## Round 5
+
+Taken on Keyflow `main` `bc59f0b` (after #113–#116) as a process extension in Architect `main` `48d3894e`, with the app's chrome shown, in an isolated headless Loft session (2560 × 1640, dark theme). The chart is *JT Recital / 02 Drive To LA*, at 125%. Architect after `4d537fb8` (architect#874) is needed for a process view's images to draw; at Keyflow's pin (`9d1f2f48`) the palette glyphs are blank.
+
+| file | what it shows |
+|---|---|
+| `round5/chart-pane-palette-applied-dark.png` | The whole chart pane, from the app's own render (`APP_SHOT`): the toolbar, the palettes, and bar 22's Bdim selected with two palette cells applied, `m7♭5` then the accent, so it reads `>Bm7b5`. The file's line went from `C // Bdim //` to `C // >Bm7b5 //`, keeping its beat slashes (#116). The status line names the selected bar; the palettes' foot names the last cell chosen. Bar 19's G△7 is an earlier `maj7` from the same palette. |
+| `round5/palettes-tempo-glyphs-dark-2x.png` | The palettes at 2×: the Tempo cells' quarter notes, the articulations, segno and coda, inked in the theme's text colour (#114), and the accent cell just used. |
