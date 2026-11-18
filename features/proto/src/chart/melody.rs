@@ -1027,6 +1027,22 @@ impl<'a> Iterator for MelodyTokenIter<'a> {
     }
 }
 
+/// `lane`'s melodies added to a bar that has `melodies`, as a voice of
+/// their own when the bar has one already: the next voice up, up to the
+/// fourth. A lane is one voice, however many melodies it holds.
+pub fn add_voice(melodies: &mut Vec<Melody>, lane: Vec<Melody>) {
+    let voice = melodies
+        .iter()
+        .map(|m| m.voice + 1)
+        .max()
+        .unwrap_or(0)
+        .min(3);
+    melodies.extend(lane.into_iter().map(|mut m| {
+        m.voice = (m.voice + voice).min(3);
+        m
+    }));
+}
+
 /// A melody is a sequence of notes
 #[derive(Debug, Clone, PartialEq, Facet)]
 pub struct Melody {
@@ -1035,6 +1051,13 @@ pub struct Melody {
 
     /// Optional name (for variable assignment)
     pub name: Option<String>,
+
+    /// Which voice of its bar it is, 0 (the first) to 3: the lanes of a
+    /// `<< chords m{ … } ; m{ … } >>` block sound together, each its own
+    /// voice, while melodies written one after another in a bar (`C m{ … }
+    /// G m{ … }`) are one voice that runs on.
+    #[facet(default)]
+    pub voice: u8,
 }
 
 impl Melody {
@@ -1043,12 +1066,17 @@ impl Melody {
         Self {
             notes: Vec::new(),
             name: None,
+            voice: 0,
         }
     }
 
     /// Create a melody with the given notes
     pub fn with_notes(notes: Vec<MelodyNote>) -> Self {
-        Self { notes, name: None }
+        Self {
+            notes,
+            name: None,
+            voice: 0,
+        }
     }
 
     /// Set the name (for variable assignment)
@@ -1201,7 +1229,11 @@ impl Melody {
             notes.push(note);
         }
 
-        let mut melody = Melody { notes, name: None };
+        let mut melody = Melody {
+            notes,
+            name: None,
+            voice: 0,
+        };
         if let Some(octave) = default_octave {
             melody.resolve_absolute_octaves_from(0, octave);
         }

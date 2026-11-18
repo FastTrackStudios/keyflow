@@ -758,7 +758,7 @@ impl<'a> ChartParser<'a> {
         base.classical_dynamics
             .extend(lane.classical_dynamics.clone());
         base.hairpins.extend(lane.hairpins.clone());
-        base.melodies.extend(lane.melodies.clone());
+        keyflow_proto::chart::melody::add_voice(&mut base.melodies, lane.melodies.clone());
     }
 }
 

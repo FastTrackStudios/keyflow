@@ -164,6 +164,16 @@ pub struct MeasureBuilder {
     /// chart pipeline uses; `true` stems them down, the engraving rule
     /// orchestral parts (and MuseScore) follow.
     middle_line_stem_down: bool,
+    /// Every stem this way (a voice of several in the bar), not chosen by
+    /// the notes' lines.
+    stem_override: Option<StemDirection>,
+    /// The staff line rests sit on: 0, the middle, unless voices share the
+    /// bar (the upper voice's rests go up, the lower's down).
+    rest_line: i32,
+    /// Where each tick sits, in points, when another voice already laid
+    /// the bar out: this voice's notes and rests go there, so voices line
+    /// up beat for beat.
+    tick_x: Vec<(i32, f64)>,
 }
 
 impl Default for MeasureBuilder {
@@ -201,7 +211,32 @@ impl MeasureBuilder {
             note_pitch_stacks: Vec::new(),
             beam_grouping: BeamGroupingMode::default(),
             middle_line_stem_down: false,
+            stem_override: None,
+            rest_line: 0,
+            tick_x: Vec::new(),
         }
+    }
+
+    /// Every stem `dir` (voice 1 up, voice 2 down when they share a bar).
+    #[must_use]
+    pub fn stem_direction(mut self, dir: StemDirection) -> Self {
+        self.stem_override = Some(dir);
+        self
+    }
+
+    /// Rests on staff line `line` (half spaces, up from the middle line).
+    #[must_use]
+    pub fn rest_line(mut self, line: i32) -> Self {
+        self.rest_line = line;
+        self
+    }
+
+    /// Place notes and rests at another voice's positions: `(tick, x)`
+    /// pairs, in order; a tick between two is placed between them.
+    #[must_use]
+    pub fn tick_x(mut self, positions: Vec<(i32, f64)>) -> Self {
+        self.tick_x = positions;
+        self
     }
 
     /// Stem middle-line notes down (engraving convention) instead of up.
@@ -620,7 +655,9 @@ impl MeasureBuilder {
 
         // Get mode-specific settings
         let default_head_type = self.mode.notehead_type();
-        let stem_dir = self.mode.default_stem_direction();
+        let stem_dir = self
+            .stem_override
+            .unwrap_or_else(|| self.mode.default_stem_direction());
         let note_line = self.mode.default_line();
 
         // Helper to get per-note pitch (line + accidental) for melody notes
@@ -750,7 +787,7 @@ impl MeasureBuilder {
                             id,
                             duration: duration_to_rest_duration(dur),
                             dots: dur.dots(),
-                            line: 0, // Center line for rests
+                            line: self.rest_line, // Center line unless voices share the bar
                         },
                         ctx,
                     );
@@ -854,6 +891,7 @@ impl MeasureBuilder {
                         line: beam_line,
                         accidental: beam_acc,
                         extras: get_pitch_stack(rhythm_index).to_vec(),
+                        rhythm_index,
                     });
 
                     current_tick += dur.ticks();
@@ -1016,6 +1054,13 @@ impl MeasureBuilder {
             })
             .unwrap_or(f64::MAX);
         let spacing_result = spacing.compute_spacing(&mut segments, target_width, self.justify);
+        if !self.tick_x.is_empty() {
+            for seg in segments.iter_mut() {
+                if seg.seg_type.is_chord_rest() {
+                    seg.x = x_at_tick(&self.tick_x, seg.tick);
+                }
+            }
+        }
 
         // 9. Build final scene with computed positions
         let scene = self.build_scene(ctx, &segments, &scene_elements);
@@ -1448,6 +1493,17 @@ impl MeasureBuilder {
                     // Rests use Up stem direction for bracket positioning and are marked as rests
                     entry_info.insert(*rhythm_index, (x, StemDirection::Up, true, true));
                 }
+                // Beamed notes are in tuplets too (three triplet eighths).
+                SceneElement::BeamGroup {
+                    notes, stem_dir, ..
+                } => {
+                    for n in notes {
+                        entry_info.insert(
+                            n.rhythm_index,
+                            (find_chord_x(n.tick), *stem_dir, false, false),
+                        );
+                    }
+                }
                 _ => {}
             }
         }
@@ -1530,6 +1586,9 @@ struct BeamNoteInfo {
     /// The beam itself draws once for the primary head; extras render as
     /// stand-alone noteheads at the same x with their own ledger lines.
     extras: Vec<(i32, Accidental)>,
+    /// Its place among the measure's rhythm entries (what a tuplet group
+    /// names).
+    rhythm_index: usize,
 }
 
 /// A group of notes that should be beamed together.
@@ -1590,6 +1649,21 @@ fn duration_to_rest_duration(dur: Duration) -> RestDuration {
         DurationKind::Sixteenth => RestDuration::Sixteenth,
         DurationKind::ThirtySecond => RestDuration::ThirtySecond,
         DurationKind::SixtyFourth => RestDuration::SixtyFourth,
+    }
+}
+
+/// The x of `tick` among `(tick, x)` positions: the one at it, else
+/// between the two around it, else the nearest.
+fn x_at_tick(positions: &[(i32, f64)], tick: i32) -> f64 {
+    let after = positions.iter().position(|&(t, _)| t >= tick);
+    match after {
+        Some(i) if positions[i].0 == tick || i == 0 => positions[i].1,
+        Some(i) => {
+            let (t0, x0) = positions[i - 1];
+            let (t1, x1) = positions[i];
+            x0 + (x1 - x0) * f64::from(tick - t0) / f64::from(t1 - t0)
+        }
+        None => positions.last().map_or(0.0, |p| p.1),
     }
 }
 

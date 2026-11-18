@@ -636,6 +636,7 @@ fn extract_from_melody(data: &MeasureMelodyData) -> RhythmBuildResult {
     }
 
     result.total_ticks = result.entries.iter().map(|e| e.duration().ticks()).sum();
+    result.tuplet_specs = triplet_groups(&data.segments, &result.entries);
 
     // Store the count of melody notes so fill_to_measure can add Slash overrides
     // We use a marker by ensuring head_type_overrides has exactly num_melody_notes entries
@@ -643,6 +644,37 @@ fn extract_from_melody(data: &MeasureMelodyData) -> RhythmBuildResult {
     debug_assert_eq!(result.head_type_overrides.len(), num_melody_notes);
 
     result
+}
+
+/// The melody's triplets in their groups: each run of triplet values
+/// closed when it adds up to three of its shortest (three triplet eighths,
+/// or a triplet quarter and a triplet eighth), each group a `3` bracket.
+fn triplet_groups(
+    segments: &[super::MelodyNoteSegment],
+    entries: &[RhythmEntry],
+) -> Vec<TupletSpec> {
+    let mut specs = Vec::new();
+    let mut open: Option<(usize, i32, i32)> = None; // start, ticks, shortest
+    for (i, (seg, entry)) in segments.iter().zip(entries).enumerate() {
+        if !seg.triplet {
+            open = None;
+            continue;
+        }
+        let t = entry.duration().ticks();
+        let (start, sum, shortest) = match open {
+            Some((s, sum, short)) => (s, sum + t, short.min(t)),
+            None => (i, t, t),
+        };
+        if sum == 3 * shortest {
+            specs.push(TupletSpec::triplet(start, i + 1));
+            open = None;
+        } else if sum > 3 * shortest {
+            open = None;
+        } else {
+            open = Some((start, sum, shortest));
+        }
+    }
+    specs
 }
 
 /// Info about a push that affects a particular beat.
