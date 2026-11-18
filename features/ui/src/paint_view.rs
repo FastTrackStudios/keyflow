@@ -457,6 +457,8 @@ pub struct ChartPaintView {
     regions_cover: bool,
     /// The version of its host's selection it last looked at.
     adopted: Option<u64>,
+    /// Note input's cursor as last followed: `(bar, from)`.
+    followed: Option<(usize, u64)>,
     /// The modifiers held at the last key event: a press on a region
     /// carries none, so a Shift- or Cmd-click reads them from here.
     mods: Vec<&'static str>,
@@ -491,6 +493,7 @@ impl ChartPaintView {
             mods: Vec::new(),
             regions_cover: false,
             adopted: None,
+            followed: None,
             pointer: (0.0, 0.0),
             panning: false,
             theme: None,
@@ -569,6 +572,51 @@ impl ChartPaintView {
         let zoom = self.effective_zoom(view.zoom, ctx.geometry.width);
         let (x, y) = clamp_scroll(view.scroll, self.content, pane_size(ctx), zoom);
         Affine::scale(zoom) * Affine::translate((-x, -y))
+    }
+
+    /// The chart scrolled, when note input's cursor moved to a bar out of
+    /// sight, just far enough to show it and the symbols over it
+    /// (MuseScore keeps the cursor on screen): typing at the keyboard
+    /// never goes on out of view.
+    fn follow_cursor(
+        &mut self,
+        ctx: &ViewCtx,
+        data: &HostData<ChartSnapshot>,
+        input: Option<InputOverlay>,
+        view: ChartView,
+    ) -> ChartView {
+        let Some(overlay) = input else {
+            self.followed = None;
+            return view;
+        };
+        let at = (overlay.bar, overlay.from.to_bits());
+        if self.followed == Some(at) {
+            return view;
+        }
+        let Some(b) = self.bar_box(overlay.bar) else {
+            return view;
+        };
+        self.followed = Some(at);
+        let px = points_to_px(1.0);
+        let target = Rect::new(
+            b.x0 * px,
+            (b.y0 - b.height() * 2.5) * px,
+            b.x1 * px,
+            (b.y1 + b.height() * 0.75) * px,
+        );
+        let zoom = self.effective_zoom(view.zoom, ctx.geometry.width);
+        let (w, h) = pane_size(ctx);
+        let scroll = clamp_scroll(view.scroll, self.content, (w, h), zoom);
+        let next = follow(scroll, target, (w / zoom, h / zoom));
+        if next == scroll {
+            return view;
+        }
+        let next = clamp_scroll(next, self.content, (w, h), zoom);
+        data.update(|s| s.view.scroll = next);
+        ChartView {
+            scroll: next,
+            ..view
+        }
     }
 
     /// The pages recorded again when the engraver's layout or theme
@@ -1307,7 +1355,8 @@ impl PaintView for ChartPaintView {
         if let Some(size) = self.view.content_size() {
             self.content = (size.0 * points_to_px(1.0), size.1 * points_to_px(1.0));
         }
-        let at = self.placement(ctx, snapshot.view);
+        let view = self.follow_cursor(ctx, &data, snapshot.input, snapshot.view);
+        let at = self.placement(ctx, view);
         let mut layers: Vec<(LayerKey, Layer)> = self
             .recorded
             .pages
@@ -1440,6 +1489,27 @@ fn draw_shadow(scene: &mut Scene, shadow: ShadowNote, x: f64, bar: Rect, colour:
 }
 
 /// The pane's logical size.
+/// The scroll that brings `target` into a view of `visible` (both in chart
+/// pixels) from `scroll`: unchanged when it is in view already, else moved
+/// just far enough, with a margin, each way on its own.
+fn follow(scroll: (f64, f64), target: Rect, visible: (f64, f64)) -> (f64, f64) {
+    let axis = |at: f64, lo: f64, hi: f64, size: f64| {
+        let margin = (size * 0.08).min(40.0);
+        if lo >= at + margin && hi <= at + size - margin {
+            at
+        } else if lo < at + margin {
+            lo - margin
+        } else {
+            // Its far edge in, but never its near edge out.
+            (hi + margin - size).min(lo - margin)
+        }
+    };
+    (
+        axis(scroll.0, target.x0, target.x1, visible.0),
+        axis(scroll.1, target.y0, target.y1, visible.1),
+    )
+}
+
 fn pane_size(ctx: &ViewCtx) -> (f64, f64) {
     (
         f64::from(ctx.geometry.width),
@@ -1631,6 +1701,26 @@ mod tests {
         );
         assert_close(fit_zoom(4000.0, Some(100.0)), 1.0);
         assert_close(fit_zoom(400.0, None), 1.0);
+    }
+
+    #[test]
+    fn the_view_follows_the_cursor_just_far_enough() {
+        let view = (400.0, 300.0);
+        // In view: no scroll.
+        let bar = Rect::new(100.0, 100.0, 200.0, 160.0);
+        assert_eq!(follow((0.0, 0.0), bar, view), (0.0, 0.0));
+        // Below: scrolled until its bottom is in, with a margin.
+        let below = Rect::new(100.0, 500.0, 200.0, 560.0);
+        let (_, y) = follow((0.0, 0.0), below, view);
+        assert!(y > 260.0 - 1.0 && y < 500.0, "{y}");
+        assert!(560.0 <= y + 300.0, "its bottom in view");
+        // Above: scrolled up to its top.
+        let (_, y) = follow((0.0, 900.0), bar, view);
+        assert!(y < 100.0, "{y}");
+        // Taller than the view: its top shown.
+        let tall = Rect::new(100.0, 500.0, 200.0, 1200.0);
+        let (_, y) = follow((0.0, 0.0), tall, view);
+        assert!(y <= 500.0 && y > 400.0, "{y}");
     }
 
     #[test]

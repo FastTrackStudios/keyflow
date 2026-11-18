@@ -363,9 +363,12 @@ fn ChartPane() -> Element {
                             let mut e = edit_state();
                             let switched = e.active.is_some_and(|a| a != key);
                             if switched {
+                                // Only the duration chosen comes along.
                                 e.input = edit::InputState {
-                                    duration: e.input.duration,
-                                    target: e.input.target,
+                                    duration: edit::Duration {
+                                        triplet: false,
+                                        ..e.input.duration
+                                    },
                                     ..edit::InputState::default()
                                 };
                                 e.preview = None;
