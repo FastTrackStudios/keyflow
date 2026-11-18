@@ -228,3 +228,4 @@ Never weaken an assertion to make it pass, and never leave it failing.
   committed code, and not as debug scaffolding. To chase a bug,
   reproduce it in a failing unit test.
 - Record the **shape**, never the secret.
+
