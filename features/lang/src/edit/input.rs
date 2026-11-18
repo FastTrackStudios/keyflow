@@ -381,6 +381,9 @@ pub enum Op {
     Target(Target),
     /// Shift+A–G: a note added above the selected note's chord.
     AddToChord(char),
+    /// Alt+1–9: a note that interval above the selected note's chord (its
+    /// top note) added to it, in the key: MuseScore's "add interval".
+    Interval(u8),
     /// A click on the staff in note input: a note at staff step `step`
     /// (`Pitch::step`) entered at the cursor, the bar's accidental for it
     /// (or the one armed) applied (MuseScore's mouse entry).
@@ -471,6 +474,7 @@ impl Op {
             | Self::Tie
             | Self::Delete
             | Self::AddToChord(_)
+            | Self::Interval(_)
             | Self::EnterStep(_)
             | Self::Double
             | Self::Halve
@@ -568,6 +572,11 @@ impl InputState {
                         self.enter_chord(score, &slot)
                     }
                     Mode::Duration => {
+                        if !self.rest
+                            && let Some(out) = self.add_at_cursor(score)
+                        {
+                            return out;
+                        }
                         let kind = if self.rest {
                             EventKind::Rest
                         } else {
@@ -713,6 +722,7 @@ impl InputState {
                 Outcome::default()
             }
             Op::AddToChord(letter) => self.add_to_chord(score, letter),
+            Op::Interval(n) => self.add_interval(score, n),
             Op::Voice(voice) => {
                 if voice > 3 {
                     return Outcome::refuse("There are four voices");
@@ -962,6 +972,105 @@ impl InputState {
         };
         *slot = Some(new);
         self.accidental = None;
+        Outcome::bars(vec![bar])
+    }
+
+    /// Input by duration, a duration that matches the note at the cursor:
+    /// the pitch added to that note's chord, not written over it (MuseScore:
+    /// "notes entered in Input by duration mode that match the duration at
+    /// the cursor position will form a chord with the existing note"), and
+    /// the cursor past it. `None` when there is no such note there.
+    fn add_at_cursor(&mut self, score: &mut Score) -> Option<Outcome> {
+        let at = self.cursor;
+        let bar = score.bars.get(at.bar)?;
+        if bar.locked.is_some() || score.read_only.get(at.bar).cloned().flatten().is_some() {
+            return None;
+        }
+        let i = bar.index_at(at.tick)?;
+        if bar.starts().get(i) != Some(&at.tick) {
+            return None;
+        }
+        let event = &bar.events[i];
+        let base = event.pitch()?;
+        if event.duration != self.duration {
+            return None;
+        }
+        let new = self.armed(self.pitch);
+        let event = &mut score.bars[at.bar].events[i];
+        if base == new || event.above.iter().flatten().any(|p| *p == new) {
+            return Some(Outcome::refuse("That note is in the chord already"));
+        }
+        let Some(slot) = event.above.iter_mut().find(|p| p.is_none()) else {
+            return Some(Outcome::refuse(
+                "A chord of notes holds four notes at most here",
+            ));
+        };
+        *slot = Some(new);
+        // Lowest first.
+        let mut all: Vec<Pitch> = std::iter::once(base)
+            .chain(event.above.iter().flatten().copied())
+            .collect();
+        all.sort_by_key(|p| p.midi());
+        event.kind = EventKind::Note(all[0]);
+        event.above = [
+            all.get(1).copied(),
+            all.get(2).copied(),
+            all.get(3).copied(),
+        ];
+        let end = at.tick + event.duration.ticks();
+        self.selected = Some(at);
+        self.cursor = if end >= score.bars[at.bar].length && at.bar + 1 < score.bars.len() {
+            Pos {
+                bar: at.bar + 1,
+                tick: 0,
+            }
+        } else {
+            Pos {
+                bar: at.bar,
+                tick: end,
+            }
+        };
+        self.accidental = None;
+        Some(Outcome::bars(vec![at.bar]))
+    }
+
+    /// Alt+1–9: a note `n` steps of the scale above the selected chord's
+    /// top note (2 a second, 3 a third, 8 an octave), as the key spells it,
+    /// added to the chord.
+    fn add_interval(&mut self, score: &mut Score, n: u8) -> Outcome {
+        if self.target == Target::Chords {
+            return Outcome::refuse(
+                "Alt+1–9 adds an interval to a chord of notes: switch to entering notes",
+            );
+        }
+        if !(1..=9).contains(&n) {
+            return Outcome::refuse("An interval from a unison (1) to a ninth (9)");
+        }
+        let Some((bar, i)) = self.selected_event(score) else {
+            return Outcome::refuse("Select a note to add an interval to");
+        };
+        let event = &score.bars[bar].events[i];
+        let Some(base) = event.pitch() else {
+            return Outcome::refuse("A rest takes no notes");
+        };
+        let top = event
+            .above
+            .iter()
+            .flatten()
+            .copied()
+            .chain(std::iter::once(base))
+            .max_by_key(|p| p.midi())
+            .unwrap_or(base);
+        let step = Pitch::from_step(top.step() + i32::from(n) - 1);
+        let new = Pitch::new(step.letter, score.key_alter(step.letter), step.octave);
+        let event = &mut score.bars[bar].events[i];
+        if new == top {
+            return Outcome::refuse("That note is in the chord already");
+        }
+        let Some(slot) = event.above.iter_mut().find(|p| p.is_none()) else {
+            return Outcome::refuse("A chord of notes holds four notes at most here");
+        };
+        *slot = Some(new);
         Outcome::bars(vec![bar])
     }
 
@@ -1356,12 +1465,12 @@ impl InputState {
                     .unwrap_or_default()
             ),
             Mode::NoteName => format!(
-                "Input by note name · notes · voice {} · {} {what}{accidental} · next at {at} · A–G enter, Shift+A–G add to the chord, 0 rest, T tie, Y: chord symbols instead, Esc leave{locked}",
+                "Input by note name · notes · voice {} · {} {what}{accidental} · next at {at} · A–G enter, Shift+A–G or Alt+1–9 add to the chord, 0 rest, T tie, Y: chord symbols instead, Esc leave{locked}",
                 self.voice + 1,
                 self.duration.name()
             ),
             Mode::Duration => format!(
-                "Input by duration · voice {} · pitch {}{accidental} · next at {at} · 1–7 enter at that duration, A–G or ↑ ↓ move the pitch, Esc leave{locked}",
+                "Input by duration · voice {} · pitch {}{accidental} · next at {at} · 1–7 enter at that duration (at the length of the note there, it joins its chord), A–G or ↑ ↓ move the pitch, Esc leave{locked}",
                 self.voice + 1,
                 self.armed(self.pitch).name()
             ),
@@ -1509,6 +1618,60 @@ mod tests {
         // As chord symbols, Shift+letter says what it is for.
         i.target = Target::Chords;
         assert!(i.apply(&mut s, Op::AddToChord('B')).refused.is_some());
+    }
+
+    #[test]
+    fn alt_number_adds_an_interval_above_the_chord_in_the_key() {
+        let mut s = score(1);
+        let mut i = input(Mode::NoteName);
+        i.apply(&mut s, Op::Duration(Half));
+        i.apply(&mut s, Op::Letter('C'));
+        // A third above C, then a third above that (the chord's top note).
+        i.apply(&mut s, Op::Interval(3));
+        i.apply(&mut s, Op::Interval(3));
+        let e = &s.bars[0].events[0];
+        let above: Vec<String> = e.above.iter().flatten().map(|p| p.name()).collect();
+        assert_eq!(above, ["E5", "G5"]);
+        // An octave above the top note.
+        i.apply(&mut s, Op::Interval(8));
+        let above: Vec<String> = s.bars[0].events[0]
+            .above
+            .iter()
+            .flatten()
+            .map(|p| p.name())
+            .collect();
+        assert_eq!(above, ["E5", "G5", "G6"]);
+        // As chord symbols, it says what it is for.
+        i.target = Target::Chords;
+        assert!(i.apply(&mut s, Op::Interval(3)).refused.is_some());
+    }
+
+    #[test]
+    fn by_duration_a_matching_duration_adds_to_the_chord_at_the_cursor() {
+        let mut s = score(1);
+        let mut i = input(Mode::Duration);
+        // A quarter C, then back to it: E at a quarter joins it as a chord;
+        // at a half, it is written over it.
+        i.pitch = Pitch::new('C', 0, 5);
+        i.apply(&mut s, Op::Duration(Quarter));
+        i.apply(&mut s, Op::Prev);
+        i.pitch = Pitch::new('E', 0, 5);
+        let out = i.apply(&mut s, Op::Duration(Quarter));
+        assert_eq!(out.changed, [0]);
+        let e = &s.bars[0].events[0];
+        assert_eq!(e.pitch().unwrap().name(), "C5");
+        let above: Vec<String> = e.above.iter().flatten().map(|p| p.name()).collect();
+        assert_eq!(above, ["E5"]);
+        assert_eq!(i.cursor.tick, TICKS_PER_WHOLE / 4, "past the chord");
+        i.apply(&mut s, Op::Prev);
+        i.pitch = Pitch::new('G', 0, 5);
+        i.apply(&mut s, Op::Duration(Half));
+        let e = &s.bars[0].events[0];
+        assert_eq!(e.pitch().unwrap().name(), "G5");
+        assert!(
+            e.above.iter().all(Option::is_none),
+            "a half is written over it"
+        );
     }
 
     #[test]
