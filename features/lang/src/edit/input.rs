@@ -334,6 +334,9 @@ pub enum Op {
     EnterStep(i32),
     /// Ctrl+Alt+1–4: the voice notes go into (0 to 3).
     Voice(u8),
+    /// Alt+↑ / Alt+↓: the selected chord symbol's quality stepped
+    /// (`G` → `Gm` → `G7` …), its root and bass kept.
+    Quality(bool),
     /// Ctrl+3: a triplet group made at the cursor, as long as the chosen
     /// duration, its three values entered next (MuseScore's tuplets; a
     /// triplet is the one tuplet Keyflow's text writes).
@@ -420,7 +423,8 @@ impl Op {
             | Self::Halve
             | Self::Longer
             | Self::Shorter
-            | Self::Triplet => true,
+            | Self::Triplet
+            | Self::Quality(_) => true,
             // A duration key enters a note only in input by duration; ↑ ↓
             // there move the pitch cursor, elsewhere the selected note.
             Self::Duration(_) => matches!(mode, Mode::Duration),
@@ -668,6 +672,14 @@ impl InputState {
                 Outcome::default()
             }
             Op::Triplet => self.triplet(score),
+            Op::Quality(up) => {
+                if self.target != Target::Chords {
+                    return Outcome::refuse(
+                        "Alt+↑ ↓ change a chord symbol's quality: select one, or Y for chord symbols",
+                    );
+                }
+                self.rechord(score, |t| super::chords::step_quality(t, up))
+            }
             Op::EnterStep(step) => {
                 let natural = Pitch::from_step(step);
                 let alter = self
@@ -1042,6 +1054,32 @@ impl InputState {
                 Some("Cut at the barline: there is no bar after it to tie into".into());
         }
         outcome
+    }
+
+    /// The selected chord symbol made `typed` (its length kept, and its
+    /// marks when `typed` has none): a chord retyped without the bar.
+    pub fn set_chord(&mut self, score: &mut Score, typed: &str) -> Outcome {
+        if typed.trim().is_empty() {
+            return Outcome::refuse("Type a chord symbol");
+        }
+        if let Some(sel) = self.selected
+            && let Some(src) = score.replays.get(sel.bar).copied().flatten()
+        {
+            self.selected = Some(Pos { bar: src, ..sel });
+        }
+        self.target = Target::Chords;
+        self.rechord(score, |old| Some(super::chords::retyped(old, typed)))
+    }
+
+    /// The selected chord's symbol, as written: what retyping it starts
+    /// from.
+    #[must_use]
+    pub fn selected_symbol(&self, score: &Score) -> Option<String> {
+        let (bar, i) = self.selected_chord(score)?;
+        match &score.chords[bar].events[i].slot {
+            Slot::Chord(t) => Some(t.clone()),
+            _ => None,
+        }
     }
 
     /// Ctrl+3: a triplet group at the cursor as long as the chosen

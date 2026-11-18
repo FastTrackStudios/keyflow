@@ -316,9 +316,91 @@ pub fn transpose(token: &str, up: bool) -> Option<String> {
     Some(format!("{marks}{}{acc}{quality}", p.letter))
 }
 
+/// A chord token's parts: its marks (`!`, `>`, `'`, `.`), its root (`F#`,
+/// `Bb`, a degree `6`, `b7`), its quality (`m7`, `sus4`, empty for a major
+/// triad) and its bass (`/A`, empty). `None` when it has no root.
+#[must_use]
+pub fn parts(token: &str) -> Option<(&str, &str, &str, &str)> {
+    let start = token.find(|c: char| c.is_ascii_alphanumeric())?;
+    // A degree written flat or sharp (`b7`, `#4`) starts at its accidental.
+    let start = if start > 0 && matches!(&token[start - 1..start], "#") {
+        start - 1
+    } else {
+        start
+    };
+    let (marks, rest) = token.split_at(start);
+    let mut end = 0;
+    let bytes = rest.as_bytes();
+    if bytes.first().is_some_and(|c| matches!(c, b'A'..=b'G')) {
+        end = 1;
+        while bytes.get(end).is_some_and(|c| matches!(c, b'#' | b'b')) {
+            end += 1;
+        }
+    } else {
+        while bytes.get(end).is_some_and(|c| matches!(c, b'#' | b'b')) {
+            end += 1;
+        }
+        let digits = rest[end..].chars().take_while(char::is_ascii_digit).count();
+        if digits == 0 {
+            return None;
+        }
+        end += digits;
+    }
+    let (root, after) = rest.split_at(end);
+    let (quality, bass) = after.find('/').map_or((after, ""), |i| after.split_at(i));
+    Some((marks, root, quality, bass))
+}
+
+/// The qualities Alt+↑ and Alt+↓ step through, in order.
+pub const QUALITIES: &[&str] = &[
+    "", "m", "7", "m7", "maj7", "sus4", "sus2", "6", "m6", "9", "add9", "dim", "aug",
+];
+
+/// `token` with its quality the next (or, not `up`, the previous) of
+/// [`QUALITIES`], its root, bass and marks kept: `G` → `Gm` → `G7`. A
+/// quality not in the list goes to the first or the last. `None` for a
+/// token with no root.
+#[must_use]
+pub fn step_quality(token: &str, up: bool) -> Option<String> {
+    let (marks, root, quality, bass) = parts(token)?;
+    let n = QUALITIES.len();
+    let next = match QUALITIES.iter().position(|q| *q == quality) {
+        Some(i) if up => (i + 1) % n,
+        Some(i) => (i + n - 1) % n,
+        None if up => 0,
+        None => n - 1,
+    };
+    Some(format!("{marks}{root}{}{bass}", QUALITIES[next]))
+}
+
+/// The symbol typed for a chord, its marks kept from `old` when it writes
+/// none of its own (a pushed `'G` retyped as `Gsus4` stays pushed).
+#[must_use]
+pub fn retyped(old: &str, typed: &str) -> String {
+    let typed = typed.trim();
+    let typed_marks = parts(typed).map_or("", |p| p.0);
+    match parts(old) {
+        Some((marks, ..)) if typed_marks.is_empty() => format!("{marks}{typed}"),
+        _ => typed.to_owned(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_chord_s_quality_steps_and_its_root_bass_and_marks_stay() {
+        assert_eq!(step_quality("G", true).as_deref(), Some("Gm"));
+        assert_eq!(step_quality("Gm", true).as_deref(), Some("G7"));
+        assert_eq!(step_quality("G", false).as_deref(), Some("Gaug"));
+        assert_eq!(step_quality("'F#m7/A", true).as_deref(), Some("'F#maj7/A"));
+        assert_eq!(step_quality("b7", true).as_deref(), Some("b7m"));
+        assert_eq!(step_quality("'6m", true).as_deref(), Some("'67"));
+        assert_eq!(step_quality("C13#11", true).as_deref(), Some("C"));
+        assert_eq!(retyped("'G", "Gsus4"), "'Gsus4");
+        assert_eq!(retyped("'G", "!Gsus4"), "!Gsus4");
+    }
     use crate::edit::music::Value;
     use crate::text::chart::parse_chart;
 

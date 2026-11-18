@@ -1121,6 +1121,28 @@ mod tests {
     }
 
     #[test]
+    fn a_chord_is_retyped_or_its_quality_stepped_without_the_bar() {
+        let text = "Edit - Test\n4/4\n\nVS 2\n| C / G / | !Am / / / |\n";
+        let chart = parse_chart(text).unwrap();
+        let mut score = Score::from_text(text, &chart);
+        let mut input = InputState::default();
+        // The G (from beat 2: `C /` is one beat), selected: retyped, its
+        // length kept.
+        input.selected = Some(crate::edit::Pos { bar: 0, tick: 192 });
+        assert_eq!(input.selected_symbol(&score).as_deref(), Some("G"));
+        let out = input.set_chord(&mut score, "Gsus4");
+        let new = write_bars(text, &chart, &score, &out.changed).unwrap();
+        assert!(new.contains("C_4 Gsus4_2. | !Am / / /"), "{new}");
+        // The accented Am: its quality stepped, its accent kept.
+        let chart = parse_chart(&new).unwrap();
+        let mut score = Score::from_text(&new, &chart);
+        input.selected = Some(crate::edit::Pos { bar: 1, tick: 0 });
+        let out = input.apply(&mut score, Op::Quality(true));
+        let newer = write_bars(&new, &chart, &score, &out.changed).unwrap();
+        assert!(newer.contains("!A7"), "{newer}");
+    }
+
+    #[test]
     fn a_triplet_is_made_and_filled_and_written() {
         let (chart, mut score) = setup();
         let mut input = InputState {

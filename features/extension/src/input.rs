@@ -61,6 +61,9 @@ pub const OP_ACTIONS: &[OpAction] = &[
     op("KEYFLOW_VOICE_3", Op::Voice(2), "⌥⌘3"),
     op("KEYFLOW_VOICE_4", Op::Voice(3), "⌥⌘4"),
     op("KEYFLOW_TRIPLET", Op::Triplet, "⌘3"),
+    // A chord symbol's quality, as ↑ ↓ step its root.
+    op("KEYFLOW_QUALITY_UP", Op::Quality(true), "⌥↑"),
+    op("KEYFLOW_QUALITY_DOWN", Op::Quality(false), "⌥↓"),
 ];
 
 /// The toolbar's actions that are note input's operations, and their keys
@@ -91,6 +94,9 @@ pub const HISTORY_KEYS: &[(&str, &str)] = &[("KEYFLOW_UNDO", "⌘Z"), ("KEYFLOW_
 /// app keeps for moving focus).
 pub const TARGET_KEY: (&str, &str) = ("KEYFLOW_TARGET_SWITCH", "Y");
 
+/// ↩: the selected chord symbol retyped, in a bar under the chart.
+pub const CHORD_EDIT_KEY: (&str, &str) = ("KEYFLOW_CHORD_EDIT", "↩");
+
 /// Every action with a key, and its key by default.
 pub fn default_keys() -> impl Iterator<Item = (&'static str, &'static str)> {
     OP_ACTIONS
@@ -99,6 +105,7 @@ pub fn default_keys() -> impl Iterator<Item = (&'static str, &'static str)> {
         .chain(TOOL_KEYS.iter().copied())
         .chain(HISTORY_KEYS.iter().copied())
         .chain(std::iter::once(TARGET_KEY))
+        .chain(std::iter::once(CHORD_EDIT_KEY))
 }
 
 /// The setting that holds `action`'s key.

@@ -147,6 +147,12 @@ impl Extension for Keyflow {
             })
             .await
         });
+        ext.action("KEYFLOW_CHORD_SET", |args| async move {
+            let typed = text(&args, "text").ok_or("text: the chord symbol")?;
+            edit_state().chord_draft = None;
+            run_edit(|_| Vec::new(), Some(typed)).await
+        });
+        ext.action("KEYFLOW_CHORD_EDIT", |_| async { chord_edit().await });
         ext.action("KEYFLOW_TARGET_SWITCH", |_| async {
             let next = match edit_state().input.target {
                 edit::Target::Chords => edit::Target::Notes,
@@ -237,6 +243,8 @@ struct EditState {
     /// Syntax mode's typing: keys typed on the chart (it keeps the
     /// keyboard, so Esc leaves the chart ready for the next key).
     draft: String,
+    /// A chord symbol being retyped (↩ on a selected chord), as typed.
+    chord_draft: Option<String>,
     /// Shortcut → action: MuseScore's keys, as the person's settings
     /// change them (`keyflow.keys.*`).
     keymap: BTreeMap<String, String>,
@@ -336,6 +344,7 @@ fn ChartPane() -> Element {
     let mut mode = use_signal(|| edit_state().input.mode);
     let mut target = use_signal(|| edit_state().input.target);
     let mut draft = use_signal(String::new);
+    let mut chord = use_signal(|| None::<String>);
     let tell = use_hook(|| {
         let (tx, mut rx) = unbounded_channel::<Msg>();
         spawn(async move {
@@ -352,6 +361,7 @@ fn ChartPane() -> Element {
                         mode.set(e.input.mode);
                         target.set(e.input.target);
                         draft.set(e.draft.clone());
+                        chord.set(e.chord_draft.clone());
                     }
                     // In order, one at a time: C D E typed fast is C D E.
                     Msg::Gesture(g) => {
@@ -502,15 +512,19 @@ fn ChartPane() -> Element {
                 div { style: "flex:1; min-height:0;",
                     PaintPane { mount: mount.mount.clone() }
                 }
-                if mode() == Mode::Syntax {
+                if mode() == Mode::Syntax || chord().is_some() {
                     div { style: "display:flex; gap:8px; align-items:center; padding:6px 10px; border-top:1px solid var(--border, #8884);",
-                        span { style: "font-size:12px; opacity:0.75; white-space:nowrap;", "Keyflow syntax" }
+                        span { style: "font-size:12px; opacity:0.75; white-space:nowrap;",
+                            if chord().is_some() { "Chord symbol" } else { "Keyflow syntax" }
+                        }
                         // What is typed on the chart, with its caret: the
                         // chart keeps the keyboard (a field would take it,
                         // and leaving it would leave the keys nowhere).
                         div {
                             style: "flex:1; min-width:0; font-family:ui-monospace, monospace; font-size:13px; padding:4px 6px; border-radius:4px; border:1px solid var(--primary, #4f46e5); white-space:pre; overflow:hidden;",
-                            if draft().is_empty() {
+                            if let Some(c) = chord() {
+                                span { "{c}▏" }
+                            } else if draft().is_empty() {
                                 span { style: "opacity:0.5;", "C / / / | Am7 / F G" }
                             } else {
                                 // Its end, where the typing is.
@@ -923,6 +937,16 @@ fn rebase(from: &str, to: &str, now: &str) -> Option<String> {
 /// the bars it changed back, and show where input is now. `make` builds
 /// the operation from the chart's bars (a click's tick needs its bar).
 async fn run_op(make: impl FnOnce(&Score) -> Vec<Op>) -> Result<Json, String> {
+    run_edit(make, None).await
+}
+
+/// `make`'s operations applied, then, with `retype`, the selected chord
+/// made the symbol typed (`InputState::set_chord`): written back as one
+/// edit, one undo step.
+async fn run_edit(
+    make: impl FnOnce(&Score) -> Vec<Op>,
+    retype: Option<String>,
+) -> Result<Json, String> {
     let _one = ONE_AT_A_TIME.lock().await;
     let Some((key, path)) = active_chart() else {
         return Err("Open a chart first".to_owned());
@@ -932,7 +956,7 @@ async fn run_op(make: impl FnOnce(&Score) -> Vec<Op>) -> Result<Json, String> {
     let chart = keyflow::text::chart::parse_chart(&text)?;
     let mut score = Score::from_text(&text, &chart);
     let ops = make(&score);
-    let Some(&op) = ops.last() else {
+    let Some(&op) = ops.last().or(retype.as_ref().map(|_| &Op::Escape)) else {
         return Ok(input_state());
     };
     let (before, outcome) = {
@@ -969,6 +993,11 @@ async fn run_op(make: impl FnOnce(&Score) -> Vec<Op>) -> Result<Json, String> {
                 outcome.refused = o.refused;
             }
         }
+        if let Some(typed) = &retype {
+            let o = e.input.set_chord(&mut score, typed);
+            outcome.changed.extend(o.changed);
+            outcome.refused = o.refused.or(outcome.refused.take());
+        }
         (before, outcome)
     };
     // A refusal, or else what the person should know it did (an entry on
@@ -977,7 +1006,10 @@ async fn run_op(make: impl FnOnce(&Score) -> Vec<Op>) -> Result<Json, String> {
     if !outcome.changed.is_empty() {
         match keyflow::edit::commit::write_bars(&text, &chart, &score, &outcome.changed) {
             Ok(new) => {
-                write_text(&handle, &path, new.clone(), &op_name(op)).await?;
+                let name = retype
+                    .as_ref()
+                    .map_or_else(|| op_name(op), |t| format!("Chord {t}"));
+                write_text(&handle, &path, new.clone(), &name).await?;
                 let after = edit_state().input.clone();
                 remember(&path, text.clone(), new, (before, after));
                 reload(Some(&path));
@@ -1118,6 +1150,9 @@ fn show_input(chart: &keyflow::Chart, score: &Score, refused: Option<String>) {
     let (overlay, path) = {
         let mut e = edit_state();
         e.status = match e.preview {
+            _ if e.chord_draft.is_some() => {
+                "Retyping the chord symbol · Enter sets it (its length kept), Esc keeps it as it was · Alt+↑ ↓ step its quality instead".to_owned()
+            }
             Some(n) if e.input.mode == Mode::Syntax => format!(
                 "Preview: {n} bar{} from bar {}, shown on the chart · Enter writes {}, Esc drops {}",
                 if n == 1 { "" } else { "s" },
@@ -1306,6 +1341,65 @@ fn tail(s: &str, n: usize) -> String {
     format!("…{}", s.chars().skip(count - n).collect::<String>())
 }
 
+/// ↩ on a selected chord symbol: it is retyped in a bar under the chart,
+/// starting from the symbol as it is written.
+async fn chord_edit() -> Result<Json, String> {
+    let Some((_, path)) = active_chart() else {
+        return Err("Open a chart first".to_owned());
+    };
+    let handle = handle()?;
+    let text = read_text(&handle, &path).await?;
+    let chart = keyflow::text::chart::parse_chart(&text)?;
+    let score = Score::from_text(&text, &chart);
+    let symbol = {
+        let mut e = edit_state();
+        e.input.target = edit::Target::Chords;
+        e.input.selected_symbol(&score)
+    };
+    let refused = match symbol {
+        Some(s) => {
+            edit_state().chord_draft = Some(s);
+            None
+        }
+        None => Some("Select a chord symbol to retype it".to_owned()),
+    };
+    show_input(&chart, &score, refused);
+    Ok(input_state())
+}
+
+/// A key typed while a chord symbol is retyped: a character added,
+/// Backspace one taken off, Enter setting it, Esc keeping the chord as it
+/// was. Whether it was.
+async fn chord_key(key: &str, mods: &[&str]) -> bool {
+    if edit_state().chord_draft.is_none() || mods.iter().any(|m| matches!(*m, "Mod" | "Ctrl")) {
+        return false;
+    }
+    match key {
+        "Enter" => {
+            let typed = edit_state().chord_draft.take().unwrap_or_default();
+            let _ = dispatch("KEYFLOW_CHORD_SET", json!({ "text": typed })).await;
+        }
+        "Escape" => {
+            edit_state().chord_draft = None;
+            rerender_input().await;
+        }
+        "Backspace" => {
+            if let Some(d) = edit_state().chord_draft.as_mut() {
+                d.pop();
+            }
+            rerender_input().await;
+        }
+        k if k.chars().count() == 1 => {
+            if let Some(d) = edit_state().chord_draft.as_mut() {
+                d.push_str(k);
+            }
+            rerender_input().await;
+        }
+        _ => return false,
+    }
+    true
+}
+
 /// A key typed in syntax mode, taken as typing: a character added to the
 /// bars being typed (and previewed), Backspace one taken off, Enter
 /// writing them, Esc dropping them and leaving. Whether it was.
@@ -1359,7 +1453,7 @@ async fn syntax_key(key: &str, mods: &[&str]) -> bool {
 async fn gesture(g: ChartGesture) {
     match g {
         ChartGesture::Key { key, mods } => {
-            if syntax_key(&key, &mods).await {
+            if chord_key(&key, &mods).await || syntax_key(&key, &mods).await {
                 return;
             }
             let chord = input::chord(&key, &mods);
