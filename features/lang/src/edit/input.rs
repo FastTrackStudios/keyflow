@@ -1093,13 +1093,43 @@ impl InputState {
         if typed.trim().is_empty() {
             return Outcome::refuse("Type a chord symbol");
         }
+        self.follow_replay(score);
+        self.target = Target::Chords;
+        self.rechord(score, |old| Some(super::chords::retyped(old, typed)))
+    }
+
+    /// A palette's quality cell on the selected chord symbol: its quality
+    /// made `quality`, its root, bass and marks kept.
+    pub fn set_quality(&mut self, score: &mut Score, quality: &str) -> Outcome {
+        self.follow_replay(score);
+        self.target = Target::Chords;
+        self.rechord(score, |old| super::chords::with_quality(old, quality))
+    }
+
+    /// A palette's articulation cell on the selected chord symbol: `mark`
+    /// (an accent, a staccato, a push) put on, or off when it is on.
+    pub fn toggle_mark(&mut self, score: &mut Score, mark: &str) -> Outcome {
+        self.follow_replay(score);
+        self.target = Target::Chords;
+        // A push moves where the chord sounds (an eighth or a sixteenth
+        // before its beat, on a downbeat into the bar before), which a
+        // bar's chord line does not place yet: typed in the bar, it is read.
+        if mark.starts_with('\'') {
+            return Outcome::refuse(
+                "A push moves the chord before its beat, which the palette does not place yet: type it in the bar ('G)",
+            );
+        }
+        self.rechord(score, |old| super::chords::with_mark(old, mark))
+    }
+
+    /// The selection on a replayed bar moved to the bar it plays, where
+    /// an edit of it is written.
+    fn follow_replay(&mut self, score: &Score) {
         if let Some(sel) = self.selected
             && let Some(src) = score.replays.get(sel.bar).copied().flatten()
         {
             self.selected = Some(Pos { bar: src, ..sel });
         }
-        self.target = Target::Chords;
-        self.rechord(score, |old| Some(super::chords::retyped(old, typed)))
     }
 
     /// The selected chord's symbol, as written: what retyping it starts

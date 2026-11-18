@@ -1170,6 +1170,48 @@ mod tests {
     }
 
     #[test]
+    fn a_palette_cell_sets_the_selected_chord_s_quality_or_marks_it() {
+        let text = "Edit - Test\n4/4\n\nVS 2\n| C / G / | Am / / / |\n";
+        let chart = parse_chart(text).unwrap();
+        let mut score = Score::from_text(text, &chart);
+        let mut input = InputState::default();
+        // The G: made a maj7, its length kept.
+        input.selected = Some(crate::edit::Pos { bar: 0, tick: 192 });
+        let out = input.set_quality(&mut score, "maj7");
+        let new = write_bars(text, &chart, &score, &out.changed).unwrap();
+        assert!(new.contains("C_4 Gmaj7_2. | Am / / /"), "{new}");
+        // An accent and a staccato on the G, read back as written; then
+        // the accent off again.
+        let mut text = new;
+        for (mark, written) in [(">", ">Gmaj7"), (".", ">.Gmaj7"), (">", "C_4 .Gmaj7")] {
+            let chart = parse_chart(&text).unwrap();
+            let mut score = Score::from_text(&text, &chart);
+            let out = input.toggle_mark(&mut score, mark);
+            assert!(out.refused.is_none(), "{mark}: {:?}", out.refused);
+            text = write_bars(&text, &chart, &score, &out.changed)
+                .unwrap_or_else(|e| panic!("{mark} on {text}: {e}"));
+            assert!(text.contains(written), "{mark}: {text}");
+        }
+        // A push is not placed by the palette yet: refused, and why.
+        let chart = parse_chart(&text).unwrap();
+        let mut score = Score::from_text(&text, &chart);
+        let out = input.toggle_mark(&mut score, "'");
+        assert!(out.changed.is_empty(), "{:?}", out.changed);
+        assert!(out.refused.as_deref().is_some_and(|r| r.contains("push")));
+        // On the Am, the bar's first chord: accented.
+        input.selected = Some(crate::edit::Pos { bar: 1, tick: 0 });
+        let out = input.toggle_mark(&mut score, ">");
+        let text = write_bars(&text, &chart, &score, &out.changed).unwrap();
+        assert!(text.contains("| >Am"), "{text}");
+        // Nothing selected: said so, nothing written.
+        let mut none = InputState::default();
+        let chart = parse_chart(&text).unwrap();
+        let mut score = Score::from_text(&text, &chart);
+        let out = none.set_quality(&mut score, "m7");
+        assert!(out.changed.is_empty() && out.refused.is_some());
+    }
+
+    #[test]
     fn a_replay_of_a_held_chord_run_plays_each_of_its_bars() {
         // The second VS replays the first, whose line holds G#m and C#sus2
         // over barlines: its n-th bar plays the n-th, and follows an edit.
