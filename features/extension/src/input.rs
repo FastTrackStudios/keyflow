@@ -1,12 +1,9 @@
 //! Note input's actions and keys: every operation of `keyflow::edit` an
 //! action of its own (`KEYFLOW_*`, `extension.toml`), so ⌘K, menus, MCP
-//! and keys reach the same thing; and the keys that run them, MuseScore's
-//! by default and each one a setting a person can change
-//! (`keyflow.keys.<action>`, a `shortcut` control on the settings page).
-//!
-//! The view binds no keys: it hands each key pressed on the chart to the
-//! pane ([`keyflow_ui::paint_view::ChartGesture`]), which looks it up here
-//! and runs the action through the host.
+//! and keys reach the same thing; and MuseScore's keys for them, each a
+//! `[[keys]] when = "view:chart"` in the manifest: the app's keymap runs
+//! them while the chart has the focus, and the person rebinds them in the
+//! action list like any key.
 
 use keyflow::edit::{Mode, Op, Value};
 
@@ -40,10 +37,10 @@ pub const OP_ACTIONS: &[OpAction] = &[
     op("KEYFLOW_PREVIOUS", Op::Prev, "←"),
     op("KEYFLOW_NEXT_BAR", Op::NextBar, "⌘→"),
     op("KEYFLOW_PREVIOUS_BAR", Op::PrevBar, "⌘←"),
-    op("KEYFLOW_FIRST_BAR", Op::First, "⌘Home"),
-    op("KEYFLOW_LAST_BAR", Op::Last, "⌘End"),
-    op("KEYFLOW_DELETE", Op::Delete, "⌦"),
-    op("KEYFLOW_ESCAPE", Op::Escape, "⎋"),
+    op("KEYFLOW_FIRST_BAR", Op::First, "⌥⌘←"),
+    op("KEYFLOW_LAST_BAR", Op::Last, "⌥⌘→"),
+    op("KEYFLOW_DELETE", Op::Delete, "⌫"),
+    op("KEYFLOW_ESCAPE", Op::Escape, "Esc"),
     op("KEYFLOW_ADD_A", Op::AddToChord('A'), "⇧A"),
     op("KEYFLOW_ADD_B", Op::AddToChord('B'), "⇧B"),
     op("KEYFLOW_ADD_C", Op::AddToChord('C'), "⇧C"),
@@ -95,7 +92,7 @@ pub const HISTORY_KEYS: &[(&str, &str)] = &[("KEYFLOW_UNDO", "⌘Z"), ("KEYFLOW_
 pub const TARGET_KEY: (&str, &str) = ("KEYFLOW_TARGET_SWITCH", "Y");
 
 /// ↩: the selected chord symbol retyped, in a bar under the chart.
-pub const CHORD_EDIT_KEY: (&str, &str) = ("KEYFLOW_CHORD_EDIT", "↩");
+pub const CHORD_EDIT_KEY: (&str, &str) = ("KEYFLOW_CHORD_EDIT", "↵");
 
 /// Every action with a key, and its key by default.
 pub fn default_keys() -> impl Iterator<Item = (&'static str, &'static str)> {
@@ -108,13 +105,21 @@ pub fn default_keys() -> impl Iterator<Item = (&'static str, &'static str)> {
         .chain(std::iter::once(CHORD_EDIT_KEY))
 }
 
-/// The setting that holds `action`'s key.
+/// The chords `key` is bound as: itself (`⌘` the Mac's command key), and
+/// with `⌃` in its place off a Mac, where the command key is Ctrl
+/// (`⇧⌘Z` and `⌃⇧Z`), in the Mac order (`⌃⌥⇧⌘`).
 #[must_use]
-pub fn setting_key(action: &str) -> String {
-    format!(
-        "keyflow.keys.{}",
-        action.trim_start_matches("KEYFLOW_").to_lowercase()
-    )
+pub fn chords(key: &str) -> Vec<String> {
+    let mut out = vec![key.to_owned()];
+    if key.contains('⌘') {
+        let mods: String = ['⌃', '⌥', '⇧']
+            .into_iter()
+            .filter(|m| *m == '⌃' || key.contains(*m))
+            .collect();
+        let rest = key.trim_start_matches(['⌃', '⌥', '⇧', '⌘']);
+        out.push(format!("{mods}{rest}"));
+    }
+    out
 }
 
 /// The operation `action` applies, if it is one of [`OP_ACTIONS`].
@@ -149,71 +154,21 @@ pub fn mode_of(action: &str) -> Option<Mode> {
     }
 }
 
-/// A key as the view hands it (`KeyboardEvent.key` and the modifiers held)
-/// written as a shortcut is (`⌘↑`, `⇧C`, `5`): what the keymap looks up.
-/// Shift is part of a letter's chord (Shift+A is not A) but not of a
-/// symbol's, which needs it to be typed at all (`+`).
-#[must_use]
-pub fn chord(key: &str, mods: &[&str]) -> String {
-    let name = match key {
-        "ArrowUp" => "↑".to_owned(),
-        "ArrowDown" => "↓".to_owned(),
-        "ArrowLeft" => "←".to_owned(),
-        "ArrowRight" => "→".to_owned(),
-        "Escape" => "⎋".to_owned(),
-        "Delete" => "⌦".to_owned(),
-        "Backspace" => "⌫".to_owned(),
-        "Enter" => "↩".to_owned(),
-        k if k.chars().count() == 1 => k.to_uppercase(),
-        k => k.to_owned(),
-    };
-    // A typed symbol (`+`, `.`): Shift is how it was typed, not a chord.
-    let symbol = name.chars().count() == 1
-        && name
-            .chars()
-            .all(|c| c.is_ascii() && !c.is_ascii_alphanumeric());
-    // Off a Mac, Ctrl is the command key (the app's ⌘ shortcuts are Ctrl).
-    let command = mods.contains(&"Mod") || (!cfg!(target_os = "macos") && mods.contains(&"Ctrl"));
-    let has = |m: &str| mods.contains(&m);
-    let mut out = String::new();
-    if has("Ctrl") && !command {
-        out.push('⌃');
-    }
-    if has("Alt") {
-        out.push('⌥');
-    }
-    if has("Shift") && !symbol {
-        out.push('⇧');
-    }
-    if command {
-        out.push('⌘');
-    }
-    out.push_str(&name);
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn a_key_is_written_as_its_shortcut() {
-        assert_eq!(chord("c", &[]), "C");
-        assert_eq!(chord("C", &["Shift"]), "⇧C", "Shift+C is not C");
-        assert_eq!(
-            chord("+", &["Shift"]),
-            "+",
-            "a symbol's Shift is how it is typed"
-        );
-        assert_eq!(chord("ArrowUp", &["Mod", "Ctrl"]), "⌘↑");
-        assert_eq!(chord("ArrowUp", &["Shift"]), "⇧↑");
-        assert_eq!(chord("Escape", &[]), "⎋");
-        assert_eq!(chord("5", &[]), "5");
-        assert_eq!(chord("z", &["Mod", "Shift"]), "⇧⌘Z");
+    fn a_command_key_is_bound_as_ctrl_off_a_mac_too() {
+        assert_eq!(chords("N"), ["N"]);
+        assert_eq!(chords("⌘Z"), ["⌘Z", "⌃Z"]);
+        assert_eq!(chords("⇧⌘Z"), ["⇧⌘Z", "⌃⇧Z"]);
+        assert_eq!(chords("⌥⌘1"), ["⌥⌘1", "⌃⌥1"]);
+        assert_eq!(chords("⌥↑"), ["⌥↑"]);
     }
 
     #[test]
-    fn every_key_is_bound_once_and_every_action_has_a_setting() {
+    fn every_key_is_bound_once() {
         let mut keys: Vec<&str> = default_keys().map(|(_, k)| k).collect();
         keys.sort_unstable();
         let n = keys.len();
@@ -221,7 +176,6 @@ mod tests {
         assert_eq!(keys.len(), n, "a key bound twice");
         for (action, _) in default_keys() {
             assert!(action.starts_with("KEYFLOW_"));
-            assert!(setting_key(action).starts_with("keyflow.keys."));
         }
     }
 }
