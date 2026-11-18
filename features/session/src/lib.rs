@@ -192,6 +192,25 @@ impl ChartSession {
         Ok(TextBinding::new(self.session.doc(), text))
     }
 
+    /// Calls `changed` whenever an edit made on another replica arrives
+    /// (an import: a peer's typing, through [`Self::synced`] or a host's
+    /// fan-out), never for this replica's own edits. A view re-reads the
+    /// chart then, as a document chart does on `doc.saved`. Dropping the
+    /// subscription stops it.
+    #[must_use = "dropping the subscription stops it"]
+    pub fn on_remote_change(
+        &self,
+        changed: impl Fn() + Send + Sync + 'static,
+    ) -> crdt::loro::Subscription {
+        self.doc
+            .loro()
+            .subscribe_root(std::sync::Arc::new(move |event| {
+                if matches!(event.triggered_by, crdt::loro::EventTriggerKind::Import) {
+                    changed();
+                }
+            }))
+    }
+
     /// Folds the file's records into one: every edit, this device's and
     /// every one received through [`Self::synced`], is on disk already.
     ///
