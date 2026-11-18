@@ -37,9 +37,11 @@ fn span(measures: &[&Measure], index: usize) -> Result<(usize, usize), String> {
         .ok_or_else(|| format!("There is no bar {}", index + 1))?;
     let s = m.source_span.as_ref().ok_or_else(|| {
         format!(
-            "Bar {} is not written out between barlines in the chart's text (it is laid out \
-             by beat counting, or repeated from elsewhere), so it cannot be written back yet",
-            index + 1
+            "Bar {} is read-only: {}",
+            index + 1,
+            m.read_only
+                .as_deref()
+                .unwrap_or("it has no text of its own in the chart's text")
         )
     })?;
     Ok((s.start, s.start + s.len))
@@ -242,7 +244,7 @@ fn placed(
     // are written out as that, so they keep their music.
     let edited: Vec<usize> = cells
         .iter()
-        .filter(|(i, text)| span(measures, *i).is_ok_and(|(a, b)| source[a..b] != *text))
+        .filter(|(i, text)| own_text(source, measures, *i).is_some_and(|own| own != *text))
         .map(|c| c.0)
         .collect();
     let all: Vec<usize> = cells.iter().map(|c| c.0).collect();
@@ -265,52 +267,61 @@ fn placed(
         let (a, _) = span(measures, index)?;
         let line = line_of(source, a);
         // Every bar on that line, in order, with its new text.
-        let mut on_line: Vec<(usize, usize, usize, String)> = measures
+        let mut on_line: Vec<(usize, usize, usize, String, String)> = measures
             .iter()
             .enumerate()
             .filter_map(|(i, m)| {
                 let s = m.source_span.as_ref()?;
                 let (s, e) = (s.start, s.start + s.len);
                 (s >= line.0 && e <= line.1).then(|| {
+                    let own = own_text(source, measures, i).unwrap_or_default();
                     let text = cells
                         .iter()
                         .find(|(j, _)| *j == i)
-                        .map_or_else(|| source[s..e].to_owned(), |(_, t)| t.clone());
-                    (i, s, e, text)
+                        .map_or_else(|| own.clone(), |(_, t)| t.clone());
+                    (i, s, e, text, own)
                 })
             })
             .collect();
-        on_line.sort_by_key(|x| x.1);
+        on_line.sort_by_key(|x| (x.1, x.0));
         done.extend(on_line.iter().map(|x| x.0));
         done.push(index);
-        if on_line.iter().all(|(_, s, e, t)| source[*s..*e] == *t) {
+        if on_line.iter().all(|x| x.3 == x.4) {
             // Nothing on this line changes: its text stays as written.
             continue;
         }
-        // A line holding a `<< … >>` is read whole, as one, and a `%` there
-        // does not repeat the bar before it: its `%`s are written out.
-        if on_line.iter().any(|x| x.3.contains("<<")) {
-            for x in &mut on_line {
-                if is_repeat_text(&x.3) {
-                    x.3 = written_out(source, measures, x.0).ok_or_else(|| {
-                        format!("Bar {} repeats a bar with no text of its own", x.0 + 1)
-                    })?;
+        // One item per text in the line: a `%3`'s bars share theirs, and
+        // are written out one `%` each, barlined, when one of them changes.
+        let mut items: Vec<(usize, usize, String, bool)> = Vec::new();
+        for x in &on_line {
+            match items.last_mut() {
+                Some(last) if last.0 == x.1 && last.1 == x.2 => {
+                    last.2.push_str(" | ");
+                    last.2.push_str(&x.3);
+                    last.3 = true;
                 }
+                _ => items.push((x.1, x.2, x.3.clone(), false)),
             }
         }
-        let beat_counted = on_line.len() > 1
-            && on_line.windows(2).all(|w| {
+        for item in &mut items {
+            // A group untouched keeps its `%3`.
+            if item.3 && item.2.split(" | ").all(|t| t.trim() == "%") {
+                item.2 = source[item.0..item.1].to_owned();
+            }
+        }
+        let beat_counted = items.len() > 1
+            && items.windows(2).all(|w| {
                 source
-                    .get(w[0].2..w[1].1)
+                    .get(w[0].1..w[1].0)
                     .is_some_and(|gap| !gap.contains('|'))
             });
         if beat_counted {
-            let first = on_line[0].1;
-            let last = on_line[on_line.len() - 1].2;
-            let joined: Vec<&str> = on_line.iter().map(|x| x.3.as_str()).collect();
+            let first = items[0].0;
+            let last = items[items.len() - 1].1;
+            let joined: Vec<&str> = items.iter().map(|x| x.2.as_str()).collect();
             edits.push((first, last, joined.join(" | ")));
         } else {
-            for (_, s, e, t) in on_line {
+            for (s, e, t, _) in items {
                 if source[s..e] != t {
                     edits.push((s, e, t));
                 }
@@ -327,7 +338,26 @@ fn is_simile(source: &str, measures: &[&Measure], i: usize) -> bool {
 }
 
 fn is_repeat_text(text: &str) -> bool {
-    matches!(text.trim(), "%" | ".")
+    let t = text.trim();
+    t == "."
+        || t.strip_prefix('%')
+            .is_some_and(|n| n.chars().all(|c| c.is_ascii_digit()))
+}
+
+/// A bar's text as written alone: a `%3`'s bars are each `%`.
+fn own_text(source: &str, measures: &[&Measure], i: usize) -> Option<String> {
+    let (a, b) = span(measures, i).ok()?;
+    let text = &source[a..b];
+    let shared = measures.iter().enumerate().any(|(j, m)| {
+        j != i
+            && m.source_span
+                .is_some_and(|s| s.start == a && s.start + s.len == b)
+    });
+    Some(if shared {
+        "%".to_owned()
+    } else {
+        text.to_owned()
+    })
 }
 
 /// Bar `i`'s text with a `%` written out: the text of the bar it repeats
@@ -638,7 +668,10 @@ mod tests {
         let chart = parse_chart(text).unwrap();
         let score = Score::from_chart(&chart);
         let err = write_bars(text, &chart, &score, &[1]).unwrap_err();
-        assert!(err.contains("not written out"), "{err}");
+        assert!(
+            err.contains("read-only") && err.contains("over the barline"),
+            "{err}"
+        );
     }
 
     #[test]

@@ -42,6 +42,9 @@ pub struct ChartParser<'a> {
     /// span carries (`TextSpan::column`, line 0) until
     /// `assign_measure_source_spans` places it in the document.
     line_texts: Vec<String>,
+    /// Reading one bar of a line that holds a `<< … >>` block: a `.` there
+    /// repeats the chord of the bar before it in the line.
+    in_parallel_part: bool,
 }
 
 impl<'a> ChartParser<'a> {
@@ -57,6 +60,7 @@ impl<'a> ChartParser<'a> {
             carried_measure: None,
             section_beats_offset: 0.0,
             line_texts: Vec::new(),
+            in_parallel_part: false,
         }
     }
 }

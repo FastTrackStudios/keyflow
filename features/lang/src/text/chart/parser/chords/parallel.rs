@@ -141,6 +141,14 @@ impl<'a> ChartParser<'a> {
                         trimmed
                     ));
                 }
+                // Read a bar at a time, a `%` here repeats the bar before it
+                // in this line (the line parser's own `carried_measure` is
+                // the bar before the line), and then the line goes on.
+                let carried = self.carried_measure.clone();
+                if let Some(previous) = measures.last() {
+                    self.carried_measure = Some(previous.clone());
+                }
+                self.in_parallel_part = true;
                 let parsed = self.parse_chord_line_inner(
                     trimmed,
                     section_type,
@@ -149,8 +157,10 @@ impl<'a> ChartParser<'a> {
                     default_chord_length.clone(),
                     default_melody_duration.clone(),
                     default_melody_octave,
-                )?;
-                if let Some(measure) = parsed.into_iter().next() {
+                );
+                self.carried_measure = carried;
+                self.in_parallel_part = false;
+                if let Some(measure) = parsed?.into_iter().next() {
                     measures.push(measure);
                 }
             }

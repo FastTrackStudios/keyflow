@@ -20,6 +20,7 @@
 
 pub mod icons;
 pub mod input;
+pub mod keep;
 pub mod palette;
 #[cfg(not(target_family = "wasm"))]
 pub mod session_host;
@@ -210,6 +211,8 @@ enum Msg {
     Input,
     /// A key pressed or a bar clicked on its chart.
     Gesture(ChartGesture),
+    /// Time to keep the view, if it changed.
+    Keep,
 }
 
 /// Note input: one person's, for the app, as MuseScore's (the tools and
@@ -351,6 +354,7 @@ fn ChartPane() -> Element {
                         edit_state().active = Some(key);
                         gesture(g).await;
                     }
+                    Msg::Keep => keep_view().await,
                 }
             }
         });
@@ -358,6 +362,19 @@ fn ChartPane() -> Element {
     });
     // Keys arrive by the bindings of the person's settings.
     use_hook(|| spawn(load_keymap()));
+    // The view as it was before a reload: zoom, scroll, selection, and
+    // note input. Then kept as it changes (a zoom or a scroll is the pane's,
+    // so it is looked at now and then; an operation keeps it at once).
+    use_hook(|| spawn(restore_view(key)));
+    #[cfg(not(target_family = "wasm"))]
+    use_hook(|| {
+        let tell = tell.clone();
+        std::thread::spawn(move || {
+            while tell.send(Msg::Keep).is_ok() {
+                std::thread::sleep(std::time::Duration::from_millis(700));
+            }
+        });
+    });
     // The toolbar's buttons lit as the input state is, once a chart shows.
     use_hook(publish_input);
     let mount = use_hook(|| {
@@ -421,6 +438,8 @@ fn ChartPane() -> Element {
                 }
                 open.error.clone_from(&message);
             }
+            // The chart's kept view, now that its path is known.
+            apply_kept_chart(key);
             error.set(message);
         }
     });
@@ -518,6 +537,151 @@ fn ChartPane() -> Element {
             }
         }
     }
+}
+
+/// The view as kept: note input, and each open chart's zoom, scroll and
+/// selection by its path.
+fn view_state() -> Json {
+    let input = keep::input_json(&edit_state().input);
+    let pending: Vec<u64> = open_charts()
+        .iter()
+        .filter(|(k, o)| kept_pending(**k, &o.path))
+        .map(|(k, _)| *k)
+        .collect();
+    // A chart not yet given its kept view back keeps what was kept.
+    let mut charts: serde_json::Map<String, Json> = KEPT
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .as_ref()
+        .and_then(|k| k.get("charts")?.as_object().cloned())
+        .unwrap_or_default();
+    let live: serde_json::Map<String, Json> = open_charts()
+        .iter()
+        .filter(|(k, o)| !o.path.is_empty() && !pending.contains(k))
+        .map(|(_, o)| o)
+        .map(|o| {
+            let view = o.data.read(|s| s.view);
+            let selection = o.selection.read(|s| s.keys.clone());
+            (
+                o.path.clone(),
+                keep::chart_json(view.zoom, view.scroll, &selection),
+            )
+        })
+        .collect();
+    charts.extend(live);
+    json!({ "input": input, "charts": charts })
+}
+
+/// The view written to the extension's own data, when it changed.
+async fn keep_view() {
+    // Not before what was kept has been read back: a process starting up
+    // would write its defaults over it.
+    if !RESTORE_TRIED.load(Ordering::Relaxed) {
+        return;
+    }
+    let state = view_state();
+    if !keep::changed(&state) {
+        return;
+    }
+    if let Ok(handle) = handle() {
+        let _ = handle
+            .host(HostRequest::SetData {
+                key: keep::KEY.to_owned(),
+                value: Some(state),
+            })
+            .await;
+    }
+}
+
+/// Note input is taken back once a process (a reload): not again for a
+/// second pane.
+static INPUT_RESTORED: AtomicBool = AtomicBool::new(false);
+
+/// Whether this process has read the kept view back (or found none).
+static RESTORE_TRIED: AtomicBool = AtomicBool::new(false);
+
+/// The pane `key`'s chart taken back to its kept zoom, scroll and
+/// selection, and note input to its kept mode, tools and cursor.
+async fn restore_view(key: u64) {
+    let Ok(handle) = handle() else { return };
+    let kept = handle
+        .host(HostRequest::Data {
+            key: keep::KEY.to_owned(),
+        })
+        .await;
+    let Ok(kept) = kept else {
+        RESTORE_TRIED.store(true, Ordering::Relaxed);
+        return;
+    };
+    // The chart's path is the pane's, read once it mounted.
+    restore_from(key, &kept).await;
+    RESTORE_TRIED.store(true, Ordering::Relaxed);
+}
+
+async fn restore_from(key: u64, kept: &Json) {
+    *KEPT.lock().unwrap_or_else(PoisonError::into_inner) = Some(kept.clone());
+    apply_kept_chart(key);
+    if let Some(input) = kept.get("input")
+        && !INPUT_RESTORED.swap(true, Ordering::Relaxed)
+    {
+        {
+            let mut e = edit_state();
+            e.input = keep::input_from(input);
+            e.active = Some(key);
+        }
+        // Remembered as written, so the first look does not write it again.
+        keep::changed(&view_state());
+        rerender_input().await;
+    }
+}
+
+/// What was kept, as read back when this process started.
+static KEPT: Mutex<Option<Json>> = Mutex::new(None);
+
+/// The panes (and their charts) given their kept view back.
+static APPLIED: Mutex<Vec<(u64, String)>> = Mutex::new(Vec::new());
+
+/// Whether pane `key` showing `path` is still to be given its kept view.
+fn kept_pending(key: u64, path: &str) -> bool {
+    let has = KEPT
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .as_ref()
+        .and_then(|k| k.get("charts")?.get(path))
+        .is_some();
+    has && !APPLIED
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .iter()
+        .any(|(k, p)| *k == key && p == path)
+}
+
+/// Pane `key`'s chart given its kept zoom, scroll and selection, once its
+/// path is known (in a process, the pane's state comes after it mounts).
+fn apply_kept_chart(key: u64) {
+    let Some(o) = open_charts().get(&key).cloned() else {
+        return;
+    };
+    if o.path.is_empty() || !kept_pending(key, &o.path) {
+        return;
+    }
+    let chart = KEPT
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .as_ref()
+        .and_then(|k| k.get("charts")?.get(&o.path).cloned());
+    let Some(chart) = chart else { return };
+    let (zoom, scroll, selection) = keep::chart_from(&chart);
+    o.data.update(|s| s.view = ChartView { zoom, scroll });
+    o.selection.set(ChartSelection {
+        keys: selection,
+        hover: None,
+    });
+    o.wake.wake();
+    APPLIED
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .push((key, o.path.clone()));
 }
 
 /// The host this extension was built with.
@@ -762,6 +926,7 @@ async fn run_op(make: impl FnOnce(&Score) -> Vec<Op>) -> Result<Json, String> {
         reload(Some(&path));
     }
     show_input(&chart, &score, refused);
+    keep_view().await;
     Ok(input_state())
 }
 

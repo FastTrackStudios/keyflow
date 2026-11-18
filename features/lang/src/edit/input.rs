@@ -37,6 +37,9 @@ pub struct Score {
     pub bars: Vec<Bar>,
     /// Each bar's chord symbols.
     pub chords: Vec<ChordBar>,
+    /// Why a bar cannot be written back, when it has no text of its own
+    /// (the parser's reason): it is shown, and an entry there refused.
+    pub read_only: Vec<Option<String>>,
     /// The key signature's alteration of each letter, C to B.
     pub key: [i8; 7],
 }
@@ -66,7 +69,25 @@ impl Score {
                 }
             }
         }
-        Self { bars, chords, key }
+        let read_only = chart
+            .sections
+            .iter()
+            .flat_map(|s| {
+                s.measures().iter().map(|m| {
+                    m.source_span.is_none().then(|| {
+                        m.read_only.clone().unwrap_or_else(|| {
+                            "it has no text of its own in the chart's text".to_owned()
+                        })
+                    })
+                })
+            })
+            .collect();
+        Self {
+            bars,
+            chords,
+            read_only,
+            key,
+        }
     }
 
     /// The key signature's alteration of `letter`.
@@ -592,6 +613,9 @@ impl InputState {
     /// a chord sounds until the next one, so the next bar is its own.
     fn enter_chord(&mut self, score: &mut Score, slot: &Slot) -> Outcome {
         let at = self.cursor;
+        if let Some(why) = score.read_only.get(at.bar).cloned().flatten() {
+            return Outcome::refuse(format!("Bar {} is read-only: {why}", at.bar + 1));
+        }
         let Some(bar) = score.chords.get_mut(at.bar) else {
             return Outcome::refuse("The cursor is past the last bar");
         };
@@ -779,9 +803,13 @@ impl InputState {
             EventKind::Rest => EventKind::Rest,
         };
         let at = self.cursor;
-        let Some(bar) = score.bars.get(at.bar) else {
+        if at.bar >= score.bars.len() {
             return Outcome::refuse("The cursor is past the last bar");
-        };
+        }
+        if let Some(why) = score.read_only.get(at.bar).cloned().flatten() {
+            return Outcome::refuse(format!("Bar {} is read-only: {why}", at.bar + 1));
+        }
+        let bar = &score.bars[at.bar];
         if let Some(why) = &bar.locked {
             return Outcome::refuse(format!("Bar {} cannot be edited here: {why}", at.bar + 1));
         }
@@ -922,6 +950,16 @@ impl InputState {
     /// where.
     #[must_use]
     pub fn status(&self, score: &Score) -> String {
+        let line = self.status_line(score);
+        match score.read_only.get(self.cursor.bar).cloned().flatten() {
+            Some(why) if self.mode.is_input() => {
+                format!("Bar {} is read-only: {why} · {line}", self.cursor.bar + 1)
+            }
+            _ => line,
+        }
+    }
+
+    fn status_line(&self, score: &Score) -> String {
         let bar = score.bars.get(self.cursor.bar);
         let beat_ticks = TICKS_PER_WHOLE / 4;
         let beat = f64::from(self.cursor.tick) / f64::from(beat_ticks) + 1.0;
@@ -990,6 +1028,7 @@ mod tests {
         Score {
             bars: (0..bars).map(|_| Bar::empty((4, 4))).collect(),
             chords: (0..bars).map(|_| ChordBar::empty((4, 4))).collect(),
+            read_only: vec![None; bars],
             key: [0; 7],
         }
     }
@@ -1245,6 +1284,24 @@ mod tests {
         i.apply(&mut s, Op::RestTool);
         i.apply(&mut s, Op::Escape);
         assert_eq!((i.mode, i.accidental, i.rest), (Mode::Normal, None, false));
+    }
+
+    #[test]
+    fn a_read_only_bar_says_why_and_takes_nothing() {
+        let mut s = score(2);
+        s.read_only[1] = Some("it is a repeat of its line made by `x2`".into());
+        let before = s.clone();
+        let mut i = input(Mode::NoteName);
+        i.apply(&mut s, Op::MoveTo(Pos { bar: 1, tick: 0 }));
+        assert!(
+            i.status(&s)
+                .starts_with("Bar 2 is read-only: it is a repeat")
+        );
+        let out = i.apply(&mut s, Op::Letter('C'));
+        assert!(out.refused.unwrap().contains("read-only"));
+        i.target = Target::Chords;
+        assert!(i.apply(&mut s, Op::Letter('C')).refused.is_some());
+        assert_eq!(s, before);
     }
 
     #[test]

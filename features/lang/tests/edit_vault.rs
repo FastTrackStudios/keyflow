@@ -69,6 +69,7 @@ fn every_bar_of_the_vault_is_found_and_written_back_unchanged() {
     let (mut total, mut found, mut edited) = (0, 0, 0);
     let mut refused = std::collections::BTreeMap::<String, usize>::new();
     let mut chord_refused = std::collections::BTreeMap::<String, usize>::new();
+    let mut read_only = std::collections::BTreeMap::<String, usize>::new();
     let mut chorded = 0;
     let mut failures = Vec::new();
     for (name, source) in charts() {
@@ -80,10 +81,25 @@ fn every_bar_of_the_vault_is_found_and_written_back_unchanged() {
         let (mut f, mut e, mut c) = (0, 0, 0);
         for (i, m) in measures.iter().enumerate() {
             let Some(span) = m.source_span.as_ref() else {
+                // Read-only, and says why.
+                match &m.read_only {
+                    Some(why) => *read_only.entry(why.clone()).or_insert(0) += 1,
+                    None => failures.push(format!("{name} bar {}: no text and no reason", i + 1)),
+                }
                 continue;
             };
             f += 1;
-            let own = &source[span.start..span.start + span.len];
+            // A `%3`'s bars share its text; each alone is `%`.
+            let shared = measures.iter().enumerate().any(|(j, o)| {
+                j != i
+                    && o.source_span
+                        .is_some_and(|t| t.start == span.start && t.len == span.len)
+            });
+            let own = if shared {
+                "%"
+            } else {
+                &source[span.start..span.start + span.len]
+            };
 
             // Unchanged: its own text typed over it.
             match splice_syntax(&source, &chart, i, own) {
@@ -161,6 +177,9 @@ fn every_bar_of_the_vault_is_found_and_written_back_unchanged() {
     println!(
         "VAULT: {found} of {total} bars found; {edited} took a note and {chorded} a chord symbol, written back"
     );
+    for (why, n) in &read_only {
+        println!("READ-ONLY {n:4} {why}");
+    }
     for (why, n) in &chord_refused {
         println!("CHORD REFUSED {n:4} {why}");
     }

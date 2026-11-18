@@ -264,41 +264,58 @@ impl<'a> ChartParser<'a> {
             let content = line.strip_suffix('\n').unwrap_or(line);
             let content = content.strip_suffix('\r').unwrap_or(content);
             let trimmed = content.trim();
-            // The marker is everything before a `,` comment; strip a `^`
-            // subsection prefix the way the section parser does.
-            let marker = match trimmed.find(',') {
-                Some(c) => trimmed[..c].trim(),
-                None => trimmed,
+            // The marker as the section parser reads it: before a `:` with
+            // content after it (`VS 8: Cm | Fm |`), else before a `,`
+            // comment; a `^` subsection prefix stripped.
+            let marker = match (trimmed.find(':'), trimmed.find(',')) {
+                (Some(c), _) if !trimmed[c + 1..].trim().is_empty() => trimmed[..c].trim(),
+                (_, Some(c)) => trimmed[..c].trim(),
+                _ => trimmed,
             };
             let marker = marker.strip_prefix('^').unwrap_or(marker);
-            if let Some(parsed) = (!marker.is_empty())
-                .then(|| SectionType::parse_with_measure_count(marker))
-                .flatten()
-            {
+            let lower = marker.to_lowercase();
+            // `pre` and `post` are read by their own path (a pre- or
+            // post-chorus), before the section types.
+            let key = if lower == "pre" || lower.starts_with("pre ") {
+                Some("pre".to_owned())
+            } else if lower == "post" || lower.starts_with("post ") {
+                Some("post".to_owned())
+            } else {
+                (!marker.is_empty())
+                    .then(|| SectionType::parse_with_measure_count(marker))
+                    .flatten()
+                    .map(|parsed| parsed.section_type.key())
+            };
+            if let Some(key) = key {
                 // Span the whole trimmed header line (marker + any comment/key),
                 // so the badge lands at end of line rather than mid-header.
                 let lead = content.len() - content.trim_start().len();
                 let start = offset + lead;
                 let end = offset + content.trim_end().len();
                 let col = lead as u32 + 1;
-                headers.push((start, end - start, line_no, col, parsed.section_type.key()));
+                headers.push((start, end - start, line_no, col, key));
             }
             offset += line.len();
             line_no += 1;
         }
 
+        // Each section to the next header of its type; a section whose
+        // header is not found leaves the rest to be found.
+        let matches = |header: &str, want: &str| {
+            header == want || (matches!(header, "pre" | "post") && want.starts_with(header))
+        };
         let mut hi = 0;
         for section in &mut self.sections {
             if section.implicit {
                 continue;
             }
             let want = section.section.section_type.key();
-            while hi < headers.len() && headers[hi].4 != want {
-                hi += 1;
-            }
-            let Some(h) = headers.get(hi) else { break };
+            let Some(found) = (hi..headers.len()).find(|&j| matches(&headers[j].4, &want)) else {
+                continue;
+            };
+            let h = &headers[found];
             section.source_span = Some(TextSpan::with_location(h.0, h.1, h.2, h.3));
-            hi += 1;
+            hi = found + 1;
         }
     }
 
@@ -380,18 +397,34 @@ impl<'a> ChartParser<'a> {
             }
             // What is left, by the cells between barlines, when they are
             // exactly the section's bars.
-            let Some((from, to)) = body else { continue };
+            let Some((from, to)) = body else {
+                for m in measures.iter_mut().filter(|m| m.source_span.is_none()) {
+                    m.read_only.get_or_insert_with(|| {
+                        "its section has no header line in the chart's text".to_owned()
+                    });
+                }
+                continue;
+            };
             if measures.iter().all(|m| m.source_span.is_some()) {
                 continue;
             }
             let section_body = &input[from..to];
             let end = lyric_start(section_body);
             let cells = bar_cells(&blank_directives(&section_body[..end]));
+            let why = if cells.is_empty() {
+                "its section has no bars of its own: it plays an earlier section's bars again; edit that one"
+            } else {
+                "its text could not be found in the chart's text (a `<< >>` block written over several lines)"
+            };
             if cells.len() != measures.len() {
+                for m in measures.iter_mut().filter(|m| m.source_span.is_none()) {
+                    m.read_only.get_or_insert_with(|| why.to_owned());
+                }
                 continue;
             }
             for (measure, (start, len)) in measures.iter_mut().zip(cells) {
                 if measure.source_span.is_none() {
+                    measure.read_only = None;
                     let (line, col) = line_col(from + start);
                     measure.source_span =
                         Some(TextSpan::with_location(from + start, len, line, col));
@@ -403,6 +436,9 @@ impl<'a> ChartParser<'a> {
             for m in section.measures_mut().iter_mut() {
                 if m.source_span.is_some_and(|s| s.line == 0) {
                     m.source_span = None;
+                    m.read_only.get_or_insert_with(|| {
+                        "its section has no header line in the chart's text".to_owned()
+                    });
                 }
             }
         }
