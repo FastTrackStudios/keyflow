@@ -163,6 +163,10 @@ impl<'a> ChartParser<'a> {
         // name (`VS` → `Verse 1a`).
         self.assign_section_source_spans(input);
 
+        // Phase 3.7: each bar written out in a section's text gets its span
+        // (`bar_cells`), so an edit made on the chart can write that bar back.
+        self.assign_measure_source_spans(input);
+
         let _ = line_idx; // Suppress unused warning
 
         Ok(())
@@ -295,6 +299,59 @@ impl<'a> ChartParser<'a> {
             let Some(h) = headers.get(hi) else { break };
             section.source_span = Some(TextSpan::with_location(h.0, h.1, h.2, h.3));
             hi += 1;
+        }
+    }
+
+    /// Assign **document-absolute** `source_span`s to the bars of every
+    /// section whose bars are written out in its text: each bar's span is
+    /// its cell between barlines ([`bar_cells`]), so an edit made on the
+    /// chart (note input) can replace that bar's text and nothing else.
+    ///
+    /// Conservative: a section gets spans only when its text holds exactly
+    /// as many cells as it has bars, in order. A section whose bars come
+    /// from elsewhere (a recalled template, a repeat the parser unrolled)
+    /// keeps `None`, and an editor says so rather than writing a wrong bar.
+    fn assign_measure_source_spans(&mut self, input: &str) {
+        use crate::text::parsing::TextSpan;
+
+        let starts: Vec<Option<usize>> = self
+            .sections
+            .iter()
+            .map(|s| s.source_span.as_ref().map(|t| t.start))
+            .collect();
+        let line_col = |off: usize| -> (u32, u32) {
+            let upto = &input[..off];
+            let line = upto.bytes().filter(|&b| b == b'\n').count() as u32 + 1;
+            let col = (off - upto.rfind('\n').map_or(0, |n| n + 1)) as u32 + 1;
+            (line, col)
+        };
+        for (i, section) in self.sections.iter_mut().enumerate() {
+            let Some(header) = section.source_span.as_ref() else {
+                continue;
+            };
+            // The body: after the header line, up to the next written header.
+            let from = input[header.start..]
+                .find('\n')
+                .map_or(input.len(), |n| header.start + n + 1);
+            let to = starts[i + 1..]
+                .iter()
+                .flatten()
+                .copied()
+                .find(|&s| s >= from)
+                .unwrap_or(input.len());
+            // A section's lyrics (`[lyrics …]` to its end, `@` lines) are
+            // not bars: the bars are what comes before them.
+            let body = &input[from..to];
+            let end = lyric_start(body);
+            let cells = bar_cells(&blank_directives(&body[..end]));
+            let measures = section.measures_mut();
+            if cells.len() != measures.len() {
+                continue;
+            }
+            for (measure, (start, len)) in measures.iter_mut().zip(cells) {
+                let (line, col) = line_col(from + start);
+                measure.source_span = Some(TextSpan::with_location(from + start, len, line, col));
+            }
         }
     }
 
@@ -619,6 +676,114 @@ impl<'a> ChartParser<'a> {
 // endregion: --- Parser Entry Point
 
 // region:    --- Tests
+
+/// Where a section's body stops holding bars: its first lyric line (a
+/// `[lyrics …]` block, or an `@` timed lyric), or its end.
+fn lyric_start(body: &str) -> usize {
+    let mut offset = 0;
+    for line in body.split_inclusive('\n') {
+        let t = line.trim_start();
+        let timed_lyric = t
+            .strip_prefix('@')
+            .is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_digit()));
+        if timed_lyric || t.to_ascii_lowercase().starts_with("[lyrics") {
+            return offset;
+        }
+        offset += line.len();
+    }
+    body.len()
+}
+
+/// `body` with the lines that direct rather than hold bars blanked (a cue
+/// `@drums "Drums in"`, a dynamic `dyn mf`), offsets kept.
+fn blank_directives(body: &str) -> String {
+    let mut out = String::with_capacity(body.len());
+    for line in body.split_inclusive('\n') {
+        let t = line.trim_start();
+        let cue = t.strip_prefix('@').is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_alphabetic()));
+        let dynamic = t.starts_with("dyn ");
+        if cue || dynamic {
+            out.extend(line.chars().map(|c| if c == '\n' { '\n' } else { ' ' }));
+            // a multi-byte char blanked to one space would shift offsets
+            let diff = line.len() - line.chars().count();
+            out.extend(std::iter::repeat_n(' ', diff));
+        } else {
+            out.push_str(line);
+        }
+    }
+    out
+}
+
+/// The bars written in a section's `body`, as (byte offset, length) of
+/// each bar's text, trimmed: the cells between barlines (`|`, `||`, `|:`,
+/// `:|`, `:|x2`) and line ends. A barline inside a melody block (`m{ }`)
+/// or a parallel container (`<< >>`) is not one, and a `;` outside them
+/// starts a comment to the end of its line.
+#[must_use]
+pub fn bar_cells(body: &str) -> Vec<(usize, usize)> {
+    let bytes = body.as_bytes();
+    let mut cells = Vec::new();
+    let mut depth = 0i32;
+    let mut start = 0usize;
+    let push = |a: usize, b: usize, cells: &mut Vec<(usize, usize)>| {
+        let text = &body[a..b];
+        let lead = text.len() - text.trim_start().len();
+        let len = text.trim().len();
+        if len > 0 {
+            cells.push((a + lead, len));
+        }
+    };
+    let mut i = 0;
+    while i < bytes.len() {
+        let c = bytes[i];
+        match c {
+            b'{' => depth += 1,
+            b'}' => depth = (depth - 1).max(0),
+            b'<' if bytes.get(i + 1) == Some(&b'<') => {
+                depth += 1;
+                i += 1;
+            }
+            b'>' if bytes.get(i + 1) == Some(&b'>') => {
+                depth = (depth - 1).max(0);
+                i += 1;
+            }
+            b';' if depth == 0 => {
+                push(start, i, &mut cells);
+                while i < bytes.len() && bytes[i] != b'\n' {
+                    i += 1;
+                }
+                start = i;
+                continue;
+            }
+            b'\n' if depth == 0 => {
+                push(start, i, &mut cells);
+                start = i + 1;
+            }
+            b'|' | b':' if depth == 0 => {
+                // A barline: `:`s and `|`s together, then a repeat count.
+                let is_bar = c == b'|' || bytes.get(i + 1) == Some(&b'|');
+                if is_bar {
+                    push(start, i, &mut cells);
+                    while i < bytes.len() && matches!(bytes[i], b'|' | b':') {
+                        i += 1;
+                    }
+                    if i < bytes.len() && bytes[i] == b'x' {
+                        let digits = bytes[i + 1..].iter().take_while(|b| b.is_ascii_digit()).count();
+                        if digits > 0 {
+                            i += 1 + digits;
+                        }
+                    }
+                    start = i;
+                    continue;
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    push(start, bytes.len(), &mut cells);
+    cells
+}
 
 #[cfg(test)]
 mod tests {
