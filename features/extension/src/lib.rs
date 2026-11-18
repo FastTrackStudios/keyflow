@@ -493,10 +493,14 @@ fn ChartPane() -> Element {
                     }
                     Msg::Keep => {
                         if give_back_place(key).await
-                            && let Some(kept) = place.borrow().clone()
                             && let Some(now) = pane_place(key)
                         {
-                            kept.set(now.to_string());
+                            if let Some(kept) = place.borrow().clone() {
+                                kept.set(now.to_string());
+                            }
+                            // And the chart's own, for whichever pane opens
+                            // it next (this one closed, the app restarted).
+                            keep_document_place(key, &now).await;
                         }
                     }
                 }
@@ -620,6 +624,7 @@ fn ChartPane() -> Element {
             // input's cursor drawn on it, which a restore before the path
             // came could not.
             give_back_place(key).await;
+            give_back_document_place(key, &path).await;
             error.set(message);
         }
     });
@@ -776,6 +781,111 @@ fn pane_place(key: u64) -> Option<Json> {
         place["input"] = keep::input_json(&e.input);
     }
     Some(place)
+}
+
+/// The data key a chart's view is kept under in this extension's data: its
+/// path's, so a pane that opens the chart again finds it.
+fn document_place_key(path: &str) -> String {
+    format!("view:{path}")
+}
+
+/// Each chart's view as last written to this extension's data (by path),
+/// and the panes that were given theirs back (by mount key and path): a
+/// view is written only once its chart's kept one has been applied, or a
+/// fresh pane would write its defaults over it.
+static DOCUMENT_PLACES: Mutex<BTreeMap<String, String>> = Mutex::new(BTreeMap::new());
+static DOCUMENT_GIVEN: Mutex<std::collections::BTreeSet<(u64, String)>> =
+    Mutex::new(std::collections::BTreeSet::new());
+
+/// Pane `key`'s chart's view (`place`'s zoom, scroll and selection) kept
+/// with the chart, when it changed.
+async fn keep_document_place(key: u64, place: &Json) {
+    let (Some(path), Some(chart)) = (place.get("path").and_then(Json::as_str), place.get("chart"))
+    else {
+        return;
+    };
+    let given = DOCUMENT_GIVEN
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .contains(&(key, path.to_owned()));
+    if !given {
+        return;
+    }
+    let text = chart.to_string();
+    {
+        let mut places = DOCUMENT_PLACES
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if places.get(path) == Some(&text) {
+            return;
+        }
+        places.insert(path.to_owned(), text);
+    }
+    if let Ok(handle) = handle() {
+        let _ = handle
+            .host(HostRequest::SetData {
+                key: document_place_key(path),
+                value: Some(chart.clone()),
+            })
+            .await;
+    }
+}
+
+/// Pane `key`, showing `path`, given the chart's kept view once, unless its
+/// own kept place (its pane's) was for this chart and has been given back.
+async fn give_back_document_place(key: u64, path: &str) {
+    if path.is_empty() {
+        return;
+    }
+    let first = DOCUMENT_GIVEN
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .insert((key, path.to_owned()));
+    if !first {
+        return;
+    }
+    let pane_had_it = PLACES
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get(&key)
+        .is_some_and(|(text, _)| {
+            serde_json::from_str::<Json>(text)
+                .ok()
+                .and_then(|p| p.get("path").and_then(Json::as_str).map(|p| p == path))
+                .unwrap_or(false)
+        });
+    if pane_had_it {
+        return;
+    }
+    let Ok(handle) = handle() else { return };
+    let Ok(kept) = handle
+        .host(HostRequest::Data {
+            key: document_place_key(path),
+        })
+        .await
+    else {
+        return;
+    };
+    if kept.is_null() {
+        return;
+    }
+    let Some(o) = open_charts().get(&key).cloned() else {
+        return;
+    };
+    if o.path != path {
+        return;
+    }
+    let (zoom, scroll, selection) = keep::chart_from(&kept);
+    o.data.update(|s| s.view = ChartView { zoom, scroll });
+    o.selection.set(ChartSelection {
+        keys: selection,
+        hover: None,
+    });
+    o.wake.wake();
+    DOCUMENT_PLACES
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .insert(path.to_owned(), kept.to_string());
 }
 
 /// What each pane's view was given back (its kept place, as text), and
