@@ -695,7 +695,7 @@ dependencies = [
 [[package]]
 name = "architect"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-action-derive",
  "architect-derive",
@@ -745,7 +745,7 @@ dependencies = [
 [[package]]
 name = "architect-a2ui"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "a2ui-base",
  "architect",
@@ -766,7 +766,7 @@ dependencies = [
 [[package]]
 name = "architect-accounts"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-devices",
@@ -800,7 +800,7 @@ dependencies = [
 [[package]]
 name = "architect-action-derive"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -810,7 +810,7 @@ dependencies = [
 [[package]]
 name = "architect-app"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-a2ui",
@@ -881,7 +881,7 @@ dependencies = [
 [[package]]
 name = "architect-atom"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-workspace-hack",
  "dioxus",
@@ -890,7 +890,7 @@ dependencies = [
 [[package]]
 name = "architect-bases"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-extensions",
@@ -910,7 +910,7 @@ dependencies = [
 [[package]]
 name = "architect-calendar"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-capture",
  "architect-extensions",
@@ -926,7 +926,7 @@ dependencies = [
 [[package]]
 name = "architect-canvas"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-scripting",
@@ -943,7 +943,7 @@ dependencies = [
 [[package]]
 name = "architect-capture"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-shell",
@@ -968,7 +968,7 @@ dependencies = [
 [[package]]
 name = "architect-command-palette"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-commands",
  "architect-extensions",
@@ -981,7 +981,7 @@ dependencies = [
 [[package]]
 name = "architect-commands"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-input",
@@ -1011,7 +1011,7 @@ dependencies = [
 [[package]]
 name = "architect-control"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-workspace-hack",
@@ -1026,7 +1026,7 @@ dependencies = [
 [[package]]
 name = "architect-cookbook"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-extensions",
@@ -1047,7 +1047,7 @@ dependencies = [
 [[package]]
 name = "architect-dayplan"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-calendar",
  "architect-extensions",
@@ -1062,7 +1062,7 @@ dependencies = [
 [[package]]
 name = "architect-derive"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -1073,7 +1073,7 @@ dependencies = [
 [[package]]
 name = "architect-desktop"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-accounts",
@@ -1120,7 +1120,7 @@ dependencies = [
 [[package]]
 name = "architect-devices"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-orgs",
@@ -1142,7 +1142,7 @@ dependencies = [
 [[package]]
 name = "architect-distribution"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-calendar",
@@ -1167,7 +1167,7 @@ dependencies = [
 [[package]]
 name = "architect-documents"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-workspace-hack",
@@ -1179,7 +1179,7 @@ dependencies = [
 [[package]]
 name = "architect-editor"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-workspace-hack",
  "dioxus",
@@ -1196,7 +1196,7 @@ dependencies = [
 [[package]]
 name = "architect-extension-archive"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-workspace-hack",
  "base64 0.22.1",
@@ -1217,7 +1217,7 @@ dependencies = [
 [[package]]
 name = "architect-extensions"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "anyrender",
  "architect",
@@ -1277,6 +1277,7 @@ dependencies = [
  "tracing",
  "unicode-normalization",
  "url",
+ "uuid",
  "vault-proto",
  "vox",
  "vox-core",
@@ -1287,7 +1288,7 @@ dependencies = [
 [[package]]
 name = "architect-favourites"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-workspace-hack",
  "serde",
@@ -1296,7 +1297,7 @@ dependencies = [
 [[package]]
 name = "architect-files"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-orgs",
@@ -1332,7 +1333,7 @@ dependencies = [
 [[package]]
 name = "architect-files-extension"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-extensions",
  "architect-navigator-api",
@@ -1345,7 +1346,7 @@ dependencies = [
 [[package]]
 name = "architect-guide"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-commands",
@@ -1369,7 +1370,7 @@ dependencies = [
 [[package]]
 name = "architect-input"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-workspace-hack",
  "dioxus",
@@ -1384,7 +1385,7 @@ dependencies = [
 [[package]]
 name = "architect-mcp"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-control",
@@ -1399,7 +1400,7 @@ dependencies = [
 [[package]]
 name = "architect-mealplan"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-extensions",
@@ -1420,7 +1421,7 @@ dependencies = [
 [[package]]
 name = "architect-media"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-playhead",
  "architect-shell",
@@ -1436,7 +1437,7 @@ dependencies = [
 [[package]]
 name = "architect-navigator"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-commands",
@@ -1465,7 +1466,7 @@ dependencies = [
 [[package]]
 name = "architect-navigator-api"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-workspace-hack",
  "serde",
@@ -1475,7 +1476,7 @@ dependencies = [
 [[package]]
 name = "architect-navigator-extension"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-extensions",
  "architect-navigator",
@@ -1490,7 +1491,7 @@ dependencies = [
 [[package]]
 name = "architect-notify"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-extensions",
  "architect-workspace-hack",
@@ -1505,7 +1506,7 @@ dependencies = [
 [[package]]
 name = "architect-orgs"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-atom",
@@ -1525,7 +1526,7 @@ dependencies = [
 [[package]]
 name = "architect-pages"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-a2ui",
@@ -1563,7 +1564,7 @@ dependencies = [
 [[package]]
 name = "architect-palette"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-workspace-hack",
  "facet",
@@ -1572,7 +1573,7 @@ dependencies = [
 [[package]]
 name = "architect-permissions"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-workspace-hack",
  "serde",
@@ -1583,7 +1584,7 @@ dependencies = [
 [[package]]
 name = "architect-playhead"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-extensions",
  "architect-shell",
@@ -1599,7 +1600,7 @@ dependencies = [
 [[package]]
 name = "architect-presence"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-commands",
@@ -1625,7 +1626,7 @@ dependencies = [
 [[package]]
 name = "architect-process-view"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "anyrender",
  "architect-extensions",
@@ -1652,7 +1653,7 @@ dependencies = [
 [[package]]
 name = "architect-projects"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-extensions",
  "architect-navigator-api",
@@ -1666,7 +1667,7 @@ dependencies = [
 [[package]]
 name = "architect-rpc-derive"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1676,7 +1677,7 @@ dependencies = [
 [[package]]
 name = "architect-sandbox-board"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-extensions",
  "architect-workspace-hack",
@@ -1688,7 +1689,7 @@ dependencies = [
 [[package]]
 name = "architect-scene"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "anyrender",
  "architect-workspace-hack",
@@ -1702,7 +1703,7 @@ dependencies = [
 [[package]]
 name = "architect-scripting"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-theme",
@@ -1718,7 +1719,7 @@ dependencies = [
 [[package]]
 name = "architect-settings"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-commands",
@@ -1740,7 +1741,7 @@ dependencies = [
 [[package]]
 name = "architect-settings-derive"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1750,7 +1751,7 @@ dependencies = [
 [[package]]
 name = "architect-settings-sheet"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-extensions",
  "architect-settings",
@@ -1765,7 +1766,7 @@ dependencies = [
 [[package]]
 name = "architect-shell"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-favourites",
  "architect-theme",
@@ -1788,7 +1789,7 @@ dependencies = [
 [[package]]
 name = "architect-sites"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-extensions",
@@ -1818,7 +1819,7 @@ dependencies = [
 [[package]]
 name = "architect-spaces"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-orgs",
@@ -1836,7 +1837,7 @@ dependencies = [
 [[package]]
 name = "architect-story-core"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-workspace-hack",
  "linkme",
@@ -1845,7 +1846,7 @@ dependencies = [
 [[package]]
 name = "architect-story-macros"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -1856,7 +1857,7 @@ dependencies = [
 [[package]]
 name = "architect-story-runtime"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-story-core",
  "architect-story-macros",
@@ -1868,7 +1869,7 @@ dependencies = [
 [[package]]
 name = "architect-tasks"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-capture",
  "architect-extensions",
@@ -1884,7 +1885,7 @@ dependencies = [
 [[package]]
 name = "architect-telemetry"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-workspace-hack",
  "sentry",
@@ -1896,7 +1897,7 @@ dependencies = [
 [[package]]
 name = "architect-theme"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-workspace-hack",
@@ -1912,7 +1913,7 @@ dependencies = [
 [[package]]
 name = "architect-theme-picker"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-extensions",
  "architect-workspace-hack",
@@ -1922,7 +1923,7 @@ dependencies = [
 [[package]]
 name = "architect-threads"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-extensions",
  "architect-workspace-hack",
@@ -1937,7 +1938,7 @@ dependencies = [
 [[package]]
 name = "architect-time-tracker"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-capture",
  "architect-extensions",
@@ -1953,7 +1954,7 @@ dependencies = [
 [[package]]
 name = "architect-ui"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-story-runtime",
  "architect-theme",
@@ -1974,7 +1975,7 @@ dependencies = [
 [[package]]
 name = "architect-updates"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-extensions",
@@ -1991,7 +1992,7 @@ dependencies = [
 [[package]]
 name = "architect-workspace"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "anyrender",
  "anyrender_vello_cpu",
@@ -2028,7 +2029,7 @@ dependencies = [
 [[package]]
 name = "architect-workspace-hack"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "aead",
  "aes-gcm",
@@ -2788,7 +2789,7 @@ dependencies = [
 [[package]]
 name = "auth-client"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-workspace-hack",
  "base64 0.22.1",
@@ -2807,7 +2808,7 @@ dependencies = [
 [[package]]
 name = "auth-proto"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-workspace-hack",
@@ -4590,7 +4591,7 @@ dependencies = [
 [[package]]
 name = "crdt"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-devices",
@@ -4616,7 +4617,7 @@ dependencies = [
 [[package]]
 name = "crdt-derive"
 version = "0.1.0"
-source = "git+https://www.github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://www.github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -10513,7 +10514,7 @@ dependencies = [
 [[package]]
 name = "links"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-workspace-hack",
@@ -10532,7 +10533,7 @@ dependencies = [
 [[package]]
 name = "links-proto"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-workspace-hack",
@@ -18165,7 +18166,7 @@ dependencies = [
 [[package]]
 name = "tag"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-workspace-hack",
@@ -18182,7 +18183,7 @@ dependencies = [
 [[package]]
 name = "tag-proto"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-workspace-hack",
@@ -19619,7 +19620,7 @@ checksum = "2799ffb329a792ecfd902b71306c8a815a6ef1c0470fa9953a6aa4d4cecbe511"
 [[package]]
 name = "vault"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-workspace-hack",
@@ -19636,10 +19637,11 @@ dependencies = [
 [[package]]
 name = "vault-collab"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-telemetry",
  "architect-workspace-hack",
+ "async-trait",
  "crdt",
  "sha2 0.10.9",
  "tokio",
@@ -19654,7 +19656,7 @@ dependencies = [
 [[package]]
 name = "vault-doc"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect-workspace-hack",
  "async-trait",
@@ -19672,7 +19674,7 @@ dependencies = [
 [[package]]
 name = "vault-live"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-editor",
@@ -19702,7 +19704,7 @@ dependencies = [
 [[package]]
 name = "vault-obsidian"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-workspace-hack",
@@ -19729,7 +19731,7 @@ dependencies = [
 [[package]]
 name = "vault-proto"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-workspace-hack",
@@ -19747,7 +19749,7 @@ dependencies = [
 [[package]]
 name = "vault-query"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/architect?rev=e976a706b31eee11fcabcf118c1d2911d99ad86b#e976a706b31eee11fcabcf118c1d2911d99ad86b"
+source = "git+https://github.com/FastTrackStudios/architect?rev=ae93a78810bf9b632e2c4b9179fe73d2ba003155#ae93a78810bf9b632e2c4b9179fe73d2ba003155"
 dependencies = [
  "architect",
  "architect-workspace-hack",
