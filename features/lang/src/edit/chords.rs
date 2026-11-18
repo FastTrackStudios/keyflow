@@ -385,9 +385,75 @@ pub fn retyped(old: &str, typed: &str) -> String {
     }
 }
 
+/// `token` with its quality made `quality`, its root, bass and marks kept
+/// (a palette's quality cell: `'F#m7/A` made `maj7` is `'F#maj7/A`). `None`
+/// for a token with no root.
+#[must_use]
+pub fn with_quality(token: &str, quality: &str) -> Option<String> {
+    let (marks, root, _, bass) = parts(token)?;
+    Some(format!("{marks}{root}{quality}{bass}"))
+}
+
+/// The marks a chord symbol is written with before its root: an accent,
+/// a staccato, and a push an eighth or a sixteenth early.
+pub const MARKS: &[&str] = &[">", ".", "'", "''"];
+
+/// `token` with `mark` (one of [`MARKS`]) put on, or taken off when it is
+/// on already: a palette's articulation cell. A chord is pushed once, so
+/// an eighth's push replaces a sixteenth's and the other way round.
+/// `None` for a token with no root, or a mark that is not one of these.
+#[must_use]
+pub fn with_mark(token: &str, mark: &str) -> Option<String> {
+    if !MARKS.contains(&mark) {
+        return None;
+    }
+    let (marks, root, quality, bass) = parts(token)?;
+    let accent = marks.contains('>');
+    let staccato = marks.contains('.');
+    let push = marks.chars().filter(|c| *c == '\'').count();
+    // Anything else written before the root (`!`), kept as it is.
+    let other: String = marks
+        .chars()
+        .filter(|c| !matches!(c, '>' | '.' | '\''))
+        .collect();
+    let (accent, staccato, push) = match mark {
+        ">" => (!accent, staccato, push),
+        "." => (accent, !staccato, push),
+        _ => {
+            let wanted = mark.len();
+            (accent, staccato, if push == wanted { 0 } else { wanted })
+        }
+    };
+    Some(format!(
+        "{other}{}{}{}{root}{quality}{bass}",
+        if accent { ">" } else { "" },
+        if staccato { "." } else { "" },
+        "'".repeat(push),
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_palette_cell_sets_a_chord_s_quality_or_puts_a_mark_on_and_off() {
+        assert_eq!(with_quality("G", "maj7").as_deref(), Some("Gmaj7"));
+        assert_eq!(
+            with_quality("'F#m7/A", "maj7").as_deref(),
+            Some("'F#maj7/A")
+        );
+        assert_eq!(with_quality("b7m", "7").as_deref(), Some("b77"));
+        assert_eq!(with_quality("Bbsus4", "").as_deref(), Some("Bb"));
+        assert_eq!(with_mark("G", ">").as_deref(), Some(">G"));
+        assert_eq!(with_mark(">G", ">").as_deref(), Some("G"));
+        assert_eq!(with_mark(">G7", "'").as_deref(), Some(">'G7"));
+        assert_eq!(with_mark("''G", "'").as_deref(), Some("'G"));
+        assert_eq!(with_mark("'G", "'").as_deref(), Some("G"));
+        assert_eq!(with_mark("!'G", ".").as_deref(), Some("!.'G"));
+        assert_eq!(with_mark("G", "~"), None);
+        assert_eq!(with_mark("/", ">"), None);
+    }
 
     #[test]
     fn a_chord_s_quality_steps_and_its_root_bass_and_marks_stay() {

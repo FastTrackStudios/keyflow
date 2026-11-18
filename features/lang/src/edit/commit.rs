@@ -65,6 +65,30 @@ fn melody_range(cell: &str) -> Option<(usize, usize)> {
 /// `cell` with its chord symbols made `chords` (`F#m_2 B_2`): the chords
 /// of `<< chords ; m{ … } >>` replaced, a melody alone given chords beside
 /// it, and text written before a bar's chords (`"Build" F`) kept.
+/// `chords` in beat slashes (`Gmaj7 ////`, `C // Bdim //`: a chord, then a
+/// slash a beat), when the bar `was` written so (slashes, no values) and
+/// each chord is a whole number of beats.
+fn in_slashes(was: &str, chords: &ChordBar, beat: u32) -> Option<String> {
+    let words: Vec<&str> = was.split_whitespace().collect();
+    let slashed = words
+        .iter()
+        .any(|w| !w.is_empty() && w.chars().all(|c| c == '/'));
+    if !slashed || words.iter().any(|w| w.contains('_')) || beat == 0 {
+        return None;
+    }
+    let mut out = Vec::new();
+    for (slot, ticks) in chords.folded() {
+        let super::chords::Slot::Chord(token) = slot else {
+            return None;
+        };
+        if ticks % beat != 0 {
+            return None;
+        }
+        out.push(format!("{token} {}", "/".repeat((ticks / beat) as usize)));
+    }
+    Some(out.join(" "))
+}
+
 fn with_chords(cell: &str, chords: &str) -> String {
     let trimmed = cell.trim();
     if let Some(inner) = trimmed
@@ -178,7 +202,24 @@ pub fn write_bars(
     score: &Score,
     changed: &[usize],
 ) -> Result<String, String> {
-    let (text, bars) = bars_text(source, chart, score, changed)?;
+    // In the bar's own style first: a bar written in beat slashes
+    // (`G ////`) is written in them again (`Gmaj7 ////`), else with values.
+    match bars_written(source, chart, score, changed, true) {
+        Ok(text) => Ok(text),
+        Err(_) => bars_written(source, chart, score, changed, false),
+    }
+}
+
+/// [`write_bars`], the chords of a bar written in beat slashes written in
+/// them again when `slashes`, else with values.
+fn bars_written(
+    source: &str,
+    chart: &Chart,
+    score: &Score,
+    changed: &[usize],
+    slashes: bool,
+) -> Result<String, String> {
+    let (text, bars) = bars_text_in(source, chart, score, changed, slashes)?;
     let measures = measures(chart);
     check(&text, &measures, &replays(chart), &bars, |after| {
         for &index in &bars {
@@ -223,6 +264,16 @@ pub fn bars_text(
     score: &Score,
     changed: &[usize],
 ) -> Result<(String, Vec<usize>), String> {
+    bars_text_in(source, chart, score, changed, false)
+}
+
+fn bars_text_in(
+    source: &str,
+    chart: &Chart,
+    score: &Score,
+    changed: &[usize],
+    slashes: bool,
+) -> Result<(String, Vec<usize>), String> {
     let measures = measures(chart);
     let prefixes = prefixes(source, chart);
     let mut cells: Vec<(usize, String)> = Vec::new();
@@ -243,7 +294,12 @@ pub fn bars_text(
             .or_else(|| own_text(source, &measures, &prefixes, index))
             .unwrap_or_else(|| source[a..b].to_owned());
         if *chords != ChordBar::from_measure(was) {
-            own = with_chords(&own, &chords.to_text()?);
+            let beat = super::music::TICKS_PER_WHOLE / u32::from(was.time_signature.1.max(1));
+            let written = slashes
+                .then(|| in_slashes(&own, chords, beat))
+                .flatten()
+                .map_or_else(|| chords.to_text(), Ok)?;
+            own = with_chords(&own, &written);
         }
         let _ = bar;
         for voice in 0..4u8 {
@@ -1159,7 +1215,7 @@ mod tests {
         assert_eq!(input.selected_symbol(&score).as_deref(), Some("G"));
         let out = input.set_chord(&mut score, "Gsus4");
         let new = write_bars(text, &chart, &score, &out.changed).unwrap();
-        assert!(new.contains("C_4 Gsus4_2. | !Am / / /"), "{new}");
+        assert!(new.contains("C / Gsus4 /// | !Am / / /"), "{new}");
         // The accented Am: its quality stepped, its accent kept.
         let chart = parse_chart(&new).unwrap();
         let mut score = Score::from_text(&new, &chart);
@@ -1167,6 +1223,48 @@ mod tests {
         let out = input.apply(&mut score, Op::Quality(true));
         let newer = write_bars(&new, &chart, &score, &out.changed).unwrap();
         assert!(newer.contains("!A7"), "{newer}");
+    }
+
+    #[test]
+    fn a_palette_cell_sets_the_selected_chord_s_quality_or_marks_it() {
+        let text = "Edit - Test\n4/4\n\nVS 2\n| C / G / | Am / / / |\n";
+        let chart = parse_chart(text).unwrap();
+        let mut score = Score::from_text(text, &chart);
+        let mut input = InputState::default();
+        // The G: made a maj7, its length kept.
+        input.selected = Some(crate::edit::Pos { bar: 0, tick: 192 });
+        let out = input.set_quality(&mut score, "maj7");
+        let new = write_bars(text, &chart, &score, &out.changed).unwrap();
+        assert!(new.contains("C / Gmaj7 /// | Am / / /"), "{new}");
+        // An accent and a staccato on the G, read back as written; then
+        // the accent off again.
+        let mut text = new;
+        for (mark, written) in [(">", ">Gmaj7"), (".", ">.Gmaj7"), (">", "C / .Gmaj7")] {
+            let chart = parse_chart(&text).unwrap();
+            let mut score = Score::from_text(&text, &chart);
+            let out = input.toggle_mark(&mut score, mark);
+            assert!(out.refused.is_none(), "{mark}: {:?}", out.refused);
+            text = write_bars(&text, &chart, &score, &out.changed)
+                .unwrap_or_else(|e| panic!("{mark} on {text}: {e}"));
+            assert!(text.contains(written), "{mark}: {text}");
+        }
+        // A push is not placed by the palette yet: refused, and why.
+        let chart = parse_chart(&text).unwrap();
+        let mut score = Score::from_text(&text, &chart);
+        let out = input.toggle_mark(&mut score, "'");
+        assert!(out.changed.is_empty(), "{:?}", out.changed);
+        assert!(out.refused.as_deref().is_some_and(|r| r.contains("push")));
+        // On the Am, the bar's first chord: accented.
+        input.selected = Some(crate::edit::Pos { bar: 1, tick: 0 });
+        let out = input.toggle_mark(&mut score, ">");
+        let text = write_bars(&text, &chart, &score, &out.changed).unwrap();
+        assert!(text.contains("| >Am"), "{text}");
+        // Nothing selected: said so, nothing written.
+        let mut none = InputState::default();
+        let chart = parse_chart(&text).unwrap();
+        let mut score = Score::from_text(&text, &chart);
+        let out = none.set_quality(&mut score, "m7");
+        assert!(out.changed.is_empty() && out.refused.is_some());
     }
 
     #[test]
@@ -1239,7 +1337,7 @@ mod tests {
         changed.extend(input.apply(&mut score, Op::Letter('A')).changed);
         let text = write_bars(CHART, &chart, &score, &changed).unwrap();
         assert!(
-            text.contains("| C / / / | D_2 G_2 | << A_1 ; m{ a:44 r2. } >> |"),
+            text.contains("| C / / / | D // G // | << A_1 ; m{ a:44 r2. } >> |"),
             "{text}"
         );
     }

@@ -173,7 +173,22 @@ impl Extension for Keyflow {
         ext.action("KEYFLOW_CHORD_SET", |args| async move {
             let typed = text(&args, "text").ok_or("text: the chord symbol")?;
             edit_state().chord_draft = None;
-            run_edit(|_| Vec::new(), Some(typed)).await
+            run_edit(|_| Vec::new(), Some(Then::Retype(typed))).await
+        });
+        // A palette cell on what is selected (a chord's quality, an
+        // accent or a staccato on it), as MuseScore applies a palette.
+        ext.action("KEYFLOW_PALETTE_APPLY", |args| async move {
+            let token = text(&args, "token").ok_or("token: the palette cell's token")?;
+            let then =
+                palette::cell(&token).ok_or_else(|| format!("{token}: not a palette cell"))?;
+            match then {
+                Ok(then) => run_edit(|_| Vec::new(), Some(then)).await,
+                Err(why) => {
+                    edit_state().refused = Some(why);
+                    rerender_input().await;
+                    Ok(input_state())
+                }
+            }
         });
         ext.action("KEYFLOW_CHORD_EDIT", |_| async { chord_edit().await });
         ext.action("KEYFLOW_TARGET_SWITCH", |_| async {
@@ -975,12 +990,40 @@ async fn run_op(make: impl FnOnce(&Score) -> Vec<Op>) -> Result<Json, String> {
     run_edit(make, None).await
 }
 
-/// `make`'s operations applied, then, with `retype`, the selected chord
-/// made the symbol typed (`InputState::set_chord`): written back as one
-/// edit, one undo step.
+/// What is done to the selected chord after an edit's operations.
+pub(crate) enum Then {
+    /// Made the symbol typed (`InputState::set_chord`).
+    Retype(String),
+    /// Its quality made this one (a palette's quality cell).
+    Quality(String),
+    /// This mark put on it, or off (a palette's articulation cell).
+    Mark(String),
+}
+
+impl Then {
+    fn apply(&self, input: &mut edit::InputState, score: &mut Score) -> edit::Outcome {
+        match self {
+            Self::Retype(t) => input.set_chord(score, t),
+            Self::Quality(q) => input.set_quality(score, q),
+            Self::Mark(m) => input.toggle_mark(score, m),
+        }
+    }
+
+    /// Its undo step's name.
+    fn name(&self) -> String {
+        match self {
+            Self::Retype(t) => format!("Chord {t}"),
+            Self::Quality(q) => format!("Chord quality {}", if q.is_empty() { "major" } else { q }),
+            Self::Mark(m) => format!("Chord mark {m}"),
+        }
+    }
+}
+
+/// `make`'s operations applied, then `then` done to the selected chord:
+/// written back as one edit, one undo step.
 async fn run_edit(
     make: impl FnOnce(&Score) -> Vec<Op>,
-    retype: Option<String>,
+    retype: Option<Then>,
 ) -> Result<Json, String> {
     let _one = ONE_AT_A_TIME.lock().await;
     let Some((key, path)) = active_chart() else {
@@ -1028,8 +1071,8 @@ async fn run_edit(
                 outcome.refused = o.refused;
             }
         }
-        if let Some(typed) = &retype {
-            let o = e.input.set_chord(&mut score, typed);
+        if let Some(then) = &retype {
+            let o = then.apply(&mut e.input, &mut score);
             outcome.changed.extend(o.changed);
             outcome.refused = o.refused.or(outcome.refused.take());
         }
@@ -1041,9 +1084,7 @@ async fn run_edit(
     if !outcome.changed.is_empty() {
         match keyflow::edit::commit::write_bars(&text, &chart, &score, &outcome.changed) {
             Ok(new) => {
-                let name = retype
-                    .as_ref()
-                    .map_or_else(|| op_name(op), |t| format!("Chord {t}"));
+                let name = retype.as_ref().map_or_else(|| op_name(op), Then::name);
                 write_text(&handle, &path, new.clone(), &name).await?;
                 let after = edit_state().input.clone();
                 remember(&path, text.clone(), new, (before, after));

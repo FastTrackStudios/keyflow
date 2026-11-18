@@ -4,8 +4,10 @@
 //! view, not a dock of the app's: the view is docked into other apps as it
 //! is, sidebar and all.
 //!
-//! A cell applies to what is selected on the chart; until the chart has a
-//! selection, choosing one says so.
+//! A cell applies to the selected chord at once (`KEYFLOW_PALETTE_APPLY`,
+//! [`cell`]): a quality sets its quality, an accent or a staccato goes on
+//! or off. The other cells say they are not placed yet; with nothing
+//! selected, the status line says so.
 
 use base64::Engine as _;
 use dioxus::prelude::*;
@@ -185,6 +187,31 @@ pub const PALETTES: &[Palette] = &[
     },
 ];
 
+/// What choosing the cell with `token` does to what is selected: a chord
+/// quality cell sets the selected chord's quality, an accent or a staccato
+/// goes on it (or off). `Err` says why a cell does nothing yet; `None`
+/// for a token no cell has.
+#[must_use]
+pub(crate) fn cell(token: &str) -> Option<Result<crate::Then, String>> {
+    let (palette, item) = PALETTES
+        .iter()
+        .find_map(|p| p.items.iter().find(|i| i.token == token).map(|i| (p, i)))?;
+    Some(match palette.title {
+        "Chord qualities" => Ok(crate::Then::Quality(token.to_owned())),
+        "Articulations" if keyflow::edit::chords::MARKS.contains(&token) => {
+            Ok(crate::Then::Mark(token.to_owned()))
+        }
+        "Articulations" => Err(format!(
+            "{}: written after the chord in the bar ({}), which the palette does not place yet",
+            item.name, item.token
+        )),
+        _ => Err(format!(
+            "{}: the palette does not place it on the chart yet; type it in the chart's text ({})",
+            item.name, item.token
+        )),
+    })
+}
+
 /// Whether `item` matches the search `query` (its name, label or token).
 #[must_use]
 pub fn matches(item: &Item, query: &str) -> bool {
@@ -272,13 +299,8 @@ pub fn Palettes() -> Element {
     let srcs = drawn.peek().1.clone();
     let q = query();
     let foot = chosen().map_or_else(
-        || "Choose a cell to apply it to what is selected.".to_owned(),
-        |i| {
-            format!(
-                "{} ({}): select a bar or a chord on the chart to apply it.",
-                i.name, i.token
-            )
-        },
+        || "Choose a cell to apply it to the selected chord.".to_owned(),
+        |i| format!("{} ({})", i.name, i.token),
     );
     rsx! {
         // Its sheet, in the document head: a process view's too, which its
@@ -317,7 +339,21 @@ pub fn Palettes() -> Element {
                                     div {
                                         class: if chosen() == Some(*item) { "kf-cell kf-cell-on" } else { "kf-cell" },
                                         title: "{item.name}",
-                                        onclick: move |_| chosen.set(Some(*item)),
+                                        // Applied to what is selected at once,
+                                        // through the action ⌘K and MCP run;
+                                        // what it did, or why not, is the
+                                        // chart's status line.
+                                        onclick: move |_| {
+                                            chosen.set(Some(*item));
+                                            let token = item.token;
+                                            spawn(async move {
+                                                let _ = crate::dispatch(
+                                                    "KEYFLOW_PALETTE_APPLY",
+                                                    serde_json::json!({ "token": token }),
+                                                )
+                                                .await;
+                                            });
+                                        },
                                         if let Some(src) = item.glyph.and_then(|g| srcs.get(&g)) {
                                             img { src: "{src}" }
                                         }
@@ -339,6 +375,21 @@ pub fn Palettes() -> Element {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_cell_applies_or_says_why_not() {
+        for item in PALETTES.iter().flat_map(|p| p.items) {
+            match cell(item.token) {
+                Some(Ok(_)) => {}
+                Some(Err(why)) => assert!(why.contains(item.name), "{why}"),
+                None => panic!("{}: no cell found by its token", item.token),
+            }
+        }
+        assert!(matches!(cell("maj7"), Some(Ok(crate::Then::Quality(q))) if q == "maj7"));
+        assert!(matches!(cell(">"), Some(Ok(crate::Then::Mark(m))) if m == ">"));
+        assert!(matches!(cell("#G"), Some(Err(_))));
+        assert!(cell("nonsense").is_none());
+    }
 
     #[test]
     fn search_finds_a_cell_by_name_label_or_token() {
