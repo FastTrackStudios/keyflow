@@ -531,19 +531,17 @@ async fn history(undo: bool) -> Result<Json, String> {
     };
     let handle = handle()?;
     let now = read_text(&handle, &step.path).await?;
-    let (expect, write) = if undo {
-        (&step.after, &step.before)
-    } else {
-        (&step.before, &step.after)
+    let write = match step_text(&step, &now, undo) {
+        Ok(text) => text,
+        Err(why) => {
+            edit_state().refused = Some(why.clone());
+            publish_input();
+            return Err(why);
+        }
     };
-    if now != *expect {
-        edit_state().refused = Some("The chart changed since; undo that in its document".to_owned());
-        publish_input();
-        return Err("the chart changed since that edit".to_owned());
-    }
     write_text(&handle, &step.path, write.clone(), if undo { "Undo" } else { "Redo" }).await?;
     reload(Some(&step.path));
-    let chart = keyflow::text::chart::parse_chart(write)?;
+    let chart = keyflow::text::chart::parse_chart(&write)?;
     edit_state().input = if undo {
         step.input.0.clone()
     } else {
@@ -553,6 +551,21 @@ async fn history(undo: bool) -> Result<Json, String> {
     let score = Score::from_chart(&chart);
     show_input(&chart, &score, None);
     Ok(input_state())
+}
+
+/// The text undoing (`undo`) or redoing `step` writes, when the chart is
+/// `now`: only over the text that step left, never over an edit since.
+fn step_text(step: &Step, now: &str, undo: bool) -> Result<String, String> {
+    let (expect, write) = if undo {
+        (&step.after, &step.before)
+    } else {
+        (&step.before, &step.after)
+    };
+    if now == expect {
+        Ok(write.clone())
+    } else {
+        Err("The chart changed since that edit; undo the change in its document".to_owned())
+    }
 }
 
 /// One note-input operation on the active chart: read it, apply it, write
@@ -954,4 +967,27 @@ fn dark_theme() -> ChartTheme {
     theme.render.foreground_color = Color::from_rgb8(245, 240, 220);
     theme.render.staff_color = Color::from_rgb8(210, 210, 205);
     theme
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn step() -> Step {
+        Step {
+            path: "Charts/A.kf".into(),
+            before: "| C / / / |".into(),
+            after: "| << C / / / ; m{ E:44 r2. } >> |".into(),
+            input: Default::default(),
+        }
+    }
+
+    #[test]
+    fn undo_takes_an_edit_back_only_over_what_it_left() {
+        let s = step();
+        assert_eq!(step_text(&s, &s.after, true).as_deref(), Ok(s.before.as_str()));
+        assert_eq!(step_text(&s, &s.before, false).as_deref(), Ok(s.after.as_str()));
+        // Someone else's edit since: not undone over.
+        assert!(step_text(&s, "| D / / / |", true).is_err());
+    }
 }
