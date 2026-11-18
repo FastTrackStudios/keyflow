@@ -19,6 +19,7 @@
 
 use keyflow_proto::Chart;
 
+use super::chords::{ChordBar, Slot, transpose};
 use super::music::{Bar, Duration, Event, EventKind, Pitch, TICKS_PER_WHOLE, Value};
 
 /// Where an input is: a bar (the chart's bars counted from 0 across its
@@ -32,7 +33,10 @@ pub struct Pos {
 /// The chart's bars as note input edits them, and its key signature.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Score {
+    /// Each bar's melody line.
     pub bars: Vec<Bar>,
+    /// Each bar's chord symbols.
+    pub chords: Vec<ChordBar>,
     /// The key signature's alteration of each letter, C to B.
     pub key: [i8; 7],
 }
@@ -46,6 +50,11 @@ impl Score {
             .iter()
             .flat_map(|s| s.measures().iter().map(Bar::from_measure))
             .collect();
+        let chords = chart
+            .sections
+            .iter()
+            .flat_map(|s| s.measures().iter().map(ChordBar::from_measure))
+            .collect();
         let mut key = [0i8; 7];
         if let Some(k) = chart.initial_key.as_ref().or(chart.current_key.as_ref()) {
             for note in k.notes() {
@@ -57,7 +66,7 @@ impl Score {
                 }
             }
         }
-        Self { bars, key }
+        Self { bars, chords, key }
     }
 
     /// The key signature's alteration of `letter`.
@@ -82,6 +91,27 @@ impl Score {
             }
         }
         None
+    }
+}
+
+/// What a letter enters: a chord symbol (these charts are chord charts
+/// first) or a note of the melody. Shown on the toolbar and the status line.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Target {
+    /// A–G a chord symbol's root at the duration, the cursor moving on.
+    #[default]
+    Chords,
+    /// A–G a note, Shift+A–G a note added to the chord of notes.
+    Notes,
+}
+
+impl Target {
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Chords => "Chord symbols",
+            Self::Notes => "Notes",
+        }
     }
 }
 
@@ -136,6 +166,8 @@ pub struct InputState {
     pub pitch: Pitch,
     /// The note or rest last entered or moved to: what ↑ ↓ Del T act on.
     pub selected: Option<Pos>,
+    /// What a letter enters.
+    pub target: Target,
 }
 
 impl Default for InputState {
@@ -149,6 +181,7 @@ impl Default for InputState {
             // The middle line of a treble staff.
             pitch: Pitch::new('B', 0, 4),
             selected: None,
+            target: Target::Chords,
         }
     }
 }
@@ -189,6 +222,39 @@ pub enum Op {
     PrevBar,
     /// A click: the cursor to the note or rest at `pos`.
     MoveTo(Pos),
+    /// Chord symbols or notes: what a letter enters.
+    Target(Target),
+    /// Shift+A–G: a note added above the selected note's chord.
+    AddToChord(char),
+}
+
+/// A chord symbol's root as written: `F#`, `Bb`.
+fn root(p: Pitch) -> String {
+    let acc = match p.alter {
+        2 => "##",
+        1 => "#",
+        -1 => "b",
+        -2 => "bb",
+        _ => "",
+    };
+    format!("{}{acc}", p.letter)
+}
+
+/// `token` with its root made `p`'s, its marks and quality kept.
+fn with_root(token: &str, p: Pitch) -> Option<String> {
+    let at = token
+        .char_indices()
+        .find(|(_, c)| c.is_ascii_alphabetic())?
+        .0;
+    let (marks, rest) = token.split_at(at);
+    let mut chars = rest.chars();
+    let first = chars.next()?;
+    if !('A'..='G').contains(&first.to_ascii_uppercase()) {
+        return None;
+    }
+    let after: String = chars.collect();
+    let quality = after.strip_prefix(['#', 'b']).unwrap_or(&after);
+    Some(format!("{marks}{}{quality}", root(p)))
 }
 
 /// What an operation did.
@@ -242,6 +308,14 @@ impl InputState {
             Op::Duration(value) => {
                 self.duration = Duration::new(value);
                 match self.mode {
+                    Mode::Duration if self.target == Target::Chords => {
+                        let slot = if self.rest {
+                            Slot::Rest
+                        } else {
+                            Slot::Chord(root(self.armed(self.pitch)))
+                        };
+                        self.enter_chord(score, &slot)
+                    }
                     Mode::Duration => {
                         let kind = if self.rest {
                             EventKind::Rest
@@ -250,6 +324,7 @@ impl InputState {
                         };
                         self.enter(score, kind)
                     }
+                    Mode::Normal if self.target == Target::Chords => self.rechord_length(score),
                     Mode::Normal => self.redurate(score),
                     _ => Outcome::default(),
                 }
@@ -281,6 +356,29 @@ impl InputState {
                 if !('A'..='G').contains(&letter) {
                     return Outcome::refuse(format!("{letter} is not a note name"));
                 }
+                if self.target == Target::Chords {
+                    // A chord symbol's root: the letter as typed (chord
+                    // symbols do not take the key signature), with an armed
+                    // accidental.
+                    let alter = self.accidental.unwrap_or(0);
+                    let pitch = Pitch::new(letter, alter, self.pitch.octave);
+                    return match self.mode {
+                        Mode::NoteName => {
+                            let slot = if self.rest {
+                                Slot::Rest
+                            } else {
+                                Slot::Chord(root(pitch))
+                            };
+                            self.enter_chord(score, &slot)
+                        }
+                        Mode::Duration => {
+                            self.pitch = pitch;
+                            Outcome::default()
+                        }
+                        Mode::Normal => self.rechord(score, |t| with_root(t, pitch)),
+                        Mode::Syntax => Outcome::default(),
+                    };
+                }
                 let alter = self.accidental.unwrap_or_else(|| score.key_alter(letter));
                 let near = score.pitch_before(self.cursor).unwrap_or(self.pitch);
                 let pitch = Pitch::nearest(letter, alter, near);
@@ -305,13 +403,22 @@ impl InputState {
                 if self.mode == Mode::Normal {
                     return self.delete(score);
                 }
+                if self.target == Target::Chords {
+                    return self.enter_chord(score, &Slot::Rest);
+                }
                 self.enter(score, EventKind::Rest)
+            }
+            Op::Tie if self.target == Target::Chords => {
+                Outcome::refuse("A tie joins notes: switch to entering notes")
             }
             Op::Tie => self.tie(score),
             Op::Semitone(up) => {
                 if self.mode == Mode::Duration {
                     self.pitch = Pitch::from_step(self.pitch.step() + if up { 1 } else { -1 });
                     return Outcome::default();
+                }
+                if self.target == Target::Chords {
+                    return self.rechord(score, |t| transpose(t, up));
                 }
                 self.repitch(score, |p| p.semitone(up))
             }
@@ -322,6 +429,7 @@ impl InputState {
                 }
                 self.repitch(score, |p| p.octave_shift(up))
             }
+            Op::Delete if self.target == Target::Chords => self.rechord_slot(score, Slot::Rest),
             Op::Delete => self.delete(score),
             Op::Next => {
                 self.step_event(score, true);
@@ -344,7 +452,155 @@ impl InputState {
                 self.move_to(score, pos);
                 Outcome::default()
             }
+            Op::Target(target) => {
+                self.target = target;
+                self.move_to(score, self.cursor);
+                Outcome::default()
+            }
+            Op::AddToChord(letter) => self.add_to_chord(score, letter),
         }
+    }
+
+    /// The bar `bar`'s events in the target's line: `(start, length)`.
+    fn line(&self, score: &Score, bar: usize) -> Vec<(u32, u32)> {
+        match self.target {
+            Target::Notes => {
+                let b = &score.bars[bar];
+                b.starts()
+                    .into_iter()
+                    .zip(&b.events)
+                    .map(|(s, e)| (s, e.duration.ticks()))
+                    .collect()
+            }
+            Target::Chords => {
+                let b = &score.chords[bar];
+                b.starts()
+                    .into_iter()
+                    .zip(&b.events)
+                    .map(|(s, e)| (s, e.duration.ticks()))
+                    .collect()
+            }
+        }
+    }
+
+    /// A chord symbol (or a rest) entered at the cursor at the duration,
+    /// overwriting, and the cursor moved past it. It stops at the barline:
+    /// a chord sounds until the next one, so the next bar is its own.
+    fn enter_chord(&mut self, score: &mut Score, slot: &Slot) -> Outcome {
+        let at = self.cursor;
+        let Some(bar) = score.chords.get_mut(at.bar) else {
+            return Outcome::refuse("The cursor is past the last bar");
+        };
+        if let Some(why) = &bar.locked {
+            return Outcome::refuse(format!(
+                "Bar {}'s chords cannot be edited here: {why}",
+                at.bar + 1
+            ));
+        }
+        if at.tick >= bar.length {
+            return Outcome::refuse("The cursor is at the end of the chart");
+        }
+        let len = self.duration.ticks().min(bar.length - at.tick);
+        bar.overwrite(at.tick, len, slot);
+        let mut end = Pos {
+            bar: at.bar,
+            tick: at.tick + len,
+        };
+        if end.tick >= bar.length && end.bar + 1 < score.chords.len() {
+            end = Pos {
+                bar: end.bar + 1,
+                tick: 0,
+            };
+        }
+        self.selected = Some(at);
+        self.cursor = end;
+        self.accidental = None;
+        Outcome::bars(vec![at.bar])
+    }
+
+    /// The selected chord symbol's text changed by `to` (`None`: it cannot
+    /// be, such as a degree's root moved a semitone).
+    fn rechord(&mut self, score: &mut Score, to: impl Fn(&str) -> Option<String>) -> Outcome {
+        let Some((bar, i)) = self.selected_chord(score) else {
+            return Outcome::refuse("Nothing selected to change");
+        };
+        let event = &mut score.chords[bar].events[i];
+        let Slot::Chord(t) = &event.slot else {
+            return Outcome::refuse("No chord there");
+        };
+        let Some(new) = to(t) else {
+            return Outcome::refuse("That chord's root is not a letter");
+        };
+        event.slot = Slot::Chord(new);
+        Outcome::bars(vec![bar])
+    }
+
+    /// The selected chord slot made `slot`.
+    fn rechord_slot(&mut self, score: &mut Score, slot: Slot) -> Outcome {
+        let Some((bar, i)) = self.selected_chord(score) else {
+            return Outcome::refuse("Nothing selected to delete");
+        };
+        score.chords[bar].events[i].slot = slot;
+        Outcome::bars(vec![bar])
+    }
+
+    /// The selected chord given the duration chosen (normal mode).
+    fn rechord_length(&mut self, score: &mut Score) -> Outcome {
+        let Some((bar, i)) = self.selected_chord(score) else {
+            return Outcome::default();
+        };
+        let slot = score.chords[bar].events[i].slot.clone();
+        let at = score.chords[bar].starts()[i];
+        let saved = self.cursor;
+        self.cursor = Pos { bar, tick: at };
+        let out = self.enter_chord(score, &slot);
+        self.cursor = saved;
+        self.selected = Some(Pos { bar, tick: at });
+        out
+    }
+
+    /// The selected chord slot: its bar and index.
+    fn selected_chord(&self, score: &Score) -> Option<(usize, usize)> {
+        let pos = self.selected?;
+        let i = score.chords.get(pos.bar)?.index_at(pos.tick)?;
+        Some((pos.bar, i))
+    }
+
+    /// Shift+letter: a note added above the selected note (MuseScore adds
+    /// it above what is there, so a chord is built from the bottom up).
+    fn add_to_chord(&mut self, score: &mut Score, letter: char) -> Outcome {
+        if self.target == Target::Chords {
+            return Outcome::refuse(
+                "Shift+A–G adds a note to a chord of notes: switch to entering notes",
+            );
+        }
+        let letter = letter.to_ascii_uppercase();
+        let Some((bar, i)) = self.selected_event(score) else {
+            return Outcome::refuse("Enter a note to add to first");
+        };
+        let alter = self.accidental.unwrap_or_else(|| score.key_alter(letter));
+        let event = &mut score.bars[bar].events[i];
+        let Some(base) = event.pitch() else {
+            return Outcome::refuse("A rest takes no notes");
+        };
+        let top = event
+            .above
+            .iter()
+            .flatten()
+            .copied()
+            .chain(std::iter::once(base))
+            .max_by_key(|p| p.midi())
+            .unwrap_or(base);
+        let mut new = Pitch::nearest(letter, alter, top);
+        while new.midi() <= top.midi() {
+            new = new.octave_shift(true);
+        }
+        let Some(slot) = event.above.iter_mut().find(|p| p.is_none()) else {
+            return Outcome::refuse("A chord of notes holds four notes at most here");
+        };
+        *slot = Some(new);
+        self.accidental = None;
+        Outcome::bars(vec![bar])
     }
 
     /// `pitch` with the armed accidental, which an entry uses up.
@@ -356,23 +612,31 @@ impl InputState {
     /// The cursor to the note or rest at `pos`, which is selected.
     fn move_to(&mut self, score: &Score, pos: Pos) {
         let bar = pos.bar.min(score.bars.len() - 1);
-        let b = &score.bars[bar];
-        let i = b
-            .index_at(pos.tick.min(b.length.saturating_sub(1)))
-            .unwrap_or(0);
-        let tick = b.starts().get(i).copied().unwrap_or(0);
+        let line = self.line(score, bar);
+        let tick = line
+            .iter()
+            .find(|(s, l)| pos.tick >= *s && pos.tick < s + l)
+            .map_or(0, |(s, _)| *s);
         self.cursor = Pos { bar, tick };
         self.selected = Some(self.cursor);
-        if let Some(p) = b.events.get(i).and_then(Event::pitch) {
+        let b = &score.bars[bar];
+        if let Some(p) = b
+            .index_at(tick)
+            .and_then(|i| b.events.get(i))
+            .and_then(Event::pitch)
+        {
             self.pitch = p;
         }
     }
 
     /// The cursor one note or rest on (or back), over barlines.
     fn step_event(&mut self, score: &Score, forward: bool) {
-        let b = &score.bars[self.cursor.bar];
-        let starts = b.starts();
-        let i = b.index_at(self.cursor.tick).unwrap_or(starts.len());
+        let line = self.line(score, self.cursor.bar);
+        let starts: Vec<u32> = line.iter().map(|x| x.0).collect();
+        let i = line
+            .iter()
+            .position(|(s, l)| self.cursor.tick >= *s && self.cursor.tick < s + l)
+            .unwrap_or(starts.len());
         let to = if forward {
             match starts.get(i + 1) {
                 Some(&tick) => Pos {
@@ -391,10 +655,10 @@ impl InputState {
                 tick: starts[i - 1],
             }
         } else if self.cursor.bar > 0 {
-            let prev = &score.bars[self.cursor.bar - 1];
+            let prev = self.line(score, self.cursor.bar - 1);
             Pos {
                 bar: self.cursor.bar - 1,
-                tick: prev.starts().last().copied().unwrap_or(0),
+                tick: prev.last().map_or(0, |x| x.0),
             }
         } else {
             return;
@@ -587,8 +851,19 @@ impl InputState {
                 ),
                 None => "Normal mode · N: input by note name · M: input by duration".to_owned(),
             },
+            Mode::NoteName if self.target == Target::Chords => format!(
+                "Input by note name · chord symbols · {} {}{accidental} · next at {at} · A–G a chord root, 0 no chord, ↑ ↓ the root, Tab: notes instead, Esc leave{}",
+                self.duration.name(),
+                if self.rest { "rest" } else { "chord" },
+                score
+                    .chords
+                    .get(self.cursor.bar)
+                    .and_then(|b| b.locked.as_deref())
+                    .map(|why| format!(" · this bar's chords cannot be edited here: {why}"))
+                    .unwrap_or_default()
+            ),
             Mode::NoteName => format!(
-                "Input by note name · voice 1 · {} {what}{accidental} · next at {at} · A–G enter, 0 rest, T tie, Esc leave{locked}",
+                "Input by note name · notes · voice 1 · {} {what}{accidental} · next at {at} · A–G enter, Shift+A–G add to the chord, 0 rest, T tie, Tab: chord symbols instead, Esc leave{locked}",
                 self.duration.name()
             ),
             Mode::Duration => format!(
@@ -610,6 +885,7 @@ mod tests {
     fn score(bars: usize) -> Score {
         Score {
             bars: (0..bars).map(|_| Bar::empty((4, 4))).collect(),
+            chords: (0..bars).map(|_| ChordBar::empty((4, 4))).collect(),
             key: [0; 7],
         }
     }
@@ -636,8 +912,55 @@ mod tests {
     fn input(mode: Mode) -> InputState {
         InputState {
             mode,
+            target: Target::Notes,
             ..InputState::default()
         }
+    }
+
+    fn chords(bar: &ChordBar) -> String {
+        bar.to_text().unwrap()
+    }
+
+    #[test]
+    fn chord_symbols_are_what_a_letter_enters_first() {
+        assert_eq!(InputState::default().target, Target::Chords);
+        let mut s = score(2);
+        let mut i = InputState {
+            mode: Mode::NoteName,
+            ..InputState::default()
+        };
+        i.apply(&mut s, Op::Duration(Half));
+        i.apply(&mut s, Op::Letter('d'));
+        i.apply(&mut s, Op::Accidental(-1));
+        i.apply(&mut s, Op::Letter('B'));
+        assert_eq!(chords(&s.chords[0]), "D_2 Bb_2");
+        assert_eq!(i.cursor, Pos { bar: 1, tick: 0 }, "on to the next bar");
+        // ↑ on the chord just entered moves its root, quality kept.
+        i.apply(&mut s, Op::Semitone(true));
+        assert_eq!(chords(&s.chords[0]), "D_2 B_2");
+        // No melody was touched.
+        assert!(s.bars[0].events.iter().all(|e| e.pitch().is_none()));
+        // Tab: notes instead.
+        i.apply(&mut s, Op::Target(Target::Notes));
+        i.apply(&mut s, Op::Letter('E'));
+        assert!(s.bars[1].events[0].pitch().is_some());
+    }
+
+    #[test]
+    fn shift_letter_adds_a_note_above_the_chord_of_notes() {
+        let mut s = score(1);
+        let mut i = input(Mode::NoteName);
+        i.apply(&mut s, Op::Duration(Half));
+        i.apply(&mut s, Op::Letter('C'));
+        i.apply(&mut s, Op::AddToChord('E'));
+        i.apply(&mut s, Op::AddToChord('G'));
+        let e = &s.bars[0].events[0];
+        let above: Vec<String> = e.above.iter().flatten().map(|p| p.name()).collect();
+        assert_eq!(e.pitch().unwrap().name(), "C5");
+        assert_eq!(above, ["E5", "G5"], "each above the last");
+        // As chord symbols, Shift+letter says what it is for.
+        i.target = Target::Chords;
+        assert!(i.apply(&mut s, Op::AddToChord('B')).refused.is_some());
     }
 
     #[test]
@@ -744,7 +1067,10 @@ mod tests {
     #[test]
     fn by_duration_the_pitch_comes_first_and_the_duration_key_enters_it() {
         let mut s = score(1);
-        let mut i = InputState::default();
+        let mut i = InputState {
+            target: Target::Notes,
+            ..InputState::default()
+        };
         i.apply(&mut s, Op::Mode(Mode::Duration));
         i.apply(&mut s, Op::Letter('A'));
         assert!(

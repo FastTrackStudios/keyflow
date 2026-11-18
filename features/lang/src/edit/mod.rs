@@ -22,9 +22,11 @@
 //! operations: a [`Score`] is read from the chart, changed, written back,
 //! and the chart is read again from what was written.
 
+pub mod chords;
 pub mod commit;
 pub mod input;
 pub mod music;
 
-pub use input::{InputState, Mode, Op, Outcome, Pos, Score};
+pub use chords::{ChordBar, ChordEvent, Slot};
+pub use input::{InputState, Mode, Op, Outcome, Pos, Score, Target};
 pub use music::{Bar, Duration, Event, EventKind, Pitch, TICKS_PER_WHOLE, Value};

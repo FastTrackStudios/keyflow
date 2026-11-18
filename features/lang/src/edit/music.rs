@@ -302,6 +302,9 @@ pub struct Event {
     pub tie: bool,
     /// Its articulations ([`MARKS`], a bit each).
     pub marks: u8,
+    /// The notes stacked on it, lowest first (a chord of notes, Shift+A–G):
+    /// up to three more.
+    pub above: [Option<Pitch>; 3],
 }
 
 impl Event {
@@ -312,6 +315,7 @@ impl Event {
             duration,
             tie: false,
             marks: 0,
+            above: [None; 3],
         }
     }
 
@@ -322,6 +326,7 @@ impl Event {
             duration,
             tie: false,
             marks: 0,
+            above: [None; 3],
         }
     }
 
@@ -468,11 +473,7 @@ impl Bar {
     /// octave explicit, so the bar reads the same wherever it moves.
     #[must_use]
     pub fn to_melody(&self) -> String {
-        let notes: Vec<String> = self
-            .events
-            .iter()
-            .map(|e| melody_note(e).to_string())
-            .collect();
+        let notes: Vec<String> = self.events.iter().map(note_text).collect();
         format!("m{{ {} }}", notes.join(" "))
     }
 }
@@ -490,6 +491,7 @@ fn new_events(kind: EventKind, len: u32, tie_last: bool) -> Vec<Event> {
             duration: d,
             tie: matches!(kind, EventKind::Note(_)) && (i + 1 < n || tie_last),
             marks: 0,
+            above: [None; 3],
         })
         .collect()
 }
@@ -504,8 +506,8 @@ fn event_of(note: &MelodyNote) -> Result<Event, String> {
     if note.triplet {
         return Err("it holds a tuplet, which note input does not edit yet".to_owned());
     }
-    if !note.extra_pitches.is_empty() {
-        return Err("it holds a chord of notes, which note input does not edit yet".to_owned());
+    if note.extra_pitches.len() > 3 {
+        return Err("it holds a chord of more than four notes".to_owned());
     }
     let value = Value::from_lilypond(note.duration)
         .ok_or_else(|| format!("a 1/{} note is not one note input edits", note.duration))?;
@@ -541,12 +543,81 @@ fn event_of(note: &MelodyNote) -> Result<Event, String> {
     });
     let natural = rest.contains('n');
     let octave = note.octave.ok_or("a note without a resolved octave")?;
+    let mut above = [None; 3];
+    for (slot, (name, octave)) in above.iter_mut().zip(&note.extra_pitches) {
+        *slot = Some(pitch_of(name, *octave)?);
+    }
     Ok(Event {
         kind: EventKind::Note(Pitch::new(letter, alter, octave as i8).with_natural(natural)),
         duration,
         tie: note.tie_start,
         marks,
+        above,
     })
+}
+
+/// A chord note's pitch, `C#` in octave `octave`.
+fn pitch_of(name: &str, octave: Option<u8>) -> Result<Pitch, String> {
+    let mut chars = name.chars();
+    let letter = chars
+        .next()
+        .map(|c| c.to_ascii_uppercase())
+        .filter(|c| ('A'..='G').contains(c))
+        .ok_or_else(|| format!("`{name}` is not a pitch note input edits"))?;
+    let rest: String = chars.collect();
+    let alter = rest.chars().fold(0i8, |a, c| match c {
+        '#' => a + 1,
+        'b' => a - 1,
+        _ => a,
+    });
+    let octave = octave.ok_or("a chord note without a resolved octave")?;
+    Ok(Pitch::new(letter, alter, octave as i8).with_natural(rest.contains('n')))
+}
+
+/// The written name of a pitch with its octave: `F#:4`.
+fn pitch_text(p: Pitch) -> String {
+    let accidental = match p.alter {
+        2 => "##",
+        1 => "#",
+        -1 => "b",
+        -2 => "bb",
+        _ if p.natural => "n",
+        _ => "",
+    };
+    format!("{}{accidental}:{}", p.letter, p.octave.max(0))
+}
+
+/// How a mark is written after a note.
+const MARK_TEXT: [&str; 7] = ["-.", "->", "--", "-^", "-!", "-fall", "-fermata"];
+
+/// `event` as Keyflow writes it in a melody: a note (`F#:44.~-.`), a rest,
+/// or a chord of notes (`<C:4 E:4 G:4>2`).
+fn note_text(event: &Event) -> String {
+    let EventKind::Note(p) = event.kind else {
+        return melody_note(event).to_string();
+    };
+    if event.above.iter().all(Option::is_none) {
+        return melody_note(event).to_string();
+    }
+    let mut out = format!("<{}", pitch_text(p));
+    for q in event.above.iter().flatten() {
+        out.push(' ');
+        out.push_str(&pitch_text(*q));
+    }
+    out.push('>');
+    out.push_str(&event.duration.value.lilypond().to_string());
+    for _ in 0..event.duration.dots {
+        out.push('.');
+    }
+    if event.tie {
+        out.push('~');
+    }
+    for (i, m) in MARK_TEXT.iter().enumerate() {
+        if event.marks & (1 << i) != 0 {
+            out.push_str(m);
+        }
+    }
+    out
 }
 
 /// `event` as the melody model writes it.

@@ -15,6 +15,7 @@
 use keyflow_proto::Chart;
 use keyflow_proto::chart::types::{Measure, RhythmElement};
 
+use super::chords::ChordBar;
 use super::input::Score;
 use super::music::Bar;
 use crate::text::chart::parse_chart;
@@ -63,6 +64,35 @@ fn melody_range(cell: &str) -> Option<(usize, usize)> {
     None
 }
 
+/// `cell` with its chord symbols made `chords` (`F#m_2 B_2`): the chords
+/// of `<< chords ; m{ … } >>` replaced, a melody alone given chords beside
+/// it, and text written before a bar's chords (`"Build" F`) kept.
+fn with_chords(cell: &str, chords: &str) -> String {
+    let trimmed = cell.trim();
+    if let Some(inner) = trimmed
+        .strip_prefix("<<")
+        .and_then(|t| t.strip_suffix(">>"))
+    {
+        return match inner.find(';') {
+            Some(at) => format!("<< {chords} ; {} >>", inner[at + 1..].trim()),
+            None => format!("<< {chords} >>"),
+        };
+    }
+    if trimmed.starts_with("m{") || trimmed.starts_with("m {") {
+        return format!("<< {chords} ; {trimmed} >>");
+    }
+    // Quoted text and cues written before the chords stay before them.
+    let mut keep = String::new();
+    let mut rest = trimmed;
+    while let Some(after) = rest.strip_prefix('"') {
+        let Some(end) = after.find('"') else { break };
+        keep.push_str(&rest[..end + 2]);
+        keep.push(' ');
+        rest = after[end + 1..].trim_start();
+    }
+    format!("{keep}{chords}")
+}
+
 /// `cell` with its melody made `melody`: the melody it has replaced, or
 /// one put beside its chords (`<< chords ; m{ … } >>`).
 fn with_melody(cell: &str, melody: &str) -> String {
@@ -96,6 +126,13 @@ pub fn write_bars(
     let measures = measures(chart);
     check(&text, &measures, &bars, |after| {
         for &index in &bars {
+            let chords = ChordBar::from_measure(after[index]);
+            if chords.folded() != score.chords[index].folded() {
+                return Err(format!(
+                    "Bar {}'s chords would not read back as entered, so they were not written",
+                    index + 1
+                ));
+            }
             let read = Bar::from_measure(after[index]);
             if read.events != score.bars[index].events {
                 return Err(format!(
@@ -127,13 +164,23 @@ pub fn bars_text(
     bars.dedup();
     for &index in &bars {
         let (a, b) = span(&measures, index)?;
-        let bar = score
-            .bars
-            .get(index)
-            .ok_or_else(|| format!("There is no bar {}", index + 1))?;
+        let (Some(bar), Some(chords), Some(was)) = (
+            score.bars.get(index),
+            score.chords.get(index),
+            measures.get(index),
+        ) else {
+            return Err(format!("There is no bar {}", index + 1));
+        };
         // A `%` bar is written out as the bar it repeats, then edited.
-        let own = written_out(source, &measures, index).unwrap_or_else(|| source[a..b].to_owned());
-        cells.push((index, with_melody(&own, &bar.to_melody())));
+        let mut own =
+            written_out(source, &measures, index).unwrap_or_else(|| source[a..b].to_owned());
+        if *chords != ChordBar::from_measure(was) {
+            own = with_chords(&own, &chords.to_text()?);
+        }
+        if *bar != Bar::from_measure(was) {
+            own = with_melody(&own, &bar.to_melody());
+        }
+        cells.push((index, own));
     }
     let text = splice(source, placed(source, &measures, cells)?);
     Ok((text, bars))
@@ -442,7 +489,7 @@ fn music_of(m: &Measure, places: bool) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::edit::input::{InputState, Mode, Op};
+    use crate::edit::input::{InputState, Mode, Op, Target};
     use crate::edit::music::Value;
 
     const CHART: &str =
@@ -475,6 +522,7 @@ mod tests {
         let (chart, mut score) = setup();
         let mut input = InputState {
             mode: Mode::NoteName,
+            target: Target::Notes,
             ..InputState::default()
         };
         input.apply(&mut score, Op::MoveTo(crate::edit::Pos { bar: 1, tick: 0 }));
@@ -501,10 +549,34 @@ mod tests {
     }
 
     #[test]
+    fn chord_symbols_entered_are_written_into_their_bar() {
+        let (chart, mut score) = setup();
+        let mut input = InputState {
+            mode: Mode::NoteName,
+            ..InputState::default()
+        };
+        input.apply(&mut score, Op::MoveTo(crate::edit::Pos { bar: 1, tick: 0 }));
+        let mut changed = Vec::new();
+        for op in [Op::Duration(Value::Half), Op::Letter('D'), Op::Letter('G')] {
+            changed.extend(input.apply(&mut score, op).changed);
+        }
+        // Then bar 3, which has a melody: its chords change, its melody stays.
+        input.apply(&mut score, Op::MoveTo(crate::edit::Pos { bar: 2, tick: 0 }));
+        changed.extend(input.apply(&mut score, Op::Duration(Value::Whole)).changed);
+        changed.extend(input.apply(&mut score, Op::Letter('A')).changed);
+        let text = write_bars(CHART, &chart, &score, &changed).unwrap();
+        assert!(
+            text.contains("| C / / / | D_2 G_2 | << A_1 ; m{ a:44 r2. } >> |"),
+            "{text}"
+        );
+    }
+
+    #[test]
     fn a_bar_with_a_melody_has_its_melody_replaced() {
         let (chart, mut score) = setup();
         let mut input = InputState {
             mode: Mode::NoteName,
+            target: Target::Notes,
             ..InputState::default()
         };
         input.apply(&mut score, Op::MoveTo(crate::edit::Pos { bar: 2, tick: 0 }));
@@ -543,6 +615,7 @@ mod tests {
         let mut score = Score::from_chart(&chart);
         let mut input = InputState {
             mode: Mode::NoteName,
+            target: Target::Notes,
             ..InputState::default()
         };
         input.apply(&mut score, Op::MoveTo(crate::edit::Pos { bar: 1, tick: 0 }));

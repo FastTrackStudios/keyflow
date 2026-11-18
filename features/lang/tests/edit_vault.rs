@@ -15,7 +15,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::print_stdout)]
 
 use keyflow_lang::edit::commit::{same_music, splice_syntax, write_bars};
-use keyflow_lang::edit::{InputState, Mode, Op, Pos, Score, Value};
+use keyflow_lang::edit::{InputState, Mode, Op, Pos, Score, Target, Value};
 use keyflow_lang::text::chart::parse_chart;
 use keyflow_proto::Chart;
 use keyflow_proto::chart::types::Measure;
@@ -68,6 +68,8 @@ fn unchanged(before: &Chart, text: &str) -> Result<(), String> {
 fn every_bar_of_the_vault_is_found_and_written_back_unchanged() {
     let (mut total, mut found, mut edited) = (0, 0, 0);
     let mut refused = std::collections::BTreeMap::<String, usize>::new();
+    let mut chord_refused = std::collections::BTreeMap::<String, usize>::new();
+    let mut chorded = 0;
     let mut failures = Vec::new();
     for (name, source) in charts() {
         let Ok(chart) = parse_chart(&source) else {
@@ -75,7 +77,7 @@ fn every_bar_of_the_vault_is_found_and_written_back_unchanged() {
         };
         let measures = bars(&chart);
         let score = Score::from_chart(&chart);
-        let (mut f, mut e) = (0, 0);
+        let (mut f, mut e, mut c) = (0, 0, 0);
         for (i, m) in measures.iter().enumerate() {
             let Some(span) = m.source_span.as_ref() else {
                 continue;
@@ -107,6 +109,24 @@ fn every_bar_of_the_vault_is_found_and_written_back_unchanged() {
                 }
             }
 
+            // Edited: a chord symbol entered over its first half.
+            {
+                let mut s = score.clone();
+                let mut input = InputState {
+                    mode: Mode::NoteName,
+                    ..InputState::default()
+                };
+                input.apply(&mut s, Op::MoveTo(Pos { bar: i, tick: 0 }));
+                input.apply(&mut s, Op::Duration(Value::Half));
+                let out = input.apply(&mut s, Op::Letter('F'));
+                if out.changed == vec![i] {
+                    match write_bars(&source, &chart, &s, &out.changed) {
+                        Ok(_) => c += 1,
+                        Err(why) => *chord_refused.entry(why).or_insert(0) += 1,
+                    }
+                }
+            }
+
             // Edited: a note on its first beat, that bar alone.
             if score.bars[i].locked.is_some() {
                 continue;
@@ -114,6 +134,7 @@ fn every_bar_of_the_vault_is_found_and_written_back_unchanged() {
             let mut s = score.clone();
             let mut input = InputState {
                 mode: Mode::NoteName,
+                target: Target::Notes,
                 ..InputState::default()
             };
             input.apply(&mut s, Op::MoveTo(Pos { bar: i, tick: 0 }));
@@ -129,14 +150,20 @@ fn every_bar_of_the_vault_is_found_and_written_back_unchanged() {
             }
         }
         println!(
-            "{f:4} of {:4} bars found, {e:4} edited: {name}",
+            "{f:4} of {:4} bars found, {e:4} took a note, {c:4} a chord: {name}",
             measures.len()
         );
+        chorded += c;
         total += measures.len();
         found += f;
         edited += e;
     }
-    println!("VAULT: {found} of {total} bars found, {edited} edited and written back");
+    println!(
+        "VAULT: {found} of {total} bars found; {edited} took a note and {chorded} a chord symbol, written back"
+    );
+    for (why, n) in &chord_refused {
+        println!("CHORD REFUSED {n:4} {why}");
+    }
     assert!(found * 10 >= total * 6, "{found} of {total} bars found");
     for (why, n) in &refused {
         println!("REFUSED {n:4} {why}");
