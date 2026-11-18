@@ -216,7 +216,54 @@ async fn follow(args: Json) -> Result<Json, String> {
     });
     join_presence(&url, id, "chart").await?;
     sessions().clock = Some(clock);
-    Ok(json!({ "following": url, "id": id.to_string(), "pane": format!("session:{id}") }))
+    // The chart into the session it follows, when it holds none yet: the
+    // `.kf` at `chart_path`, written through the host's fts.session as
+    // Keyflow's own data.
+    let seeded = match args.get("chart_path").and_then(Json::as_str) {
+        Some(path) => seed_chart(&id.to_string(), path).await?,
+        None => false,
+    };
+    Ok(json!({
+        "following": url,
+        "id": id.to_string(),
+        "pane": format!("session:{id}"),
+        "seeded": seeded,
+    }))
+}
+
+/// Writes the chart at `chart_path` into session `doc` if it holds no
+/// chart: `true` when written.
+async fn seed_chart(doc: &str, chart_path: &str) -> Result<bool, String> {
+    let source = chart_source(&json!({ "chart_path": chart_path }))?;
+    let handle = crate::handle()?;
+    let pane = format!("session:{doc}");
+    if !crate::read_text(&handle, &pane).await?.trim().is_empty() {
+        return Ok(false);
+    }
+    crate::write_text(&handle, &pane, source, "Chart").await?;
+    crate::reload(Some(&pane));
+    Ok(true)
+}
+
+/// Makes bar `bar` of session `id` (held here) the song's bar 1: where
+/// the chart's bar 1 is after a count-in. `bar` 1 or none: the session's
+/// start. (A session the engine holds is the engine's to set.)
+fn set_bar_one(args: &Json) -> Result<Json, String> {
+    let id = id_of(args)?;
+    let bar = args
+        .get("bar")
+        .and_then(Json::as_i64)
+        .and_then(|b| i32::try_from(b).ok())
+        .filter(|b| *b > 1);
+    let s = sessions();
+    let chart = s
+        .charts
+        .get(&id)
+        .ok_or("this copy does not hold that session (KEYFLOW_SESSION_OPEN or _JOIN)")?;
+    let session = chart.session();
+    let at = bar.map(|b| session.tempo().at_bar(b, 1, 0.0));
+    session.set_bar_one(at).map_err(|e| e.to_string())?;
+    Ok(json!({ "bar_one": bar.unwrap_or(1), "chart_start_seconds": chart.chart_start() }))
 }
 
 /// Where the followed session's leader is now, session seconds, and
@@ -384,14 +431,40 @@ pub fn build(ext: &mut Builder) {
     .action("KEYFLOW_SESSION_SERVE", serve)
     .action("KEYFLOW_SESSION_JOIN", join)
     .action("KEYFLOW_SESSION_FOLLOW", follow)
+    .action("KEYFLOW_SESSION_BAR_ONE", |args| async move {
+        set_bar_one(&args)
+    })
     .action("KEYFLOW_SESSION_PLAY", |args| async move { play(&args) })
     .action("KEYFLOW_SESSION_STATE", |_| async { Ok(state()) });
 }
 
 #[cfg(test)]
 mod tests {
-    use super::chart_source;
+    use super::{chart_source, open, set_bar_one};
     use serde_json::json;
+
+    /// A session this copy holds gets its bar 1 here (no engine to set it):
+    /// bar 5 of a 4/4 session at its default 120 BPM is 8 s in.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_held_sessions_bar_one_is_set_here() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a.session");
+        let opened = open(json!({
+            "path": path.display().to_string(),
+            "chart": "Verse: C G Am F\n",
+        }))
+        .await
+        .unwrap();
+        let id = opened["id"].as_str().unwrap().to_owned();
+        let set = set_bar_one(&json!({ "id": id, "bar": 5 })).unwrap();
+        assert!(
+            (set["chart_start_seconds"].as_f64().unwrap() - 8.0).abs() < 1e-9,
+            "{set}"
+        );
+        let cleared = set_bar_one(&json!({ "id": id })).unwrap();
+        assert!(cleared["chart_start_seconds"].as_f64().unwrap().abs() < 1e-9);
+        assert!(set_bar_one(&json!({ "id": uuid::Uuid::new_v4().to_string(), "bar": 5 })).is_err());
+    }
 
     #[test]
     fn a_new_sessions_chart_is_text_or_a_file_never_a_path_taken_for_text() {
