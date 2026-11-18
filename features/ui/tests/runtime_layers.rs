@@ -345,17 +345,23 @@ fn measure(name: &str) {
     let o = other.bounds.center();
     let inside = kurbo::Point::new(o.x * points_to_px(1.0), o.y * points_to_px(1.0));
     let regions: usize = layers.iter().map(|(_, l)| l.region_count()).sum();
-    let hit = layers
+    let (page, hit) = layers
         .iter()
         .filter(|(k, _)| *k < (1 << 32))
-        .filter_map(|(_, l)| l.regions.as_deref())
-        .flat_map(|r| r.iter())
-        .filter(|r| match r.shape {
+        .filter_map(|(k, l)| l.regions.as_deref().map(|r| (*k, r)))
+        .flat_map(|(k, r)| r.iter().map(move |r| (k, r)))
+        .filter(|(_, r)| match r.shape {
             architect_workspace::paint::region::Shape::Rect(rect) => rect.contains(inside),
             _ => false,
         })
         .next_back()
-        .map(|r| r.id)
+        .map(|(k, r)| {
+            assert!(
+                r.hover_layer.is_some(),
+                "{name}: the chord's region names its hover layer"
+            );
+            (k, r.id)
+        })
         .expect("a region over the second chord");
     let mut region =
         |pane: &mut Pane, event: RegionEvent, receiver: &mut Receiver| -> (usize, Duration) {
@@ -371,7 +377,18 @@ fn measure(name: &str) {
         Some(other.key.clone()),
         "{name}: the pointer hovers the second chord"
     );
-    recoloured(name, &selected, &receiver, rgb(colours.hover));
+    // The host draws the chord's hover layer (sent once, hidden) while its
+    // region is hovered: composed as it composes it, the region lit.
+    let lit = architect_scene::region::Lit {
+        hit: architect_scene::region::Hit { key: page, id: hit },
+        pressed: false,
+    };
+    recoloured_as(
+        name,
+        &selected,
+        &composed_lit(&receiver, lit),
+        rgb(colours.hover),
+    );
     // A move within it: the host does not even tell the view, so only a
     // frame asked of it again, which sends nothing.
     let (hover_off, _) = region(&mut pane, RegionEvent::Leave(hit), &mut receiver);
@@ -408,7 +425,8 @@ fn measure(name: &str) {
         first.saturating_sub(font_bytes),
         as_before * 100.0
     );
-    assert!(hover_on > 0, "{name}: the hover drew nothing");
+    // The host shows the hover layer it already holds: nothing crosses.
+    assert_eq!(hover_on, 0, "{name}: a hover sent bytes");
     assert_eq!(
         hover_within, 0,
         "{name}: a move within one element sent bytes"
@@ -438,8 +456,26 @@ fn composed(receiver: &Receiver) -> Vec<u8> {
 /// (the view's own colours for it), and only its
 /// ink: the pixels in that colour are few and do not fill the box around
 /// them, so it is the element recoloured, not a box laid over it.
+/// What the host composes with region `lit` hovered: its hover layer shown.
+fn composed_lit(receiver: &Receiver, lit: architect_scene::region::Lit) -> Vec<u8> {
+    let mut scene = Scene::new();
+    receiver.layers().compose_lit(
+        &mut scene,
+        Affine::IDENTITY,
+        &architect_scene::anim::Readings::NONE,
+        &architect_scene::anim::Values::new(),
+        Some(lit),
+    );
+    raster(&scene)
+}
+
 fn recoloured(name: &str, before: &[u8], receiver: &Receiver, rgb: [u8; 3]) {
-    let pixels = composed(receiver);
+    recoloured_as(name, before, &composed(receiver), rgb);
+}
+
+/// [`recoloured`] for pixels already composed.
+fn recoloured_as(name: &str, before: &[u8], pixels: &[u8], rgb: [u8; 3]) {
+    let pixels = pixels.to_vec();
     if std::env::var_os("KEYFLOW_SHOTS").is_some() {
         let out =
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/runtime-layers");
