@@ -81,7 +81,14 @@ pub struct Selectable {
     pub bounds: Rect,
     /// Its text in the chart's source, when the layout kept it.
     pub span: Option<TextSpan>,
+    /// The scene node that draws it, as child indices from the layout's
+    /// root: what a highlight draws again in another colour. `None` for a
+    /// bar, which is the layout's box, not a node.
+    pub node: Option<Vec<usize>>,
 }
+
+/// One element found on the walk: its kind, bounds, span and node.
+type Found = (Kind, Rect, Option<TextSpan>, Option<Vec<usize>>);
 
 /// The metadata keys that name an element, and its kind.
 const MARKED: &[(&str, Kind)] = &[
@@ -137,8 +144,8 @@ pub fn kind_of(node: &SceneNode) -> Option<Kind> {
 /// Every element of `layout` that can be selected, in reading order.
 #[must_use]
 pub fn selectables(layout: &ChartLayoutResult) -> Vec<Selectable> {
-    let mut found: Vec<(Kind, Rect, Option<TextSpan>)> = Vec::new();
-    walk(&layout.scene, Affine::IDENTITY, &mut found);
+    let mut found: Vec<Found> = Vec::new();
+    walk(&layout.scene, Affine::IDENTITY, &mut Vec::new(), &mut found);
 
     // Every bar, from the layout's own boxes: a measure that wraps is one
     // per system it sits on.
@@ -151,9 +158,9 @@ pub fn selectables(layout: &ChartLayoutResult) -> Vec<Selectable> {
         );
         let seen = found
             .iter()
-            .any(|(kind, r, _)| *kind == Kind::Bar && *r == rect);
+            .any(|(kind, r, _, _)| *kind == Kind::Bar && *r == rect);
         if !seen && rect.width() > 0.0 {
-            found.push((Kind::Bar, rect, None));
+            found.push((Kind::Bar, rect, None, None));
         }
     }
 
@@ -191,7 +198,7 @@ pub fn selectables(layout: &ChartLayoutResult) -> Vec<Selectable> {
         .collect();
     found
         .into_iter()
-        .map(|(kind, bounds, span)| {
+        .map(|(kind, bounds, span, node)| {
             let key = if kind == Kind::Bar {
                 let measure = bars
                     .iter()
@@ -217,6 +224,7 @@ pub fn selectables(layout: &ChartLayoutResult) -> Vec<Selectable> {
                 kind,
                 bounds,
                 span,
+                node,
             }
         })
         .collect()
@@ -224,7 +232,7 @@ pub fn selectables(layout: &ChartLayoutResult) -> Vec<Selectable> {
 
 /// Collects every named element under `node`; an element inside another
 /// (a note in a measure's group) is one of its own.
-fn walk(node: &SceneNode, parent: Affine, found: &mut Vec<(Kind, Rect, Option<TextSpan>)>) {
+fn walk(node: &SceneNode, parent: Affine, path: &mut Vec<usize>, found: &mut Vec<Found>) {
     if !node.visible {
         return;
     }
@@ -233,15 +241,31 @@ fn walk(node: &SceneNode, parent: Affine, found: &mut Vec<(Kind, Rect, Option<Te
         && let Some(bounds) = scene_ink_bounds(node, parent)
     {
         let span = node.get_json_metadata::<TextSpan>(metadata_keys::SOURCE_SPAN);
-        found.push((kind, bounds, span));
+        found.push((kind, bounds, span, Some(path.clone())));
         // A chord symbol's own parts (its quality, its bass) are it.
         if kind == Kind::Chord {
             return;
         }
     }
-    for child in &node.children {
-        walk(child, transform, found);
+    for (i, child) in node.children.iter().enumerate() {
+        path.push(i);
+        walk(child, transform, path, found);
+        path.pop();
     }
+}
+
+/// The node at `path` (child indices from `root`) and the transform its
+/// parent places it with, from `root`'s parent's space: what
+/// [`Selectable::node`] names.
+#[must_use]
+pub fn node_at<'a>(root: &'a SceneNode, path: &[usize]) -> Option<(&'a SceneNode, Affine)> {
+    let mut node = root;
+    let mut parent = Affine::IDENTITY;
+    for &i in path {
+        parent *= node.transform;
+        node = node.children.get(i)?;
+    }
+    Some((node, parent))
 }
 
 /// Each system: its page, its staff's top and its height, in layout order.
@@ -307,6 +331,7 @@ mod tests {
             kind,
             bounds: Rect::new(r.0, r.1, r.2, r.3),
             span: None,
+            node: None,
         }
     }
 

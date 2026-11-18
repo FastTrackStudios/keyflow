@@ -60,6 +60,8 @@ pub struct InkMap {
     ink: [f32; 4],
     line: [f32; 4],
     accents: Vec<([u8; 3], Color)>,
+    /// Every ink in this one colour ([`InkMap::solid`]).
+    solid: Option<Color>,
 }
 
 impl InkMap {
@@ -87,13 +89,37 @@ impl InkMap {
                     ([c.r, c.g, c.b], *to)
                 })
                 .collect(),
+            solid: None,
         })
+    }
+
+    /// Every ink of an element in `color`, as a highlight draws it: the
+    /// element as itself, recoloured (MuseScore's selected and hovered
+    /// elements). The layout's light neutrals, the knock-outs it draws in
+    /// paper white behind text, are left out, so only the ink shows.
+    #[must_use]
+    pub fn solid(color: Color) -> Self {
+        Self {
+            paper: [1.0; 4],
+            ink: [0.0, 0.0, 0.0, 1.0],
+            line: [0.0, 0.0, 0.0, 1.0],
+            accents: Vec::new(),
+            solid: Some(color),
+        }
     }
 
     /// `color` as this theme paints it in `role`.
     #[must_use]
     pub fn map(&self, color: Color, role: InkRole) -> Color {
         let [r, g, b, a] = color.components;
+        if let Some(solid) = self.solid {
+            let neutral = (r - g).abs() < 1e-4 && (g - b).abs() < 1e-4;
+            return if neutral && r > 0.5 {
+                Color::TRANSPARENT
+            } else {
+                solid.multiply_alpha(a)
+            };
+        }
         if (r - g).abs() < 1e-4 && (g - b).abs() < 1e-4 {
             let base = match role {
                 InkRole::Fill => self.ink,
@@ -359,6 +385,21 @@ mod tests {
         // Chromatic colours pass through unless mapped.
         let red = Color::from_rgb8(0xCC, 0, 0);
         assert_eq!(map.map(red, InkRole::Fill), red);
+    }
+
+    #[test]
+    fn a_solid_map_draws_every_ink_in_one_colour_and_drops_knock_outs() {
+        let blue = Color::from_rgb8(30, 100, 220);
+        let map = InkMap::solid(blue);
+        assert_eq!(map.map(Color::BLACK, InkRole::Fill), blue);
+        assert_eq!(map.map(Color::BLACK, InkRole::Line), blue);
+        assert_eq!(map.map(MARKER_COLOR, InkRole::Fill), blue, "a red push marker too");
+        assert_eq!(map.map(Color::WHITE, InkRole::Fill), Color::TRANSPARENT);
+        assert_eq!(
+            map.map(Color::from_rgba8(0, 0, 0, 128), InkRole::Fill).to_rgba8().a,
+            128,
+            "its alpha is kept"
+        );
     }
 
     #[test]
