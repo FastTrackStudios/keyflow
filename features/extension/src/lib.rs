@@ -21,6 +21,8 @@
 pub mod icons;
 pub mod input;
 pub mod palette;
+#[cfg(not(target_family = "wasm"))]
+pub mod session_host;
 pub mod tools;
 
 use std::collections::BTreeMap;
@@ -61,6 +63,9 @@ impl Extension for Keyflow {
 
     fn build(&self, ext: &mut Builder) {
         *HANDLE.lock().unwrap_or_else(PoisonError::into_inner) = Some(ext.handle());
+        // `fts.session`: Keyflow as a session's host (native only).
+        #[cfg(not(target_family = "wasm"))]
+        session_host::build(ext);
         for tool in tools::TOOLS {
             let command = tool.command;
             ext.action(tool.action, move |_| async move {
@@ -542,11 +547,8 @@ async fn read_text(handle: &Handle, path: &str) -> Result<String, String> {
         .read_call()
         .map_err(|e| e.to_string())?
     {
-        let reply = handle
-            .host(service_request(&call)?)
-            .await
-            .map_err(|e| format!("{e:?}"))?;
-        return ChartSource::chart_of(&reply.to_string()).map_err(|e| e.to_string());
+        let reply = ask_session(handle, &call).await?;
+        return ChartSource::chart_of(&reply).map_err(|e| e.to_string());
     }
     let answer = handle
         .host(HostRequest::ReadDocument {
@@ -575,11 +577,7 @@ async fn write_text(handle: &Handle, path: &str, text: String, name: &str) -> Re
         else {
             return Ok(());
         };
-        return handle
-            .host(service_request(&call)?)
-            .await
-            .map(|_| ())
-            .map_err(|e| format!("{e:?}"));
+        return ask_session(handle, &call).await.map(|_| ());
     }
     handle
         .host(HostRequest::EditDocument {
@@ -1157,6 +1155,24 @@ async fn read_chart(path: &str) -> Result<keyflow::Chart, String> {
     // (`session:<id>`, the chart as Keyflow's data there).
     let text = read_text(&handle, path).await?;
     keyflow::parse(&text).map_err(|e| e.to_string())
+}
+
+/// A `fts.session` call, as this extension: answered here when this copy
+/// hosts the session (an extension cannot `[uses]` the service it
+/// provides), else through the host. The reply as JSON text.
+async fn ask_session(
+    handle: &Handle,
+    call: &keyflow_session::ServiceCall,
+) -> Result<String, String> {
+    #[cfg(not(target_family = "wasm"))]
+    if let Some(reply) = session_host::local_answer(call) {
+        return reply;
+    }
+    handle
+        .host(service_request(call)?)
+        .await
+        .map(|reply| reply.to_string())
+        .map_err(|e| format!("{e:?}"))
 }
 
 /// A `fts.session` call as the host request that makes it (the host runs

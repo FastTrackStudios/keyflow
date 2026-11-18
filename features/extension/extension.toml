@@ -26,10 +26,13 @@ git = "https://github.com/FastTrackStudios/keyflow"
 rev = "main"
 path = "features/extension"
 
-# A chart in a session (pane state `session:<id>`) is read and edited
-# through the session's host. A chart alone needs no session.
-[uses]
-"fts.session" = "^0.1"
+# A chart in a session (pane state `session:<id>`) is read from the session
+# this copy hosts. A chart alone needs no session.
+# Keyflow is a session's first host (and so does not `[uses]` the service:
+# its chart reads the sessions it holds directly): it provides `fts.session` to every
+# extension (KEYFLOW_READ / _WRITE / _STRUCTURE, run as the caller).
+[provides]
+"fts.session" = "0.1.0"
 
 [capabilities]
 effect = "mutating"
@@ -1049,3 +1052,68 @@ view = "chart"
 [[hooks]]
 on = "doc.saved"
 action = "KEYFLOW_RELOAD"
+
+# ── fts.session: Keyflow as a session's host (src/session_host.rs) ──────
+
+[[actions]]
+id = "KEYFLOW_READ"
+name = "fts.session: read"
+description = "fts.session's `read`: the calling extension's data, the timeline (other extensions' payloads null) or the song's structure. Args `{doc, request}`."
+group = "Session"
+effect = "read_only"
+params = '{"type":"object","properties":{"doc":{"type":"string"},"request":{}},"required":["doc","request"]}'
+
+[[actions]]
+id = "KEYFLOW_WRITE"
+name = "fts.session: write"
+description = "fts.session's `write`: an edit to the calling extension's namespace, lanes or items. Args `{doc, request}`."
+group = "Session"
+effect = "mutating"
+params = '{"type":"object","properties":{"doc":{"type":"string"},"request":{}},"required":["doc","request"]}'
+
+[[actions]]
+id = "KEYFLOW_STRUCTURE"
+name = "fts.session: structure"
+description = "fts.session's `structure`: the tempo map, markers or regions. Args `{doc, request}`."
+group = "Session"
+effect = "mutating"
+params = '{"type":"object","properties":{"doc":{"type":"string"},"request":{}},"required":["doc","request"]}'
+
+[[actions]]
+id = "KEYFLOW_SESSION_OPEN"
+name = "Session: open"
+description = "Opens a `.session` file (`path`; made with `chart` when it is not there) and serves it as fts.session. Answers `{id, pane}`."
+group = "Session"
+effect = "mutating"
+params = '{"type":"object","properties":{"path":{"type":"string"},"chart":{"type":"string"}},"required":["path"]}'
+
+[[actions]]
+id = "KEYFLOW_SESSION_SERVE"
+name = "Session: share with other app instances"
+description = "Serves open session `id` (document sync, presence, the session clock) over vox on a WebSocket at `bind` (default 0.0.0.0:4142)."
+group = "Session"
+effect = "mutating"
+params = '{"type":"object","properties":{"id":{"type":"string"},"bind":{"type":"string"}},"required":["id"]}'
+
+[[actions]]
+id = "KEYFLOW_SESSION_JOIN"
+name = "Session: join"
+description = "Joins session `id` served at `url` (`ws://host:port/vox`), keeping it in `path`; serves it here as fts.session."
+group = "Session"
+effect = "mutating"
+params = '{"type":"object","properties":{"url":{"type":"string"},"id":{"type":"string"},"path":{"type":"string"}},"required":["url","id","path"]}'
+
+[[actions]]
+id = "KEYFLOW_SESSION_PLAY"
+name = "Session: publish the transport"
+description = "Publishes the transport (`playing`, `position` seconds), stamped in the session's shared clock."
+group = "Session"
+effect = "mutating"
+params = '{"type":"object","properties":{"playing":{"type":"boolean"},"position":{"type":"number"}}}'
+
+[[actions]]
+id = "KEYFLOW_SESSION_STATE"
+name = "Session: state"
+description = "Each open session's chart, the leader's transport, the followed playhead, the clock estimate and this process's clock epoch."
+group = "Session"
+effect = "read_only"

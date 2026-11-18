@@ -37,6 +37,13 @@ tokio = { workspace = true, features = ["sync"] }
 # Off the browser also its process copy (`guest`: vox and tokio).
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 architect-extensions = { workspace = true, features = ["guest"] }
+# Hosting and joining a session (src/session_host.rs): Architect's sync and
+# presence over vox on a WebSocket, the session's clock.
+architect = { workspace = true, features = ["vox", "host", "connect"] }
+crdt = { workspace = true, features = ["vox"] }
+session = { workspace = true, features = ["clock", "extension"] }
+uuid = { workspace = true }
+tokio = { workspace = true, features = ["sync", "rt", "time"] }
 
 [lints]
 workspace = true
