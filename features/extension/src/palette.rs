@@ -195,9 +195,28 @@ pub fn matches(item: &Item, query: &str) -> bool {
             .any(|s| s.to_lowercase().contains(&q))
 }
 
-/// Glyph `glyph` of the chart's music font as an image source.
-fn glyph_src(glyph: char) -> Option<String> {
-    let svg = icons::svg(glyph)?;
+/// The glyphs' ink when the host gives no theme (a linked view's host
+/// sends none): a grey that reads on the dark sheet and on a light one.
+const FALLBACK_INK: &str = "#9aa0a6";
+
+/// The theme's text colour, which the sheet's text is drawn in, as a
+/// process view's host gives it; else [`FALLBACK_INK`].
+fn use_ink() -> String {
+    #[cfg(all(not(target_family = "wasm"), unix))]
+    if let Some(ink) = architect_extensions::guest::use_theme()
+        .as_ref()
+        .and_then(|t| t.get("foreground").map(str::to_owned))
+    {
+        return ink;
+    }
+    FALLBACK_INK.to_owned()
+}
+
+/// Glyph `glyph` of the chart's music font as an image source, inked
+/// `ink`. An image's `currentColor` has nothing to inherit and draws black,
+/// dark on the dark sheet, so the colour is written into it.
+fn glyph_src(glyph: char, ink: &str) -> Option<String> {
+    let svg = icons::svg_inked(glyph, ink)?;
     Some(format!(
         "data:image/svg+xml;base64,{}",
         base64::engine::general_purpose::STANDARD.encode(svg)
@@ -238,14 +257,19 @@ pub fn Palettes() -> Element {
     let mut query = use_signal(String::new);
     let mut closed = use_signal(std::collections::BTreeSet::<&'static str>::new);
     let mut chosen = use_signal(|| None::<Item>);
-    let srcs = use_hook(|| {
-        PALETTES
+    // Drawn again in the theme's ink when it changes.
+    let ink = use_ink();
+    let mut drawn = use_signal(|| (String::new(), std::collections::BTreeMap::new()));
+    if drawn.peek().0 != ink {
+        let srcs = PALETTES
             .iter()
             .flat_map(|p| p.items)
             .filter_map(|i| i.glyph)
-            .filter_map(|g| glyph_src(g).map(|s| (g, s)))
-            .collect::<std::collections::BTreeMap<char, String>>()
-    });
+            .filter_map(|g| glyph_src(g, &ink).map(|s| (g, s)))
+            .collect::<std::collections::BTreeMap<char, String>>();
+        drawn.set((ink, srcs));
+    }
+    let srcs = drawn.peek().1.clone();
     let q = query();
     let foot = chosen().map_or_else(
         || "Choose a cell to apply it to what is selected.".to_owned(),
@@ -334,6 +358,11 @@ mod tests {
         for item in PALETTES.iter().flat_map(|p| p.items) {
             if let Some(g) = item.glyph {
                 assert!(icons::svg(g).is_some(), "{}: no glyph {g:?}", item.name);
+                // An `<img>`'s `currentColor` draws black: the palette's
+                // glyphs are inked in a colour of their own.
+                let svg = icons::svg_inked(g, FALLBACK_INK).unwrap();
+                assert!(svg.contains(r##"fill="#9aa0a6""##), "{svg}");
+                assert!(!svg.contains("currentColor"), "{svg}");
             }
         }
     }
