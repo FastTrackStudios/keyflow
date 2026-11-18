@@ -32,6 +32,7 @@ members = [
     "features/engraver",
     "features/editor",
     "features/extension",
+    "features/session",
 ]
 
 [workspace.package]
@@ -135,6 +136,14 @@ vox = { version = "0.10.0-rc.7", default-features = false, features = ["runtime"
 # extension needs it.
 # Back to a tag before this merges; studio pins one.
 architect = { git = "https://github.com/FastTrackStudios/architect", rev = "51e503331f8bb89bf095f8dbb1277ad8c191fd39" }
+# Architect's documents (`crdt`): the session is one. The same revision as
+# `architect`; the patch below lifts what `session` brings to it too.
+crdt = { git = "https://github.com/FastTrackStudios/architect", rev = "51e503331f8bb89bf095f8dbb1277ad8c191fd39" }
+# The session primitive (FastTrackStudios/session): a chart is Keyflow's
+# data in a session (features/session). By rev until it is tagged.
+session = { git = "https://github.com/FastTrackStudios/session", rev = "9e2a85cfa77ab62013e1d6486743219e98987b2a", default-features = false }
+uuid = { version = "1", features = ["v4"] }
+tempfile = "3"
 
 # The shared musical vocabulary — section colours and the canonical
 # palettes `keyflow-proto` engraves section cards with.
@@ -280,6 +289,19 @@ architect-ui = { git = "https://www.github.com/FastTrackStudios/architect", rev 
 # ones (architect-workspace, -shell): unpatched, each lands twice in the lock.
 architect-theme = { git = "https://www.github.com/FastTrackStudios/architect", rev = "51e503331f8bb89bf095f8dbb1277ad8c191fd39" }
 architect-workspace-hack = { git = "https://www.github.com/FastTrackStudios/architect", rev = "51e503331f8bb89bf095f8dbb1277ad8c191fd39" }
+# What the session primitive brings (its `crdt` at v0.12.6), on the one
+# revision above, and what `crdt` itself uses that other Architect crates
+# also use (each must come from one source, or `architect-accounts` sees
+# two `architect-devices`).
+crdt = { git = "https://www.github.com/FastTrackStudios/architect", rev = "51e503331f8bb89bf095f8dbb1277ad8c191fd39" }
+crdt-derive = { git = "https://www.github.com/FastTrackStudios/architect", rev = "51e503331f8bb89bf095f8dbb1277ad8c191fd39" }
+architect-devices = { git = "https://www.github.com/FastTrackStudios/architect", rev = "51e503331f8bb89bf095f8dbb1277ad8c191fd39" }
+architect-orgs = { git = "https://www.github.com/FastTrackStudios/architect", rev = "51e503331f8bb89bf095f8dbb1277ad8c191fd39" }
+architect-telemetry = { git = "https://www.github.com/FastTrackStudios/architect", rev = "51e503331f8bb89bf095f8dbb1277ad8c191fd39" }
+auth-client = { git = "https://www.github.com/FastTrackStudios/architect", rev = "51e503331f8bb89bf095f8dbb1277ad8c191fd39" }
+auth-proto = { git = "https://www.github.com/FastTrackStudios/architect", rev = "51e503331f8bb89bf095f8dbb1277ad8c191fd39" }
+architect-shell = { git = "https://www.github.com/FastTrackStudios/architect", rev = "51e503331f8bb89bf095f8dbb1277ad8c191fd39" }
+architect-favourites = { git = "https://www.github.com/FastTrackStudios/architect", rev = "51e503331f8bb89bf095f8dbb1277ad8c191fd39" }
 
 [workspace.lints.rust]
 # Flipped from "allow" 2026-07-28 (task cleanup): the blanket allows are
