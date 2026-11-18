@@ -31,6 +31,11 @@ path = "features/extension"
 [uses]
 "fts.session" = "^0.1"
 
+# Keyflow is a session's first host: it provides `fts.session` to every
+# extension (KEYFLOW_READ / _WRITE / _STRUCTURE, run as the caller).
+[provides]
+"fts.session" = "0.1.0"
+
 [capabilities]
 effect = "mutating"
 # A chart's text: read to engrave it.
@@ -432,3 +437,61 @@ view = "chart"
 [[hooks]]
 on = "doc.saved"
 action = "KEYFLOW_RELOAD"
+
+# ── fts.session: Keyflow as a session's host (src/session_host.rs) ──────
+
+[[actions]]
+id = "KEYFLOW_READ"
+name = "fts.session: read"
+description = "fts.session's `read`: the calling extension's data, the timeline (other extensions' payloads null) or the song's structure. Args `{doc, request}`."
+group = "Session"
+effect = "read_only"
+
+[[actions]]
+id = "KEYFLOW_WRITE"
+name = "fts.session: write"
+description = "fts.session's `write`: an edit to the calling extension's namespace, lanes or items. Args `{doc, request}`."
+group = "Session"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_STRUCTURE"
+name = "fts.session: structure"
+description = "fts.session's `structure`: the tempo map, markers or regions. Args `{doc, request}`."
+group = "Session"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_SESSION_OPEN"
+name = "Session: open"
+description = "Opens a `.session` file (`path`; made with `chart` when it is not there) and serves it as fts.session. Answers `{id, pane}`."
+group = "Session"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_SESSION_SERVE"
+name = "Session: share with other app instances"
+description = "Serves open session `id` (document sync, presence, the session clock) over vox on a WebSocket at `bind` (default 0.0.0.0:4142)."
+group = "Session"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_SESSION_JOIN"
+name = "Session: join"
+description = "Joins session `id` served at `url` (`ws://host:port/vox`), keeping it in `path`; serves it here as fts.session."
+group = "Session"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_SESSION_PLAY"
+name = "Session: publish the transport"
+description = "Publishes the transport (`playing`, `position` seconds), stamped in the session's shared clock."
+group = "Session"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_SESSION_STATE"
+name = "Session: state"
+description = "Each open session's chart, the leader's transport, the followed playhead, the clock estimate and this process's clock epoch."
+group = "Session"
+effect = "read_only"

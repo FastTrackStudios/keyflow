@@ -20,6 +20,8 @@
 
 pub mod icons;
 pub mod palette;
+#[cfg(not(target_family = "wasm"))]
+pub mod session_host;
 pub mod tools;
 
 use std::collections::BTreeMap;
@@ -56,6 +58,9 @@ impl Extension for Keyflow {
 
     fn build(&self, ext: &mut Builder) {
         *HANDLE.lock().unwrap_or_else(PoisonError::into_inner) = Some(ext.handle());
+        // `fts.session`: Keyflow as a session's host (native only).
+        #[cfg(not(target_family = "wasm"))]
+        session_host::build(ext);
         for tool in tools::TOOLS {
             let command = tool.command;
             ext.action(tool.action, move |_| async move {

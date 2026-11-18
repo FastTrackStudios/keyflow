@@ -1,0 +1,276 @@
+//! Keyflow as a session's host, in a running app: `fts.session` provided to
+//! every extension, and the session shared with another app instance.
+//!
+//! - `KEYFLOW_READ`, `KEYFLOW_WRITE`, `KEYFLOW_STRUCTURE`: `fts.session`'s
+//!   three methods (the host runs `<PREFIX><METHOD>` as the caller, with
+//!   its id in `cx.caller`), answered by `keyflow_session::Provider`.
+//! - `KEYFLOW_SESSION_OPEN {path, chart?}`: opens a `.session` file (made
+//!   with `chart` when it is not there) and serves it; answers its id and
+//!   the pane state that shows it (`session:<id>`).
+//! - `KEYFLOW_SESSION_SERVE {id, bind}`: serves that session to other app
+//!   instances: Architect's document sync (`DocSyncHost` on this file's
+//!   document), its presence, and the session clock, over vox on a
+//!   WebSocket (`EngineHost`, `/vox`).
+//! - `KEYFLOW_SESSION_JOIN {url, id, path}`: joins a served session: a
+//!   `.session` of the same lineage at `path`, synced durably, its
+//!   presence, and the host's clock estimated.
+//! - `KEYFLOW_SESSION_PLAY {playing, position}`: publishes the transport,
+//!   stamped in the shared clock (the host's).
+//! - `KEYFLOW_SESSION_STATE`: what this instance holds and sees: each
+//!   session's chart, the leader's transport, the followed playhead, the
+//!   clock estimate, and this process's clock epoch in wall-clock time.
+//!
+//! Native only: hosting and joining are sockets.
+
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock, PoisonError};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use architect::LayerRouter;
+use architect::connect::{Endpoint, pool};
+use architect::host::EngineHost;
+use architect_extensions::linked::Builder;
+use crdt::presence::{Here, PeerState, PlayState};
+use crdt::sync::{
+    DocPresenceClient, DocPresenceDispatcher, DocSyncClient, DocSyncDispatcher, DocSyncHost,
+    PresenceHost, PresencePeer, doc_presence_service_descriptor, doc_sync_service_descriptor,
+};
+use keyflow_session::{ChartSession, Provider};
+use serde_json::{Value as Json, json};
+use session::clock::{
+    ClockHost, SessionClockClient, SharedClock, serve as serve_clock,
+    session_clock_rpc_service_descriptor,
+};
+use session::doc::transport_of;
+use session::sync::Tracker;
+use session::sync::clock::now_micros_f64;
+use uuid::Uuid;
+
+/// What this instance hosts and follows.
+#[derive(Default)]
+struct Sessions {
+    provider: Provider,
+    charts: HashMap<Uuid, ChartSession>,
+    presence: Option<PresencePeer>,
+    here: Option<Here<PresencePeer>>,
+    /// The host's clock, estimated; `None` on the host itself.
+    clock: Option<SharedClock>,
+    tracker: Tracker,
+}
+
+fn sessions() -> std::sync::MutexGuard<'static, Sessions> {
+    static SESSIONS: OnceLock<Mutex<Sessions>> = OnceLock::new();
+    SESSIONS
+        .get_or_init(Mutex::default)
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+}
+
+/// This process's clock epoch in wall-clock microseconds: what a reader
+/// on the same machine measures the shared clock's error against.
+fn epoch_wall_micros() -> f64 {
+    let wall = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs_f64()
+        * 1e6;
+    wall - now_micros_f64()
+}
+
+fn text(args: &Json, key: &str) -> Result<String, String> {
+    args.get(key)
+        .and_then(Json::as_str)
+        .map(str::to_owned)
+        .ok_or_else(|| format!("`{key}` is missing"))
+}
+
+fn id_of(args: &Json) -> Result<Uuid, String> {
+    Uuid::parse_str(&text(args, "id")?).map_err(|e| e.to_string())
+}
+
+/// `fts.session`'s method `method`, for the extension in `cx.caller`.
+fn answer(method: &'static str, args: &Json, cx: &Json) -> Result<Json, String> {
+    let caller = cx.get("caller").and_then(Json::as_str);
+    let reply = sessions()
+        .provider
+        .answer(method, &args.to_string(), caller)
+        .map_err(|e| e.to_string())?;
+    serde_json::from_str(&reply).map_err(|e| e.to_string())
+}
+
+async fn open(args: Json) -> Result<Json, String> {
+    let path = PathBuf::from(text(&args, "path")?);
+    let chart = if path.exists() {
+        ChartSession::open(&path).await
+    } else {
+        let source = args.get("chart").and_then(Json::as_str).unwrap_or_default();
+        ChartSession::create(&path, source).await
+    }
+    .map_err(|e| e.to_string())?;
+    let id = chart.id();
+    let mut s = sessions();
+    s.provider.open(&chart);
+    s.charts.insert(id, chart);
+    Ok(json!({ "id": id.to_string(), "pane": format!("session:{id}") }))
+}
+
+async fn serve(args: Json) -> Result<Json, String> {
+    let id = id_of(&args)?;
+    let bind = text(&args, "bind").unwrap_or_else(|_| "0.0.0.0:4142".into());
+    let doc = sessions()
+        .charts
+        .get(&id)
+        .map(ChartSession::crdt)
+        .ok_or("open the session first (KEYFLOW_SESSION_OPEN)")?;
+    let router = LayerRouter::new()
+        .with(
+            doc_sync_service_descriptor(),
+            DocSyncDispatcher::new(DocSyncHost::new(id, doc)),
+        )
+        .with(
+            doc_presence_service_descriptor(),
+            DocPresenceDispatcher::new(PresenceHost::new(id, 30_000)),
+        )
+        .with(session_clock_rpc_service_descriptor(), serve_clock(ClockHost));
+    let port = bind.rsplit(':').next().unwrap_or("4142").to_owned();
+    tokio::spawn(async move {
+        let _ = EngineHost::ungated(router, bind).serve().await;
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    // The host takes part in its own presence, as the leader: its clock
+    // is the shared clock.
+    let url = format!("ws://127.0.0.1:{port}/vox");
+    join_presence(&url, id, "lead").await?;
+    Ok(json!({ "serving": url, "id": id.to_string() }))
+}
+
+async fn join_presence(url: &str, id: Uuid, me: &str) -> Result<(), String> {
+    let client: DocPresenceClient = pool()
+        .client(&Endpoint::url(url))
+        .await
+        .map_err(|e| e.to_string())?;
+    let (peer, mut driver) = PresencePeer::new(id, 30_000);
+    tokio::spawn(async move {
+        let _ = driver.run(&client).await;
+    });
+    peer.set(&format!("{me}/epoch"), epoch_wall_micros());
+    let here = Here::new(peer.clone(), me, PeerState::new(me, me));
+    let mut s = sessions();
+    s.presence = Some(peer);
+    s.here = Some(here);
+    Ok(())
+}
+
+async fn join(args: Json) -> Result<Json, String> {
+    let url = text(&args, "url")?;
+    let id = id_of(&args)?;
+    let path = PathBuf::from(text(&args, "path")?);
+    let chart = if path.exists() {
+        ChartSession::open(&path).await
+    } else {
+        ChartSession::adopt(&path, id).await
+    }
+    .map_err(|e| e.to_string())?;
+    let client: DocSyncClient = pool()
+        .client(&Endpoint::url(&url))
+        .await
+        .map_err(|e| e.to_string())?;
+    let mut synced = chart.synced();
+    tokio::spawn(async move {
+        let _ = synced.run(&client).await;
+    });
+    let host: SessionClockClient = pool()
+        .client(&Endpoint::url(&url))
+        .await
+        .map_err(|e| e.to_string())?;
+    let clock = SharedClock::default();
+    let pinger = clock.clone();
+    tokio::spawn(async move {
+        let _ = pinger.run(&host).await;
+    });
+    join_presence(&url, id, "follow").await?;
+    let mut s = sessions();
+    s.provider.open(&chart);
+    s.charts.insert(id, chart);
+    s.clock = Some(clock);
+    Ok(json!({ "joined": url, "id": id.to_string(), "pane": format!("session:{id}") }))
+}
+
+fn play(args: &Json) -> Result<Json, String> {
+    let playing = args.get("playing").and_then(Json::as_bool).unwrap_or(true);
+    let position = args.get("position").and_then(Json::as_f64).unwrap_or(0.0);
+    let s = sessions();
+    let here = s.here.as_ref().ok_or("serve or join a session first")?;
+    // On the host its own clock is the shared clock; a peer uses its
+    // estimate of the host's.
+    let at_micros = match &s.clock {
+        None => now_micros_f64(),
+        Some(clock) => clock.now_micros().ok_or("the host's clock is not known yet")?,
+    };
+    here.play(&PlayState {
+        playing,
+        position,
+        at_ms: at_micros / 1000.0,
+        rate: 1.0,
+    });
+    Ok(json!({ "playing": playing, "position": position, "at_ms": at_micros / 1000.0 }))
+}
+
+fn state() -> Json {
+    let mut s = sessions();
+    let charts: Vec<Json> = s
+        .charts
+        .values()
+        .map(|c| json!({ "id": c.id().to_string(), "chart": c.chart() }))
+        .collect();
+    let offset = s.clock.as_ref().map_or(Some(0.0), SharedClock::offset_micros);
+    let round_trip = s.clock.as_ref().and_then(SharedClock::round_trip_micros);
+    let (leader, lead_epoch) = s.presence.as_ref().map_or((None, None), |peer| {
+        let states = peer.states();
+        (
+            states.get("lead/play").and_then(transport_of),
+            states
+                .get("lead/epoch")
+                .and_then(|v| v.clone().into_double().ok()),
+        )
+    });
+    let now = now_micros_f64();
+    let shown = match (leader, offset) {
+        (Some(t), Some(offset)) => {
+            s.tracker.observe(t);
+            s.tracker.position(now, offset)
+        }
+        _ => None,
+    };
+    json!({
+        "charts": charts,
+        "leader": leader.map(|t| json!({
+            "playing": t.is_playing, "position": t.playhead_seconds, "at_us": t.host_micros,
+        })),
+        "shown_seconds": shown,
+        "offset_us": offset,
+        "round_trip_us": round_trip,
+        "epoch_wall_us": epoch_wall_micros(),
+        "leader_epoch_wall_us": lead_epoch,
+        "local_now_us": now,
+    })
+}
+
+/// Registers the session host's actions.
+pub fn build(ext: &mut Builder) {
+    ext.action_in("KEYFLOW_READ", |args, cx| async move {
+        answer(session::service::READ, &args, &cx)
+    })
+    .action_in("KEYFLOW_WRITE", |args, cx| async move {
+        answer(session::service::WRITE, &args, &cx)
+    })
+    .action_in("KEYFLOW_STRUCTURE", |args, cx| async move {
+        answer(session::service::STRUCTURE, &args, &cx)
+    })
+    .action("KEYFLOW_SESSION_OPEN", open)
+    .action("KEYFLOW_SESSION_SERVE", serve)
+    .action("KEYFLOW_SESSION_JOIN", join)
+    .action("KEYFLOW_SESSION_PLAY", |args| async move { play(&args) })
+    .action("KEYFLOW_SESSION_STATE", |_| async { Ok(state()) });
+}
