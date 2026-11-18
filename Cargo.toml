@@ -129,16 +129,16 @@ vox = { version = "0.10.0-rc.7", default-features = false, features = ["runtime"
 # a split revision checks that repo out twice, and cargo treats the two
 # checkouts as different crates whose traits then refuse to unify.
 #
-# architect at FastTrackStudios/architect `main`, 9d1f2f48: the runtime
-# compositor (#852), an extension's live vault documents (#864, which a
-# session file needs), a provider using its own service (#873: `[uses]
-# "fts.session"` beside `[provides]`, with #872) and the host's answers to
-# what the Keyflow extension asked for (#857–#861). By rev until v0.14.0 is
-# tagged; then back to a tag, as studio pins one.
-architect = { git = "https://github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd" }
+# architect v0.14.0 (a236142c), as studio pins it: the runtime compositor
+# (#852), an extension's live vault documents (#864, which a session file
+# needs), a provider using its own service (#873: `[uses] "fts.session"`
+# beside `[provides]`, with #872), the host's answers to what the Keyflow
+# extension asked for (#857–#861) and a remote view's images (#874: the
+# palettes' glyphs in a process view).
+architect = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.14.0" }
 # Architect's documents (`crdt`): the session is one. The same revision as
 # `architect`; the patch below lifts what `session` brings to it too.
-crdt = { git = "https://github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd" }
+crdt = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.14.0" }
 # The session primitive (FastTrackStudios/session): a chart is Keyflow's
 # data in a session (features/session). By rev until it is tagged.
 session = { git = "https://github.com/FastTrackStudios/session", rev = "a8ec37a454c767c0558973412c4d321746066d02", default-features = false }
@@ -150,19 +150,19 @@ tempfile = "3"
 music-catalog = { git = "https://github.com/FastTrackStudios/music-convention", tag = "v0.1.0" }
 color-palette = { git = "https://github.com/FastTrackStudios/music-convention", tag = "v0.1.0" }
 # The Dioxus primitive library (was libs/ui/fts-ui, renamed on the split).
-architect-ui = { git = "https://github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd" }
+architect-ui = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.14.0" }
 # The extension host's side an extension builds against (features/extension):
 # the linked trait, the paint pane it is drawn in, the theme it follows.
 # Defaults off: the extension names what it needs, the app the rest.
-architect-extensions = { git = "https://github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd", default-features = false }
-architect-workspace = { git = "https://github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd", default-features = false }
-architect-theme = { git = "https://github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd", default-features = false }
+architect-extensions = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.14.0", default-features = false }
+architect-workspace = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.14.0", default-features = false }
+architect-theme = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.14.0", default-features = false }
 # Layers as a process sends them (`ops::Sender`), in keyflow-ui's tests.
-architect-scene = { git = "https://github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd" }
+architect-scene = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.14.0" }
 # The Architect app as a library (apps/architect, `architect_desktop::run`):
 # Keyflow's development window. Without its window here; the app turns
 # `gui` on. `vox` is the node's services, which every build needs.
-architect-desktop = { git = "https://github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd", default-features = false, features = ["vox"] }
+architect-desktop = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.14.0", default-features = false, features = ["vox"] }
 # ── MusicXML parsing (keyflow) ─────────────────────────────────────────
 musicxml = "1.1"
 
@@ -276,32 +276,32 @@ dioxus-vdom = { git = "https://github.com/FastTrackStudios/vendor", tag = "v0.7.
 # lets it patch the plain one; a same-host patch is refused. Bump this revision
 # with the pins above; drop the block once keyflow takes daw from studio.
 [patch."https://github.com/FastTrackStudios/architect"]
-architect = { git = "https://www.github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd" }
-architect-action-derive = { git = "https://www.github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd" }
-architect-derive = { git = "https://www.github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd" }
-architect-permissions = { git = "https://www.github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd" }
-architect-rpc-derive = { git = "https://www.github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd" }
-architect-story-core = { git = "https://www.github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd" }
-architect-story-macros = { git = "https://www.github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd" }
-architect-story-runtime = { git = "https://www.github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd" }
-architect-ui = { git = "https://www.github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd" }
+architect = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.14.0" }
+architect-action-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.14.0" }
+architect-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.14.0" }
+architect-permissions = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.14.0" }
+architect-rpc-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.14.0" }
+architect-story-core = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.14.0" }
+architect-story-macros = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.14.0" }
+architect-story-runtime = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.14.0" }
+architect-ui = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.14.0" }
 # Reached both through the patched crates above and through the unpatched
 # ones (architect-workspace, -shell): unpatched, each lands twice in the lock.
-architect-theme = { git = "https://www.github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd" }
-architect-workspace-hack = { git = "https://www.github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd" }
+architect-theme = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.14.0" }
+architect-workspace-hack = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.14.0" }
 # What the session primitive brings (its `crdt` at v0.12.6), on the one
 # revision above, and what `crdt` itself uses that other Architect crates
 # also use (each must come from one source, or `architect-accounts` sees
 # two `architect-devices`).
-crdt = { git = "https://www.github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd" }
-crdt-derive = { git = "https://www.github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd" }
-architect-devices = { git = "https://www.github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd" }
-architect-orgs = { git = "https://www.github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd" }
-architect-telemetry = { git = "https://www.github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd" }
-auth-client = { git = "https://www.github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd" }
-auth-proto = { git = "https://www.github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd" }
-architect-shell = { git = "https://www.github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd" }
-architect-favourites = { git = "https://www.github.com/FastTrackStudios/architect", rev = "9d1f2f4834c678646abcf5b5b1e1be4ffda131cd" }
+crdt = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.14.0" }
+crdt-derive = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.14.0" }
+architect-devices = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.14.0" }
+architect-orgs = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.14.0" }
+architect-telemetry = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.14.0" }
+auth-client = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.14.0" }
+auth-proto = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.14.0" }
+architect-shell = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.14.0" }
+architect-favourites = { git = "https://www.github.com/FastTrackStudios/architect", tag = "v0.14.0" }
 
 [workspace.lints.rust]
 # Flipped from "allow" 2026-07-28 (task cleanup): the blanket allows are
