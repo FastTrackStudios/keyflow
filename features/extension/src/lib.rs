@@ -884,19 +884,26 @@ struct Step {
 /// it rather than writing over it.
 static ONE_AT_A_TIME: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-/// Note input's own edits, to undo and redo (the app's document history
-/// has every one as an undo step, but no action a chart view can run
-/// reaches it yet).
+/// A session chart's edits, to undo and redo: a session (`session:<id>`)
+/// is edited through `fts.session`, whose history no host action reaches
+/// yet. A chart that is a document has its document's own (`DOC_UNDO`).
 static UNDO: Mutex<Vec<Step>> = Mutex::new(Vec::new());
 static REDO: Mutex<Vec<Step>> = Mutex::new(Vec::new());
 
-/// An edit made: kept to undo, and what was undone is no longer redone.
+/// An edit made: kept to undo, and what was undone is no longer redone,
+/// for a session chart (a document's history is its own).
 fn remember(
     path: &str,
     before: String,
     after: String,
     input: (edit::InputState, edit::InputState),
 ) {
+    if !matches!(
+        ChartSource::of_pane_state(path),
+        ChartSource::Session { .. }
+    ) {
+        return;
+    }
     let mut undo = UNDO.lock().unwrap_or_else(PoisonError::into_inner);
     undo.push(Step {
         path: path.to_owned(),
@@ -910,10 +917,40 @@ fn remember(
     REDO.lock().unwrap_or_else(PoisonError::into_inner).clear();
 }
 
-/// ⌘Z (`undo`) or ⇧⌘Z: note input's last edit taken back (or made again),
-/// as a new edit. Another person's edits since, elsewhere in the chart,
+/// ⌘Z (`undo`) or ⇧⌘Z: the chart's last edit taken back (or made again):
+/// a document's through its own history; a session's, note input's last
+/// edit, as a new edit. Another person's edits since, elsewhere in the chart,
 /// stay; one over this edit's own text is not undone over.
 async fn history(undo: bool) -> Result<Json, String> {
+    // A chart that is a document: its document's own history (the host's
+    // undo_document / redo_document, architect#858, as DOC_UNDO runs it),
+    // every edit to it one step, other people's included, as the editor's
+    // undo walks.
+    if let Some((_, path)) = active_chart()
+        && !matches!(
+            ChartSource::of_pane_state(&path),
+            ChartSource::Session { .. }
+        )
+    {
+        let handle = handle()?;
+        let request = if undo {
+            HostRequest::UndoDocument { path: path.clone() }
+        } else {
+            HostRequest::RedoDocument { path: path.clone() }
+        };
+        let step = handle.host(request).await.map_err(|e| format!("{e:?}"))?;
+        if step.is_null() {
+            let why = if undo {
+                "Nothing to undo"
+            } else {
+                "Nothing to redo"
+            };
+            edit_state().refused = Some(why.to_owned());
+        }
+        reload(Some(&path));
+        rerender_input().await;
+        return Ok(input_state());
+    }
     let _one = ONE_AT_A_TIME.lock().await;
     let (from, to) = if undo { (&UNDO, &REDO) } else { (&REDO, &UNDO) };
     let Some(step) = from.lock().unwrap_or_else(PoisonError::into_inner).pop() else {
