@@ -425,6 +425,8 @@ pub struct ChartPaintView {
     ctrl: bool,
     /// Whether every element has a region (else the pane hit-tests).
     regions_cover: bool,
+    /// The version of its host's selection it last looked at.
+    adopted: Option<u64>,
     /// The modifiers held at the last key event: a press on a region
     /// carries none, so a Shift- or Cmd-click reads them from here.
     mods: Vec<&'static str>,
@@ -458,6 +460,7 @@ impl ChartPaintView {
             ctrl: false,
             mods: Vec::new(),
             regions_cover: false,
+            adopted: None,
             pointer: (0.0, 0.0),
             panning: false,
             theme: None,
@@ -1061,6 +1064,35 @@ impl ChartPaintView {
     }
 }
 
+impl ChartPaintView {
+    /// A selection its host set (one kept over a reload, written after the
+    /// chart mounted): taken up when it differs from the view's own, of
+    /// what is still on the chart. The view's own writes read back equal.
+    fn adopt_selection(&mut self, ctx: &ViewCtx) {
+        if self.recorded.selectables.is_empty() {
+            return;
+        }
+        let Some(given) = ctx.data::<ChartSelection>() else {
+            return;
+        };
+        let version = given.version();
+        if self.adopted == Some(version) {
+            return;
+        }
+        self.adopted = Some(version);
+        let keys: Vec<String> = given.read(|s| s.keys.clone());
+        if keys.as_slice() == self.selection.items() {
+            return;
+        }
+        let there: Vec<String> = keys
+            .into_iter()
+            .filter(|k| self.recorded.selectables.iter().any(|s| s.key == *k))
+            .collect();
+        self.selection.lasso(there, false);
+        self.recorded.selection = None;
+    }
+}
+
 impl PaintView for ChartPaintView {
     fn region(&mut self, ctx: &ViewCtx, event: &RegionEvent) -> bool {
         self.region_event(ctx, event)
@@ -1239,6 +1271,7 @@ impl PaintView for ChartPaintView {
         self.update_theme(ctx, &snapshot);
         self.update_layout(&snapshot);
         self.record_pages();
+        self.adopt_selection(ctx);
         if let Some(size) = self.view.content_size() {
             self.content = (size.0 * points_to_px(1.0), size.1 * points_to_px(1.0));
         }

@@ -803,9 +803,9 @@ impl InputState {
             EventKind::Rest => EventKind::Rest,
         };
         let at = self.cursor;
-        let Some(bar) = score.bars.get(at.bar) else {
+        if at.bar >= score.bars.len() {
             return Outcome::refuse("The cursor is past the last bar");
-        };
+        }
         if let Some(why) = score.read_only.get(at.bar).cloned().flatten() {
             return Outcome::refuse(format!("Bar {} is read-only: {why}", at.bar + 1));
         }
