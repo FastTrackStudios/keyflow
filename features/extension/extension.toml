@@ -56,6 +56,9 @@ effect = "mutating"
 # operation one edit_document commit, one undo step).
 reads = ["documents"]
 writes = ["documents"]
+# The app's actions it runs: a chart's tab named for the chart (its
+# title), not "Chart".
+actions = ["WORKSPACE_TAB_SET"]
 
 [[actions]]
 id = "KEYFLOW_STATE"
