@@ -179,7 +179,8 @@ impl Extension for Keyflow {
         // accent or a staccato on it), as MuseScore applies a palette.
         ext.action("KEYFLOW_PALETTE_APPLY", |args| async move {
             let token = text(&args, "token").ok_or("token: the palette cell's token")?;
-            let then = palette::cell(&token).ok_or_else(|| format!("{token}: not a palette cell"))?;
+            let then =
+                palette::cell(&token).ok_or_else(|| format!("{token}: not a palette cell"))?;
             match then {
                 Ok(then) => run_edit(|_| Vec::new(), Some(then)).await,
                 Err(why) => {
@@ -1083,9 +1084,7 @@ async fn run_edit(
     if !outcome.changed.is_empty() {
         match keyflow::edit::commit::write_bars(&text, &chart, &score, &outcome.changed) {
             Ok(new) => {
-                let name = retype
-                    .as_ref()
-                    .map_or_else(|| op_name(op), Then::name);
+                let name = retype.as_ref().map_or_else(|| op_name(op), Then::name);
                 write_text(&handle, &path, new.clone(), &name).await?;
                 let after = edit_state().input.clone();
                 remember(&path, text.clone(), new, (before, after));

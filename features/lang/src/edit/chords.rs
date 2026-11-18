@@ -412,7 +412,10 @@ pub fn with_mark(token: &str, mark: &str) -> Option<String> {
     let staccato = marks.contains('.');
     let push = marks.chars().filter(|c| *c == '\'').count();
     // Anything else written before the root (`!`), kept as it is.
-    let other: String = marks.chars().filter(|c| !matches!(c, '>' | '.' | '\'')).collect();
+    let other: String = marks
+        .chars()
+        .filter(|c| !matches!(c, '>' | '.' | '\''))
+        .collect();
     let (accent, staccato, push) = match mark {
         ">" => (!accent, staccato, push),
         "." => (accent, !staccato, push),
@@ -436,7 +439,10 @@ mod tests {
     #[test]
     fn a_palette_cell_sets_a_chord_s_quality_or_puts_a_mark_on_and_off() {
         assert_eq!(with_quality("G", "maj7").as_deref(), Some("Gmaj7"));
-        assert_eq!(with_quality("'F#m7/A", "maj7").as_deref(), Some("'F#maj7/A"));
+        assert_eq!(
+            with_quality("'F#m7/A", "maj7").as_deref(),
+            Some("'F#maj7/A")
+        );
         assert_eq!(with_quality("b7m", "7").as_deref(), Some("b77"));
         assert_eq!(with_quality("Bbsus4", "").as_deref(), Some("Bb"));
         assert_eq!(with_mark("G", ">").as_deref(), Some(">G"));

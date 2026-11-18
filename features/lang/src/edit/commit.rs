@@ -70,7 +70,9 @@ fn melody_range(cell: &str) -> Option<(usize, usize)> {
 /// each chord is a whole number of beats.
 fn in_slashes(was: &str, chords: &ChordBar, beat: u32) -> Option<String> {
     let words: Vec<&str> = was.split_whitespace().collect();
-    let slashed = words.iter().any(|w| !w.is_empty() && w.chars().all(|c| c == '/'));
+    let slashed = words
+        .iter()
+        .any(|w| !w.is_empty() && w.chars().all(|c| c == '/'));
     if !slashed || words.iter().any(|w| w.contains('_')) || beat == 0 {
         return None;
     }
