@@ -92,22 +92,42 @@ impl Value {
     }
 }
 
-/// A written duration: a note value and its dots.
+/// A written duration: a note value, its dots, and whether it is a
+/// triplet (three in the time of two: `C:48t`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Duration {
     pub value: Value,
     pub dots: u8,
+    pub triplet: bool,
 }
 
 impl Duration {
     #[must_use]
     pub const fn new(value: Value) -> Self {
-        Self { value, dots: 0 }
+        Self {
+            value,
+            dots: 0,
+            triplet: false,
+        }
     }
 
     #[must_use]
     pub const fn dotted(value: Value) -> Self {
-        Self { value, dots: 1 }
+        Self {
+            value,
+            dots: 1,
+            triplet: false,
+        }
+    }
+
+    /// A triplet `value`: two thirds of it.
+    #[must_use]
+    pub const fn triplet(value: Value) -> Self {
+        Self {
+            value,
+            dots: 0,
+            triplet: true,
+        }
     }
 
     /// Its length in ticks.
@@ -122,7 +142,7 @@ impl Duration {
             total += add;
             d += 1;
         }
-        total
+        if self.triplet { total * 2 / 3 } else { total }
     }
 
     /// `ticks` as written durations, longest first, each a value or a
@@ -147,10 +167,47 @@ impl Duration {
     /// Its name, as a status line says it: `Dotted quarter`.
     #[must_use]
     pub fn name(self) -> String {
-        match self.dots {
+        let name = match self.dots {
             0 => self.value.name().to_owned(),
             1 => format!("Dotted {}", self.value.name().to_lowercase()),
             _ => format!("Double-dotted {}", self.value.name().to_lowercase()),
+        };
+        if self.triplet {
+            format!("Triplet {}", name.to_lowercase())
+        } else {
+            name
+        }
+    }
+
+    /// `ticks` as triplet values, longest first: what is left of a
+    /// triplet group when a note is written over part of it.
+    #[must_use]
+    pub fn split_triplets(mut ticks: u32) -> Vec<Self> {
+        let mut out = Vec::new();
+        while ticks > 0 {
+            let Some(d) = Value::ALL
+                .iter()
+                .rev()
+                .map(|v| Self::triplet(*v))
+                .find(|d| d.ticks() <= ticks && d.ticks() > 0)
+            else {
+                break;
+            };
+            out.push(d);
+            ticks -= d.ticks();
+        }
+        out
+    }
+
+    /// `ticks` as written durations: plain values when they add up to it,
+    /// else triplet values (the rest of a triplet group).
+    #[must_use]
+    pub fn split_any(ticks: u32) -> Vec<Self> {
+        let plain = Self::split(ticks);
+        if plain.iter().map(|d| d.ticks()).sum::<u32>() == ticks {
+            plain
+        } else {
+            Self::split_triplets(ticks)
         }
     }
 }
@@ -370,11 +427,18 @@ impl Bar {
         }
     }
 
-    /// `measure`'s line: its first melody's notes, or rests.
+    /// `measure`'s line: its first voice's notes, or rests.
     #[must_use]
     pub fn from_measure(measure: &Measure) -> Self {
+        Self::from_voice(measure, 0)
+    }
+
+    /// `measure`'s line in `voice` (0 to 3): that voice's first melody's
+    /// notes, or rests.
+    #[must_use]
+    pub fn from_voice(measure: &Measure, voice: u8) -> Self {
         let mut bar = Self::empty(measure.time_signature);
-        let Some(melody) = measure.melodies.first() else {
+        let Some(melody) = measure.melodies.iter().find(|m| m.voice == voice) else {
             return bar;
         };
         bar.written = true;
@@ -432,18 +496,41 @@ impl Bar {
     /// many tied values as `len` needs; `tie_last` ties its last into the
     /// next bar. Returns the index of its first value.
     pub fn overwrite(&mut self, at: u32, len: u32, kind: EventKind, tie_last: bool) -> usize {
+        self.splice(at, len, new_events(kind, len, tie_last));
+        // Rests regrouped by the beat; the new event is where it starts.
+        self.regroup_rests();
+        self.index_at(at).unwrap_or(0)
+    }
+
+    /// A triplet group of `unit`s (three in the time of two) made at `at`:
+    /// three triplet rests over what was there, as MuseScore's Ctrl+3 in
+    /// note input makes one for the notes to fill. Returns how long it is.
+    pub fn triplet_group(&mut self, at: u32, unit: Value) -> u32 {
+        let span = Duration::new(unit).ticks() * 2;
+        let rests = (0..3)
+            .map(|_| Event::rest(Duration::triplet(unit)))
+            .collect();
+        self.splice(at, span, rests);
+        self.regroup_rests();
+        span
+    }
+
+    /// `new` written over `[at, at + len)`: what was there cut, and what is
+    /// left of a cut event made rest.
+    fn splice(&mut self, at: u32, len: u32, new: Vec<Event>) {
         let end = at + len;
-        let rests = |ticks: u32| Duration::split(ticks).into_iter().map(Event::rest);
+        let rests = |ticks: u32| Duration::split_any(ticks).into_iter().map(Event::rest);
         let mut out: Vec<Event> = Vec::new();
-        let mut inserted = None;
+        let mut new = Some(new);
         let mut tick = 0;
         for event in &self.events {
             let (s, e) = (tick, tick + event.duration.ticks());
             tick = e;
             if e <= at || s >= end {
-                if s >= end && inserted.is_none() {
-                    inserted = Some(out.len());
-                    out.extend(new_events(kind, len, tie_last));
+                if s >= end
+                    && let Some(n) = new.take()
+                {
+                    out.extend(n);
                 }
                 out.push(*event);
                 continue;
@@ -451,25 +538,18 @@ impl Bar {
             if s < at {
                 out.extend(rests(at - s));
             }
-            if inserted.is_none() {
-                inserted = Some(out.len());
-                out.extend(new_events(kind, len, tie_last));
+            if let Some(n) = new.take() {
+                out.extend(n);
             }
             if e > end {
                 out.extend(rests(e - end));
             }
         }
-        let first = *inserted.get_or_insert_with(|| {
-            let i = out.len();
-            out.extend(new_events(kind, len, tie_last));
-            i
-        });
+        if let Some(n) = new.take() {
+            out.extend(n);
+        }
         self.events = out;
         self.written = true;
-        let _ = first;
-        // Rests regrouped by the beat; the new event is where it starts.
-        self.regroup_rests();
-        self.index_at(at).unwrap_or(0)
     }
 
     /// Each run of rests rewritten as the beat groups it (MuseScore's rests
@@ -501,7 +581,8 @@ impl Bar {
         };
         for e in &self.events {
             let len = e.duration.ticks();
-            if e.pitch().is_none() && e.marks == 0 {
+            // A triplet group's rests stay as the group has them.
+            if e.pitch().is_none() && e.marks == 0 && !e.duration.triplet {
                 run = Some(match run {
                     Some((s, _, m)) => (s, tick + len, m),
                     None => (tick, tick + len, 0),
@@ -528,7 +609,7 @@ impl Bar {
 /// The new event `kind` over `len` ticks: one value if one fits, else
 /// tied values (a rest is not tied).
 fn new_events(kind: EventKind, len: u32, tie_last: bool) -> Vec<Event> {
-    let parts = Duration::split(len);
+    let parts = Duration::split_any(len);
     let n = parts.len();
     parts
         .into_iter()
@@ -550,9 +631,6 @@ pub fn bar_ticks((num, den): (u8, u8)) -> u32 {
 }
 
 fn event_of(note: &MelodyNote) -> Result<Event, String> {
-    if note.triplet {
-        return Err("it holds a tuplet, which note input does not edit yet".to_owned());
-    }
     if note.extra_pitches.len() > 3 {
         return Err("it holds a chord of more than four notes".to_owned());
     }
@@ -561,6 +639,7 @@ fn event_of(note: &MelodyNote) -> Result<Event, String> {
     let duration = Duration {
         value,
         dots: u8::from(note.dotted),
+        triplet: note.triplet,
     };
     let mut marks = 0u8;
     for name in &note.articulations {
@@ -656,6 +735,9 @@ fn note_text(event: &Event) -> String {
     for _ in 0..event.duration.dots {
         out.push('.');
     }
+    if event.duration.triplet {
+        out.push('t');
+    }
     if event.tie {
         out.push('~');
     }
@@ -689,6 +771,7 @@ fn melody_note(event: &Event) -> MelodyNote {
         }
     };
     note.dotted = d.dots > 0;
+    note.triplet = d.triplet;
     note.articulations = MARKS
         .iter()
         .enumerate()

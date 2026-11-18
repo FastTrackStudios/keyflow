@@ -91,6 +91,9 @@ pub struct InputOverlay {
     /// a click would enter a note: the staff's top line as a staff step
     /// (`Pitch::step`), and how the note would look.
     pub pointer: Option<PointerShadow>,
+    /// The voice notes go into, 0 to 3: the cursor, the shadow note and the
+    /// entry are drawn in its colour, as MuseScore draws them.
+    pub voice: u8,
 }
 
 /// What the pointer's shadow note looks like, and the staff it is read on.
@@ -296,6 +299,14 @@ fn chart_token(ctx: &ViewCtx, name: &str) -> Option<Color> {
 /// Without a theme's tokens (a host that gives none): MuseScore's.
 const SELECTION_FALLBACK: Color = Color::from_rgb8(0x00, 0x65, 0xBF);
 const HOVER_FALLBACK: Color = Color::from_rgb8(0x2E, 0x9C, 0xE6);
+/// Voices 2 to 4, a theme's `chart.voice2` … or MuseScore's: green,
+/// orange, pink (voice 1 is the selection colour, MuseScore's blue).
+const VOICE_TOKENS: [&str; 3] = ["chart.voice2", "chart.voice3", "chart.voice4"];
+const VOICE_FALLBACKS: [Color; 3] = [
+    Color::from_rgb8(0x00, 0x7F, 0x00),
+    Color::from_rgb8(0xC5, 0x3F, 0x00),
+    Color::from_rgb8(0xC3, 0x19, 0x89),
+];
 
 /// The two colours a highlight takes, as the theme and the chart's paper
 /// give them.
@@ -303,6 +314,8 @@ const HOVER_FALLBACK: Color = Color::from_rgb8(0x2E, 0x9C, 0xE6);
 pub struct HighlightColours {
     pub selection: Color,
     pub hover: Color,
+    /// Voices 2 to 4's colours.
+    pub voices: [Color; 3],
 }
 
 impl HighlightColours {
@@ -317,6 +330,22 @@ impl HighlightColours {
         Self {
             selection: legible(pick(SELECTION_TOKENS, SELECTION_FALLBACK), paper, ink),
             hover: legible(pick(HOVER_TOKENS, HOVER_FALLBACK), paper, ink),
+            voices: std::array::from_fn(|i| {
+                legible(
+                    token(VOICE_TOKENS[i]).unwrap_or(VOICE_FALLBACKS[i]),
+                    paper,
+                    ink,
+                )
+            }),
+        }
+    }
+
+    /// Voice `voice`'s colour (0 to 3): voice 1's is the selection's.
+    #[must_use]
+    pub fn voice(self, voice: u8) -> Color {
+        match voice {
+            1..=3 => self.voices[usize::from(voice) - 1],
+            _ => self.selection,
         }
     }
 
@@ -334,6 +363,7 @@ impl Default for HighlightColours {
         Self {
             selection: SELECTION_FALLBACK,
             hover: HOVER_FALLBACK,
+            voices: VOICE_FALLBACKS,
         }
     }
 }
@@ -686,7 +716,8 @@ impl ChartPaintView {
     /// drawn again only when they move.
     fn input_layer(&mut self, overlay: Option<InputOverlay>) -> Option<Layer> {
         let overlay = overlay?;
-        let drawn_for = (overlay, self.colours.selection);
+        let colour = self.colours.voice(overlay.voice);
+        let drawn_for = (overlay, colour);
         if let Some((drawn, layer)) = &self.recorded.input
             && *drawn == drawn_for
         {
@@ -694,7 +725,6 @@ impl ChartPaintView {
         }
         let bounds = self.bar_box(overlay.bar)?;
         let px = points_to_px(1.0);
-        let colour = self.colours.selection;
         let mut scene = Scene::new();
         let w = bounds.width();
         let x0 = bounds.x0 + overlay.from.clamp(0.0, 1.0) * w;
@@ -743,7 +773,14 @@ impl ChartPaintView {
     /// colour: the chords or the notes and rests whose middle is in its span
     /// of its bar.
     fn entry_layer(&mut self, overlay: Option<InputOverlay>) -> Option<Layer> {
-        let (bar, from, to, chords) = overlay?.selected?;
+        let overlay = overlay?;
+        let (bar, from, to, chords) = overlay.selected?;
+        // A chord symbol is no voice's: the selection colour.
+        let colour = if chords {
+            self.colours.selection
+        } else {
+            self.colours.voice(overlay.voice)
+        };
         let b = self.bar_box(bar)?;
         let (x0, x1) = (b.x0 + from * b.width(), b.x0 + to * b.width());
         // Its staff and the chord symbols over it, not the line below.
@@ -772,7 +809,7 @@ impl ChartPaintView {
             self.recorded.entry = None;
             return None;
         }
-        let drawn_for = (keys, self.colours.selection);
+        let drawn_for = (keys, colour);
         if let Some((drawn, layer)) = &self.recorded.entry
             && *drawn == drawn_for
         {
@@ -789,19 +826,14 @@ impl ChartPaintView {
         &mut self,
         ctx: &ViewCtx,
         view: ChartView,
-        shadow: Option<PointerShadow>,
+        shadow: Option<(PointerShadow, u8)>,
     ) -> Option<Layer> {
-        let shadow = shadow?;
+        let (shadow, voice) = shadow?;
+        let colour = self.colours.voice(voice);
         let (bar, fraction, below_top) = self.staff_under(ctx, view, self.pointer)?;
         let b = self.bar_box(bar)?;
         let x = b.x0 + fraction * b.width();
-        let key = (
-            bar,
-            (x * 4.0) as i64,
-            below_top,
-            shadow,
-            self.colours.selection,
-        );
+        let key = (bar, (x * 4.0) as i64, below_top, shadow, colour);
         if let Some((drawn, layer)) = &self.recorded.pointer
             && *drawn == key
         {
@@ -818,7 +850,7 @@ impl ChartPaintView {
             },
             x - space * 1.15,
             b,
-            self.colours.selection.with_alpha(0.5),
+            colour.with_alpha(0.5),
         );
         let layer = Layer::new(Arc::new(scene.commands)).z(INPUT_Z);
         self.recorded.pointer = Some((key, layer.clone()));
@@ -1294,9 +1326,11 @@ impl PaintView for ChartPaintView {
         if let Some(entry) = self.entry_layer(snapshot.input) {
             layers.push((ENTRY_LAYER, entry.at(at)));
         }
-        if let Some(pointer) =
-            self.pointer_layer(ctx, snapshot.view, snapshot.input.and_then(|i| i.pointer))
-        {
+        if let Some(pointer) = self.pointer_layer(
+            ctx,
+            snapshot.view,
+            snapshot.input.and_then(|i| i.pointer.map(|p| (p, i.voice))),
+        ) {
             layers.push((POINTER_LAYER, pointer.at(at)));
         }
         if let Some(playhead) = self.playhead_layer(snapshot.playhead_secs) {

@@ -111,6 +111,64 @@ fn with_melody(cell: &str, melody: &str) -> String {
     format!("<< {trimmed} ; {melody} >>")
 }
 
+/// The lanes of `inner` (a `<< >>` block's inside), split at the `;`s
+/// outside braces.
+fn lanes(inner: &str) -> Vec<String> {
+    let mut out = vec![String::new()];
+    let mut depth = 0i32;
+    for c in inner.chars() {
+        match c {
+            '{' | '<' => depth += 1,
+            '}' | '>' => depth -= 1,
+            ';' if depth == 0 => {
+                out.push(String::new());
+                continue;
+            }
+            _ => {}
+        }
+        out.last_mut().expect("one lane at least").push(c);
+    }
+    out.into_iter().map(|l| l.trim().to_owned()).collect()
+}
+
+/// `cell` with voice `voice`'s melody made `melody`. Voice 1 is the bar's
+/// melody ([`with_melody`]); a lower voice is the lane of `<< … ; m{ … } ;
+/// m{ … } >>` that holds that voice, added when the bar has none, with
+/// `filler` (a bar of rest) for any voice before it that is missing.
+fn with_voice(cell: &str, voice: u8, melody: &str, filler: &str) -> String {
+    if voice == 0 {
+        return with_melody(cell, melody);
+    }
+    let trimmed = cell.trim();
+    let mut parts = match trimmed
+        .strip_prefix("<<")
+        .and_then(|t| t.strip_suffix(">>"))
+    {
+        Some(inner) => lanes(inner),
+        None => vec![trimmed.to_owned()],
+    };
+    // The lanes that hold a melody, in order: voice 1's, voice 2's, …
+    let with_melody_at: Vec<usize> = (0..parts.len())
+        .filter(|&i| melody_range(&parts[i]).is_some())
+        .collect();
+    let v = usize::from(voice);
+    if let Some(&i) = with_melody_at.get(v) {
+        let (a, b) = melody_range(&parts[i]).expect("a melody");
+        parts[i] = format!("{}{melody}{}", &parts[i][..a], &parts[i][b..]);
+    } else {
+        for _ in with_melody_at.len()..v {
+            parts.push(filler.to_owned());
+        }
+        parts.push(melody.to_owned());
+    }
+    let parts: Vec<&str> = parts
+        .iter()
+        .map(String::as_str)
+        .filter(|p| !p.is_empty())
+        .collect();
+    format!("<< {} >>", parts.join(" ; "))
+}
+
 /// `source` (the text `chart` was read from) with `changed` bars of
 /// `score` written into it.
 ///
@@ -135,12 +193,22 @@ pub fn write_bars(
                     index + 1
                 ));
             }
-            let read = Bar::from_measure(after[index]);
-            if read.events != score.bars[index].events {
-                return Err(format!(
-                    "Bar {} would not read back as entered, so it was not written",
-                    index + 1
-                ));
+            for voice in 0..4u8 {
+                let Some(want) = score.voice_bars(voice).get(index) else {
+                    continue;
+                };
+                let read = Bar::from_voice(after[index], voice);
+                if read.events != want.events {
+                    return Err(format!(
+                        "Bar {}{} would not read back as entered, so it was not written",
+                        index + 1,
+                        if voice == 0 {
+                            String::new()
+                        } else {
+                            format!(" (voice {})", voice + 1)
+                        }
+                    ));
+                }
             }
         }
         Ok(())
@@ -179,8 +247,15 @@ pub fn bars_text(
         if *chords != ChordBar::from_measure(was) {
             own = with_chords(&own, &chords.to_text()?);
         }
-        if *bar != Bar::from_measure(was) {
-            own = with_melody(&own, &bar.to_melody());
+        let _ = bar;
+        for voice in 0..4u8 {
+            let Some(line) = score.voice_bars(voice).get(index) else {
+                continue;
+            };
+            if *line != Bar::from_voice(was, voice) {
+                let filler = Bar::empty(was.time_signature).to_melody();
+                own = with_voice(&own, voice, &line.to_melody(), &filler);
+            }
         }
         cells.push((index, own));
     }
@@ -576,6 +651,81 @@ mod tests {
         // And it reads back as entered.
         let again = Score::from_chart(&parse_chart(&text).unwrap());
         assert_eq!(again.bars[1].events, score.bars[1].events);
+    }
+
+    #[test]
+    fn a_second_voice_is_written_into_a_lane_of_its_own() {
+        let (chart, mut score) = setup();
+        let mut input = InputState {
+            mode: Mode::NoteName,
+            target: Target::Notes,
+            ..InputState::default()
+        };
+        // Bar 3 has voice 1 (`a:44 r2.`); voice 2 gets two halves.
+        input.apply(&mut score, Op::MoveTo(crate::edit::Pos { bar: 2, tick: 0 }));
+        let mut changed = Vec::new();
+        for op in [
+            Op::Voice(1),
+            Op::Duration(Value::Half),
+            Op::Letter('C'),
+            Op::Letter('D'),
+        ] {
+            changed.extend(input.apply(&mut score, op).changed);
+        }
+        assert_eq!(input.voice, 1);
+        let text = write_bars(CHART, &chart, &score, &changed).unwrap();
+        assert!(
+            text.contains("<< F ; m{ a:44 r2. } ; m{ C:52 D:52 } >>"),
+            "{text}"
+        );
+        // Both voices read back: voice 1 as it was, voice 2 as entered.
+        let back = parse_chart(&text).unwrap();
+        let bar = measures(&back)[2];
+        assert_eq!(
+            Bar::from_voice(bar, 0),
+            Bar::from_measure(measures(&chart)[2])
+        );
+        assert_eq!(
+            Bar::from_voice(bar, 1).events,
+            score.voice_bars(1)[2].events
+        );
+        assert_eq!(measures(&back).len(), 4, "no bar added");
+
+        // A bar with no melody: voice 1 is written as a bar of rest first.
+        let mut score = Score::from_chart(&back);
+        input.apply(&mut score, Op::MoveTo(crate::edit::Pos { bar: 3, tick: 0 }));
+        let out = input.apply(&mut score, Op::Letter('E'));
+        let text2 = write_bars(&text, &back, &score, &out.changed).unwrap();
+        assert!(text2.contains("<< G / / / ; m{ r1 } ; m{ E:"), "{text2}");
+    }
+
+    #[test]
+    fn a_triplet_is_made_and_filled_and_written() {
+        let (chart, mut score) = setup();
+        let mut input = InputState {
+            mode: Mode::NoteName,
+            target: Target::Notes,
+            ..InputState::default()
+        };
+        input.apply(&mut score, Op::MoveTo(crate::edit::Pos { bar: 1, tick: 0 }));
+        let mut changed = Vec::new();
+        for op in [
+            Op::Duration(Value::Quarter),
+            Op::Triplet,
+            Op::Letter('C'),
+            Op::Letter('D'),
+            Op::Letter('E'),
+            Op::Letter('F'),
+        ] {
+            changed.extend(input.apply(&mut score, op).changed);
+        }
+        // After the group: quarters again.
+        assert_eq!(
+            input.duration,
+            crate::edit::music::Duration::new(Value::Quarter)
+        );
+        let text = write_bars(CHART, &chart, &score, &changed).unwrap();
+        assert!(text.contains("m{ C:58t D:58t E:58t F:54 r2 }"), "{text}");
     }
 
     #[test]

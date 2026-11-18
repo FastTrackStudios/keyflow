@@ -53,6 +53,12 @@ pub const OP_ACTIONS: &[OpAction] = &[
     op("KEYFLOW_HALVE", Op::Halve, "Q"),
     op("KEYFLOW_LONGER", Op::Longer, "⇧W"),
     op("KEYFLOW_SHORTER", Op::Shorter, "⇧Q"),
+    // MuseScore's Ctrl+Alt+1–4 (⌘⌥ on a Mac) and Ctrl+3.
+    op("KEYFLOW_VOICE_1", Op::Voice(0), "⌥⌘1"),
+    op("KEYFLOW_VOICE_2", Op::Voice(1), "⌥⌘2"),
+    op("KEYFLOW_VOICE_3", Op::Voice(2), "⌥⌘3"),
+    op("KEYFLOW_VOICE_4", Op::Voice(3), "⌥⌘4"),
+    op("KEYFLOW_TRIPLET", Op::Triplet, "⌘3"),
 ];
 
 /// The toolbar's actions that are note input's operations, and their keys

@@ -72,6 +72,8 @@ pub fn input_json(i: &InputState) -> Json {
         "pitch": [i.pitch.letter.to_string(), i.pitch.alter, i.pitch.octave],
         "selected": i.selected.map(pos),
         "target": match i.target { Target::Chords => "chords", Target::Notes => "notes" },
+        "voice": i.voice,
+        "triplet": i.duration.triplet,
     })
 }
 
@@ -95,6 +97,7 @@ pub fn input_from(v: &Json) -> InputState {
                 .get("dots")
                 .and_then(Json::as_u64)
                 .map_or(0, |d| d.min(2) as u8),
+            triplet: v.get("triplet").and_then(Json::as_bool).unwrap_or(false),
         };
     }
     i.accidental = v
@@ -115,6 +118,10 @@ pub fn input_from(v: &Json) -> InputState {
             i.pitch = Pitch::new(l, a as i8, o as i8);
         }
     }
+    i.voice = v
+        .get("voice")
+        .and_then(Json::as_u64)
+        .map_or(0, |n| n.min(3) as u8);
     i.target = match v.get("target").and_then(Json::as_str) {
         Some("notes") => Target::Notes,
         _ => Target::Chords,
@@ -168,6 +175,7 @@ mod tests {
             pitch: Pitch::new('F', 1, 3),
             selected: Some(Pos { bar: 11, tick: 0 }),
             target: Target::Notes,
+            voice: 2,
         };
         let back = input_from(&input_json(&i));
         assert_eq!(back, i);

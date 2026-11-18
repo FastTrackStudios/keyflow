@@ -110,7 +110,10 @@ impl Extension for Keyflow {
                 // A note clicked in a bar with no melody is a rhythm
                 // slash: it is the bar's chords.
                 let target = target.map(|t| match t {
-                    edit::Target::Notes if !score.bars.get(bar).is_some_and(|b| b.written) => {
+                    edit::Target::Notes
+                        if !(0..4)
+                            .any(|v| score.voice_bars(v).get(bar).is_some_and(|b| b.written)) =>
+                    {
                         edit::Target::Chords
                     }
                     t => t,
@@ -1063,13 +1066,15 @@ fn overlay(
     chart: &keyflow::Chart,
     score: &Score,
 ) -> Option<InputOverlay> {
-    let last = score.bars.len().checked_sub(1)?;
+    // The voice being entered's lines (every voice's bars are as long).
+    let bars = score.voice_bars(input.voice);
+    let last = bars.len().checked_sub(1)?;
     // The entry selected: highlighted as itself, in normal mode too.
     let selected = input.selected.and_then(|pos| {
         let bar = pos.bar.min(last);
         let (start, len) = match input.target {
             edit::Target::Notes => {
-                let b = &score.bars[bar];
+                let b = &bars[bar];
                 let i = b.index_at(pos.tick)?;
                 (b.starts()[i], b.events[i].duration.ticks())
             }
@@ -1079,7 +1084,7 @@ fn overlay(
                 (b.starts()[i], b.events[i].duration.ticks())
             }
         };
-        let length = f64::from(score.bars[bar].length.max(1));
+        let length = f64::from(bars[bar].length.max(1));
         Some((
             bar,
             f64::from(start) / length,
@@ -1096,10 +1101,11 @@ fn overlay(
             bars: 0,
             selected: Some(selected),
             pointer: None,
+            voice: input.voice,
         });
     }
     let bar = input.cursor.bar.min(last);
-    let length = f64::from(score.bars[bar].length.max(1));
+    let length = f64::from(bars[bar].length.max(1));
     // Syntax writes whole bars: the cursor is the bar (or the bars typed).
     let (from, to) = if input.mode == Mode::Syntax {
         (0.0, 1.0)
@@ -1147,6 +1153,7 @@ fn overlay(
             selected
         },
         pointer,
+        voice: input.voice,
     })
 }
 
