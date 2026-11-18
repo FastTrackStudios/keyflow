@@ -209,3 +209,37 @@ async fn the_chart_view_reads_and_edits_through_fts_session() {
     assert_eq!(alone, ChartSource::Document("Charts/Belief.kf".into()));
     assert!(alone.read_call().unwrap().is_none());
 }
+
+/// Note input re-serializes the whole chart; through the session that is
+/// the one splice it amounts to, merging with someone else's typing.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_whole_chart_write_is_one_splice_and_merges() {
+    use keyflow_session::splice_between;
+    assert_eq!(
+        splice_between("Verse: C G\n", "Verse: C Am G\n"),
+        (9, 0, "Am ".into())
+    );
+    assert_eq!(splice_between("abc", "abc"), (3, 0, String::new()));
+    assert_eq!(splice_between("Am7", "Am"), (2, 1, String::new()));
+    assert_eq!(splice_between("ändern", "ändern!"), (6, 0, "!".into()));
+
+    let dir = tempfile::tempdir().unwrap();
+    let chart = ChartSession::create(&dir.path().join("s.session"), VERSE)
+        .await
+        .unwrap();
+    let provider = Provider::default();
+    provider.open(&chart);
+    let source = ChartSource::of_pane_state(&format!("session:{}", chart.id()));
+    // Someone else types at the end meanwhile.
+    chart.set_chart(&format!("{VERSE}Chorus\n")).unwrap();
+    // Note input read "Verse: C G Am F", changed a chord, and writes it all.
+    let call = source
+        .replace_call(VERSE, "Verse: C G Am7 F\n")
+        .unwrap()
+        .unwrap();
+    provider
+        .answer(call.method, &call.args, Some(EXTENSION))
+        .unwrap();
+    assert_eq!(chart.chart(), "Verse: C G Am7 F\nChorus\n");
+    assert!(source.replace_call("same", "same").unwrap().is_none());
+}

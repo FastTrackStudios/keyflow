@@ -335,6 +335,24 @@ impl ChartSource {
         }))
     }
 
+    /// The call that makes the chart read `new` when it now reads `old`:
+    /// the one splice between their common prefix and suffix (positions in
+    /// Unicode scalars), so a whole-text write from an editor that
+    /// re-serializes the chart (note input) merges per character with
+    /// someone else's typing, as the host's diffed `DocEdit::Replace` does
+    /// for a document. `None` for a document, or when nothing changed.
+    ///
+    /// # Errors
+    ///
+    /// The request could not be encoded.
+    pub fn replace_call(&self, old: &str, new: &str) -> Result<Option<ServiceCall>> {
+        let (at, delete, insert) = splice_between(old, new);
+        if delete == 0 && insert.is_empty() {
+            return Ok(None);
+        }
+        self.splice_call(at, delete, &insert)
+    }
+
     /// The chart's source in the reply to [`Self::read_call`]; empty when
     /// the session has no chart yet.
     ///
@@ -350,4 +368,32 @@ impl ChartSource {
             other => Err(Error::Service(format!("not the chart's data: {other:?}"))),
         }
     }
+}
+
+/// The one splice that turns `old` into `new`: where it starts, how many
+/// characters it deletes, and what it inserts (Unicode scalars).
+#[must_use]
+pub fn splice_between(old: &str, new: &str) -> (u32, u32, String) {
+    let old: Vec<char> = old.chars().collect();
+    let new: Vec<char> = new.chars().collect();
+    let prefix = old.iter().zip(&new).take_while(|(a, b)| a == b).count();
+    let room = old.len().min(new.len()).saturating_sub(prefix);
+    let suffix = old
+        .iter()
+        .rev()
+        .zip(new.iter().rev())
+        .take(room)
+        .take_while(|(a, b)| a == b)
+        .count();
+    let deleted = old.len().saturating_sub(prefix).saturating_sub(suffix);
+    let inserted: String = new
+        .get(prefix..new.len().saturating_sub(suffix))
+        .unwrap_or_default()
+        .iter()
+        .collect();
+    (
+        u32::try_from(prefix).unwrap_or(u32::MAX),
+        u32::try_from(deleted).unwrap_or(u32::MAX),
+        inserted,
+    )
 }
