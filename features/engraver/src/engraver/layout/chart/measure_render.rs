@@ -316,6 +316,30 @@ impl ChartLayoutEngine {
             }
         }
 
+        // A beat the lower voices divide (a triplet under a quarter) needs
+        // room for each of their notes: they are placed inside it.
+        if has_written_notes && let Some(data) = melody_data {
+            let mut onsets: Vec<i32> = Vec::new();
+            for voice in &data.voices {
+                let mut tick = 0;
+                for seg in voice {
+                    onsets.push(tick);
+                    tick += seg.to_duration().ticks();
+                }
+            }
+            for (i, &(start, len)) in segments.iter().enumerate() {
+                let inside = onsets
+                    .iter()
+                    .filter(|&&o| o > start && o < start + len)
+                    .count();
+                if inside > 0
+                    && let Some(w) = chord_min_widths.get_mut(i)
+                {
+                    *w = w.max((inside as f64 + 1.0) * 2.6 * self.config.spatium);
+                }
+            }
+        }
+
         // Build the measure based on whether we have explicit rhythm entries or not
         let mut builder = MeasureBuilder::new()
             .id_base(id_base)

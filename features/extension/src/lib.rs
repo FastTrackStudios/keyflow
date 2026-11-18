@@ -441,8 +441,16 @@ fn ChartPane() -> Element {
                 }
                 open.error.clone_from(&message);
             }
-            // The chart's kept view, now that its path is known.
+            // The chart's kept view, now that its path is known; and note
+            // input's cursor drawn on it, which a restore before the path
+            // came could not.
             apply_kept_chart(key);
+            if INPUT_RESTORED.load(Ordering::Relaxed)
+                && !INPUT_SHOWN.swap(true, Ordering::Relaxed)
+                && edit_state().active == Some(key)
+            {
+                rerender_input().await;
+            }
             error.set(message);
         }
     });
@@ -637,6 +645,9 @@ async fn restore_from(key: u64, kept: &Json) {
         rerender_input().await;
     }
 }
+
+/// Whether the restored note input has been drawn on its chart.
+static INPUT_SHOWN: AtomicBool = AtomicBool::new(false);
 
 /// What was kept, as read back when this process started.
 static KEPT: Mutex<Option<Json>> = Mutex::new(None);
