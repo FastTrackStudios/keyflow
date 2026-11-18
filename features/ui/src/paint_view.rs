@@ -950,7 +950,26 @@ impl ChartPaintView {
         let x0 = bounds.x0 + overlay.from.clamp(0.0, 1.0) * w;
         let space = bounds.height() / 4.0;
         if overlay.ruler {
-            draw_ruler(&mut scene, &overlay, bounds, colour);
+            // Under the bar's chord symbols, which a chord chart writes
+            // over the staff where MuseScore's ruler stands: the lowest's
+            // bottom, if any.
+            let symbols = self
+                .recorded
+                .selectables
+                .iter()
+                .filter(|s| s.key.starts_with("chord#"))
+                .filter(|s| {
+                    let c = s.bounds.center();
+                    c.x >= bounds.x0
+                        && c.x < bounds.x1
+                        && s.bounds.y1 <= bounds.y0
+                        && s.bounds.y1 > bounds.y0 - bounds.height() * 3.0
+                })
+                .map(|s| s.bounds.y1)
+                .fold(None, |low: Option<f64>, y| {
+                    Some(low.map_or(y, |l| l.max(y)))
+                });
+            draw_ruler(&mut scene, &overlay, bounds, symbols, colour);
         }
         // MuseScore's note-input cursor: a translucent box in the voice's
         // colour over where the next note goes, a little past the staff; one
@@ -1705,15 +1724,28 @@ fn draw_shadow(scene: &mut Scene, shadow: ShadowNote, x: f64, bar: Rect, colour:
 /// input): over the staff, a pin in the voice's colour where the next note
 /// goes, and a tick each duration on from it to the barline, in chart pixels
 /// at 100%.
-fn draw_ruler(scene: &mut Scene, overlay: &InputOverlay, bar: Rect, colour: Color) {
+///
+/// `symbols`, the bottom of the lowest chord symbol over the bar (chart
+/// points): the ruler stays under it, shortened, rather than among them.
+fn draw_ruler(
+    scene: &mut Scene,
+    overlay: &InputOverlay,
+    bar: Rect,
+    symbols: Option<f64>,
+    colour: Color,
+) {
     let px = points_to_px(1.0);
     let space = bar.height() / 4.0;
     let w = bar.width();
     let x = (bar.x0 + overlay.from.clamp(0.0, 1.0) * w) * px;
     let step = (overlay.to - overlay.from).max(0.0) * w * px;
-    let base = (bar.y0 - space * 0.8) * px;
-    // The pin: a stem and a head.
-    let top = base - space * 3.0 * px;
+    let base = (bar.y0 - space * 0.5) * px;
+    // The pin: a stem and a head; as tall as there is room under the
+    // symbols (a space and a half at least).
+    let room = symbols.map_or(space * 3.0, |y| {
+        (bar.y0 - space * 0.5 - y - space * 0.6).max(space * 1.5)
+    });
+    let top = base - room.min(space * 3.0) * px;
     scene.stroke(
         &Stroke::new(1.5),
         Affine::IDENTITY,
@@ -1726,7 +1758,7 @@ fn draw_ruler(scene: &mut Scene, overlay: &InputOverlay, bar: Rect, colour: Colo
         Affine::IDENTITY,
         colour,
         None,
-        &kurbo::Circle::new((x, top), space * 0.55 * px),
+        &kurbo::Circle::new((x, top), space * 0.45 * px),
     );
     // A tick a duration on, to the barline.
     if step > 2.0 {
@@ -1738,7 +1770,7 @@ fn draw_ruler(scene: &mut Scene, overlay: &InputOverlay, bar: Rect, colour: Colo
                 Affine::IDENTITY,
                 colour.with_alpha(0.7),
                 None,
-                &kurbo::Line::new((t, base), (t, base - space * 1.4 * px)),
+                &kurbo::Line::new((t, base), (t, base - (room * 0.45).min(space * 1.4) * px)),
             );
             t += step;
         }
