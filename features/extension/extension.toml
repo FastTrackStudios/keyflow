@@ -582,7 +582,7 @@ params = '{"type":"object","required":["text"],"properties":{"text":{"type":"str
 [[actions]]
 id = "KEYFLOW_PALETTE_APPLY"
 name = "Keyflow: apply a palette cell"
-description = "The palette cell with `token` applied to the selected chord symbol: a quality (`maj7`, `m7`, …) sets its quality, keeping its root, bass and marks; an accent (`>`) or a staccato (`.`) goes on, or off when it is on. The other cells say what they do not apply yet."
+description = "The palette cell with `token` applied to the selected chord symbol: a quality (`maj7`, `m7`, …) sets its quality, keeping its root, bass and marks; an accent (`>`), a staccato (`.`) or a push (`'`, `''`; not on a bar's first chord, which would sound in the bar before) goes on, or off when it is on. The other cells say what they do not apply yet."
 group = "Keyflow"
 effect = "mutating"
 params = '{"type":"object","required":["token"],"properties":{"token":{"type":"string"}}}'

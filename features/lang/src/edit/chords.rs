@@ -80,7 +80,10 @@ impl ChordBar {
                 .iter()
                 .map(|r| ticks_of(r.duration(), time))
                 .sum::<u32>()
-                == length;
+                == length
+            // A pushed chord's rhythm reads its length from where it is
+            // written; where it sounds is its place.
+            && !measure.chords.iter().any(|c| c.push_pull.is_some());
         if !rhythm_fills {
             // A chord sounds until the next one: each lasts from where it
             // starts to where the next starts (the last, to the barline).
@@ -119,6 +122,28 @@ impl ChordBar {
                         slots.push((Slot::Hold, ticks_of(&s.duration, time)))
                     }
                 }
+            }
+        }
+        // A pushed chord (`'G`, `''G`) sounds an eighth or a sixteenth
+        // before the beat it is written on: put back on that beat, with the
+        // slot before it as much longer, it is its written place, which its
+        // mark pushes again when the bar is read back. (One pushed onto the
+        // bar's downbeat sounds in the bar before: not here.)
+        for i in 1..slots.len() {
+            let push = match &slots[i].0 {
+                Slot::Chord(t) => {
+                    parts(t).map_or(0, |p| p.0.chars().filter(|c| *c == '\'').count())
+                }
+                _ => 0,
+            };
+            let ticks = match push {
+                1 => TICKS_PER_WHOLE / 8,
+                2 => TICKS_PER_WHOLE / 16,
+                _ => 0,
+            };
+            if ticks > 0 && slots[i].1 > ticks {
+                slots[i].1 -= ticks;
+                slots[i - 1].1 += ticks;
             }
         }
         let total: u32 = slots.iter().map(|s| s.1).sum();
@@ -469,6 +494,22 @@ mod tests {
     }
     use crate::edit::music::Value;
     use crate::text::chart::parse_chart;
+
+    #[test]
+    fn a_pushed_chord_is_on_the_beat_it_is_written_on() {
+        // `'G` on beat 3 sounds an eighth early: the bar's chord line has it
+        // on beat 3 (the C a half), as written, its push in its mark.
+        for (text, want) in [
+            ("C // 'G / F /", "C_2 'G_4 F_4"),
+            ("C_2 'G_4 F_4", "C_2 'G_4 F_4"),
+            ("C // ''G / F /", "C_2 ''G_4 F_4"),
+            ("C / / / 'G", "C_2. 'G_4"),
+        ] {
+            let b = bar(text);
+            assert_eq!(b.locked, None, "{text}");
+            assert_eq!(b.to_text().unwrap(), want, "{text}");
+        }
+    }
 
     fn bar(text: &str) -> ChordBar {
         let chart = parse_chart(&format!("T - A\n4/4\n\nVS 1\n| {text} |\n")).unwrap();

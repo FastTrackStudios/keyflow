@@ -921,8 +921,11 @@ impl<'a> ChartParser<'a> {
             section_measure_count,
         )?;
         // A repeat's copies (`x4`) are not written: only the first is.
-        for copy in measures.iter_mut().skip(written) {
+        for (k, copy) in measures.iter_mut().enumerate().skip(written) {
             copy.source_span = None;
+            // It plays the line's first time through again: that bar's edit
+            // is its edit (`edit::replays`).
+            copy.plays_back = (written > 0).then(|| k - k % written);
             copy.read_only = Some(
                 "it is a repeat of its line made by `x2` (or `x3`, `x4`…): edit the line's first time through"
                     .to_owned(),

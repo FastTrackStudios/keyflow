@@ -63,10 +63,23 @@ pub fn replays(chart: &Chart) -> Vec<Option<usize>> {
             n += usize::from(drawn);
         }
     }
-    bars(chart)
-        .iter()
-        .map(|m| m.replays.and_then(|g| index.get(g).copied().flatten()))
-        .collect()
+    // Each bar's place among all the chart's bars, engraved or not, so a
+    // copy's `plays_back` counts back from its own.
+    let mut all: usize = 0;
+    let mut out = Vec::new();
+    for s in &chart.sections {
+        let drawn = engraved(&s.section.section_type);
+        for m in s.measures() {
+            if drawn {
+                let plays = m
+                    .replays
+                    .or_else(|| m.plays_back.and_then(|back| all.checked_sub(back)));
+                out.push(plays.and_then(|g| index.get(g).copied().flatten()));
+            }
+            all += 1;
+        }
+    }
+    out
 }
 
 /// Where an input is: a bar (the chart's bars counted from 0 across its
@@ -137,7 +150,16 @@ impl Score {
                 // Only a copy note for note (not transposed or cut short).
                 replays.filter(|&g| {
                     all.get(g).is_some_and(|src| {
-                        super::commit::same_music(m, src) && src.source_span.is_some()
+                        // An `x2` copy of a line's last bar is the bar but
+                        // for the `x2` itself, which that bar carries.
+                        let same = if m.plays_back.is_some() {
+                            let mut copy = (**m).clone();
+                            copy.repeat_count = src.repeat_count;
+                            super::commit::same_music(&copy, src)
+                        } else {
+                            super::commit::same_music(m, src)
+                        };
+                        same && src.source_span.is_some()
                     })
                 })
             })
@@ -1111,12 +1133,15 @@ impl InputState {
     pub fn toggle_mark(&mut self, score: &mut Score, mark: &str) -> Outcome {
         self.follow_replay(score);
         self.target = Target::Chords;
-        // A push moves where the chord sounds (an eighth or a sixteenth
-        // before its beat, on a downbeat into the bar before), which a
-        // bar's chord line does not place yet: typed in the bar, it is read.
-        if mark.starts_with('\'') {
+        // A push sounds the chord an eighth or a sixteenth before the beat
+        // it is written on; on a bar's first chord, in the bar before,
+        // which would change that bar's last chord.
+        if mark.starts_with('\'')
+            && let Some((bar, i)) = self.selected_chord(score)
+            && score.chords[bar].starts().get(i) == Some(&0)
+        {
             return Outcome::refuse(
-                "A push moves the chord before its beat, which the palette does not place yet: type it in the bar ('G)",
+                "A push on a bar's first chord sounds in the bar before: push a chord after the downbeat",
             );
         }
         self.rechord(score, |old| super::chords::with_mark(old, mark))
