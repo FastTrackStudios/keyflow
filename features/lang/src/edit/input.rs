@@ -561,7 +561,7 @@ impl InputState {
                     .chain(e.above.iter().flatten().copied())
             })
             .filter(|p| p.letter == letter && p.octave == octave)
-            .last()
+            .next_back()
             .map_or_else(|| score.key_alter(letter), |p| p.alter)
     }
 
@@ -956,7 +956,7 @@ impl InputState {
                 None => "Normal mode · N: input by note name · M: input by duration".to_owned(),
             },
             Mode::NoteName if self.target == Target::Chords => format!(
-                "Input by note name · chord symbols · {} {}{accidental} · next at {at} · A–G a chord root, 0 no chord, ↑ ↓ the root, Tab: notes instead, Esc leave{}",
+                "Input by note name · chord symbols · {} {}{accidental} · next at {at} · A–G a chord root, 0 no chord, ↑ ↓ the root, Y: notes instead, Esc leave{}",
                 self.duration.name(),
                 if self.rest { "rest" } else { "chord" },
                 score
@@ -967,7 +967,7 @@ impl InputState {
                     .unwrap_or_default()
             ),
             Mode::NoteName => format!(
-                "Input by note name · notes · voice 1 · {} {what}{accidental} · next at {at} · A–G enter, Shift+A–G add to the chord, 0 rest, T tie, Tab: chord symbols instead, Esc leave{locked}",
+                "Input by note name · notes · voice 1 · {} {what}{accidental} · next at {at} · A–G enter, Shift+A–G add to the chord, 0 rest, T tie, Y: chord symbols instead, Esc leave{locked}",
                 self.duration.name()
             ),
             Mode::Duration => format!(
@@ -1044,7 +1044,7 @@ mod tests {
         assert_eq!(chords(&s.chords[0]), "D_2 B_2");
         // No melody was touched.
         assert!(s.bars[0].events.iter().all(|e| e.pitch().is_none()));
-        // Tab: notes instead.
+        // Y: notes instead.
         i.apply(&mut s, Op::Target(Target::Notes));
         i.apply(&mut s, Op::Letter('E'));
         assert!(s.bars[1].events[0].pitch().is_some());

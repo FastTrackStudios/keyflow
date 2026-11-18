@@ -100,6 +100,14 @@ impl Extension for Keyflow {
                     bar,
                     tick: (fraction.clamp(0.0, 1.0) * f64::from(length)) as u32,
                 });
+                // A note clicked in a bar with no melody is a rhythm
+                // slash: it is the bar's chords.
+                let target = target.map(|t| match t {
+                    edit::Target::Notes if !score.bars.get(bar).is_some_and(|b| b.written) => {
+                        edit::Target::Chords
+                    }
+                    t => t,
+                });
                 target.map_or_else(|| vec![at], |t| vec![Op::Target(t), at])
             })
             .await;
@@ -490,7 +498,7 @@ fn ChartPane() -> Element {
                         },
                         "{mode().name()}"
                     }
-                    // What a letter enters, while entering: Tab switches.
+                    // What a letter enters, while entering: Y switches.
                     if mode() == Mode::NoteName || mode() == Mode::Duration {
                         span {
                             style: "padding:1px 8px; border-radius:9px; border:1px solid var(--primary, #4f46e5); color:var(--primary, #4f46e5); white-space:nowrap;",
@@ -721,6 +729,10 @@ async fn run_op(make: impl FnOnce(&Score) -> Vec<Op>) -> Result<Json, String> {
     if matches!(op, Op::Mode(_)) {
         load_keymap().await;
     }
+    // Leaving syntax mode drops what was previewed: the chart as it is.
+    if !edit_state().input.mode.is_input() && edit_state().preview.take().is_some() {
+        reload(Some(&path));
+    }
     show_input(&chart, &score, refused);
     Ok(input_state())
 }
@@ -825,7 +837,16 @@ static TOP_STEP: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::ne
 fn show_input(chart: &keyflow::Chart, score: &Score, refused: Option<String>) {
     let (overlay, path) = {
         let mut e = edit_state();
-        e.status = e.input.status(score);
+        e.status = match e.preview {
+            Some(n) if e.input.mode == Mode::Syntax => format!(
+                "Preview: {n} bar{} from bar {}, shown on the chart · Enter writes {}, Esc drops {}",
+                if n == 1 { "" } else { "s" },
+                e.input.cursor.bar + 1,
+                if n == 1 { "it" } else { "them" },
+                if n == 1 { "it" } else { "them" },
+            ),
+            _ => e.input.status(score),
+        };
         e.refused = refused;
         let path = e
             .active

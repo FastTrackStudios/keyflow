@@ -480,7 +480,7 @@ effect = "mutating"
 [[actions]]
 id = "KEYFLOW_TARGET_SWITCH"
 name = "Keyflow: chord symbols or notes"
-description = "Switches what a letter enters (Tab): chord symbols, the default in a chord chart, or notes."
+description = "Switches what a letter enters (Y): chord symbols, the default in a chord chart, or notes."
 group = "Keyflow"
 effect = "mutating"
 
@@ -730,7 +730,7 @@ default = "⇧Q"
 key = "keyflow.keys.target_switch"
 title = "Chord symbols or notes"
 control = "shortcut"
-default = "Tab"
+default = "Y"
 
 [[sections.settings]]
 key = "keyflow.keys.undo"
