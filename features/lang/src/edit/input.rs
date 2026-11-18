@@ -135,6 +135,9 @@ impl Score {
     /// near.
     #[must_use]
     pub fn pitch_before(&self, pos: Pos) -> Option<Pitch> {
+        if self.bars.is_empty() {
+            return None;
+        }
         for b in (0..=pos.bar.min(self.bars.len().saturating_sub(1))).rev() {
             let bar = &self.bars[b];
             let starts = bar.starts();
@@ -362,7 +365,21 @@ impl InputState {
     /// `op` applied: the state moved and `score`'s bars changed as it says.
     pub fn apply(&mut self, score: &mut Score, op: Op) -> Outcome {
         if score.bars.is_empty() {
-            return Outcome::refuse("The chart has no bars");
+            // A blank chart: its first bars are typed in syntax mode.
+            return match op {
+                Op::Mode(mode) => {
+                    self.mode = mode;
+                    self.cursor = Pos::default();
+                    Outcome::default()
+                }
+                Op::Escape => {
+                    self.mode = Mode::Normal;
+                    Outcome::default()
+                }
+                _ => Outcome::refuse(
+                    "The chart has no bars yet: K, then type some (`C / / / | G / / /`) and Enter",
+                ),
+            };
         }
         self.cursor.bar = self.cursor.bar.min(score.bars.len() - 1);
         score.set_voice(self.voice);
@@ -1388,6 +1405,16 @@ mod tests {
         i.apply(&mut s, Op::RestTool);
         i.apply(&mut s, Op::Escape);
         assert_eq!((i.mode, i.accidental, i.rest), (Mode::Normal, None, false));
+    }
+
+    #[test]
+    fn a_blank_chart_goes_into_syntax_mode_and_takes_nothing_else() {
+        let mut s = score(0);
+        assert_eq!(s.pitch_before(Pos { bar: 5, tick: 0 }), None, "no panic");
+        let mut i = InputState::default();
+        assert!(i.apply(&mut s, Op::Mode(Mode::Syntax)).refused.is_none());
+        assert_eq!(i.mode, Mode::Syntax);
+        assert!(i.apply(&mut s, Op::Letter('C')).refused.is_some());
     }
 
     #[test]

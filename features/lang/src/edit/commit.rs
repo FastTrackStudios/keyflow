@@ -285,23 +285,61 @@ pub fn splice_syntax(
         return Err("Type one or more bars, separated by |".to_owned());
     }
     let measures = measures(chart);
-    if from + cells.len() > measures.len() {
-        return Err(format!(
-            "{} bars typed, but only {} from bar {} to the end of the chart",
-            cells.len(),
-            measures.len().saturating_sub(from),
-            from + 1
-        ));
+    if from > measures.len() {
+        return Err(format!("There is no bar {}", from + 1));
     }
-    let new: Vec<(usize, String)> = cells
+    // Bars typed past the chart's end are added after it (MuseScore adds
+    // bars as note input runs off the end), so a chart can be sketched
+    // from nothing.
+    let fit = (measures.len() - from).min(cells.len());
+    let new: Vec<(usize, String)> = cells[..fit]
         .iter()
         .enumerate()
         .map(|(k, cell)| (from + k, (*cell).to_owned()))
         .collect();
-    let text = splice(source, placed(source, &measures, new)?);
+    let mut edits = placed(source, &measures, new)?;
+    edits.extend(appended(source, chart, &measures, &cells[fit..]));
+    let text = splice(source, edits);
     let written: Vec<usize> = (from..from + cells.len()).collect();
     check(&text, &measures, &written, |_| Ok(()))?;
     Ok((text, cells.len()))
+}
+
+/// The text edits that add `extra` bars after the chart's last: on a line
+/// of their own after the last bar's, the last section's bar count (`vs
+/// 8`) raised to take them; or, in a chart with no bars, a section of
+/// their own.
+fn appended(
+    source: &str,
+    chart: &Chart,
+    measures: &[&Measure],
+    extra: &[&str],
+) -> Vec<(usize, usize, String)> {
+    if extra.is_empty() {
+        return Vec::new();
+    }
+    let line = format!("| {} |", extra.join(" | "));
+    let Some(last) = measures.last().and_then(|m| m.source_span.as_ref()) else {
+        let end = source.trim_end().len();
+        return vec![(end, source.len(), format!("\n\nvs\n{line}\n"))];
+    };
+    let end = last.start + last.len;
+    let line_end = source[end..].find('\n').map_or(source.len(), |i| end + i);
+    let mut edits = vec![(line_end, line_end, format!("\n{line}"))];
+    // `vs 8` → `vs 12`: a header that counts its bars counts these too.
+    if let Some(header) = chart.sections.last().and_then(|s| s.source_span.as_ref()) {
+        let text = &source[header.start..header.start + header.len];
+        let trimmed = text.trim_end();
+        let digits = trimmed.len() - trimmed.trim_end_matches(|c: char| c.is_ascii_digit()).len();
+        let before_digits = &trimmed[..trimmed.len() - digits];
+        if digits > 0 && before_digits.ends_with(char::is_whitespace)
+            && let Ok(n) = trimmed[trimmed.len() - digits..].parse::<usize>()
+        {
+            let at = header.start + trimmed.len() - digits;
+            edits.push((at, at + digits, (n + extra.len()).to_string()));
+        }
+    }
+    edits
 }
 
 /// The text edits that give bars `cells` (bar index, new text) their new
@@ -485,11 +523,13 @@ fn check(
         }
     })?;
     let measures = measures(&after);
-    if measures.len() != before.len() {
+    // Bars written past the end were added.
+    let grown = written.iter().filter(|&&i| i >= before.len()).count();
+    if measures.len() != before.len() + grown {
         return Err(format!(
             "That would make the chart {} bars long instead of {}",
             measures.len(),
-            before.len()
+            before.len() + grown
         ));
     }
     for (i, (a, b)) in before.iter().zip(&measures).enumerate() {
@@ -700,6 +740,22 @@ mod tests {
     }
 
     #[test]
+    fn bars_typed_past_the_end_are_added() {
+        // Into a blank chart: a section of their own.
+        let blank = "Sketch\n4/4\n";
+        let chart = parse_chart(blank).unwrap();
+        let (text, n) = splice_syntax(blank, &chart, 0, "C / / / | Am / / / | F / G /").unwrap();
+        assert_eq!(n, 3);
+        assert_eq!(measures(&parse_chart(&text).unwrap()).len(), 3, "{text}");
+        // Over the last two bars and on past the end: the count goes up.
+        let (text2, _) = splice_syntax(CHART, &setup().0, 2, "Dm / / / | G / / / | C / / / | E7 / / /").unwrap();
+        let back = parse_chart(&text2).unwrap();
+        assert_eq!(measures(&back).len(), 6, "{text2}");
+        assert!(text2.contains("VS 6"), "{text2}");
+        assert!(text2.contains("| Dm / / / | G / / / |\n| C / / / | E7 / / / |"), "{text2}");
+    }
+
+    #[test]
     fn a_triplet_is_made_and_filled_and_written() {
         let (chart, mut score) = setup();
         let mut input = InputState {
@@ -774,8 +830,10 @@ mod tests {
             text.contains("| C / / / | Dm7 / G7 / | Cmaj7 | G / / / |"),
             "{text}"
         );
-        let err = splice_syntax(CHART, &chart, 3, "C | D").unwrap_err();
-        assert!(err.contains("only 1"), "{err}");
+        // Past the end: added, not refused.
+        let (text, n) = splice_syntax(CHART, &chart, 3, "C | D").unwrap();
+        assert_eq!(n, 2);
+        assert!(text.contains("VS 5"), "{text}");
         let err = splice_syntax(CHART, &chart, 0, "  ").unwrap_err();
         assert!(err.contains("Type"), "{err}");
     }

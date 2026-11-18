@@ -354,7 +354,29 @@ fn ChartPane() -> Element {
                     }
                     // In order, one at a time: C D E typed fast is C D E.
                     Msg::Gesture(g) => {
-                        edit_state().active = Some(key);
+                        // Another chart: note input starts afresh in it (a
+                        // cursor at bar 6 of the last chart means nothing
+                        // here), as MuseScore leaves note input on another
+                        // score.
+                        let switched = {
+                            let mut e = edit_state();
+                            let switched = e.active.is_some_and(|a| a != key);
+                            if switched {
+                                e.input = edit::InputState {
+                                    duration: e.input.duration,
+                                    target: e.input.target,
+                                    ..edit::InputState::default()
+                                };
+                                e.preview = None;
+                                e.refused = None;
+                                e.clicked = None;
+                            }
+                            e.active = Some(key);
+                            switched
+                        };
+                        if switched {
+                            rerender_input().await;
+                        }
                         gesture(g).await;
                     }
                     Msg::Keep => keep_view().await,
@@ -445,12 +467,7 @@ fn ChartPane() -> Element {
             // input's cursor drawn on it, which a restore before the path
             // came could not.
             apply_kept_chart(key);
-            if INPUT_RESTORED.load(Ordering::Relaxed)
-                && !INPUT_SHOWN.swap(true, Ordering::Relaxed)
-                && edit_state().active == Some(key)
-            {
-                rerender_input().await;
-            }
+            restore_input(key).await;
             error.set(message);
         }
     });
@@ -580,7 +597,9 @@ fn view_state() -> Json {
         })
         .collect();
     charts.extend(live);
-    json!({ "input": input, "charts": charts })
+    // Note input is in one chart: the one it is given back to.
+    let input_chart = active_chart().map(|(_, path)| path);
+    json!({ "input": input, "input_chart": input_chart, "charts": charts })
 }
 
 /// The view written to the extension's own data, when it changed.
@@ -632,22 +651,43 @@ async fn restore_view(key: u64) {
 async fn restore_from(key: u64, kept: &Json) {
     *KEPT.lock().unwrap_or_else(PoisonError::into_inner) = Some(kept.clone());
     apply_kept_chart(key);
-    if let Some(input) = kept.get("input")
-        && !INPUT_RESTORED.swap(true, Ordering::Relaxed)
-    {
-        {
-            let mut e = edit_state();
-            e.input = keep::input_from(input);
-            e.active = Some(key);
-        }
-        // Remembered as written, so the first look does not write it again.
-        keep::changed(&view_state());
-        rerender_input().await;
-    }
+    restore_input(key).await;
 }
 
-/// Whether the restored note input has been drawn on its chart.
-static INPUT_SHOWN: AtomicBool = AtomicBool::new(false);
+/// Note input given back, once, to pane `key` if it shows the chart it
+/// was kept in (not to whichever pane mounts first), and drawn there.
+/// Its path may not be known yet; the chart's read calls this again.
+async fn restore_input(key: u64) {
+    if INPUT_RESTORED.load(Ordering::Relaxed) {
+        return;
+    }
+    let Some(path) = open_charts()
+        .get(&key)
+        .map(|o| o.path.clone())
+        .filter(|p| !p.is_empty())
+    else {
+        return;
+    };
+    let kept = KEPT.lock().unwrap_or_else(PoisonError::into_inner).clone();
+    let Some(input) = kept.as_ref().and_then(|k| k.get("input")) else {
+        return;
+    };
+    let chart = kept
+        .as_ref()
+        .and_then(|k| k.get("input_chart"))
+        .and_then(Json::as_str);
+    if chart.is_some_and(|c| c != path) || INPUT_RESTORED.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    {
+        let mut e = edit_state();
+        e.input = keep::input_from(input);
+        e.active = Some(key);
+    }
+    // Remembered as written, so the first look does not write it again.
+    keep::changed(&view_state());
+    rerender_input().await;
+}
 
 /// What was kept, as read back when this process started.
 static KEPT: Mutex<Option<Json>> = Mutex::new(None);
