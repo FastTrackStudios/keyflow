@@ -34,7 +34,8 @@ use architect_extensions::linked::Builder;
 use crdt::presence::{Here, PeerState, PlayState};
 use crdt::sync::{
     DocPresenceClient, DocPresenceDispatcher, DocSyncClient, DocSyncDispatcher, DocSyncHost,
-    PresenceHost, PresencePeer, doc_presence_service_descriptor, doc_sync_service_descriptor,
+    PresenceDriver, PresenceHost, PresencePeer, doc_presence_service_descriptor,
+    doc_sync_service_descriptor,
 };
 use keyflow_session::{ChartSession, Provider};
 use serde_json::{Value as Json, json};
@@ -192,19 +193,76 @@ async fn serve(args: Json) -> Result<Json, String> {
     // The host takes part in its own presence, as the leader: its clock
     // is the shared clock.
     let url = format!("ws://127.0.0.1:{port}/vox");
-    join_presence(&url, id, "lead").await?;
+    join_presence(&url, id, "lead", None).await?;
     Ok(json!({ "serving": url, "id": id.to_string() }))
 }
 
-async fn join_presence(url: &str, id: Uuid, me: &str) -> Result<(), String> {
-    let client: DocPresenceClient = pool()
+/// How long to wait before dialling a session's host again after `failed`
+/// dials in a row came to nothing (0: it answered, then went): a quarter
+/// second, doubling, at most five seconds.
+fn redial_after(failed: u32) -> std::time::Duration {
+    const FIRST_MS: u64 = 250;
+    const MOST_MS: u64 = 5_000;
+    let doubled = FIRST_MS.saturating_mul(1_u64 << failed.min(16));
+    std::time::Duration::from_millis(doubled.min(MOST_MS))
+}
+
+/// Runs `driver` on the presence at `url`, and `pinger` on its host's
+/// clock when given, for as long as the process runs: dialled again
+/// whenever the host is gone (the DAW engine restarting), so a follower
+/// picks the transport up again by itself.
+fn keep_following(url: String, mut driver: PresenceDriver, pinger: Option<SharedClock>) {
+    tokio::spawn(async move {
+        let endpoint = Endpoint::url(&url);
+        let mut failed: u32 = 0;
+        loop {
+            let presence = pool().client::<DocPresenceClient>(&endpoint).await;
+            let host = match pinger {
+                Some(_) => pool()
+                    .client::<SessionClockClient>(&endpoint)
+                    .await
+                    .map(Some),
+                None => Ok(None),
+            };
+            match (presence, host, &pinger) {
+                (Ok(presence), Ok(Some(host)), Some(pinger)) => {
+                    failed = 0;
+                    let follow = driver.run(&presence);
+                    let pings = pinger.run(&host);
+                    tokio::pin!(follow, pings);
+                    tokio::select! {
+                        _ = &mut follow => {}
+                        _ = &mut pings => {}
+                    }
+                    pool().evict(&endpoint);
+                }
+                (Ok(presence), Ok(None), None) => {
+                    failed = 0;
+                    let _ = driver.run(&presence).await;
+                    pool().evict(&endpoint);
+                }
+                _ => failed = failed.saturating_add(1),
+            }
+            tokio::time::sleep(redial_after(failed)).await;
+        }
+    });
+}
+
+/// Joins session `id`'s presence at `url` as `me`, and pings its host's
+/// clock into `pinger` when given. The first dial must answer (a wrong
+/// `url` is the caller's error); after that it is kept up.
+async fn join_presence(
+    url: &str,
+    id: Uuid,
+    me: &str,
+    pinger: Option<SharedClock>,
+) -> Result<(), String> {
+    let _: DocPresenceClient = pool()
         .client(&Endpoint::url(url))
         .await
         .map_err(|e| e.to_string())?;
-    let (peer, mut driver) = PresencePeer::new(id, 30_000);
-    tokio::spawn(async move {
-        let _ = driver.run(&client).await;
-    });
+    let (peer, driver) = PresencePeer::new(id, 30_000);
+    keep_following(url.to_owned(), driver, pinger);
     peer.set(&format!("{me}/epoch"), epoch_wall_micros());
     let here = Here::new(peer.clone(), me, PeerState::new(me, me));
     let mut s = sessions();
@@ -221,16 +279,12 @@ async fn join_presence(url: &str, id: Uuid, me: &str) -> Result<(), String> {
 async fn follow(args: Json) -> Result<Json, String> {
     let url = text(&args, "url")?;
     let id = id_of(&args)?;
-    let host: SessionClockClient = pool()
+    let _: SessionClockClient = pool()
         .client(&Endpoint::url(&url))
         .await
         .map_err(|e| e.to_string())?;
     let clock = SharedClock::default();
-    let pinger = clock.clone();
-    tokio::spawn(async move {
-        let _ = pinger.run(&host).await;
-    });
-    join_presence(&url, id, "chart").await?;
+    join_presence(&url, id, "chart", Some(clock.clone())).await?;
     sessions().clock = Some(clock);
     // The chart into the session it follows, when it holds none yet: the
     // `.kf` at `chart_path`, written through the host's fts.session as
@@ -383,16 +437,12 @@ async fn join(args: Json) -> Result<Json, String> {
     tokio::spawn(async move {
         let _ = synced.run(&client).await;
     });
-    let host: SessionClockClient = pool()
+    let _: SessionClockClient = pool()
         .client(&Endpoint::url(&url))
         .await
         .map_err(|e| e.to_string())?;
     let clock = SharedClock::default();
-    let pinger = clock.clone();
-    tokio::spawn(async move {
-        let _ = pinger.run(&host).await;
-    });
-    join_presence(&url, id, "follow").await?;
+    join_presence(&url, id, "follow", Some(clock.clone())).await?;
     {
         let mut s = sessions();
         s.provider.open(&chart);
@@ -516,7 +566,18 @@ pub fn build(ext: &mut Builder) {
 
 #[cfg(test)]
 mod tests {
-    use super::{chart_source, open, set_bar_one};
+    use super::{chart_source, open, redial_after, set_bar_one};
+
+    #[test]
+    fn a_followed_host_is_dialled_again_soon_then_every_few_seconds() {
+        use std::time::Duration;
+        // It answered, then went (the engine restarting): soon.
+        assert_eq!(redial_after(0), Duration::from_millis(250));
+        assert_eq!(redial_after(2), Duration::from_millis(1_000));
+        // Never longer than five seconds, however long it is gone.
+        assert_eq!(redial_after(5), Duration::from_secs(5));
+        assert_eq!(redial_after(u32::MAX), Duration::from_secs(5));
+    }
     use serde_json::json;
 
     /// A session this copy holds gets its bar 1 here (no engine to set it):
