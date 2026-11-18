@@ -45,6 +45,9 @@ pub struct Score {
     /// Why a bar cannot be written back, when it has no text of its own
     /// (the parser's reason): it is shown, and an entry there refused.
     pub read_only: Vec<Option<String>>,
+    /// The bar a bar plays again, when its section replays an earlier one
+    /// note for note: an edit there is the edit of that bar.
+    pub replays: Vec<Option<usize>>,
     /// The key signature's alteration of each letter, C to B.
     pub key: [i8; 7],
 }
@@ -92,12 +95,29 @@ impl Score {
                 })
             })
             .collect();
+        let all: Vec<&keyflow_proto::chart::types::Measure> = chart
+            .sections
+            .iter()
+            .flat_map(|s| s.measures().iter())
+            .collect();
+        let replays = all
+            .iter()
+            .map(|m| {
+                // Only a copy note for note (not transposed or cut short).
+                m.replays.filter(|&g| {
+                    all.get(g).is_some_and(|src| {
+                        super::commit::same_music(m, src) && src.source_span.is_some()
+                    })
+                })
+            })
+            .collect();
         Self {
             bars,
             voice: 0,
             others,
             chords,
             read_only,
+            replays,
             key,
         }
     }
@@ -363,27 +383,87 @@ pub struct Outcome {
     pub changed: Vec<usize>,
     /// What it could not do, said as the status line says it.
     pub refused: Option<String>,
+    /// What it did that the person should be told (an entry on a replayed
+    /// bar written to the bar it replays).
+    pub note: Option<String>,
 }
 
 impl Outcome {
     fn refuse(why: impl Into<String>) -> Self {
         Self {
-            changed: Vec::new(),
             refused: Some(why.into()),
+            ..Self::default()
         }
     }
 
     fn bars(changed: Vec<usize>) -> Self {
         Self {
             changed,
-            refused: None,
+            ..Self::default()
+        }
+    }
+}
+
+impl Op {
+    /// Whether it edits the music (rather than moving the cursor or
+    /// choosing a tool), in `mode`.
+    #[must_use]
+    pub const fn edits(self, mode: Mode) -> bool {
+        match self {
+            Self::Letter(_)
+            | Self::Rest
+            | Self::Tie
+            | Self::Delete
+            | Self::AddToChord(_)
+            | Self::EnterStep(_)
+            | Self::Double
+            | Self::Halve
+            | Self::Longer
+            | Self::Shorter
+            | Self::Triplet => true,
+            // A duration key enters a note only in input by duration; ↑ ↓
+            // there move the pitch cursor, elsewhere the selected note.
+            Self::Duration(_) => matches!(mode, Mode::Duration),
+            Self::Semitone(_) | Self::Octave(_) => !matches!(mode, Mode::Duration),
+            _ => false,
         }
     }
 }
 
 impl InputState {
     /// `op` applied: the state moved and `score`'s bars changed as it says.
+    ///
+    /// An edit on a bar whose section plays an earlier section's again
+    /// (`VS` with nothing under it) is the edit of the bar it plays: the
+    /// cursor goes there, and the outcome says so. MuseScore has no such
+    /// bar; a chord chart has many.
     pub fn apply(&mut self, score: &mut Score, op: Op) -> Outcome {
+        let mut note = None;
+        if op.edits(self.mode) {
+            let replayed = |bar: usize| score.replays.get(bar).copied().flatten();
+            if let Some(src) = replayed(self.cursor.bar) {
+                note = Some(format!(
+                    "Bar {} plays bar {} again: entered at bar {}",
+                    self.cursor.bar + 1,
+                    src + 1,
+                    src + 1
+                ));
+                self.cursor.bar = src;
+            }
+            if let Some(sel) = self.selected
+                && let Some(src) = replayed(sel.bar)
+            {
+                self.selected = Some(Pos { bar: src, ..sel });
+            }
+        }
+        let mut out = self.apply_op(score, op);
+        if out.note.is_none() {
+            out.note = note;
+        }
+        out
+    }
+
+    fn apply_op(&mut self, score: &mut Score, op: Op) -> Outcome {
         if score.bars.is_empty() {
             // A blank chart: its first bars are typed in syntax mode.
             return match op {
@@ -1088,6 +1168,16 @@ impl InputState {
     #[must_use]
     pub fn status(&self, score: &Score) -> String {
         let line = self.status_line(score);
+        if let Some(src) = score.replays.get(self.cursor.bar).copied().flatten()
+            && self.mode.is_input()
+        {
+            return format!(
+                "Bar {} plays bar {} again: what you enter here is written at bar {} · {line}",
+                self.cursor.bar + 1,
+                src + 1,
+                src + 1
+            );
+        }
         match score.read_only.get(self.cursor.bar).cloned().flatten() {
             Some(why) if self.mode.is_input() => {
                 format!("Bar {} is read-only: {why} · {line}", self.cursor.bar + 1)
@@ -1171,6 +1261,7 @@ mod tests {
             others: vec![Vec::new(), empty(), empty(), empty()],
             chords: (0..bars).map(|_| ChordBar::empty((4, 4))).collect(),
             read_only: vec![None; bars],
+            replays: vec![None; bars],
             key: [0; 7],
         }
     }

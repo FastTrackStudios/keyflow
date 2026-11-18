@@ -71,15 +71,36 @@ fn every_bar_of_the_vault_is_found_and_written_back_unchanged() {
     let mut chord_refused = std::collections::BTreeMap::<String, usize>::new();
     let mut read_only = std::collections::BTreeMap::<String, usize>::new();
     let mut chorded = 0;
+    let mut replayed = 0;
     let mut failures = Vec::new();
     for (name, source) in charts() {
         let Ok(chart) = parse_chart(&source) else {
             continue;
         };
         let measures = bars(&chart);
-        let score = Score::from_chart(&chart);
+        let score = Score::from_text(&source, &chart);
         let (mut f, mut e, mut c) = (0, 0, 0);
         for (i, m) in measures.iter().enumerate() {
+            // A bar that plays an earlier one again is edited there: a chord
+            // entered on it is written at that bar, and it follows.
+            if let Some(src) = score.replays[i] {
+                let mut s = score.clone();
+                let mut input = InputState {
+                    mode: Mode::NoteName,
+                    ..InputState::default()
+                };
+                input.apply(&mut s, Op::MoveTo(Pos { bar: i, tick: 0 }));
+                let out = input.apply(&mut s, Op::Letter('C'));
+                if out.changed.contains(&src) {
+                    match write_bars(&source, &chart, &s, &out.changed) {
+                        Ok(_) => {
+                            replayed += 1;
+                            continue;
+                        }
+                        Err(why) => *chord_refused.entry(why).or_insert(0) += 1,
+                    }
+                }
+            }
             let Some(span) = m.source_span.as_ref() else {
                 // Read-only, and says why.
                 match &m.read_only {
@@ -174,7 +195,7 @@ fn every_bar_of_the_vault_is_found_and_written_back_unchanged() {
         edited += e;
     }
     println!(
-        "VAULT: {found} of {total} bars found; {edited} took a note and {chorded} a chord symbol, written back"
+        "VAULT: {found} of {total} bars found; {edited} took a note and {chorded} a chord symbol, written back; {replayed} more replay a bar and are edited there"
     );
     for (why, n) in &read_only {
         println!("READ-ONLY {n:4} {why}");

@@ -455,6 +455,12 @@ pub struct Measure {
     /// written out bar by bar.
     #[facet(default)]
     pub own_part: Option<TextSpan>,
+    /// When its section has no bars of its own and plays an earlier one's
+    /// again (`VS` under a verse already written), the bar it plays: its
+    /// place among the chart's bars, from 0. An edit here is the edit of
+    /// that bar.
+    #[facet(default)]
+    pub replays: Option<usize>,
 
     /// Source measure number when imported from MusicXML — the value of
     /// `<measure number="...">`. `None` for keyflow-text-authored charts.
@@ -494,6 +500,7 @@ impl Measure {
             source_measure_width: None,
             read_only: None,
             own_part: None,
+            replays: None,
         }
     }
 

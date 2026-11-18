@@ -832,7 +832,11 @@ fn check(
             x.simile = false;
             music_of(&x, false) == music_of(b, false)
         };
-        if !written.contains(&i) && !written_out && !same_music(a, b) {
+        // A bar that plays a written bar again follows it.
+        let follows = a.replays.is_some_and(|g| {
+            written.contains(&g) && measures.get(g).is_some_and(|w| same_music(w, b))
+        });
+        if !written.contains(&i) && !written_out && !follows && !same_music(a, b) {
             return Err(format!(
                 "That would change bar {} as well, so it was not written",
                 i + 1
@@ -1084,6 +1088,35 @@ mod tests {
         assert!(
             out.refused
                 .is_some_and(|r| r.contains("pushed over its barline"))
+        );
+    }
+
+    #[test]
+    fn an_entry_on_a_replayed_bar_is_written_where_the_bar_it_plays_is() {
+        // The second VS has no bars of its own: it plays the first's.
+        let text = "Edit - Test\n4/4\n\nVS 2\n| C | G |\n\nCH 1\n| F |\n\nVS\n";
+        let chart = parse_chart(text).unwrap();
+        let mut score = Score::from_text(text, &chart);
+        assert_eq!(score.replays, [None, None, None, Some(0), Some(1)]);
+        let mut input = InputState {
+            mode: Mode::NoteName,
+            ..InputState::default()
+        };
+        input.apply(&mut score, Op::MoveTo(crate::edit::Pos { bar: 4, tick: 0 }));
+        assert!(input.status(&score).contains("plays bar 2 again"));
+        input.apply(&mut score, Op::Duration(Value::Whole));
+        let out = input.apply(&mut score, Op::Letter('A'));
+        assert_eq!(out.changed, [1]);
+        assert!(out.note.is_some_and(|n| n.contains("Bar 5 plays bar 2")));
+        let new = write_bars(text, &chart, &score, &out.changed).unwrap();
+        assert!(new.contains("| C | A_1 |"), "{new}");
+        // Read again, the replay plays the new bar.
+        let back = parse_chart(&new).unwrap();
+        assert_eq!(
+            ChordBar::from_measure(measures(&back)[4])
+                .to_text()
+                .unwrap(),
+            "A_1"
         );
     }
 

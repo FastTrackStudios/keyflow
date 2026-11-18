@@ -962,13 +962,18 @@ async fn run_op(make: impl FnOnce(&Score) -> Vec<Op>) -> Result<Json, String> {
         for op in &ops {
             let o = e.input.apply(&mut score, *op);
             outcome.changed.extend(o.changed);
+            if o.note.is_some() {
+                outcome.note = o.note;
+            }
             if o.refused.is_some() {
                 outcome.refused = o.refused;
             }
         }
         (before, outcome)
     };
-    let mut refused = outcome.refused.clone();
+    // A refusal, or else what the person should know it did (an entry on
+    // a replayed bar written where the bar it plays is): the status line.
+    let mut refused = outcome.refused.clone().or_else(|| outcome.note.clone());
     if !outcome.changed.is_empty() {
         match keyflow::edit::commit::write_bars(&text, &chart, &score, &outcome.changed) {
             Ok(new) => {
@@ -1005,7 +1010,23 @@ async fn syntax_write(typed: &str) -> Result<Json, String> {
     let handle = handle()?;
     let text = read_text(&handle, &path).await?;
     let chart = keyflow::text::chart::parse_chart(&text)?;
-    let from = edit_state().input.cursor.bar;
+    let mut from = edit_state().input.cursor.bar;
+    // Typed over a replayed bar: written over the bar it plays.
+    let mut note = None;
+    if let Some(src) = Score::from_text(&text, &chart)
+        .replays
+        .get(from)
+        .copied()
+        .flatten()
+    {
+        note = Some(format!(
+            "Bar {} plays bar {} again: written from bar {}",
+            from + 1,
+            src + 1,
+            src + 1
+        ));
+        from = src;
+    }
     let refused = match keyflow::edit::commit::splice_syntax(&text, &chart, from, typed) {
         Ok((new, bars)) => {
             write_text(&handle, &path, new.clone(), "Type bars").await?;
@@ -1019,7 +1040,7 @@ async fn syntax_write(typed: &str) -> Result<Json, String> {
             };
             edit_state().input = after.clone();
             remember(&path, text.clone(), new, (before, after));
-            None
+            note
         }
         Err(why) => Some(why),
     };
