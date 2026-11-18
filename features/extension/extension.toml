@@ -34,7 +34,7 @@ reads = ["documents"]
 [[actions]]
 id = "KEYFLOW_STATE"
 name = "Keyflow: open charts"
-description = "Every chart open in a pane: its `path`, whether it parsed (`error` when not), its zoom (`null` fits the page to the width) and scroll ([x, y], logical pixels), what is selected on it (`selection`, the selectables' keys in reading order) and its pane's frame times (`frames`: count, p50, p99, slowest), whether the charts are `dark`, and the toolbar's tools that are on (`tools_on`)."
+description = "Every chart open in a pane: its `path`, whether it parsed (`error` when not), its zoom (`null` fits the page to the width) and scroll ([x, y], logical pixels), what is selected on it (`selection`, the selectables' keys in reading order), the element under the pointer (`hover`) and its pane's frame times (`frames`: count, p50, p99, slowest); whether the charts are pinned `dark` or follow the app's theme (`follows_app_theme`), and the toolbar's tools that are on (`tools_on`)."
 group = "Keyflow"
 effect = "read_only"
 
@@ -49,7 +49,7 @@ params = '{"type":"object","properties":{"path":{"type":"string"},"zoom":{"type"
 [[actions]]
 id = "KEYFLOW_SET_CHART_THEME"
 name = "Keyflow: set the chart's theme"
-description = "Draws the charts on dark paper (`dark: true`) or light, the default whatever the app's theme; `follow: true` draws them in the app's theme instead."
+description = "Draws the charts on dark paper (`dark: true`) or light, the default whatever the app's theme; `follow: true` draws them in the app's theme instead (its `chart.*` tokens, else its card, card ink and muted lines). Selection and hover are drawn in the theme's `chart.select` / `chart.hover`, else `primary` / `info`, either way."
 group = "Keyflow"
 effect = "mutating"
 params = '{"type":"object","properties":{"dark":{"type":"boolean"},"follow":{"type":"boolean"}}}'

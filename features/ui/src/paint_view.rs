@@ -143,26 +143,152 @@ impl PaintView for MountedChart {
 }
 
 /// What is selected on the chart: the selectables' keys
-/// (`keyflow::engraver::layout::chart::select`), in reading order. The
-/// pane writes it as it changes, when its host gave it one in its extras.
+/// (`keyflow::engraver::layout::chart::select`), in reading order, and
+/// the one under the pointer. The pane writes it as it changes, when its
+/// host gave it one in its extras. Both are presence: this person's view
+/// of the chart, not the chart.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ChartSelection {
     pub keys: Vec<String>,
+    /// The element under the pointer, highlighted as itself.
+    pub hover: Option<String>,
 }
 
 /// The layers a chart is drawn in, by key. Each page is its own (its
 /// number), so an edit re-sends only the pages it changed; the
-/// selection, a lasso and the playhead are each one more, over the pages.
+/// selection, the hover, a lasso and the playhead are each one more, over
+/// the pages, so a hover moving re-sends only its own small layer.
 const SELECTION_LAYER: LayerKey = 1 << 32;
 const LASSO_LAYER: LayerKey = SELECTION_LAYER + 1;
 const PLAYHEAD_LAYER: LayerKey = SELECTION_LAYER + 2;
+const HOVER_LAYER: LayerKey = SELECTION_LAYER + 3;
+
+/// The layers' stacking over the pages (z 0).
+const HOVER_Z: i32 = 1;
+const SELECTION_Z: i32 = 2;
+const PLAYHEAD_Z: i32 = 3;
+const LASSO_Z: i32 = 4;
 
 /// How far, in chart points, a click may miss what it selects.
 const PICK_SLOP: f64 = 3.0;
 
-/// The selection's wash and edge, and the lasso's.
-const HIGHLIGHT: Color = Color::from_rgba8(46, 125, 230, 56);
-const HIGHLIGHT_EDGE: Color = Color::from_rgba8(46, 125, 230, 220);
+/// The theme tokens the selection and the hover are drawn in: a theme's
+/// own `chart.select` / `chart.hover` (the engraver's `chart.*` tokens,
+/// `ChartTheme::from_tokens`) when it has them, else the app's brand
+/// colour (`primary`) and `info`. Not `accent`: in the app's tokens that
+/// is a hover's background tint, near the paper.
+const SELECTION_TOKENS: [&str; 2] = ["chart.select", "primary"];
+const HOVER_TOKENS: [&str; 2] = ["chart.hover", "info"];
+
+/// A chart that follows the app's theme without `chart.*` tokens of its
+/// own is drawn on the app's card, in its card ink, with muted staff lines.
+const CHART_TOKEN_FALLBACKS: [(&str, &str); 3] = [
+    ("chart.paper", "card"),
+    ("chart.ink", "card-foreground"),
+    ("chart.staff", "muted-foreground"),
+];
+
+/// `name` from the pane's theme tokens, or the app token a `chart.*` one
+/// falls back to.
+fn chart_token(ctx: &ViewCtx, name: &str) -> Option<Color> {
+    ctx.theme.color(name).or_else(|| {
+        CHART_TOKEN_FALLBACKS
+            .iter()
+            .find(|(chart, _)| *chart == name)
+            .and_then(|(_, app)| ctx.theme.color(app))
+    })
+}
+/// Without a theme's tokens (a host that gives none): MuseScore's.
+const SELECTION_FALLBACK: Color = Color::from_rgb8(0x00, 0x65, 0xBF);
+const HOVER_FALLBACK: Color = Color::from_rgb8(0x2E, 0x9C, 0xE6);
+
+/// The two colours a highlight takes, as the theme and the chart's paper
+/// give them.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HighlightColours {
+    pub selection: Color,
+    pub hover: Color,
+}
+
+impl HighlightColours {
+    /// From the theme's tokens (`token`), made to read on `paper`: a
+    /// token too close to the paper (a dark theme's light accent on a
+    /// chart pinned to light paper) is mixed toward `ink` until it does.
+    #[must_use]
+    pub fn from_tokens(
+        token: impl Fn(&str) -> Option<Color>,
+        paper: Color,
+        ink: Color,
+    ) -> Self {
+        let pick = |names: [&str; 2], fallback: Color| {
+            names.iter().find_map(|n| token(n)).unwrap_or(fallback)
+        };
+        Self {
+            selection: legible(pick(SELECTION_TOKENS, SELECTION_FALLBACK), paper, ink),
+            hover: legible(pick(HOVER_TOKENS, HOVER_FALLBACK), paper, ink),
+        }
+    }
+
+    /// The lasso's wash and edge: the selection colour, light.
+    fn lasso(self) -> (Color, Color) {
+        (
+            self.selection.with_alpha(0.22),
+            self.selection.with_alpha(0.86),
+        )
+    }
+}
+
+impl Default for HighlightColours {
+    fn default() -> Self {
+        Self {
+            selection: SELECTION_FALLBACK,
+            hover: HOVER_FALLBACK,
+        }
+    }
+}
+
+/// Relative luminance (WCAG), near enough for a contrast guard.
+fn luminance(c: Color) -> f32 {
+    let [r, g, b, _] = c.components;
+    let lin = |v: f32| {
+        if v <= 0.04045 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+}
+
+/// WCAG contrast ratio of two colours.
+fn contrast(a: Color, b: Color) -> f32 {
+    let (la, lb) = (luminance(a), luminance(b));
+    let (hi, lo) = if la > lb { (la, lb) } else { (lb, la) };
+    (hi + 0.05) / (lo + 0.05)
+}
+
+/// `colour`, mixed toward `ink` in steps until it reads on `paper`
+/// (3:1, WCAG's for graphics), opaque.
+fn legible(colour: Color, paper: Color, ink: Color) -> Color {
+    let mut c = colour.with_alpha(1.0);
+    for _ in 0..6 {
+        if contrast(c, paper) >= 3.0 {
+            break;
+        }
+        c = mix(c, ink.with_alpha(1.0), 0.3);
+    }
+    c
+}
+
+fn mix(a: Color, b: Color, t: f32) -> Color {
+    let (a, b) = (a.components, b.components);
+    Color::new([
+        a[0] + (b[0] - a[0]) * t,
+        a[1] + (b[1] - a[1]) * t,
+        a[2] + (b[2] - a[2]) * t,
+        a[3] + (b[3] - a[3]) * t,
+    ])
+}
 
 /// A press that may become a lasso: where it started, in pane pixels, and
 /// whether it adds to the selection.
@@ -181,8 +307,10 @@ struct Recorded {
     /// The engraver's generation the pages were recorded at.
     generation: Option<u64>,
     pages: Vec<(LayerKey, Layer)>,
-    /// The selection's keys it was drawn for, and its layer.
-    selection: Option<(Vec<String>, Layer)>,
+    /// The selection's keys and colour it was drawn for, and its layer.
+    selection: Option<((Vec<String>, Color), Layer)>,
+    /// The hovered element's key and colour it was drawn for, and its layer.
+    hover: Option<((String, Color), Layer)>,
     /// The playhead's time it was drawn at, and its layer.
     playhead: Option<(u64, Option<Layer>)>,
     /// The laid-out chart's selectables, at that generation.
@@ -207,6 +335,10 @@ pub struct ChartPaintView {
     theme: Option<u64>,
     recorded: Recorded,
     selection: Selection<String>,
+    /// The element under the pointer.
+    hover: Option<String>,
+    /// The theme's highlight colours, read at the last frame.
+    colours: HighlightColours,
     press: Option<Press>,
 }
 
@@ -227,6 +359,8 @@ impl ChartPaintView {
             theme: None,
             recorded: Recorded::default(),
             selection: Selection::default(),
+            hover: None,
+            colours: HighlightColours::default(),
             press: None,
         })
     }
@@ -253,10 +387,15 @@ impl ChartPaintView {
         let theme = snapshot
             .theme
             .clone()
-            .unwrap_or_else(|| ChartTheme::from_tokens(|name| ctx.theme.color(name)));
+            .unwrap_or_else(|| ChartTheme::from_tokens(|name| chart_token(ctx, name)));
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         format!("{theme:?}").hash(&mut hasher);
         let hash = hasher.finish();
+        self.colours = HighlightColours::from_tokens(
+            |name| ctx.theme.color(name),
+            theme.render.background_color,
+            theme.render.foreground_color,
+        );
         if self.theme != Some(hash) {
             self.theme = Some(hash);
             self.view.set_theme(theme);
@@ -334,8 +473,51 @@ impl ChartPaintView {
         if kept.len() != self.selection.items().len() {
             self.selection.lasso(kept, false);
         }
+        if self.hover.as_ref().is_some_and(|h| !keys.contains(h)) {
+            self.hover = None;
+        }
         self.recorded.selection = None;
+        self.recorded.hover = None;
         self.recorded.playhead = None;
+    }
+
+    /// `keys`' elements drawn as themselves in `colour`: each element's
+    /// own ink, recoloured by the engraver ([`renderer::ChartView::
+    /// record_elements`]); a bar, which is a box and not a mark, outlined
+    /// as MuseScore outlines a selected measure.
+    fn highlight(&self, keys: &[String], colour: Color, z: i32) -> Layer {
+        let items: Vec<&Selectable> = self
+            .recorded
+            .selectables
+            .iter()
+            .filter(|s| keys.contains(&s.key))
+            .collect();
+        let nodes: Vec<&[usize]> = items.iter().filter_map(|s| s.node.as_deref()).collect();
+        let mut commands = if nodes.is_empty() {
+            Vec::new()
+        } else {
+            self.view
+                .record_elements(&nodes, colour)
+                .unwrap_or_default()
+        };
+        let bars: Vec<&&Selectable> = items.iter().filter(|s| s.node.is_none()).collect();
+        if !bars.is_empty() {
+            let mut scene = Scene::new();
+            let px = points_to_px(1.0);
+            for bar in bars {
+                let b = bar.bounds.inflate(1.0, 2.0);
+                let rect = Rect::new(b.x0 * px, b.y0 * px, b.x1 * px, b.y1 * px);
+                scene.stroke(
+                    &Stroke::new(2.0),
+                    Affine::IDENTITY,
+                    colour,
+                    None,
+                    &RoundedRect::from_rect(rect, 1.5),
+                );
+            }
+            commands.extend(scene.commands);
+        }
+        Layer::new(Arc::new(commands)).z(z)
     }
 
     /// The selection's highlight, in chart pixels at 100%: drawn again
@@ -346,34 +528,53 @@ impl ChartPaintView {
             self.recorded.selection = None;
             return None;
         }
+        let drawn_for = (keys, self.colours.selection);
         if let Some((drawn, layer)) = &self.recorded.selection
-            && *drawn == keys
+            && *drawn == drawn_for
         {
             return Some(layer.clone());
         }
-        let mut scene = Scene::new();
-        let px = points_to_px(1.0);
-        for item in self
-            .recorded
-            .selectables
-            .iter()
-            .filter(|s| keys.contains(&s.key))
-        {
-            let b = item.bounds.inflate(1.5, 1.5);
-            let rect = Rect::new(b.x0 * px, b.y0 * px, b.x1 * px, b.y1 * px);
-            let shape = RoundedRect::from_rect(rect, 2.0);
-            scene.fill(Fill::NonZero, Affine::IDENTITY, HIGHLIGHT, None, &shape);
-            scene.stroke(
-                &Stroke::new(1.0),
-                Affine::IDENTITY,
-                HIGHLIGHT_EDGE,
-                None,
-                &shape,
-            );
-        }
-        let layer = Layer::new(Arc::new(scene.commands)).z(1);
-        self.recorded.selection = Some((keys, layer.clone()));
+        let layer = self.highlight(&drawn_for.0, drawn_for.1, SELECTION_Z);
+        self.recorded.selection = Some((drawn_for, layer.clone()));
         Some(layer)
+    }
+
+    /// The element under the pointer, drawn as itself in the hover
+    /// colour: drawn again only when the pointer moves onto another. A
+    /// selected element shows as selected, not hovered.
+    fn hover_layer(&mut self) -> Option<Layer> {
+        let key = self
+            .hover
+            .clone()
+            .filter(|k| !self.selection.contains(k))?;
+        let drawn_for = (key, self.colours.hover);
+        if let Some((drawn, layer)) = &self.recorded.hover
+            && *drawn == drawn_for
+        {
+            return Some(layer.clone());
+        }
+        let layer = self.highlight(std::slice::from_ref(&drawn_for.0), drawn_for.1, HOVER_Z);
+        self.recorded.hover = Some((drawn_for, layer.clone()));
+        Some(layer)
+    }
+
+    /// The element under the pane point `at`, if any.
+    fn under(&self, ctx: &ViewCtx, view: ChartView, at: (f64, f64)) -> Option<String> {
+        let point = self.chart_point(ctx, view, at);
+        pick(&self.recorded.selectables, point, PICK_SLOP)
+            .and_then(|i| self.recorded.selectables.get(i))
+            .map(|s| s.key.clone())
+    }
+
+    /// The pointer moved to `at`: what it is over now. Whether that
+    /// changed (a frame is needed).
+    fn hover_at(&mut self, ctx: &ViewCtx, view: ChartView, at: (f64, f64)) -> bool {
+        let under = self.under(ctx, view, at);
+        if under == self.hover {
+            return false;
+        }
+        self.hover = under;
+        true
     }
 
     /// The playhead at `secs`, in chart pixels at 100%: drawn again only
@@ -390,7 +591,7 @@ impl ChartPaintView {
         let layer = self
             .view
             .paint_playhead(&mut scene, secs)
-            .then(|| Layer::new(Arc::new(scene.commands)).z(2));
+            .then(|| Layer::new(Arc::new(scene.commands)).z(PLAYHEAD_Z));
         self.recorded.playhead = Some((bits, layer.clone()));
         layer
     }
@@ -399,16 +600,11 @@ impl ChartPaintView {
     fn lasso_layer(&self) -> Option<Layer> {
         let press = self.press.filter(|p| p.moved)?;
         let rect = Rect::from_points(press.from, press.to);
+        let (wash, edge) = self.colours.lasso();
         let mut scene = Scene::new();
-        scene.fill(Fill::NonZero, Affine::IDENTITY, HIGHLIGHT, None, &rect);
-        scene.stroke(
-            &Stroke::new(1.0),
-            Affine::IDENTITY,
-            HIGHLIGHT_EDGE,
-            None,
-            &rect,
-        );
-        Some(Layer::new(Arc::new(scene.commands)).z(3))
+        scene.fill(Fill::NonZero, Affine::IDENTITY, wash, None, &rect);
+        scene.stroke(&Stroke::new(1.0), Affine::IDENTITY, edge, None, &rect);
+        Some(Layer::new(Arc::new(scene.commands)).z(LASSO_Z))
     }
 
     /// A pane point in chart points, under `snapshot`'s framing.
@@ -424,11 +620,7 @@ impl ChartPaintView {
     fn press(&mut self, ctx: &ViewCtx, view: ChartView, at: (f64, f64), mods: &[&str]) -> bool {
         let shift = mods.contains(&"Shift");
         let command = mods.contains(&"Mod");
-        let point = self.chart_point(ctx, view, at);
-        let hit = pick(&self.recorded.selectables, point, PICK_SLOP)
-            .and_then(|i| self.recorded.selectables.get(i))
-            .map(|s| s.key.clone());
-        let Some(key) = hit else {
+        let Some(key) = self.under(ctx, view, at) else {
             self.press = Some(Press {
                 from: at,
                 to: at,
@@ -478,9 +670,12 @@ impl ChartPaintView {
     /// The selection out to the host, when it asked for it.
     fn publish(&self, ctx: &ViewCtx) {
         if let Some(out) = ctx.data::<ChartSelection>() {
-            let keys = self.selection.items().to_vec();
-            if out.read(|s| s.keys != keys) {
-                out.set(ChartSelection { keys });
+            let now = ChartSelection {
+                keys: self.selection.items().to_vec(),
+                hover: self.hover.clone(),
+            };
+            if out.read(|s| *s != now) {
+                out.set(now);
             }
         }
     }
@@ -549,7 +744,12 @@ impl PaintView for ChartPaintView {
                     return press.moved;
                 }
                 if !self.panning {
-                    return false;
+                    let view = data.read(|s| s.view);
+                    let changed = self.hover_at(ctx, view, self.pointer);
+                    if changed {
+                        self.publish(ctx);
+                    }
+                    return changed;
                 }
                 let (to, content) = (self.pointer, self.content);
                 self.edit_view(&data, ctx, |view, zoom| {
@@ -570,6 +770,11 @@ impl PaintView for ChartPaintView {
                         scroll_by(view, (dx, dy), zoom, content, pane)
                     }
                 });
+                // What is under the pointer moved under it.
+                let view = data.read(|s| s.view);
+                if self.hover_at(ctx, view, pointer) {
+                    self.publish(ctx);
+                }
                 true
             }
             _ => false,
@@ -605,6 +810,9 @@ impl PaintView for ChartPaintView {
             .iter()
             .map(|(key, page)| (*key, page.clone().at(at)))
             .collect();
+        if let Some(hover) = self.hover_layer() {
+            layers.push((HOVER_LAYER, hover.at(at)));
+        }
         if let Some(selection) = self.selection_layer() {
             layers.push((SELECTION_LAYER, selection.at(at)));
         }
@@ -727,6 +935,43 @@ mod tests {
             (actual - expected).abs() < EPS,
             "{actual} is not {expected}"
         );
+    }
+
+    #[test]
+    fn highlight_colours_come_from_the_theme_and_read_on_the_paper() {
+        let white = Color::WHITE;
+        let black = Color::BLACK;
+        // A light theme's brand colour and info, on light paper: as they are.
+        let teal = Color::from_rgb8(0x0f, 0x76, 0x6e);
+        let blue = Color::from_rgb8(0x1d, 0x4e, 0xd8);
+        let tokens = |name: &str| match name {
+            "primary" => Some(teal),
+            "info" => Some(blue),
+            _ => None,
+        };
+        let c = HighlightColours::from_tokens(tokens, white, black);
+        assert_eq!((c.selection, c.hover), (teal, blue));
+        assert_ne!(c.selection, c.hover, "two states, two colours");
+
+        // A theme's own chart tokens win over the app's.
+        let red = Color::from_rgb8(0xb9, 0x1c, 0x1c);
+        let c = HighlightColours::from_tokens(
+            |name| (name == "chart.select").then_some(red).or_else(|| tokens(name)),
+            white,
+            black,
+        );
+        assert_eq!(c.selection, red);
+
+        // A dark theme's light brand colour on a chart pinned to light paper is
+        // darkened until it reads; on dark paper it is left alone.
+        let light_teal = Color::from_rgb8(0x2d, 0xd4, 0xbf);
+        let dark_tokens = |name: &str| (name == "primary").then_some(light_teal);
+        let on_white = HighlightColours::from_tokens(dark_tokens, white, black);
+        assert!(contrast(on_white.selection, white) >= 3.0);
+        let paper = Color::from_rgb8(25, 30, 45);
+        let ink = Color::from_rgb8(245, 240, 220);
+        let on_dark = HighlightColours::from_tokens(dark_tokens, paper, ink);
+        assert_eq!(on_dark.selection, light_teal);
     }
 
     #[test]

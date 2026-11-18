@@ -9985,7 +9985,6 @@ name = "keyflow-extension"
 version = "0.5.5"
 dependencies = [
  "architect-extensions",
- "architect-theme",
  "architect-workspace",
  "base64 0.22.1",
  "dioxus",

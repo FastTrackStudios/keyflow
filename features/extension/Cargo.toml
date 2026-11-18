@@ -21,8 +21,6 @@ path = "src/main.rs"
 architect-extensions = { workspace = true, features = ["linked-core", "paint-pane"] }
 # The chart pane: PaintPane, HostData, the pane it is drawn in.
 architect-workspace = { workspace = true, features = ["paint-ui"] }
-# The app's theme, which the chart follows.
-architect-theme = { workspace = true, features = ["dioxus"] }
 keyflow = { workspace = true, features = ["text", "paint"] }
 keyflow-ui = { workspace = true, features = ["paint-view"] }
 dioxus = { workspace = true }

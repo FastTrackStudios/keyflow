@@ -157,6 +157,12 @@ static NEXT: AtomicU64 = AtomicU64::new(0);
 static DARK: AtomicBool = AtomicBool::new(false);
 static PINNED: AtomicBool = AtomicBool::new(true);
 
+/// The theme a chart is given: a pinned one's, or `None` to follow the
+/// app's theme tokens.
+fn chart_theme() -> Option<ChartTheme> {
+    PINNED.load(Ordering::Relaxed).then(pinned_theme)
+}
+
 /// The theme a pinned chart is drawn in.
 fn pinned_theme() -> ChartTheme {
     if DARK.load(Ordering::Relaxed) {
@@ -253,18 +259,12 @@ fn ChartPane() -> Element {
         }
     });
 
-    // Light paper unless pinned otherwise; the app's theme when following it.
-    let colours = architect_theme::use_themed::<ChartColours>();
-    use_effect(move || {
-        let c = colours();
-        let theme = if PINNED.load(Ordering::Relaxed) {
-            pinned_theme()
-        } else {
-            DARK.store(c.dark, Ordering::Relaxed);
-            c.theme()
-        };
+    // Light paper unless pinned otherwise. Following the app's theme, the
+    // chart is drawn from its pane's theme tokens (`theme: None`): the
+    // tokens the host gives the view, live, linked in or as a process.
+    use_hook(move || {
         if let Some(open) = open_charts().get(&key) {
-            open.data.update(|s| s.theme = Some(theme));
+            open.data.update(|s| s.theme = chart_theme());
             open.wake.wake();
         }
     });
@@ -324,6 +324,7 @@ fn state() -> Json {
                 "zoom": view.zoom,
                 "scroll": [view.scroll.0, view.scroll.1],
                 "selection": o.selection.read(|s| s.keys.clone()),
+                "hover": o.selection.read(|s| s.hover.clone()),
                 "frames": {
                     "count": frames.frames,
                     "p50_ms": ms(frames.p50),
@@ -341,7 +342,12 @@ fn state() -> Json {
             .map(|t| t.action)
             .collect()
     };
-    json!({ "charts": charts, "dark": DARK.load(Ordering::Relaxed), "tools_on": on })
+    json!({
+        "charts": charts,
+        "dark": DARK.load(Ordering::Relaxed),
+        "follows_app_theme": !PINNED.load(Ordering::Relaxed),
+        "tools_on": on,
+    })
 }
 
 /// `KEYFLOW_CHART_VIEW`.
@@ -367,8 +373,11 @@ fn set_view(args: &Json) -> Result<Json, String> {
 /// `KEYFLOW_SET_CHART_THEME`.
 fn set_theme(args: &Json) -> Result<Json, String> {
     if args.get("follow").and_then(Json::as_bool) == Some(true) {
-        // The next theme change repaints them in it.
         PINNED.store(false, Ordering::Relaxed);
+        for open in open_charts().values() {
+            open.data.update(|s| s.theme = None);
+            open.wake.wake();
+        }
         return Ok(json!({ "ok": true }));
     }
     let dark = args
@@ -405,35 +414,4 @@ fn dark_theme() -> ChartTheme {
     theme.render.foreground_color = Color::from_rgb8(245, 240, 220);
     theme.render.staff_color = Color::from_rgb8(210, 210, 205);
     theme
-}
-
-/// The chart's slice of the app's theme: its paper, its ink, its staff.
-#[derive(Clone, PartialEq)]
-struct ChartColours {
-    dark: bool,
-    paper: architect_theme::Rgba,
-    ink: architect_theme::Rgba,
-    staff: architect_theme::Rgba,
-}
-
-impl architect_theme::FromResolved for ChartColours {
-    fn from_resolved(r: &architect_theme::Resolved) -> Self {
-        Self {
-            dark: r.scheme() == architect_theme::Scheme::Dark,
-            paper: r.color("card"),
-            ink: r.color("card-foreground"),
-            staff: r.color("muted-foreground"),
-        }
-    }
-}
-
-impl ChartColours {
-    fn theme(&self) -> ChartTheme {
-        let c = |x: architect_theme::Rgba| Color::new([x.r, x.g, x.b, x.a]);
-        let mut theme = ChartTheme::default();
-        theme.render.background_color = c(self.paper);
-        theme.render.foreground_color = c(self.ink);
-        theme.render.staff_color = c(self.staff);
-        theme
-    }
 }
