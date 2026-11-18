@@ -742,11 +742,25 @@ pub struct MelodyNoteSegment {
     /// Relative octave modifiers for `extra_pitches`; parallel to
     /// `extra_pitches`, defaulting to none when omitted.
     pub extra_pitch_modifiers: Vec<crate::chart::melody::OctaveModifier>,
+    /// A triplet value (`C:48t`): two thirds of its written value, drawn
+    /// under a `3` bracket with the others of its group.
+    pub triplet: bool,
 }
 
 impl MelodyNoteSegment {
     /// Convert beats to a Duration enum value
     pub fn to_duration(&self) -> Duration {
+        if self.triplet {
+            // Its written value: three of them in the time of two.
+            return match self.beats * 1.5 {
+                b if b >= 3.5 => Duration::TripletWhole,
+                b if b >= 1.75 => Duration::TripletHalf,
+                b if b >= 0.875 => Duration::TripletQuarter,
+                b if b >= 0.4375 => Duration::TripletEighth,
+                b if b >= 0.21875 => Duration::TripletSixteenth,
+                _ => Duration::TripletThirtySecond,
+            };
+        }
         // Map beats to duration (approximating to nearest standard duration)
         // For dotted notes, divide by 1.5 to get the base duration
         let base_beats = if self.dotted {
@@ -797,6 +811,9 @@ pub struct MeasureMelodyData {
     /// Active key signature as fifths: positive sharps, negative flats.
     /// Used only to decide which accidentals must be visibly printed.
     pub key_signature: i8,
+    /// Voices 2 to 4 (`voices[0]` is voice 2), sounding with `segments`:
+    /// drawn in the same bar, voice 1's stems up and the others' down.
+    pub voices: Vec<Vec<MelodyNoteSegment>>,
 }
 
 impl MeasureMelodyData {
@@ -1115,6 +1132,32 @@ pub fn expand_melodies_across_measures(
     beats_per_measure: f64,
     key_signature: i8,
 ) -> HashMap<usize, MeasureMelodyData> {
+    let mut result = expand_voice(section_measures, beats_per_measure, key_signature, 0);
+    // Voices 2 to 4 sound with the first, each its own line through the
+    // bar (and on over the barline, as the first does).
+    for voice in 1..=3u8 {
+        for (m, data) in expand_voice(section_measures, beats_per_measure, key_signature, voice) {
+            let entry = result.entry(m).or_default();
+            entry.key_signature = key_signature;
+            let slot = usize::from(voice) - 1;
+            if entry.voices.len() <= slot {
+                entry.voices.resize_with(slot + 1, Vec::new);
+            }
+            entry.voices[slot] = data.segments;
+        }
+    }
+    center_melody_octaves(section_measures, &mut result);
+    result
+}
+
+/// One voice's melodies (`Melody::voice`), expanded across the section's
+/// measures.
+fn expand_voice(
+    section_measures: &[crate::chart::types::Measure],
+    beats_per_measure: f64,
+    key_signature: i8,
+    voice: u8,
+) -> HashMap<usize, MeasureMelodyData> {
     let mut result: HashMap<usize, MeasureMelodyData> = HashMap::new();
 
     for (measure_idx, measure) in section_measures.iter().enumerate() {
@@ -1128,8 +1171,8 @@ pub fn expand_melodies_across_measures(
             measure.melodies.len()
         );
 
-        // Process each melody attached to this measure
-        for melody in &measure.melodies {
+        // Process each melody of this voice attached to this measure
+        for melody in measure.melodies.iter().filter(|m| m.voice == voice) {
             tracing::debug!(
                 "[melody-spillover]   Processing melody with {} notes, total_beats: {:.2}",
                 melody.notes.len(),
@@ -1218,6 +1261,8 @@ pub fn expand_melodies_across_measures(
                         } else {
                             Vec::new()
                         },
+                        // A triplet split at a barline is not one any more.
+                        triplet: note.triplet && is_first_segment && is_last_segment,
                     };
 
                     measure_data.segments.push(segment);
@@ -1235,16 +1280,23 @@ pub fn expand_melodies_across_measures(
         }
     }
 
-    // Smart octave centering: shift all notes so the median sits near the
-    // middle of the treble staff (B4, staff_position 6, line 0).
-    // Only apply when no notes had explicit octave annotations.
+    result
+}
+
+/// Smart octave centering: shift all notes (every voice's, together) so the
+/// median sits near the middle of the treble staff (B4, staff_position 6,
+/// line 0). Only applied when no notes had explicit octave annotations.
+fn center_melody_octaves(
+    section_measures: &[crate::chart::types::Measure],
+    result: &mut HashMap<usize, MeasureMelodyData>,
+) {
     {
         // Collect all staff positions across all measures
         let mut positions: Vec<i32> = Vec::new();
         let mut has_explicit_octave = false;
 
         for data in result.values() {
-            for seg in &data.segments {
+            for seg in data.segments.iter().chain(data.voices.iter().flatten()) {
                 if seg.is_rest {
                     continue;
                 }
@@ -1305,7 +1357,11 @@ pub fn expand_melodies_across_measures(
                         range
                     );
                     for data in result.values_mut() {
-                        for seg in &mut data.segments {
+                        for seg in data
+                            .segments
+                            .iter_mut()
+                            .chain(data.voices.iter_mut().flatten())
+                        {
                             if let Some(ref mut oct) = seg.octave {
                                 *oct = (*oct as i8 + octave_shift).max(0) as u8;
                             }
@@ -1335,8 +1391,6 @@ pub fn expand_melodies_across_measures(
             );
         }
     }
-
-    result
 }
 
 // ============================================================================

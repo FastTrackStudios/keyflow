@@ -316,6 +316,30 @@ impl ChartLayoutEngine {
             }
         }
 
+        // A beat the lower voices divide (a triplet under a quarter) needs
+        // room for each of their notes: they are placed inside it.
+        if has_written_notes && let Some(data) = melody_data {
+            let mut onsets: Vec<i32> = Vec::new();
+            for voice in &data.voices {
+                let mut tick = 0;
+                for seg in voice {
+                    onsets.push(tick);
+                    tick += seg.to_duration().ticks();
+                }
+            }
+            for (i, &(start, len)) in segments.iter().enumerate() {
+                let inside = onsets
+                    .iter()
+                    .filter(|&&o| o > start && o < start + len)
+                    .count();
+                if inside > 0
+                    && let Some(w) = chord_min_widths.get_mut(i)
+                {
+                    *w = w.max((inside as f64 + 1.0) * 2.6 * self.config.spatium);
+                }
+            }
+        }
+
         // Build the measure based on whether we have explicit rhythm entries or not
         let mut builder = MeasureBuilder::new()
             .id_base(id_base)
@@ -395,7 +419,36 @@ impl ChartLayoutEngine {
             builder = builder.tuplet_group(spec.start_idx, spec.end_idx, spec.ratio);
         }
 
+        // Voices sharing the bar: voice 1's stems up and its rests raised,
+        // so the lower voices have the space below.
+        let lower_voices: Vec<&[super::MelodyNoteSegment]> = melody_data
+            .map(|d| {
+                d.voices
+                    .iter()
+                    .map(Vec::as_slice)
+                    .filter(|v| !v.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default();
+        if has_written_notes && !lower_voices.is_empty() {
+            builder = builder
+                .stem_direction(crate::engraver::layout::tlayout::StemDirection::Up)
+                .rest_line(4);
+        }
+
         let mut result = builder.build(ctx);
+
+        if has_written_notes && let Some(data) = melody_data {
+            self.add_lower_voices(
+                &mut result,
+                data,
+                &lower_voices,
+                &config,
+                width_spatiums,
+                id_base,
+                ctx,
+            );
+        }
 
         // Set internal push positions for chord rendering
         result.internal_push_positions = internal_push_positions;
@@ -431,6 +484,70 @@ impl ChartLayoutEngine {
         }
 
         result
+    }
+
+    /// Voices 2 to 4 drawn into `result`, voice 1's bar: each laid out
+    /// on voice 1's positions (a beat where voice 1 has none placed
+    /// between its neighbours), stems down, rests lowered.
+    #[allow(clippy::too_many_arguments)]
+    fn add_lower_voices(
+        &self,
+        result: &mut MeasureScene,
+        data: &super::MeasureMelodyData,
+        voices: &[&[super::MelodyNoteSegment]],
+        config: &RhythmBuildConfig,
+        width_spatiums: f64,
+        id_base: u64,
+        ctx: &LayoutContext,
+    ) {
+        let mut positions: Vec<(i32, f64)> = result
+            .segments
+            .iter()
+            .filter(|s| s.seg_type.is_chord_rest())
+            .map(|s| (s.tick, s.x))
+            .collect();
+        // The bar's end, so a beat after voice 1's last is placed before it.
+        if let Some(last) = result
+            .segments
+            .iter()
+            .filter(|s| s.seg_type.is_chord_rest())
+            .last()
+        {
+            let end_x = result.width.max(last.x + last.width);
+            positions.push((last.tick + last.ticks, end_x));
+        }
+        for (k, segments) in voices.iter().enumerate() {
+            let voice = super::MeasureMelodyData {
+                segments: segments.to_vec(),
+                total_beats: segments.iter().map(|s| s.beats).sum(),
+                clef: data.clef,
+                key_signature: data.key_signature,
+                voices: Vec::new(),
+            };
+            let rhythm = rhythm_builder::build_rhythm(RhythmSource::MelodyData(&voice), config);
+            let mut builder = MeasureBuilder::new()
+                .id_base(id_base + 100_000 * (k as u64 + 1))
+                .justify_to(width_spatiums)
+                .no_barlines()
+                .beam_grouping(self.config.beam_grouping)
+                .entries(rhythm.entries)
+                .note_pitches(rhythm.note_pitches)
+                .stem_direction(crate::engraver::layout::tlayout::StemDirection::Down)
+                .rest_line(-4)
+                .tick_x(positions.clone())
+                .time_signature_meta(crate::engraver::notation::TimeSignature::new(
+                    config.time_signature.0,
+                    config.time_signature.1,
+                ));
+            if rhythm.note_pitch_stacks.iter().any(|s| !s.is_empty()) {
+                builder = builder.note_pitch_stacks(rhythm.note_pitch_stacks);
+            }
+            for spec in &rhythm.tuplet_specs {
+                builder = builder.tuplet_group(spec.start_idx, spec.end_idx, spec.ratio);
+            }
+            let built = builder.build(ctx);
+            result.scene.add_child(built.scene);
+        }
     }
 
     /// Expand whole/half note durations to quarter notes for auto_rhythm_slashes.

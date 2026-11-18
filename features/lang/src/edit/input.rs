@@ -33,8 +33,13 @@ pub struct Pos {
 /// The chart's bars as note input edits them, and its key signature.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Score {
-    /// Each bar's melody line.
+    /// Each bar's line in the voice being entered ([`Self::voice`]).
     pub bars: Vec<Bar>,
+    /// The voice `bars` holds, 0 to 3.
+    pub voice: u8,
+    /// Every voice's lines, the one being entered left empty while it is
+    /// `bars` (see [`Self::set_voice`]).
+    pub others: Vec<Vec<Bar>>,
     /// Each bar's chord symbols.
     pub chords: Vec<ChordBar>,
     /// Why a bar cannot be written back, when it has no text of its own
@@ -48,11 +53,16 @@ impl Score {
     /// `chart`'s bars, in order, and its key's signature.
     #[must_use]
     pub fn from_chart(chart: &Chart) -> Self {
-        let bars = chart
-            .sections
-            .iter()
-            .flat_map(|s| s.measures().iter().map(Bar::from_measure))
+        let mut others: Vec<Vec<Bar>> = (0..4u8)
+            .map(|v| {
+                chart
+                    .sections
+                    .iter()
+                    .flat_map(|s| s.measures().iter().map(move |m| Bar::from_voice(m, v)))
+                    .collect()
+            })
             .collect();
+        let bars = std::mem::take(&mut others[0]);
         let chords = chart
             .sections
             .iter()
@@ -84,9 +94,34 @@ impl Score {
             .collect();
         Self {
             bars,
+            voice: 0,
+            others,
             chords,
             read_only,
             key,
+        }
+    }
+
+    /// `voice`'s lines made the ones entered (`bars`), the others kept.
+    pub fn set_voice(&mut self, voice: u8) {
+        let voice = voice.min(3);
+        if voice == self.voice || self.others.len() < 4 {
+            return;
+        }
+        std::mem::swap(&mut self.bars, &mut self.others[usize::from(self.voice)]);
+        std::mem::swap(&mut self.bars, &mut self.others[usize::from(voice)]);
+        self.voice = voice;
+    }
+
+    /// `voice`'s lines, 0 to 3.
+    #[must_use]
+    pub fn voice_bars(&self, voice: u8) -> &[Bar] {
+        if voice == self.voice {
+            &self.bars
+        } else {
+            self.others
+                .get(usize::from(voice))
+                .map_or(&[], Vec::as_slice)
         }
     }
 
@@ -100,6 +135,9 @@ impl Score {
     /// near.
     #[must_use]
     pub fn pitch_before(&self, pos: Pos) -> Option<Pitch> {
+        if self.bars.is_empty() {
+            return None;
+        }
         for b in (0..=pos.bar.min(self.bars.len().saturating_sub(1))).rev() {
             let bar = &self.bars[b];
             let starts = bar.starts();
@@ -189,6 +227,8 @@ pub struct InputState {
     pub selected: Option<Pos>,
     /// What a letter enters.
     pub target: Target,
+    /// The voice notes go into, 0 to 3 (MuseScore's voices 1 to 4).
+    pub voice: u8,
 }
 
 impl Default for InputState {
@@ -203,6 +243,7 @@ impl Default for InputState {
             pitch: Pitch::new('B', 0, 4),
             selected: None,
             target: Target::Chords,
+            voice: 0,
         }
     }
 }
@@ -241,6 +282,9 @@ pub enum Op {
     /// Ctrl+→ / Ctrl+←: the next or previous bar.
     NextBar,
     PrevBar,
+    /// Ctrl+Home / Ctrl+End: the first bar, or the last.
+    First,
+    Last,
     /// A click: the cursor to the note or rest at `pos`.
     MoveTo(Pos),
     /// Chord symbols or notes: what a letter enters.
@@ -251,6 +295,12 @@ pub enum Op {
     /// (`Pitch::step`) entered at the cursor, the bar's accidental for it
     /// (or the one armed) applied (MuseScore's mouse entry).
     EnterStep(i32),
+    /// Ctrl+Alt+1–4: the voice notes go into (0 to 3).
+    Voice(u8),
+    /// Ctrl+3: a triplet group made at the cursor, as long as the chosen
+    /// duration, its three values entered next (MuseScore's tuplets; a
+    /// triplet is the one tuplet Keyflow's text writes).
+    Triplet,
     /// W / Q: the selected note or chord's length doubled or halved.
     Double,
     Halve,
@@ -318,9 +368,24 @@ impl InputState {
     /// `op` applied: the state moved and `score`'s bars changed as it says.
     pub fn apply(&mut self, score: &mut Score, op: Op) -> Outcome {
         if score.bars.is_empty() {
-            return Outcome::refuse("The chart has no bars");
+            // A blank chart: its first bars are typed in syntax mode.
+            return match op {
+                Op::Mode(mode) => {
+                    self.mode = mode;
+                    self.cursor = Pos::default();
+                    Outcome::default()
+                }
+                Op::Escape => {
+                    self.mode = Mode::Normal;
+                    Outcome::default()
+                }
+                _ => Outcome::refuse(
+                    "The chart has no bars yet: K, then type some (`C / / / | G / / /`) and Enter",
+                ),
+            };
         }
         self.cursor.bar = self.cursor.bar.min(score.bars.len() - 1);
+        score.set_voice(self.voice);
         match op {
             Op::Mode(mode) => {
                 if mode == Mode::Duration
@@ -474,11 +539,12 @@ impl InputState {
                 self.step_event(score, false);
                 Outcome::default()
             }
-            Op::NextBar | Op::PrevBar => {
-                let bar = if op == Op::NextBar {
-                    (self.cursor.bar + 1).min(score.bars.len() - 1)
-                } else {
-                    self.cursor.bar.saturating_sub(1)
+            Op::NextBar | Op::PrevBar | Op::First | Op::Last => {
+                let bar = match op {
+                    Op::NextBar => (self.cursor.bar + 1).min(score.bars.len() - 1),
+                    Op::PrevBar => self.cursor.bar.saturating_sub(1),
+                    Op::First => 0,
+                    _ => score.bars.len() - 1,
                 };
                 self.move_to(score, Pos { bar, tick: 0 });
                 Outcome::default()
@@ -493,6 +559,18 @@ impl InputState {
                 Outcome::default()
             }
             Op::AddToChord(letter) => self.add_to_chord(score, letter),
+            Op::Voice(voice) => {
+                if voice > 3 {
+                    return Outcome::refuse("There are four voices");
+                }
+                self.voice = voice;
+                score.set_voice(voice);
+                // Voices are notes' (chord symbols have one line).
+                self.target = Target::Notes;
+                self.move_to(score, self.cursor);
+                Outcome::default()
+            }
+            Op::Triplet => self.triplet(score),
             Op::EnterStep(step) => {
                 let natural = Pitch::from_step(step);
                 let alter = self
@@ -507,18 +585,12 @@ impl InputState {
             Op::Double => self.rescale(score, |d| {
                 Value::ALL
                     .get(d.value.index() as usize + 1)
-                    .map(|v| Duration {
-                        value: *v,
-                        dots: d.dots,
-                    })
+                    .map(|v| Duration { value: *v, ..d })
             }),
             Op::Halve => self.rescale(score, |d| {
                 (d.value.index() > 0)
                     .then(|| Value::ALL[d.value.index() as usize - 1])
-                    .map(|v| Duration {
-                        value: v,
-                        dots: d.dots,
-                    })
+                    .map(|v| Duration { value: v, ..d })
             }),
             Op::Longer => self.rescale(score, |d| {
                 if d.dots == 0 && d.value != Value::Whole {
@@ -818,6 +890,9 @@ impl InputState {
         }
         let len = self.duration.ticks();
         let room = bar.length - at.tick;
+        if self.duration.triplet && len > room {
+            return Outcome::refuse("A triplet does not run over the barline");
+        }
         let mut changed = vec![at.bar];
         let next_ok = score
             .bars
@@ -850,6 +925,16 @@ impl InputState {
         }
         self.selected = Some(at);
         self.cursor = end;
+        // Out of the triplet group: back to the value it was made from.
+        if self.duration.triplet
+            && !score.bars[end.bar]
+                .index_at(end.tick)
+                .is_some_and(|i| score.bars[end.bar].events[i].duration.triplet)
+        {
+            self.duration = Duration::new(
+                Value::ALL[(self.duration.value.index() as usize + 1).min(Value::ALL.len() - 1)],
+            );
+        }
         if let EventKind::Note(p) = kind {
             self.pitch = p;
         }
@@ -860,6 +945,41 @@ impl InputState {
                 Some("Cut at the barline: there is no bar after it to tie into".into());
         }
         outcome
+    }
+
+    /// Ctrl+3: a triplet group at the cursor as long as the chosen
+    /// duration (a quarter makes three triplet eighths), and the duration
+    /// made its value, so the next three entries fill it.
+    fn triplet(&mut self, score: &mut Score) -> Outcome {
+        if !matches!(self.mode, Mode::NoteName | Mode::Duration) || self.target != Target::Notes {
+            return Outcome::refuse(
+                "A triplet is made in note input, on notes (N, then Y for notes)",
+            );
+        }
+        let total = Duration::new(self.duration.value);
+        let Some(unit) = (total.value.index() as usize)
+            .checked_sub(1)
+            .map(|i| Value::ALL[i])
+        else {
+            return Outcome::refuse("A triplet of 128ths is too short to write");
+        };
+        let at = self.cursor;
+        if let Some(why) = score.read_only.get(at.bar).cloned().flatten() {
+            return Outcome::refuse(format!("Bar {} is read-only: {why}", at.bar + 1));
+        }
+        let Some(bar) = score.bars.get_mut(at.bar) else {
+            return Outcome::refuse("The cursor is past the last bar");
+        };
+        if let Some(why) = &bar.locked {
+            return Outcome::refuse(format!("Bar {} cannot be edited here: {why}", at.bar + 1));
+        }
+        if at.tick + total.ticks() > bar.length {
+            return Outcome::refuse("The triplet would run over the barline");
+        }
+        bar.triplet_group(at.tick, unit);
+        self.duration = Duration::triplet(unit);
+        self.selected = Some(at);
+        Outcome::bars(vec![at.bar])
     }
 
     /// The selected note's pitch changed by `to` (all of a tied note in
@@ -1005,11 +1125,13 @@ impl InputState {
                     .unwrap_or_default()
             ),
             Mode::NoteName => format!(
-                "Input by note name · notes · voice 1 · {} {what}{accidental} · next at {at} · A–G enter, Shift+A–G add to the chord, 0 rest, T tie, Y: chord symbols instead, Esc leave{locked}",
+                "Input by note name · notes · voice {} · {} {what}{accidental} · next at {at} · A–G enter, Shift+A–G add to the chord, 0 rest, T tie, Y: chord symbols instead, Esc leave{locked}",
+                self.voice + 1,
                 self.duration.name()
             ),
             Mode::Duration => format!(
-                "Input by duration · voice 1 · pitch {}{accidental} · next at {at} · 1–7 enter at that duration, A–G or ↑ ↓ move the pitch, Esc leave{locked}",
+                "Input by duration · voice {} · pitch {}{accidental} · next at {at} · 1–7 enter at that duration, A–G or ↑ ↓ move the pitch, Esc leave{locked}",
+                self.voice + 1,
                 self.armed(self.pitch).name()
             ),
             Mode::Syntax => format!(
@@ -1025,8 +1147,11 @@ mod tests {
     use crate::edit::music::Value::{Eighth, Half, Quarter, Whole};
 
     fn score(bars: usize) -> Score {
+        let empty = || (0..bars).map(|_| Bar::empty((4, 4))).collect::<Vec<_>>();
         Score {
-            bars: (0..bars).map(|_| Bar::empty((4, 4))).collect(),
+            bars: empty(),
+            voice: 0,
+            others: vec![Vec::new(), empty(), empty(), empty()],
             chords: (0..bars).map(|_| ChordBar::empty((4, 4))).collect(),
             read_only: vec![None; bars],
             key: [0; 7],
@@ -1284,6 +1409,16 @@ mod tests {
         i.apply(&mut s, Op::RestTool);
         i.apply(&mut s, Op::Escape);
         assert_eq!((i.mode, i.accidental, i.rest), (Mode::Normal, None, false));
+    }
+
+    #[test]
+    fn a_blank_chart_goes_into_syntax_mode_and_takes_nothing_else() {
+        let mut s = score(0);
+        assert_eq!(s.pitch_before(Pos { bar: 5, tick: 0 }), None, "no panic");
+        let mut i = InputState::default();
+        assert!(i.apply(&mut s, Op::Mode(Mode::Syntax)).refused.is_none());
+        assert_eq!(i.mode, Mode::Syntax);
+        assert!(i.apply(&mut s, Op::Letter('C')).refused.is_some());
     }
 
     #[test]

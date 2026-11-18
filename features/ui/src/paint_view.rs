@@ -91,6 +91,9 @@ pub struct InputOverlay {
     /// a click would enter a note: the staff's top line as a staff step
     /// (`Pitch::step`), and how the note would look.
     pub pointer: Option<PointerShadow>,
+    /// The voice notes go into, 0 to 3: the cursor, the shadow note and the
+    /// entry are drawn in its colour, as MuseScore draws them.
+    pub voice: u8,
 }
 
 /// What the pointer's shadow note looks like, and the staff it is read on.
@@ -296,6 +299,14 @@ fn chart_token(ctx: &ViewCtx, name: &str) -> Option<Color> {
 /// Without a theme's tokens (a host that gives none): MuseScore's.
 const SELECTION_FALLBACK: Color = Color::from_rgb8(0x00, 0x65, 0xBF);
 const HOVER_FALLBACK: Color = Color::from_rgb8(0x2E, 0x9C, 0xE6);
+/// Voices 2 to 4, a theme's `chart.voice2` … or MuseScore's: green,
+/// orange, pink (voice 1 is the selection colour, MuseScore's blue).
+const VOICE_TOKENS: [&str; 3] = ["chart.voice2", "chart.voice3", "chart.voice4"];
+const VOICE_FALLBACKS: [Color; 3] = [
+    Color::from_rgb8(0x00, 0x7F, 0x00),
+    Color::from_rgb8(0xC5, 0x3F, 0x00),
+    Color::from_rgb8(0xC3, 0x19, 0x89),
+];
 
 /// The two colours a highlight takes, as the theme and the chart's paper
 /// give them.
@@ -303,6 +314,8 @@ const HOVER_FALLBACK: Color = Color::from_rgb8(0x2E, 0x9C, 0xE6);
 pub struct HighlightColours {
     pub selection: Color,
     pub hover: Color,
+    /// Voices 2 to 4's colours.
+    pub voices: [Color; 3],
 }
 
 impl HighlightColours {
@@ -317,6 +330,22 @@ impl HighlightColours {
         Self {
             selection: legible(pick(SELECTION_TOKENS, SELECTION_FALLBACK), paper, ink),
             hover: legible(pick(HOVER_TOKENS, HOVER_FALLBACK), paper, ink),
+            voices: std::array::from_fn(|i| {
+                legible(
+                    token(VOICE_TOKENS[i]).unwrap_or(VOICE_FALLBACKS[i]),
+                    paper,
+                    ink,
+                )
+            }),
+        }
+    }
+
+    /// Voice `voice`'s colour (0 to 3): voice 1's is the selection's.
+    #[must_use]
+    pub fn voice(self, voice: u8) -> Color {
+        match voice {
+            1..=3 => self.voices[usize::from(voice) - 1],
+            _ => self.selection,
         }
     }
 
@@ -334,6 +363,7 @@ impl Default for HighlightColours {
         Self {
             selection: SELECTION_FALLBACK,
             hover: HOVER_FALLBACK,
+            voices: VOICE_FALLBACKS,
         }
     }
 }
@@ -427,6 +457,8 @@ pub struct ChartPaintView {
     regions_cover: bool,
     /// The version of its host's selection it last looked at.
     adopted: Option<u64>,
+    /// Note input's cursor as last followed: `(bar, from)`.
+    followed: Option<(usize, u64)>,
     /// The modifiers held at the last key event: a press on a region
     /// carries none, so a Shift- or Cmd-click reads them from here.
     mods: Vec<&'static str>,
@@ -461,6 +493,7 @@ impl ChartPaintView {
             mods: Vec::new(),
             regions_cover: false,
             adopted: None,
+            followed: None,
             pointer: (0.0, 0.0),
             panning: false,
             theme: None,
@@ -539,6 +572,51 @@ impl ChartPaintView {
         let zoom = self.effective_zoom(view.zoom, ctx.geometry.width);
         let (x, y) = clamp_scroll(view.scroll, self.content, pane_size(ctx), zoom);
         Affine::scale(zoom) * Affine::translate((-x, -y))
+    }
+
+    /// The chart scrolled, when note input's cursor moved to a bar out of
+    /// sight, just far enough to show it and the symbols over it
+    /// (MuseScore keeps the cursor on screen): typing at the keyboard
+    /// never goes on out of view.
+    fn follow_cursor(
+        &mut self,
+        ctx: &ViewCtx,
+        data: &HostData<ChartSnapshot>,
+        input: Option<InputOverlay>,
+        view: ChartView,
+    ) -> ChartView {
+        let Some(overlay) = input else {
+            self.followed = None;
+            return view;
+        };
+        let at = (overlay.bar, overlay.from.to_bits());
+        if self.followed == Some(at) {
+            return view;
+        }
+        let Some(b) = self.bar_box(overlay.bar) else {
+            return view;
+        };
+        self.followed = Some(at);
+        let px = points_to_px(1.0);
+        let target = Rect::new(
+            b.x0 * px,
+            (b.y0 - b.height() * 2.5) * px,
+            b.x1 * px,
+            (b.y1 + b.height() * 0.75) * px,
+        );
+        let zoom = self.effective_zoom(view.zoom, ctx.geometry.width);
+        let (w, h) = pane_size(ctx);
+        let scroll = clamp_scroll(view.scroll, self.content, (w, h), zoom);
+        let next = follow(scroll, target, (w / zoom, h / zoom));
+        if next == scroll {
+            return view;
+        }
+        let next = clamp_scroll(next, self.content, (w, h), zoom);
+        data.update(|s| s.view.scroll = next);
+        ChartView {
+            scroll: next,
+            ..view
+        }
     }
 
     /// The pages recorded again when the engraver's layout or theme
@@ -686,7 +764,8 @@ impl ChartPaintView {
     /// drawn again only when they move.
     fn input_layer(&mut self, overlay: Option<InputOverlay>) -> Option<Layer> {
         let overlay = overlay?;
-        let drawn_for = (overlay, self.colours.selection);
+        let colour = self.colours.voice(overlay.voice);
+        let drawn_for = (overlay, colour);
         if let Some((drawn, layer)) = &self.recorded.input
             && *drawn == drawn_for
         {
@@ -694,7 +773,6 @@ impl ChartPaintView {
         }
         let bounds = self.bar_box(overlay.bar)?;
         let px = points_to_px(1.0);
-        let colour = self.colours.selection;
         let mut scene = Scene::new();
         let w = bounds.width();
         let x0 = bounds.x0 + overlay.from.clamp(0.0, 1.0) * w;
@@ -743,7 +821,14 @@ impl ChartPaintView {
     /// colour: the chords or the notes and rests whose middle is in its span
     /// of its bar.
     fn entry_layer(&mut self, overlay: Option<InputOverlay>) -> Option<Layer> {
-        let (bar, from, to, chords) = overlay?.selected?;
+        let overlay = overlay?;
+        let (bar, from, to, chords) = overlay.selected?;
+        // A chord symbol is no voice's: the selection colour.
+        let colour = if chords {
+            self.colours.selection
+        } else {
+            self.colours.voice(overlay.voice)
+        };
         let b = self.bar_box(bar)?;
         let (x0, x1) = (b.x0 + from * b.width(), b.x0 + to * b.width());
         // Its staff and the chord symbols over it, not the line below.
@@ -772,7 +857,7 @@ impl ChartPaintView {
             self.recorded.entry = None;
             return None;
         }
-        let drawn_for = (keys, self.colours.selection);
+        let drawn_for = (keys, colour);
         if let Some((drawn, layer)) = &self.recorded.entry
             && *drawn == drawn_for
         {
@@ -789,19 +874,14 @@ impl ChartPaintView {
         &mut self,
         ctx: &ViewCtx,
         view: ChartView,
-        shadow: Option<PointerShadow>,
+        shadow: Option<(PointerShadow, u8)>,
     ) -> Option<Layer> {
-        let shadow = shadow?;
+        let (shadow, voice) = shadow?;
+        let colour = self.colours.voice(voice);
         let (bar, fraction, below_top) = self.staff_under(ctx, view, self.pointer)?;
         let b = self.bar_box(bar)?;
         let x = b.x0 + fraction * b.width();
-        let key = (
-            bar,
-            (x * 4.0) as i64,
-            below_top,
-            shadow,
-            self.colours.selection,
-        );
+        let key = (bar, (x * 4.0) as i64, below_top, shadow, colour);
         if let Some((drawn, layer)) = &self.recorded.pointer
             && *drawn == key
         {
@@ -818,7 +898,7 @@ impl ChartPaintView {
             },
             x - space * 1.15,
             b,
-            self.colours.selection.with_alpha(0.5),
+            colour.with_alpha(0.5),
         );
         let layer = Layer::new(Arc::new(scene.commands)).z(INPUT_Z);
         self.recorded.pointer = Some((key, layer.clone()));
@@ -1275,7 +1355,8 @@ impl PaintView for ChartPaintView {
         if let Some(size) = self.view.content_size() {
             self.content = (size.0 * points_to_px(1.0), size.1 * points_to_px(1.0));
         }
-        let at = self.placement(ctx, snapshot.view);
+        let view = self.follow_cursor(ctx, &data, snapshot.input, snapshot.view);
+        let at = self.placement(ctx, view);
         let mut layers: Vec<(LayerKey, Layer)> = self
             .recorded
             .pages
@@ -1294,9 +1375,11 @@ impl PaintView for ChartPaintView {
         if let Some(entry) = self.entry_layer(snapshot.input) {
             layers.push((ENTRY_LAYER, entry.at(at)));
         }
-        if let Some(pointer) =
-            self.pointer_layer(ctx, snapshot.view, snapshot.input.and_then(|i| i.pointer))
-        {
+        if let Some(pointer) = self.pointer_layer(
+            ctx,
+            snapshot.view,
+            snapshot.input.and_then(|i| i.pointer.map(|p| (p, i.voice))),
+        ) {
             layers.push((POINTER_LAYER, pointer.at(at)));
         }
         if let Some(playhead) = self.playhead_layer(snapshot.playhead_secs) {
@@ -1406,6 +1489,27 @@ fn draw_shadow(scene: &mut Scene, shadow: ShadowNote, x: f64, bar: Rect, colour:
 }
 
 /// The pane's logical size.
+/// The scroll that brings `target` into a view of `visible` (both in chart
+/// pixels) from `scroll`: unchanged when it is in view already, else moved
+/// just far enough, with a margin, each way on its own.
+fn follow(scroll: (f64, f64), target: Rect, visible: (f64, f64)) -> (f64, f64) {
+    let axis = |at: f64, lo: f64, hi: f64, size: f64| {
+        let margin = (size * 0.08).min(40.0);
+        if lo >= at + margin && hi <= at + size - margin {
+            at
+        } else if lo < at + margin {
+            lo - margin
+        } else {
+            // Its far edge in, but never its near edge out.
+            (hi + margin - size).min(lo - margin)
+        }
+    };
+    (
+        axis(scroll.0, target.x0, target.x1, visible.0),
+        axis(scroll.1, target.y0, target.y1, visible.1),
+    )
+}
+
 fn pane_size(ctx: &ViewCtx) -> (f64, f64) {
     (
         f64::from(ctx.geometry.width),
@@ -1597,6 +1701,26 @@ mod tests {
         );
         assert_close(fit_zoom(4000.0, Some(100.0)), 1.0);
         assert_close(fit_zoom(400.0, None), 1.0);
+    }
+
+    #[test]
+    fn the_view_follows_the_cursor_just_far_enough() {
+        let view = (400.0, 300.0);
+        // In view: no scroll.
+        let bar = Rect::new(100.0, 100.0, 200.0, 160.0);
+        assert_eq!(follow((0.0, 0.0), bar, view), (0.0, 0.0));
+        // Below: scrolled until its bottom is in, with a margin.
+        let below = Rect::new(100.0, 500.0, 200.0, 560.0);
+        let (_, y) = follow((0.0, 0.0), below, view);
+        assert!(y > 260.0 - 1.0 && y < 500.0, "{y}");
+        assert!(560.0 <= y + 300.0, "its bottom in view");
+        // Above: scrolled up to its top.
+        let (_, y) = follow((0.0, 900.0), bar, view);
+        assert!(y < 100.0, "{y}");
+        // Taller than the view: its top shown.
+        let tall = Rect::new(100.0, 500.0, 200.0, 1200.0);
+        let (_, y) = follow((0.0, 0.0), tall, view);
+        assert!(y <= 500.0 && y > 400.0, "{y}");
     }
 
     #[test]

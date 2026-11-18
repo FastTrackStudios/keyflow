@@ -486,6 +486,55 @@ group = "Keyflow"
 effect = "mutating"
 
 [[actions]]
+id = "KEYFLOW_VOICE_1"
+name = "Keyflow: voice 1"
+description = "Notes entered go into voice 1 (Ctrl+Alt+1), drawn in the bar with the others, stems up."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_VOICE_2"
+name = "Keyflow: voice 2"
+description = "Notes entered go into voice 2 (Ctrl+Alt+2), drawn in the bar with the others, stems down."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_VOICE_3"
+name = "Keyflow: voice 3"
+description = "Notes entered go into voice 3 (Ctrl+Alt+3), drawn in the bar with the others, stems down."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_VOICE_4"
+name = "Keyflow: voice 4"
+description = "Notes entered go into voice 4 (Ctrl+Alt+4), drawn in the bar with the others, stems down."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_TRIPLET"
+name = "Keyflow: triplet"
+description = "A triplet group at the cursor, as long as the chosen duration (Ctrl+3): a quarter makes three triplet eighths, and the next three notes fill it."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_FIRST_BAR"
+name = "Keyflow: first bar"
+description = "The cursor to the chart's first bar (Ctrl+Home)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_LAST_BAR"
+name = "Keyflow: last bar"
+description = "The cursor to the chart's last bar (Ctrl+End)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
 id = "KEYFLOW_TARGET_SWITCH"
 name = "Keyflow: chord symbols or notes"
 description = "Switches what a letter enters (Y): chord symbols, the default in a chord chart, or notes."
@@ -835,6 +884,48 @@ key = "keyflow.keys.sharp"
 title = "Sharp"
 control = "shortcut"
 default = "+"
+
+[[sections.settings]]
+key = "keyflow.keys.voice_1"
+title = "Voice 1"
+control = "shortcut"
+default = "⌥⌘1"
+
+[[sections.settings]]
+key = "keyflow.keys.voice_2"
+title = "Voice 2"
+control = "shortcut"
+default = "⌥⌘2"
+
+[[sections.settings]]
+key = "keyflow.keys.voice_3"
+title = "Voice 3"
+control = "shortcut"
+default = "⌥⌘3"
+
+[[sections.settings]]
+key = "keyflow.keys.voice_4"
+title = "Voice 4"
+control = "shortcut"
+default = "⌥⌘4"
+
+[[sections.settings]]
+key = "keyflow.keys.triplet"
+title = "Triplet"
+control = "shortcut"
+default = "⌘3"
+
+[[sections.settings]]
+key = "keyflow.keys.first_bar"
+title = "First bar"
+control = "shortcut"
+default = "⌘Home"
+
+[[sections.settings]]
+key = "keyflow.keys.last_bar"
+title = "Last bar"
+control = "shortcut"
+default = "⌘End"
 
 [[sections.settings]]
 key = "keyflow.keys.tie"

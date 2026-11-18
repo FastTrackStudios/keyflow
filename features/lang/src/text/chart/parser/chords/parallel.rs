@@ -412,7 +412,7 @@ impl<'a> ChartParser<'a> {
         merged.staff_text.extend(branch_measure.staff_text);
         merged.figured_bass.extend(branch_measure.figured_bass);
         merged.dynamics.extend(branch_measure.dynamics);
-        merged.melodies.extend(branch_measure.melodies);
+        keyflow_proto::chart::melody::add_voice(&mut merged.melodies, branch_measure.melodies);
         merged.repeat_count = merged.repeat_count.max(branch_measure.repeat_count);
         merged.time_signature = branch_measure.time_signature;
         if merged.source_span.is_none() {
