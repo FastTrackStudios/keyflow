@@ -5,9 +5,10 @@
 //! is, sidebar and all.
 //!
 //! A cell applies to the selected chord at once (`KEYFLOW_PALETTE_APPLY`,
-//! [`cell`]): a quality sets its quality, an accent or a staccato goes on
-//! or off. The other cells say they are not placed yet; with nothing
-//! selected, the status line says so.
+//! [`cell`]): a quality sets its quality; an accent, a staccato or a push
+//! goes on or off (a push not on a bar's first chord, which would sound in
+//! the bar before). The other cells say they are not placed yet; with
+//! nothing selected, the status line says so.
 
 use base64::Engine as _;
 use dioxus::prelude::*;
@@ -188,8 +189,8 @@ pub const PALETTES: &[Palette] = &[
 ];
 
 /// What choosing the cell with `token` does to what is selected: a chord
-/// quality cell sets the selected chord's quality, an accent or a staccato
-/// goes on it (or off). `Err` says why a cell does nothing yet; `None`
+/// quality cell sets the selected chord's quality, an accent, a staccato or
+/// a push goes on it (or off). `Err` says why a cell does nothing yet; `None`
 /// for a token no cell has.
 #[must_use]
 pub(crate) fn cell(token: &str) -> Option<Result<crate::Then, String>> {

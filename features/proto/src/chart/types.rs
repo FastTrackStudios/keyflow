@@ -461,6 +461,11 @@ pub struct Measure {
     /// that bar.
     #[facet(default)]
     pub replays: Option<usize>,
+    /// When it is a copy its line makes of itself (`x2`, `x4`), how many
+    /// bars before it the bar it plays is: the line's first time through,
+    /// where an edit of it is written.
+    #[facet(default)]
+    pub plays_back: Option<usize>,
 
     /// Source measure number when imported from MusicXML — the value of
     /// `<measure number="...">`. `None` for keyflow-text-authored charts.
@@ -501,6 +506,7 @@ impl Measure {
             read_only: None,
             own_part: None,
             replays: None,
+            plays_back: None,
         }
     }
 

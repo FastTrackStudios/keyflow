@@ -885,8 +885,17 @@ fn check(
             music_of(&x, false) == music_of(b, false)
         };
         // A bar that plays a written bar again follows it.
+        // (An `x2` copy of a line's last bar is it but for the `x2`, which
+        // that bar carries.)
         let follows = replays.get(i).copied().flatten().is_some_and(|g| {
-            written.contains(&g) && measures.get(g).is_some_and(|w| same_music(w, b))
+            written.contains(&g)
+                && measures.get(g).is_some_and(|w| {
+                    let mut copy = (*b).clone();
+                    if b.plays_back.is_some() {
+                        copy.repeat_count = w.repeat_count;
+                    }
+                    same_music(w, &copy)
+                })
         });
         if !written.contains(&i) && !written_out && !follows && !same_music(a, b) {
             return Err(format!(
@@ -1173,6 +1182,38 @@ mod tests {
     }
 
     #[test]
+    fn an_entry_on_a_line_s_x2_copy_is_written_in_its_first_time_through() {
+        // `x2` plays the line twice: bars 3 and 4 are bars 1 and 2 again.
+        let text = "Edit - Test\n4/4\n\nVS 4\n| C | G | x2\n";
+        let chart = parse_chart(text).unwrap();
+        let mut score = Score::from_text(text, &chart);
+        assert_eq!(score.replays, [None, None, Some(0), Some(1)]);
+        let mut input = InputState {
+            mode: Mode::NoteName,
+            ..InputState::default()
+        };
+        input.apply(&mut score, Op::MoveTo(crate::edit::Pos { bar: 3, tick: 0 }));
+        assert!(input.status(&score).contains("plays bar 2 again"));
+        input.apply(&mut score, Op::Duration(Value::Whole));
+        let out = input.apply(&mut score, Op::Letter('A'));
+        assert_eq!(out.changed, [1]);
+        let new = write_bars(text, &chart, &score, &out.changed).unwrap();
+        assert!(new.contains("x2"), "{new}");
+        // Read again, both times through play the new bar.
+        let back = parse_chart(&new).unwrap();
+        for bar in [1, 3] {
+            assert_eq!(
+                ChordBar::from_measure(measures(&back)[bar])
+                    .to_text()
+                    .unwrap(),
+                "A_1",
+                "bar {}: {new}",
+                bar + 1
+            );
+        }
+    }
+
+    #[test]
     fn a_count_in_is_not_one_of_the_bars_note_input_edits() {
         // Drawn in the header as a countdown, the count-in has no measure
         // number: bar 0 is the verse's first, as the engraver numbers it,
@@ -1248,14 +1289,34 @@ mod tests {
                 .unwrap_or_else(|e| panic!("{mark} on {text}: {e}"));
             assert!(text.contains(written), "{mark}: {text}");
         }
-        // A push is not placed by the palette yet: refused, and why.
+        // Pushed, an eighth and then a sixteenth early, and back: the G
+        // stays on the beat it is written on and sounds before it.
+        for (mark, written) in [
+            ("'", "C / .'Gmaj7"),
+            ("''", "C / .''Gmaj7"),
+            ("''", "C / .Gmaj7"),
+        ] {
+            let chart = parse_chart(&text).unwrap();
+            let mut score = Score::from_text(&text, &chart);
+            let out = input.toggle_mark(&mut score, mark);
+            assert!(out.refused.is_none(), "{mark}: {:?}", out.refused);
+            text = write_bars(&text, &chart, &score, &out.changed)
+                .unwrap_or_else(|e| panic!("{mark} on {text}: {e}"));
+            assert!(text.contains(written), "{mark}: {text}");
+        }
+        // On the Am, the bar's first chord, a push would sound in the bar
+        // before: refused, and why.
+        input.selected = Some(crate::edit::Pos { bar: 1, tick: 0 });
         let chart = parse_chart(&text).unwrap();
         let mut score = Score::from_text(&text, &chart);
         let out = input.toggle_mark(&mut score, "'");
         assert!(out.changed.is_empty(), "{:?}", out.changed);
-        assert!(out.refused.as_deref().is_some_and(|r| r.contains("push")));
-        // On the Am, the bar's first chord: accented.
-        input.selected = Some(crate::edit::Pos { bar: 1, tick: 0 });
+        assert!(
+            out.refused
+                .as_deref()
+                .is_some_and(|r| r.contains("bar before"))
+        );
+        // Accented.
         let out = input.toggle_mark(&mut score, ">");
         let text = write_bars(&text, &chart, &score, &out.changed).unwrap();
         assert!(text.contains("| >Am"), "{text}");
