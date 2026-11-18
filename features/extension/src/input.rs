@@ -40,6 +40,8 @@ pub const OP_ACTIONS: &[OpAction] = &[
     op("KEYFLOW_PREVIOUS", Op::Prev, "←"),
     op("KEYFLOW_NEXT_BAR", Op::NextBar, "⌘→"),
     op("KEYFLOW_PREVIOUS_BAR", Op::PrevBar, "⌘←"),
+    op("KEYFLOW_FIRST_BAR", Op::First, "⌘Home"),
+    op("KEYFLOW_LAST_BAR", Op::Last, "⌘End"),
     op("KEYFLOW_DELETE", Op::Delete, "⌦"),
     op("KEYFLOW_ESCAPE", Op::Escape, "⎋"),
     op("KEYFLOW_ADD_A", Op::AddToChord('A'), "⇧A"),

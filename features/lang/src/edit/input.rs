@@ -282,6 +282,9 @@ pub enum Op {
     /// Ctrl+→ / Ctrl+←: the next or previous bar.
     NextBar,
     PrevBar,
+    /// Ctrl+Home / Ctrl+End: the first bar, or the last.
+    First,
+    Last,
     /// A click: the cursor to the note or rest at `pos`.
     MoveTo(Pos),
     /// Chord symbols or notes: what a letter enters.
@@ -536,11 +539,12 @@ impl InputState {
                 self.step_event(score, false);
                 Outcome::default()
             }
-            Op::NextBar | Op::PrevBar => {
-                let bar = if op == Op::NextBar {
-                    (self.cursor.bar + 1).min(score.bars.len() - 1)
-                } else {
-                    self.cursor.bar.saturating_sub(1)
+            Op::NextBar | Op::PrevBar | Op::First | Op::Last => {
+                let bar = match op {
+                    Op::NextBar => (self.cursor.bar + 1).min(score.bars.len() - 1),
+                    Op::PrevBar => self.cursor.bar.saturating_sub(1),
+                    Op::First => 0,
+                    _ => score.bars.len() - 1,
                 };
                 self.move_to(score, Pos { bar, tick: 0 });
                 Outcome::default()

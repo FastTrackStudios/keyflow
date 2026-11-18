@@ -332,7 +332,8 @@ fn appended(
         let trimmed = text.trim_end();
         let digits = trimmed.len() - trimmed.trim_end_matches(|c: char| c.is_ascii_digit()).len();
         let before_digits = &trimmed[..trimmed.len() - digits];
-        if digits > 0 && before_digits.ends_with(char::is_whitespace)
+        if digits > 0
+            && before_digits.ends_with(char::is_whitespace)
             && let Ok(n) = trimmed[trimmed.len() - digits..].parse::<usize>()
         {
             let at = header.start + trimmed.len() - digits;
@@ -748,11 +749,20 @@ mod tests {
         assert_eq!(n, 3);
         assert_eq!(measures(&parse_chart(&text).unwrap()).len(), 3, "{text}");
         // Over the last two bars and on past the end: the count goes up.
-        let (text2, _) = splice_syntax(CHART, &setup().0, 2, "Dm / / / | G / / / | C / / / | E7 / / /").unwrap();
+        let (text2, _) = splice_syntax(
+            CHART,
+            &setup().0,
+            2,
+            "Dm / / / | G / / / | C / / / | E7 / / /",
+        )
+        .unwrap();
         let back = parse_chart(&text2).unwrap();
         assert_eq!(measures(&back).len(), 6, "{text2}");
         assert!(text2.contains("VS 6"), "{text2}");
-        assert!(text2.contains("| Dm / / / | G / / / |\n| C / / / | E7 / / / |"), "{text2}");
+        assert!(
+            text2.contains("| Dm / / / | G / / / |\n| C / / / | E7 / / / |"),
+            "{text2}"
+        );
     }
 
     #[test]

@@ -234,6 +234,9 @@ struct EditState {
     /// Syntax typed and not yet written: the bars it would write from the
     /// cursor, shown on the chart as they would be.
     preview: Option<usize>,
+    /// Syntax mode's typing: keys typed on the chart (it keeps the
+    /// keyboard, so Esc leaves the chart ready for the next key).
+    draft: String,
     /// Shortcut → action: MuseScore's keys, as the person's settings
     /// change them (`keyflow.keys.*`).
     keymap: BTreeMap<String, String>,
@@ -333,9 +336,6 @@ fn ChartPane() -> Element {
     let mut mode = use_signal(|| edit_state().input.mode);
     let mut target = use_signal(|| edit_state().input.target);
     let mut draft = use_signal(String::new);
-    // The syntax field is uncontrolled (a value written back on every key
-    // moves the caret as it is typed); a new key clears it.
-    let mut field = use_signal(|| 0_u64);
     let tell = use_hook(|| {
         let (tx, mut rx) = unbounded_channel::<Msg>();
         spawn(async move {
@@ -351,6 +351,7 @@ fn ChartPane() -> Element {
                         });
                         mode.set(e.input.mode);
                         target.set(e.input.target);
+                        draft.set(e.draft.clone());
                     }
                     // In order, one at a time: C D E typed fast is C D E.
                     Msg::Gesture(g) => {
@@ -501,42 +502,17 @@ fn ChartPane() -> Element {
                 if mode() == Mode::Syntax {
                     div { style: "display:flex; gap:8px; align-items:center; padding:6px 10px; border-top:1px solid var(--border, #8884);",
                         span { style: "font-size:12px; opacity:0.75; white-space:nowrap;", "Keyflow syntax" }
-                        // Keyed by `field`: a new one (empty) after each write.
-                        for generation in std::iter::once(field()) {
-                        input {
-                            key: "{generation}",
-                            style: "flex:1; min-width:0; font-family:ui-monospace, monospace; font-size:13px; padding:4px 6px; border-radius:4px; border:1px solid var(--border, #8886); background:var(--background, transparent); color:var(--foreground, inherit);",
-                            placeholder: "C / / / | Am7 / F G",
-                            autofocus: true,
-                            oninput: move |e| {
-                                let typed = e.value();
-                                draft.set(typed.clone());
-                                spawn(async move {
-                                    let _ = dispatch("KEYFLOW_SYNTAX_PREVIEW", json!({ "text": typed })).await;
-                                });
-                            },
-                            onkeydown: move |e| {
-                                match e.key().to_string().as_str() {
-                                    "Enter" => {
-                                        let typed = draft();
-                                        spawn(async move {
-                                            if dispatch("KEYFLOW_SYNTAX_WRITE", json!({ "text": typed })).await.is_ok()
-                                                && edit_state().refused.is_none()
-                                            {
-                                                draft.set(String::new());
-                                                field += 1;
-                                            }
-                                        });
-                                    }
-                                    "Escape" => {
-                                        spawn(async move {
-                                            let _ = dispatch("KEYFLOW_ESCAPE", json!({})).await;
-                                        });
-                                    }
-                                    _ => {}
-                                }
-                            },
-                        }
+                        // What is typed on the chart, with its caret: the
+                        // chart keeps the keyboard (a field would take it,
+                        // and leaving it would leave the keys nowhere).
+                        div {
+                            style: "flex:1; min-width:0; font-family:ui-monospace, monospace; font-size:13px; padding:4px 6px; border-radius:4px; border:1px solid var(--primary, #4f46e5); white-space:pre; overflow:hidden;",
+                            if draft().is_empty() {
+                                span { style: "opacity:0.5;", "C / / / | Am7 / F G" }
+                            } else {
+                                // Its end, where the typing is.
+                                span { "{tail(&draft(), 110)}▏" }
+                            }
                         }
                     }
                 }
@@ -930,7 +906,7 @@ async fn run_op(make: impl FnOnce(&Score) -> Vec<Op>) -> Result<Json, String> {
         if e.input.mode == Mode::Normal
             && let Op::Mode(m) = op
             && m.is_input()
-            && let Some((bar, fraction)) = e.clicked
+            && let Some((bar, fraction)) = e.clicked.take()
         {
             let length = score.bars.get(bar).map_or(0, |b| b.length);
             let tick = (fraction * f64::from(length)) as u32;
@@ -1264,12 +1240,71 @@ fn input_state() -> Json {
     })
 }
 
+/// The last `n` characters of `s`, an ellipsis before them when cut.
+fn tail(s: &str, n: usize) -> String {
+    let count = s.chars().count();
+    if count <= n {
+        return s.to_owned();
+    }
+    format!("…{}", s.chars().skip(count - n).collect::<String>())
+}
+
+/// A key typed in syntax mode, taken as typing: a character added to the
+/// bars being typed (and previewed), Backspace one taken off, Enter
+/// writing them, Esc dropping them and leaving. Whether it was.
+async fn syntax_key(key: &str, mods: &[&str]) -> bool {
+    if edit_state().input.mode != Mode::Syntax
+        || mods.iter().any(|m| matches!(*m, "Mod" | "Ctrl" | "Alt"))
+    {
+        return false;
+    }
+    let typed = {
+        let mut e = edit_state();
+        match key {
+            "Enter" => None,
+            "Escape" => {
+                e.draft.clear();
+                return false; // ⎋ is note input's Escape: it leaves.
+            }
+            "Backspace" => {
+                e.draft.pop();
+                Some(e.draft.clone())
+            }
+            k if k.chars().count() == 1 => {
+                e.draft.push_str(k);
+                Some(e.draft.clone())
+            }
+            _ => return false,
+        }
+    };
+    match typed {
+        Some(text) => {
+            let _ = dispatch("KEYFLOW_SYNTAX_PREVIEW", json!({ "text": text })).await;
+        }
+        None => {
+            let text = edit_state().draft.clone();
+            if dispatch("KEYFLOW_SYNTAX_WRITE", json!({ "text": text }))
+                .await
+                .is_ok()
+                && edit_state().refused.is_none()
+            {
+                edit_state().draft.clear();
+                rerender_input().await;
+            }
+        }
+    }
+    true
+}
+
 /// A key pressed or a bar clicked on a chart: a key run as the action the
 /// keymap binds it to, through the host (as ⌘K and MCP run it); a click
 /// noted as where note input starts, or the cursor moved there.
 async fn gesture(g: ChartGesture) {
     match g {
         ChartGesture::Key { key, mods } => {
+            if syntax_key(&key, &mods).await {
+                return;
+            }
             let chord = input::chord(&key, &mods);
             let (action, mode, selected) = {
                 let e = edit_state();

@@ -521,6 +521,20 @@ group = "Keyflow"
 effect = "mutating"
 
 [[actions]]
+id = "KEYFLOW_FIRST_BAR"
+name = "Keyflow: first bar"
+description = "The cursor to the chart's first bar (Ctrl+Home)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_LAST_BAR"
+name = "Keyflow: last bar"
+description = "The cursor to the chart's last bar (Ctrl+End)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
 id = "KEYFLOW_TARGET_SWITCH"
 name = "Keyflow: chord symbols or notes"
 description = "Switches what a letter enters (Y): chord symbols, the default in a chord chart, or notes."
@@ -900,6 +914,18 @@ key = "keyflow.keys.triplet"
 title = "Triplet"
 control = "shortcut"
 default = "⌘3"
+
+[[sections.settings]]
+key = "keyflow.keys.first_bar"
+title = "First bar"
+control = "shortcut"
+default = "⌘Home"
+
+[[sections.settings]]
+key = "keyflow.keys.last_bar"
+title = "Last bar"
+control = "shortcut"
+default = "⌘End"
 
 [[sections.settings]]
 key = "keyflow.keys.tie"
