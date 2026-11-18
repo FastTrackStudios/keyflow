@@ -58,7 +58,7 @@ reads = ["documents"]
 writes = ["documents"]
 # The app's actions it runs: a chart's tab named for the chart (its
 # title), not "Chart".
-actions = ["WORKSPACE_TAB_SET"]
+actions = ["WORKSPACE_TAB_SET", "TOOLBAR_SHOW"]
 
 [[actions]]
 id = "KEYFLOW_STATE"
@@ -276,6 +276,15 @@ description = "The next chord is pushed (anticipated): `'` in the chart."
 group = "Keyflow"
 effect = "mutating"
 toggle = true
+
+[[actions]]
+id = "KEYFLOW_EDIT_MODE"
+name = "Keyflow: edit mode"
+description = "Into or out of edit mode (`on`: true or false; with neither, the other way): in it the palettes show beside the chart and the note-input toolbar over it; out of it the pane is the chart alone, for reading and following playback."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+params = '{"type":"object","properties":{"on":{"type":"boolean"}}}'
 
 [[actions]]
 id = "KEYFLOW_PALETTES"

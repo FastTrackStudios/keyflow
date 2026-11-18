@@ -671,7 +671,8 @@ impl ChartPaintView {
     }
 
     /// The chart scrolled, when the playhead moved into a measure out of
-    /// sight, just far enough to show it (a page turned as it plays). Not
+    /// sight, a page at a time: that measure's line goes to the top, so
+    /// the lines after it are read ahead ([`turn_page`]). Not
     /// while note input has a cursor: the person typing leads the view.
     fn follow_playhead(
         &mut self,
@@ -696,7 +697,17 @@ impl ChartPaintView {
         let zoom = self.effective_zoom(view.zoom, ctx.geometry.width);
         let (w, h) = pane_size(ctx);
         let scroll = clamp_scroll(view.scroll, self.content, (w, h), zoom);
-        let next = follow(scroll, target, (w / zoom, h / zoom));
+        // The page the measure is on: playback shows that page whole (or
+        // from its left edge and top, when it is larger than the pane),
+        // never a sliver of it beside the page before.
+        let mid = (x0 + x1) / 2.0;
+        let page = (1..)
+            .map_while(|n| self.view.page(n))
+            .find(|&(px0, _, width, _)| mid >= px0 && mid <= px0 + width)
+            .map(|(px0, py0, width, height)| {
+                Rect::new(px0 * px, py0 * px, (px0 + width) * px, (py0 + height) * px)
+            });
+        let next = turn_page(scroll, target, page, (w / zoom, h / zoom));
         if next == scroll {
             return view;
         }
@@ -1798,6 +1809,39 @@ fn follow(scroll: (f64, f64), target: Rect, visible: (f64, f64)) -> (f64, f64) {
     )
 }
 
+/// The scroll that follows playback into `target` (the measure playing) on
+/// `page` (its page, when known): unchanged while that measure is in view.
+/// Once it is not, the view goes to its page: the page's left edge and,
+/// when the page fits the pane's height, its top, so the whole page is
+/// read; on a page taller than the pane, the measure's line goes to the
+/// top. With no page, sideways as [`follow`].
+fn turn_page(
+    scroll: (f64, f64),
+    target: Rect,
+    page: Option<Rect>,
+    visible: (f64, f64),
+) -> (f64, f64) {
+    let in_view = target.x0 >= scroll.0
+        && target.x1 <= scroll.0 + visible.0
+        && target.y0 >= scroll.1
+        && target.y1 <= scroll.1 + visible.1;
+    if in_view {
+        return scroll;
+    }
+    let margin = (visible.1 * 0.04).min(24.0);
+    let Some(page) = page else {
+        let (x, _) = follow(scroll, target, visible);
+        return (x, target.y0 - margin);
+    };
+    let x = page.x0 - margin.min(12.0);
+    let y = if page.height() + margin <= visible.1 {
+        page.y0 - margin
+    } else {
+        target.y0 - margin
+    };
+    (x, y)
+}
+
 fn pane_size(ctx: &ViewCtx) -> (f64, f64) {
     (
         f64::from(ctx.geometry.width),
@@ -2004,6 +2048,12 @@ mod tests {
         // In view: no scroll.
         let bar = Rect::new(100.0, 100.0, 200.0, 160.0);
         assert_eq!(follow((0.0, 0.0), bar, view), (0.0, 0.0));
+        // Playback turns a page: a measure below the view goes to its top.
+        assert_eq!(turn_page((0.0, 0.0), bar, None, view), (0.0, 0.0));
+        // A measure on the next page, out of view: that page from its edge.
+        let next = Rect::new(700.0, 100.0, 800.0, 160.0);
+        let page = Rect::new(650.0, 0.0, 1000.0, 280.0);
+        assert_eq!(turn_page((0.0, 0.0), next, Some(page), view), (638.0, -12.0));
         // Below: scrolled until its bottom is in, with a margin.
         let below = Rect::new(100.0, 500.0, 200.0, 560.0);
         let (_, y) = follow((0.0, 0.0), below, view);
