@@ -13,7 +13,7 @@
 use std::time::Duration;
 
 use architect::{LayerRouter, LocalServer, Scope};
-use crdt::sync::{DocSyncClient, DocSyncDispatcher, SyncedDoc, doc_sync_service_descriptor};
+use crdt::sync::{DocSyncClient, DocSyncDispatcher, doc_sync_service_descriptor};
 use crdt::text::{EditorBinding, TextOp};
 use crdt::{CrdtDoc, DocRegistry};
 use keyflow_session::{ChartSession, ChartSource, EXTENSION, Provider};
@@ -94,7 +94,7 @@ async fn two_keyflows_share_a_session_and_type_into_it() {
     );
     let local = LocalServer::serve(router, scope.clone());
     let sync = |chart: &ChartSession| {
-        let synced = SyncedDoc::new(chart.id(), chart.crdt());
+        let synced = chart.synced();
         let local = &local;
         async move {
             let client: DocSyncClient = local.establish().await.unwrap();
@@ -151,8 +151,8 @@ async fn two_keyflows_share_a_session_and_type_into_it() {
     .await;
     assert_eq!(a.chart(), both);
 
-    // B's file holds what it received: reopened, it reads the same chart.
-    b.save().await.unwrap();
+    // B's file holds what it received as it arrived (a durable sync): the
+    // process ends with no save, and the file, reopened, reads the chart.
     drop(b_text);
     drop(b);
     let reopened = ChartSession::open(&b_path).await.unwrap();

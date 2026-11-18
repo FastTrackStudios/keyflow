@@ -31,7 +31,7 @@
 use std::path::Path;
 
 use crdt::file::{DiskStorage, MAIN};
-use crdt::{CrdtDoc, DocFile, Persistence as _, TextBinding};
+use crdt::{CrdtDoc, DocFile, TextBinding};
 use session::doc::SessionDoc;
 use session::extension::{call_json, response_of};
 use session::service::{READ, Request, Response, Sessions, WRITE};
@@ -61,8 +61,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// A `.session` file holding a chart, open on this device.
 pub struct ChartSession {
     id: Uuid,
-    /// The file the document's persistence writes to.
-    file: DocFile,
+    // Kept open: the file the document's persistence writes to.
+    _file: DocFile,
     doc: CrdtDoc,
     session: SessionDoc,
 }
@@ -122,7 +122,7 @@ impl ChartSession {
         let session = SessionDoc::from_doc(doc.loro().clone());
         Ok(Self {
             id,
-            file,
+            _file: file,
             doc,
             session,
         })
@@ -141,8 +141,8 @@ impl ChartSession {
         &self.session
     }
 
-    /// The document, for the sync driver (`crdt::sync::SyncedDoc::new(id,
-    /// chart.crdt())`, or the org's driver).
+    /// The document (for the org's driver; a single session syncs with
+    /// [`Self::synced`]).
     #[must_use]
     pub fn crdt(&self) -> CrdtDoc {
         self.doc.clone()
@@ -192,34 +192,27 @@ impl ChartSession {
         Ok(TextBinding::new(self.session.doc(), text))
     }
 
-    /// Writes everything this replica holds to the file, then folds it
-    /// into one record.
-    ///
-    /// This device's own edits reach the file as they are made. What
-    /// arrives by sync does not: Architect's `SyncedDoc` applies remote
-    /// updates without persisting them (`CrdtDoc::apply_remote`, not
-    /// `apply_remote_durable`), so a synced `.session` keeps another
-    /// device's edits only once this has run. It writes only what the
-    /// file lacks (`Persistence::write_snapshot` on the branch).
+    /// Folds the file's records into one: every edit, this device's and
+    /// every one received through [`Self::synced`], is on disk already.
     ///
     /// # Errors
     ///
     /// The file could not be written.
     pub async fn save(&self) -> Result<()> {
-        let snapshot = self
-            .doc
-            .loro()
-            .export(crdt::loro::ExportMode::Snapshot)
-            .map_err(|e| Error::Doc(e.to_string()))?;
-        self.file
-            .persistence(MAIN)
-            .write_snapshot(self.id, &snapshot)
-            .await
-            .map_err(|e| Error::File(e.to_string()))?;
         self.doc
             .compact(self.id)
             .await
             .map_err(|e| Error::File(e.to_string()))
+    }
+
+    /// The sync driver for this session: Architect's `SyncedDoc`, made
+    /// `durable`, so what arrives from other devices is written to this
+    /// file as it arrives, not only this device's own edits. Run it
+    /// against a client of the org's lane or a share link
+    /// (`SyncedDoc::run`), again on reconnect.
+    #[must_use]
+    pub fn synced(&self) -> crdt::sync::SyncedDoc {
+        crdt::sync::SyncedDoc::new(self.id, self.doc.clone()).durable()
     }
 }
 
