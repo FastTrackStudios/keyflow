@@ -51,7 +51,7 @@ use std::sync::{Arc, OnceLock};
 
 use anyrender::PaintScene;
 use kurbo::{Affine, Rect, Stroke};
-use peniko::Fill;
+use peniko::{Color, Fill};
 
 use crate::Chart;
 use crate::api::pipeline::{ChartPipeline, Preset, PresetOptions};
@@ -684,6 +684,47 @@ impl ChartView {
         Some(out)
     }
 
+    /// The elements whose scene nodes `nodes` names ([`Selectable::node`],
+    /// from [`ChartView::selectables`]) drawn again as themselves, every
+    /// ink in `color` ([`InkMap::solid`]), in chart pixels at 100% as
+    /// [`ChartView::record_pages`] draws them: a highlight laid over the
+    /// pages, so a hover or a selection recolours an element without the
+    /// page it is on being recorded again. `None` before the first layout;
+    /// a path the layout no longer has is skipped.
+    ///
+    /// [`Selectable::node`]: crate::engraver::layout::chart::select::Selectable::node
+    #[must_use]
+    pub fn record_elements(
+        &self,
+        nodes: &[&[usize]],
+        color: Color,
+    ) -> Option<Vec<anyrender::recording::RenderCommand>> {
+        use crate::engraver::layout::chart::select::node_at;
+        let cached = self.cached.as_ref()?;
+        let root = &cached.layout.scene;
+        let mut scene = anyrender::Scene::new();
+        if root.visible {
+            let base = SceneRenderBuilder::new()
+                .spatium(cached.spatium)
+                .build()
+                .with_ink_map(Some(InkMap::solid(color)));
+            let mut renderer = self.pipeline.fonts().configure_renderer(base);
+            for (from, to) in &self.theme.typography.font_aliases {
+                renderer = renderer.with_font_alias(from.clone(), to.clone());
+            }
+            for path in nodes {
+                if let Some((node, parent)) = node_at(root, path) {
+                    renderer.render_with_transform(
+                        &mut scene,
+                        node,
+                        Affine::scale(DPI_SCALE) * parent,
+                    );
+                }
+            }
+        }
+        Some(scene.commands)
+    }
+
     /// The playback cursor at `playhead_secs` (chart time) into `scene`,
     /// in chart pixels at 100%, as [`ChartView::paint_cached`] draws it:
     /// whether there was one to draw.
@@ -706,6 +747,15 @@ impl ChartView {
         self.cached
             .as_ref()
             .map(|c| (c.layout.total_width, c.layout.total_height))
+    }
+
+    /// The laid-out chart's scene, the root a [`Selectable::node`] path
+    /// starts from. `None` before the first layout.
+    ///
+    /// [`Selectable::node`]: crate::engraver::layout::chart::select::Selectable::node
+    #[must_use]
+    pub fn layout_scene(&self) -> Option<&SceneNode> {
+        self.cached.as_ref().map(|c| &c.layout.scene)
     }
 
     /// What can be selected on the laid-out chart, in reading order, its

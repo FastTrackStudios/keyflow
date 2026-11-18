@@ -1,0 +1,106 @@
+DTLA Cinematic Intro
+Transcribed By Cody Wright
+\title "DTLA Cinematic Intro"
+#C 160bpm 4/4
+
+Count 2
+
+; Top of show, into Drive To LA. Per Cody's notes the intro plays Drive To LA's chorus (1 5 4 ... 3 5 2).
+; Source: the show's Ableton set, beats 0-328 (82 bars): SECTIONS +CC (Intro / Chords / Hits / Band In),
+; tempo map (160), FoH Notes + Count Ins cues, stems (reference mix, BASS - PLUCK, PERC - IMPACTS).
+; The hit cell (stems + impacts): chord on beat 4, next on the and of 1, next on 3, held 2+ bars.
+; No lyric lines in the set for this part (vox track only: FoH "From our movie"); the .lrc is empty.
+
+IN 34 (tracks)
+"Pad tracks" C
+C
+C
+C
+C
+C
+C
+C
+C
+C
+C
+C
+C
+C
+C
+C
+C
+C
+C
+C
+C
+C
+C
+C
+C
+C
+C
+C
+@all "Vox track"
+C
+C
+C
+C
+C
+C
+
+[C Pedal] 16
+C
+C
+C
+C
+C
+C
+C
+C
+C
+C
+C
+C
+C
+C
+"Track hits" C_8 G_4. F_2
+F
+
+; Band hits start in bar 2 (FoH "BAND HITS", Count Ins "Hits... 2... 1 2 3 4").
+; Bar 16: FoH "BAND CUT INCOMING" — band cut; the tracks hit on 3 (impacts). Cut length unconfirmed.
+INST 16 (hits)
+F
+F_2. >C_4 ~
+C_8 >G_4. >F_2
+F
+F
+F_2. >C_4 ~
+C_8 >G_4. >F_2
+F
+F
+F_2. >Em_4 ~
+Em_8 >G_4. >Dm_2
+Dm
+Dm
+Dm_2. >C_4 ~
+C_8 >G_4. >F_2
+"Cut" r1
+
+CH 16 (band in)
+@all "Band in"
+F
+F_2. C_4 ~
+C_8 G_4. F_2
+F
+F
+F_2. C_4 ~
+C_8 G_4. F_2
+F
+F
+F_2. Em_4 ~
+Em_8 G_4. Dm_2
+Dm
+Dm
+Dm_2. r4
+"Cut — count into Drive To LA" r1
+r1

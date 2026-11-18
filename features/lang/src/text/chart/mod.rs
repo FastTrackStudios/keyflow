@@ -38,6 +38,10 @@ pub struct ChartParser<'a> {
     /// so positions computed inside a single-line parse (e.g. key changes)
     /// are section-relative, not line-relative.
     section_beats_offset: f64,
+    /// The section lines bars were read from, by the id a bar's provisional
+    /// span carries (`TextSpan::column`, line 0) until
+    /// `assign_measure_source_spans` places it in the document.
+    line_texts: Vec<String>,
 }
 
 impl<'a> ChartParser<'a> {
@@ -52,6 +56,7 @@ impl<'a> ChartParser<'a> {
             chart_degree_votes: 0,
             carried_measure: None,
             section_beats_offset: 0.0,
+            line_texts: Vec::new(),
         }
     }
 }

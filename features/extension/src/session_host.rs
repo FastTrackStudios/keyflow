@@ -132,7 +132,10 @@ async fn serve(args: Json) -> Result<Json, String> {
             doc_presence_service_descriptor(),
             DocPresenceDispatcher::new(PresenceHost::new(id, 30_000)),
         )
-        .with(session_clock_rpc_service_descriptor(), serve_clock(ClockHost));
+        .with(
+            session_clock_rpc_service_descriptor(),
+            serve_clock(ClockHost),
+        );
     let port = bind.rsplit(':').next().unwrap_or("4142").to_owned();
     tokio::spawn(async move {
         let _ = EngineHost::ungated(router, bind).serve().await;
@@ -206,7 +209,9 @@ fn play(args: &Json) -> Result<Json, String> {
     // estimate of the host's.
     let at_micros = match &s.clock {
         None => now_micros_f64(),
-        Some(clock) => clock.now_micros().ok_or("the host's clock is not known yet")?,
+        Some(clock) => clock
+            .now_micros()
+            .ok_or("the host's clock is not known yet")?,
     };
     here.play(&PlayState {
         playing,
@@ -224,7 +229,10 @@ fn state() -> Json {
         .values()
         .map(|c| json!({ "id": c.id().to_string(), "chart": c.chart() }))
         .collect();
-    let offset = s.clock.as_ref().map_or(Some(0.0), SharedClock::offset_micros);
+    let offset = s
+        .clock
+        .as_ref()
+        .map_or(Some(0.0), SharedClock::offset_micros);
     let round_trip = s.clock.as_ref().and_then(SharedClock::round_trip_micros);
     let (leader, lead_epoch) = s.presence.as_ref().map_or((None, None), |peer| {
         let states = peer.states();
@@ -257,12 +265,24 @@ fn state() -> Json {
     })
 }
 
-/// The chart of session `id` if this copy holds it: what the chart pane
-/// reads directly instead of asking the host for its own service.
+/// `call` answered by this copy's provider, as Keyflow, if this copy holds
+/// the session it names: what the chart pane and note input do instead of
+/// asking the host for this extension's own service. `None` when the
+/// session is elsewhere.
 #[must_use]
-pub fn local_chart(id: &str) -> Option<String> {
-    let id = Uuid::parse_str(id).ok()?;
-    sessions().charts.get(&id).map(ChartSession::chart)
+pub fn local_answer(call: &keyflow_session::ServiceCall) -> Option<Result<String, String>> {
+    let args: Json = serde_json::from_str(&call.args).ok()?;
+    let id = Uuid::parse_str(args.get("doc")?.as_str()?).ok()?;
+    let sessions = sessions();
+    if !sessions.charts.contains_key(&id) {
+        return None;
+    }
+    Some(
+        sessions
+            .provider
+            .answer(call.method, &call.args, Some(keyflow_session::EXTENSION))
+            .map_err(|e| e.to_string()),
+    )
 }
 
 /// Registers the session host's actions.
