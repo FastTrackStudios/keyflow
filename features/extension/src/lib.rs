@@ -19,6 +19,7 @@
 //! ([`icons`]).
 
 pub mod icons;
+pub mod input;
 pub mod palette;
 pub mod tools;
 
@@ -27,13 +28,17 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, PoisonError};
 
 use architect_extensions::contrib::{StateKind, StateWrite};
-use architect_extensions::hostcall::HostRequest;
+use architect_extensions::hostcall::{DocEdit, HostRequest};
 use architect_extensions::linked::{Builder, Extension, Handle, PaintPane, use_pane_state};
 use architect_workspace::paint::peniko::Color;
 use architect_workspace::{HostData, PaintWake};
 use dioxus::prelude::*;
 use keyflow::engraver::renderer::ChartTheme;
-use keyflow_ui::paint_view::{ChartSelection, ChartSnapshot, ChartView, chart_mount};
+use keyflow::edit::{self, Mode, Op, Pos, Score};
+use keyflow_ui::paint_view::{
+    ChartGesture, ChartGestures, ChartSelection, ChartSnapshot, ChartView, InputOverlay,
+    ShadowNote, chart_mount_with,
+};
 use serde_json::{Value as Json, json};
 use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 
@@ -58,15 +63,46 @@ impl Extension for Keyflow {
         for tool in tools::TOOLS {
             let command = tool.command;
             ext.action(tool.action, move |_| async move {
+                let now = edit_state().input.mode;
+                if let Some(op) = command.op(now) {
+                    return run_op(move |_| op).await;
+                }
                 let on = {
                     let mut input = input();
                     input.apply(command);
-                    input.is_on(command)
+                    input.is_on(&edit_state().input, command)
                 };
                 publish_input();
                 Ok(json!({ "on": on }))
             });
         }
+        for action in input::OP_ACTIONS {
+            let op = action.op;
+            ext.action(action.action, move |_| async move { run_op(move |_| op).await });
+        }
+        ext.action("KEYFLOW_INPUT_MOVE", |args| async move {
+            let bar = args.get("bar").and_then(Json::as_u64).ok_or("bar: a number")? as usize;
+            let fraction = args.get("fraction").and_then(Json::as_f64).unwrap_or(0.0);
+            run_op(move |score| {
+                let length = score.bars.get(bar).map_or(0, |b| b.length);
+                Op::MoveTo(Pos {
+                    bar,
+                    tick: (fraction.clamp(0.0, 1.0) * f64::from(length)) as u32,
+                })
+            })
+            .await
+        });
+        ext.action("KEYFLOW_SYNTAX_WRITE", |args| async move {
+            let typed = text(&args, "text").ok_or("text: the bars to write")?;
+            syntax_write(&typed).await
+        });
+        ext.action("KEYFLOW_INPUT_STATE", |_| async { Ok(input_state()) });
+        ext.action("KEYFLOW_UNDO", |_| async { history(true).await });
+        ext.action("KEYFLOW_REDO", |_| async { history(false).await });
+        ext.action("KEYFLOW_KEYMAP_RELOAD", |_| async {
+            load_keymap().await;
+            Ok(json!({ "keys": edit_state().keymap.len() }))
+        });
         ext.view("chart", ChartPane)
             .action("KEYFLOW_STATE", |_| async { Ok(state()) })
             .action("KEYFLOW_CHART_VIEW", |args| async move { set_view(&args) })
@@ -103,12 +139,46 @@ struct Open {
 }
 
 /// What a pane is told from outside its own thread.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 enum Msg {
     /// Read the document again.
     Reread,
-    /// The input state changed (the palettes shown or hidden).
+    /// The input state changed (the palettes shown or hidden, the mode,
+    /// the status line).
     Input,
+    /// A key pressed or a bar clicked on its chart.
+    Gesture(ChartGesture),
+}
+
+/// Note input: one person's, for the app, as MuseScore's (the tools and
+/// the cursor are theirs, whichever chart they are on).
+#[derive(Default)]
+struct EditState {
+    input: edit::InputState,
+    /// What the status line says.
+    status: String,
+    /// What the last operation could not do.
+    refused: Option<String>,
+    /// The pane note input is on (its mount's key), the last one used.
+    active: Option<u64>,
+    /// The last bar clicked and how far across: where note input starts.
+    clicked: Option<(usize, f64)>,
+    /// Shortcut → action: MuseScore's keys, as the person's settings
+    /// change them (`keyflow.keys.*`).
+    keymap: BTreeMap<String, String>,
+}
+
+static EDIT: std::sync::LazyLock<Mutex<EditState>> = std::sync::LazyLock::new(|| {
+    Mutex::new(EditState {
+        keymap: input::default_keys()
+            .map(|(action, key)| (key.to_owned(), action.to_owned()))
+            .collect(),
+        ..EditState::default()
+    })
+});
+
+fn edit_state() -> std::sync::MutexGuard<'static, EditState> {
+    EDIT.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// The note-input state the toolbar sets, one for the app: as MuseScore's,
@@ -123,6 +193,7 @@ fn input() -> std::sync::MutexGuard<'static, tools::InputState> {
 /// Lights each tool's button as the input state says, and tells the panes.
 fn publish_input() {
     let state = input().clone();
+    let edit = edit_state().input.clone();
     if let Some(handle) = HANDLE
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
@@ -132,7 +203,7 @@ fn publish_input() {
             handle.set_state(StateWrite {
                 key: tool.action.to_owned(),
                 kind: StateKind::Checked,
-                text: if state.is_on(tool.command) {
+                text: if state.is_on(&edit, tool.command) {
                     "on"
                 } else {
                     "off"
@@ -187,18 +258,39 @@ fn ChartPane() -> Element {
     let mut palettes = use_signal(|| input().palettes);
     // What is told off the UI thread lands here: a reread bumps `reads`, an
     // input change shows or hides the palettes.
+    let mut status = use_signal(|| edit_state().status.clone());
+    let mut mode = use_signal(|| edit_state().input.mode);
+    let mut draft = use_signal(String::new);
+    // The syntax field is uncontrolled (a value written back on every key
+    // moves the caret as it is typed); a new key clears it.
+    let mut field = use_signal(|| 0_u64);
     let tell = use_hook(|| {
         let (tx, mut rx) = unbounded_channel::<Msg>();
         spawn(async move {
             while let Some(msg) = rx.recv().await {
                 match msg {
                     Msg::Reread => reads += 1,
-                    Msg::Input => palettes.set(input().palettes),
+                    Msg::Input => {
+                        palettes.set(input().palettes);
+                        let e = edit_state();
+                        status.set(match &e.refused {
+                            Some(why) => format!("{why} · {}", e.status),
+                            None => e.status.clone(),
+                        });
+                        mode.set(e.input.mode);
+                    }
+                    // In order, one at a time: C D E typed fast is C D E.
+                    Msg::Gesture(g) => {
+                        edit_state().active = Some(key);
+                        gesture(g).await;
+                    }
                 }
             }
         });
         tx
     });
+    // Keys arrive by the bindings of the person's settings.
+    use_hook(|| spawn(load_keymap()));
     // The toolbar's buttons lit as the input state is, once a chart shows.
     use_hook(publish_input);
     let mount = use_hook(|| {
@@ -208,8 +300,15 @@ fn ChartPane() -> Element {
             playhead_secs: None,
             theme: None,
             view: ChartView::default(),
+            input: None,
         });
-        let mount = chart_mount(data.clone());
+        let gestures = {
+            let tell = tell.clone();
+            ChartGestures(std::sync::Arc::new(move |g| {
+                let _ = tell.send(Msg::Gesture(g));
+            }))
+        };
+        let mount = chart_mount_with(data.clone(), Some(gestures));
         open_charts().insert(
             key,
             Open {
@@ -285,9 +384,449 @@ fn ChartPane() -> Element {
                 div { style: "flex:1; min-height:0;",
                     PaintPane { mount: mount.mount.clone() }
                 }
+                if mode() == Mode::Syntax {
+                    div { style: "display:flex; gap:8px; align-items:center; padding:6px 10px; border-top:1px solid var(--border, #8884);",
+                        span { style: "font-size:12px; opacity:0.75; white-space:nowrap;", "Keyflow syntax" }
+                        input {
+                            key: "{field}",
+                            style: "flex:1; min-width:0; font-family:ui-monospace, monospace; font-size:13px; padding:4px 6px; border-radius:4px; border:1px solid var(--border, #8886); background:var(--background, transparent); color:var(--foreground, inherit);",
+                            placeholder: "C / / / | Am7 / F G",
+                            autofocus: true,
+                            oninput: move |e| draft.set(e.value()),
+                            onkeydown: move |e| {
+                                match e.key().to_string().as_str() {
+                                    "Enter" => {
+                                        let typed = draft();
+                                        spawn(async move {
+                                            if dispatch("KEYFLOW_SYNTAX_WRITE", json!({ "text": typed })).await.is_ok()
+                                                && edit_state().refused.is_none()
+                                            {
+                                                draft.set(String::new());
+                                                field += 1;
+                                            }
+                                        });
+                                    }
+                                    "Escape" => {
+                                        spawn(async move {
+                                            let _ = dispatch("KEYFLOW_ESCAPE", json!({})).await;
+                                        });
+                                    }
+                                    _ => {}
+                                }
+                            },
+                        }
+                    }
+                }
+                // The mode, always shown, and what the next key does:
+                // MuseScore's status bar.
+                div { style: "display:flex; gap:8px; align-items:center; padding:4px 10px; font-size:12px; border-top:1px solid var(--border, #8884); min-height:22px;",
+                    span {
+                        style: if mode().is_input() {
+                            "padding:1px 8px; border-radius:9px; background:var(--primary, #4f46e5); color:var(--primary-foreground, white); white-space:nowrap;"
+                        } else {
+                            "padding:1px 8px; border-radius:9px; border:1px solid var(--border, #8886); white-space:nowrap; opacity:0.8;"
+                        },
+                        "{mode().name()}"
+                    }
+                    span { style: "opacity:0.8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;",
+                        "{status}"
+                    }
+                }
             }
         }
     }
+}
+
+/// The host this extension was built with.
+fn handle() -> Result<Handle, String> {
+    HANDLE
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone()
+        .ok_or_else(|| "the extension is not loaded".to_owned())
+}
+
+/// The chart note input is on: the pane last used, else the first open.
+fn active_chart() -> Option<(u64, String)> {
+    let active = edit_state().active;
+    let charts = open_charts();
+    active
+        .and_then(|k| charts.get(&k).map(|o| (k, o.path.clone())))
+        .or_else(|| charts.iter().next().map(|(k, o)| (*k, o.path.clone())))
+        .filter(|(_, path)| !path.is_empty())
+}
+
+/// A document's text, through the host.
+async fn read_text(handle: &Handle, path: &str) -> Result<String, String> {
+    let answer = handle
+        .host(HostRequest::ReadDocument {
+            path: path.to_owned(),
+        })
+        .await
+        .map_err(|e| format!("{e:?}"))?;
+    answer
+        .as_str()
+        .map(str::to_owned)
+        .ok_or_else(|| "the document is not text".to_owned())
+}
+
+/// `text` made the document's text at `path`: one commit, one undo step
+/// named `name` (the host makes the edits that differ, so another
+/// person's typing elsewhere in it stays).
+async fn write_text(handle: &Handle, path: &str, text: String, name: &str) -> Result<(), String> {
+    handle
+        .host(HostRequest::EditDocument {
+            path: path.to_owned(),
+            edits: vec![DocEdit::Replace { text }],
+            name: Some(name.to_owned()),
+        })
+        .await
+        .map(|_| ())
+        .map_err(|e| format!("{e:?}"))
+}
+
+/// One edit note input made: the chart's text before and after it.
+struct Step {
+    path: String,
+    before: String,
+    after: String,
+    /// Note input as it was before and after it: undo puts the cursor back.
+    input: (edit::InputState, edit::InputState),
+}
+
+/// One edit at a time: each reads the chart, changes it and writes it
+/// back, so a key pressed while the last is still being written waits for
+/// it rather than writing over it.
+static ONE_AT_A_TIME: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// Note input's own edits, to undo and redo (the app's document history
+/// has every one as an undo step, but no action a chart view can run
+/// reaches it yet).
+static UNDO: Mutex<Vec<Step>> = Mutex::new(Vec::new());
+static REDO: Mutex<Vec<Step>> = Mutex::new(Vec::new());
+
+/// An edit made: kept to undo, and what was undone is no longer redone.
+fn remember(path: &str, before: String, after: String, input: (edit::InputState, edit::InputState)) {
+    let mut undo = UNDO.lock().unwrap_or_else(PoisonError::into_inner);
+    undo.push(Step {
+        path: path.to_owned(),
+        before,
+        after,
+        input,
+    });
+    if undo.len() > 200 {
+        undo.remove(0);
+    }
+    REDO.lock().unwrap_or_else(PoisonError::into_inner).clear();
+}
+
+/// ⌘Z (`undo`) or ⇧⌘Z: note input's last edit taken back (or made again),
+/// as a new edit, when the chart is still as that edit left it; another
+/// edit since (another person's, the text's) is not undone over.
+async fn history(undo: bool) -> Result<Json, String> {
+    let _one = ONE_AT_A_TIME.lock().await;
+    let (from, to) = if undo { (&UNDO, &REDO) } else { (&REDO, &UNDO) };
+    let Some(step) = from.lock().unwrap_or_else(PoisonError::into_inner).pop() else {
+        return Err(if undo { "Nothing to undo" } else { "Nothing to redo" }.to_owned());
+    };
+    let handle = handle()?;
+    let now = read_text(&handle, &step.path).await?;
+    let (expect, write) = if undo {
+        (&step.after, &step.before)
+    } else {
+        (&step.before, &step.after)
+    };
+    if now != *expect {
+        edit_state().refused = Some("The chart changed since; undo that in its document".to_owned());
+        publish_input();
+        return Err("the chart changed since that edit".to_owned());
+    }
+    write_text(&handle, &step.path, write.clone(), if undo { "Undo" } else { "Redo" }).await?;
+    reload(Some(&step.path));
+    let chart = keyflow::text::chart::parse_chart(write)?;
+    edit_state().input = if undo {
+        step.input.0.clone()
+    } else {
+        step.input.1.clone()
+    };
+    to.lock().unwrap_or_else(PoisonError::into_inner).push(step);
+    let score = Score::from_chart(&chart);
+    show_input(&chart, &score, None);
+    Ok(input_state())
+}
+
+/// One note-input operation on the active chart: read it, apply it, write
+/// the bars it changed back, and show where input is now. `make` builds
+/// the operation from the chart's bars (a click's tick needs its bar).
+async fn run_op(make: impl FnOnce(&Score) -> Op) -> Result<Json, String> {
+    let _one = ONE_AT_A_TIME.lock().await;
+    let Some((key, path)) = active_chart() else {
+        return Err("Open a chart first".to_owned());
+    };
+    let handle = handle()?;
+    let text = read_text(&handle, &path).await?;
+    let chart = keyflow::text::chart::parse_chart(&text)?;
+    let mut score = Score::from_chart(&chart);
+    let op = make(&score);
+    let (before, outcome) = {
+        let mut e = edit_state();
+        e.active = Some(key);
+        // Into note input from normal mode: where the person last clicked.
+        if e.input.mode == Mode::Normal
+            && let Op::Mode(m) = op
+            && m.is_input()
+            && let Some((bar, fraction)) = e.clicked
+        {
+            let length = score.bars.get(bar).map_or(0, |b| b.length);
+            let tick = (fraction * f64::from(length)) as u32;
+            e.input.apply(&mut score, Op::MoveTo(Pos { bar, tick }));
+        }
+        // Into note input with no note before the cursor: the first
+        // letter's octave is chosen near the staff's middle line, as its
+        // clef puts it (MuseScore's pitch cursor starts there).
+        if e.input.mode == Mode::Normal
+            && matches!(op, Op::Mode(_))
+            && score.pitch_before(e.input.cursor).is_none()
+        {
+            e.input.pitch = edit::Pitch::from_step(top_line(&chart, e.input.cursor.bar) - 4);
+        }
+        let before = e.input.clone();
+        let outcome = e.input.apply(&mut score, op);
+        (before, outcome)
+    };
+    let mut refused = outcome.refused.clone();
+    if !outcome.changed.is_empty() {
+        match keyflow::edit::commit::write_bars(&text, &chart, &score, &outcome.changed) {
+            Ok(new) => {
+                write_text(&handle, &path, new.clone(), &op_name(op)).await?;
+                let after = edit_state().input.clone();
+                remember(&path, text.clone(), new, (before, after));
+                reload(Some(&path));
+            }
+            Err(why) => {
+                // Not written: the cursor stays where it was.
+                edit_state().input = before;
+                refused = Some(why);
+            }
+        }
+    }
+    if matches!(op, Op::Mode(_)) {
+        load_keymap().await;
+    }
+    show_input(&chart, &score, refused);
+    Ok(input_state())
+}
+
+/// Keyflow syntax typed at the cursor, written over the bars from there.
+async fn syntax_write(typed: &str) -> Result<Json, String> {
+    let _one = ONE_AT_A_TIME.lock().await;
+    let Some((_, path)) = active_chart() else {
+        return Err("Open a chart first".to_owned());
+    };
+    let handle = handle()?;
+    let text = read_text(&handle, &path).await?;
+    let chart = keyflow::text::chart::parse_chart(&text)?;
+    let from = edit_state().input.cursor.bar;
+    let refused = match keyflow::edit::commit::splice_syntax(&text, &chart, from, typed) {
+        Ok((new, bars)) => {
+            write_text(&handle, &path, new.clone(), "Type bars").await?;
+            reload(Some(&path));
+            let before = edit_state().input.clone();
+            let mut after = before.clone();
+            after.cursor = Pos {
+                bar: from + bars,
+                tick: 0,
+            };
+            edit_state().input = after.clone();
+            remember(&path, text.clone(), new, (before, after));
+            None
+        }
+        Err(why) => Some(why),
+    };
+    let score = Score::from_chart(&chart);
+    show_input(&chart, &score, refused);
+    Ok(input_state())
+}
+
+/// The status line, the cursor and the shadow note shown on every pane of
+/// the active chart, and the toolbar lit.
+fn show_input(chart: &keyflow::Chart, score: &Score, refused: Option<String>) {
+    let (overlay, path) = {
+        let mut e = edit_state();
+        e.status = e.input.status(score);
+        e.refused = refused;
+        let path = e
+            .active
+            .and_then(|k| open_charts().get(&k).map(|o| o.path.clone()));
+        (overlay(&e.input, chart, score), path)
+    };
+    for open in open_charts().values() {
+        let on = path.as_deref() == Some(open.path.as_str());
+        open.data.update(|s| s.input = if on { overlay } else { None });
+        open.wake.wake();
+    }
+    publish_input();
+}
+
+/// Note input's cursor and shadow note, as the pane draws them.
+fn overlay(input: &edit::InputState, chart: &keyflow::Chart, score: &Score) -> Option<InputOverlay> {
+    if !input.mode.is_input() {
+        return None;
+    }
+    let bar = input.cursor.bar.min(score.bars.len().checked_sub(1)?);
+    let length = f64::from(score.bars[bar].length.max(1));
+    // Syntax writes whole bars: the cursor is the bar.
+    let (from, to) = if input.mode == Mode::Syntax {
+        (0.0, 1.0)
+    } else {
+        (
+            f64::from(input.cursor.tick) / length,
+            (f64::from(input.cursor.tick + input.duration.ticks()) / length).min(1.0),
+        )
+    };
+    let shadow = match input.mode {
+        _ if input.rest => Some(ShadowNote {
+            below_top: 4,
+            open: false,
+            rest: true,
+        }),
+        // Input by duration: the pitch cursor, where it would go.
+        Mode::Duration => Some(ShadowNote {
+            below_top: top_line(chart, bar) - input.pitch.step(),
+            open: input.duration.value >= edit::Value::Half,
+            rest: false,
+        }),
+        _ => None,
+    };
+    Some(InputOverlay {
+        bar,
+        from,
+        to,
+        shadow,
+    })
+}
+
+/// The staff step of the top line of bar `bar`'s staff, by its clef.
+fn top_line(chart: &keyflow::Chart, bar: usize) -> i32 {
+    use keyflow::chart::ChartClef;
+    let mut n = 0;
+    // The engraver's default: a chart that declares no clef is in bass.
+    let mut clef = chart.initial_clef.unwrap_or(ChartClef::Bass);
+    for section in &chart.sections {
+        let count = section.measures().len();
+        if bar < n + count {
+            clef = section.clef.unwrap_or(clef);
+            break;
+        }
+        n += count;
+    }
+    let top = match clef {
+        ChartClef::Bass => edit::Pitch::new('A', 0, 3),
+        ChartClef::Alto => edit::Pitch::new('G', 0, 4),
+        ChartClef::Tenor => edit::Pitch::new('E', 0, 4),
+        ChartClef::Treble | ChartClef::Percussion => edit::Pitch::new('F', 0, 5),
+    };
+    top.step()
+}
+
+/// An operation's name, as the undo history shows it.
+fn op_name(op: Op) -> String {
+    match op {
+        Op::Letter(l) => format!("Enter {l}"),
+        Op::Rest => "Enter rest".to_owned(),
+        Op::Tie => "Add tied note".to_owned(),
+        Op::Duration(v) => format!("Enter {}", v.name().to_lowercase()),
+        Op::Semitone(true) => "Pitch up".to_owned(),
+        Op::Semitone(false) => "Pitch down".to_owned(),
+        Op::Octave(true) => "Octave up".to_owned(),
+        Op::Octave(false) => "Octave down".to_owned(),
+        Op::Delete => "Delete".to_owned(),
+        Op::Accidental(_) => "Change accidental".to_owned(),
+        Op::Dot => "Toggle dot".to_owned(),
+        _ => "Edit".to_owned(),
+    }
+}
+
+/// Note input as `KEYFLOW_INPUT_STATE` reports it.
+fn input_state() -> Json {
+    let e = edit_state();
+    json!({
+        "mode": e.input.mode.name(),
+        "duration": e.input.duration.name(),
+        "accidental": e.input.accidental,
+        "rest": e.input.rest,
+        "cursor": { "bar": e.input.cursor.bar + 1, "tick": e.input.cursor.tick },
+        "pitch": e.input.pitch.name(),
+        "status": e.status,
+        "refused": e.refused,
+    })
+}
+
+/// A key pressed or a bar clicked on a chart: a key run as the action the
+/// keymap binds it to, through the host (as ⌘K and MCP run it); a click
+/// noted as where note input starts, or the cursor moved there.
+async fn gesture(g: ChartGesture) {
+    match g {
+        ChartGesture::Key { key, mods } => {
+            let chord = input::chord(&key, &mods);
+            let (action, mode) = {
+                let e = edit_state();
+                (e.keymap.get(&chord).cloned(), e.input.mode)
+            };
+            let Some(action) = action else { return };
+            let history = input::HISTORY_KEYS.iter().any(|(a, _)| *a == action);
+            // Normal mode: only the keys into note input (the chart's own
+            // selection keys are MuseScore's next step).
+            if mode == Mode::Normal && input::mode_of(&action).is_none() && !history {
+                return;
+            }
+            if mode == Mode::Syntax && action != "KEYFLOW_ESCAPE" && input::mode_of(&action).is_none() {
+                return;
+            }
+            let _ = dispatch(&action, json!({})).await;
+        }
+        ChartGesture::Click { bar, fraction } => {
+            let input = {
+                let mut e = edit_state();
+                e.clicked = Some((bar, fraction));
+                e.input.mode.is_input()
+            };
+            if input {
+                let _ = dispatch("KEYFLOW_INPUT_MOVE", json!({ "bar": bar, "fraction": fraction })).await;
+            }
+        }
+    }
+}
+
+/// `action` run through the host, so a key runs what ⌘K and MCP run.
+async fn dispatch(action: &str, args: Json) -> Result<Json, String> {
+    handle()?
+        .host(HostRequest::Run {
+            action: action.to_owned(),
+            args,
+            ticket: None,
+        })
+        .await
+        .map_err(|e| format!("{e:?}"))
+}
+
+/// The keymap read again from the person's settings: each action's
+/// `keyflow.keys.*`, MuseScore's key when unset.
+async fn load_keymap() {
+    let Ok(handle) = handle() else { return };
+    let mut map = BTreeMap::new();
+    for (action, default) in input::default_keys() {
+        let set = handle
+            .host(HostRequest::Setting {
+                key: input::setting_key(action),
+            })
+            .await
+            .ok()
+            .and_then(|v| v.as_str().map(str::to_owned))
+            .filter(|k| !k.trim().is_empty());
+        map.insert(set.unwrap_or_else(|| default.to_owned()), action.to_owned());
+    }
+    edit_state().keymap = map;
 }
 
 /// The chart at `path`, read through the host and parsed.
@@ -336,9 +875,10 @@ fn state() -> Json {
         .collect();
     let on: Vec<&str> = {
         let state = input();
+        let edit = edit_state().input.clone();
         tools::TOOLS
             .iter()
-            .filter(|t| state.is_on(t.command))
+            .filter(|t| state.is_on(&edit, t.command))
             .map(|t| t.action)
             .collect()
     };

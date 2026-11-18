@@ -68,6 +68,7 @@ fn pane(text: &str) -> Pane {
         playhead_secs: None,
         theme: Some(ChartTheme::default()),
         view: ChartView::default(),
+        input: None,
     });
     let mount = chart_mount(data.clone());
     let ctx = ViewCtx::new(

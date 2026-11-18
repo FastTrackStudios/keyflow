@@ -28,8 +28,10 @@ path = "features/extension"
 
 [capabilities]
 effect = "mutating"
-# A chart's text: read to engrave it.
+# A chart's text: read to engrave it, and written by note input (each
+# operation one edit_document commit, one undo step).
 reads = ["documents"]
+writes = ["documents"]
 
 [[actions]]
 id = "KEYFLOW_STATE"
@@ -67,8 +69,24 @@ params = '{"type":"object","properties":{"path":{"type":"string"}}}'
 
 [[actions]]
 id = "KEYFLOW_NOTE_INPUT"
-name = "Keyflow: note input"
-description = "Note input on or off: entry on the chart, with the duration, accidental and marks chosen here."
+name = "Keyflow: input by note name"
+description = "Note input by note name, MuseScore's default (N), or out of it: choose a duration (1–7), then A–G enters the note at it and moves on; 0 a rest, T a tie, ↑ ↓ a semitone, Esc back to normal mode. It starts where the chart was last clicked."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_INPUT_BY_DURATION"
+name = "Keyflow: input by duration"
+description = "Note input by duration (M), or out of it: A–G or ↑ ↓ (a step) and Ctrl+↑ ↓ (an octave) move the pitch cursor, shown on the chart as the shadow note; a duration key (1–7) enters it."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_INPUT_SYNTAX"
+name = "Keyflow: input via syntax"
+description = "Keyflow's own syntax typed at the cursor (K), or out of it: type bars (`C / / / | Am7 / F G`) in the field under the chart and Enter writes them over the bars from the cursor on."
 group = "Keyflow"
 effect = "mutating"
 toggle = true
@@ -76,7 +94,7 @@ toggle = true
 [[actions]]
 id = "KEYFLOW_DURATION_64TH"
 name = "Keyflow: 64th note"
-description = "The duration the next entry or the selection takes."
+description = "The duration the next entry takes; in input by duration, the pitch cursor entered at it."
 group = "Keyflow"
 effect = "mutating"
 toggle = true
@@ -84,7 +102,7 @@ toggle = true
 [[actions]]
 id = "KEYFLOW_DURATION_32ND"
 name = "Keyflow: 32nd note"
-description = "The duration the next entry or the selection takes."
+description = "The duration the next entry takes; in input by duration, the pitch cursor entered at it."
 group = "Keyflow"
 effect = "mutating"
 toggle = true
@@ -92,7 +110,7 @@ toggle = true
 [[actions]]
 id = "KEYFLOW_DURATION_16TH"
 name = "Keyflow: 16th note"
-description = "The duration the next entry or the selection takes."
+description = "The duration the next entry takes; in input by duration, the pitch cursor entered at it."
 group = "Keyflow"
 effect = "mutating"
 toggle = true
@@ -100,7 +118,7 @@ toggle = true
 [[actions]]
 id = "KEYFLOW_DURATION_EIGHTH"
 name = "Keyflow: eighth note"
-description = "The duration the next entry or the selection takes."
+description = "The duration the next entry takes; in input by duration, the pitch cursor entered at it."
 group = "Keyflow"
 effect = "mutating"
 toggle = true
@@ -108,7 +126,7 @@ toggle = true
 [[actions]]
 id = "KEYFLOW_DURATION_QUARTER"
 name = "Keyflow: quarter note"
-description = "The duration the next entry or the selection takes."
+description = "The duration the next entry takes; in input by duration, the pitch cursor entered at it."
 group = "Keyflow"
 effect = "mutating"
 toggle = true
@@ -116,7 +134,7 @@ toggle = true
 [[actions]]
 id = "KEYFLOW_DURATION_HALF"
 name = "Keyflow: half note"
-description = "The duration the next entry or the selection takes."
+description = "The duration the next entry takes; in input by duration, the pitch cursor entered at it."
 group = "Keyflow"
 effect = "mutating"
 toggle = true
@@ -124,7 +142,7 @@ toggle = true
 [[actions]]
 id = "KEYFLOW_DURATION_WHOLE"
 name = "Keyflow: whole note"
-description = "The duration the next entry or the selection takes."
+description = "The duration the next entry takes; in input by duration, the pitch cursor entered at it."
 group = "Keyflow"
 effect = "mutating"
 toggle = true
@@ -148,7 +166,7 @@ toggle = true
 [[actions]]
 id = "KEYFLOW_DOUBLE_FLAT"
 name = "Keyflow: double flat"
-description = "The accidental the next note takes; chosen again, none."
+description = "The accidental the next note takes (- flat, = natural, + sharp); chosen again, none."
 group = "Keyflow"
 effect = "mutating"
 toggle = true
@@ -156,7 +174,7 @@ toggle = true
 [[actions]]
 id = "KEYFLOW_FLAT"
 name = "Keyflow: flat"
-description = "The accidental the next note takes; chosen again, none."
+description = "The accidental the next note takes (- flat, = natural, + sharp); chosen again, none."
 group = "Keyflow"
 effect = "mutating"
 toggle = true
@@ -164,7 +182,7 @@ toggle = true
 [[actions]]
 id = "KEYFLOW_NATURAL"
 name = "Keyflow: natural"
-description = "The accidental the next note takes; chosen again, none."
+description = "The accidental the next note takes (- flat, = natural, + sharp); chosen again, none."
 group = "Keyflow"
 effect = "mutating"
 toggle = true
@@ -172,7 +190,7 @@ toggle = true
 [[actions]]
 id = "KEYFLOW_SHARP"
 name = "Keyflow: sharp"
-description = "The accidental the next note takes; chosen again, none."
+description = "The accidental the next note takes (- flat, = natural, + sharp); chosen again, none."
 group = "Keyflow"
 effect = "mutating"
 toggle = true
@@ -180,7 +198,7 @@ toggle = true
 [[actions]]
 id = "KEYFLOW_DOUBLE_SHARP"
 name = "Keyflow: double sharp"
-description = "The accidental the next note takes; chosen again, none."
+description = "The accidental the next note takes (- flat, = natural, + sharp); chosen again, none."
 group = "Keyflow"
 effect = "mutating"
 toggle = true
@@ -188,10 +206,9 @@ toggle = true
 [[actions]]
 id = "KEYFLOW_TIE"
 name = "Keyflow: tie"
-description = "Ties the next entry to the one before."
+description = "A note of the pitch just entered, at the duration chosen, tied from it (T)."
 group = "Keyflow"
 effect = "mutating"
-toggle = true
 
 [[actions]]
 id = "KEYFLOW_ACCENT"
@@ -241,6 +258,394 @@ group = "Keyflow"
 effect = "mutating"
 toggle = true
 
+[[actions]]
+id = "KEYFLOW_NOTE_A"
+name = "Keyflow: note A"
+description = "A: in input by note name, A entered at the duration and the cursor moved on (the octave nearest the note before, the key signature's accidental unless one is armed); in input by duration, the pitch cursor moved to A."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_NOTE_B"
+name = "Keyflow: note B"
+description = "B: in input by note name, B entered at the duration and the cursor moved on (the octave nearest the note before, the key signature's accidental unless one is armed); in input by duration, the pitch cursor moved to B."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_NOTE_C"
+name = "Keyflow: note C"
+description = "C: in input by note name, C entered at the duration and the cursor moved on (the octave nearest the note before, the key signature's accidental unless one is armed); in input by duration, the pitch cursor moved to C."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_NOTE_D"
+name = "Keyflow: note D"
+description = "D: in input by note name, D entered at the duration and the cursor moved on (the octave nearest the note before, the key signature's accidental unless one is armed); in input by duration, the pitch cursor moved to D."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_NOTE_E"
+name = "Keyflow: note E"
+description = "E: in input by note name, E entered at the duration and the cursor moved on (the octave nearest the note before, the key signature's accidental unless one is armed); in input by duration, the pitch cursor moved to E."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_NOTE_F"
+name = "Keyflow: note F"
+description = "F: in input by note name, F entered at the duration and the cursor moved on (the octave nearest the note before, the key signature's accidental unless one is armed); in input by duration, the pitch cursor moved to F."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_NOTE_G"
+name = "Keyflow: note G"
+description = "G: in input by note name, G entered at the duration and the cursor moved on (the octave nearest the note before, the key signature's accidental unless one is armed); in input by duration, the pitch cursor moved to G."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_ENTER_REST"
+name = "Keyflow: rest"
+description = "A rest at the duration, and the cursor moved on (0)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_PITCH_UP"
+name = "Keyflow: pitch up"
+description = "The note just entered up a semitone, spelled with sharps (↑); in input by duration, the pitch cursor up a step."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_PITCH_DOWN"
+name = "Keyflow: pitch down"
+description = "The note just entered down a semitone, spelled with flats (↓); in input by duration, the pitch cursor down a step."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_OCTAVE_UP"
+name = "Keyflow: octave up"
+description = "The note just entered, or the pitch cursor, up an octave (Ctrl+↑)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_OCTAVE_DOWN"
+name = "Keyflow: octave down"
+description = "The note just entered, or the pitch cursor, down an octave (Ctrl+↓)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_NEXT"
+name = "Keyflow: next note"
+description = "The cursor to the next note or rest (→)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_PREVIOUS"
+name = "Keyflow: previous note"
+description = "The cursor to the previous note or rest (←)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_NEXT_BAR"
+name = "Keyflow: next bar"
+description = "The cursor to the next bar (Ctrl+→)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_PREVIOUS_BAR"
+name = "Keyflow: previous bar"
+description = "The cursor to the previous bar (Ctrl+←)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_DELETE"
+name = "Keyflow: delete"
+description = "The note just entered or moved to becomes a rest of its duration (Del)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_ESCAPE"
+name = "Keyflow: leave note input"
+description = "Out of note input, back to normal mode (Esc)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INPUT_MOVE"
+name = "Keyflow: move the input cursor"
+description = "The note-input cursor to the note or rest at `fraction` (0 to 1) across bar `bar` (the chart's bars from 0): what a click on the chart does in note input."
+group = "Keyflow"
+effect = "mutating"
+params = '{"type":"object","required":["bar"],"properties":{"bar":{"type":"integer","minimum":0},"fraction":{"type":"number","minimum":0,"maximum":1}}}'
+
+[[actions]]
+id = "KEYFLOW_SYNTAX_WRITE"
+name = "Keyflow: write bars in Keyflow syntax"
+description = "Bars typed in Keyflow's syntax (`text`: `C / / / | Am7 / F G`) written over the active chart's bars from the input cursor on, and the cursor moved past them; refused, with why, when they do not read or run past the chart's end."
+group = "Keyflow"
+effect = "mutating"
+params = '{"type":"object","required":["text"],"properties":{"text":{"type":"string"}}}'
+
+[[actions]]
+id = "KEYFLOW_UNDO"
+name = "Keyflow: undo note input"
+description = "Note input's last edit taken back (⌘Z), as a new edit, when the chart is still as that edit left it."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_REDO"
+name = "Keyflow: redo note input"
+description = "Note input's last undone edit made again (⇧⌘Z)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INPUT_STATE"
+name = "Keyflow: note input state"
+description = "Note input as it is: the `mode`, the `duration`, the armed `accidental` (−2 to 2), the `rest` tool, the `cursor` (bar from 1, tick of 384 a whole), the `pitch` cursor, the `status` line and what the last operation could not do (`refused`)."
+group = "Keyflow"
+effect = "read_only"
+
+[[actions]]
+id = "KEYFLOW_KEYMAP_RELOAD"
+name = "Keyflow: reload note input's keys"
+description = "Reads note input's keys again from the settings (Settings → Keyflow note input), as entering note input does."
+group = "Keyflow"
+effect = "read_only"
+
+# Note input's keys: MuseScore's by default, each one a setting a person
+# can change (src/input.rs; Settings → Keyflow note input). Entering note
+# input reads them again (KEYFLOW_KEYMAP_RELOAD).
+[[sections]]
+id = "keyflow-keys"
+title = "Keyflow note input"
+icon = "keyboard"
+
+[[sections.settings]]
+key = "keyflow.keys.note_a"
+title = "Note a"
+control = "shortcut"
+default = "A"
+
+[[sections.settings]]
+key = "keyflow.keys.note_b"
+title = "Note b"
+control = "shortcut"
+default = "B"
+
+[[sections.settings]]
+key = "keyflow.keys.note_c"
+title = "Note c"
+control = "shortcut"
+default = "C"
+
+[[sections.settings]]
+key = "keyflow.keys.note_d"
+title = "Note d"
+control = "shortcut"
+default = "D"
+
+[[sections.settings]]
+key = "keyflow.keys.note_e"
+title = "Note e"
+control = "shortcut"
+default = "E"
+
+[[sections.settings]]
+key = "keyflow.keys.note_f"
+title = "Note f"
+control = "shortcut"
+default = "F"
+
+[[sections.settings]]
+key = "keyflow.keys.note_g"
+title = "Note g"
+control = "shortcut"
+default = "G"
+
+[[sections.settings]]
+key = "keyflow.keys.enter_rest"
+title = "Rest"
+control = "shortcut"
+default = "0"
+
+[[sections.settings]]
+key = "keyflow.keys.pitch_up"
+title = "Pitch up"
+control = "shortcut"
+default = "↑"
+
+[[sections.settings]]
+key = "keyflow.keys.pitch_down"
+title = "Pitch down"
+control = "shortcut"
+default = "↓"
+
+[[sections.settings]]
+key = "keyflow.keys.octave_up"
+title = "Octave up"
+control = "shortcut"
+default = "⌘↑"
+
+[[sections.settings]]
+key = "keyflow.keys.octave_down"
+title = "Octave down"
+control = "shortcut"
+default = "⌘↓"
+
+[[sections.settings]]
+key = "keyflow.keys.next"
+title = "Next note"
+control = "shortcut"
+default = "→"
+
+[[sections.settings]]
+key = "keyflow.keys.previous"
+title = "Previous note"
+control = "shortcut"
+default = "←"
+
+[[sections.settings]]
+key = "keyflow.keys.next_bar"
+title = "Next bar"
+control = "shortcut"
+default = "⌘→"
+
+[[sections.settings]]
+key = "keyflow.keys.previous_bar"
+title = "Previous bar"
+control = "shortcut"
+default = "⌘←"
+
+[[sections.settings]]
+key = "keyflow.keys.delete"
+title = "Delete"
+control = "shortcut"
+default = "⌦"
+
+[[sections.settings]]
+key = "keyflow.keys.escape"
+title = "Leave note input"
+control = "shortcut"
+default = "⎋"
+
+[[sections.settings]]
+key = "keyflow.keys.undo"
+title = "Undo note input"
+control = "shortcut"
+default = "⌘Z"
+
+[[sections.settings]]
+key = "keyflow.keys.redo"
+title = "Redo note input"
+control = "shortcut"
+default = "⇧⌘Z"
+
+[[sections.settings]]
+key = "keyflow.keys.note_input"
+title = "Input by note name"
+control = "shortcut"
+default = "N"
+
+[[sections.settings]]
+key = "keyflow.keys.input_by_duration"
+title = "Input by duration"
+control = "shortcut"
+default = "M"
+
+[[sections.settings]]
+key = "keyflow.keys.input_syntax"
+title = "Input via syntax"
+control = "shortcut"
+default = "K"
+
+[[sections.settings]]
+key = "keyflow.keys.duration_64th"
+title = "64th note"
+control = "shortcut"
+default = "1"
+
+[[sections.settings]]
+key = "keyflow.keys.duration_32nd"
+title = "32nd note"
+control = "shortcut"
+default = "2"
+
+[[sections.settings]]
+key = "keyflow.keys.duration_16th"
+title = "16th note"
+control = "shortcut"
+default = "3"
+
+[[sections.settings]]
+key = "keyflow.keys.duration_eighth"
+title = "Eighth note"
+control = "shortcut"
+default = "4"
+
+[[sections.settings]]
+key = "keyflow.keys.duration_quarter"
+title = "Quarter note"
+control = "shortcut"
+default = "5"
+
+[[sections.settings]]
+key = "keyflow.keys.duration_half"
+title = "Half note"
+control = "shortcut"
+default = "6"
+
+[[sections.settings]]
+key = "keyflow.keys.duration_whole"
+title = "Whole note"
+control = "shortcut"
+default = "7"
+
+[[sections.settings]]
+key = "keyflow.keys.dot"
+title = "Augmentation dot"
+control = "shortcut"
+default = "."
+
+[[sections.settings]]
+key = "keyflow.keys.flat"
+title = "Flat"
+control = "shortcut"
+default = "-"
+
+[[sections.settings]]
+key = "keyflow.keys.natural"
+title = "Natural"
+control = "shortcut"
+default = "="
+
+[[sections.settings]]
+key = "keyflow.keys.sharp"
+title = "Sharp"
+control = "shortcut"
+default = "+"
+
+[[sections.settings]]
+key = "keyflow.keys.tie"
+title = "Tie"
+control = "shortcut"
+default = "T"
+
 # The note-input toolbar, on the chart's own pane: it goes wherever the
 # view is docked. Its glyphs are the chart's music font (src/icons.rs).
 [[toolbars]]
@@ -251,7 +656,19 @@ where = "view:keyflow/chart"
 [[toolbars.items]]
 action = "KEYFLOW_NOTE_INPUT"
 icon = "pencil"
-label = "Note input"
+label = "Input by note name"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_INPUT_BY_DURATION"
+icon = "ruler"
+label = "Input by duration"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_INPUT_SYNTAX"
+icon = "code"
+label = "Input via syntax"
 hide_label = true
 
 [[toolbars.items]]
