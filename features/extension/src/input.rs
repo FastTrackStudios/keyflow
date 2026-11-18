@@ -42,6 +42,17 @@ pub const OP_ACTIONS: &[OpAction] = &[
     op("KEYFLOW_PREVIOUS_BAR", Op::PrevBar, "⌘←"),
     op("KEYFLOW_DELETE", Op::Delete, "⌦"),
     op("KEYFLOW_ESCAPE", Op::Escape, "⎋"),
+    op("KEYFLOW_ADD_A", Op::AddToChord('A'), "⇧A"),
+    op("KEYFLOW_ADD_B", Op::AddToChord('B'), "⇧B"),
+    op("KEYFLOW_ADD_C", Op::AddToChord('C'), "⇧C"),
+    op("KEYFLOW_ADD_D", Op::AddToChord('D'), "⇧D"),
+    op("KEYFLOW_ADD_E", Op::AddToChord('E'), "⇧E"),
+    op("KEYFLOW_ADD_F", Op::AddToChord('F'), "⇧F"),
+    op("KEYFLOW_ADD_G", Op::AddToChord('G'), "⇧G"),
+    op("KEYFLOW_DOUBLE", Op::Double, "W"),
+    op("KEYFLOW_HALVE", Op::Halve, "Q"),
+    op("KEYFLOW_LONGER", Op::Longer, "⇧W"),
+    op("KEYFLOW_SHORTER", Op::Shorter, "⇧Q"),
 ];
 
 /// The toolbar's actions that are note input's operations, and their keys
@@ -68,6 +79,9 @@ pub const TOOL_KEYS: &[(&str, &str)] = &[
 /// Undo and redo of note input's own edits: keys in every mode.
 pub const HISTORY_KEYS: &[(&str, &str)] = &[("KEYFLOW_UNDO", "⌘Z"), ("KEYFLOW_REDO", "⇧⌘Z")];
 
+/// Tab: chord symbols or notes, what a letter enters.
+pub const TARGET_KEY: (&str, &str) = ("KEYFLOW_TARGET_SWITCH", "Tab");
+
 /// Every action with a key, and its key by default.
 pub fn default_keys() -> impl Iterator<Item = (&'static str, &'static str)> {
     OP_ACTIONS
@@ -75,6 +89,7 @@ pub fn default_keys() -> impl Iterator<Item = (&'static str, &'static str)> {
         .map(|a| (a.action, a.key))
         .chain(TOOL_KEYS.iter().copied())
         .chain(HISTORY_KEYS.iter().copied())
+        .chain(std::iter::once(TARGET_KEY))
 }
 
 /// The setting that holds `action`'s key.

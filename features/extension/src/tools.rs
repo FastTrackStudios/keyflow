@@ -10,7 +10,7 @@
 
 use std::collections::BTreeSet;
 
-use keyflow::edit::{self, Mode, Op};
+use keyflow::edit::{self, Mode, Op, Target};
 
 /// A note value, from the 64th to the whole.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -62,6 +62,8 @@ pub enum Articulation {
 pub enum Command {
     /// Into an input mode, or out of it when it is the one on.
     Mode(Mode),
+    /// What a letter enters: chord symbols or notes.
+    Target(Target),
     /// The duration: chosen, it stays chosen (one at a time).
     Duration(Duration),
     Dot,
@@ -85,6 +87,7 @@ impl Command {
         Some(match self {
             Self::Mode(m) if m == now => Op::Escape,
             Self::Mode(m) => Op::Mode(m),
+            Self::Target(t) => Op::Target(t),
             Self::Duration(d) => Op::Duration(crate::input::value_of(d)),
             Self::Dot => Op::Dot,
             Self::Rest => Op::RestTool,
@@ -133,6 +136,7 @@ impl InputState {
     pub fn is_on(&self, edit: &edit::InputState, command: Command) -> bool {
         match command {
             Command::Mode(m) => edit.mode == m,
+            Command::Target(t) => edit.target == t,
             Command::Duration(d) => edit.duration.value == crate::input::value_of(d),
             Command::Dot => edit.duration.dots > 0,
             Command::Rest => edit.rest,
@@ -194,6 +198,18 @@ pub const TOOLS: &[Tool] = &[
         "Input via syntax",
         Icon("code"),
         Command::Mode(Mode::Syntax),
+    ),
+    tool(
+        "KEYFLOW_TARGET_CHORDS",
+        "Enter chord symbols",
+        Icon("type"),
+        Command::Target(Target::Chords),
+    ),
+    tool(
+        "KEYFLOW_TARGET_NOTES",
+        "Enter notes",
+        Icon("music"),
+        Command::Target(Target::Notes),
     ),
     tool(
         "KEYFLOW_DURATION_64TH",

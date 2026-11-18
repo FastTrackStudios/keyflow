@@ -466,7 +466,54 @@ impl Bar {
         });
         self.events = out;
         self.written = true;
-        first
+        let _ = first;
+        // Rests regrouped by the beat; the new event is where it starts.
+        self.regroup_rests();
+        self.index_at(at).unwrap_or(0)
+    }
+
+    /// Each run of rests rewritten as the beat groups it (MuseScore's rests
+    /// after an edit): from where it starts, the longest rest value that
+    /// starts on a multiple of its own length and fits, so a run from beat 2
+    /// to the end of a 4/4 bar is `r4 r2`, not `r2 r4`, and one from the
+    /// and of 1 is `r8 r4 r2`.
+    pub fn regroup_rests(&mut self) {
+        let mut out: Vec<Event> = Vec::new();
+        let mut tick = 0;
+        let mut run: Option<(u32, u32, u8)> = None; // start, end, marks
+        let flush = |out: &mut Vec<Event>, run: &mut Option<(u32, u32, u8)>| {
+            let Some((mut at, end, _)) = run.take() else {
+                return;
+            };
+            while at < end {
+                let fit = Value::ALL
+                    .iter()
+                    .rev()
+                    .map(|v| v.ticks())
+                    .find(|&t| at % t == 0 && at + t <= end)
+                    .unwrap_or(end - at);
+                let d = Duration::split(fit);
+                for d in d {
+                    out.push(Event::rest(d));
+                    at += d.ticks();
+                }
+            }
+        };
+        for e in &self.events {
+            let len = e.duration.ticks();
+            if e.pitch().is_none() && e.marks == 0 {
+                run = Some(match run {
+                    Some((s, _, m)) => (s, tick + len, m),
+                    None => (tick, tick + len, 0),
+                });
+            } else {
+                flush(&mut out, &mut run);
+                out.push(*e);
+            }
+            tick += len;
+        }
+        flush(&mut out, &mut run);
+        self.events = out;
     }
 
     /// The bar's line as Keyflow writes a melody: `m{ F#:44 r2 }`, every

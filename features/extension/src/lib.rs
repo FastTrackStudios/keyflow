@@ -37,7 +37,7 @@ use keyflow::edit::{self, Mode, Op, Pos, Score};
 use keyflow::engraver::renderer::ChartTheme;
 use keyflow_ui::paint_view::{
     ChartGesture, ChartGestures, ChartSelection, ChartSnapshot, ChartView, InputOverlay,
-    ShadowNote, chart_mount_with,
+    PointerShadow, ShadowNote, chart_mount_with,
 };
 use serde_json::{Value as Json, json};
 use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
@@ -65,7 +65,7 @@ impl Extension for Keyflow {
             ext.action(tool.action, move |_| async move {
                 let now = edit_state().input.mode;
                 if let Some(op) = command.op(now) {
-                    return run_op(move |_| op).await;
+                    return run_op(move |_| vec![op]).await;
                 }
                 let on = {
                     let mut input = input();
@@ -78,10 +78,9 @@ impl Extension for Keyflow {
         }
         for action in input::OP_ACTIONS {
             let op = action.op;
-            ext.action(
-                action.action,
-                move |_| async move { run_op(move |_| op).await },
-            );
+            ext.action(action.action, move |_| async move {
+                run_op(move |_| vec![op]).await
+            });
         }
         ext.action("KEYFLOW_INPUT_MOVE", |args| async move {
             let bar = args
@@ -89,14 +88,57 @@ impl Extension for Keyflow {
                 .and_then(Json::as_u64)
                 .ok_or("bar: a number")? as usize;
             let fraction = args.get("fraction").and_then(Json::as_f64).unwrap_or(0.0);
-            run_op(move |score| {
+            let target = match args.get("target").and_then(Json::as_str) {
+                Some("chords") => Some(edit::Target::Chords),
+                Some("notes") => Some(edit::Target::Notes),
+                _ => None,
+            };
+            let select = args.get("select").and_then(Json::as_bool).unwrap_or(true);
+            let out = run_op(move |score| {
                 let length = score.bars.get(bar).map_or(0, |b| b.length);
-                Op::MoveTo(Pos {
+                let at = Op::MoveTo(Pos {
                     bar,
                     tick: (fraction.clamp(0.0, 1.0) * f64::from(length)) as u32,
-                })
+                });
+                target.map_or_else(|| vec![at], |t| vec![Op::Target(t), at])
+            })
+            .await;
+            if !select {
+                edit_state().input.selected = None;
+                rerender_input().await;
+            }
+            out
+        });
+        ext.action("KEYFLOW_INPUT_ENTER_AT", |args| async move {
+            let bar = args
+                .get("bar")
+                .and_then(Json::as_u64)
+                .ok_or("bar: a number")? as usize;
+            let fraction = args.get("fraction").and_then(Json::as_f64).unwrap_or(0.0);
+            let below_top = args.get("below_top").and_then(Json::as_i64).unwrap_or(4) as i32;
+            let top = TOP_STEP.load(Ordering::Relaxed);
+            run_op(move |score| {
+                let length = score.bars.get(bar).map_or(0, |b| b.length);
+                vec![
+                    Op::MoveTo(Pos {
+                        bar,
+                        tick: (fraction.clamp(0.0, 1.0) * f64::from(length)) as u32,
+                    }),
+                    Op::EnterStep(top - below_top),
+                ]
             })
             .await
+        });
+        ext.action("KEYFLOW_TARGET_SWITCH", |_| async {
+            let next = match edit_state().input.target {
+                edit::Target::Chords => edit::Target::Notes,
+                edit::Target::Notes => edit::Target::Chords,
+            };
+            run_op(move |_| vec![Op::Target(next)]).await
+        });
+        ext.action("KEYFLOW_SYNTAX_PREVIEW", |args| async move {
+            let typed = text(&args, "text").unwrap_or_default();
+            syntax_preview(&typed).await
         });
         ext.action("KEYFLOW_SYNTAX_WRITE", |args| async move {
             let typed = text(&args, "text").ok_or("text: the bars to write")?;
@@ -169,6 +211,9 @@ struct EditState {
     active: Option<u64>,
     /// The last bar clicked and how far across: where note input starts.
     clicked: Option<(usize, f64)>,
+    /// Syntax typed and not yet written: the bars it would write from the
+    /// cursor, shown on the chart as they would be.
+    preview: Option<usize>,
     /// Shortcut → action: MuseScore's keys, as the person's settings
     /// change them (`keyflow.keys.*`).
     keymap: BTreeMap<String, String>,
@@ -266,6 +311,7 @@ fn ChartPane() -> Element {
     // input change shows or hides the palettes.
     let mut status = use_signal(|| edit_state().status.clone());
     let mut mode = use_signal(|| edit_state().input.mode);
+    let mut target = use_signal(|| edit_state().input.target);
     let mut draft = use_signal(String::new);
     // The syntax field is uncontrolled (a value written back on every key
     // moves the caret as it is typed); a new key clears it.
@@ -284,6 +330,7 @@ fn ChartPane() -> Element {
                             None => e.status.clone(),
                         });
                         mode.set(e.input.mode);
+                        target.set(e.input.target);
                     }
                     // In order, one at a time: C D E typed fast is C D E.
                     Msg::Gesture(g) => {
@@ -393,12 +440,20 @@ fn ChartPane() -> Element {
                 if mode() == Mode::Syntax {
                     div { style: "display:flex; gap:8px; align-items:center; padding:6px 10px; border-top:1px solid var(--border, #8884);",
                         span { style: "font-size:12px; opacity:0.75; white-space:nowrap;", "Keyflow syntax" }
+                        // Keyed by `field`: a new one (empty) after each write.
+                        for generation in std::iter::once(field()) {
                         input {
-                            key: "{field}",
+                            key: "{generation}",
                             style: "flex:1; min-width:0; font-family:ui-monospace, monospace; font-size:13px; padding:4px 6px; border-radius:4px; border:1px solid var(--border, #8886); background:var(--background, transparent); color:var(--foreground, inherit);",
                             placeholder: "C / / / | Am7 / F G",
                             autofocus: true,
-                            oninput: move |e| draft.set(e.value()),
+                            oninput: move |e| {
+                                let typed = e.value();
+                                draft.set(typed.clone());
+                                spawn(async move {
+                                    let _ = dispatch("KEYFLOW_SYNTAX_PREVIEW", json!({ "text": typed })).await;
+                                });
+                            },
                             onkeydown: move |e| {
                                 match e.key().to_string().as_str() {
                                     "Enter" => {
@@ -421,6 +476,7 @@ fn ChartPane() -> Element {
                                 }
                             },
                         }
+                        }
                     }
                 }
                 // The mode, always shown, and what the next key does:
@@ -433,6 +489,13 @@ fn ChartPane() -> Element {
                             "padding:1px 8px; border-radius:9px; border:1px solid var(--border, #8886); white-space:nowrap; opacity:0.8;"
                         },
                         "{mode().name()}"
+                    }
+                    // What a letter enters, while entering: Tab switches.
+                    if mode() == Mode::NoteName || mode() == Mode::Duration {
+                        span {
+                            style: "padding:1px 8px; border-radius:9px; border:1px solid var(--primary, #4f46e5); color:var(--primary, #4f46e5); white-space:nowrap;",
+                            "{target().name()}"
+                        }
                     }
                     span { style: "opacity:0.8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;",
                         "{status}"
@@ -593,7 +656,7 @@ fn step_text(step: &Step, now: &str, undo: bool) -> Result<String, String> {
 /// One note-input operation on the active chart: read it, apply it, write
 /// the bars it changed back, and show where input is now. `make` builds
 /// the operation from the chart's bars (a click's tick needs its bar).
-async fn run_op(make: impl FnOnce(&Score) -> Op) -> Result<Json, String> {
+async fn run_op(make: impl FnOnce(&Score) -> Vec<Op>) -> Result<Json, String> {
     let _one = ONE_AT_A_TIME.lock().await;
     let Some((key, path)) = active_chart() else {
         return Err("Open a chart first".to_owned());
@@ -602,7 +665,10 @@ async fn run_op(make: impl FnOnce(&Score) -> Op) -> Result<Json, String> {
     let text = read_text(&handle, &path).await?;
     let chart = keyflow::text::chart::parse_chart(&text)?;
     let mut score = Score::from_chart(&chart);
-    let op = make(&score);
+    let ops = make(&score);
+    let Some(&op) = ops.last() else {
+        return Ok(input_state());
+    };
     let (before, outcome) = {
         let mut e = edit_state();
         e.active = Some(key);
@@ -626,7 +692,14 @@ async fn run_op(make: impl FnOnce(&Score) -> Op) -> Result<Json, String> {
             e.input.pitch = edit::Pitch::from_step(top_line(&chart, e.input.cursor.bar) - 4);
         }
         let before = e.input.clone();
-        let outcome = e.input.apply(&mut score, op);
+        let mut outcome = edit::Outcome::default();
+        for op in &ops {
+            let o = e.input.apply(&mut score, *op);
+            outcome.changed.extend(o.changed);
+            if o.refused.is_some() {
+                outcome.refused = o.refused;
+            }
+        }
         (before, outcome)
     };
     let mut refused = outcome.refused.clone();
@@ -665,6 +738,7 @@ async fn syntax_write(typed: &str) -> Result<Json, String> {
     let refused = match keyflow::edit::commit::splice_syntax(&text, &chart, from, typed) {
         Ok((new, bars)) => {
             write_text(&handle, &path, new.clone(), "Type bars").await?;
+            edit_state().preview = None;
             reload(Some(&path));
             let before = edit_state().input.clone();
             let mut after = before.clone();
@@ -683,6 +757,69 @@ async fn syntax_write(typed: &str) -> Result<Json, String> {
     Ok(input_state())
 }
 
+/// Syntax being typed, shown on the chart as it would be written (the
+/// chart engraved from the text it would make, nothing written), or why
+/// it would not be; nothing typed shows the chart as it is.
+async fn syntax_preview(typed: &str) -> Result<Json, String> {
+    let _one = ONE_AT_A_TIME.lock().await;
+    let Some((_, path)) = active_chart() else {
+        return Err("Open a chart first".to_owned());
+    };
+    let handle = handle()?;
+    let text = read_text(&handle, &path).await?;
+    let chart = keyflow::text::chart::parse_chart(&text)?;
+    let from = edit_state().input.cursor.bar;
+    let score = Score::from_chart(&chart);
+    if typed.trim().is_empty() {
+        edit_state().preview = None;
+        reload(Some(&path));
+        show_input(&chart, &score, None);
+        return Ok(input_state());
+    }
+    let refused = match keyflow::edit::commit::splice_syntax(&text, &chart, from, typed) {
+        Ok((new, bars)) => {
+            if let Ok(preview) = keyflow::text::chart::parse_chart(&new) {
+                for open in open_charts().values().filter(|o| o.path == path) {
+                    open.data.update(|s| {
+                        s.chart = preview.clone();
+                        s.revision = s.revision.wrapping_add(1);
+                    });
+                    open.wake.wake();
+                }
+            }
+            edit_state().preview = Some(bars);
+            None
+        }
+        Err(why) => {
+            edit_state().preview = None;
+            Some(why)
+        }
+    };
+    show_input(&chart, &score, refused);
+    Ok(input_state())
+}
+
+/// The overlay drawn again from the active chart as it is.
+async fn rerender_input() {
+    let Some((_, path)) = active_chart() else {
+        return;
+    };
+    let Ok(handle) = handle() else { return };
+    let Ok(text) = read_text(&handle, &path).await else {
+        return;
+    };
+    let Ok(chart) = keyflow::text::chart::parse_chart(&text) else {
+        return;
+    };
+    let score = Score::from_chart(&chart);
+    let refused = edit_state().refused.clone();
+    show_input(&chart, &score, refused);
+}
+
+/// The staff step of the active chart's top line: what a click on the
+/// staff reads its pitch from.
+static TOP_STEP: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(38);
+
 /// The status line, the cursor and the shadow note shown on every pane of
 /// the active chart, and the toolbar lit.
 fn show_input(chart: &keyflow::Chart, score: &Score, refused: Option<String>) {
@@ -693,7 +830,8 @@ fn show_input(chart: &keyflow::Chart, score: &Score, refused: Option<String>) {
         let path = e
             .active
             .and_then(|k| open_charts().get(&k).map(|o| o.path.clone()));
-        (overlay(&e.input, chart, score), path)
+        TOP_STEP.store(top_line(chart, e.input.cursor.bar), Ordering::Relaxed);
+        (overlay(&e.input, e.preview, chart, score), path)
     };
     for open in open_charts().values() {
         let on = path.as_deref() == Some(open.path.as_str());
@@ -707,15 +845,48 @@ fn show_input(chart: &keyflow::Chart, score: &Score, refused: Option<String>) {
 /// Note input's cursor and shadow note, as the pane draws them.
 fn overlay(
     input: &edit::InputState,
+    preview: Option<usize>,
     chart: &keyflow::Chart,
     score: &Score,
 ) -> Option<InputOverlay> {
+    let last = score.bars.len().checked_sub(1)?;
+    // The entry selected: highlighted as itself, in normal mode too.
+    let selected = input.selected.and_then(|pos| {
+        let bar = pos.bar.min(last);
+        let (start, len) = match input.target {
+            edit::Target::Notes => {
+                let b = &score.bars[bar];
+                let i = b.index_at(pos.tick)?;
+                (b.starts()[i], b.events[i].duration.ticks())
+            }
+            edit::Target::Chords => {
+                let b = &score.chords[bar];
+                let i = b.index_at(pos.tick)?;
+                (b.starts()[i], b.events[i].duration.ticks())
+            }
+        };
+        let length = f64::from(score.bars[bar].length.max(1));
+        Some((
+            bar,
+            f64::from(start) / length,
+            f64::from(start + len) / length,
+            input.target == edit::Target::Chords,
+        ))
+    });
     if !input.mode.is_input() {
-        return None;
+        return selected.map(|selected| InputOverlay {
+            bar: selected.0,
+            from: 0.0,
+            to: 0.0,
+            shadow: None,
+            bars: 0,
+            selected: Some(selected),
+            pointer: None,
+        });
     }
-    let bar = input.cursor.bar.min(score.bars.len().checked_sub(1)?);
+    let bar = input.cursor.bar.min(last);
     let length = f64::from(score.bars[bar].length.max(1));
-    // Syntax writes whole bars: the cursor is the bar.
+    // Syntax writes whole bars: the cursor is the bar (or the bars typed).
     let (from, to) = if input.mode == Mode::Syntax {
         (0.0, 1.0)
     } else {
@@ -724,6 +895,7 @@ fn overlay(
             (f64::from(input.cursor.tick + input.duration.ticks()) / length).min(1.0),
         )
     };
+    let notes = input.target == edit::Target::Notes;
     let shadow = match input.mode {
         _ if input.rest => Some(ShadowNote {
             below_top: 4,
@@ -731,18 +903,36 @@ fn overlay(
             rest: true,
         }),
         // Input by duration: the pitch cursor, where it would go.
-        Mode::Duration => Some(ShadowNote {
+        Mode::Duration if notes => Some(ShadowNote {
             below_top: top_line(chart, bar) - input.pitch.step(),
             open: input.duration.value >= edit::Value::Half,
             rest: false,
         }),
         _ => None,
     };
+    // Input by note name, notes: the note a click would enter, under the
+    // pointer (MuseScore's mouse preview).
+    let pointer = (input.mode == Mode::NoteName && notes).then(|| PointerShadow {
+        top_step: top_line(chart, bar),
+        open: input.duration.value >= edit::Value::Half,
+        rest: input.rest,
+    });
     Some(InputOverlay {
         bar,
         from,
         to,
         shadow,
+        bars: if input.mode == Mode::Syntax {
+            preview.unwrap_or(1)
+        } else {
+            1
+        },
+        selected: if input.mode == Mode::Syntax {
+            None
+        } else {
+            selected
+        },
+        pointer,
     })
 }
 
@@ -809,38 +999,64 @@ async fn gesture(g: ChartGesture) {
     match g {
         ChartGesture::Key { key, mods } => {
             let chord = input::chord(&key, &mods);
-            let (action, mode) = {
+            let (action, mode, selected) = {
                 let e = edit_state();
-                (e.keymap.get(&chord).cloned(), e.input.mode)
+                (
+                    e.keymap.get(&chord).cloned(),
+                    e.input.mode,
+                    e.input.selected.is_some(),
+                )
             };
             let Some(action) = action else { return };
-            let history = input::HISTORY_KEYS.iter().any(|(a, _)| *a == action);
-            // Normal mode: only the keys into note input (the chart's own
-            // selection keys are MuseScore's next step).
-            if mode == Mode::Normal && input::mode_of(&action).is_none() && !history {
+            let always = input::HISTORY_KEYS.iter().any(|(a, _)| *a == action)
+                || input::mode_of(&action).is_some()
+                || action == input::TARGET_KEY.0;
+            // Normal mode: a key acts on what is selected on the chart (a
+            // chord or a note clicked), as MuseScore's; with nothing
+            // selected, only the keys into note input and undo.
+            if mode == Mode::Normal && !always && !selected {
                 return;
             }
-            if mode == Mode::Syntax
-                && action != "KEYFLOW_ESCAPE"
-                && input::mode_of(&action).is_none()
-            {
+            if mode == Mode::Syntax && action != "KEYFLOW_ESCAPE" && !always {
                 return;
             }
             let _ = dispatch(&action, json!({})).await;
         }
-        ChartGesture::Click { bar, fraction } => {
-            let input = {
+        ChartGesture::Click {
+            bar,
+            fraction,
+            kind,
+            below_top,
+        } => {
+            let (mode, target) = {
                 let mut e = edit_state();
                 e.clicked = Some((bar, fraction));
-                e.input.mode.is_input()
+                (e.input.mode, e.input.target)
             };
-            if input {
-                let _ = dispatch(
-                    "KEYFLOW_INPUT_MOVE",
-                    json!({ "bar": bar, "fraction": fraction }),
-                )
-                .await;
-            }
+            let on = kind.as_deref();
+            let target_of = match on {
+                Some("chord") => Some("chords"),
+                Some("note" | "rest") => Some("notes"),
+                _ => None,
+            };
+            let args = match mode {
+                // Normal mode: a chord or a note clicked is what keys act on.
+                Mode::Normal => json!({
+                    "bar": bar, "fraction": fraction,
+                    "target": target_of, "select": target_of.is_some(),
+                }),
+                // Entering notes: a click on the staff enters the note there.
+                Mode::NoteName if target == edit::Target::Notes => {
+                    let _ = dispatch(
+                        "KEYFLOW_INPUT_ENTER_AT",
+                        json!({ "bar": bar, "fraction": fraction, "below_top": below_top }),
+                    )
+                    .await;
+                    return;
+                }
+                _ => json!({ "bar": bar, "fraction": fraction }),
+            };
+            let _ = dispatch("KEYFLOW_INPUT_MOVE", args).await;
         }
     }
 }

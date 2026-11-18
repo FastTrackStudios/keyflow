@@ -21,7 +21,7 @@ use std::time::{Duration, Instant};
 use architect::action::{ActionCaller, ActionList};
 use architect_scene::ops::{Receiver, Sender};
 use architect_workspace::paint::peniko::kurbo::Affine;
-use architect_workspace::paint::{Layer, LayerKey, PaintView, Scene};
+use architect_workspace::paint::{Layer, LayerKey, PaintView, RegionEvent, Scene};
 use architect_workspace::{
     Button, FrameClock, Geometry, HostData, KindId, PaneId, Placement, ViewCtx, ViewHost, ViewInput,
 };
@@ -337,40 +337,51 @@ fn measure(name: &str) {
     // A hover: the pointer onto another chord, which is drawn again as
     // itself in the hover colour, in a layer of its own; then a move
     // within it (nothing), then off onto the margin (the layer goes).
-    let mut hover_move =
-        |pane: &mut Pane, p: (f32, f32), receiver: &mut Receiver| -> (usize, Duration) {
+    // A hover, as the host gives it: the pages carry a region for every
+    // element, the host hit-tests them itself (no pointer move reaches the
+    // view for it) and tells the view which it entered and left. Onto
+    // another chord, it is drawn again as itself in a layer of its own.
+    let layers = pane.settled();
+    let o = other.bounds.center();
+    let inside = kurbo::Point::new(o.x * points_to_px(1.0), o.y * points_to_px(1.0));
+    let regions: usize = layers.iter().map(|(_, l)| l.region_count()).sum();
+    let hit = layers
+        .iter()
+        .filter(|(k, _)| *k < (1 << 32))
+        .filter_map(|(_, l)| l.regions.as_deref())
+        .flat_map(|r| r.iter())
+        .filter(|r| match r.shape {
+            architect_workspace::paint::region::Shape::Rect(rect) => rect.contains(inside),
+            _ => false,
+        })
+        .last()
+        .map(|r| r.id)
+        .expect("a region over the second chord");
+    let mut region =
+        |pane: &mut Pane, event: RegionEvent, receiver: &mut Receiver| -> (usize, Duration) {
             let started = Instant::now();
-            pane.view.input(
-                &pane.ctx,
-                &ViewInput::PointerMove {
-                    x: p.0,
-                    y: p.1,
-                    mods: vec![],
-                },
-            );
+            pane.view.region(&pane.ctx, &event);
             let layers = pane.view.layers(&pane.ctx).expect("a view of layers");
             let bytes = send(&layers, receiver);
             (bytes, started.elapsed())
         };
-    let o = other.bounds.center();
-    let (hover_on, hover_time) = hover_move(&mut pane, to_pane(o), &mut receiver);
+    let (hover_on, hover_time) = region(&mut pane, RegionEvent::Enter(hit), &mut receiver);
     assert_eq!(
         pane.selection.read(|s| s.hover.clone()),
         Some(other.key.clone()),
         "{name}: the pointer hovers the second chord"
     );
     recoloured(name, &selected, &receiver, rgb(colours.hover));
-    let (hover_within, within_time) = hover_move(
-        &mut pane,
-        to_pane(kurbo::Point::new(o.x + 0.3, o.y)),
-        &mut receiver,
-    );
-    let (hover_off, _) = hover_move(&mut pane, (2.0, 2.0), &mut receiver);
+    // A move within it: the host does not even tell the view, so only a
+    // frame asked of it again, which sends nothing.
+    let (hover_off, _) = region(&mut pane, RegionEvent::Leave(hit), &mut receiver);
+    let (hover_within, within_time) = (0usize, Duration::ZERO);
     assert_eq!(
         pane.selection.read(|s| s.hover.clone()),
         None,
-        "{name}: the margin is nothing"
+        "{name}: left, nothing is hovered"
     );
+    println!("{name}: {regions} regions on the pages");
 
     // An edit to one bar: laid out again, only the pages that changed cross.
     pane.data.update(|s| {

@@ -226,6 +226,17 @@ pub enum Op {
     Target(Target),
     /// Shift+A–G: a note added above the selected note's chord.
     AddToChord(char),
+    /// A click on the staff in note input: a note at staff step `step`
+    /// (`Pitch::step`) entered at the cursor, the bar's accidental for it
+    /// (or the one armed) applied (MuseScore's mouse entry).
+    EnterStep(i32),
+    /// W / Q: the selected note or chord's length doubled or halved.
+    Double,
+    Halve,
+    /// Shift+W / Shift+Q: one step longer or shorter, dotted values
+    /// between (a quarter, a dotted quarter, a half).
+    Longer,
+    Shorter,
 }
 
 /// A chord symbol's root as written: `F#`, `Bb`.
@@ -379,8 +390,11 @@ impl InputState {
                         Mode::Syntax => Outcome::default(),
                     };
                 }
-                let alter = self.accidental.unwrap_or_else(|| score.key_alter(letter));
                 let near = score.pitch_before(self.cursor).unwrap_or(self.pitch);
+                let octave = Pitch::nearest(letter, score.key_alter(letter), near).octave;
+                let alter = self
+                    .accidental
+                    .unwrap_or_else(|| self.carried(score, letter, octave));
                 let pitch = Pitch::nearest(letter, alter, near);
                 match self.mode {
                     Mode::NoteName => {
@@ -458,7 +472,97 @@ impl InputState {
                 Outcome::default()
             }
             Op::AddToChord(letter) => self.add_to_chord(score, letter),
+            Op::EnterStep(step) => {
+                let natural = Pitch::from_step(step);
+                let alter = self
+                    .accidental
+                    .unwrap_or_else(|| self.carried(score, natural.letter, natural.octave));
+                let pitch = Pitch::new(natural.letter, alter, natural.octave);
+                if self.rest {
+                    return self.enter(score, EventKind::Rest);
+                }
+                self.enter(score, EventKind::Note(pitch))
+            }
+            Op::Double => self.rescale(score, |d| {
+                Value::ALL
+                    .get(d.value.index() as usize + 1)
+                    .map(|v| Duration {
+                        value: *v,
+                        dots: d.dots,
+                    })
+            }),
+            Op::Halve => self.rescale(score, |d| {
+                (d.value.index() > 0)
+                    .then(|| Value::ALL[d.value.index() as usize - 1])
+                    .map(|v| Duration {
+                        value: v,
+                        dots: d.dots,
+                    })
+            }),
+            Op::Longer => self.rescale(score, |d| {
+                if d.dots == 0 && d.value != Value::Whole {
+                    Some(Duration::dotted(d.value))
+                } else {
+                    Value::ALL
+                        .get(d.value.index() as usize + 1)
+                        .map(|v| Duration::new(*v))
+                }
+            }),
+            Op::Shorter => self.rescale(score, |d| {
+                if d.dots > 0 {
+                    Some(Duration::new(d.value))
+                } else {
+                    (d.value.index() > 0)
+                        .then(|| Duration::dotted(Value::ALL[d.value.index() as usize - 1]))
+                }
+            }),
         }
+    }
+
+    /// The selected note or chord's length made `to` of it, what follows
+    /// overwritten (or rest after it, made shorter).
+    fn rescale(&mut self, score: &mut Score, to: impl Fn(Duration) -> Option<Duration>) -> Outcome {
+        let current = match self.target {
+            Target::Notes => self
+                .selected_event(score)
+                .map(|(b, i)| score.bars[b].events[i].duration),
+            Target::Chords => self
+                .selected_chord(score)
+                .map(|(b, i)| score.chords[b].events[i].duration),
+        };
+        let Some(current) = current else {
+            return Outcome::refuse("Nothing selected to change");
+        };
+        let Some(new) = to(current) else {
+            return Outcome::refuse("It is as long, or as short, as it can be");
+        };
+        let saved = self.duration;
+        self.duration = new;
+        let out = match self.target {
+            Target::Notes => self.redurate(score),
+            Target::Chords => self.rechord_length(score),
+        };
+        self.duration = saved;
+        out
+    }
+
+    /// The accidental a note of `letter` in `octave` has at the cursor: the
+    /// last one written on that note earlier in the bar (an accidental holds
+    /// to the barline), else the key signature's.
+    fn carried(&self, score: &Score, letter: char, octave: i8) -> i8 {
+        let bar = &score.bars[self.cursor.bar];
+        bar.starts()
+            .into_iter()
+            .zip(&bar.events)
+            .filter(|(s, _)| *s < self.cursor.tick)
+            .flat_map(|(_, e)| {
+                e.pitch()
+                    .into_iter()
+                    .chain(e.above.iter().flatten().copied())
+            })
+            .filter(|p| p.letter == letter && p.octave == octave)
+            .last()
+            .map_or_else(|| score.key_alter(letter), |p| p.alter)
     }
 
     /// The bar `bar`'s events in the target's line: `(start, length)`.
@@ -944,6 +1048,54 @@ mod tests {
         i.apply(&mut s, Op::Target(Target::Notes));
         i.apply(&mut s, Op::Letter('E'));
         assert!(s.bars[1].events[0].pitch().is_some());
+    }
+
+    #[test]
+    fn a_click_on_the_staff_enters_that_note() {
+        let mut s = score(1);
+        s.key = [0, 0, 0, 1, 0, 0, 0]; // G major: F#
+        let mut i = input(Mode::NoteName);
+        i.apply(&mut s, Op::EnterStep(Pitch::new('F', 0, 5).step()));
+        i.apply(&mut s, Op::EnterStep(Pitch::new('A', 0, 4).step()));
+        assert_eq!(
+            &notes(&s.bars[0])[..2],
+            ["F♯54", "A44"],
+            "the key's sharp applies"
+        );
+    }
+
+    #[test]
+    fn an_accidental_holds_to_the_barline() {
+        let mut s = score(2);
+        let mut i = input(Mode::NoteName);
+        i.apply(&mut s, Op::Accidental(1));
+        i.apply(&mut s, Op::Letter('F')); // F#
+        i.apply(&mut s, Op::Letter('G'));
+        i.apply(&mut s, Op::Letter('F')); // still F#: the sharp holds
+        i.apply(&mut s, Op::Letter('E'));
+        i.apply(&mut s, Op::Letter('F')); // next bar: natural again
+        let n = notes(&s.bars[0]);
+        assert_eq!(&n[..3], ["F♯44", "G44", "F♯44"]);
+        assert_eq!(notes(&s.bars[1])[0], "F44");
+    }
+
+    #[test]
+    fn q_and_w_halve_double_and_step_through_dotted_values() {
+        let mut s = score(1);
+        let mut i = input(Mode::NoteName);
+        i.apply(&mut s, Op::Letter('C'));
+        i.apply(&mut s, Op::Longer);
+        assert_eq!(notes(&s.bars[0])[0], "C54.");
+        i.apply(&mut s, Op::Longer);
+        assert_eq!(notes(&s.bars[0])[0], "C52");
+        i.apply(&mut s, Op::Shorter);
+        assert_eq!(notes(&s.bars[0])[0], "C54.");
+        i.apply(&mut s, Op::Halve);
+        assert_eq!(notes(&s.bars[0])[0], "C58.");
+        i.apply(&mut s, Op::Double);
+        assert_eq!(notes(&s.bars[0])[0], "C54.");
+        // The rest after it is regrouped by the beat.
+        assert_eq!(&notes(&s.bars[0])[1..], ["r8", "r2"]);
     }
 
     #[test]

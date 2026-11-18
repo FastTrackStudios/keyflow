@@ -622,7 +622,10 @@ mod tests {
         let out = input.apply(&mut score, Op::Letter('A'));
         let new = write_bars(text, &chart, &score, &out.changed).unwrap();
         // Barlined, the `%` written out as the F it repeated.
-        assert!(new.contains("C | << F ; m{ A:44 r2. } >> | F | G"), "{new}");
+        assert!(
+            new.contains("C | << F ; m{ A:44 r4 r2 } >> | F | G"),
+            "{new}"
+        );
         // Typed in syntax mode over the `%`, the line is barlined too.
         let (typed, _) = splice_syntax(text, &chart, 2, "Dm7 G7").unwrap();
         assert!(typed.contains("C | F | Dm7 G7 | G"), "{typed}");

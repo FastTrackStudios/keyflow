@@ -387,10 +387,10 @@ effect = "mutating"
 [[actions]]
 id = "KEYFLOW_INPUT_MOVE"
 name = "Keyflow: move the input cursor"
-description = "The note-input cursor to the note or rest at `fraction` (0 to 1) across bar `bar` (the chart's bars from 0): what a click on the chart does in note input."
+description = "The note-input cursor to the note, rest or chord at `fraction` (0 to 1) across bar `bar` (the chart's bars from 0), selecting it: what a click on the chart does. `target` (`chords`, `notes`) says which line; `select: false` moves without selecting."
 group = "Keyflow"
 effect = "mutating"
-params = '{"type":"object","required":["bar"],"properties":{"bar":{"type":"integer","minimum":0},"fraction":{"type":"number","minimum":0,"maximum":1}}}'
+params = '{"type":"object","required":["bar"],"properties":{"bar":{"type":"integer","minimum":0},"fraction":{"type":"number","minimum":0,"maximum":1},"target":{"type":"string","enum":["chords","notes"]},"select":{"type":"boolean"}}}'
 
 [[actions]]
 id = "KEYFLOW_SYNTAX_WRITE"
@@ -399,6 +399,122 @@ description = "Bars typed in Keyflow's syntax (`text`: `C / / / | Am7 / F G`) wr
 group = "Keyflow"
 effect = "mutating"
 params = '{"type":"object","required":["text"],"properties":{"text":{"type":"string"}}}'
+
+[[actions]]
+id = "KEYFLOW_ADD_A"
+name = "Keyflow: add A to the chord"
+description = "A added above the selected note (Shift+A): a chord of notes built from the bottom up, as MuseScore's."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_ADD_B"
+name = "Keyflow: add B to the chord"
+description = "B added above the selected note (Shift+B): a chord of notes built from the bottom up, as MuseScore's."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_ADD_C"
+name = "Keyflow: add C to the chord"
+description = "C added above the selected note (Shift+C): a chord of notes built from the bottom up, as MuseScore's."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_ADD_D"
+name = "Keyflow: add D to the chord"
+description = "D added above the selected note (Shift+D): a chord of notes built from the bottom up, as MuseScore's."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_ADD_E"
+name = "Keyflow: add E to the chord"
+description = "E added above the selected note (Shift+E): a chord of notes built from the bottom up, as MuseScore's."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_ADD_F"
+name = "Keyflow: add F to the chord"
+description = "F added above the selected note (Shift+F): a chord of notes built from the bottom up, as MuseScore's."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_ADD_G"
+name = "Keyflow: add G to the chord"
+description = "G added above the selected note (Shift+G): a chord of notes built from the bottom up, as MuseScore's."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_DOUBLE"
+name = "Keyflow: double the length"
+description = "The selected note or chord twice as long (W)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_HALVE"
+name = "Keyflow: halve the length"
+description = "The selected note or chord half as long (Q)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_LONGER"
+name = "Keyflow: one step longer"
+description = "The selected note or chord one step longer, a dot first (Shift+W): a quarter, a dotted quarter, a half."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_SHORTER"
+name = "Keyflow: one step shorter"
+description = "The selected note or chord one step shorter (Shift+Q)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_TARGET_SWITCH"
+name = "Keyflow: chord symbols or notes"
+description = "Switches what a letter enters (Tab): chord symbols, the default in a chord chart, or notes."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_TARGET_CHORDS"
+name = "Keyflow: enter chord symbols"
+description = "A–G enters a chord symbol's root at the duration, the cursor moving on; ↑ ↓ move the root, 0 no chord."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_TARGET_NOTES"
+name = "Keyflow: enter notes"
+description = "A–G enters a note, Shift+A–G adds one to the chord of notes, T ties, a click on the staff enters the note under the pointer."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_INPUT_ENTER_AT"
+name = "Keyflow: enter the note clicked"
+description = "Note input's mouse entry: the note at staff position `below_top` (half-spaces below the top line) entered at `fraction` (0 to 1) across bar `bar`, at the duration chosen."
+group = "Keyflow"
+effect = "mutating"
+params = '{"type":"object","required":["bar"],"properties":{"bar":{"type":"integer","minimum":0},"fraction":{"type":"number"},"below_top":{"type":"integer"}}}'
+
+[[actions]]
+id = "KEYFLOW_SYNTAX_PREVIEW"
+name = "Keyflow: preview bars in Keyflow syntax"
+description = "Shows the active chart as bars typed in Keyflow's syntax (`text`) would make it, from the input cursor, without writing them; an empty `text` shows it as it is. Why they would not read is the status."
+group = "Keyflow"
+effect = "read_only"
+params = '{"type":"object","properties":{"text":{"type":"string"}}}'
 
 [[actions]]
 id = "KEYFLOW_UNDO"
@@ -545,6 +661,78 @@ control = "shortcut"
 default = "⎋"
 
 [[sections.settings]]
+key = "keyflow.keys.add_a"
+title = "Add A to the chord"
+control = "shortcut"
+default = "⇧A"
+
+[[sections.settings]]
+key = "keyflow.keys.add_b"
+title = "Add B to the chord"
+control = "shortcut"
+default = "⇧B"
+
+[[sections.settings]]
+key = "keyflow.keys.add_c"
+title = "Add C to the chord"
+control = "shortcut"
+default = "⇧C"
+
+[[sections.settings]]
+key = "keyflow.keys.add_d"
+title = "Add D to the chord"
+control = "shortcut"
+default = "⇧D"
+
+[[sections.settings]]
+key = "keyflow.keys.add_e"
+title = "Add E to the chord"
+control = "shortcut"
+default = "⇧E"
+
+[[sections.settings]]
+key = "keyflow.keys.add_f"
+title = "Add F to the chord"
+control = "shortcut"
+default = "⇧F"
+
+[[sections.settings]]
+key = "keyflow.keys.add_g"
+title = "Add G to the chord"
+control = "shortcut"
+default = "⇧G"
+
+[[sections.settings]]
+key = "keyflow.keys.double"
+title = "Double the length"
+control = "shortcut"
+default = "W"
+
+[[sections.settings]]
+key = "keyflow.keys.halve"
+title = "Halve the length"
+control = "shortcut"
+default = "Q"
+
+[[sections.settings]]
+key = "keyflow.keys.longer"
+title = "One step longer"
+control = "shortcut"
+default = "⇧W"
+
+[[sections.settings]]
+key = "keyflow.keys.shorter"
+title = "One step shorter"
+control = "shortcut"
+default = "⇧Q"
+
+[[sections.settings]]
+key = "keyflow.keys.target_switch"
+title = "Chord symbols or notes"
+control = "shortcut"
+default = "Tab"
+
+[[sections.settings]]
 key = "keyflow.keys.undo"
 title = "Undo note input"
 control = "shortcut"
@@ -669,6 +857,18 @@ hide_label = true
 action = "KEYFLOW_INPUT_SYNTAX"
 icon = "code"
 label = "Input via syntax"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_TARGET_CHORDS"
+icon = "type"
+label = "Enter chord symbols"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_TARGET_NOTES"
+icon = "music"
+label = "Enter notes"
 hide_label = true
 
 [[toolbars.items]]
