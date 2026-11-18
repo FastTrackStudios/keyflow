@@ -44,12 +44,9 @@ fn charts() -> Vec<(String, String)> {
         .collect()
 }
 
+/// The chart's bars as note input numbers them (its count-in left out).
 fn bars(chart: &Chart) -> Vec<&Measure> {
-    chart
-        .sections
-        .iter()
-        .flat_map(|s| s.measures().iter())
-        .collect()
+    keyflow_lang::edit::bars(chart)
 }
 
 fn unchanged(before: &Chart, text: &str) -> Result<(), String> {

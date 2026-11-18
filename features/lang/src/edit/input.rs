@@ -18,12 +18,59 @@
 //! 2–4, tuplets, insert, and an accidental carried through the bar.
 
 use keyflow_proto::Chart;
+use keyflow_proto::chart::types::{ChartSection, Measure};
+use keyflow_proto::sections::SectionType;
 
 use super::chords::{ChordBar, Slot, transpose};
 use super::music::{Bar, Duration, Event, EventKind, Pitch, TICKS_PER_WHOLE, Value};
 
+/// Whether a section's bars are bars of the chart as the engraver lays it
+/// out: a count-in is drawn in the title header as a countdown (`-1 0`)
+/// and an `End` is not drawn at all, so neither has a measure number, and
+/// the chart's bar 1 is the first bar after the count-in.
+fn engraved(section: &SectionType) -> bool {
+    !section.is_compact() && *section != SectionType::End
+}
+
+/// The sections whose bars are [`bars`], in order.
+pub fn sections(chart: &Chart) -> impl Iterator<Item = &ChartSection> {
+    chart
+        .sections
+        .iter()
+        .filter(|s| engraved(&s.section.section_type))
+}
+
+/// The chart's bars as note input numbers them, from 0: the engraver's
+/// measures (`bar#N` on the chart, `BeatPosition::measure`), its count-in
+/// and `End` sections left out. Every index into a [`Score`]'s bars, a
+/// [`Pos`]'s and `KEYFLOW_INPUT_MOVE`'s `bar`, counts these.
+#[must_use]
+pub fn bars(chart: &Chart) -> Vec<&Measure> {
+    sections(chart).flat_map(|s| s.measures().iter()).collect()
+}
+
+/// For each of [`bars`], the bar it plays again (the parser's
+/// `Measure::replays`, which counts every section's bars) as one of
+/// [`bars`] too, when it is one.
+#[must_use]
+pub fn replays(chart: &Chart) -> Vec<Option<usize>> {
+    let mut index = Vec::new();
+    let mut n = 0;
+    for s in &chart.sections {
+        let drawn = engraved(&s.section.section_type);
+        for _ in s.measures() {
+            index.push(drawn.then_some(n));
+            n += usize::from(drawn);
+        }
+    }
+    bars(chart)
+        .iter()
+        .map(|m| m.replays.and_then(|g| index.get(g).copied().flatten()))
+        .collect()
+}
+
 /// Where an input is: a bar (the chart's bars counted from 0 across its
-/// sections, as the engraver numbers them) and a tick in it.
+/// sections, as the engraver numbers them: [`bars`]) and a tick in it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Pos {
     pub bar: usize,
@@ -56,21 +103,12 @@ impl Score {
     /// `chart`'s bars, in order, and its key's signature.
     #[must_use]
     pub fn from_chart(chart: &Chart) -> Self {
+        let all = bars(chart);
         let mut others: Vec<Vec<Bar>> = (0..4u8)
-            .map(|v| {
-                chart
-                    .sections
-                    .iter()
-                    .flat_map(|s| s.measures().iter().map(move |m| Bar::from_voice(m, v)))
-                    .collect()
-            })
+            .map(|v| all.iter().map(|m| Bar::from_voice(m, v)).collect())
             .collect();
         let bars = std::mem::take(&mut others[0]);
-        let chords = chart
-            .sections
-            .iter()
-            .flat_map(|s| s.measures().iter().map(ChordBar::from_measure))
-            .collect();
+        let chords = all.iter().map(|m| ChordBar::from_measure(m)).collect();
         let mut key = [0i8; 7];
         if let Some(k) = chart.initial_key.as_ref().or(chart.current_key.as_ref()) {
             for note in k.notes() {
@@ -82,29 +120,22 @@ impl Score {
                 }
             }
         }
-        let read_only = chart
-            .sections
+        let read_only = all
             .iter()
-            .flat_map(|s| {
-                s.measures().iter().map(|m| {
-                    m.source_span.is_none().then(|| {
-                        m.read_only.clone().unwrap_or_else(|| {
-                            "it has no text of its own in the chart's text".to_owned()
-                        })
+            .map(|m| {
+                m.source_span.is_none().then(|| {
+                    m.read_only.clone().unwrap_or_else(|| {
+                        "it has no text of its own in the chart's text".to_owned()
                     })
                 })
             })
             .collect();
-        let all: Vec<&keyflow_proto::chart::types::Measure> = chart
-            .sections
-            .iter()
-            .flat_map(|s| s.measures().iter())
-            .collect();
-        let replays = all
-            .iter()
-            .map(|m| {
+        let replays = replays(chart)
+            .into_iter()
+            .zip(&all)
+            .map(|(replays, m)| {
                 // Only a copy note for note (not transposed or cut short).
-                m.replays.filter(|&g| {
+                replays.filter(|&g| {
                     all.get(g).is_some_and(|src| {
                         super::commit::same_music(m, src) && src.source_span.is_some()
                     })
