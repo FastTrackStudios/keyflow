@@ -421,12 +421,14 @@ impl ChartLayoutEngine {
 
         // Voices sharing the bar: voice 1's stems up and its rests raised,
         // so the lower voices have the space below.
-        let lower_voices: Vec<&[super::MelodyNoteSegment]> = melody_data
+        // Each with its voice (`voices[0]` is voice 2: 1 from 0).
+        let lower_voices: Vec<(u8, &[super::MelodyNoteSegment])> = melody_data
             .map(|d| {
                 d.voices
                     .iter()
-                    .map(Vec::as_slice)
-                    .filter(|v| !v.is_empty())
+                    .enumerate()
+                    .filter(|(_, v)| !v.is_empty())
+                    .map(|(k, v)| (u8::try_from(k + 1).unwrap_or(u8::MAX), v.as_slice()))
                     .collect()
             })
             .unwrap_or_default();
@@ -494,7 +496,7 @@ impl ChartLayoutEngine {
         &self,
         result: &mut MeasureScene,
         data: &super::MeasureMelodyData,
-        voices: &[&[super::MelodyNoteSegment]],
+        voices: &[(u8, &[super::MelodyNoteSegment])],
         config: &RhythmBuildConfig,
         width_spatiums: f64,
         id_base: u64,
@@ -516,7 +518,7 @@ impl ChartLayoutEngine {
             let end_x = result.width.max(last.x + last.width);
             positions.push((last.tick + last.ticks, end_x));
         }
-        for (k, segments) in voices.iter().enumerate() {
+        for (k, (voice_index, segments)) in voices.iter().enumerate() {
             let voice = super::MeasureMelodyData {
                 segments: segments.to_vec(),
                 total_beats: segments.iter().map(|s| s.beats).sum(),
@@ -545,7 +547,10 @@ impl ChartLayoutEngine {
             for spec in &rhythm.tuplet_specs {
                 builder = builder.tuplet_group(spec.start_idx, spec.end_idx, spec.ratio);
             }
-            let built = builder.build(ctx);
+            let mut built = builder.build(ctx);
+            // Its notes and rests are this voice's: a selection draws them
+            // in its colour.
+            built.scene.set_voice(*voice_index);
             result.scene.add_child(built.scene);
         }
     }

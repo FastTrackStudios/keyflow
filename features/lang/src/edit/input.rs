@@ -310,6 +310,9 @@ pub struct InputState {
     pub target: Target,
     /// The voice notes go into, 0 to 3 (MuseScore's voices 1 to 4).
     pub voice: u8,
+    /// MuseScore's re-pitch method: a letter gives the note at the cursor
+    /// that pitch, its length kept, and moves on to the next note.
+    pub repitch: bool,
 }
 
 impl Default for InputState {
@@ -325,6 +328,7 @@ impl Default for InputState {
             selected: None,
             target: Target::Chords,
             voice: 0,
+            repitch: false,
         }
     }
 }
@@ -372,12 +376,17 @@ pub enum Op {
     Target(Target),
     /// Shift+A–G: a note added above the selected note's chord.
     AddToChord(char),
+    /// Ctrl+Shift+I: MuseScore's re-pitch method, on or off: letters change
+    /// the pitches of the notes from the cursor, their rhythm kept.
+    Repitch,
     /// J: the selected note spelled the next way that sounds the same
     /// (`C#` → `Db`), MuseScore's respell.
     Respell,
     /// Alt+1–9: a note that interval above the selected note's chord (its
-    /// top note) added to it, in the key: MuseScore's "add interval".
-    Interval(u8),
+    /// top note) added to it, in the key: MuseScore's "add interval". Below
+    /// (negative): that interval under its lowest note, MuseScore's "add
+    /// interval below", which has no key of its own.
+    Interval(i8),
     /// A click on the staff in note input: a note at staff step `step`
     /// (`Pitch::step`) entered at the cursor, the bar's accidental for it
     /// (or the one armed) applied (MuseScore's mouse entry).
@@ -641,6 +650,7 @@ impl InputState {
                     .unwrap_or_else(|| self.carried(score, letter, octave));
                 let pitch = Pitch::nearest(letter, alter, near);
                 match self.mode {
+                    Mode::NoteName if self.repitch && !self.rest => self.repitch_next(score, pitch),
                     Mode::NoteName => {
                         let kind = if self.rest {
                             EventKind::Rest
@@ -718,6 +728,10 @@ impl InputState {
             }
             Op::AddToChord(letter) => self.add_to_chord(score, letter),
             Op::Interval(n) => self.add_interval(score, n),
+            Op::Repitch => {
+                self.repitch = !self.repitch;
+                Outcome::default()
+            }
             Op::Respell => {
                 if self.target == Target::Chords {
                     return Outcome::refuse("J respells a note: switch to entering notes");
@@ -744,6 +758,9 @@ impl InputState {
                 }
                 self.rechord(score, |t| super::chords::step_quality(t, up))
             }
+            Op::EnterStep(_) if self.repitch => Outcome::refuse(
+                "Re-pitch takes its pitches from the keyboard, not the mouse (⌘⇧I to enter notes again)",
+            ),
             Op::EnterStep(step) => {
                 let natural = Pitch::from_step(step);
                 let alter = self
@@ -976,6 +993,59 @@ impl InputState {
         Outcome::bars(vec![bar])
     }
 
+    /// Re-pitch: the note at the cursor (or the next note, past rests) given
+    /// `pitch`, its length and ties kept, and the cursor on to the note after
+    /// it, as MuseScore's re-pitch method does.
+    fn repitch_next(&mut self, score: &mut Score, pitch: Pitch) -> Outcome {
+        // Past rests to a note.
+        let mut guard = 0;
+        loop {
+            let at = self.cursor;
+            let is_note = score
+                .bars
+                .get(at.bar)
+                .and_then(|b| b.index_at(at.tick).map(|i| b.events[i].pitch().is_some()));
+            match is_note {
+                Some(true) => break,
+                Some(false) => {
+                    let before = self.cursor;
+                    self.step_event(score, true);
+                    guard += 1;
+                    if self.cursor == before || guard > 4096 {
+                        return Outcome::refuse("No note left to re-pitch");
+                    }
+                }
+                None => return Outcome::refuse("No note left to re-pitch"),
+            }
+        }
+        if let Some(why) = score.read_only.get(self.cursor.bar).cloned().flatten() {
+            return Outcome::refuse(format!("Bar {} is read-only: {why}", self.cursor.bar + 1));
+        }
+        self.selected = Some(self.cursor);
+        let out = self.repitch(score, |_| pitch);
+        self.accidental = None;
+        // On past the note and any notes tied on from it.
+        let bar = self.cursor.bar;
+        let mut tied = score.bars[bar]
+            .index_at(self.cursor.tick)
+            .is_some_and(|i| score.bars[bar].events[i].tie);
+        self.step_event(score, true);
+        while tied {
+            let at = self.cursor;
+            tied = score
+                .bars
+                .get(at.bar)
+                .and_then(|b| b.index_at(at.tick).map(|i| b.events[i].tie))
+                .unwrap_or(false);
+            let before = self.cursor;
+            self.step_event(score, true);
+            if self.cursor == before {
+                break;
+            }
+        }
+        out
+    }
+
     /// Input by duration, a duration that matches the note at the cursor:
     /// the pitch added to that note's chord, not written over it (MuseScore:
     /// "notes entered in Input by duration mode that match the duration at
@@ -1037,14 +1107,14 @@ impl InputState {
 
     /// Alt+1–9: a note `n` steps of the scale above the selected chord's
     /// top note (2 a second, 3 a third, 8 an octave), as the key spells it,
-    /// added to the chord.
-    fn add_interval(&mut self, score: &mut Score, n: u8) -> Outcome {
+    /// added to the chord; `-n`, as far under its lowest note.
+    fn add_interval(&mut self, score: &mut Score, n: i8) -> Outcome {
         if self.target == Target::Chords {
             return Outcome::refuse(
                 "Alt+1–9 adds an interval to a chord of notes: switch to entering notes",
             );
         }
-        if !(1..=9).contains(&n) {
+        if !(1..=9).contains(&n.unsigned_abs()) {
             return Outcome::refuse("An interval from a unison (1) to a ninth (9)");
         }
         let Some((bar, i)) = self.selected_event(score) else {
@@ -1054,24 +1124,47 @@ impl InputState {
         let Some(base) = event.pitch() else {
             return Outcome::refuse("A rest takes no notes");
         };
-        let top = event
-            .above
-            .iter()
-            .flatten()
-            .copied()
-            .chain(std::iter::once(base))
-            .max_by_key(|p| p.midi())
-            .unwrap_or(base);
-        let step = Pitch::from_step(top.step() + i32::from(n) - 1);
+        let notes: Vec<Pitch> = std::iter::once(base)
+            .chain(event.above.iter().flatten().copied())
+            .collect();
+        let (from, steps) = if n > 0 {
+            (
+                notes
+                    .iter()
+                    .max_by_key(|p| p.midi())
+                    .copied()
+                    .unwrap_or(base),
+                i32::from(n) - 1,
+            )
+        } else {
+            (
+                notes
+                    .iter()
+                    .min_by_key(|p| p.midi())
+                    .copied()
+                    .unwrap_or(base),
+                i32::from(n) + 1,
+            )
+        };
+        let step = Pitch::from_step(from.step() + steps);
         let new = Pitch::new(step.letter, score.key_alter(step.letter), step.octave);
-        let event = &mut score.bars[bar].events[i];
-        if new == top {
+        if notes.contains(&new) {
             return Outcome::refuse("That note is in the chord already");
         }
-        let Some(slot) = event.above.iter_mut().find(|p| p.is_none()) else {
+        if notes.len() >= 4 {
             return Outcome::refuse("A chord of notes holds four notes at most here");
-        };
-        *slot = Some(new);
+        }
+        // Lowest first: a note added below is the chord's new bottom.
+        let mut all = notes;
+        all.push(new);
+        all.sort_by_key(|p| p.midi());
+        let event = &mut score.bars[bar].events[i];
+        event.kind = EventKind::Note(all[0]);
+        event.above = [
+            all.get(1).copied(),
+            all.get(2).copied(),
+            all.get(3).copied(),
+        ];
         Outcome::bars(vec![bar])
     }
 
@@ -1521,6 +1614,10 @@ impl InputState {
                     .map(|why| format!(" · this bar's chords cannot be edited here: {why}"))
                     .unwrap_or_default()
             ),
+            Mode::NoteName if self.repitch && self.target == Target::Notes => format!(
+                "Input by note name · re-pitch · voice {} · next note at {at}{accidental} · A–G give it that pitch, its length kept, and go on to the next · ⌘⇧I: enter notes again, Esc leave{locked}",
+                self.voice + 1,
+            ),
             Mode::NoteName => format!(
                 "Input by note name · notes · voice {} · {} {what}{accidental} · next at {at} · A–G enter, Shift+A–G or Alt+1–9 add to the chord, J respell, 0 rest, T tie, Y: chord symbols instead, Esc leave{locked}",
                 self.voice + 1,
@@ -1692,6 +1789,45 @@ mod tests {
     }
 
     #[test]
+    fn re_pitch_changes_the_notes_pitches_and_keeps_their_rhythm() {
+        let mut s = score(1);
+        let mut i = input(Mode::NoteName);
+        // C a half, then two quarters: C and a rest.
+        i.apply(&mut s, Op::Duration(Half));
+        i.apply(&mut s, Op::Letter('C'));
+        i.apply(&mut s, Op::Duration(Quarter));
+        i.apply(&mut s, Op::Letter('C'));
+        i.apply(&mut s, Op::Rest);
+        let lengths: Vec<u32> = s.bars[0]
+            .events
+            .iter()
+            .map(|e| e.duration.ticks())
+            .collect();
+        i.apply(&mut s, Op::MoveTo(Pos { bar: 0, tick: 0 }));
+        i.apply(&mut s, Op::Repitch);
+        i.apply(&mut s, Op::Letter('E'));
+        i.apply(&mut s, Op::Letter('G'));
+        let names: Vec<String> = s.bars[0]
+            .events
+            .iter()
+            .map(|e| e.pitch().map_or("r".into(), |p| p.name()))
+            .collect();
+        assert_eq!(names[..2], ["E5", "G5"]);
+        assert_eq!(names[2], "r", "the rest kept");
+        let after: Vec<u32> = s.bars[0]
+            .events
+            .iter()
+            .map(|e| e.duration.ticks())
+            .collect();
+        assert_eq!(after, lengths, "the rhythm kept");
+        // Past the last note: says so.
+        assert!(i.apply(&mut s, Op::Letter('A')).refused.is_some());
+        // Off: letters enter notes again.
+        i.apply(&mut s, Op::Repitch);
+        assert!(!i.repitch);
+    }
+
+    #[test]
     fn j_respells_the_selected_note_the_next_way_that_sounds_the_same() {
         let spell = |p: Pitch| p.respelled().name();
         assert_eq!(spell(Pitch::new('C', 1, 4)), "D♭4");
@@ -1731,6 +1867,16 @@ mod tests {
             .map(|p| p.name())
             .collect();
         assert_eq!(above, ["E5", "G5", "G6"]);
+        // A third below a C: A, the chord's new bottom note.
+        let mut s2 = score(1);
+        let mut j = input(Mode::NoteName);
+        j.apply(&mut s2, Op::Duration(Half));
+        j.apply(&mut s2, Op::Letter('C'));
+        j.apply(&mut s2, Op::Interval(-3));
+        let e = &s2.bars[0].events[0];
+        assert_eq!(e.pitch().unwrap().name(), "A4");
+        let above: Vec<String> = e.above.iter().flatten().map(|p| p.name()).collect();
+        assert_eq!(above, ["C5"]);
         // As chord symbols, it says what it is for.
         i.target = Target::Chords;
         assert!(i.apply(&mut s, Op::Interval(3)).refused.is_some());

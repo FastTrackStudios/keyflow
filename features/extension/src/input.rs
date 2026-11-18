@@ -62,6 +62,8 @@ pub const OP_ACTIONS: &[OpAction] = &[
     op("KEYFLOW_QUALITY_UP", Op::Quality(true), "⌥↑"),
     op("KEYFLOW_QUALITY_DOWN", Op::Quality(false), "⌥↓"),
     op("KEYFLOW_RESPELL", Op::Respell, "J"),
+    // MuseScore's re-pitch method (Cmd+Shift+I).
+    op("KEYFLOW_REPITCH", Op::Repitch, "⇧⌘I"),
     // MuseScore's add interval: Alt+1–9, a unison to a ninth above.
     op("KEYFLOW_INTERVAL_1", Op::Interval(1), "⌥1"),
     op("KEYFLOW_INTERVAL_2", Op::Interval(2), "⌥2"),
@@ -72,6 +74,17 @@ pub const OP_ACTIONS: &[OpAction] = &[
     op("KEYFLOW_INTERVAL_7", Op::Interval(7), "⌥7"),
     op("KEYFLOW_INTERVAL_8", Op::Interval(8), "⌥8"),
     op("KEYFLOW_INTERVAL_9", Op::Interval(9), "⌥9"),
+    // MuseScore's add interval below: no key by default; bound by the
+    // person, as MuseScore's are.
+    op("KEYFLOW_INTERVAL_BELOW_1", Op::Interval(-1), ""),
+    op("KEYFLOW_INTERVAL_BELOW_2", Op::Interval(-2), ""),
+    op("KEYFLOW_INTERVAL_BELOW_3", Op::Interval(-3), ""),
+    op("KEYFLOW_INTERVAL_BELOW_4", Op::Interval(-4), ""),
+    op("KEYFLOW_INTERVAL_BELOW_5", Op::Interval(-5), ""),
+    op("KEYFLOW_INTERVAL_BELOW_6", Op::Interval(-6), ""),
+    op("KEYFLOW_INTERVAL_BELOW_7", Op::Interval(-7), ""),
+    op("KEYFLOW_INTERVAL_BELOW_8", Op::Interval(-8), ""),
+    op("KEYFLOW_INTERVAL_BELOW_9", Op::Interval(-9), ""),
 ];
 
 /// The toolbar's actions that are note input's operations, and their keys
@@ -109,6 +122,7 @@ pub const CHORD_EDIT_KEY: (&str, &str) = ("KEYFLOW_CHORD_EDIT", "↵");
 pub fn default_keys() -> impl Iterator<Item = (&'static str, &'static str)> {
     OP_ACTIONS
         .iter()
+        .filter(|a| !a.key.is_empty())
         .map(|a| (a.action, a.key))
         .chain(TOOL_KEYS.iter().copied())
         .chain(HISTORY_KEYS.iter().copied())

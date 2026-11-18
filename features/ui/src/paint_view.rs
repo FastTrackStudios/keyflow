@@ -116,6 +116,10 @@ pub struct InputOverlay {
     /// The voice notes go into, 0 to 3: the cursor, the shadow note and the
     /// entry are drawn in its colour, as MuseScore draws them.
     pub voice: u8,
+    /// Input by duration's cursor as MuseScore's above-staff ruler: a pin
+    /// over where the next note goes and a tick a duration on to the
+    /// barline, instead of the box.
+    pub ruler: bool,
 }
 
 /// What the pointer's shadow note looks like, and the staff it is read on.
@@ -157,6 +161,9 @@ pub enum ChartGesture {
         fraction: f64,
         kind: Option<String>,
         below_top: i32,
+        /// The voice of the note or rest clicked, from 0: what is selected
+        /// is that voice's, as MuseScore's selection is.
+        voice: Option<u8>,
     },
 }
 
@@ -821,7 +828,31 @@ impl ChartPaintView {
         {
             return Some(layer.clone());
         }
-        let layer = self.highlight(&drawn_for.0, drawn_for.1, SELECTION_Z);
+        // A note or rest in its voice's colour (voice 1's is the selection
+        // colour), everything else in the selection colour: MuseScore's
+        // "highlighted in the color of their respective voice".
+        let voice_of = |key: &String| {
+            self.recorded
+                .selectables
+                .iter()
+                .find(|s| s.key == *key)
+                .and_then(|s| s.voice)
+                .unwrap_or(0)
+        };
+        let mut groups: Vec<(u8, Vec<String>)> = Vec::new();
+        for key in &drawn_for.0 {
+            let voice = voice_of(key);
+            match groups.iter_mut().find(|g| g.0 == voice) {
+                Some(g) => g.1.push(key.clone()),
+                None => groups.push((voice, vec![key.clone()])),
+            }
+        }
+        let mut commands = Vec::new();
+        for (voice, keys) in &groups {
+            let layer = self.highlight(keys, self.colours.voice(*voice), SELECTION_Z);
+            commands.extend(layer.commands.iter().cloned());
+        }
+        let layer = Layer::new(Arc::new(commands)).z(SELECTION_Z);
         self.recorded.selection = Some((drawn_for, layer.clone()));
         Some(layer)
     }
@@ -915,10 +946,16 @@ impl ChartPaintView {
         let w = bounds.width();
         let x0 = bounds.x0 + overlay.from.clamp(0.0, 1.0) * w;
         let space = bounds.height() / 4.0;
+        if overlay.ruler {
+            draw_ruler(&mut scene, &overlay, bounds, colour);
+        }
         // MuseScore's note-input cursor: a translucent box in the voice's
         // colour over where the next note goes, a little past the staff; one
         // a bar when the next entry writes several (syntax mode's preview).
-        for k in 0..overlay.bars.max(1) {
+        // (Normal mode's overlay, `bars: 0`, only highlights what is
+        // selected: no cursor.)
+        let boxes = if overlay.ruler { 0 } else { overlay.bars };
+        for k in 0..boxes {
             let Some(b) = self.bar_box(overlay.bar + k) else {
                 break;
             };
@@ -986,8 +1023,11 @@ impl ChartPaintView {
                 } else {
                     s.key.starts_with("note#") || s.key.starts_with("rest#")
                 };
+                // The input voice's notes and rests: another voice's at the
+                // same beat are not this entry.
+                let voice_ok = chords || s.voice.is_none_or(|v| v == overlay.voice);
                 let c = s.bounds.center();
-                kind_ok && c.x >= x0 - 0.5 && c.x < x1 && near.contains(c)
+                kind_ok && voice_ok && c.x >= x0 - 0.5 && c.x < x1 && near.contains(c)
             })
             .map(|s| s.key.clone())
             .collect();
@@ -1255,11 +1295,17 @@ impl ChartPaintView {
                         self.staff_under(ctx, view, self.pointer)
                 {
                     let kind = key.split('#').next().map(str::to_owned);
+                    let voice = self
+                        .recorded
+                        .selectables
+                        .get(usize::try_from(id).unwrap_or(usize::MAX))
+                        .and_then(|s| s.voice);
                     (gestures.0)(ChartGesture::Click {
                         bar,
                         fraction,
                         kind,
                         below_top,
+                        voice,
                     });
                 }
                 // The keys held, as the host said just before the press.
@@ -1374,14 +1420,21 @@ impl PaintView for ChartPaintView {
                             && let Some((bar, fraction, below_top)) =
                                 self.staff_under(ctx, view, self.pointer)
                         {
-                            let kind = self
-                                .under(ctx, view, self.pointer)
-                                .and_then(|k| k.split('#').next().map(str::to_owned));
+                            let under = self.under(ctx, view, self.pointer);
+                            let voice = under.as_ref().and_then(|k| {
+                                self.recorded
+                                    .selectables
+                                    .iter()
+                                    .find(|s| s.key == *k)
+                                    .and_then(|s| s.voice)
+                            });
+                            let kind = under.and_then(|k| k.split('#').next().map(str::to_owned));
                             (gestures.0)(ChartGesture::Click {
                                 bar,
                                 fraction,
                                 kind,
                                 below_top,
+                                voice,
                             });
                         }
                         let changed = self.press(ctx, view, self.pointer, mods);
@@ -1633,6 +1686,50 @@ fn draw_shadow(scene: &mut Scene, shadow: ShadowNote, x: f64, bar: Rect, colour:
 }
 
 /// The pane's logical size.
+/// Input by duration's above-staff ruler (MuseScore's, Preferences → Note
+/// input): over the staff, a pin in the voice's colour where the next note
+/// goes, and a tick each duration on from it to the barline, in chart pixels
+/// at 100%.
+fn draw_ruler(scene: &mut Scene, overlay: &InputOverlay, bar: Rect, colour: Color) {
+    let px = points_to_px(1.0);
+    let space = bar.height() / 4.0;
+    let w = bar.width();
+    let x = (bar.x0 + overlay.from.clamp(0.0, 1.0) * w) * px;
+    let step = (overlay.to - overlay.from).max(0.0) * w * px;
+    let base = (bar.y0 - space * 0.8) * px;
+    // The pin: a stem and a head.
+    let top = base - space * 3.0 * px;
+    scene.stroke(
+        &Stroke::new(1.5),
+        Affine::IDENTITY,
+        colour,
+        None,
+        &kurbo::Line::new((x, base), (x, top)),
+    );
+    scene.fill(
+        Fill::NonZero,
+        Affine::IDENTITY,
+        colour,
+        None,
+        &kurbo::Circle::new((x, top), space * 0.55 * px),
+    );
+    // A tick a duration on, to the barline.
+    if step > 2.0 {
+        let end = bar.x1 * px;
+        let mut t = x + step;
+        while t < end - 0.5 {
+            scene.stroke(
+                &Stroke::new(1.0),
+                Affine::IDENTITY,
+                colour.with_alpha(0.7),
+                None,
+                &kurbo::Line::new((t, base), (t, base - space * 1.4 * px)),
+            );
+            t += step;
+        }
+    }
+}
+
 /// The scroll that brings `target` into a view of `visible` (both in chart
 /// pixels) from `scroll`: unchanged when it is in view already, else moved
 /// just far enough, with a margin, each way on its own.

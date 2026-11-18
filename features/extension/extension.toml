@@ -411,10 +411,10 @@ effect = "mutating"
 [[actions]]
 id = "KEYFLOW_INPUT_MOVE"
 name = "Keyflow: move the input cursor"
-description = "The note-input cursor to the note, rest or chord at `fraction` (0 to 1) across bar `bar` (the chart's bars from 0), selecting it: what a click on the chart does. `target` (`chords`, `notes`) says which line; `select: false` moves without selecting."
+description = "The note-input cursor to the note, rest or chord at `fraction` (0 to 1) across bar `bar` (the chart's bars from 0), selecting it: what a click on the chart does. `target` (`chords`, `notes`) says which line; `select: false` moves without selecting; `voice` (0 to 3), the voice of the note or rest clicked, which note input then enters into."
 group = "Keyflow"
 effect = "mutating"
-params = '{"type":"object","required":["bar"],"properties":{"bar":{"type":"integer","minimum":0},"fraction":{"type":"number","minimum":0,"maximum":1},"target":{"type":"string","enum":["chords","notes"]},"select":{"type":"boolean"}}}'
+params = '{"type":"object","required":["bar"],"properties":{"bar":{"type":"integer","minimum":0},"fraction":{"type":"number","minimum":0,"maximum":1},"target":{"type":"string","enum":["chords","notes"]},"select":{"type":"boolean"},"voice":{"type":"integer","minimum":0,"maximum":3}}}'
 
 [[actions]]
 id = "KEYFLOW_SYNTAX_WRITE"
@@ -631,6 +631,83 @@ effect = "mutating"
 id = "KEYFLOW_INTERVAL_9"
 name = "Keyflow: add ninth above"
 description = "A note a ninth above the selected note's chord (its top note) added to it, spelled in the key (Alt+9): MuseScore's add interval."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_BELOW_1"
+name = "Keyflow: add unison below"
+description = "A note a unison below the selected note's chord (its lowest note) added to it, spelled in the key: MuseScore's add interval below. No key by default; bind one in the action list."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_BELOW_2"
+name = "Keyflow: add second below"
+description = "A note a second below the selected note's chord (its lowest note) added to it, spelled in the key: MuseScore's add interval below. No key by default; bind one in the action list."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_BELOW_3"
+name = "Keyflow: add third below"
+description = "A note a third below the selected note's chord (its lowest note) added to it, spelled in the key: MuseScore's add interval below. No key by default; bind one in the action list."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_BELOW_4"
+name = "Keyflow: add fourth below"
+description = "A note a fourth below the selected note's chord (its lowest note) added to it, spelled in the key: MuseScore's add interval below. No key by default; bind one in the action list."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_BELOW_5"
+name = "Keyflow: add fifth below"
+description = "A note a fifth below the selected note's chord (its lowest note) added to it, spelled in the key: MuseScore's add interval below. No key by default; bind one in the action list."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_BELOW_6"
+name = "Keyflow: add sixth below"
+description = "A note a sixth below the selected note's chord (its lowest note) added to it, spelled in the key: MuseScore's add interval below. No key by default; bind one in the action list."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_BELOW_7"
+name = "Keyflow: add seventh below"
+description = "A note a seventh below the selected note's chord (its lowest note) added to it, spelled in the key: MuseScore's add interval below. No key by default; bind one in the action list."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_BELOW_8"
+name = "Keyflow: add octave below"
+description = "A note an octave below the selected note's chord (its lowest note) added to it, spelled in the key: MuseScore's add interval below. No key by default; bind one in the action list."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_BELOW_9"
+name = "Keyflow: add ninth below"
+description = "A note a ninth below the selected note's chord (its lowest note) added to it, spelled in the key: MuseScore's add interval below. No key by default; bind one in the action list."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_REPITCH"
+name = "Keyflow: re-pitch"
+description = "MuseScore's re-pitch method, on or off (Cmd+Shift+I): in input by note name, a letter gives the note at the cursor that pitch, its length kept, and moves on to the next note, past rests."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_DURATION_RULER"
+name = "Keyflow: input by duration cursor (ruler or box)"
+description = "Input by duration's cursor switched between MuseScore's above-staff ruler (a pin where the next note goes and a tick a duration on to the barline; the default) and the classic box cursor, as MuseScore's Preferences → Note input chooses."
 group = "Keyflow"
 effect = "mutating"
 
@@ -1283,6 +1360,16 @@ when = "view:chart"
 [[keys]]
 chord = "⌥↓"
 action = "KEYFLOW_QUALITY_DOWN"
+when = "view:chart"
+
+[[keys]]
+chord = "⇧⌘I"
+action = "KEYFLOW_REPITCH"
+when = "view:chart"
+
+[[keys]]
+chord = "⌃⇧I"
+action = "KEYFLOW_REPITCH"
 when = "view:chart"
 
 [[keys]]
