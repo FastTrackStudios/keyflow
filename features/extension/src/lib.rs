@@ -379,6 +379,7 @@ fn open_charts() -> std::sync::MutexGuard<'static, BTreeMap<u64, Open>> {
 #[component]
 fn ChartPane() -> Element {
     // Its pane's state, linked in or as a process (its host tells it).
+    let pane_id = use_pane_state().map(|(id, _)| id).unwrap_or_default();
     let path = use_pane_state().map(|(_, state)| state).unwrap_or_default();
     let key = use_hook(|| NEXT.fetch_add(1, Ordering::Relaxed));
     let mut reads = use_signal(|| 0_u64);
@@ -550,12 +551,25 @@ fn ChartPane() -> Element {
     }
 
     // Read and engrave the document whenever the path or `reads` moves.
+    let mut titled = use_signal(String::new);
+    let pane_for_title = pane_id.clone();
     let _ = use_resource(move || {
         let path = current();
         let _ = reads();
+        let pane = pane_for_title.clone();
         async move {
             let outcome = read_chart(&path).await;
             let message = outcome.as_ref().err().cloned();
+            // Its tab named for the chart, not "Chart": its title, else its
+            // file's name.
+            if let Ok(chart) = &outcome {
+                let title = tab_title(chart, &path);
+                if !pane.is_empty() && *titled.peek() != title {
+                    titled.set(title.clone());
+                    let _ = dispatch("WORKSPACE_TAB_SET", json!({ "pane": pane, "title": title }))
+                        .await;
+                }
+            }
             if let Some(open) = open_charts().get_mut(&key) {
                 if let Ok(chart) = outcome {
                     open.data.update(|s| {
@@ -1523,6 +1537,22 @@ async fn gesture(g: ChartGesture) {
             let _ = dispatch("KEYFLOW_INPUT_MOVE", args).await;
         }
     }
+}
+
+/// What a chart's tab is called: its title (`"Drive To LA"`), else its
+/// file's name without the extension, else "Chart".
+fn tab_title(chart: &keyflow::Chart, path: &str) -> String {
+    chart
+        .metadata
+        .title
+        .clone()
+        .filter(|t| !t.trim().is_empty())
+        .or_else(|| {
+            let name = path.rsplit('/').next().unwrap_or(path);
+            let stem = name.strip_suffix(".kf").unwrap_or(name);
+            (!stem.is_empty()).then(|| stem.to_owned())
+        })
+        .unwrap_or_else(|| "Chart".to_owned())
 }
 
 /// `action` run through the host, so a key runs what ⌘K and MCP run.
