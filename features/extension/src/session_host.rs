@@ -31,7 +31,7 @@ use architect::LayerRouter;
 use architect::connect::{Endpoint, pool};
 use architect::host::EngineHost;
 use architect_extensions::linked::Builder;
-use crdt::presence::{Here, PeerState, PlayState};
+use crdt::presence::{Here, PeerState};
 use crdt::sync::{
     DocPresenceClient, DocPresenceDispatcher, DocSyncClient, DocSyncDispatcher, DocSyncHost,
     PresenceDriver, PresenceHost, PresencePeer, doc_presence_service_descriptor,
@@ -39,13 +39,8 @@ use crdt::sync::{
 };
 use keyflow_session::{ChartSession, Provider};
 use serde_json::{Value as Json, json};
-use session::clock::{
-    ClockHost, SessionClockClient, SharedClock, serve as serve_clock,
-    session_clock_rpc_service_descriptor,
-};
 use session::doc::{SessionDoc, transport_of};
 use session::sync::Tracker;
-use session::sync::clock::now_micros_f64;
 use uuid::Uuid;
 
 /// What this instance hosts and follows.
@@ -55,8 +50,6 @@ struct Sessions {
     charts: HashMap<Uuid, ChartSession>,
     presence: Option<PresencePeer>,
     here: Option<Here<PresencePeer>>,
-    /// The host's clock, estimated; `None` on the host itself.
-    clock: Option<SharedClock>,
     tracker: Tracker,
     /// Per session, the subscription that re-reads its chart panes when
     /// another replica's edit arrives.
@@ -73,6 +66,25 @@ fn sessions() -> std::sync::MutexGuard<'static, Sessions> {
         .get_or_init(Mutex::default)
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
+}
+
+/// This process's clock, microseconds: the one the presence clock's
+/// offset is to (`crdt::presence::clock_ms`).
+fn now_micros_f64() -> f64 {
+    crdt::presence::clock_ms() * 1000.0
+}
+
+/// The host's clock as the presence driver estimates it (the presence
+/// host serves it, `DocPresence::now`): the offset to this process's
+/// clock and the round trip, microseconds. `None` before the first ping.
+fn host_clock(s: &Sessions) -> (Option<f64>, Option<f64>) {
+    s.presence.as_ref().map_or((None, None), |peer| {
+        let clock = peer.clock();
+        (
+            clock.offset_ms().map(|ms| ms * 1000.0),
+            clock.round_trip_ms().map(|ms| ms * 1000.0),
+        )
+    })
 }
 
 /// This process's clock epoch in wall-clock microseconds: what a reader
@@ -176,24 +188,21 @@ async fn serve(args: Json) -> Result<Json, String> {
         ),
         None => router,
     };
-    let router = router
-        .with(
-            doc_presence_service_descriptor(),
-            DocPresenceDispatcher::new(PresenceHost::new(id, 30_000)),
-        )
-        .with(
-            session_clock_rpc_service_descriptor(),
-            serve_clock(ClockHost),
-        );
+    // Its presence serves its clock too (`DocPresence::now`): every
+    // peer's driver estimates it, the host's own included.
+    let router = router.with(
+        doc_presence_service_descriptor(),
+        DocPresenceDispatcher::new(PresenceHost::new(id, 30_000)),
+    );
     let port = bind.rsplit(':').next().unwrap_or("4142").to_owned();
     tokio::spawn(async move {
         let _ = EngineHost::ungated(router, bind).serve().await;
     });
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
     // The host takes part in its own presence, as the leader: its clock
-    // is the shared clock.
+    // is the shared clock (its driver's estimate of it is its own).
     let url = format!("ws://127.0.0.1:{port}/vox");
-    join_presence(&url, id, "lead", None).await?;
+    join_presence(&url, id, "lead").await?;
     Ok(json!({ "serving": url, "id": id.to_string() }))
 }
 
@@ -207,62 +216,38 @@ fn redial_after(failed: u32) -> std::time::Duration {
     std::time::Duration::from_millis(doubled.min(MOST_MS))
 }
 
-/// Runs `driver` on the presence at `url`, and `pinger` on its host's
-/// clock when given, for as long as the process runs: dialled again
-/// whenever the host is gone (the DAW engine restarting), so a follower
-/// picks the transport up again by itself.
-fn keep_following(url: String, mut driver: PresenceDriver, pinger: Option<SharedClock>) {
+/// Runs `driver` on the presence at `url` (which also pings its host's
+/// clock into the peer's estimate) for as long as the process runs:
+/// dialled again whenever the host is gone (the DAW engine restarting), so
+/// a follower picks the transport up again by itself.
+fn keep_following(url: String, mut driver: PresenceDriver) {
     tokio::spawn(async move {
         let endpoint = Endpoint::url(&url);
         let mut failed: u32 = 0;
         loop {
-            let presence = pool().client::<DocPresenceClient>(&endpoint).await;
-            let host = match pinger {
-                Some(_) => pool()
-                    .client::<SessionClockClient>(&endpoint)
-                    .await
-                    .map(Some),
-                None => Ok(None),
-            };
-            match (presence, host, &pinger) {
-                (Ok(presence), Ok(Some(host)), Some(pinger)) => {
-                    failed = 0;
-                    let follow = driver.run(&presence);
-                    let pings = pinger.run(&host);
-                    tokio::pin!(follow, pings);
-                    tokio::select! {
-                        _ = &mut follow => {}
-                        _ = &mut pings => {}
-                    }
-                    pool().evict(&endpoint);
-                }
-                (Ok(presence), Ok(None), None) => {
+            match pool().client::<DocPresenceClient>(&endpoint).await {
+                Ok(presence) => {
                     failed = 0;
                     let _ = driver.run(&presence).await;
                     pool().evict(&endpoint);
                 }
-                _ => failed = failed.saturating_add(1),
+                Err(_) => failed = failed.saturating_add(1),
             }
             tokio::time::sleep(redial_after(failed)).await;
         }
     });
 }
 
-/// Joins session `id`'s presence at `url` as `me`, and pings its host's
-/// clock into `pinger` when given. The first dial must answer (a wrong
-/// `url` is the caller's error); after that it is kept up.
-async fn join_presence(
-    url: &str,
-    id: Uuid,
-    me: &str,
-    pinger: Option<SharedClock>,
-) -> Result<(), String> {
+/// Joins session `id`'s presence at `url` as `me`; its driver estimates
+/// the host's clock (`PresencePeer::clock`). The first dial must answer
+/// (a wrong `url` is the caller's error); after that it is kept up.
+async fn join_presence(url: &str, id: Uuid, me: &str) -> Result<(), String> {
     let _: DocPresenceClient = pool()
         .client(&Endpoint::url(url))
         .await
         .map_err(|e| e.to_string())?;
     let (peer, driver) = PresencePeer::new(id, 30_000);
-    keep_following(url.to_owned(), driver, pinger);
+    keep_following(url.to_owned(), driver);
     peer.set(&format!("{me}/epoch"), epoch_wall_micros());
     let here = Here::new(peer.clone(), me, PeerState::new(me, me));
     let mut s = sessions();
@@ -279,13 +264,7 @@ async fn join_presence(
 async fn follow(args: Json) -> Result<Json, String> {
     let url = text(&args, "url")?;
     let id = id_of(&args)?;
-    let _: SessionClockClient = pool()
-        .client(&Endpoint::url(&url))
-        .await
-        .map_err(|e| e.to_string())?;
-    let clock = SharedClock::default();
-    join_presence(&url, id, "chart", Some(clock.clone())).await?;
-    sessions().clock = Some(clock);
+    join_presence(&url, id, "chart").await?;
     // The chart into the session it follows, when it holds none yet: the
     // `.kf` at `chart_path`, written through the host's fts.session as
     // Keyflow's own data.
@@ -347,14 +326,11 @@ fn set_bar_one(args: &Json) -> Result<Json, String> {
 
 /// Where the followed session's leader is now, session seconds, and
 /// whether it plays: `None` before the clock is estimated or the leader
-/// has said anything. On the host itself the offset is zero.
+/// has said anything.
 #[must_use]
 pub fn shown_now() -> Option<(f64, bool)> {
     let mut s = sessions();
-    let offset = s
-        .clock
-        .as_ref()
-        .map_or(Some(0.0), SharedClock::offset_micros)?;
+    let offset = host_clock(&s).0?;
     let leader = s
         .presence
         .as_ref()?
@@ -437,18 +413,12 @@ async fn join(args: Json) -> Result<Json, String> {
     tokio::spawn(async move {
         let _ = synced.run(&client).await;
     });
-    let _: SessionClockClient = pool()
-        .client(&Endpoint::url(&url))
-        .await
-        .map_err(|e| e.to_string())?;
-    let clock = SharedClock::default();
-    join_presence(&url, id, "follow", Some(clock.clone())).await?;
+    join_presence(&url, id, "follow").await?;
     {
         let mut s = sessions();
         s.provider.open(&chart);
         s.watches.insert(id, watch(&chart, id));
         s.charts.insert(id, chart);
-        s.clock = Some(clock);
     }
     let pane = format!("session:{id}");
     // As for a document: a pane opened before it was held reads again.
@@ -461,21 +431,13 @@ fn play(args: &Json) -> Result<Json, String> {
     let position = args.get("position").and_then(Json::as_f64).unwrap_or(0.0);
     let s = sessions();
     let here = s.here.as_ref().ok_or("serve or join a session first")?;
-    // On the host its own clock is the shared clock; a peer uses its
-    // estimate of the host's.
-    let at_micros = match &s.clock {
-        None => now_micros_f64(),
-        Some(clock) => clock
-            .now_micros()
-            .ok_or("the host's clock is not known yet")?,
-    };
-    here.play(&PlayState {
-        playing,
-        position,
-        at_ms: at_micros / 1000.0,
-        rate: 1.0,
-    });
-    Ok(json!({ "playing": playing, "position": position, "at_ms": at_micros / 1000.0 }))
+    // Stamped in the host's clock as this peer's driver estimates it (on
+    // the host, its own clock).
+    if !here.play_now(playing, position, 1.0) {
+        return Err("the host's clock is not known yet".to_owned());
+    }
+    let at_ms = s.presence.as_ref().and_then(|p| p.clock().now_ms());
+    Ok(json!({ "playing": playing, "position": position, "at_ms": at_ms }))
 }
 
 fn state() -> Json {
@@ -485,11 +447,7 @@ fn state() -> Json {
         .values()
         .map(|c| json!({ "id": c.id().to_string(), "chart": c.chart() }))
         .collect();
-    let offset = s
-        .clock
-        .as_ref()
-        .map_or(Some(0.0), SharedClock::offset_micros);
-    let round_trip = s.clock.as_ref().and_then(SharedClock::round_trip_micros);
+    let (offset, round_trip) = host_clock(&s);
     let (leader, lead_epoch) = s.presence.as_ref().map_or((None, None), |peer| {
         let states = peer.states();
         (
@@ -601,6 +559,76 @@ mod tests {
         let cleared = set_bar_one(&json!({ "id": id })).unwrap();
         assert!(cleared["chart_start_seconds"].as_f64().unwrap().abs() < 1e-9);
         assert!(set_bar_one(&json!({ "id": uuid::Uuid::new_v4().to_string(), "bar": 5 })).is_err());
+    }
+
+    /// A leader that serves only its presence (Architect's, whose host
+    /// serves its clock: the session engine's `Leader` once
+    /// `session::clock` is gone, session#189) is followed: the chart's
+    /// position comes from the presence peer's own clock estimate.
+    #[tokio::test(flavor = "multi_thread")]
+    #[allow(clippy::arithmetic_side_effects)] // Deadlines: an instant plus seconds.
+    async fn a_presence_only_leader_is_followed() {
+        use super::{
+            DocPresenceDispatcher, Endpoint, EngineHost, Here, LayerRouter, PeerState,
+            PresenceHost, PresencePeer, doc_presence_service_descriptor, follow, pool, shown_now,
+        };
+        use std::time::Duration;
+        use tokio::time::{Instant, sleep};
+
+        let doc = uuid::Uuid::new_v4();
+        let port = 46_000 + (std::process::id() % 1000);
+        let router = LayerRouter::new().with(
+            doc_presence_service_descriptor(),
+            DocPresenceDispatcher::new(PresenceHost::new(doc, 30_000)),
+        );
+        let bind = format!("127.0.0.1:{port}");
+        tokio::spawn(async move {
+            let _ = EngineHost::ungated(router, bind).serve().await;
+        });
+        let url = format!("ws://127.0.0.1:{port}/vox");
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let presence = loop {
+            if let Ok(client) = pool().client(&Endpoint::url(&url)).await {
+                break client;
+            }
+            assert!(Instant::now() < deadline, "the leader never served");
+            sleep(Duration::from_millis(20)).await;
+        };
+        // The leader: its presence peer, stamping in the host's clock.
+        let (peer, mut driver) = PresencePeer::new(doc, 30_000);
+        tokio::spawn(async move {
+            let _ = driver.run(&presence).await;
+        });
+        let lead = Here::new(peer, "lead", PeerState::new("lead", "Transport"));
+        while !lead.play_now(true, 48.0, 1.0) {
+            assert!(
+                Instant::now() < deadline,
+                "the leader's clock never estimated"
+            );
+            sleep(Duration::from_millis(20)).await;
+        }
+
+        follow(json!({ "url": url, "id": doc.to_string() }))
+            .await
+            .unwrap();
+        let shown = loop {
+            if let Some((at, playing)) = shown_now() {
+                assert!(playing);
+                break at;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "the follower never placed the leader"
+            );
+            sleep(Duration::from_millis(20)).await;
+        };
+        assert!((48.0..49.0).contains(&shown), "shown {shown}");
+        sleep(Duration::from_millis(500)).await;
+        let later = shown_now().unwrap().0;
+        assert!(
+            (later - shown - 0.5).abs() < 0.15,
+            "it moves with the clock: {shown} then {later}"
+        );
     }
 
     #[test]
