@@ -24,6 +24,8 @@ pub mod keep;
 pub mod palette;
 #[cfg(not(target_family = "wasm"))]
 pub mod session_host;
+#[cfg(not(target_family = "wasm"))]
+pub mod session_view;
 pub mod tools;
 
 use std::collections::BTreeMap;
@@ -67,6 +69,12 @@ impl Extension for Keyflow {
         // `fts.session`: Keyflow as a session's host (native only).
         #[cfg(not(target_family = "wasm"))]
         session_host::build(ext);
+        // A chart on a session: its playhead, and its source beside it.
+        #[cfg(not(target_family = "wasm"))]
+        {
+            session_view::start_playhead();
+            ext.view("source", session_view::ChartSourcePane);
+        }
         for tool in tools::TOOLS {
             let command = tool.command;
             ext.action(tool.action, move |_| async move {

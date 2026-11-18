@@ -149,6 +149,15 @@ impl ChartSession {
         self.doc.clone()
     }
 
+    /// Where the chart's bar 1 is in this session, seconds (the song's
+    /// bar 1 after a count-in; `0` when the session sets none).
+    #[must_use]
+    pub fn chart_start(&self) -> f64 {
+        self.session
+            .bar_one()
+            .map_or(0.0, |at| at.seconds(&self.session.tempo()))
+    }
+
     /// The chart's source; empty when it has none yet.
     #[must_use]
     pub fn chart(&self) -> String {
@@ -345,6 +354,42 @@ impl ChartSource {
             method: READ,
             args: call_json(doc, Request::ReadData).map_err(Error::Service)?,
         }))
+    }
+
+    /// The call that reads the session's structure (its tempo map and
+    /// where the song's bar 1 is); `None` for a document.
+    ///
+    /// # Errors
+    ///
+    /// The request could not be encoded.
+    pub fn structure_call(&self) -> Result<Option<ServiceCall>> {
+        let Self::Session { doc } = self else {
+            return Ok(None);
+        };
+        Ok(Some(ServiceCall {
+            service: session::extension::SERVICE,
+            method: READ,
+            args: call_json(doc, Request::ReadStructure).map_err(Error::Service)?,
+        }))
+    }
+
+    /// Where the chart's bar 1 is in the session, seconds, from the reply
+    /// to [`Self::structure_call`]: the song's bar 1 (`bar_one`, after a
+    /// count-in) under the session's tempo map; `0` when it has none.
+    ///
+    /// # Errors
+    ///
+    /// The reply is not the session's structure.
+    pub fn chart_start_of(reply: &str) -> Result<f64> {
+        match response_of(reply).map_err(Error::Service)? {
+            Response::Structure { tempo, bar_one, .. } => {
+                let map = tempo
+                    .to_tempo_map()
+                    .map_err(|e| Error::Service(e.to_string()))?;
+                Ok(bar_one.map_or(0.0, |at| at.seconds(&map)))
+            }
+            other => Err(Error::Service(format!("not the structure: {other:?}"))),
+        }
     }
 
     /// The call that replaces `delete` characters at `at` of the chart

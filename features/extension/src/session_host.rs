@@ -109,13 +109,34 @@ fn watch(chart: &ChartSession, id: Uuid) -> crdt::loro::Subscription {
     chart.on_remote_change(move || crate::reload(Some(&pane)))
 }
 
+/// A new session's chart: the `.kf` file at `chart_path`, or `chart`
+/// (Keyflow source); either must read as a chart. A path given as
+/// `chart` is refused, not taken for a one-bar chart titled with it.
+fn chart_source(args: &Json) -> Result<String, String> {
+    let source = match (
+        args.get("chart_path").and_then(Json::as_str),
+        args.get("chart").and_then(Json::as_str),
+    ) {
+        (Some(path), _) => std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?,
+        (None, Some(text)) => text.to_owned(),
+        (None, None) => return Ok(String::new()),
+    };
+    keyflow::parse(&source).map_err(|e| format!("not a chart: {e}"))?;
+    if !source.contains('\n') && (source.ends_with(".kf") || source.contains('/')) {
+        return Err(format!(
+            "`chart` is the chart's text; {source:?} looks like a path: give it as `chart_path`"
+        ));
+    }
+    Ok(source)
+}
+
 async fn open(args: Json) -> Result<Json, String> {
     let path = PathBuf::from(text(&args, "path")?);
     let chart = if path.exists() {
         ChartSession::open(&path).await
     } else {
-        let source = args.get("chart").and_then(Json::as_str).unwrap_or_default();
-        ChartSession::create(&path, source).await
+        let source = chart_source(&args)?;
+        ChartSession::create(&path, &source).await
     }
     .map_err(|e| e.to_string())?;
     let id = chart.id();
@@ -174,6 +195,57 @@ async fn join_presence(url: &str, id: Uuid, me: &str) -> Result<(), String> {
     s.presence = Some(peer);
     s.here = Some(here);
     Ok(())
+}
+
+/// Follows a session hosted elsewhere (the DAW engine's, another app's)
+/// without holding a copy or providing it: its presence and its host's
+/// clock at `url`, so the chart panes on `session:<doc>` draw where its
+/// leader is. The chart itself is read and written through the host's
+/// `fts.session`, from whichever extension provides it.
+async fn follow(args: Json) -> Result<Json, String> {
+    let url = text(&args, "url")?;
+    let id = id_of(&args)?;
+    let host: SessionClockClient = pool()
+        .client(&Endpoint::url(&url))
+        .await
+        .map_err(|e| e.to_string())?;
+    let clock = SharedClock::default();
+    let pinger = clock.clone();
+    tokio::spawn(async move {
+        let _ = pinger.run(&host).await;
+    });
+    join_presence(&url, id, "chart").await?;
+    sessions().clock = Some(clock);
+    Ok(json!({ "following": url, "id": id.to_string(), "pane": format!("session:{id}") }))
+}
+
+/// Where the followed session's leader is now, session seconds, and
+/// whether it plays: `None` before the clock is estimated or the leader
+/// has said anything. On the host itself the offset is zero.
+#[must_use]
+pub fn shown_now() -> Option<(f64, bool)> {
+    let mut s = sessions();
+    let offset = s
+        .clock
+        .as_ref()
+        .map_or(Some(0.0), SharedClock::offset_micros)?;
+    let leader = s
+        .presence
+        .as_ref()?
+        .states()
+        .get("lead/play")
+        .and_then(transport_of)?;
+    s.tracker.observe(leader);
+    let at = s.tracker.position(now_micros_f64(), offset)?;
+    Some((at, leader.is_playing))
+}
+
+/// Where the chart's bar 1 is in session `doc`, seconds, if this copy
+/// holds it; `None` for a session held elsewhere (ask its provider).
+#[must_use]
+pub fn held_chart_start(doc: &str) -> Option<f64> {
+    let id = Uuid::parse_str(doc).ok()?;
+    sessions().charts.get(&id).map(ChartSession::chart_start)
 }
 
 async fn join(args: Json) -> Result<Json, String> {
@@ -311,6 +383,30 @@ pub fn build(ext: &mut Builder) {
     .action("KEYFLOW_SESSION_OPEN", open)
     .action("KEYFLOW_SESSION_SERVE", serve)
     .action("KEYFLOW_SESSION_JOIN", join)
+    .action("KEYFLOW_SESSION_FOLLOW", follow)
     .action("KEYFLOW_SESSION_PLAY", |args| async move { play(&args) })
     .action("KEYFLOW_SESSION_STATE", |_| async { Ok(state()) });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::chart_source;
+    use serde_json::json;
+
+    #[test]
+    fn a_new_sessions_chart_is_text_or_a_file_never_a_path_taken_for_text() {
+        let chart = chart_source(&json!({ "chart": "Verse: C G Am F\n" })).unwrap();
+        assert_eq!(chart, "Verse: C G Am F\n");
+        assert!(
+            chart_source(&json!({ "chart": "Charts/02 Drive To LA.kf" })).is_err(),
+            "a vault path given as the chart's text"
+        );
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("a.kf");
+        std::fs::write(&file, "Verse: C G\n").unwrap();
+        let chart = chart_source(&json!({ "chart_path": file.display().to_string() })).unwrap();
+        assert_eq!(chart, "Verse: C G\n");
+        assert!(chart_source(&json!({ "chart_path": "/nowhere/a.kf" })).is_err());
+        assert_eq!(chart_source(&json!({})).unwrap(), "");
+    }
 }
