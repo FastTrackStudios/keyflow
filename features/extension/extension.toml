@@ -26,6 +26,11 @@ git = "https://github.com/FastTrackStudios/keyflow"
 rev = "main"
 path = "features/extension"
 
+# A chart in a session (pane state `session:<id>`) is read and edited
+# through the session's host. A chart alone needs no session.
+[uses]
+"fts.session" = "^0.1"
+
 [capabilities]
 effect = "mutating"
 # A chart's text: read to engrave it.

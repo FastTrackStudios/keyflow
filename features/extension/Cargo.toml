@@ -25,6 +25,9 @@ architect-workspace = { workspace = true, features = ["paint-ui"] }
 architect-theme = { workspace = true, features = ["dioxus"] }
 keyflow = { workspace = true, features = ["text", "paint"] }
 keyflow-ui = { workspace = true, features = ["paint-view"] }
+# A chart in a session: its pane state, and the `fts.session` calls that
+# read and edit it (the chart alone still reads its document).
+keyflow-session = { path = "../session" }
 dioxus = { workspace = true }
 serde_json = { workspace = true }
 # Glyph outlines as SVG icons (src/icons.rs), the palette's images inline.

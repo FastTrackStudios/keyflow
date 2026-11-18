@@ -28,6 +28,7 @@ use std::sync::{Mutex, PoisonError};
 
 use architect_extensions::contrib::{StateKind, StateWrite};
 use architect_extensions::hostcall::HostRequest;
+use keyflow_session::ChartSource;
 use architect_extensions::linked::{Builder, Extension, Handle, PaintPane, use_pane_state};
 use architect_workspace::paint::peniko::Color;
 use architect_workspace::{HostData, PaintWake};
@@ -300,14 +301,38 @@ async fn read_chart(path: &str) -> Result<keyflow::Chart, String> {
         .unwrap_or_else(PoisonError::into_inner)
         .clone()
         .ok_or("the extension is not loaded")?;
-    let answer = handle
-        .host(HostRequest::ReadDocument {
-            path: path.to_owned(),
-        })
-        .await
-        .map_err(|e| format!("{e:?}"))?;
-    let source = answer.as_str().ok_or("the document is not text")?;
-    keyflow::parse(source).map_err(|e| e.to_string())
+    // The pane's state names a document (the chart alone) or a session
+    // (`session:<id>`, the chart as Keyflow's data there).
+    let source = ChartSource::of_pane_state(path);
+    let text = match source.read_call().map_err(|e| e.to_string())? {
+        None => handle
+            .host(HostRequest::ReadDocument {
+                path: path.to_owned(),
+            })
+            .await
+            .map_err(|e| format!("{e:?}"))?
+            .as_str()
+            .ok_or("the document is not text")?
+            .to_owned(),
+        Some(call) => {
+            let reply = handle
+                .host(service_request(&call)?)
+                .await
+                .map_err(|e| format!("{e:?}"))?;
+            ChartSource::chart_of(&reply.to_string()).map_err(|e| e.to_string())?
+        }
+    };
+    keyflow::parse(&text).map_err(|e| e.to_string())
+}
+
+/// A `fts.session` call as the host request that makes it (the host runs
+/// the provider's action as this extension).
+fn service_request(call: &keyflow_session::ServiceCall) -> Result<HostRequest, String> {
+    Ok(HostRequest::Service {
+        service: call.service.to_owned(),
+        method: call.method.to_owned(),
+        args: serde_json::from_str(&call.args).map_err(|e| e.to_string())?,
+    })
 }
 
 /// The open charts, for `KEYFLOW_STATE`.
