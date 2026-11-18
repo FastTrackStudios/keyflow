@@ -8,7 +8,7 @@ the `architect` / `daw` / `vendor` splits before it.
 |---|---|---|
 | **keyflow** (here) | the chart language, its formats, the LSP + grammar, and Engraver | — |
 | [daw](https://github.com/FastTrackStudios/daw) | the DAW platform and shared substrate | git dep, tag `v0.0.7` |
-| [architect](https://github.com/FastTrackStudios/architect) | the framework (entity/RPC, atom, form, auth, permissions, crdt), `architect-ui` | git dep, tag `v0.12.6` (same tag studio pins) |
+| [architect](https://github.com/FastTrackStudios/architect) | the framework (entity/RPC, atom, form, auth, permissions, crdt), `architect-ui` | git dep, tag `v0.12.6`, on the **`www.github.com`** spelling (Studio patches it to its own tag) |
 | [session](https://github.com/FastTrackStudios/session) | the musical/production vocabulary and the Session app | consumes this repo |
 | [editor](https://github.com/FastTrackStudios/editor) | the embeddable text/markdown editor — sits BELOW this repo | git dep, pinned by `rev` (`6817dc2`, architect v0.12.6's) |
 
@@ -26,6 +26,52 @@ daw = { path = "../daw/crates/daw/daw" }
 ```
 
 Never commit those overrides — the paths are machine-specific.
+
+## Moving the Architect pin
+
+Every Architect dependency here is spelled `https://www.github.com/FastTrackStudios/architect`,
+on purpose. Cargo treats that spelling as a different source from the plain
+URL, so Studio can patch exactly these pins to its own tag:
+`[patch."https://www.github.com/FastTrackStudios/architect"]` in Studio's
+Cargo.toml. In Studio's graph, keyflow's Architect tag is then not used.
+
+- **An Architect patch release** (v0.12.6 → v0.12.5) needs **no keyflow
+  release**. Studio takes it alone. The bot still bumps the pin here so
+  keyflow's own CI builds on the newest Architect; no tag is needed.
+- **An Architect minor** (v0.12 → v0.13) needs one: it may break this code,
+  and so far every minor moved the editor, dioxus or blitz revisions this
+  repo follows. Run `just bump-architect vX.Y.0 --version auto`, merge, then
+  `just release-tag`. The bot sets `--version auto` on a minor by itself.
+- **A new direct Architect dependency of a keyflow crate** must also go into
+  Studio's www `[patch]` table, or Studio's lock gets a second Architect
+  source. Studio's `just bump-architect` refuses a lock with one. Keep every
+  Architect entry here on the www spelling.
+
+`just bump-architect vX.Y.Z` moves every Architect pin (the
+`[workspace.dependencies]` entries, the `[patch]` table, `features/ui`'s
+`architect-workspace`, the comments and the table above) and `Cargo.lock`.
+It exits 3 when Architect moved a pin this repo follows (editor, dioxus,
+blitz): the rest is done, and a person moves that one.
+`just bump-architect-test` replays keyflow#67 and #61.
+
+When Architect releases a stable tag, `.github/workflows/bump-architect.yml`
+runs the same command and opens `bump/architect-<tag>`. When `CI` is green
+on the bot's own head, the bot merges a mechanical bump, checking the files,
+the head's author and new git sources again at merge time. A failing one
+stays open with the failed jobs named and never merges itself. To hold one
+release, close its bump PR (or label it `hold`): the bot never reopens or
+re-pushes it. It refuses a tag whose commit is not on Architect's `main`,
+and a major change, a minor jump of more than one, or a new git source in
+`Cargo.lock` is never mechanical. It is inert until the repo variable
+`ARCHITECT_BUMP` is `on`. Its App token is minted for this repo only
+(contents and pull-requests write), from the `pin-bump` environment's own
+secret `PIN_BUMP_APP_KEY`. `just check-token-mints` (in `PR
+checks`) fails any workflow that mints a wider one.
+
+**Tagging** is `just release-tag`: it tags `origin/main` as
+`v<workspace version>` once `CI passed` is green there. Only admins and the
+fts-forge App may create `v*` tags once `scripts/tag-ruleset.sh --apply`
+has been run (by the owner).
 
 ## Run it
 
