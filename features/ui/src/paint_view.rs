@@ -177,6 +177,11 @@ pub struct ChartGestures(pub Arc<dyn Fn(ChartGesture) + Send + Sync>);
 #[derive(Clone, Debug, Default)]
 pub struct ChartPaintStatus {
     pub error: Option<String>,
+    /// The zoom in effect (1.0 is 100%), fit-to-width's when the view's
+    /// zoom is `None`: what a zoom readout shows and a zoom key steps from.
+    pub zoom: f64,
+    /// The pane's size in logical pixels, for zooming about its middle.
+    pub pane: (f64, f64),
 }
 
 /// A mount and its per-pane wake handle and initialization status.
@@ -214,9 +219,7 @@ pub fn chart_mount_with(
     let mount = PaintMount::new(|ctx| {
         let result = ChartPaintView::new();
         if let Some(status) = ctx.data::<ChartPaintStatus>() {
-            status.set(ChartPaintStatus {
-                error: result.as_ref().err().cloned(),
-            });
+            status.update(|s| s.error = result.as_ref().err().cloned());
         }
         MountedChart(result.ok())
     })
@@ -1545,6 +1548,18 @@ impl PaintView for ChartPaintView {
         let view = self.follow_cursor(ctx, &data, snapshot.input, snapshot.view);
         let view = self.follow_playhead(ctx, &data, &snapshot, view);
         let at = self.placement(ctx, view);
+        // The zoom in effect and the pane's size, for the host's readout and
+        // zoom keys: written when they change.
+        if let Some(status) = ctx.data::<ChartPaintStatus>() {
+            let zoom = self.effective_zoom(view.zoom, ctx.geometry.width);
+            let pane = pane_size(ctx);
+            if status.read(|s| (s.zoom - zoom).abs() > 1e-6 || s.pane != pane) {
+                status.update(|s| {
+                    s.zoom = zoom;
+                    s.pane = pane;
+                });
+            }
+        }
         let mut layers: Vec<(LayerKey, Layer)> = self
             .recorded
             .pages
@@ -1762,7 +1777,8 @@ fn point(x: f32, y: f32) -> (f64, f64) {
     (f64::from(x), f64::from(y))
 }
 
-fn clamp_zoom(zoom: f64) -> f64 {
+#[must_use]
+pub fn clamp_zoom(zoom: f64) -> f64 {
     zoom.clamp(MIN_ZOOM, MAX_ZOOM)
 }
 
@@ -1814,7 +1830,8 @@ fn scroll_by(
 
 /// The factor for a Ctrl + wheel of `dy`: a wheel up (`dy` < 0) zooms in.
 /// Clamped to a factor of half or twice per event.
-fn wheel_zoom_factor(dy: f64) -> f64 {
+#[must_use]
+pub fn wheel_zoom_factor(dy: f64) -> f64 {
     ZOOM_PER_NOTCH.powf(-dy / WHEEL_NOTCH_PX).clamp(0.5, 2.0)
 }
 

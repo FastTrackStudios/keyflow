@@ -111,6 +111,15 @@ pub const TOOL_KEYS: &[(&str, &str)] = &[
 /// Undo and redo of note input's own edits: keys in every mode.
 pub const HISTORY_KEYS: &[(&str, &str)] = &[("KEYFLOW_UNDO", "⌘Z"), ("KEYFLOW_REDO", "⇧⌘Z")];
 
+/// The chart's zoom, MuseScore's keys: ⌘= in, ⌘- out, ⌘0 100%; and fit
+/// to the pane's width, ⌥⌘0 (MuseScore gives it none).
+pub const ZOOM_KEYS: &[(&str, &str)] = &[
+    ("KEYFLOW_ZOOM_IN", "⌘="),
+    ("KEYFLOW_ZOOM_OUT", "⌘-"),
+    ("KEYFLOW_ZOOM_100", "⌘0"),
+    ("KEYFLOW_ZOOM_FIT", "⌥⌘0"),
+];
+
 /// Y: chord symbols or notes, what a letter enters (not Tab, which the
 /// app keeps for moving focus).
 pub const TARGET_KEY: (&str, &str) = ("KEYFLOW_TARGET_SWITCH", "Y");
@@ -126,6 +135,7 @@ pub fn default_keys() -> impl Iterator<Item = (&'static str, &'static str)> {
         .map(|a| (a.action, a.key))
         .chain(TOOL_KEYS.iter().copied())
         .chain(HISTORY_KEYS.iter().copied())
+        .chain(ZOOM_KEYS.iter().copied())
         .chain(std::iter::once(TARGET_KEY))
         .chain(std::iter::once(CHORD_EDIT_KEY))
 }

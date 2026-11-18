@@ -715,6 +715,34 @@ group = "Keyflow"
 effect = "mutating"
 
 [[actions]]
+id = "KEYFLOW_ZOOM_IN"
+name = "Keyflow: zoom in"
+description = "The chart zoomed in a step (⌘=), about the middle of its pane."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_ZOOM_OUT"
+name = "Keyflow: zoom out"
+description = "The chart zoomed out a step (⌘-), about the middle of its pane."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_ZOOM_100"
+name = "Keyflow: zoom to 100%"
+description = "The chart at 100% (⌘0)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_ZOOM_FIT"
+name = "Keyflow: fit to width"
+description = "The chart's page fitted to its pane's width (⌥⌘0), as a chart opens; the zoom readout in the status bar does it too."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
 id = "KEYFLOW_CHORD_EDIT"
 name = "Keyflow: retype chord symbol"
 description = "Retype the selected chord symbol (Enter): a bar under the chart shows it; type the new symbol and Enter, or Esc to keep it."
@@ -1528,4 +1556,44 @@ when = "view:chart"
 [[keys]]
 chord = "↵"
 action = "KEYFLOW_CHORD_EDIT"
+when = "view:chart"
+
+[[keys]]
+chord = "⌘="
+action = "KEYFLOW_ZOOM_IN"
+when = "view:chart"
+
+[[keys]]
+chord = "⌃="
+action = "KEYFLOW_ZOOM_IN"
+when = "view:chart"
+
+[[keys]]
+chord = "⌘-"
+action = "KEYFLOW_ZOOM_OUT"
+when = "view:chart"
+
+[[keys]]
+chord = "⌃-"
+action = "KEYFLOW_ZOOM_OUT"
+when = "view:chart"
+
+[[keys]]
+chord = "⌘0"
+action = "KEYFLOW_ZOOM_100"
+when = "view:chart"
+
+[[keys]]
+chord = "⌃0"
+action = "KEYFLOW_ZOOM_100"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥⌘0"
+action = "KEYFLOW_ZOOM_FIT"
+when = "view:chart"
+
+[[keys]]
+chord = "⌃⌥0"
+action = "KEYFLOW_ZOOM_FIT"
 when = "view:chart"
