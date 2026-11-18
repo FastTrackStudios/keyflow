@@ -576,7 +576,7 @@ params = '{"type":"object","properties":{"text":{"type":"string"}}}'
 [[actions]]
 id = "KEYFLOW_UNDO"
 name = "Keyflow: undo note input"
-description = "Note input's last edit taken back (⌘Z), as a new edit, when the chart is still as that edit left it."
+description = "Note input's last edit taken back (⌘Z), as a new edit: only that edit, past anyone else's since in other bars; refused when someone else has changed its own text."
 group = "Keyflow"
 effect = "mutating"
 

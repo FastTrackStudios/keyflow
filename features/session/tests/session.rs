@@ -243,3 +243,50 @@ async fn a_whole_chart_write_is_one_splice_and_merges() {
     assert_eq!(chart.chart(), "Verse: C G Am7 F\nChorus\n");
     assert!(source.replace_call("same", "same").unwrap().is_none());
 }
+
+/// A view re-reads the chart when the other machine's typing arrives,
+/// and only then: its own edits it has already shown.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_peers_edit_tells_the_view_and_its_own_does_not() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let registry = DocRegistry::new(|_| Box::pin(async { Ok(CrdtDoc::ephemeral()) }));
+    let router = LayerRouter::new().with(
+        doc_sync_service_descriptor(),
+        DocSyncDispatcher::new(registry),
+    );
+    let local = LocalServer::serve(router, Scope::new());
+    let dir = tempfile::tempdir().unwrap();
+    let a = ChartSession::create(&dir.path().join("a.session"), VERSE)
+        .await
+        .unwrap();
+    let b = ChartSession::adopt(&dir.path().join("b.session"), a.id())
+        .await
+        .unwrap();
+    for chart in [&a, &b] {
+        let client: DocSyncClient = local.establish().await.unwrap();
+        let mut synced = chart.synced();
+        tokio::spawn(async move {
+            let _ = synced.run(&client).await;
+        });
+    }
+    eventually("B has A's chart", || b.chart() == VERSE).await;
+
+    let told = Arc::new(AtomicUsize::new(0));
+    let _watch = {
+        let told = told.clone();
+        b.on_remote_change(move || {
+            told.fetch_add(1, Ordering::SeqCst);
+        })
+    };
+    // B's own edit: nothing to tell B's view.
+    b.set_chart("Verse: C G Am F G\n").unwrap();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(told.load(Ordering::SeqCst), 0);
+    // A's edit arrives at B: B's view is told.
+    eventually("A has B's edit", || a.chart() == "Verse: C G Am F G\n").await;
+    a.set_chart("Intro: C\nVerse: C G Am F G\n").unwrap();
+    eventually("B's view is told", || told.load(Ordering::SeqCst) > 0).await;
+    assert_eq!(b.chart(), "Intro: C\nVerse: C G Am F G\n");
+}
