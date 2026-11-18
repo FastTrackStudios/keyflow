@@ -1143,6 +1143,29 @@ mod tests {
     }
 
     #[test]
+    fn a_replay_of_a_held_chord_run_plays_each_of_its_bars() {
+        // The second VS replays the first, whose line holds G#m and C#sus2
+        // over barlines: its n-th bar plays the n-th, and follows an edit.
+        let text =
+            "Held\n4/4\n\nVS 4\nE /// G#m / G#m B /// C#sus2 / C#sus2\n\nCH 2\n| A | B |\n\nVS\n";
+        let chart = parse_chart(text).unwrap();
+        let mut score = Score::from_text(text, &chart);
+        assert_eq!(&score.replays[6..], [Some(0), Some(1), Some(2), Some(3)]);
+        let mut input = InputState {
+            mode: Mode::NoteName,
+            ..InputState::default()
+        };
+        input.apply(&mut score, Op::MoveTo(crate::edit::Pos { bar: 1, tick: 0 }));
+        input.apply(&mut score, Op::Duration(Value::Whole));
+        let out = input.apply(&mut score, Op::Letter('A'));
+        let new = write_bars(text, &chart, &score, &out.changed).unwrap();
+        assert!(
+            new.contains("E /// G#m | A_1 | B /// C#sus2 / C#sus2"),
+            "{new}"
+        );
+    }
+
+    #[test]
     fn a_triplet_is_made_and_filled_and_written() {
         let (chart, mut score) = setup();
         let mut input = InputState {

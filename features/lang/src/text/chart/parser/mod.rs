@@ -356,11 +356,23 @@ impl<'a> ChartParser<'a> {
                     .map(|s| (s.column, s.start, s.len))
             })
             .collect();
-        let mut first_read: std::collections::HashMap<(u32, usize, usize), usize> =
+        // The bars first read with each text, in order (a run of bars a
+        // chord is held across shares one text): those of the first section
+        // that has them. A copy's n-th bar with a text plays its n-th.
+        let section_of: Vec<usize> = self
+            .sections
+            .iter()
+            .enumerate()
+            .flat_map(|(i, s)| std::iter::repeat_n(i, s.measures().len()))
+            .collect();
+        let mut first_read: std::collections::HashMap<(u32, usize, usize), Vec<usize>> =
             std::collections::HashMap::new();
         for (g, key) in read_as.iter().enumerate() {
             if let Some(key) = key {
-                first_read.entry(*key).or_insert(g);
+                let bars = first_read.entry(*key).or_default();
+                if bars.first().is_none_or(|&f| section_of[f] == section_of[g]) {
+                    bars.push(g);
+                }
             }
         }
         let mut bars_before = 0usize;
@@ -451,13 +463,20 @@ impl<'a> ChartParser<'a> {
                         continue;
                     }
                     m.read_only.get_or_insert_with(|| why.to_owned());
-                    // The bar it plays again, when it is a copy of one.
-                    if cells.is_empty() {
-                        m.replays = read_as
-                            .get(first_bar + k)
+                    // The bar it plays again, when it is a copy of one: the
+                    // n-th of this section's bars read with its text plays
+                    // the n-th first read with it.
+                    if cells.is_empty()
+                        && let Some(key) = read_as.get(first_bar + k).copied().flatten()
+                    {
+                        let nth = read_as[first_bar..first_bar + k]
+                            .iter()
+                            .filter(|r| **r == Some(key))
+                            .count();
+                        m.replays = first_read
+                            .get(&key)
+                            .and_then(|bars| bars.get(nth))
                             .copied()
-                            .flatten()
-                            .and_then(|key| first_read.get(&key).copied())
                             .filter(|&g| g < first_bar);
                     }
                 }

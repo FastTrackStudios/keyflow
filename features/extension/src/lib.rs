@@ -454,9 +454,21 @@ fn ChartPane() -> Element {
     // another chart: follow it, as a signal the read below depends on.
     let mut current = use_signal(|| path.clone());
     if *current.peek() != path {
+        let was = current.peek().clone();
         current.set(path.clone());
         if let Some(open) = open_charts().get_mut(&key) {
             open.path.clone_from(&path);
+            // Another chart in this pane: it starts at its own view (its
+            // kept one, if any, applied once it is read), not at the last
+            // chart's zoom, scroll and selection.
+            if !was.is_empty() {
+                open.data.update(|s| s.view = ChartView::default());
+                open.selection.update(|s| {
+                    s.keys.clear();
+                    s.hover = None;
+                });
+                open.wake.wake();
+            }
         }
     }
 
@@ -1377,7 +1389,11 @@ async fn chord_key(key: &str, mods: &[&str]) -> bool {
     match key {
         "Enter" => {
             let typed = edit_state().chord_draft.take().unwrap_or_default();
-            let _ = dispatch("KEYFLOW_CHORD_SET", json!({ "text": typed })).await;
+            // Not run (the host refused it): said, not left as it was.
+            if let Err(why) = dispatch("KEYFLOW_CHORD_SET", json!({ "text": typed })).await {
+                edit_state().refused = Some(why);
+                rerender_input().await;
+            }
         }
         "Escape" => {
             edit_state().chord_draft = None;

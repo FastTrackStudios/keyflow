@@ -403,7 +403,7 @@ params = '{"type":"object","required":["bar"],"properties":{"bar":{"type":"integ
 [[actions]]
 id = "KEYFLOW_SYNTAX_WRITE"
 name = "Keyflow: write bars in Keyflow syntax"
-description = "Bars typed in Keyflow's syntax (`text`: `C / / / | Am7 / F G`) written over the active chart's bars from the input cursor on, and the cursor moved past them; refused, with why, when they do not read or run past the chart's end."
+description = "Bars typed in Keyflow's syntax (`text`: `C / / / | Am7 / F G`) written over the active chart's bars from the input cursor on, and the cursor moved past them; bars typed past the chart's end are added after it; refused, with why, when they do not read."
 group = "Keyflow"
 effect = "mutating"
 params = '{"type":"object","required":["text"],"properties":{"text":{"type":"string"}}}'
@@ -561,6 +561,7 @@ name = "Keyflow: set chord symbol"
 description = "The selected chord symbol made `text` (its length kept, and its push or accent marks when the text has none)."
 group = "Keyflow"
 effect = "mutating"
+params = '{"type":"object","required":["text"],"properties":{"text":{"type":"string"}}}'
 
 [[actions]]
 id = "KEYFLOW_TARGET_SWITCH"
