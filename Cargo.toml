@@ -133,7 +133,7 @@ architect = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.1
 crdt = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.12.6" }
 # The session primitive (FastTrackStudios/session): a chart is Keyflow's
 # data in a session (features/session). By rev until it is tagged.
-session = { git = "https://github.com/FastTrackStudios/session", rev = "b36a447e828349d1e143978e6f25e00689ef4a6b", default-features = false }
+session = { git = "https://github.com/FastTrackStudios/session", rev = "9e2a85cfa77ab62013e1d6486743219e98987b2a", default-features = false }
 uuid = { version = "1", features = ["v4"] }
 tokio = { version = "1", default-features = false }
 tempfile = "3"
