@@ -442,6 +442,12 @@ pub struct Measure {
     /// Source text span for this measure
     /// Links this measure back to the original input text that generated it.
     pub source_span: Option<TextSpan>,
+    /// Why this bar has no text of its own to edit, when `source_span` is
+    /// `None` and the parser knows: a chord pushed or held into it over the
+    /// barline, a copy made by `x2`, a section that repeats an earlier one.
+    /// An editor shows it and keeps the bar read-only.
+    #[facet(default)]
+    pub read_only: Option<String>,
 
     /// Source measure number when imported from MusicXML — the value of
     /// `<measure number="...">`. `None` for keyflow-text-authored charts.
@@ -479,6 +485,7 @@ impl Measure {
             source_span: None,
             source_measure_number: None,
             source_measure_width: None,
+            read_only: None,
         }
     }
 

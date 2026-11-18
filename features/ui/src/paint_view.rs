@@ -6,9 +6,20 @@
 //! The framing ([`ChartView`]) is shared both ways: the pane writes the
 //! wheel and a middle-button drag into it, and a host reads or sets it.
 
-use architect_workspace::paint::{PaintMount, PaintView, PaintWake, Scene};
+use std::hash::{Hash as _, Hasher as _};
+use std::sync::Arc;
+
+use architect_workspace::paint::peniko::kurbo::{Affine, Point, Rect, RoundedRect, Stroke};
+use architect_workspace::paint::peniko::{Color, Fill};
+use architect_workspace::paint::region::{Region, Shape};
+use architect_workspace::paint::{
+    Layer, LayerKey, PaintMount, PaintScene as _, PaintView, PaintWake, RegionEvent, Scene,
+};
 use architect_workspace::{Button, Extras, HostData, ViewCtx, ViewInput};
-use keyflow::engraver::renderer::{self, points_to_px, ChartTheme, LayoutWorker};
+use keyflow::engraver::layout::chart::select::{Selectable, in_box, pick};
+use keyflow::engraver::renderer::{self, ChartTheme, LayoutWorker, points_to_px};
+
+use crate::selection::{Gesture, Selection};
 
 /// The zoom a host's `Some(zoom)` is clamped to.
 const MIN_ZOOM: f64 = 0.25;
@@ -54,7 +65,83 @@ pub struct ChartSnapshot {
     /// Zoom and pan. The pane updates them on the wheel (Ctrl to zoom) and
     /// with a middle-button drag; a host may set them as well.
     pub view: ChartView,
+    /// Note input's cursor and shadow note, when a host is in note input.
+    pub input: Option<InputOverlay>,
 }
+
+/// Where note input's next entry goes, as the pane draws it: MuseScore's
+/// note-input cursor over the span of the bar the next note will fill, and
+/// the shadow note, the note that would be entered, at its pitch.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct InputOverlay {
+    /// The bar (the chart's bars from 0, as `bar#N` names them).
+    pub bar: usize,
+    /// The span of the bar the next entry fills, as fractions of it.
+    pub from: f64,
+    pub to: f64,
+    /// The note that would be entered, when the pane should show it.
+    pub shadow: Option<ShadowNote>,
+    /// How many bars from `bar` the next entry writes (syntax mode's typed
+    /// bars, previewed): the cursor covers each.
+    pub bars: usize,
+    /// The note, rest or chord last entered or moved to, highlighted as
+    /// itself in the selection colour: `(bar, from, to, chords)`.
+    pub selected: Option<(usize, f64, f64, bool)>,
+    /// The shadow note under the pointer (MuseScore's mouse preview), when
+    /// a click would enter a note: the staff's top line as a staff step
+    /// (`Pitch::step`), and how the note would look.
+    pub pointer: Option<PointerShadow>,
+    /// The voice notes go into, 0 to 3: the cursor, the shadow note and the
+    /// entry are drawn in its colour, as MuseScore draws them.
+    pub voice: u8,
+}
+
+/// What the pointer's shadow note looks like, and the staff it is read on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PointerShadow {
+    /// The staff step of the staff's top line, by its clef.
+    pub top_step: i32,
+    pub open: bool,
+    pub rest: bool,
+}
+
+/// The note or rest note input would enter, drawn where it would go.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ShadowNote {
+    /// Its staff position: half-spaces below the staff's top line (a line
+    /// is even, a space odd; negative is above the staff).
+    pub below_top: i32,
+    /// A half or a whole: an open notehead.
+    pub open: bool,
+    /// A rest, not a note.
+    pub rest: bool,
+}
+
+/// A key pressed on the chart, or a click on a bar: what the pane hands
+/// its host, which turns keys into actions through its keymap (the view
+/// binds none itself) and a click into a place for note input.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ChartGesture {
+    /// A key by its `KeyboardEvent.key` name, with the modifiers held.
+    Key {
+        key: String,
+        mods: Vec<&'static str>,
+    },
+    /// The main button pressed on bar `bar`, `fraction` of the way across:
+    /// on the element of `kind` (`chord`, `note`, `rest`…) if one is there,
+    /// at staff position `below_top` (half-spaces below the top line).
+    Click {
+        bar: usize,
+        fraction: f64,
+        kind: Option<String>,
+        below_top: i32,
+    },
+}
+
+/// Where the pane hands its gestures: given in its extras
+/// ([`chart_mount_with`]).
+#[derive(Clone)]
+pub struct ChartGestures(pub Arc<dyn Fn(ChartGesture) + Send + Sync>);
 
 /// Initialization status for a chart pane. Hosts can show `error` in their
 /// own chrome if fonts or the layout worker could not be started.
@@ -69,6 +156,8 @@ pub struct ChartMount {
     pub mount: PaintMount,
     pub wake: PaintWake,
     pub status: HostData<ChartPaintStatus>,
+    /// What is selected on the chart, as the pane last wrote it.
+    pub selection: HostData<ChartSelection>,
 }
 
 impl PartialEq for ChartMount {
@@ -82,7 +171,17 @@ impl PartialEq for ChartMount {
 /// pane with `PaintPane { mount }`.
 #[must_use]
 pub fn chart_mount(data: HostData<ChartSnapshot>) -> ChartMount {
+    chart_mount_with(data, None)
+}
+
+/// [`chart_mount`], handing the pane's keys and clicks to `gestures`.
+#[must_use]
+pub fn chart_mount_with(
+    data: HostData<ChartSnapshot>,
+    gestures: Option<ChartGestures>,
+) -> ChartMount {
     let status = HostData::new(ChartPaintStatus::default());
+    let selection = HostData::new(ChartSelection::default());
     let mount = PaintMount::new(|ctx| {
         let result = ChartPaintView::new();
         if let Some(status) = ctx.data::<ChartPaintStatus>() {
@@ -92,12 +191,22 @@ pub fn chart_mount(data: HostData<ChartSnapshot>) -> ChartMount {
         }
         MountedChart(result.ok())
     })
-    .extras(Extras::default().with_data(data).with_data(status.clone()));
+    .extras({
+        let extras = Extras::default()
+            .with_data(data)
+            .with_data(status.clone())
+            .with_data(selection.clone());
+        match gestures {
+            Some(g) => extras.with(g),
+            None => extras,
+        }
+    });
     let wake = mount.wake_handle();
     ChartMount {
         mount,
         wake,
         status,
+        selection,
     }
 }
 
@@ -114,9 +223,225 @@ impl PaintView for MountedChart {
         }
     }
 
+    fn layers(&mut self, ctx: &ViewCtx) -> Option<Vec<(LayerKey, Layer)>> {
+        self.0.as_mut().and_then(|view| view.layers(ctx))
+    }
+
     fn animating(&self, ctx: &ViewCtx) -> bool {
         self.0.as_ref().is_some_and(|view| view.animating(ctx))
     }
+
+    fn region(&mut self, ctx: &ViewCtx, event: &RegionEvent) -> bool {
+        self.0.as_mut().is_some_and(|view| view.region(ctx, event))
+    }
+}
+
+/// What is selected on the chart: the selectables' keys
+/// (`keyflow::engraver::layout::chart::select`), in reading order, and
+/// the one under the pointer. The pane writes it as it changes, when its
+/// host gave it one in its extras. Both are presence: this person's view
+/// of the chart, not the chart.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ChartSelection {
+    pub keys: Vec<String>,
+    /// The element under the pointer, highlighted as itself.
+    pub hover: Option<String>,
+}
+
+/// The layers a chart is drawn in, by key. Each page is its own (its
+/// number), so an edit re-sends only the pages it changed; the
+/// selection, the hover, a lasso and the playhead are each one more, over
+/// the pages, so a hover moving re-sends only its own small layer.
+const SELECTION_LAYER: LayerKey = 1 << 32;
+const LASSO_LAYER: LayerKey = SELECTION_LAYER + 1;
+const PLAYHEAD_LAYER: LayerKey = SELECTION_LAYER + 2;
+const HOVER_LAYER: LayerKey = SELECTION_LAYER + 3;
+const INPUT_LAYER: LayerKey = SELECTION_LAYER + 4;
+const ENTRY_LAYER: LayerKey = SELECTION_LAYER + 5;
+const POINTER_LAYER: LayerKey = SELECTION_LAYER + 6;
+
+/// The layers' stacking over the pages (z 0).
+const HOVER_Z: i32 = 1;
+const SELECTION_Z: i32 = 2;
+const PLAYHEAD_Z: i32 = 3;
+const LASSO_Z: i32 = 4;
+const INPUT_Z: i32 = 5;
+
+/// How far, in chart points, a click may miss what it selects.
+const PICK_SLOP: f64 = 3.0;
+
+/// The theme tokens the selection and the hover are drawn in: a theme's
+/// own `chart.select` / `chart.hover` (the engraver's `chart.*` tokens,
+/// `ChartTheme::from_tokens`) when it has them, else the app's brand
+/// colour (`primary`) and `info`. Not `accent`: in the app's tokens that
+/// is a hover's background tint, near the paper.
+const SELECTION_TOKENS: [&str; 2] = ["chart.select", "primary"];
+const HOVER_TOKENS: [&str; 2] = ["chart.hover", "info"];
+
+/// A chart that follows the app's theme without `chart.*` tokens of its
+/// own is drawn on the app's card, in its card ink, with muted staff lines.
+const CHART_TOKEN_FALLBACKS: [(&str, &str); 3] = [
+    ("chart.paper", "card"),
+    ("chart.ink", "card-foreground"),
+    ("chart.staff", "muted-foreground"),
+];
+
+/// `name` from the pane's theme tokens, or the app token a `chart.*` one
+/// falls back to.
+fn chart_token(ctx: &ViewCtx, name: &str) -> Option<Color> {
+    ctx.theme.color(name).or_else(|| {
+        CHART_TOKEN_FALLBACKS
+            .iter()
+            .find(|(chart, _)| *chart == name)
+            .and_then(|(_, app)| ctx.theme.color(app))
+    })
+}
+/// Without a theme's tokens (a host that gives none): MuseScore's.
+const SELECTION_FALLBACK: Color = Color::from_rgb8(0x00, 0x65, 0xBF);
+const HOVER_FALLBACK: Color = Color::from_rgb8(0x2E, 0x9C, 0xE6);
+/// Voices 2 to 4, a theme's `chart.voice2` … or MuseScore's: green,
+/// orange, pink (voice 1 is the selection colour, MuseScore's blue).
+const VOICE_TOKENS: [&str; 3] = ["chart.voice2", "chart.voice3", "chart.voice4"];
+const VOICE_FALLBACKS: [Color; 3] = [
+    Color::from_rgb8(0x00, 0x7F, 0x00),
+    Color::from_rgb8(0xC5, 0x3F, 0x00),
+    Color::from_rgb8(0xC3, 0x19, 0x89),
+];
+
+/// The two colours a highlight takes, as the theme and the chart's paper
+/// give them.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HighlightColours {
+    pub selection: Color,
+    pub hover: Color,
+    /// Voices 2 to 4's colours.
+    pub voices: [Color; 3],
+}
+
+impl HighlightColours {
+    /// From the theme's tokens (`token`), made to read on `paper`: a
+    /// token too close to the paper (a dark theme's light accent on a
+    /// chart pinned to light paper) is mixed toward `ink` until it does.
+    #[must_use]
+    pub fn from_tokens(token: impl Fn(&str) -> Option<Color>, paper: Color, ink: Color) -> Self {
+        let pick = |names: [&str; 2], fallback: Color| {
+            names.iter().find_map(|n| token(n)).unwrap_or(fallback)
+        };
+        Self {
+            selection: legible(pick(SELECTION_TOKENS, SELECTION_FALLBACK), paper, ink),
+            hover: legible(pick(HOVER_TOKENS, HOVER_FALLBACK), paper, ink),
+            voices: std::array::from_fn(|i| {
+                legible(
+                    token(VOICE_TOKENS[i]).unwrap_or(VOICE_FALLBACKS[i]),
+                    paper,
+                    ink,
+                )
+            }),
+        }
+    }
+
+    /// Voice `voice`'s colour (0 to 3): voice 1's is the selection's.
+    #[must_use]
+    pub fn voice(self, voice: u8) -> Color {
+        match voice {
+            1..=3 => self.voices[usize::from(voice) - 1],
+            _ => self.selection,
+        }
+    }
+
+    /// The lasso's wash and edge: the selection colour, light.
+    fn lasso(self) -> (Color, Color) {
+        (
+            self.selection.with_alpha(0.22),
+            self.selection.with_alpha(0.86),
+        )
+    }
+}
+
+impl Default for HighlightColours {
+    fn default() -> Self {
+        Self {
+            selection: SELECTION_FALLBACK,
+            hover: HOVER_FALLBACK,
+            voices: VOICE_FALLBACKS,
+        }
+    }
+}
+
+/// Relative luminance (WCAG), near enough for a contrast guard.
+fn luminance(c: Color) -> f32 {
+    let [r, g, b, _] = c.components;
+    let lin = |v: f32| {
+        if v <= 0.04045 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+}
+
+/// WCAG contrast ratio of two colours.
+fn contrast(a: Color, b: Color) -> f32 {
+    let (la, lb) = (luminance(a), luminance(b));
+    let (hi, lo) = if la > lb { (la, lb) } else { (lb, la) };
+    (hi + 0.05) / (lo + 0.05)
+}
+
+/// `colour`, mixed toward `ink` in steps until it reads on `paper`
+/// (3:1, WCAG's for graphics), opaque.
+fn legible(colour: Color, paper: Color, ink: Color) -> Color {
+    let mut c = colour.with_alpha(1.0);
+    for _ in 0..6 {
+        if contrast(c, paper) >= 3.0 {
+            break;
+        }
+        c = mix(c, ink.with_alpha(1.0), 0.3);
+    }
+    c
+}
+
+fn mix(a: Color, b: Color, t: f32) -> Color {
+    let (a, b) = (a.components, b.components);
+    Color::new([
+        a[0] + (b[0] - a[0]) * t,
+        a[1] + (b[1] - a[1]) * t,
+        a[2] + (b[2] - a[2]) * t,
+        a[3] + (b[3] - a[3]) * t,
+    ])
+}
+
+/// A press that may become a lasso: where it started, in pane pixels, and
+/// whether it adds to the selection.
+#[derive(Clone, Copy)]
+struct Press {
+    from: (f64, f64),
+    to: (f64, f64),
+    add: bool,
+    moved: bool,
+}
+
+/// What it last recorded, kept while what it shows is the same: a pan or
+/// a zoom is a new transform on the same recordings.
+#[derive(Default)]
+struct Recorded {
+    /// The engraver's generation the pages were recorded at.
+    generation: Option<u64>,
+    pages: Vec<(LayerKey, Layer)>,
+    /// The selection's keys and colour it was drawn for, and its layer.
+    selection: Option<((Vec<String>, Color), Layer)>,
+    /// The hovered element's key and colour it was drawn for, and its layer.
+    hover: Option<((String, Color), Layer)>,
+    /// Note input's overlay and colour it was drawn for, and its layer.
+    input: Option<((InputOverlay, Color), Layer)>,
+    /// The entry selected in note input, and its layer.
+    entry: Option<((Vec<String>, Color), Layer)>,
+    /// The pointer's shadow note, and its layer.
+    pointer: Option<((usize, i64, i32, PointerShadow, Color), Layer)>,
+    /// The playhead's time it was drawn at, and its layer.
+    playhead: Option<(u64, Option<Layer>)>,
+    /// The laid-out chart's selectables, at that generation.
+    selectables: Vec<Selectable>,
 }
 
 /// An in-process chart view for `PaintMount`.
@@ -128,10 +453,29 @@ pub struct ChartPaintView {
     content: (f64, f64),
     /// Whether Ctrl was held at the last key event.
     ctrl: bool,
+    /// Whether every element has a region (else the pane hit-tests).
+    regions_cover: bool,
+    /// The version of its host's selection it last looked at.
+    adopted: Option<u64>,
+    /// Note input's cursor as last followed: `(bar, from)`.
+    followed: Option<(usize, u64)>,
+    /// The modifiers held at the last key event: a press on a region
+    /// carries none, so a Shift- or Cmd-click reads them from here.
+    mods: Vec<&'static str>,
     /// The pointer's last position in the pane, from its pointer events.
     pointer: (f64, f64),
     /// Whether a middle-button drag is in progress.
     panning: bool,
+    /// The theme last set, by its debug text's hash: set again only when
+    /// it changed, so the recordings are kept.
+    theme: Option<u64>,
+    recorded: Recorded,
+    selection: Selection<String>,
+    /// The element under the pointer.
+    hover: Option<String>,
+    /// The theme's highlight colours, read at the last frame.
+    colours: HighlightColours,
+    press: Option<Press>,
 }
 
 impl ChartPaintView {
@@ -146,8 +490,18 @@ impl ChartPaintView {
             requested: None,
             content: (0.0, 0.0),
             ctrl: false,
+            mods: Vec::new(),
+            regions_cover: false,
+            adopted: None,
+            followed: None,
             pointer: (0.0, 0.0),
             panning: false,
+            theme: None,
+            recorded: Recorded::default(),
+            selection: Selection::default(),
+            hover: None,
+            colours: HighlightColours::default(),
+            press: None,
         })
     }
 
@@ -164,6 +518,27 @@ impl ChartPaintView {
                     .layout_job(snapshot.chart.clone(), snapshot.revision),
             );
             self.requested = Some(snapshot.revision);
+        }
+    }
+
+    /// The host's theme, or the pane's tokens', set on the engraver when
+    /// it changed.
+    fn update_theme(&mut self, ctx: &ViewCtx, snapshot: &ChartSnapshot) {
+        let theme = snapshot
+            .theme
+            .clone()
+            .unwrap_or_else(|| ChartTheme::from_tokens(|name| chart_token(ctx, name)));
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        format!("{theme:?}").hash(&mut hasher);
+        let hash = hasher.finish();
+        self.colours = HighlightColours::from_tokens(
+            |name| ctx.theme.color(name),
+            theme.render.background_color,
+            theme.render.foreground_color,
+        );
+        if self.theme != Some(hash) {
+            self.theme = Some(hash);
+            self.view.set_theme(theme);
         }
     }
 
@@ -190,42 +565,742 @@ impl ChartPaintView {
             snapshot.view = edit(snapshot.view, zoom);
         });
     }
+
+    /// Chart pixels at 100% to the pane's logical pixels, for `snapshot`'s
+    /// framing in a pane `ctx` measures.
+    fn placement(&self, ctx: &ViewCtx, view: ChartView) -> Affine {
+        let zoom = self.effective_zoom(view.zoom, ctx.geometry.width);
+        let (x, y) = clamp_scroll(view.scroll, self.content, pane_size(ctx), zoom);
+        Affine::scale(zoom) * Affine::translate((-x, -y))
+    }
+
+    /// The chart scrolled, when note input's cursor moved to a bar out of
+    /// sight, just far enough to show it and the symbols over it
+    /// (MuseScore keeps the cursor on screen): typing at the keyboard
+    /// never goes on out of view.
+    fn follow_cursor(
+        &mut self,
+        ctx: &ViewCtx,
+        data: &HostData<ChartSnapshot>,
+        input: Option<InputOverlay>,
+        view: ChartView,
+    ) -> ChartView {
+        let Some(overlay) = input else {
+            self.followed = None;
+            return view;
+        };
+        let at = (overlay.bar, overlay.from.to_bits());
+        if self.followed == Some(at) {
+            return view;
+        }
+        let Some(b) = self.bar_box(overlay.bar) else {
+            return view;
+        };
+        self.followed = Some(at);
+        let px = points_to_px(1.0);
+        let target = Rect::new(
+            b.x0 * px,
+            (b.y0 - b.height() * 2.5) * px,
+            b.x1 * px,
+            (b.y1 + b.height() * 0.75) * px,
+        );
+        let zoom = self.effective_zoom(view.zoom, ctx.geometry.width);
+        let (w, h) = pane_size(ctx);
+        let scroll = clamp_scroll(view.scroll, self.content, (w, h), zoom);
+        let next = follow(scroll, target, (w / zoom, h / zoom));
+        if next == scroll {
+            return view;
+        }
+        let next = clamp_scroll(next, self.content, (w, h), zoom);
+        data.update(|s| s.view.scroll = next);
+        ChartView {
+            scroll: next,
+            ..view
+        }
+    }
+
+    /// The pages recorded again when the engraver's layout or theme
+    /// changed; the same `Arc`s otherwise.
+    fn record_pages(&mut self) {
+        let generation = self.view.generation();
+        if self.recorded.generation == Some(generation) {
+            return;
+        }
+        let Some(pages) = self.view.record_pages() else {
+            return;
+        };
+        self.recorded.generation = Some(generation);
+        self.recorded.selectables = self.view.selectables();
+        let selectables = &self.recorded.selectables;
+        let mut cover = true;
+        self.recorded.pages = pages
+            .into_iter()
+            .map(|page| {
+                let regions = page_regions(selectables, page.rect);
+                cover &= regions.len() <= architect_workspace::paint::region::MAX_LAYER_REGIONS;
+                (
+                    LayerKey::from(page.number),
+                    Layer::new(Arc::new(page.commands)).regions(regions),
+                )
+            })
+            .collect();
+        self.regions_cover = cover;
+        // A new layout renumbers what can be selected: what was selected
+        // and is still there stays.
+        let keys: Vec<String> = self
+            .recorded
+            .selectables
+            .iter()
+            .map(|s| s.key.clone())
+            .collect();
+        let kept: Vec<String> = self
+            .selection
+            .items()
+            .iter()
+            .filter(|k| keys.contains(k))
+            .cloned()
+            .collect();
+        if kept.len() != self.selection.items().len() {
+            self.selection.lasso(kept, false);
+        }
+        if self.hover.as_ref().is_some_and(|h| !keys.contains(h)) {
+            self.hover = None;
+        }
+        self.recorded.selection = None;
+        self.recorded.hover = None;
+        self.recorded.input = None;
+        self.recorded.entry = None;
+        self.recorded.pointer = None;
+        self.recorded.playhead = None;
+    }
+
+    /// `keys`' elements drawn as themselves in `colour`: each element's
+    /// own ink, recoloured by the engraver ([`renderer::ChartView::
+    /// record_elements`]); a bar, which is a box and not a mark, outlined
+    /// as MuseScore outlines a selected measure.
+    fn highlight(&self, keys: &[String], colour: Color, z: i32) -> Layer {
+        let items: Vec<&Selectable> = self
+            .recorded
+            .selectables
+            .iter()
+            .filter(|s| keys.contains(&s.key))
+            .collect();
+        let nodes: Vec<&[usize]> = items.iter().filter_map(|s| s.node.as_deref()).collect();
+        let mut commands = if nodes.is_empty() {
+            Vec::new()
+        } else {
+            self.view
+                .record_elements(&nodes, colour)
+                .unwrap_or_default()
+        };
+        let bars: Vec<&&Selectable> = items.iter().filter(|s| s.node.is_none()).collect();
+        if !bars.is_empty() {
+            let mut scene = Scene::new();
+            let px = points_to_px(1.0);
+            for bar in bars {
+                let b = bar.bounds.inflate(1.0, 2.0);
+                let rect = Rect::new(b.x0 * px, b.y0 * px, b.x1 * px, b.y1 * px);
+                scene.stroke(
+                    &Stroke::new(2.0),
+                    Affine::IDENTITY,
+                    colour,
+                    None,
+                    &RoundedRect::from_rect(rect, 1.5),
+                );
+            }
+            commands.extend(scene.commands);
+        }
+        Layer::new(Arc::new(commands)).z(z)
+    }
+
+    /// The selection's highlight, in chart pixels at 100%: drawn again
+    /// only when the selection or the layout changed.
+    fn selection_layer(&mut self) -> Option<Layer> {
+        let keys = self.selection.items().to_vec();
+        if keys.is_empty() {
+            self.recorded.selection = None;
+            return None;
+        }
+        let drawn_for = (keys, self.colours.selection);
+        if let Some((drawn, layer)) = &self.recorded.selection
+            && *drawn == drawn_for
+        {
+            return Some(layer.clone());
+        }
+        let layer = self.highlight(&drawn_for.0, drawn_for.1, SELECTION_Z);
+        self.recorded.selection = Some((drawn_for, layer.clone()));
+        Some(layer)
+    }
+
+    /// The element under the pointer, drawn as itself in the hover
+    /// colour: drawn again only when the pointer moves onto another. A
+    /// selected element shows as selected, not hovered.
+    fn hover_layer(&mut self) -> Option<Layer> {
+        let key = self.hover.clone().filter(|k| !self.selection.contains(k))?;
+        let drawn_for = (key, self.colours.hover);
+        if let Some((drawn, layer)) = &self.recorded.hover
+            && *drawn == drawn_for
+        {
+            return Some(layer.clone());
+        }
+        let layer = self.highlight(std::slice::from_ref(&drawn_for.0), drawn_for.1, HOVER_Z);
+        self.recorded.hover = Some((drawn_for, layer.clone()));
+        Some(layer)
+    }
+
+    /// The bar's box (chart points) the chart's bar `bar` is drawn in: its
+    /// first, when it wraps.
+    fn bar_box(&self, bar: usize) -> Option<Rect> {
+        let key = format!("bar#{bar}");
+        let part = format!("bar#{bar}.");
+        self.recorded
+            .selectables
+            .iter()
+            .find(|s| s.key == key || s.key.starts_with(&part))
+            .map(|s| s.bounds)
+    }
+
+    /// Note input's cursor and shadow note, in chart pixels at 100%:
+    /// drawn again only when they move.
+    fn input_layer(&mut self, overlay: Option<InputOverlay>) -> Option<Layer> {
+        let overlay = overlay?;
+        let colour = self.colours.voice(overlay.voice);
+        let drawn_for = (overlay, colour);
+        if let Some((drawn, layer)) = &self.recorded.input
+            && *drawn == drawn_for
+        {
+            return Some(layer.clone());
+        }
+        let bounds = self.bar_box(overlay.bar)?;
+        let px = points_to_px(1.0);
+        let mut scene = Scene::new();
+        let w = bounds.width();
+        let x0 = bounds.x0 + overlay.from.clamp(0.0, 1.0) * w;
+        let space = bounds.height() / 4.0;
+        // MuseScore's note-input cursor: a translucent box in the voice's
+        // colour over where the next note goes, a little past the staff; one
+        // a bar when the next entry writes several (syntax mode's preview).
+        for k in 0..overlay.bars.max(1) {
+            let Some(b) = self.bar_box(overlay.bar + k) else {
+                break;
+            };
+            let (from, to) = if overlay.bars > 1 {
+                (if k == 0 { overlay.from } else { 0.0 }, 1.0)
+            } else {
+                (overlay.from, overlay.to)
+            };
+            let x0 = b.x0 + from.clamp(0.0, 1.0) * b.width();
+            let x1 = (b.x0 + to.clamp(0.0, 1.0) * b.width()).max(x0 + 4.0);
+            let cursor = Rect::new(x0 * px, (b.y0 - space) * px, x1 * px, (b.y1 + space) * px);
+            let shape = RoundedRect::from_rect(cursor, 2.0);
+            scene.fill(
+                Fill::NonZero,
+                Affine::IDENTITY,
+                colour.with_alpha(0.16),
+                None,
+                &shape,
+            );
+            scene.stroke(
+                &Stroke::new(1.5),
+                Affine::IDENTITY,
+                colour.with_alpha(0.85),
+                None,
+                &shape,
+            );
+        }
+        let _ = w;
+        if let Some(shadow) = overlay.shadow {
+            draw_shadow(&mut scene, shadow, x0, bounds, colour.with_alpha(0.6));
+        }
+        let layer = Layer::new(Arc::new(scene.commands)).z(INPUT_Z);
+        self.recorded.input = Some((drawn_for, layer.clone()));
+        Some(layer)
+    }
+
+    /// The entry note input has selected, drawn as itself in the selection
+    /// colour: the chords or the notes and rests whose middle is in its span
+    /// of its bar.
+    fn entry_layer(&mut self, overlay: Option<InputOverlay>) -> Option<Layer> {
+        let overlay = overlay?;
+        let (bar, from, to, chords) = overlay.selected?;
+        // A chord symbol is no voice's: the selection colour.
+        let colour = if chords {
+            self.colours.selection
+        } else {
+            self.colours.voice(overlay.voice)
+        };
+        let b = self.bar_box(bar)?;
+        let (x0, x1) = (b.x0 + from * b.width(), b.x0 + to * b.width());
+        // Its staff and the chord symbols over it, not the line below.
+        let near = Rect::new(
+            b.x0,
+            b.y0 - b.height() * 2.5,
+            b.x1,
+            b.y1 + b.height() * 0.75,
+        );
+        let keys: Vec<String> = self
+            .recorded
+            .selectables
+            .iter()
+            .filter(|s| {
+                let kind_ok = if chords {
+                    s.key.starts_with("chord#")
+                } else {
+                    s.key.starts_with("note#") || s.key.starts_with("rest#")
+                };
+                let c = s.bounds.center();
+                kind_ok && c.x >= x0 - 0.5 && c.x < x1 && near.contains(c)
+            })
+            .map(|s| s.key.clone())
+            .collect();
+        if keys.is_empty() {
+            self.recorded.entry = None;
+            return None;
+        }
+        let drawn_for = (keys, colour);
+        if let Some((drawn, layer)) = &self.recorded.entry
+            && *drawn == drawn_for
+        {
+            return Some(layer.clone());
+        }
+        let layer = self.highlight(&drawn_for.0, drawn_for.1, SELECTION_Z);
+        self.recorded.entry = Some((drawn_for, layer.clone()));
+        Some(layer)
+    }
+
+    /// The shadow note under the pointer: drawn again only when it moves
+    /// to another bar, beat or staff position.
+    fn pointer_layer(
+        &mut self,
+        ctx: &ViewCtx,
+        view: ChartView,
+        shadow: Option<(PointerShadow, u8)>,
+    ) -> Option<Layer> {
+        let (shadow, voice) = shadow?;
+        let colour = self.colours.voice(voice);
+        let (bar, fraction, below_top) = self.staff_under(ctx, view, self.pointer)?;
+        let b = self.bar_box(bar)?;
+        let x = b.x0 + fraction * b.width();
+        let key = (bar, (x * 4.0) as i64, below_top, shadow, colour);
+        if let Some((drawn, layer)) = &self.recorded.pointer
+            && *drawn == key
+        {
+            return Some(layer.clone());
+        }
+        let mut scene = Scene::new();
+        let space = b.height() / 4.0;
+        draw_shadow(
+            &mut scene,
+            ShadowNote {
+                below_top,
+                open: shadow.open,
+                rest: shadow.rest,
+            },
+            x - space * 1.15,
+            b,
+            colour.with_alpha(0.5),
+        );
+        let layer = Layer::new(Arc::new(scene.commands)).z(INPUT_Z);
+        self.recorded.pointer = Some((key, layer.clone()));
+        Some(layer)
+    }
+
+    /// The bar under `at`, how far across it, and the staff position there
+    /// (half-spaces below the top line, to the nearest line or space).
+    fn staff_under(
+        &self,
+        ctx: &ViewCtx,
+        view: ChartView,
+        at: (f64, f64),
+    ) -> Option<(usize, f64, i32)> {
+        let (bar, fraction) = self.bar_under(ctx, view, at)?;
+        let b = self.bar_box(bar)?;
+        let point = self.chart_point(ctx, view, at);
+        let half = b.height() / 8.0;
+        let below_top = ((point.y - b.y0) / half).round() as i32;
+        Some((bar, fraction, below_top.clamp(-12, 20)))
+    }
+
+    /// The bar under the pane point `at`, and how far across it.
+    fn bar_under(&self, ctx: &ViewCtx, view: ChartView, at: (f64, f64)) -> Option<(usize, f64)> {
+        let point = self.chart_point(ctx, view, at);
+        // The bar whose column the point is in, on the nearest staff within
+        // a staff's height or two (a click on its chord symbols counts).
+        self.recorded
+            .selectables
+            .iter()
+            .filter(|s| s.key.starts_with("bar#"))
+            .filter(|s| point.x >= s.bounds.x0 && point.x <= s.bounds.x1)
+            .map(|s| {
+                let b = s.bounds;
+                let dy = if point.y < b.y0 {
+                    b.y0 - point.y
+                } else if point.y > b.y1 {
+                    point.y - b.y1
+                } else {
+                    0.0
+                };
+                (s, dy)
+            })
+            .filter(|(s, dy)| *dy <= s.bounds.height() * 2.5)
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(s, _)| s)
+            .and_then(|s| {
+                let number = s.key.trim_start_matches("bar#").split('.').next()?;
+                let bar = number.parse::<usize>().ok()?;
+                let fraction = (point.x - s.bounds.x0) / s.bounds.width().max(1.0);
+                Some((bar, fraction.clamp(0.0, 1.0)))
+            })
+    }
+
+    /// The element under the pane point `at`, if any.
+    fn under(&self, ctx: &ViewCtx, view: ChartView, at: (f64, f64)) -> Option<String> {
+        let point = self.chart_point(ctx, view, at);
+        pick(&self.recorded.selectables, point, PICK_SLOP)
+            .and_then(|i| self.recorded.selectables.get(i))
+            .map(|s| s.key.clone())
+    }
+
+    /// The pointer moved to `at`: what it is over now. Whether that
+    /// changed (a frame is needed).
+    fn hover_at(&mut self, ctx: &ViewCtx, view: ChartView, at: (f64, f64)) -> bool {
+        let under = self.under(ctx, view, at);
+        if under == self.hover {
+            return false;
+        }
+        self.hover = under;
+        true
+    }
+
+    /// The playhead at `secs`, in chart pixels at 100%: drawn again only
+    /// when the time moved.
+    fn playhead_layer(&mut self, secs: Option<f64>) -> Option<Layer> {
+        let secs = secs?;
+        let bits = secs.to_bits();
+        if let Some((at, layer)) = &self.recorded.playhead
+            && *at == bits
+        {
+            return layer.clone();
+        }
+        let mut scene = Scene::new();
+        let layer = self
+            .view
+            .paint_playhead(&mut scene, secs)
+            .then(|| Layer::new(Arc::new(scene.commands)).z(PLAYHEAD_Z));
+        self.recorded.playhead = Some((bits, layer.clone()));
+        layer
+    }
+
+    /// The lasso being drawn, in the pane's pixels.
+    fn lasso_layer(&self) -> Option<Layer> {
+        let press = self.press.filter(|p| p.moved)?;
+        let rect = Rect::from_points(press.from, press.to);
+        let (wash, edge) = self.colours.lasso();
+        let mut scene = Scene::new();
+        scene.fill(Fill::NonZero, Affine::IDENTITY, wash, None, &rect);
+        scene.stroke(&Stroke::new(1.0), Affine::IDENTITY, edge, None, &rect);
+        Some(Layer::new(Arc::new(scene.commands)).z(LASSO_Z))
+    }
+
+    /// A pane point in chart points, under `snapshot`'s framing.
+    fn chart_point(&self, ctx: &ViewCtx, view: ChartView, at: (f64, f64)) -> Point {
+        let px = self.placement(ctx, view).inverse() * Point::new(at.0, at.1);
+        let per = points_to_px(1.0);
+        Point::new(px.x / per, px.y / per)
+    }
+
+    /// A press of the main button at `at` with `mods` held: what it
+    /// selects, as MuseScore's view does (Shift a range, Cmd/Ctrl one
+    /// more). A press on nothing starts a lasso.
+    fn press(&mut self, ctx: &ViewCtx, view: ChartView, at: (f64, f64), mods: &[&str]) -> bool {
+        let shift = mods.contains(&"Shift");
+        let command = mods.contains(&"Mod");
+        let Some(key) = self.under(ctx, view, at) else {
+            self.press = Some(Press {
+                from: at,
+                to: at,
+                add: shift || command,
+                moved: false,
+            });
+            return false;
+        };
+        let order: Vec<String> = self
+            .recorded
+            .selectables
+            .iter()
+            .map(|s| s.key.clone())
+            .collect();
+        match Gesture::of(shift, command) {
+            Gesture::Single => self.selection.click(key),
+            Gesture::Range => self.selection.extend(key, &order),
+            Gesture::Toggle => self.selection.toggle(key),
+        }
+        true
+    }
+
+    /// The press let go: a lasso selects what it covers; a click on
+    /// nothing clears the selection.
+    fn release(&mut self, ctx: &ViewCtx, view: ChartView) -> bool {
+        let Some(press) = self.press.take() else {
+            return false;
+        };
+        if !press.moved {
+            if press.add || self.selection.is_empty() {
+                return false;
+            }
+            self.selection.clear();
+            return true;
+        }
+        let a = self.chart_point(ctx, view, press.from);
+        let b = self.chart_point(ctx, view, press.to);
+        let covered: Vec<String> = in_box(&self.recorded.selectables, Rect::from_points(a, b))
+            .into_iter()
+            .filter_map(|i| self.recorded.selectables.get(i))
+            .map(|s| s.key.clone())
+            .collect();
+        self.selection.lasso(covered, press.add);
+        true
+    }
+
+    /// The selection out to the host, when it asked for it.
+    fn publish(&self, ctx: &ViewCtx) {
+        if let Some(out) = ctx.data::<ChartSelection>() {
+            let now = ChartSelection {
+                keys: self.selection.items().to_vec(),
+                hover: self.hover.clone(),
+            };
+            if out.read(|s| *s != now) {
+                out.set(now);
+            }
+        }
+    }
+}
+
+impl ChartPaintView {
+    /// What the host saw a pointer do to an element's region: the hover
+    /// as it enters and leaves (the host hit-tests; no pointer move reaches
+    /// here for it), a press as a click on it (MuseScore's selection, and
+    /// note input's place).
+    fn region_event(&mut self, ctx: &ViewCtx, event: &RegionEvent) -> bool {
+        let Some(data) = ctx.data::<ChartSnapshot>() else {
+            return false;
+        };
+        let key_of = |id: u64| {
+            self.recorded
+                .selectables
+                .get(usize::try_from(id).ok()?)
+                .map(|s| s.key.clone())
+        };
+        match *event {
+            RegionEvent::Enter(id) => {
+                let key = key_of(id);
+                if key == self.hover {
+                    return false;
+                }
+                self.hover = key;
+                self.publish(ctx);
+                true
+            }
+            RegionEvent::Leave(id) => {
+                if self.hover.is_some() && self.hover == key_of(id) {
+                    self.hover = None;
+                    self.publish(ctx);
+                    return true;
+                }
+                false
+            }
+            RegionEvent::Press(id) => {
+                let Some(key) = key_of(id) else { return false };
+                let view = data.read(|s| s.view);
+                if let Some(gestures) = ctx.extras.get::<ChartGestures>()
+                    && let Some((bar, fraction, below_top)) =
+                        self.staff_under(ctx, view, self.pointer)
+                {
+                    let kind = key.split('#').next().map(str::to_owned);
+                    (gestures.0)(ChartGesture::Click {
+                        bar,
+                        fraction,
+                        kind,
+                        below_top,
+                    });
+                }
+                let mods = self.mods.clone();
+                let order: Vec<String> = self
+                    .recorded
+                    .selectables
+                    .iter()
+                    .map(|s| s.key.clone())
+                    .collect();
+                match Gesture::of(mods.contains(&"Shift"), mods.contains(&"Mod")) {
+                    Gesture::Single => self.selection.click(key),
+                    Gesture::Range => self.selection.extend(key, &order),
+                    Gesture::Toggle => self.selection.toggle(key),
+                }
+                self.publish(ctx);
+                true
+            }
+            _ => false,
+        }
+    }
+}
+
+impl ChartPaintView {
+    /// A selection its host set (one kept over a reload, written after the
+    /// chart mounted): taken up when it differs from the view's own, of
+    /// what is still on the chart. The view's own writes read back equal.
+    fn adopt_selection(&mut self, ctx: &ViewCtx) {
+        if self.recorded.selectables.is_empty() {
+            return;
+        }
+        let Some(given) = ctx.data::<ChartSelection>() else {
+            return;
+        };
+        let version = given.version();
+        if self.adopted == Some(version) {
+            return;
+        }
+        self.adopted = Some(version);
+        let keys: Vec<String> = given.read(|s| s.keys.clone());
+        if keys.as_slice() == self.selection.items() {
+            return;
+        }
+        let there: Vec<String> = keys
+            .into_iter()
+            .filter(|k| self.recorded.selectables.iter().any(|s| s.key == *k))
+            .collect();
+        self.selection.lasso(there, false);
+        self.recorded.selection = None;
+    }
 }
 
 impl PaintView for ChartPaintView {
+    fn region(&mut self, ctx: &ViewCtx, event: &RegionEvent) -> bool {
+        self.region_event(ctx, event)
+    }
+
     fn input(&mut self, ctx: &ViewCtx, event: &ViewInput) -> bool {
         let Some(data) = ctx.data::<ChartSnapshot>() else {
             return false;
         };
         let pane = pane_size(ctx);
         match event {
-            ViewInput::Key { modifiers, .. } => {
+            ViewInput::Key {
+                key,
+                down,
+                modifiers,
+            } => {
                 self.ctrl = modifiers.contains(&"Ctrl");
+                // A modifier key's own event: held while down, gone when up.
+                let mut held = modifiers.clone();
+                let name = match key.as_str() {
+                    "Shift" => Some("Shift"),
+                    "Control" => Some("Ctrl"),
+                    "Meta" | "Super" => Some("Mod"),
+                    "Alt" => Some("Alt"),
+                    _ => None,
+                };
+                if let Some(name) = name {
+                    held.retain(|m| *m != name);
+                    if *down {
+                        held.push(name);
+                    }
+                    if name == "Ctrl" && !cfg!(target_os = "macos") {
+                        held.retain(|m| *m != "Mod");
+                        if *down {
+                            held.push("Mod");
+                        }
+                    }
+                }
+                self.mods = held;
+                // The host's keymap reads it: the view binds no keys.
+                if *down && let Some(gestures) = ctx.extras.get::<ChartGestures>() {
+                    (gestures.0)(ChartGesture::Key {
+                        key: key.clone(),
+                        mods: modifiers.clone(),
+                    });
+                }
                 false
             }
             ViewInput::Focus(false) => {
                 self.ctrl = false;
                 self.panning = false;
-                false
+                self.press = None;
+                true
             }
-            ViewInput::PointerDown { x, y, button } => {
+            ViewInput::PointerDown {
+                x, y, button, mods, ..
+            } => {
                 self.pointer = point(*x, *y);
-                if *button == Button::Middle {
-                    self.panning = true;
+                match button {
+                    Button::Middle => {
+                        self.panning = true;
+                        false
+                    }
+                    Button::Primary => {
+                        let view = data.read(|s| s.view);
+                        if let Some(gestures) = ctx.extras.get::<ChartGestures>()
+                            && let Some((bar, fraction, below_top)) =
+                                self.staff_under(ctx, view, self.pointer)
+                        {
+                            let kind = self
+                                .under(ctx, view, self.pointer)
+                                .and_then(|k| k.split('#').next().map(str::to_owned));
+                            (gestures.0)(ChartGesture::Click {
+                                bar,
+                                fraction,
+                                kind,
+                                below_top,
+                            });
+                        }
+                        let changed = self.press(ctx, view, self.pointer, mods);
+                        if changed {
+                            self.publish(ctx);
+                        }
+                        changed
+                    }
+                    Button::Secondary => false,
                 }
-                false
             }
-            ViewInput::PointerUp { x, y, button } => {
+            ViewInput::PointerUp { x, y, button, .. } => {
                 self.pointer = point(*x, *y);
-                if *button == Button::Middle {
-                    self.panning = false;
+                match button {
+                    Button::Middle => {
+                        self.panning = false;
+                        false
+                    }
+                    _ => {
+                        let view = data.read(|s| s.view);
+                        let changed = self.release(ctx, view);
+                        if changed {
+                            self.publish(ctx);
+                        }
+                        changed
+                    }
                 }
-                false
             }
-            ViewInput::PointerMove { x, y } => {
+            ViewInput::PointerMove { x, y, .. } => {
                 let from = std::mem::replace(&mut self.pointer, point(*x, *y));
+                if let Some(press) = &mut self.press {
+                    press.to = self.pointer;
+                    let (dx, dy) = (press.to.0 - press.from.0, press.to.1 - press.from.1);
+                    press.moved |= dx.hypot(dy) > 3.0;
+                    return press.moved;
+                }
                 if !self.panning {
-                    return false;
+                    let (view, shadow) = data.read(|s| (s.view, s.input.and_then(|i| i.pointer)));
+                    // The pointer's shadow note follows it, in its own layer.
+                    let moved_shadow = shadow.is_some()
+                        && self.staff_under(ctx, view, self.pointer)
+                            != self.staff_under(ctx, view, from);
+                    // Hover is the host's, by the pages' regions; a page with
+                    // more elements than a layer may carry regions for is
+                    // hit-tested here.
+                    let hovered = !self.regions_cover && self.hover_at(ctx, view, self.pointer);
+                    let changed = hovered || moved_shadow;
+                    if changed {
+                        self.publish(ctx);
+                    }
+                    return changed;
                 }
                 let (to, content) = (self.pointer, self.content);
                 self.edit_view(&data, ctx, |view, zoom| {
@@ -236,7 +1311,7 @@ impl PaintView for ChartPaintView {
             ViewInput::Wheel { dx, dy, x, y, mods } => {
                 let (dx, dy) = (f64::from(*dx), f64::from(*dy));
                 // Ctrl (Cmd on macOS) and the pointer come with the wheel itself.
-                let ctrl = mods.iter().any(|m| *m == "Mod");
+                let ctrl = mods.contains(&"Mod");
                 let (pointer, content) = (point(*x, *y), self.content);
                 self.edit_view(&data, ctx, |view, zoom| {
                     if ctrl && dy != 0.0 {
@@ -246,6 +1321,11 @@ impl PaintView for ChartPaintView {
                         scroll_by(view, (dx, dy), zoom, content, pane)
                     }
                 });
+                // What is under the pointer moved under it.
+                let view = data.read(|s| s.view);
+                if self.hover_at(ctx, view, pointer) {
+                    self.publish(ctx);
+                }
                 true
             }
             _ => false,
@@ -253,29 +1333,62 @@ impl PaintView for ChartPaintView {
     }
 
     fn paint(&mut self, ctx: &ViewCtx, scene: &mut Scene) {
-        let Some(data) = ctx.data::<ChartSnapshot>() else {
-            return;
-        };
-        let snapshot = data.get();
-        self.view.set_theme(
-            snapshot
-                .theme
-                .clone()
-                .unwrap_or_else(|| ChartTheme::from_tokens(|name| ctx.theme.color(name))),
-        );
-        self.update_layout(&snapshot);
-        let zoom = self.effective_zoom(snapshot.view.zoom, ctx.geometry.width);
-        let (scroll_x, scroll_y) =
-            clamp_scroll(snapshot.view.scroll, self.content, pane_size(ctx), zoom);
-        // The renderer pans in points, so convert the view's logical pixels.
-        let scroll_pt = (scroll_x / points_to_px(1.0), scroll_y / points_to_px(1.0));
-        // The host scales the scene to physical pixels; paint in logical pixels.
-        if let Some((width, height)) =
-            self.view
-                .paint_cached(scene, 1.0, zoom, scroll_pt, snapshot.playhead_secs)
-        {
-            self.content = (width * points_to_px(1.0), height * points_to_px(1.0));
+        // A host that composes no layers: the same layers, composed here.
+        if let Some(layers) = self.layers(ctx) {
+            let mut sorted = layers;
+            sorted.sort_by_key(|(key, layer)| (layer.z, *key));
+            for (_, layer) in sorted {
+                let mut content = Scene::new();
+                content.commands.clone_from(&layer.commands);
+                scene.append_scene(content, layer.transform);
+            }
         }
+    }
+
+    fn layers(&mut self, ctx: &ViewCtx) -> Option<Vec<(LayerKey, Layer)>> {
+        let data = ctx.data::<ChartSnapshot>()?;
+        let snapshot = data.get();
+        self.update_theme(ctx, &snapshot);
+        self.update_layout(&snapshot);
+        self.record_pages();
+        self.adopt_selection(ctx);
+        if let Some(size) = self.view.content_size() {
+            self.content = (size.0 * points_to_px(1.0), size.1 * points_to_px(1.0));
+        }
+        let view = self.follow_cursor(ctx, &data, snapshot.input, snapshot.view);
+        let at = self.placement(ctx, view);
+        let mut layers: Vec<(LayerKey, Layer)> = self
+            .recorded
+            .pages
+            .iter()
+            .map(|(key, page)| (*key, page.clone().at(at)))
+            .collect();
+        if let Some(hover) = self.hover_layer() {
+            layers.push((HOVER_LAYER, hover.at(at)));
+        }
+        if let Some(selection) = self.selection_layer() {
+            layers.push((SELECTION_LAYER, selection.at(at)));
+        }
+        if let Some(input) = self.input_layer(snapshot.input) {
+            layers.push((INPUT_LAYER, input.at(at)));
+        }
+        if let Some(entry) = self.entry_layer(snapshot.input) {
+            layers.push((ENTRY_LAYER, entry.at(at)));
+        }
+        if let Some(pointer) = self.pointer_layer(
+            ctx,
+            snapshot.view,
+            snapshot.input.and_then(|i| i.pointer.map(|p| (p, i.voice))),
+        ) {
+            layers.push((POINTER_LAYER, pointer.at(at)));
+        }
+        if let Some(playhead) = self.playhead_layer(snapshot.playhead_secs) {
+            layers.push((PLAYHEAD_LAYER, playhead.at(at)));
+        }
+        if let Some(lasso) = self.lasso_layer() {
+            layers.push((LASSO_LAYER, lasso));
+        }
+        Some(layers)
     }
 
     fn animating(&self, _ctx: &ViewCtx) -> bool {
@@ -283,7 +1396,120 @@ impl PaintView for ChartPaintView {
     }
 }
 
+/// The regions a page's layer carries, one per element on it (chart pixels
+/// at 100%, the page layer's own space): bars first, then the rest from
+/// the largest to the smallest, so the host's hit (the last region under
+/// the pointer) is the smallest element there, as `pick` chooses. A page
+/// with more than a layer may carry keeps its smallest.
+fn page_regions(items: &[Selectable], page: Rect) -> Vec<Region> {
+    let px = points_to_px(1.0);
+    let mut on: Vec<(usize, &Selectable)> = items
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| {
+            let c = s.bounds.center();
+            page.contains(architect_workspace::paint::peniko::kurbo::Point::new(
+                c.x * px,
+                c.y * px,
+            ))
+        })
+        .collect();
+    on.sort_by(|a, b| b.1.bounds.area().total_cmp(&a.1.bounds.area()));
+    let limit = architect_workspace::paint::region::MAX_LAYER_REGIONS;
+    let skip = on.len().saturating_sub(limit);
+    on.into_iter()
+        .skip(skip)
+        .map(|(i, s)| {
+            let b = s.bounds.inflate(PICK_SLOP, PICK_SLOP);
+            Region::new(
+                i as u64,
+                Shape::Rect(Rect::new(b.x0 * px, b.y0 * px, b.x1 * px, b.y1 * px)),
+            )
+        })
+        .collect()
+}
+
+/// The shadow note at `x` (chart points) in the staff `bar` (its box):
+/// a notehead at its staff position, open for a half or a whole, with
+/// ledger lines off the staff; a rest as a block on the middle line.
+fn draw_shadow(scene: &mut Scene, shadow: ShadowNote, x: f64, bar: Rect, colour: Color) {
+    use architect_workspace::paint::peniko::kurbo::{Ellipse, Line};
+    let px = points_to_px(1.0);
+    let space = bar.height() / 4.0;
+    let head_w = space * 1.3;
+    let cx = x + space * 0.5 + head_w / 2.0;
+    if shadow.rest {
+        let r = Rect::new(
+            cx - space * 0.4,
+            bar.y0 + space * 1.5,
+            cx + space * 0.4,
+            bar.y0 + space * 2.5,
+        );
+        scene.fill(
+            Fill::NonZero,
+            Affine::IDENTITY,
+            colour,
+            None,
+            &Rect::new(r.x0 * px, r.y0 * px, r.x1 * px, r.y1 * px),
+        );
+        return;
+    }
+    let y = bar.y0 + f64::from(shadow.below_top) * space / 2.0;
+    // Ledger lines from the staff out to the note.
+    let ledger = Stroke::new(1.0);
+    let mut lines = Vec::new();
+    let mut step = -2;
+    while step >= shadow.below_top {
+        lines.push(step);
+        step -= 2;
+    }
+    let mut step = 10;
+    while step <= shadow.below_top {
+        lines.push(step);
+        step += 2;
+    }
+    for step in lines {
+        let ly = bar.y0 + f64::from(step) * space / 2.0;
+        let line = Line::new(
+            ((cx - head_w * 0.9) * px, ly * px),
+            ((cx + head_w * 0.9) * px, ly * px),
+        );
+        scene.stroke(&ledger, Affine::IDENTITY, colour, None, &line);
+    }
+    let head = Ellipse::new(
+        (cx * px, y * px),
+        (head_w / 2.0 * px, space / 2.0 * px),
+        -0.35,
+    );
+    if shadow.open {
+        scene.stroke(&Stroke::new(1.6), Affine::IDENTITY, colour, None, &head);
+    } else {
+        scene.fill(Fill::NonZero, Affine::IDENTITY, colour, None, &head);
+    }
+}
+
 /// The pane's logical size.
+/// The scroll that brings `target` into a view of `visible` (both in chart
+/// pixels) from `scroll`: unchanged when it is in view already, else moved
+/// just far enough, with a margin, each way on its own.
+fn follow(scroll: (f64, f64), target: Rect, visible: (f64, f64)) -> (f64, f64) {
+    let axis = |at: f64, lo: f64, hi: f64, size: f64| {
+        let margin = (size * 0.08).min(40.0);
+        if lo >= at + margin && hi <= at + size - margin {
+            at
+        } else if lo < at + margin {
+            lo - margin
+        } else {
+            // Its far edge in, but never its near edge out.
+            (hi + margin - size).min(lo - margin)
+        }
+    };
+    (
+        axis(scroll.0, target.x0, target.x1, visible.0),
+        axis(scroll.1, target.y0, target.y1, visible.1),
+    )
+}
+
 fn pane_size(ctx: &ViewCtx) -> (f64, f64) {
     (
         f64::from(ctx.geometry.width),
@@ -391,6 +1617,47 @@ mod tests {
     }
 
     #[test]
+    fn highlight_colours_come_from_the_theme_and_read_on_the_paper() {
+        let white = Color::WHITE;
+        let black = Color::BLACK;
+        // A light theme's brand colour and info, on light paper: as they are.
+        let teal = Color::from_rgb8(0x0f, 0x76, 0x6e);
+        let blue = Color::from_rgb8(0x1d, 0x4e, 0xd8);
+        let tokens = |name: &str| match name {
+            "primary" => Some(teal),
+            "info" => Some(blue),
+            _ => None,
+        };
+        let c = HighlightColours::from_tokens(tokens, white, black);
+        assert_eq!((c.selection, c.hover), (teal, blue));
+        assert_ne!(c.selection, c.hover, "two states, two colours");
+
+        // A theme's own chart tokens win over the app's.
+        let red = Color::from_rgb8(0xb9, 0x1c, 0x1c);
+        let c = HighlightColours::from_tokens(
+            |name| {
+                (name == "chart.select")
+                    .then_some(red)
+                    .or_else(|| tokens(name))
+            },
+            white,
+            black,
+        );
+        assert_eq!(c.selection, red);
+
+        // A dark theme's light brand colour on a chart pinned to light paper is
+        // darkened until it reads; on dark paper it is left alone.
+        let light_teal = Color::from_rgb8(0x2d, 0xd4, 0xbf);
+        let dark_tokens = |name: &str| (name == "primary").then_some(light_teal);
+        let on_white = HighlightColours::from_tokens(dark_tokens, white, black);
+        assert!(contrast(on_white.selection, white) >= 3.0);
+        let paper = Color::from_rgb8(25, 30, 45);
+        let ink = Color::from_rgb8(245, 240, 220);
+        let on_dark = HighlightColours::from_tokens(dark_tokens, paper, ink);
+        assert_eq!(on_dark.selection, light_teal);
+    }
+
+    #[test]
     fn chart_view_zoom_is_clamped_to_a_quarter_and_four() {
         assert_close(clamp_zoom(0.01), 0.25);
         assert_close(clamp_zoom(9.0), 4.0);
@@ -434,6 +1701,26 @@ mod tests {
         );
         assert_close(fit_zoom(4000.0, Some(100.0)), 1.0);
         assert_close(fit_zoom(400.0, None), 1.0);
+    }
+
+    #[test]
+    fn the_view_follows_the_cursor_just_far_enough() {
+        let view = (400.0, 300.0);
+        // In view: no scroll.
+        let bar = Rect::new(100.0, 100.0, 200.0, 160.0);
+        assert_eq!(follow((0.0, 0.0), bar, view), (0.0, 0.0));
+        // Below: scrolled until its bottom is in, with a margin.
+        let below = Rect::new(100.0, 500.0, 200.0, 560.0);
+        let (_, y) = follow((0.0, 0.0), below, view);
+        assert!(y > 260.0 - 1.0 && y < 500.0, "{y}");
+        assert!(560.0 <= y + 300.0, "its bottom in view");
+        // Above: scrolled up to its top.
+        let (_, y) = follow((0.0, 900.0), bar, view);
+        assert!(y < 100.0, "{y}");
+        // Taller than the view: its top shown.
+        let tall = Rect::new(100.0, 500.0, 200.0, 1200.0);
+        let (_, y) = follow((0.0, 0.0), tall, view);
+        assert!(y <= 500.0 && y > 400.0, "{y}");
     }
 
     #[test]

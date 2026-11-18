@@ -1,0 +1,49 @@
+[package]
+name = "keyflow-extension"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Keyflow as an Architect extension: a .kf chart opened in a pane, engraved in the app's theme. Linked into Architect and Studio, or run as a process (extension.toml)."
+publish = false
+
+[lib]
+doctest = false
+
+[[bin]]
+name = "keyflow-extension"
+path = "src/main.rs"
+
+[dependencies]
+# The trait (`linked-core`): linked into an app, a browser's too. The app
+# that links it turns on `linked` / `paint-ui` in its own copy.
+# `paint-pane`: the chart's `PaintPane`, the same code linked in or as a
+# process (`linked::PaintPane`), and its pane's state (`use_pane_state`).
+architect-extensions = { workspace = true, features = ["linked-core", "paint-pane"] }
+# The chart pane: PaintPane, HostData, the pane it is drawn in.
+architect-workspace = { workspace = true, features = ["paint-ui"] }
+keyflow = { workspace = true, features = ["text", "paint"] }
+keyflow-ui = { workspace = true, features = ["paint-view"] }
+# A chart in a session: its pane state, and the `fts.session` calls that
+# read and edit it (the chart alone still reads its document).
+keyflow-session = { path = "../session" }
+dioxus = { workspace = true }
+serde_json = { workspace = true }
+# Glyph outlines as SVG icons (src/icons.rs), the palette's images inline.
+kurbo = { workspace = true }
+base64 = "0.22"
+# A pane told to read its chart again, from an action's thread.
+tokio = { workspace = true, features = ["sync"] }
+
+# Off the browser also its process copy (`guest`: vox and tokio).
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+architect-extensions = { workspace = true, features = ["guest"] }
+# Hosting and joining a session (src/session_host.rs): Architect's sync and
+# presence over vox on a WebSocket, the session's clock.
+architect = { workspace = true, features = ["vox", "host", "connect"] }
+crdt = { workspace = true, features = ["vox"] }
+session = { workspace = true, features = ["clock", "extension"] }
+uuid = { workspace = true }
+tokio = { workspace = true, features = ["sync", "rt", "time"] }
+
+[lints]
+workspace = true

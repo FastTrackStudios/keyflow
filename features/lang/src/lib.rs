@@ -6,6 +6,7 @@
 //! synced lyrics are each behind a feature of the same name.
 
 pub mod chordpro;
+pub mod edit;
 pub mod text;
 
 #[cfg(feature = "chordsheet")]

@@ -1,0 +1,176 @@
+Drive To LA
+Transcribed By Cody Wright
+#C 160bpm 4/4
+
+Count 2
+
+; Source: the show's Ableton set (SECTIONS +CC names/ranges, tempo map, FoH Notes/Count Ins cues,
+; stems via warp markers) + Cody's Nashville notes (_notes-from-cody.md: chords, hits, key change,
+; last-chorus 3 6 2 '1). SONG END at beat 852 of the set.
+; 2026-11-15 (Cody): the 4-bar tracks intro is cut from the chart (bar 1 = the verse), fewer lyrics,
+; Pre-Chorus and chorus groove rewritten from Cody's notes.
+; Chorus cell: C for 2 beats, G pushed onto the and of 2, F on 4, F held through the next bar.
+
+VS 16
+C
+C
+C
+C
+F
+F
+F
+F
+C
+C
+C
+C
+F
+F
+F
+F
+[lyrics lrc]
+@1:2 I know it's been some time…
+
+PRE 8
+>Dm_2 ~ Dm_8 >C/D_4 >Dm_8 ~
+Dm ////
+G ////
+G7/B ////
+C ////
+C // Bdim //
+F ////
+F ////
+[lyrics lrc]
+@1 Had in the past…
+
+; Down chorus: tracks over a C pedal (FoH "TRAX UP"); band enters at the next chorus (FoH "Band In").
+CH 8 (down)
+C // 'G / F / F ////
+C // 'G / F / F //// x2
+Em // 'G / Dm / Dm /// 'C /
+[lyrics lrc]
+@1:1.5 Drive down to LA…
+
+CH 8 (band in)
+C // 'G / F / F //// x3
+Em // 'G / Dm / Dm /// 'C /
+[lyrics lrc]
+@1:2.5 Staying in so nice…
+
+; Drum fill, band in on the pushed G (like the second INST).
+INST 8
+@drums "Fill"
+r4. G_4. F_4
+F ////
+C // 'G / F / F //// x2
+Em // 'G / Dm /
+Dm_2 ~ Dm_8 >C_8 >C_8 >C_8
+
+[Break] 2
+"Tracks only" C
+C
+
+VS 8
+r4 C ///
+C
+C
+C
+F
+F
+F
+F
+[lyrics lrc]
+@1:2.5 I wonder how your sister is now…
+
+; 2026-11-15 (Cody): G hits pushed an eighth (on the ands, held to the next, no rests), two G7/B hits, then quarter-note
+; triplet hits (6 Am, 3 G, 3 Em), held F and G (no accent on the G).
+PRE 8
+>Dm_2 ~ Dm_8 >C/D_4 >Dm_8 ~
+Dm_2. ~ Dm_8 >G_8 ~
+G_8 >G_4 >G_4 >G_4 >G7/B_8 ~
+G7/B_8 >G7/B_8 r4 r2
+>Am_4t >Am_4t >Am_4t >Am_4t >Am_4t >Am_4t
+>G_4t >G_4t >G_4t >Em_4t >Em_4t >Em_4t
+>F_1
+G_1
+[lyrics lrc]
+@1:1.5 Far from the world…
+
+CH 16
+C // 'G / F / F //// x3
+Em // 'G / Dm / Dm /// 'C /
+C // 'G / F / F //// x3
+Em // 'G / Dm / Dm /// 'C /
+[lyrics lrc]
+@1:1.5 Drive down to LA…
+@9:2 Staying in so nice…
+
+[Tag] 2
+"Tracks" C
+C
+[lyrics lrc]
+@1:3.5 I only did that with you
+
+; Comes in on the pushed G after a dotted-quarter rest.
+INST 8
+r4. G_4. F_4
+F ////
+C // 'G / F / F //// x2
+Em // 'G / Dm / Dm /// 'C /
+
+; Notes: "1 2M 4 b6M"; stems: C C D D F F Ab Ab.
+BR 8
+C
+C
+D
+D
+F
+F
+Ab
+Ab
+[lyrics lrc]
+@1:1.5 I've learned some things about me now…
+
+; Key change to C# per the notes, written as Db (enharmonic: the 3 chord reads Fm, not E#m).
+CH 4 (keys only) bDb
+Db // 'Ab / Gb / Gb ////
+Db // 'Ab / Gb /
+Gb_4 r2.
+[lyrics lrc]
+@1:2.5 Drive down to LA…
+@4:2 from our movie
+
+CH 12 (band in)
+Db // 'Ab / Gb / Gb ////
+Fm // 'Bbm / Ebm / Ebm /// 'Db /
+Db // 'Ab / Gb / Gb ////
+Db // 'Ab / Gb /
+Gb // >Gb_8 >Gb_8 r8 >Db_8 ~
+Db // 'Ab / Gb / Gb ////
+Fm // 'Bbm / Ebm / Ebm /// 'Db /
+[lyrics lrc]
+@1:4 Coffee in downtown…
+@5:2 Staying in so nice…
+
+[Tag] 2
+"Tracks" Db
+Db
+[lyrics lrc]
+@1:3.5 But I don't need that with you
+
+; 2026-11-15 (Cody): drum fill (3 eighths, band out) into the Ab on the and of 2; stutter hits
+; (staccato on 1 2 3) in the 4th bar.
+OUT 8
+@drums "Fill"
+r4. Ab_4. Gb_4
+Gb ////
+Db // 'Ab / Gb /
+>.Gb_4 >.Gb_4 >.Gb_4 r4
+Db // 'Ab / Gb / Gb ////
+Fm // 'Bbm / Ebm /
+Ebm_2 ~ Ebm_8 >Db_8 >Db_8 >Db_8
+[lyrics lrc]
+@7 Don't forget that we did that too
+
+[End] 1
+"Stop (song ends)" r1

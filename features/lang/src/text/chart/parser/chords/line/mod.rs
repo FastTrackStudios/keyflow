@@ -68,6 +68,9 @@ impl<'a> ChartParser<'a> {
         let trim_offset = (line_to_parse.as_ptr() as usize).saturating_sub(line.as_ptr() as usize);
         let outer_offset = line_byte_offset + trim_offset;
 
+        // The text the bars are read from, before anything rewrites it:
+        // when nothing does, each bar's tokens are its text in the line.
+        let as_written = line_to_parse;
         let line_to_parse = self.expand_aliases_in_line(line_to_parse);
 
         let trimmed_parallel = line_to_parse.trim();
@@ -77,28 +80,33 @@ impl<'a> ChartParser<'a> {
                 && !line_to_parse.contains("|:")
                 && !line_to_parse.contains(":|"))
         {
-            return self.parse_parallel_chord_line(
-                &line_to_parse,
-                repeat_count,
-                section_type,
-                section_measure_count,
-                outer_offset,
-                default_chord_length,
-                default_melody_duration,
-                default_melody_octave,
-            );
+            // Its bars' text is found by its cells (`bar_cells`), not here.
+            return self
+                .parse_parallel_chord_line(
+                    &line_to_parse,
+                    repeat_count,
+                    section_type,
+                    section_measure_count,
+                    outer_offset,
+                    default_chord_length,
+                    default_melody_duration,
+                    default_melody_octave,
+                )
+                .map(without_spans);
         }
 
         if default_chord_length.is_some() && line_to_parse.contains('|') {
-            return self.parse_barred_line_with_default_chord_length(
-                &line_to_parse,
-                section_type,
-                section_measure_count,
-                outer_offset,
-                default_chord_length,
-                default_melody_duration,
-                default_melody_octave,
-            );
+            return self
+                .parse_barred_line_with_default_chord_length(
+                    &line_to_parse,
+                    section_type,
+                    section_measure_count,
+                    outer_offset,
+                    default_chord_length,
+                    default_melody_duration,
+                    default_melody_octave,
+                )
+                .map(without_spans);
         }
 
         let line_to_parse = Self::normalize_parallel_container_syntax(&line_to_parse);
@@ -142,7 +150,12 @@ impl<'a> ChartParser<'a> {
         let mut in_melody_block = false; // Track if we're inside a m{...} block
         let mut melody_search_offset = 0usize; // Cursor for finding successive m{ blocks in line_to_parse
         let mut line_melody_octave = default_melody_octave;
-        let mut last_chord: Option<ChordInstance> = None; // Track last chord for dot repeat
+        // Track last chord for dot repeat; one bar of a `<< >>` line starts
+        // from the bar before it in that line.
+        let mut last_chord: Option<ChordInstance> = self
+            .in_parallel_part
+            .then(|| self.carried_measure.as_ref()?.chords.last().cloned())
+            .flatten();
         let mut chord_length_override: Option<(ChordRhythm, MusicalDuration)> =
             default_chord_length.clone();
         // The declared default (`\duration`), which a written note value
@@ -169,6 +182,9 @@ impl<'a> ChartParser<'a> {
         // later ambiguous lines can fall back to it.
         self.record_line_system_votes(&tokens_str);
 
+        // Which bar each token went into (`TokenMark`), so each bar knows
+        // its text in the line.
+        let mut marks: Vec<TokenMark> = Vec::with_capacity(tokens_str.len());
         let mut st = LineState {
             time_sig,
             beats_per_measure,
@@ -183,6 +199,10 @@ impl<'a> ChartParser<'a> {
         };
 
         for (token_idx, token_str) in tokens_str.iter().enumerate() {
+            if let Some(last) = marks.last_mut() {
+                last.close(st.measures.len(), st.current_measure_beats);
+            }
+            marks.push(TokenMark::open(st.measures.len()));
             // Text waiting for the bar after a full one: once that bar has
             // begun, the text opens it.
             if pending_staff_text
@@ -836,6 +856,10 @@ impl<'a> ChartParser<'a> {
             }
         }
 
+        if let Some(last) = marks.last_mut() {
+            last.close(st.measures.len(), st.current_measure_beats);
+        }
+
         // A one-shot meter change still waiting for its measure when the line
         // ends is a bar of that meter with no new chord in it — `!T2/4` on a
         // line of its own is "one bar of 2/4", the breakdown bar of a
@@ -867,13 +891,153 @@ impl<'a> ChartParser<'a> {
             st.measures.push(st.current_measure);
         }
 
-        self.expand_phrase_repeats(
+        // Each bar's text in the line, line-relative, when the line was read
+        // as written; a bar a token spilled into has none of its own.
+        // A line with barlines is read by its cells instead
+        // (`tag_line_spans`): a token's bar there is what the barlines say.
+        if line_to_parse == as_written && !as_written.contains('|') {
+            let spans = bar_spans(
+                &marks,
+                &tokens_str,
+                &original_token_spans,
+                st.measures.len(),
+            );
+            for (measure, (span, why)) in st.measures.iter_mut().zip(spans) {
+                measure.source_span =
+                    span.map(|(start, len)| TextSpan::with_location(start, len, 0, 0));
+                measure.read_only = why;
+            }
+        }
+        let written = st.measures.len();
+
+        let mut measures = self.expand_phrase_repeats(
             st.measures,
             repeat_count,
             st.time_sig,
             st.beats_per_measure,
             section_type,
             section_measure_count,
-        )
+        )?;
+        // A repeat's copies (`x4`) are not written: only the first is.
+        for copy in measures.iter_mut().skip(written) {
+            copy.source_span = None;
+            copy.read_only = Some(
+                "it is a repeat of its line made by `x2` (or `x3`, `x4`…): edit the line's first time through"
+                    .to_owned(),
+            );
+        }
+        Ok(measures)
     }
+}
+
+/// `measures` with no text of their own claimed.
+fn without_spans(mut measures: Vec<Measure>) -> Vec<Measure> {
+    for m in &mut measures {
+        m.source_span = None;
+    }
+    measures
+}
+
+/// Which bar a token went into: the bars there were when it was read, and
+/// after (and how far into the bar being filled it left things).
+struct TokenMark {
+    before: usize,
+    after: usize,
+    beats_after: f64,
+}
+
+impl TokenMark {
+    const fn open(before: usize) -> Self {
+        Self {
+            before,
+            after: before,
+            beats_after: 0.0,
+        }
+    }
+
+    fn close(&mut self, after: usize, beats_after: f64) {
+        self.after = after;
+        self.beats_after = beats_after;
+    }
+}
+
+/// Each bar's text in its line, as `(start, len)` line-relative: from its
+/// first token to its last. A barline belongs to no bar; `%` is the bar it
+/// adds, and `%3`'s three bars share its text. A bar a token ran into from
+/// the bar before (a chord pushed or held over the barline) has no text of
+/// its own, and says so.
+fn bar_spans(
+    marks: &[TokenMark],
+    tokens: &[&str],
+    spans: &[TextSpan],
+    bars: usize,
+) -> Vec<(Option<(usize, usize)>, Option<String>)> {
+    const SHARED: &str =
+        "it shares a chord with the bar before it (a chord pushed or held over the barline)";
+    let mut range: Vec<Option<(usize, usize)>> = vec![None; bars];
+    let mut shared: Vec<bool> = vec![false; bars];
+    let mut spilled = vec![false; bars];
+    for ((mark, token), span) in marks.iter().zip(tokens).zip(spans) {
+        let is_barline = !token.is_empty() && token.chars().all(|c| matches!(c, '|' | ':'));
+        if is_barline {
+            continue;
+        }
+        let (s, e) = (span.start, span.start + span.len);
+        if token.starts_with('%') {
+            // `%N`: the last N bars it pushed are its, one text for all.
+            let n = ChartParser::parse_measure_repeat(token).unwrap_or(1).max(1);
+            let first = mark.after.saturating_sub(n).max(mark.before);
+            for b in first..mark.after.min(bars) {
+                range[b] = Some((s, e));
+                shared[b] = n > 1;
+            }
+            continue;
+        }
+        for b in mark.before + 1..mark.after.min(bars) {
+            spilled[b] = true;
+        }
+        if mark.after > mark.before && mark.beats_after > 0.001 && mark.after < bars {
+            spilled[mark.after] = true;
+        }
+        let own = mark.before;
+        if own >= bars {
+            continue;
+        }
+        range[own] = Some(match range[own] {
+            Some((a, b)) => (a.min(s), b.max(e)),
+            None => (s, e),
+        });
+    }
+    let mut out: Vec<(Option<(usize, usize)>, Option<String>)> = range
+        .into_iter()
+        .zip(spilled)
+        .map(|(r, spill)| {
+            if spill {
+                (None, Some(SHARED.to_owned()))
+            } else {
+                (r, None)
+            }
+        })
+        .collect();
+    // Bars follow one another in the line: two that overlap (a mark read
+    // into the bar before it) are not one text each; a `%3`'s bars share
+    // one on purpose.
+    let mut last: Option<(usize, (usize, usize))> = None;
+    for i in 0..out.len() {
+        if let Some((a, b)) = out[i].0 {
+            if let Some((j, (pa, pb))) = last
+                && a < pb
+                && !(shared[i] && (a, b) == (pa, pb))
+            {
+                out[i] = (None, Some(SHARED.to_owned()));
+                out[j] = (None, Some(SHARED.to_owned()));
+            }
+            if let Some(r) = out[i].0 {
+                last = Some((i, r));
+            }
+        }
+    }
+    out.into_iter()
+        .map(|(r, why)| (r.map(|(a, b)| (a, b - a)), why))
+        .collect()
 }

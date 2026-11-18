@@ -7,6 +7,10 @@
 // Re-export all types from keyflow-proto for convenience
 #[cfg(feature = "svg")]
 pub use engraver;
+/// Editing a chart on the chart: note input's state and operations, and
+/// the bars they change written back (`keyflow_lang::edit`).
+#[cfg(feature = "text")]
+pub use keyflow_lang::edit;
 #[cfg(feature = "live")]
 pub use keyflow_lang::live;
 #[cfg(feature = "midi")]

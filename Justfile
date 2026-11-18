@@ -74,6 +74,48 @@ wasm-check:
         -p editor-keyflow -p keyflow -p keyflow-ui --no-default-features \
         --features editor-keyflow/render,keyflow/text,keyflow/svg,keyflow/highlighting,keyflow-ui/wasm-graphics
 
+# ── The app ─────────────────────────────────────────────────────────
+# Keyflow's development window: the Architect app with the Keyflow
+# extension compiled in (apps/architect), its own config folder
+# (keyflow-dev), under `dx serve`: a save is hot-patched into the running
+# window, the extension's code included. `devenv up` runs it beside the
+# telemetry stack. Its vault is devenv's state copy of
+# apps/architect/vault, seeded on the first run: edits made in the app
+# never touch the repo. Delete .devenv/state/keyflow-vault to start again
+# from the seed.
+app *ARGS:
+    cd apps/architect && \
+    ARCHITECT_VAULT="${ARCHITECT_VAULT:-${DEVENV_STATE:-{{justfile_directory()}}/.devenv/state}/keyflow-vault}" \
+    ARCHITECT_VAULT_SEED="${ARCHITECT_VAULT_SEED:-${DEVENV_ROOT:-{{justfile_directory()}}}/apps/architect/vault}" \
+    dx serve --platform desktop --renderer native --hot-patch true {{ARGS}}
+
+# The same window built and run plainly (`cargo run`), no hot patching.
+app-plain *ARGS:
+    ARCHITECT_VAULT="${ARCHITECT_VAULT:-${DEVENV_STATE:-{{justfile_directory()}}/.devenv/state}/keyflow-vault}" \
+    ARCHITECT_VAULT_SEED="${ARCHITECT_VAULT_SEED:-${DEVENV_ROOT:-{{justfile_directory()}}}/apps/architect/vault}" \
+    cargo run -p keyflow-architect -- {{ARGS}}
+
+# The chart as a runtime extension: a stock Architect, with nothing of
+# Keyflow compiled in, running this checkout's extension as a development
+# copy (a process, `features/extension`), alone in an isolated instance:
+# no sidebars, rail or status bar, so the window is the chart. Its program
+# is built here and put where its manifest's `[entry]` names it; a rebuild
+# restarts it. `ARCHITECT` is the app to run (`architect` on PATH by
+# default: an Architect build new enough to load this one), `KEYFLOW_OPEN`
+# the chart (a path in the vault, seeded from apps/architect/vault).
+app-from *ARGS:
+    cargo build -p keyflow-extension
+    install -m 755 target/debug/keyflow-extension features/extension/keyflow-extension
+    "${ARCHITECT:-architect}" dev --extension features/extension --only keyflow --hide all \
+        --seed apps/architect/vault --open "${KEYFLOW_OPEN:-Charts/COLDPLAY - YELLOW.kf}" {{ARGS}}
+
+# `app-from` with the app's chrome shown: the chart in the whole app.
+app-full *ARGS:
+    cargo build -p keyflow-extension
+    install -m 755 target/debug/keyflow-extension features/extension/keyflow-extension
+    "${ARCHITECT:-architect}" dev --extension features/extension --only keyflow \
+        --seed apps/architect/vault --open "${KEYFLOW_OPEN:-Charts/COLDPLAY - YELLOW.kf}" {{ARGS}}
+
 # ── Keyflow CLI ──────────────────────────────────────────────────────────
 
 # Parse / render a .kf chart — `just kf render examples/foo.kf`

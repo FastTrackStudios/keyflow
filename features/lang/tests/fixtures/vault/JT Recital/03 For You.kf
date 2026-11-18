@@ -1,0 +1,136 @@
+For You
+Transcribed By Cody Wright
+\title "For You"
+bAb 105bpm 4/4
+
+Count 2
+
+; Source: the show's Ableton set, beats 3058-3386 (82 bars; count-in 3050-3058, SONG END 3386):
+; SECTIONS +CC, tempo map (105), FoH Notes cues, stems (SYNTHS - PIANO, GTR - ACOUTSICS, Piano/NORD).
+; 2026-11-15 (Cody): written in Nashville numbers, the secondary dominant as 3M (C), 3M/#5 where E is in the bass (C/E); outro 1 4 (3M/#5 on beat 3, as bar 60) 6m 4maj7, cut to 8 bars (Cody).
+; Chords: Cody's notes (key of Ab; VS/PRE 1 5 1/3 4; CH 1 4 6 4 with V/6 up to the 6; CH 2 1 4 6 4 / 1 2 6 4,
+; BR 1 4 6 4 / 1 2 V/6 5).
+
+VS 8
+"Panda + tracks" 1
+1
+5
+5
+1/3
+1/3
+4
+4
+[lyrics lrc]
+@1:1.5 Feels like a shot…
+@5 Yea i've been broken…
+
+; Notes: VS/PRE = 1 5 1/3 4. Stems hint the 5 arrives mid-bar 1 here; written as the notes.
+PRE-CH 8 (band in)
+1
+1
+5
+5
+1/3
+1/3
+4
+4
+[lyrics lrc]
+@1 As we go, i'll try…
+
+; V/6 "up to the 6": stems show an E in the bass on beat 3 of bar 12 -> C/E into Fm.
+CH 16
+dyn f
+1
+1
+4
+4
+6m
+6m
+4
+4
+1
+1
+4
+4 // 3M/#5 //
+6m
+6m
+4
+4
+[lyrics lrc]
+@1:1.5 Running all day for you
+@9:1.5 Running all day for you
+
+VS 8
+"Tracks moment" 1
+1
+5
+5
+1/3
+1/3
+4
+4
+[lyrics lrc]
+@1:2 My walls are still built up high…
+
+; Pre 2: not in the notes; from the stems (Ab Ab Eb Eb Ab/C Ab Db Db->Eb). LOW CONFIDENCE bars 5-6, 8.
+PRE 8
+1
+1
+5
+5
+1/3
+1/3
+4
+4 // 5 //
+[lyrics lrc]
+@1 Cause as we go, i'll try…
+
+; Notes: 1 4 6 4 / 1 2 6 4; stems: C7 on beat 3 of bar 6 into Fm (the V/6 again).
+; 2026-11-15 (Cody): a break, the band comes back in on beat 2.
+CH 16
+r4 1 ///
+1
+4
+4
+6m
+6m
+4
+4
+1
+1
+2m
+2m // 3M/#5 //
+6m
+6m
+4
+4
+[lyrics lrc]
+@1:1.5 Running all day for you
+@9 Runnin all day for you
+
+BR 8
+1
+1
+4
+4
+6m
+6m
+4
+4
+[lyrics lrc]
+@1:1.5 I'm running and driving…
+
+; DISAGREEMENT: the notes' bridge line 2 "1 2 V/6 5" (written here, two bars each) lands on the outro's
+; first 8 bars; the reference + stems play Ab Ab Db Db(C/E) Fm Fm Db Db there. FoH: "VOX TRAX" (vox + tracks).
+; Last 2 bars: Dbmaj7 held (stems), not in the notes.
+OUT 8
+"Vox + tracks" 1
+1
+4
+4 // 3M/#5 //
+6m
+6m
+4maj7
+4maj7_1 \fermata
+[lyrics lrc]
+@1:1.5 I'm running and driving…

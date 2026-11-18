@@ -1,0 +1,73 @@
+Sleigh Ride - Tori Kelly
+Transcribed By Cody Wright
+#B 86bpm 4/4
+\repeat_chord_symbols = clusters
+
+Count 2
+
+IN 4
+@drums "Drums in"
+r1
+r1
+r1
+>E/F#_8. >E/F#_16 ~ E/F#_8 >E/F#_8 ~ E/F#_2
+[lyrics lrc]
+@4:3 Just hear those
+
+CH 8
+dyn mp
+Bmaj7 / G#m7 / C#m9 / E/F# / Bmaj7
+Bmaj7 / G#m7 / C#m9 / E/F# / Bmaj7 // Gmaj7/D / F#7/C# /
+Bmaj7 / G#m7 / C#m9 / E/F# / Bmaj7
+Bmaj7 / G#m7 / C#m9 / E/F# / Bmaj7 ////
+[lyrics lrc]
+@1 sleigh bells jingling…
+
+VS 8
+dyn mf
+Fm9 /// Bb9 / Ebmaj9 x2
+Ebm9 /// Ab7 / Dbmaj7
+>C#m9_8 !STOP r8 r2.
+E/F#
+[lyrics lrc]
+@1 Giddy up, giddy up…
+
+CH 8
+dyn mp
+Bmaj7 / G#m7 / C#m9 / E/F# / Bmaj7
+Bmaj7 / G#m7 / C#m9 / E/F# / Bmaj7 // Gmaj7/D / F#7/C# /
+Bmaj7 / G#m7 / C#m9 / E/F# / Bmaj7
+Bmaj7 / G#m7 / C#m9 / E/F# / Bmaj7 ////
+[lyrics lrc]
+@1 Our cheeks are nice and rosy…
+
+VS 8
+dyn mf
+Fm9 /// Bb9 / Ebmaj9 x2
+Ebm9 /// Ab7 / Dbmaj7
+>C#m9_8 !STOP r8 r2.
+E/F# // >F/G_8 !STOP r8 r4
+
+INST 6 #C
+@vox "Scat singing"
+Cmaj7 / Am7 / Dm9 / F/G / Cmaj7
+Cmaj7 / Am7 / Dm9 / F/G / Cmaj7 // Abmaj7 / F/G /
+Cmaj7 / Am7 / Dm9 / F/G / Cmaj7
+
+[TAG] 5
+dyn f
+Cmaj7 / Am7 / Dm9 / F/G / Cmaj7 / Am7 / Dm9 / F/G /
+Cmaj7_4 Am7_4 Dm9_4 "Let ring" F/G_4 ~
+dyn mp
+F/G_1 ~
+"Rall. tom fill" F/G_1
+[lyrics lrc]
+@1:1 It's lovely weather for a sleigh ride together…
+
+OUT 17
+dyn f
+Cmaj7 Gm9 Fmaj9 Fm6
+Cmaj7 Gm9 Fmaj9 Fm6 x2
+Cmaj7 Gm9 Fmaj9
+>Fm6_2 >Fm6_2
+C_1 \fermata
