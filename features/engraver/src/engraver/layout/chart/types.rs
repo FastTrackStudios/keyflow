@@ -748,6 +748,12 @@ pub struct MelodyNoteSegment {
 }
 
 impl MelodyNoteSegment {
+    /// A melody space (`s`): no written note, the rhythm slash shows.
+    #[must_use]
+    pub fn is_space(&self) -> bool {
+        matches!(self.pitch.as_str(), "s" | "S")
+    }
+
     /// Convert beats to a Duration enum value
     pub fn to_duration(&self) -> Duration {
         if self.triplet {
@@ -895,6 +901,45 @@ fn accidental_from_alteration(alteration: i8) -> Accidental {
         -1 => Accidental::Flat,
         -2 => Accidental::DoubleFlat,
         _ => Accidental::Natural,
+    }
+}
+
+/// Accidentals in force in one bar, by staff line: what a note on that line
+/// sounds as until the barline (a B♭ earlier in the bar makes a later plain
+/// B need its natural, a second E♭ needs no flat).
+#[derive(Debug, Default, Clone)]
+pub struct BarAccidentals {
+    in_force: std::collections::HashMap<i32, i8>,
+}
+
+impl BarAccidentals {
+    /// The accidental to print on a note at `line` spelled `pitch`, given the
+    /// key and what the bar has already shown; records it. `tied_in` is a
+    /// note tied over the barline from the last bar, which prints none but
+    /// sets the line for the rest of this bar.
+    pub fn display(
+        &mut self,
+        pitch: &str,
+        line: i32,
+        key_signature: i8,
+        tied_in: bool,
+    ) -> Accidental {
+        let Some((class, alteration, explicit)) = parse_melody_pitch(pitch) else {
+            return Accidental::None;
+        };
+        let current = *self
+            .in_force
+            .entry(line)
+            .or_insert_with(|| key_signature_alteration(class, key_signature));
+        self.in_force.insert(line, alteration);
+        if tied_in || alteration == current {
+            return Accidental::None;
+        }
+        if alteration == 0 || explicit == Accidental::Natural {
+            Accidental::Natural
+        } else {
+            accidental_from_alteration(alteration)
+        }
     }
 }
 

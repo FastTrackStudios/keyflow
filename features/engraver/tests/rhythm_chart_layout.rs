@@ -733,6 +733,21 @@ fn every_accent_draws_in_marker_red_even_on_a_chord_named_once() {
     );
 }
 
+#[test]
+fn staccato_dots_stay_black_while_accents_turn_red() {
+    let result = render("St\n#G 120bpm 4/4\n\nOUT 1\n>.G_4 .G_4 r2\n");
+    let mut dots = Vec::new();
+    glyph_colors(&result.scene, '\u{E4A2}', &mut dots);
+    assert_eq!(dots.len(), 2, "both attacks carry a staccato dot");
+    assert!(
+        dots.iter().all(|c| *c == peniko::Color::BLACK),
+        "staccato dots are black: {dots:?}"
+    );
+    let mut accents = Vec::new();
+    glyph_colors(&result.scene, '\u{E4A0}', &mut accents);
+    assert_eq!(accents.len(), 1, "only the first attack is accented");
+}
+
 /// Stroke widths of every vertical line in the scene, left to right.
 fn vertical_line_widths(node: &SceneNode, parent: Affine, out: &mut Vec<(f64, f64)>) {
     let t = parent * node.transform;
@@ -824,5 +839,51 @@ fn a_crowded_slash_chord_folds_and_a_roomy_one_does_not() {
     assert!(
         ys.iter().all(|y| (y - ys[0]).abs() < 1e-6),
         "one baseline: {ys:?}"
+    );
+}
+
+#[test]
+fn a_melody_space_draws_as_the_rhythm_slash_before_written_notes() {
+    // This Christmas: the held Fadd2 is a half slash, then the riff is
+    // written out (`m{ s2 Bb:216 … }`) — the space must not print a note.
+    let result = render(
+        "TC\nbF 93bpm 4/4\n\nIN 1\n<< Fadd2_2 Fadd2_16 Fadd2_16 Fadd2_8 Fadd2_16 Fadd2_16 Fadd2_8 ; m{ s2 Bb:216 C:316 Eb:38 F:316 Eb:316 C:38 } >>\n",
+    );
+    assert_eq!(
+        count_glyphs(&result.scene, WHITE_HALF_SLASH),
+        1,
+        "the space prints as one hollow half slash"
+    );
+    // noteheadHalf: a pitched half note would mean the space was drawn as a note.
+    assert_eq!(count_glyphs(&result.scene, '\u{E0A3}'), 0);
+    // noteheadBlack: the six written riff notes.
+    assert_eq!(count_glyphs(&result.scene, '\u{E0A4}'), 6);
+}
+
+#[test]
+fn an_accidental_lasts_to_the_barline_so_a_later_plain_note_gets_its_natural() {
+    // All I Want for Christmas walk-up in G: G A B♭ B — the B after the B♭
+    // needs a natural, and a second B♭ in a bar needs no second flat.
+    let walk =
+        render("AIW\n#G 150bpm 4/4\n\nCH 1\n<< G_4 G_4 G_4 G_4 ; m{ G:24 A:24 Bb:24 B:24 } >>\n");
+    assert_eq!(
+        count_glyphs(&walk.scene, '\u{E260}'),
+        1,
+        "one flat, on the B♭"
+    );
+    assert_eq!(
+        count_glyphs(&walk.scene, '\u{E261}'),
+        1,
+        "one natural, on the B"
+    );
+
+    let repeat = render(
+        "TC\nbF 93bpm 4/4\n\nVS 1\n<< Ebmaj9_4 Ebmaj9_4 Ebmaj9_2 ; m{ Eb:34 Eb:34 Eb:32 } >>\n",
+    );
+    // Two flats: the key signature's B♭ and the first E♭ — not one per E♭.
+    assert_eq!(
+        count_glyphs(&repeat.scene, '\u{E260}'),
+        2,
+        "the flat prints once per bar"
     );
 }

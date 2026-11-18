@@ -174,6 +174,7 @@ pub fn render_system_prefix(
         let key_params = KeySigParams {
             id: id_counter,
             key: KeySigType::Standard(ctx.key_signature),
+            clef: ctx.clef_type.into(),
             color: ctx.key_sig_color,
             show_naturals: cancels,
             prev_key: ctx.prev_key_signature.map(KeySigType::Standard),

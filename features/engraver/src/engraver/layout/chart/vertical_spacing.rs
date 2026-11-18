@@ -300,7 +300,7 @@ pub(super) fn draws_above_staff(measures: &[Measure]) -> bool {
 /// systems are placed and when the vertical compactor closes up after them, so
 /// the page breaks taken during layout survive the compaction.
 pub(super) fn bare_system_gap(config: &ChartLayoutConfig) -> f64 {
-    (config.spatium * 3.0).max(8.0)
+    (config.spatium * 5.0).max(8.0)
 }
 
 /// The gap above and below a folded row.

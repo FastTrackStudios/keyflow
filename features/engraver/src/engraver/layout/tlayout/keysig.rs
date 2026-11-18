@@ -92,6 +92,21 @@ impl ClefContext {
     }
 }
 
+impl From<super::clef::ClefType> for ClefContext {
+    /// The staff positions a key signature uses follow the clef it sits
+    /// after; percussion and tab staves have no pitched lines, so they keep
+    /// the treble default.
+    fn from(clef: super::clef::ClefType) -> Self {
+        use super::clef::ClefType;
+        match clef {
+            ClefType::Bass => Self::Bass,
+            ClefType::Alto => Self::Alto,
+            ClefType::Tenor => Self::Tenor,
+            ClefType::Treble | ClefType::Percussion | ClefType::Tab => Self::Treble,
+        }
+    }
+}
+
 /// Key signature layout parameters.
 #[derive(Debug, Clone, Default)]
 pub struct KeySigParams {
@@ -387,5 +402,27 @@ mod tests {
             calculate_naturals(&KeySigType::Standard(3), &KeySigType::Standard(-2)),
             3
         );
+    }
+}
+
+#[cfg(test)]
+mod clef_context_tests {
+    use super::super::clef::ClefType;
+    use super::*;
+
+    #[test]
+    fn a_bass_clef_key_signature_puts_b_flat_on_the_second_line() {
+        // F major after a bass clef: the B-flat sits on the second line from
+        // the bottom (B2), one line below the treble clef's middle-line B4.
+        let clef = ClefContext::from(ClefType::Bass);
+        assert_eq!(clef, ClefContext::Bass);
+        assert_eq!(clef.flat_positions()[0], -2);
+        assert_eq!(clef.sharp_positions()[0], 2, "F-sharp on the fourth line");
+    }
+
+    #[test]
+    fn unpitched_staves_keep_the_treble_positions() {
+        assert_eq!(ClefContext::from(ClefType::Percussion), ClefContext::Treble);
+        assert_eq!(ClefContext::from(ClefType::Treble), ClefContext::Treble);
     }
 }

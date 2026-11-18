@@ -909,7 +909,13 @@ impl MeasureBuilder {
                     .iter()
                     .map(|n| n.line + n.extras.iter().map(|(l, _)| *l).sum::<i32>())
                     .sum();
-                let auto_stem_dir = if line_sum > 0 || (self.middle_line_stem_down && line_sum == 0)
+                // A group of rhythm slashes keeps the slash convention,
+                // stems down (`resolve_for_head_type`), even in a bar whose
+                // written notes would otherwise flip a middle-line group up
+                // (`m{ s8 s8~ ~s2 r16 Eb:316 … }`).
+                let auto_stem_dir = if beam_head_type == NoteHeadType::Slash
+                    || line_sum > 0
+                    || (self.middle_line_stem_down && line_sum == 0)
                 {
                     StemDirection::Down
                 } else {

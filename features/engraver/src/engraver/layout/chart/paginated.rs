@@ -565,6 +565,7 @@ impl ChartLayoutEngine {
                                 measure_x,
                                 staff_y,
                                 self.config.spatium,
+                                self.section_clef_for(chart, chart_section),
                                 &ctx,
                                 id_counter,
                             );

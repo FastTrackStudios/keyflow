@@ -575,25 +575,42 @@ fn extract_from_melody(data: &MeasureMelodyData) -> RhythmBuildResult {
 
     let mut result = RhythmBuildResult::default();
     let num_melody_notes = data.segments.len();
+    let mut bar_accidentals = super::types::BarAccidentals::default();
 
-    for segment in &data.segments {
+    for (seg_idx, segment) in data.segments.iter().enumerate() {
+        let tied_in = seg_idx == 0 && segment.tie_from_previous;
         let duration = segment.to_duration();
         if segment.is_rest {
             result.entries.push(RhythmEntry::Rest(duration));
             result.note_pitches.push(None);
             result.note_pitch_stacks.push(Vec::new());
+        } else if segment.is_space() {
+            // A melody space (`s2`) in a rhythm chart is time the line
+            // leaves to the band: draw it as the rhythm slash of its length,
+            // so a bar can hold a chord and then switch to written notes
+            // (`m{ s2 Bb:216 C:316 Eb:38 … }`). Ties into and out of it
+            // still draw (`~s2`, `s8~`).
+            result.entries.push(RhythmEntry::Note(duration));
+            result.note_pitches.push(None);
+            result.note_pitch_stacks.push(Vec::new());
+            result
+                .head_type_overrides
+                .push(Some(NoteHeadOverride::Slash));
+            continue;
         } else {
             result.entries.push(RhythmEntry::Note(duration));
 
             // Primary pitch + any polyphony stack (octave doublings /
             // double-stops). All resolved through the active clef.
             if let Some(octave) = segment.octave {
-                let (line, acc) = melody_pitch_to_line_for_clef_and_key(
+                let (line, _) = melody_pitch_to_line_for_clef_and_key(
                     &segment.pitch,
                     octave,
                     data.clef,
                     data.key_signature,
                 );
+                let acc =
+                    bar_accidentals.display(&segment.pitch, line, data.key_signature, tied_in);
                 result.note_pitches.push(Some((line, acc)));
                 let mut stack: Vec<(i32, Accidental)> =
                     Vec::with_capacity(segment.extra_pitches.len());
@@ -615,12 +632,14 @@ fn extract_from_melody(data: &MeasureMelodyData) -> RhythmBuildResult {
                             octave
                         }
                     });
-                    let (eline, eacc) = melody_pitch_to_line_for_clef_and_key(
+                    let (eline, _) = melody_pitch_to_line_for_clef_and_key(
                         extra_pitch,
                         oct,
                         data.clef,
                         data.key_signature,
                     );
+                    let eacc =
+                        bar_accidentals.display(extra_pitch, eline, data.key_signature, tied_in);
                     stack.push((eline, eacc));
                 }
                 result.note_pitch_stacks.push(stack);

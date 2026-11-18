@@ -50,11 +50,12 @@ pub struct PrintedSymbol {
 
 /// Whether a slash chord prints as a vertical fraction (1.0) or inline
 /// (0.0), from the time it has before the next symbol (or the barline), in
-/// ticks (quarter = 480). Less than a beat and it stacks: `A` over a rule
-/// over `E`, as a hand-written chart would squeeze it.
+/// ticks (quarter = 480). A beat or less and it stacks: `A` over a rule
+/// over `E`, as a hand-written chart would squeeze a walk of one chord per
+/// beat (`Eb7 Eb7/Db Cm Eb7/Bb`).
 #[must_use]
 pub fn slash_stack_for_span(span_ticks: i32) -> f64 {
-    if f64::from(span_ticks) < constants::TICKS_PER_QUARTER {
+    if f64::from(span_ticks) <= constants::TICKS_PER_QUARTER {
         1.0
     } else {
         0.0
@@ -247,6 +248,7 @@ pub fn printed_symbols(
         .map(|p| measure.chords[p.chord_idx].full_symbol.contains('/'))
         .collect();
     let mut stacks: Vec<f64> = printed.iter().map(|p| p.stack).collect();
+    stack_adjacent_slash_chords(&onsets, &is_slash, &mut stacks);
     spread_stacking(&onsets, &is_slash, &mut stacks);
     for (symbol, stack) in printed.iter_mut().zip(stacks) {
         symbol.stack = stack;
@@ -256,6 +258,23 @@ pub fn printed_symbols(
         }
     }
     printed
+}
+
+/// Two slash chords a beat or less apart print as fractions together
+/// (`Bmaj7 // Gmaj7/D / F#7/C# /`). Side by side inline they need a wide
+/// beat each, and a line that can't give it would stack them in the
+/// renderer anyway — after this pass had already widened the bar for the
+/// inline form, leaving a gap the fractions don't use. Deciding here lets
+/// the bar be spaced for the fractions it prints. `onsets`, `is_slash` and
+/// `stacks` run in print order.
+pub fn stack_adjacent_slash_chords(onsets: &[i32], is_slash: &[bool], stacks: &mut [f64]) {
+    let beat = constants::TICKS_PER_QUARTER as i32;
+    for i in 1..stacks.len().min(onsets.len()).min(is_slash.len()) {
+        if is_slash[i - 1] && is_slash[i] && onsets[i] - onsets[i - 1] <= beat {
+            stacks[i - 1] = 1.0;
+            stacks[i] = 1.0;
+        }
+    }
 }
 
 /// How near (ticks) another slash chord must be to a stacked one to stack
@@ -501,7 +520,34 @@ mod tests {
 
 #[cfg(test)]
 mod spread_stacking_tests {
-    use super::spread_stacking;
+    use super::{constants, slash_stack_for_span, spread_stacking, stack_adjacent_slash_chords};
+
+    #[test]
+    fn a_slash_chord_held_one_beat_stacks_and_a_longer_one_does_not() {
+        let beat = constants::TICKS_PER_QUARTER as i32;
+        assert_eq!(slash_stack_for_span(beat), 1.0);
+        assert_eq!(slash_stack_for_span(beat / 2), 1.0);
+        assert_eq!(slash_stack_for_span(beat * 2), 0.0);
+    }
+
+    #[test]
+    fn slash_chords_a_beat_apart_stack_together() {
+        // Bmaj7 @1, Gmaj7/D @3, F#7/C# @4.
+        let onsets = [0, 960, 1440];
+        let is_slash = [false, true, true];
+        let mut stacks = [0.0, 0.0, 0.0];
+        stack_adjacent_slash_chords(&onsets, &is_slash, &mut stacks);
+        assert_eq!(stacks, [0.0, 1.0, 1.0]);
+    }
+
+    #[test]
+    fn slash_chords_two_beats_apart_stay_inline() {
+        let onsets = [0, 960];
+        let is_slash = [true, true];
+        let mut stacks = [0.0, 0.0];
+        stack_adjacent_slash_chords(&onsets, &is_slash, &mut stacks);
+        assert_eq!(stacks, [0.0, 0.0]);
+    }
 
     #[test]
     fn near_slash_chords_stack_with_a_crowded_one() {
