@@ -239,6 +239,9 @@ async fn follow(args: Json) -> Result<Json, String> {
         Some(path) => seed_chart(&id.to_string(), path).await?,
         None => false,
     };
+    // A pane on this session opened before (a window restoring its
+    // layout) read it with nobody to answer: it reads again now.
+    crate::reload(Some(&format!("session:{id}")));
     Ok(json!({
         "following": url,
         "id": id.to_string(),
@@ -350,10 +353,15 @@ async fn document(args: Json) -> Result<Json, String> {
                 }
             }))
     };
-    let mut s = sessions();
-    s.provider.open_doc(id, session.clone());
-    s.watches.insert(id, watch);
-    s.documents.insert(id, (replica, session));
+    {
+        let mut s = sessions();
+        s.provider.open_doc(id, session.clone());
+        s.watches.insert(id, watch);
+        s.documents.insert(id, (replica, session));
+    }
+    // A pane on this session opened before it was held here (a window
+    // restoring its layout) failed to read it: it reads again now.
+    crate::reload(Some(&pane));
     Ok(json!({ "id": id.to_string(), "pane": pane, "path": path, "writable": writable }))
 }
 
@@ -385,12 +393,17 @@ async fn join(args: Json) -> Result<Json, String> {
         let _ = pinger.run(&host).await;
     });
     join_presence(&url, id, "follow").await?;
-    let mut s = sessions();
-    s.provider.open(&chart);
-    s.watches.insert(id, watch(&chart, id));
-    s.charts.insert(id, chart);
-    s.clock = Some(clock);
-    Ok(json!({ "joined": url, "id": id.to_string(), "pane": format!("session:{id}") }))
+    {
+        let mut s = sessions();
+        s.provider.open(&chart);
+        s.watches.insert(id, watch(&chart, id));
+        s.charts.insert(id, chart);
+        s.clock = Some(clock);
+    }
+    let pane = format!("session:{id}");
+    // As for a document: a pane opened before it was held reads again.
+    crate::reload(Some(&pane));
+    Ok(json!({ "joined": url, "id": id.to_string(), "pane": pane }))
 }
 
 fn play(args: &Json) -> Result<Json, String> {
