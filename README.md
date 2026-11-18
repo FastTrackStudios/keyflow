@@ -22,3 +22,23 @@ Each was taken at 390 and 1280 px, light (`light`) and dark (`dark`):
 | `*-duration.png` | Input by duration: the pitch cursor (G) shown as a shadow note at the cursor |
 | `*-syntax-preview.png` | Input via syntax: `Dm7 / G7 / \| Cmaj7` previewed over bars 12–13, before it is written |
 | `kf1280-light-chrome-note-name.png` | Input by note name with the app's chrome shown |
+
+## Round 3
+
+Taken on Keyflow `feat/chart-selection-and-input-modes` after keyflow#92, in the same setup, with Architect at `runtime-compositor-keyflow-input` `d20f1fa0` (the focus fix).
+
+### Recording
+
+`recording/sketch-16-bars.mp4` (40 s, 1280 px), a new blank chart (`Sketch\n4/4\n`):
+1. One click on the empty paper to give the chart the keyboard (a newly opened pane does not take it; see the report). Every key after that is the keyboard alone.
+2. K, then 16 bars of chords typed on the chart, previewed as they are typed. Enter writes them; the chart had no bars, so they are added as a section of their own.
+3. Esc, Ctrl+Home, Ctrl+→ ×3 to bar 4, K, `G7 / / /`, Enter. The chart follows the cursor.
+4. The same at bar 8 (`Gsus4 / G7 /`) and at bar 11 (`E7 / / /`).
+5. N, Ctrl+Home, Ctrl+Alt+1 (voice 1, which also means notes), 5 (a quarter), E, G: two melody notes in bar 1.
+
+### Captures
+
+| file | what it shows |
+|---|---|
+| `captures/round3/kf1280-light-voices-triplet.png` | bar 6 of YELLOW with two voices: voice 1 stems up, voice 2 stems down with a triplet under a `3`. The cursor is in voice 2's colour (green), restored after a reload |
+| `captures/round3/kf390-light-voices-triplet.png` | the same bar at 390 px |
