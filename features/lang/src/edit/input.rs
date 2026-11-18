@@ -1503,8 +1503,17 @@ impl InputState {
                 format!("{b:.2}").trim_end_matches('0').to_owned()
             }
         };
-        if self.target == Target::Chords {
-            if let Some((bar, i)) = self.selected_chord(score) {
+        // A bar with no notes written in any voice is its chord symbols, as
+        // the chart shows it (a chord chart's bar): described as them even
+        // when note input was left entering notes.
+        let no_notes = !(0..4).any(|v| score.voice_bars(v).get(p.bar).is_some_and(|b| b.written));
+        if self.target == Target::Chords || no_notes {
+            if let Some((bar, i)) = score
+                .chords
+                .get(p.bar)
+                .and_then(|c| c.index_at(p.tick))
+                .map(|i| (p.bar, i))
+            {
                 let c = &score.chords[bar];
                 let at = c.starts().get(i).copied().unwrap_or(p.tick);
                 let e = &c.events[i];
@@ -1772,6 +1781,24 @@ mod tests {
         // As chord symbols, Shift+letter says what it is for.
         i.target = Target::Chords;
         assert!(i.apply(&mut s, Op::AddToChord('B')).refused.is_some());
+    }
+
+    #[test]
+    fn a_chord_only_bar_is_described_by_its_chords_with_notes_targeted() {
+        // Note input left entering notes; a bar with no notes in any voice
+        // is described as the chart shows it: its chord.
+        let mut s = score(1);
+        let mut i = input(Mode::Normal);
+        i.target = Target::Notes;
+        i.selected = Some(Pos { bar: 0, tick: 0 });
+        let line = i.status(&s);
+        assert!(!line.contains("Rest"), "{line}");
+        // With a note written, the note.
+        let mut j = input(Mode::NoteName);
+        j.apply(&mut s, Op::Duration(Quarter));
+        j.apply(&mut s, Op::Letter('C'));
+        j.apply(&mut s, Op::Escape);
+        assert!(j.status(&s).contains("Note C"), "{}", j.status(&s));
     }
 
     #[test]
