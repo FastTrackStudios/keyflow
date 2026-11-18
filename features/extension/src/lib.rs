@@ -34,7 +34,9 @@ use std::sync::{Mutex, PoisonError};
 
 use architect_extensions::contrib::{StateKind, StateWrite};
 use architect_extensions::hostcall::{DocEdit, HostRequest};
-use architect_extensions::linked::{Builder, Extension, Handle, PaintPane, use_pane_state};
+use architect_extensions::linked::{
+    Builder, Extension, Handle, PaintPane, ViewState, use_pane_state, use_view_state,
+};
 use architect_workspace::paint::peniko::Color;
 use architect_workspace::{HostData, PaintWake};
 use dioxus::prelude::*;
@@ -356,7 +358,21 @@ fn ChartPane() -> Element {
     let mut draft = use_signal(String::new);
     let mut chord = use_signal(|| None::<String>);
     let mut field = use_signal(|| 0_u64);
+    // The pane's place as its pane keeps it (architect#859): the latest,
+    // for the keeper below to write through, and what was kept, given back
+    // once (the pane's input reaches a process just after its first render,
+    // so it may come a render late).
+    let place = use_hook(|| std::rc::Rc::new(std::cell::RefCell::new(None::<ViewState>)));
+    if let Some(kept) = use_view_state() {
+        let mut places = PLACES.lock().unwrap_or_else(PoisonError::into_inner);
+        let slot = places.entry(key).or_insert((String::new(), false));
+        if !slot.1 {
+            slot.0.clone_from(&kept.value);
+        }
+        *place.borrow_mut() = Some(kept);
+    }
     let tell = use_hook(|| {
+        let place = place.clone();
         let (tx, mut rx) = unbounded_channel::<Msg>();
         spawn(async move {
             while let Some(msg) = rx.recv().await {
@@ -410,17 +426,24 @@ fn ChartPane() -> Element {
                         }
                         gesture(g).await;
                     }
-                    Msg::Keep => keep_view().await,
+                    // The pane's place kept, once what was kept is given back
+                    // (a starting view would write its defaults over it).
+                    Msg::Keep => {
+                        if give_back_place(key).await
+                            && let Some(kept) = place.borrow().clone()
+                            && let Some(now) = pane_place(key)
+                        {
+                            kept.set(now.to_string());
+                        }
+                    }
                 }
             }
         });
         tx
     });
-    // Keys arrive by the bindings of the person's settings.
-    // The view as it was before a reload: zoom, scroll, selection, and
-    // note input. Then kept as it changes (a zoom or a scroll is the pane's,
-    // so it is looked at now and then; an operation keeps it at once).
-    use_hook(|| spawn(restore_view(key)));
+    // The view's place, kept by its pane (`use_view_state`): given back
+    // once its chart is read, then kept as it changes (a zoom or a scroll
+    // is the pane's, so it is looked at now and then).
     #[cfg(not(target_family = "wasm"))]
     use_hook(|| {
         let tell = tell.clone();
@@ -508,8 +531,7 @@ fn ChartPane() -> Element {
             // The chart's kept view, now that its path is known; and note
             // input's cursor drawn on it, which a restore before the path
             // came could not.
-            apply_kept_chart(key);
-            restore_input(key).await;
+            give_back_place(key).await;
             error.set(message);
         }
     });
@@ -629,175 +651,82 @@ fn ChartPane() -> Element {
     }
 }
 
-/// The view as kept: note input, and each open chart's zoom, scroll and
-/// selection by its path.
-fn view_state() -> Json {
-    let input = keep::input_json(&edit_state().input);
-    let pending: Vec<u64> = open_charts()
-        .iter()
-        .filter(|(k, o)| kept_pending(**k, &o.path))
-        .map(|(k, _)| *k)
-        .collect();
-    // A chart not yet given its kept view back keeps what was kept.
-    let mut charts: serde_json::Map<String, Json> = KEPT
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .as_ref()
-        .and_then(|k| k.get("charts")?.as_object().cloned())
-        .unwrap_or_default();
-    let live: serde_json::Map<String, Json> = open_charts()
-        .iter()
-        .filter(|(k, o)| !o.path.is_empty() && !pending.contains(k))
-        .map(|(_, o)| o)
-        .map(|o| {
-            let view = o.data.read(|s| s.view);
-            let selection = o.selection.read(|s| s.keys.clone());
-            (
-                o.path.clone(),
-                keep::chart_json(view.zoom, view.scroll, &selection),
-            )
-        })
-        .collect();
-    charts.extend(live);
-    // Note input is in one chart: the one it is given back to.
-    let input_chart = active_chart().map(|(_, path)| path);
-    json!({ "input": input, "input_chart": input_chart, "charts": charts })
-}
-
-/// The view written to the extension's own data, when it changed.
-async fn keep_view() {
-    // Not before what was kept has been read back: a process starting up
-    // would write its defaults over it.
-    if !RESTORE_TRIED.load(Ordering::Relaxed) {
-        return;
+/// Pane `key`'s place, as its pane keeps it (`use_view_state`,
+/// architect#859): its chart's zoom, scroll and selection, by the chart it
+/// shows, and note input when it is on this pane. Given back when the view
+/// starts again: its program restarted (a development copy rebuilt), its
+/// pane moved or popped out, the app opened again.
+fn pane_place(key: u64) -> Option<Json> {
+    let o = open_charts().get(&key).cloned()?;
+    if o.path.is_empty() {
+        return None;
     }
-    let state = view_state();
-    if !keep::changed(&state) {
-        return;
-    }
-    if let Ok(handle) = handle() {
-        let _ = handle
-            .host(HostRequest::SetData {
-                key: keep::KEY.to_owned(),
-                value: Some(state),
-            })
-            .await;
-    }
-}
-
-/// Note input is taken back once a process (a reload): not again for a
-/// second pane.
-static INPUT_RESTORED: AtomicBool = AtomicBool::new(false);
-
-/// Whether this process has read the kept view back (or found none).
-static RESTORE_TRIED: AtomicBool = AtomicBool::new(false);
-
-/// The pane `key`'s chart taken back to its kept zoom, scroll and
-/// selection, and note input to its kept mode, tools and cursor.
-async fn restore_view(key: u64) {
-    let Ok(handle) = handle() else { return };
-    let kept = handle
-        .host(HostRequest::Data {
-            key: keep::KEY.to_owned(),
-        })
-        .await;
-    let Ok(kept) = kept else {
-        RESTORE_TRIED.store(true, Ordering::Relaxed);
-        return;
-    };
-    // The chart's path is the pane's, read once it mounted.
-    restore_from(key, &kept).await;
-    RESTORE_TRIED.store(true, Ordering::Relaxed);
-}
-
-async fn restore_from(key: u64, kept: &Json) {
-    *KEPT.lock().unwrap_or_else(PoisonError::into_inner) = Some(kept.clone());
-    apply_kept_chart(key);
-    restore_input(key).await;
-}
-
-/// Note input given back, once, to pane `key` if it shows the chart it
-/// was kept in (not to whichever pane mounts first), and drawn there.
-/// Its path may not be known yet; the chart's read calls this again.
-async fn restore_input(key: u64) {
-    if INPUT_RESTORED.load(Ordering::Relaxed) {
-        return;
-    }
-    let Some(path) = open_charts()
-        .get(&key)
-        .map(|o| o.path.clone())
-        .filter(|p| !p.is_empty())
-    else {
-        return;
-    };
-    let kept = KEPT.lock().unwrap_or_else(PoisonError::into_inner).clone();
-    let Some(input) = kept.as_ref().and_then(|k| k.get("input")) else {
-        return;
-    };
-    let chart = kept
-        .as_ref()
-        .and_then(|k| k.get("input_chart"))
-        .and_then(Json::as_str);
-    if chart.is_some_and(|c| c != path) || INPUT_RESTORED.swap(true, Ordering::Relaxed) {
-        return;
-    }
-    {
-        let mut e = edit_state();
-        e.input = keep::input_from(input);
-        e.active = Some(key);
-    }
-    // Remembered as written, so the first look does not write it again.
-    keep::changed(&view_state());
-    rerender_input().await;
-}
-
-/// What was kept, as read back when this process started.
-static KEPT: Mutex<Option<Json>> = Mutex::new(None);
-
-/// The panes (and their charts) given their kept view back.
-static APPLIED: Mutex<Vec<(u64, String)>> = Mutex::new(Vec::new());
-
-/// Whether pane `key` showing `path` is still to be given its kept view.
-fn kept_pending(key: u64, path: &str) -> bool {
-    let has = KEPT
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .as_ref()
-        .and_then(|k| k.get("charts")?.get(path))
-        .is_some();
-    has && !APPLIED
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .iter()
-        .any(|(k, p)| *k == key && p == path)
-}
-
-/// Pane `key`'s chart given its kept zoom, scroll and selection, once its
-/// path is known (in a process, the pane's state comes after it mounts).
-fn apply_kept_chart(key: u64) {
-    let Some(o) = open_charts().get(&key).cloned() else {
-        return;
-    };
-    if o.path.is_empty() || !kept_pending(key, &o.path) {
-        return;
-    }
-    let chart = KEPT
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .as_ref()
-        .and_then(|k| k.get("charts")?.get(&o.path).cloned());
-    let Some(chart) = chart else { return };
-    let (zoom, scroll, selection) = keep::chart_from(&chart);
-    o.data.update(|s| s.view = ChartView { zoom, scroll });
-    o.selection.set(ChartSelection {
-        keys: selection,
-        hover: None,
+    let view = o.data.read(|s| s.view);
+    let selection = o.selection.read(|s| s.keys.clone());
+    let mut place = json!({
+        "path": o.path,
+        "chart": keep::chart_json(view.zoom, view.scroll, &selection),
     });
-    o.wake.wake();
-    APPLIED
+    let e = edit_state();
+    if e.active == Some(key) {
+        place["input"] = keep::input_json(&e.input);
+    }
+    Some(place)
+}
+
+/// What each pane's view was given back (its kept place, as text), and
+/// whether it has been applied: a pane is given its place once, when its
+/// chart's path is known and is the chart it was kept for.
+static PLACES: Mutex<BTreeMap<u64, (String, bool)>> = Mutex::new(BTreeMap::new());
+
+/// Pane `key`'s kept place applied, if it has one not yet applied and its
+/// chart is the one it was kept for: zoom, scroll and selection, and note
+/// input if it was on this pane. Whether there is nothing left to apply
+/// (so the pane's place may now be written).
+async fn give_back_place(key: u64) -> bool {
+    let kept = {
+        let places = PLACES.lock().unwrap_or_else(PoisonError::into_inner);
+        match places.get(&key) {
+            Some((text, false)) if !text.is_empty() => text.clone(),
+            _ => return true,
+        }
+    };
+    let Some(o) = open_charts().get(&key).cloned() else {
+        return false;
+    };
+    if o.path.is_empty() {
+        return false;
+    }
+    let place: Json = serde_json::from_str(&kept).unwrap_or(Json::Null);
+    if let Some(slot) = PLACES
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .push((key, o.path.clone()));
+        .get_mut(&key)
+    {
+        slot.1 = true;
+    }
+    // Kept for another chart (the pane shows another now): not applied.
+    if place.get("path").and_then(Json::as_str) != Some(o.path.as_str()) {
+        return true;
+    }
+    if let Some(chart) = place.get("chart") {
+        let (zoom, scroll, selection) = keep::chart_from(chart);
+        o.data.update(|s| s.view = ChartView { zoom, scroll });
+        o.selection.set(ChartSelection {
+            keys: selection,
+            hover: None,
+        });
+        o.wake.wake();
+    }
+    if let Some(input) = place.get("input") {
+        {
+            let mut e = edit_state();
+            e.input = keep::input_from(input);
+            e.active = Some(key);
+        }
+        rerender_input().await;
+    }
+    true
 }
 
 /// The host this extension was built with.
@@ -1132,7 +1061,6 @@ async fn run_edit(
         reload(Some(&path));
     }
     show_input(&chart, &score, refused);
-    keep_view().await;
     Ok(input_state())
 }
 
