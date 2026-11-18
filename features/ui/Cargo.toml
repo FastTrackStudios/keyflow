@@ -19,7 +19,7 @@ keyflow = { workspace = true, features = ["text", "svg", "highlighting"] }
 architect-ui = { workspace = true }
 editor-keyflow = { workspace = true, features = ["native"], optional = true }
 # Provisional integration checkpoint until the next Architect tag.
-architect-workspace = { git = "https://github.com/FastTrackStudios/architect", rev = "e976a706b31eee11fcabcf118c1d2911d99ad86b", features = ["paint-ui"], optional = true }
+architect-workspace = { git = "https://github.com/FastTrackStudios/architect", rev = "9b5c97f7af9ad807598cd22ec4649fbb38a47f4f", features = ["paint-ui"], optional = true }
 
 # Backend-agnostic rendering abstraction — one stack with the workspace
 # (anyrender 0.11 / anyrender_vello 0.12, paired with blitz-git dioxus-native).
