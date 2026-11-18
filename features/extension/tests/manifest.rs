@@ -73,15 +73,47 @@ fn every_tool_is_a_toggle_on_the_chart_s_own_toolbar() {
     for (tool, button) in TOOLS.iter().zip(&buttons) {
         assert_eq!(button.action, tool.action, "in the tools' order");
         let action = m.actions.iter().find(|a| a.id == tool.action).unwrap();
-        assert!(action.toggle, "{} is a toggle", tool.action);
+        // A tie is an action (T enters a tied note); every other tool stays on.
+        let toggle = tool.action != "KEYFLOW_TIE";
+        assert_eq!(
+            action.toggle, toggle,
+            "{} is a toggle: {toggle}",
+            tool.action
+        );
         match tool.face {
             Face::Glyph(g) => assert_eq!(button.image, keyflow_extension::icons::path_of(g)),
             Face::Icon(i) => assert_eq!(button.icon, i),
         }
     }
     // Every image a button names is a file of the package.
-    let files: Vec<&str> = keyflow_extension::icons::files().iter().map(|(p, _)| *p).collect();
+    let files: Vec<&str> = keyflow_extension::icons::files()
+        .iter()
+        .map(|(p, _)| *p)
+        .collect();
     for button in &buttons {
-        assert!(button.image.is_empty() || files.contains(&button.image.as_str()), "{}", button.image);
+        assert!(
+            button.image.is_empty() || files.contains(&button.image.as_str()),
+            "{}",
+            button.image
+        );
+    }
+}
+
+#[test]
+fn every_key_of_note_input_is_a_setting_with_musescore_s_default() {
+    let m = manifest();
+    let settings: Vec<_> = m.sections.iter().flat_map(|s| s.settings.iter()).collect();
+    for (action, key) in keyflow_extension::input::default_keys() {
+        let id = keyflow_extension::input::setting_key(action);
+        let setting = settings
+            .iter()
+            .find(|s| s.key == id)
+            .unwrap_or_else(|| panic!("no setting {id} for {action}"));
+        assert_eq!(setting.control, "shortcut", "{id}");
+        assert_eq!(setting.default.as_str(), Some(key), "{id}");
+        assert!(
+            m.actions.iter().any(|a| a.id == action),
+            "{action} is declared"
+        );
     }
 }

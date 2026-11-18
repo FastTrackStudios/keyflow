@@ -13,8 +13,12 @@ use kurbo::{Affine, Shape};
 
 use crate::tools::{Face, TOOLS};
 
-/// The ink an icon is drawn in: the app's chrome is dark, as MuseScore's.
-const INK: &str = "#e6e6e6";
+/// The ink an icon is drawn in: a grey that reads on the app's light
+/// chrome and its dark (3.2:1 on white, 6:1 on near-black). A file shown
+/// as an image cannot follow the theme (no `currentColor`, no media query
+/// in an image); the toolbar tinting its images in the ink token is the
+/// fix, asked of Architect.
+const INK: &str = "#8b919c";
 
 /// The package path of glyph `glyph`'s icon.
 #[must_use]

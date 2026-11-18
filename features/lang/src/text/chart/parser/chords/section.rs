@@ -115,6 +115,8 @@ impl<'a> ChartParser<'a> {
                                         melody_measures[0].hairpins.append(&mut pending_hairpins);
                                     }
 
+                                    self.tag_melody_line(line, &mut melody_measures);
+                                    self.tag_melody_line(line, &mut melody_measures);
                                     measures.extend(melody_measures);
                                 }
                             }
@@ -295,6 +297,8 @@ impl<'a> ChartParser<'a> {
                     line_measures[0].hairpins.append(&mut pending_hairpins);
                 }
 
+                self.tag_line_spans(line, &mut line_measures);
+
                 let line_base = i32::try_from(measures.len()).unwrap_or(i32::MAX);
                 for change in &mut self.tempo_changes[tempo_changes_before..] {
                     change.position.total_duration.measure += line_base;
@@ -307,6 +311,61 @@ impl<'a> ChartParser<'a> {
         self.section_beats_offset = 0.0;
         self.carried_measure = None;
         Ok(measures)
+    }
+
+    /// The bars read from `line` marked with it: each bar's provisional,
+    /// line-relative span (line 0) gets the line's id in `line_texts`, for
+    /// `assign_measure_source_spans` to place in the document.
+    fn tag_line_spans(&mut self, line: &str, measures: &mut [Measure]) {
+        // A barlined line: its bars are its cells, when they are as many.
+        if line.contains('|') {
+            let cells = crate::text::chart::parser::bar_cells(line);
+            let copies = measures
+                .iter()
+                .skip(cells.len())
+                .all(|m| m.source_span.is_none());
+            if cells.len() <= measures.len() && copies {
+                let repeated = cells.len() < measures.len();
+                for (i, m) in measures.iter_mut().enumerate() {
+                    m.source_span = cells.get(i).filter(|_| !repeated || i < cells.len()).map(
+                        |&(start, len)| {
+                            crate::text::parsing::TextSpan::with_location(start, len, 0, 0)
+                        },
+                    );
+                }
+                if repeated {
+                    // `| A | B | x2`: the copies have no text of their own.
+                    for m in measures.iter_mut().skip(cells.len()) {
+                        m.source_span = None;
+                    }
+                }
+            }
+        }
+        if measures.iter().all(|m| m.source_span.is_none()) {
+            return;
+        }
+        self.line_texts.push(line.to_owned());
+        let id = u32::try_from(self.line_texts.len()).unwrap_or(u32::MAX);
+        for m in measures.iter_mut() {
+            if let Some(span) = m.source_span.as_mut() {
+                span.line = 0;
+                span.column = id;
+            }
+        }
+    }
+
+    /// A melody line (`m{ … }`) that is one bar: the line is its text.
+    fn tag_melody_line(&mut self, line: &str, measures: &mut [Measure]) {
+        if let [only] = measures {
+            let lead = line.len() - line.trim_start().len();
+            only.source_span = Some(crate::text::parsing::TextSpan::with_location(
+                lead,
+                line.trim().len(),
+                0,
+                0,
+            ));
+            self.tag_line_spans(line, measures);
+        }
     }
 
     fn last_melody_context_octave(melody: &Melody) -> Option<u8> {

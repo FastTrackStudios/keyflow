@@ -1,0 +1,156 @@
+Fire
+Transcribed By Cody Wright
+\title "Fire"
+\subtitle "Nights Out"
+#D 120bpm 4/4
+
+Count 2
+
+; 2026-11-15: rebuilt bar for bar from the band MuseScore chart, Downloads/Fire.pdf,
+; in Nashville numbers, key D: its chords, rhythms, lead-line fills and every cue.
+; A#dim / Bb dim = #5dim, F# = 3M, A/C# = 5/7, Em9 = 2m9. Lyric cues from the set's lyric clips.
+; Lead line A-B-A-G-F#-D from the and of 2: bars 4, 24, 84 after the held chord,
+; bars 52, 60, 92 after two hits and an eighth rest.
+
+IN 4
+"Acoustic only" 4maj7
+5
+6m7
+<< 1sus2/3 ; m{ /4. A:316 B:316 A:38 G:38 F#:38 D:38 } >>
+
+VS 8
+"Electric in" 4maj7
+5
+6m7
+1sus2/3 /// r4
+"Drums & bass in" 4maj7
+5
+6m7
+1maj7
+[lyrics lrc]
+@1:1.5 Auburn dances on…
+
+PRE-CH 8
+4maj7
+5
+6m9
+1sus2/3
+4maj7
+5
+6m7
+"Cut" 1maj7_2 1maj7_2
+[lyrics lrc]
+@4:2 But I've been burned before, won't play with fire…
+@8:1.5 But I've never been higher…
+
+CH 8
+"Acoustic only" 4maj7
+5
+6m7
+<< 1sus2/3 ; m{ /4. A:316 B:316 A:38 G:38 F#:38 D:38 } >>
+4maj7
+5 /// '#5dim /
+6m7
+"Cut" 1maj7_2 1maj7_2
+[lyrics lrc]
+@2:3 I'm getting lighter the more she…
+
+INST 4
+"Band back" 4maj7
+5
+6m7
+"Cut" 1sus2/3_4 ~ 1sus2/3_8 r8 r2
+
+VS 8
+4maj7
+5
+6m7
+1sus2/3 /// r4
+"Open feel" 4maj7
+3M
+6m7 !STOP
+r1
+[lyrics lrc]
+@1:1.5 Every house that I've moved into, somehow burns to…
+
+PRE-CH 8
+4maj7
+5
+6m9
+1sus2/3
+4maj7
+5
+6m7_2 ~ 6m7_8 5/7_4 1maj7_8
+"Cut" r1
+[lyrics lrc]
+@4:2 Sure I've been burned before but I just don't…
+@8 Because I've never been higher than…
+
+CH 8
+4maj7
+5
+6m7
+<< >1sus2/3_8 >1sus2/3_8 s4 s2 ; m{ /8 /8 r8 A:316 B:316 A:38 G:38 F#:38 D:38 } >>
+4maj7
+5 /// '#5dim /
+6m7
+1maj7
+[lyrics lrc]
+@2:3 I'm getting lighter the more she…
+
+SOLO 8
+@guitar "Guitar solo"
+4maj7
+5
+6m7
+<< >1sus2/3_8 >1sus2/3_8 s4 s2 ; m{ /8 /8 r8 A:316 B:316 A:38 G:38 F#:38 D:38 } >>
+"Cut, *dead notes" >4maj7_8 >4maj7_8 4maj7 ///
+5 /// '#5dim /
+"Halftime" 6m7
+1maj7
+
+BR 16
+"Acoustic only" 4maj7
+5
+6m7
+1sus2/3
+4maj7
+5 // #5dim //
+6m7
+1maj7
+"Band in" 4maj7
+5
+6m7
+1sus2/3
+"4 on the floor" 4maj7
+5 // #5dim //
+"Build" 6m7
+"Cut" r1
+[lyrics lrc]
+@1:1.5 Been left…
+@9 Been left…
+@16 Because I've never been higher than…
+
+CH 16 (last)
+"Full band hits" >4maj7_4. >4maj7_8 r2
+r1
+>6m7_4. >6m7_8 r4. >5_8 ~
+<< 5_4. s8 s2 ; m{ /4. A:316 B:316 A:38 G:38 F#:38 D:38 } >>
+"Cut, *dead notes" >2m9_8 >2m9_8 2m9 ///
+4maj7
+"Build" 6m7_2 ~ 6m7_8 5/7_4 1maj7_8 ~
+1maj7
+4maj7
+5
+6m7
+<< >1sus2/3_8 >1sus2/3_8 s4 s2 ; m{ /8 /8 r8 A:316 B:316 A:38 G:38 F#:38 G:38-> } >>
+4maj7
+5 /// '#5dim /
+"Halftime" 6m7
+"Ritard" 1maj7 // r2
+[lyrics lrc]
+@2:3.5 I'm getting lighter the more she…
+@10:3 I'm getting lighter the more she…
+
+[End] 1
+"More of a swell than a trash can ending" >4maj7_8 >4maj7_8 >4maj7_2. \fermata

@@ -28,9 +28,9 @@ pub mod pipeline;
 pub mod prefix_renderer;
 pub mod rhythm_builder;
 pub mod section_layout;
+mod section_plan;
 /// What on a laid-out chart can be selected, and what a click or a box picks.
 pub mod select;
-mod section_plan;
 pub mod spacing;
 pub mod symbol_spacing;
 mod system_breaking;
