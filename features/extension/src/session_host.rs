@@ -57,6 +57,9 @@ struct Sessions {
     /// The host's clock, estimated; `None` on the host itself.
     clock: Option<SharedClock>,
     tracker: Tracker,
+    /// Per session, the subscription that re-reads its chart panes when
+    /// another replica's edit arrives.
+    watches: HashMap<Uuid, crdt::loro::Subscription>,
 }
 
 fn sessions() -> std::sync::MutexGuard<'static, Sessions> {
@@ -99,6 +102,13 @@ fn answer(method: &'static str, args: &Json, cx: &Json) -> Result<Json, String> 
     serde_json::from_str(&reply).map_err(|e| e.to_string())
 }
 
+/// Re-reads the panes showing session `id`'s chart when another
+/// replica's edit arrives: the other machine's typing appears here.
+fn watch(chart: &ChartSession, id: Uuid) -> crdt::loro::Subscription {
+    let pane = format!("session:{id}");
+    chart.on_remote_change(move || crate::reload(Some(&pane)))
+}
+
 async fn open(args: Json) -> Result<Json, String> {
     let path = PathBuf::from(text(&args, "path")?);
     let chart = if path.exists() {
@@ -111,6 +121,7 @@ async fn open(args: Json) -> Result<Json, String> {
     let id = chart.id();
     let mut s = sessions();
     s.provider.open(&chart);
+    s.watches.insert(id, watch(&chart, id));
     s.charts.insert(id, chart);
     Ok(json!({ "id": id.to_string(), "pane": format!("session:{id}") }))
 }
@@ -195,6 +206,7 @@ async fn join(args: Json) -> Result<Json, String> {
     join_presence(&url, id, "follow").await?;
     let mut s = sessions();
     s.provider.open(&chart);
+    s.watches.insert(id, watch(&chart, id));
     s.charts.insert(id, chart);
     s.clock = Some(clock);
     Ok(json!({ "joined": url, "id": id.to_string(), "pane": format!("session:{id}") }))

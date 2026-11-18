@@ -795,8 +795,8 @@ fn remember(
 }
 
 /// ⌘Z (`undo`) or ⇧⌘Z: note input's last edit taken back (or made again),
-/// as a new edit, when the chart is still as that edit left it; another
-/// edit since (another person's, the text's) is not undone over.
+/// as a new edit. Another person's edits since, elsewhere in the chart,
+/// stay; one over this edit's own text is not undone over.
 async fn history(undo: bool) -> Result<Json, String> {
     let _one = ONE_AT_A_TIME.lock().await;
     let (from, to) = if undo { (&UNDO, &REDO) } else { (&REDO, &UNDO) };
@@ -839,18 +839,51 @@ async fn history(undo: bool) -> Result<Json, String> {
 }
 
 /// The text undoing (`undo`) or redoing `step` writes, when the chart is
-/// `now`: only over the text that step left, never over an edit since.
+/// `now`: that step's own change taken back (or made again) and nothing
+/// else. Edits made since elsewhere in the chart (the other person's, in
+/// another bar) stay: the step's splice moves past them. One that touched
+/// the step's own text is not undone over.
 fn step_text(step: &Step, now: &str, undo: bool) -> Result<String, String> {
-    let (expect, write) = if undo {
+    let (from, to) = if undo {
         (&step.after, &step.before)
     } else {
         (&step.before, &step.after)
     };
-    if now == expect {
-        Ok(write.clone())
-    } else {
-        Err("The chart changed since that edit; undo the change in its document".to_owned())
+    if now == from {
+        return Ok(to.clone());
     }
+    rebase(from, to, now).ok_or_else(|| {
+        "That bar changed since the edit; undo the change in its document".to_owned()
+    })
+}
+
+/// `from` → `to` (one splice) applied to `now`, which is `from` with
+/// someone else's change: `None` when that change touches the splice's
+/// text. Positions are Unicode scalars, as `splice_between`'s.
+fn rebase(from: &str, to: &str, now: &str) -> Option<String> {
+    let (at, delete, insert) = keyflow_session::splice_between(from, to);
+    let (theirs_at, theirs_delete, theirs_insert) = keyflow_session::splice_between(from, now);
+    let (at, delete) = (at as usize, delete as usize);
+    let (theirs_at, theirs_delete) = (theirs_at as usize, theirs_delete as usize);
+    let theirs_end = theirs_at + theirs_delete;
+    // Theirs wholly before ours: ours moves by what theirs added. Wholly
+    // after: ours stays. Adjacent or overlapping: refused, since theirs
+    // may continue ours.
+    let moved = if theirs_end < at {
+        (at + theirs_insert.chars().count()).checked_sub(theirs_delete)?
+    } else if theirs_at > at + delete {
+        at
+    } else {
+        return None;
+    };
+    let chars: Vec<char> = now.chars().collect();
+    let ours: Vec<char> = from.chars().skip(at).take(delete).collect();
+    if chars.get(moved..moved + delete)? != ours.as_slice() {
+        return None;
+    }
+    let head: String = chars.get(..moved)?.iter().collect();
+    let tail: String = chars.get(moved + delete..)?.iter().collect();
+    Some(format!("{head}{insert}{tail}"))
 }
 
 /// One note-input operation on the active chart: read it, apply it, write
@@ -1481,7 +1514,38 @@ mod tests {
             step_text(&s, &s.before, false).as_deref(),
             Ok(s.after.as_str())
         );
-        // Someone else's edit since: not undone over.
+        // Someone else's edit since, over the step's own text: not undone over.
         assert!(step_text(&s, "| D / / / |", true).is_err());
+    }
+
+    /// Two people typing in different bars: each one's undo takes back
+    /// only its own edit, wherever the other's moved it.
+    #[test]
+    fn undo_takes_back_only_this_edit_past_anothers_in_another_bar() {
+        let mine = Step {
+            path: "session:x".into(),
+            before: "| C / / / | F / / / | G / / / |".into(),
+            after: "| C / / / | Dm7 / / / | G / / / |".into(),
+            input: Default::default(),
+        };
+        // Theirs after mine (bar 3), and before it (bar 1).
+        let later = "| C / / / | Dm7 / / / | G7sus4 / / / |";
+        assert_eq!(
+            step_text(&mine, later, true).as_deref(),
+            Ok("| C / / / | F / / / | G7sus4 / / / |")
+        );
+        let earlier = "| Cmaj9 / / / | Dm7 / / / | G / / / |";
+        assert_eq!(
+            step_text(&mine, earlier, true).as_deref(),
+            Ok("| Cmaj9 / / / | F / / / | G / / / |")
+        );
+        // Redo puts it back over theirs the same way.
+        let undone = "| Cmaj9 / / / | F / / / | G / / / |";
+        assert_eq!(
+            step_text(&mine, undone, false).as_deref(),
+            Ok("| Cmaj9 / / / | Dm7 / / / | G / / / |")
+        );
+        // Theirs inside my bar's chord: refused.
+        assert!(step_text(&mine, "| C / / / | Dm9 / / / | G / / / |", true).is_err());
     }
 }
