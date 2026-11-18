@@ -1,0 +1,112 @@
+Know Me
+Transcribed By Cody Wright
+\title "Know Me (Extended)"
+\subtitle "The Band CAMINO"
+#E 127bpm 4/4
+
+Count 2
+
+; Concert key E (Ultimate Guitar's chart is capo 4: F Am G = A C#m B).
+; Form and bars from the set's SECTIONS clips; chords from the Songsterr bass
+; tab (s4349073, bar-for-bar with the set up to bar 118) and the stems.
+; 2026-11-15 (Cody): written in Nashville numbers (D = b7); intro bar 8 walks up: F#m on 3, E/G# on the and of 3.
+; Lyric cues (2026-11-15): from Cody's chord/lyric sheet, the important lines only.
+; Chorus: A on 1, C#m pushed on the "and" of 4, B on 3.
+
+IN 8
+@keys "Keys + track drums"
+4 '6m 4 '6m // 5 //
+4 '6m // 5 // 2m 2m // 2m_8 1/3_4.
+
+; Verse chords are LOW CONFIDENCE on the 3rd bar of each line (G#m7 vs E/G#).
+
+VS 8
+"Bass out" 4 '5 1 '3m7
+4 '5 1 '3m7
+
+; Pre-chorus (Cody, 2026-11-15): 4 '6m 5 x3, b7. Chorus bar 8 walks up 2m 1/3 into the second half.
+[lyrics lrc]
+@1:2 Take what is left of this…
+
+PRE 8
+4 '6m // 5 // 4 '6m // 5 //
+4 '6m // 5 // b7 b7
+[lyrics lrc]
+@1:2 I hate the way you always took it too far…
+
+CH 16
+4 '6m // 5 // 4 '6m // '5 //
+4 '6m // 5 // 2m 2m // 2m_8 1/3_4.
+4 '6m // 5 // 4 '6m // '5 //
+4 '6m // 5 // b7 b7
+[lyrics lrc]
+@1 Well I guess it's really my fault…
+@9 And I guess it's really over…
+
+VS 8
+4 '5 1 '3m7
+4 '5 1 '3m7
+[lyrics lrc]
+@1:2 I've heard all of your lines…
+
+PRE 8
+4 '6m // 5 // 4 '6m // 5 //
+4 '6m // 5 // b7 b7
+[lyrics lrc]
+@1 It's eight fifteen and I don't know where to start…
+
+CH 16
+4 '6m // 5 // 4 '6m // '5 //
+4 '6m // 5 // 2m 2m // 2m_8 1/3_4.
+4 '6m // 5 // 4 '6m // '5 //
+4 '6m // 5 // b7 b7
+[lyrics lrc]
+@1 Well I guess it's really my fault…
+@9 And I guess it's really over…
+
+SOLO 16
+@keys "Keytar solo"
+4 '6m // 5 // 4 '6m // '5 //
+4 '6m // 5 // 2m 2m // 2m_8 1/3_4.
+4 '6m // 5 // 4 '6m // '5 //
+4 '6m // 5 // b7 b7
+[lyrics lrc]
+@16:3 I guess it's really…
+
+CH 18
+4 '6m // 5 // 4 '6m // '5 //
+4 '6m // 5 // 2m 2m // 2m_8 1/3_4.
+4 '6m // 5 // 4 '6m // '5 //
+4 '6m // 5 // b7 b7
+b7 "Band out on 3" b7 // r2
+
+; DownChorus: the set drops to 114 bpm. The record ends at bar 119; bars
+; 119-122 are the set's extended-outro bounce (vox + keys).
+[lyrics lrc]
+@1 I guess it's really my fault…
+@9 It's really over…
+
+[Down Chorus] 16
+->114bpm "Vox & keys only, 114 bpm" 4 '6m // 5 // 4 '6m // '5 //
+4 '6m // 5 // 2m 2m // 2m_8 1/3_4.
+4 '6m // 5 // 4 '6m // '5 //
+4 '6m // 5 // b7 b7
+
+; Build: the chorus chords; the click carries the tempo ramp back to 127.
+[lyrics lrc]
+@1:2 All the things I always thought that I knew…
+@5:2 But I know you don't know, you don't know me
+
+[Build] 16
+@all "Band in (no drums)"
+4 '6m // 5 // 4 '6m // '5 //
+4 '6m // 5 // 2m 2m // 2m_8 1/3_4.
+4 '6m // 5 // 4 '6m // '5 //
+@drums "Drums in"
+4 '6m // 5 // b7 b7
+
+OUT 16
+->127bpm "127 bpm, JT talks" 4 '6m // 5 // 4 '6m // '5 //
+4 '6m // 5 // 2m 2m // 2m_8 1/3_4.
+4 '6m // 5 // 4 '6m // '5 //
+4 '6m // 5 // b7 "Ring out" b7_1 \fermata

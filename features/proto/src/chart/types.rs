@@ -442,6 +442,30 @@ pub struct Measure {
     /// Source text span for this measure
     /// Links this measure back to the original input text that generated it.
     pub source_span: Option<TextSpan>,
+    /// Why this bar has no text of its own to edit, when `source_span` is
+    /// `None` and the parser knows: a chord pushed or held into it over the
+    /// barline, a copy made by `x2`, a section that repeats an earlier one.
+    /// An editor shows it and keeps the bar read-only.
+    #[facet(default)]
+    pub read_only: Option<String>,
+    /// When it shares `source_span` with the bars around it (a chord held
+    /// or pushed over a barline joins them), the part of that text that
+    /// starts in this bar: its start as an offset from `source_span`'s, and
+    /// its length. What it is written as alone, first, when the run is
+    /// written out bar by bar.
+    #[facet(default)]
+    pub own_part: Option<TextSpan>,
+    /// When its section has no bars of its own and plays an earlier one's
+    /// again (`VS` under a verse already written), the bar it plays: its
+    /// place among the chart's bars, from 0. An edit here is the edit of
+    /// that bar.
+    #[facet(default)]
+    pub replays: Option<usize>,
+    /// When it is a copy its line makes of itself (`x2`, `x4`), how many
+    /// bars before it the bar it plays is: the line's first time through,
+    /// where an edit of it is written.
+    #[facet(default)]
+    pub plays_back: Option<usize>,
 
     /// Source measure number when imported from MusicXML — the value of
     /// `<measure number="...">`. `None` for keyflow-text-authored charts.
@@ -479,6 +503,10 @@ impl Measure {
             source_span: None,
             source_measure_number: None,
             source_measure_width: None,
+            read_only: None,
+            own_part: None,
+            replays: None,
+            plays_back: None,
         }
     }
 

@@ -1,0 +1,29 @@
+[package]
+name = "keyflow-architect"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Keyflow's development app: the Architect app with the Keyflow extension (features/extension) compiled in, under a name and config folder of its own so it never touches a real Architect's. `devenv up` opens it."
+publish = false
+
+[[bin]]
+name = "keyflow-architect"
+path = "src/main.rs"
+
+[features]
+# The window. Off, the binary is Architect's headless node with the
+# extension in it.
+default = ["gui"]
+gui = ["architect-desktop/gui"]
+
+[dependencies]
+# The Architect app as a library a distribution's `main` runs. Never its
+# `keyflow-lab` feature: that links a second, pinned copy of Keyflow.
+architect-desktop = { workspace = true }
+keyflow-extension = { workspace = true }
+# The app host turns on the linked-extension runner in the one copy of
+# architect-extensions the graph holds.
+architect-extensions = { workspace = true, features = ["linked"] }
+
+[lints]
+workspace = true

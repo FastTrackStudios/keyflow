@@ -70,6 +70,8 @@ pub mod chart_renderer;
 pub mod components;
 pub mod examples;
 pub mod layouts;
+/// What is selected on a chart, and how clicks change it (MuseScore's model).
+pub mod selection;
 pub mod signals;
 
 #[cfg(any(
@@ -87,9 +89,9 @@ pub use chart_graphics::ChartGraphics;
 pub use chart_renderer::{ChartLayoutManager, SceneHitResult};
 pub use layouts::ChartEditorLayout;
 pub use signals::{
-    ChartEditorBounds, ChartPageInfo, ChartViewport, PageMeta, PreviewMode, RenderStats,
-    SemanticZoomLevel, SystemMeta, CHART_BASE_SCALE, CHART_CURSOR_POSITION,
-    CHART_CURSOR_SCENE_CLICK, CHART_CURSOR_TICK, CHART_CURSOR_VISIBLE, CHART_EDITOR_BOUNDS,
-    CHART_HOVER_SCENE_POINT, CHART_PAGE_INFO, CHART_PREVIEW_MODE, CHART_RENDER_STATS, CHART_SOURCE,
-    CHART_VIEWPORT, SESSION_CHART_SOURCE,
+    CHART_BASE_SCALE, CHART_CURSOR_POSITION, CHART_CURSOR_SCENE_CLICK, CHART_CURSOR_TICK,
+    CHART_CURSOR_VISIBLE, CHART_EDITOR_BOUNDS, CHART_HOVER_SCENE_POINT, CHART_PAGE_INFO,
+    CHART_PREVIEW_MODE, CHART_RENDER_STATS, CHART_SOURCE, CHART_VIEWPORT, ChartEditorBounds,
+    ChartPageInfo, ChartViewport, PageMeta, PreviewMode, RenderStats, SESSION_CHART_SOURCE,
+    SemanticZoomLevel, SystemMeta,
 };

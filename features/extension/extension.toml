@@ -1,0 +1,1599 @@
+# Keyflow (features/extension/src/lib.rs): the chart editor as an
+# Architect extension. One Rust value (`Keyflow`, a linked::Extension)
+# runs it two ways: Architect and Studio link it in as a built-in, and its
+# program (src/main.rs) serves the same value as a process, this
+# manifest's [entry], when a development copy runs
+# (EXT_CLONE {"id":"keyflow"}).
+#
+# A chart is a `.kf` document in the app's documents, which are CRDT
+# replicas: an edit made through the host (`edit_document`) is one commit
+# and one undo step that merges with everyone else's.
+id = "keyflow"
+name = "Keyflow"
+version = "0.1.0"
+kind = "process"
+api = "0.1"
+description = "Chord charts and lead sheets: open a .kf chart and it is engraved in its pane, following the app's theme; zoom with Ctrl and the wheel, pan with the middle button."
+authors = ["FastTrackStudios"]
+
+[entry]
+path = "keyflow-extension"
+
+# EXT_CLONE writes this crate to the development folder and builds its
+# program, which then overrides the linked copy under the same id.
+[source]
+git = "https://github.com/FastTrackStudios/keyflow"
+rev = "main"
+path = "features/extension"
+
+# A chart in a session (pane state `session:<id>`) is read from the session
+# this copy hosts. A chart alone needs no session.
+# Keyflow is a session's first host: it provides `fts.session` to every
+# extension (KEYFLOW_READ / _WRITE / _STRUCTURE, run as the caller), and
+# its chart reads the sessions it holds directly.
+[provides]
+"fts.session" = "0.1.0"
+
+# And uses it: KEYFLOW_SESSION_FOLLOW reads the session another provider
+# answers for (the DAW engine's, studio#522, chosen with architect#872's
+# EXT_SERVICE_USE), which the host allows only for a service named here.
+# Providing and using one service together is valid since architect#873.
+[uses]
+"fts.session" = "^0.1"
+
+# A session file (`.session`) is a document of the vault: the node opens it,
+# syncs it through the org, and Keyflow edits the node's copy
+# (KEYFLOW_SESSION_DOCUMENT).
+[[doc_kinds]]
+id = "fts.session"
+name = "Session"
+files = ["session"]
+schema = 1
+
+[capabilities]
+effect = "mutating"
+# A chart's text: read to engrave it, and written by note input (each
+# operation one edit_document commit, one undo step).
+reads = ["documents"]
+writes = ["documents"]
+# The app's actions it runs: a chart's tab named for the chart (its
+# title), not "Chart".
+actions = ["WORKSPACE_TAB_SET"]
+
+[[actions]]
+id = "KEYFLOW_STATE"
+name = "Keyflow: open charts"
+description = "Every chart open in a pane: its `path`, whether it parsed (`error` when not), its zoom (`null` fits the page to the width) and scroll ([x, y], logical pixels), what is selected on it (`selection`, the selectables' keys in reading order), the element under the pointer (`hover`) and its pane's frame times (`frames`: count, p50, p99, slowest); whether the charts are pinned `dark` or follow the app's theme (`follows_app_theme`), and the toolbar's tools that are on (`tools_on`)."
+group = "Keyflow"
+effect = "read_only"
+
+[[actions]]
+id = "KEYFLOW_CHART_VIEW"
+name = "Keyflow: set the chart's view"
+description = "Zooms and pans the open charts (`path`: only that one): `zoom` (1.0 is 100%, clamped to 0.25 to 4.0; `null` fits the page to the width), and `scrollX` / `scrollY` from the chart's top-left, in logical pixels."
+group = "Keyflow"
+effect = "mutating"
+params = '{"type":"object","properties":{"path":{"type":"string"},"zoom":{"type":["number","null"]},"scrollX":{"type":"number"},"scrollY":{"type":"number"}}}'
+
+[[actions]]
+id = "KEYFLOW_SET_CHART_THEME"
+name = "Keyflow: set the chart's theme"
+description = "Draws the charts on dark paper (`dark: true`) or light, the default whatever the app's theme; `follow: true` draws them in the app's theme instead (its `chart.*` tokens, else its card, card ink and muted lines). Selection and hover are drawn in the theme's `chart.select` / `chart.hover`, else `primary` / `info`, either way."
+group = "Keyflow"
+effect = "mutating"
+params = '{"type":"object","properties":{"dark":{"type":"boolean"},"follow":{"type":"boolean"}}}'
+
+[[actions]]
+id = "KEYFLOW_RELOAD"
+name = "Keyflow: reload the chart"
+description = "Reads the open charts (`path`: only that one) from their documents again and engraves them."
+group = "Keyflow"
+effect = "read_only"
+params = '{"type":"object","properties":{"path":{"type":"string"}}}'
+
+# The note-input toolbar's tools (src/tools.rs `TOOLS`): each an action of
+# its own, lit while on (state `checked`), so ⌘K, keys and MCP reach it too.
+
+[[actions]]
+id = "KEYFLOW_NOTE_INPUT"
+name = "Keyflow: input by note name"
+description = "Note input by note name, MuseScore's default (N), or out of it: choose a duration (1–7), then A–G enters the note at it and moves on; 0 a rest, T a tie, ↑ ↓ a semitone, Esc back to normal mode. It starts where the chart was last clicked."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_INPUT_BY_DURATION"
+name = "Keyflow: input by duration"
+description = "Note input by duration (M), or out of it: A–G or ↑ ↓ (a step) and Ctrl+↑ ↓ (an octave) move the pitch cursor, shown on the chart as the shadow note; a duration key (1–7) enters it."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_INPUT_SYNTAX"
+name = "Keyflow: input via syntax"
+description = "Keyflow's own syntax typed at the cursor (K), or out of it: type bars (`C / / / | Am7 / F G`) in the field under the chart and Enter writes them over the bars from the cursor on."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_DURATION_64TH"
+name = "Keyflow: 64th note"
+description = "The duration the next entry takes; in input by duration, the pitch cursor entered at it."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_DURATION_32ND"
+name = "Keyflow: 32nd note"
+description = "The duration the next entry takes; in input by duration, the pitch cursor entered at it."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_DURATION_16TH"
+name = "Keyflow: 16th note"
+description = "The duration the next entry takes; in input by duration, the pitch cursor entered at it."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_DURATION_EIGHTH"
+name = "Keyflow: eighth note"
+description = "The duration the next entry takes; in input by duration, the pitch cursor entered at it."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_DURATION_QUARTER"
+name = "Keyflow: quarter note"
+description = "The duration the next entry takes; in input by duration, the pitch cursor entered at it."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_DURATION_HALF"
+name = "Keyflow: half note"
+description = "The duration the next entry takes; in input by duration, the pitch cursor entered at it."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_DURATION_WHOLE"
+name = "Keyflow: whole note"
+description = "The duration the next entry takes; in input by duration, the pitch cursor entered at it."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_DOT"
+name = "Keyflow: augmentation dot"
+description = "Dots the duration chosen."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_REST"
+name = "Keyflow: rest"
+description = "The next entry is a rest."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_DOUBLE_FLAT"
+name = "Keyflow: double flat"
+description = "The accidental the next note takes (- flat, = natural, + sharp); chosen again, none."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_FLAT"
+name = "Keyflow: flat"
+description = "The accidental the next note takes (- flat, = natural, + sharp); chosen again, none."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_NATURAL"
+name = "Keyflow: natural"
+description = "The accidental the next note takes (- flat, = natural, + sharp); chosen again, none."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_SHARP"
+name = "Keyflow: sharp"
+description = "The accidental the next note takes (- flat, = natural, + sharp); chosen again, none."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_DOUBLE_SHARP"
+name = "Keyflow: double sharp"
+description = "The accidental the next note takes (- flat, = natural, + sharp); chosen again, none."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_TIE"
+name = "Keyflow: tie"
+description = "A note of the pitch just entered, at the duration chosen, tied from it (T)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_ACCENT"
+name = "Keyflow: accent"
+description = "The mark the next entry or the selected chord takes."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_MARCATO"
+name = "Keyflow: marcato"
+description = "The mark the next entry or the selected chord takes."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_TENUTO"
+name = "Keyflow: tenuto"
+description = "The mark the next entry or the selected chord takes."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_STACCATO"
+name = "Keyflow: staccato"
+description = "The mark the next entry or the selected chord takes."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_PUSH"
+name = "Keyflow: push"
+description = "The next chord is pushed (anticipated): `'` in the chart."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_PALETTES"
+name = "Keyflow: palettes"
+description = "Shows or hides the palettes beside the chart."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_NOTE_A"
+name = "Keyflow: note A"
+description = "A: in input by note name, A entered at the duration and the cursor moved on (the octave nearest the note before, the key signature's accidental unless one is armed); in input by duration, the pitch cursor moved to A."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_NOTE_B"
+name = "Keyflow: note B"
+description = "B: in input by note name, B entered at the duration and the cursor moved on (the octave nearest the note before, the key signature's accidental unless one is armed); in input by duration, the pitch cursor moved to B."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_NOTE_C"
+name = "Keyflow: note C"
+description = "C: in input by note name, C entered at the duration and the cursor moved on (the octave nearest the note before, the key signature's accidental unless one is armed); in input by duration, the pitch cursor moved to C."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_NOTE_D"
+name = "Keyflow: note D"
+description = "D: in input by note name, D entered at the duration and the cursor moved on (the octave nearest the note before, the key signature's accidental unless one is armed); in input by duration, the pitch cursor moved to D."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_NOTE_E"
+name = "Keyflow: note E"
+description = "E: in input by note name, E entered at the duration and the cursor moved on (the octave nearest the note before, the key signature's accidental unless one is armed); in input by duration, the pitch cursor moved to E."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_NOTE_F"
+name = "Keyflow: note F"
+description = "F: in input by note name, F entered at the duration and the cursor moved on (the octave nearest the note before, the key signature's accidental unless one is armed); in input by duration, the pitch cursor moved to F."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_NOTE_G"
+name = "Keyflow: note G"
+description = "G: in input by note name, G entered at the duration and the cursor moved on (the octave nearest the note before, the key signature's accidental unless one is armed); in input by duration, the pitch cursor moved to G."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_ENTER_REST"
+name = "Keyflow: rest"
+description = "A rest at the duration, and the cursor moved on (0)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_PITCH_UP"
+name = "Keyflow: pitch up"
+description = "The note just entered up a semitone, spelled with sharps (↑); in input by duration, the pitch cursor up a step."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_PITCH_DOWN"
+name = "Keyflow: pitch down"
+description = "The note just entered down a semitone, spelled with flats (↓); in input by duration, the pitch cursor down a step."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_OCTAVE_UP"
+name = "Keyflow: octave up"
+description = "The note just entered, or the pitch cursor, up an octave (Ctrl+↑)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_OCTAVE_DOWN"
+name = "Keyflow: octave down"
+description = "The note just entered, or the pitch cursor, down an octave (Ctrl+↓)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_NEXT"
+name = "Keyflow: next note"
+description = "The cursor to the next note or rest (→)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_PREVIOUS"
+name = "Keyflow: previous note"
+description = "The cursor to the previous note or rest (←)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_NEXT_BAR"
+name = "Keyflow: next bar"
+description = "The cursor to the next bar (Ctrl+→)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_PREVIOUS_BAR"
+name = "Keyflow: previous bar"
+description = "The cursor to the previous bar (Ctrl+←)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_DELETE"
+name = "Keyflow: delete"
+description = "The note just entered or moved to becomes a rest of its duration (Del)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_ESCAPE"
+name = "Keyflow: leave note input"
+description = "Out of note input, back to normal mode (Esc)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INPUT_MOVE"
+name = "Keyflow: move the input cursor"
+description = "The note-input cursor to the note, rest or chord at `fraction` (0 to 1) across bar `bar` (the chart's bars from 0), selecting it: what a click on the chart does. `target` (`chords`, `notes`) says which line; `select: false` moves without selecting; `voice` (0 to 3), the voice of the note or rest clicked, which note input then enters into."
+group = "Keyflow"
+effect = "mutating"
+params = '{"type":"object","required":["bar"],"properties":{"bar":{"type":"integer","minimum":0},"fraction":{"type":"number","minimum":0,"maximum":1},"target":{"type":"string","enum":["chords","notes"]},"select":{"type":"boolean"},"voice":{"type":"integer","minimum":0,"maximum":3}}}'
+
+[[actions]]
+id = "KEYFLOW_SYNTAX_WRITE"
+name = "Keyflow: write bars in Keyflow syntax"
+description = "Bars typed in Keyflow's syntax (`text`: `C / / / | Am7 / F G`) written over the active chart's bars from the input cursor on, and the cursor moved past them; bars typed past the chart's end are added after it; refused, with why, when they do not read."
+group = "Keyflow"
+effect = "mutating"
+params = '{"type":"object","required":["text"],"properties":{"text":{"type":"string"}}}'
+
+[[actions]]
+id = "KEYFLOW_ADD_A"
+name = "Keyflow: add A to the chord"
+description = "A added above the selected note (Shift+A): a chord of notes built from the bottom up, as MuseScore's."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_ADD_B"
+name = "Keyflow: add B to the chord"
+description = "B added above the selected note (Shift+B): a chord of notes built from the bottom up, as MuseScore's."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_ADD_C"
+name = "Keyflow: add C to the chord"
+description = "C added above the selected note (Shift+C): a chord of notes built from the bottom up, as MuseScore's."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_ADD_D"
+name = "Keyflow: add D to the chord"
+description = "D added above the selected note (Shift+D): a chord of notes built from the bottom up, as MuseScore's."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_ADD_E"
+name = "Keyflow: add E to the chord"
+description = "E added above the selected note (Shift+E): a chord of notes built from the bottom up, as MuseScore's."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_ADD_F"
+name = "Keyflow: add F to the chord"
+description = "F added above the selected note (Shift+F): a chord of notes built from the bottom up, as MuseScore's."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_ADD_G"
+name = "Keyflow: add G to the chord"
+description = "G added above the selected note (Shift+G): a chord of notes built from the bottom up, as MuseScore's."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_DOUBLE"
+name = "Keyflow: double the length"
+description = "The selected note or chord twice as long (W)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_HALVE"
+name = "Keyflow: halve the length"
+description = "The selected note or chord half as long (Q)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_LONGER"
+name = "Keyflow: one step longer"
+description = "The selected note or chord one step longer, a dot first (Shift+W): a quarter, a dotted quarter, a half."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_SHORTER"
+name = "Keyflow: one step shorter"
+description = "The selected note or chord one step shorter (Shift+Q)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_VOICE_1"
+name = "Keyflow: voice 1"
+description = "Notes entered go into voice 1 (Ctrl+Alt+1), drawn in the bar with the others, stems up."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_VOICE_2"
+name = "Keyflow: voice 2"
+description = "Notes entered go into voice 2 (Ctrl+Alt+2), drawn in the bar with the others, stems down."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_VOICE_3"
+name = "Keyflow: voice 3"
+description = "Notes entered go into voice 3 (Ctrl+Alt+3), drawn in the bar with the others, stems down."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_VOICE_4"
+name = "Keyflow: voice 4"
+description = "Notes entered go into voice 4 (Ctrl+Alt+4), drawn in the bar with the others, stems down."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_TRIPLET"
+name = "Keyflow: triplet"
+description = "A triplet group at the cursor, as long as the chosen duration (Ctrl+3): a quarter makes three triplet eighths, and the next three notes fill it."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_FIRST_BAR"
+name = "Keyflow: first bar"
+description = "The cursor to the chart's first bar (Ctrl+Home)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_LAST_BAR"
+name = "Keyflow: last bar"
+description = "The cursor to the chart's last bar (Ctrl+End)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_QUALITY_UP"
+name = "Keyflow: next chord quality"
+description = "The selected chord symbol's quality stepped on (Alt+↑): G, Gm, G7, Gm7, Gmaj7, Gsus4 …, its root and bass kept."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_QUALITY_DOWN"
+name = "Keyflow: previous chord quality"
+description = "The selected chord symbol's quality stepped back (Alt+↓)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_RESPELL"
+name = "Keyflow: respell the note"
+description = "The selected note spelled the next way that sounds the same (J): C♯ becomes D♭, then B𝄪, then C♯ again, as MuseScore's respell."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_1"
+name = "Keyflow: add unison above"
+description = "A note a unison above the selected note's chord (its top note) added to it, spelled in the key (Alt+1): MuseScore's add interval."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_2"
+name = "Keyflow: add second above"
+description = "A note a second above the selected note's chord (its top note) added to it, spelled in the key (Alt+2): MuseScore's add interval."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_3"
+name = "Keyflow: add third above"
+description = "A note a third above the selected note's chord (its top note) added to it, spelled in the key (Alt+3): MuseScore's add interval."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_4"
+name = "Keyflow: add fourth above"
+description = "A note a fourth above the selected note's chord (its top note) added to it, spelled in the key (Alt+4): MuseScore's add interval."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_5"
+name = "Keyflow: add fifth above"
+description = "A note a fifth above the selected note's chord (its top note) added to it, spelled in the key (Alt+5): MuseScore's add interval."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_6"
+name = "Keyflow: add sixth above"
+description = "A note a sixth above the selected note's chord (its top note) added to it, spelled in the key (Alt+6): MuseScore's add interval."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_7"
+name = "Keyflow: add seventh above"
+description = "A note a seventh above the selected note's chord (its top note) added to it, spelled in the key (Alt+7): MuseScore's add interval."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_8"
+name = "Keyflow: add octave above"
+description = "A note an octave above the selected note's chord (its top note) added to it, spelled in the key (Alt+8): MuseScore's add interval."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_9"
+name = "Keyflow: add ninth above"
+description = "A note a ninth above the selected note's chord (its top note) added to it, spelled in the key (Alt+9): MuseScore's add interval."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_BELOW_1"
+name = "Keyflow: add unison below"
+description = "A note a unison below the selected note's chord (its lowest note) added to it, spelled in the key: MuseScore's add interval below. No key by default; bind one in the action list."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_BELOW_2"
+name = "Keyflow: add second below"
+description = "A note a second below the selected note's chord (its lowest note) added to it, spelled in the key: MuseScore's add interval below. No key by default; bind one in the action list."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_BELOW_3"
+name = "Keyflow: add third below"
+description = "A note a third below the selected note's chord (its lowest note) added to it, spelled in the key: MuseScore's add interval below. No key by default; bind one in the action list."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_BELOW_4"
+name = "Keyflow: add fourth below"
+description = "A note a fourth below the selected note's chord (its lowest note) added to it, spelled in the key: MuseScore's add interval below. No key by default; bind one in the action list."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_BELOW_5"
+name = "Keyflow: add fifth below"
+description = "A note a fifth below the selected note's chord (its lowest note) added to it, spelled in the key: MuseScore's add interval below. No key by default; bind one in the action list."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_BELOW_6"
+name = "Keyflow: add sixth below"
+description = "A note a sixth below the selected note's chord (its lowest note) added to it, spelled in the key: MuseScore's add interval below. No key by default; bind one in the action list."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_BELOW_7"
+name = "Keyflow: add seventh below"
+description = "A note a seventh below the selected note's chord (its lowest note) added to it, spelled in the key: MuseScore's add interval below. No key by default; bind one in the action list."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_BELOW_8"
+name = "Keyflow: add octave below"
+description = "A note an octave below the selected note's chord (its lowest note) added to it, spelled in the key: MuseScore's add interval below. No key by default; bind one in the action list."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INTERVAL_BELOW_9"
+name = "Keyflow: add ninth below"
+description = "A note a ninth below the selected note's chord (its lowest note) added to it, spelled in the key: MuseScore's add interval below. No key by default; bind one in the action list."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_REPITCH"
+name = "Keyflow: re-pitch"
+description = "MuseScore's re-pitch method, on or off (Cmd+Shift+I): in input by note name, a letter gives the note at the cursor that pitch, its length kept, and moves on to the next note, past rests."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_DURATION_RULER"
+name = "Keyflow: input by duration cursor (ruler or box)"
+description = "Input by duration's cursor switched between MuseScore's above-staff ruler (a pin where the next note goes and a tick a duration on to the barline; the default) and the classic box cursor, as MuseScore's Preferences → Note input chooses."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_ZOOM_IN"
+name = "Keyflow: zoom in"
+description = "The chart zoomed in a step (⌘=), about the middle of its pane."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_ZOOM_OUT"
+name = "Keyflow: zoom out"
+description = "The chart zoomed out a step (⌘-), about the middle of its pane."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_ZOOM_100"
+name = "Keyflow: zoom to 100%"
+description = "The chart at 100% (⌘0)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_ZOOM_FIT"
+name = "Keyflow: fit to width"
+description = "The chart's page fitted to its pane's width (⌥⌘0), as a chart opens; the zoom readout in the status bar does it too."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_CHORD_EDIT"
+name = "Keyflow: retype chord symbol"
+description = "Retype the selected chord symbol (Enter): a bar under the chart shows it; type the new symbol and Enter, or Esc to keep it."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_CHORD_SET"
+name = "Keyflow: set chord symbol"
+description = "The selected chord symbol made `text` (its length kept, and its push or accent marks when the text has none)."
+group = "Keyflow"
+effect = "mutating"
+params = '{"type":"object","required":["text"],"properties":{"text":{"type":"string"}}}'
+
+[[actions]]
+id = "KEYFLOW_PALETTE_APPLY"
+name = "Keyflow: apply a palette cell"
+description = "The palette cell with `token` applied to the selected chord symbol: a quality (`maj7`, `m7`, …) sets its quality, keeping its root, bass and marks; an accent (`>`), a staccato (`.`) or a push (`'`, `''`; not on a bar's first chord, which would sound in the bar before) goes on, or off when it is on. The other cells say what they do not apply yet."
+group = "Keyflow"
+effect = "mutating"
+params = '{"type":"object","required":["token"],"properties":{"token":{"type":"string"}}}'
+
+[[actions]]
+id = "KEYFLOW_TARGET_SWITCH"
+name = "Keyflow: chord symbols or notes"
+description = "Switches what a letter enters (Y): chord symbols, the default in a chord chart, or notes."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_TARGET_CHORDS"
+name = "Keyflow: enter chord symbols"
+description = "A–G enters a chord symbol's root at the duration, the cursor moving on; ↑ ↓ move the root, 0 no chord."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_TARGET_NOTES"
+name = "Keyflow: enter notes"
+description = "A–G enters a note, Shift+A–G adds one to the chord of notes, T ties, a click on the staff enters the note under the pointer."
+group = "Keyflow"
+effect = "mutating"
+toggle = true
+
+[[actions]]
+id = "KEYFLOW_INPUT_ENTER_AT"
+name = "Keyflow: enter the note clicked"
+description = "Note input's mouse entry: the note at staff position `below_top` (half-spaces below the top line) entered at `fraction` (0 to 1) across bar `bar`, at the duration chosen."
+group = "Keyflow"
+effect = "mutating"
+params = '{"type":"object","required":["bar"],"properties":{"bar":{"type":"integer","minimum":0},"fraction":{"type":"number"},"below_top":{"type":"integer"}}}'
+
+[[actions]]
+id = "KEYFLOW_SYNTAX_PREVIEW"
+name = "Keyflow: preview bars in Keyflow syntax"
+description = "Shows the active chart as bars typed in Keyflow's syntax (`text`) would make it, from the input cursor, without writing them; an empty `text` shows it as it is. Why they would not read is the status."
+group = "Keyflow"
+effect = "read_only"
+params = '{"type":"object","properties":{"text":{"type":"string"}}}'
+
+[[actions]]
+id = "KEYFLOW_UNDO"
+name = "Keyflow: undo note input"
+description = "Note input's last edit taken back (⌘Z), as a new edit: only that edit, past anyone else's since in other bars; refused when someone else has changed its own text."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_REDO"
+name = "Keyflow: redo note input"
+description = "Note input's last undone edit made again (⇧⌘Z)."
+group = "Keyflow"
+effect = "mutating"
+
+[[actions]]
+id = "KEYFLOW_INPUT_STATE"
+name = "Keyflow: note input state"
+description = "Note input as it is: the `mode`, the `duration`, the armed `accidental` (−2 to 2), the `rest` tool, the `cursor` (bar from 1, tick of 384 a whole), the `pitch` cursor, the `status` line and what the last operation could not do (`refused`)."
+group = "Keyflow"
+effect = "read_only"
+
+# The note-input toolbar, on the chart's own pane: it goes wherever the
+# view is docked. Its glyphs are the chart's music font (src/icons.rs),
+# drawn in the item's ink (`tint = true`), so they follow the theme.
+[[toolbars]]
+id = "note-input"
+title = "Note input"
+where = "view:keyflow/chart"
+
+[[toolbars.items]]
+action = "KEYFLOW_NOTE_INPUT"
+icon = "pencil"
+label = "Input by note name"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_INPUT_BY_DURATION"
+icon = "ruler"
+label = "Input by duration"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_INPUT_SYNTAX"
+icon = "code"
+label = "Input via syntax"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_TARGET_CHORDS"
+icon = "type"
+label = "Enter chord symbols"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_TARGET_NOTES"
+icon = "music"
+label = "Enter notes"
+hide_label = true
+
+[[toolbars.items]]
+kind = "separator"
+
+[[toolbars.items]]
+action = "KEYFLOW_DURATION_64TH"
+image = "icons/E1DD.svg"
+tint = true
+label = "64th note"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_DURATION_32ND"
+image = "icons/E1DB.svg"
+tint = true
+label = "32nd note"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_DURATION_16TH"
+image = "icons/E1D9.svg"
+tint = true
+label = "16th note"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_DURATION_EIGHTH"
+image = "icons/E1D7.svg"
+tint = true
+label = "Eighth note"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_DURATION_QUARTER"
+image = "icons/E1D5.svg"
+tint = true
+label = "Quarter note"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_DURATION_HALF"
+image = "icons/E1D3.svg"
+tint = true
+label = "Half note"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_DURATION_WHOLE"
+image = "icons/E1D2.svg"
+tint = true
+label = "Whole note"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_DOT"
+image = "icons/E1E7.svg"
+tint = true
+label = "Augmentation dot"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_REST"
+image = "icons/E4E5.svg"
+tint = true
+label = "Rest"
+hide_label = true
+
+[[toolbars.items]]
+kind = "separator"
+
+[[toolbars.items]]
+action = "KEYFLOW_DOUBLE_FLAT"
+image = "icons/E264.svg"
+tint = true
+label = "Double flat"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_FLAT"
+image = "icons/E260.svg"
+tint = true
+label = "Flat"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_NATURAL"
+image = "icons/E261.svg"
+tint = true
+label = "Natural"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_SHARP"
+image = "icons/E262.svg"
+tint = true
+label = "Sharp"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_DOUBLE_SHARP"
+image = "icons/E263.svg"
+tint = true
+label = "Double sharp"
+hide_label = true
+
+[[toolbars.items]]
+kind = "separator"
+
+[[toolbars.items]]
+action = "KEYFLOW_TIE"
+icon = "spline"
+label = "Tie"
+hide_label = true
+
+[[toolbars.items]]
+kind = "separator"
+
+[[toolbars.items]]
+action = "KEYFLOW_ACCENT"
+image = "icons/E4A0.svg"
+tint = true
+label = "Accent"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_MARCATO"
+image = "icons/E4AC.svg"
+tint = true
+label = "Marcato"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_TENUTO"
+image = "icons/E4A4.svg"
+tint = true
+label = "Tenuto"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_STACCATO"
+image = "icons/E4A2.svg"
+tint = true
+label = "Staccato"
+hide_label = true
+
+[[toolbars.items]]
+action = "KEYFLOW_PUSH"
+icon = "chevrons-left"
+label = "Push"
+hide_label = true
+
+[[toolbars.items]]
+kind = "separator"
+
+[[toolbars.items]]
+action = "KEYFLOW_PALETTES"
+icon = "panel-left"
+label = "Palettes"
+hide_label = true
+
+[[views]]
+id = "chart"
+title = "Chart"
+
+# A .kf file is a document the app reads and edits (`read_document`,
+# `edit_document`): without this the documents service serves only notes.
+# Its body is text, not markdown.
+[[file_types]]
+extension = "kf"
+name = "Keyflow chart"
+icon = "music"
+note_type = "keyflow-chart"
+body = "text"
+
+[[doc_kinds]]
+id = "keyflow.chart"
+name = "Keyflow chart"
+files = ["kf"]
+icon = "music"
+view = "chart"
+
+[[openers]]
+id = "kf"
+title = "Keyflow chart"
+files = ["kf"]
+view = "chart"
+
+# A chart saved elsewhere (another person, another device, another
+# extension) is read again.
+[[hooks]]
+on = "doc.saved"
+action = "KEYFLOW_RELOAD"
+
+# ── fts.session: Keyflow as a session's host (src/session_host.rs) ──────
+
+[[actions]]
+id = "KEYFLOW_READ"
+name = "fts.session: read"
+description = "fts.session's `read`: the calling extension's data, the timeline (other extensions' payloads null) or the song's structure. Args `{doc, request}`."
+group = "Session"
+effect = "read_only"
+params = '{"type":"object","properties":{"doc":{"type":"string"},"request":{}},"required":["doc","request"]}'
+
+[[actions]]
+id = "KEYFLOW_WRITE"
+name = "fts.session: write"
+description = "fts.session's `write`: an edit to the calling extension's namespace, lanes or items. Args `{doc, request}`."
+group = "Session"
+effect = "mutating"
+params = '{"type":"object","properties":{"doc":{"type":"string"},"request":{}},"required":["doc","request"]}'
+
+[[actions]]
+id = "KEYFLOW_STRUCTURE"
+name = "fts.session: structure"
+description = "fts.session's `structure`: the tempo map, markers or regions. Args `{doc, request}`."
+group = "Session"
+effect = "mutating"
+params = '{"type":"object","properties":{"doc":{"type":"string"},"request":{}},"required":["doc","request"]}'
+
+[[actions]]
+id = "KEYFLOW_SESSION_OPEN"
+name = "Session: open"
+description = "Opens a `.session` file (`path`; when it is not there, made with the chart read from `chart_path`, or with `chart`, Keyflow source; either must read as a chart) and serves it as fts.session. Answers `{id, pane}`."
+group = "Session"
+effect = "mutating"
+params = '{"type":"object","properties":{"path":{"type":"string"},"chart":{"type":"string"},"chart_path":{"type":"string"}},"required":["path"]}'
+
+[[actions]]
+id = "KEYFLOW_SESSION_SERVE"
+name = "Session: share with other app instances"
+description = "Serves open session `id` (document sync, presence, the session clock) over vox on a WebSocket at `bind` (default 0.0.0.0:4142)."
+group = "Session"
+effect = "mutating"
+params = '{"type":"object","properties":{"id":{"type":"string"},"bind":{"type":"string"}},"required":["id"]}'
+
+[[actions]]
+id = "KEYFLOW_SESSION_FOLLOW"
+name = "Session: follow"
+description = "Follows session `id` hosted elsewhere (the DAW engine's, another app's) at `url` (`ws://host:port/vox`): its transport and its host's clock, so the chart on `session:<id>` draws where it plays. Holds no copy and provides nothing: the chart is read and written through the host's fts.session. With `chart_path` (a .kf), the chart is written into the session when it holds none yet."
+group = "Session"
+effect = "mutating"
+params = '{"type":"object","properties":{"url":{"type":"string"},"id":{"type":"string"},"chart_path":{"type":"string"}},"required":["url","id"]}'
+
+[[actions]]
+id = "KEYFLOW_SESSION_BAR_ONE"
+name = "Session: the song's bar 1"
+description = "Makes bar `bar` of session `id` (one this copy holds) the song's bar 1, where the chart's bar 1 is after a count-in (session bar_one); 1 or none: the session's start. A session the DAW engine holds is the engine's to set."
+group = "Session"
+effect = "mutating"
+params = '{"type":"object","properties":{"id":{"type":"string"},"bar":{"type":"integer","minimum":1}},"required":["id"]}'
+
+[[actions]]
+id = "KEYFLOW_SESSION_DOCUMENT"
+name = "Session: open a vault's session"
+description = "Opens the session that is the vault document at `path` (a `.session` file of the vault): the node's copy, edited through the host and synced through the org like any document, served as fts.session. Keyflow holds no file and runs no host for it. Answers `{id, pane, path, writable}`."
+group = "Session"
+effect = "mutating"
+params = '{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}'
+
+[[actions]]
+id = "KEYFLOW_SESSION_JOIN"
+name = "Session: join"
+description = "Joins session `id` served at `url` (`ws://host:port/vox`), keeping it in `path`; serves it here as fts.session."
+group = "Session"
+effect = "mutating"
+params = '{"type":"object","properties":{"url":{"type":"string"},"id":{"type":"string"},"path":{"type":"string"}},"required":["url","id","path"]}'
+
+[[actions]]
+id = "KEYFLOW_SESSION_PLAY"
+name = "Session: publish the transport"
+description = "Publishes the transport (`playing`, `position` seconds), stamped in the session's shared clock."
+group = "Session"
+effect = "mutating"
+params = '{"type":"object","properties":{"playing":{"type":"boolean"},"position":{"type":"number"}}}'
+
+[[actions]]
+id = "KEYFLOW_SESSION_STATE"
+name = "Session: state"
+description = "Each open session's chart, the leader's transport, the followed playhead, the clock estimate and this process's clock epoch."
+group = "Session"
+effect = "read_only"
+
+# Note input's keys, MuseScore's: the app's keymap runs them while the
+# chart has the focus (`view:chart`), before it hears them, and the person
+# rebinds them in the action list. ⌘ chords are ⌃ off a Mac.
+
+[[keys]]
+chord = "A"
+action = "KEYFLOW_NOTE_A"
+when = "view:chart"
+
+[[keys]]
+chord = "B"
+action = "KEYFLOW_NOTE_B"
+when = "view:chart"
+
+[[keys]]
+chord = "C"
+action = "KEYFLOW_NOTE_C"
+when = "view:chart"
+
+[[keys]]
+chord = "D"
+action = "KEYFLOW_NOTE_D"
+when = "view:chart"
+
+[[keys]]
+chord = "E"
+action = "KEYFLOW_NOTE_E"
+when = "view:chart"
+
+[[keys]]
+chord = "F"
+action = "KEYFLOW_NOTE_F"
+when = "view:chart"
+
+[[keys]]
+chord = "G"
+action = "KEYFLOW_NOTE_G"
+when = "view:chart"
+
+[[keys]]
+chord = "0"
+action = "KEYFLOW_ENTER_REST"
+when = "view:chart"
+
+[[keys]]
+chord = "↑"
+action = "KEYFLOW_PITCH_UP"
+when = "view:chart"
+
+[[keys]]
+chord = "↓"
+action = "KEYFLOW_PITCH_DOWN"
+when = "view:chart"
+
+[[keys]]
+chord = "⌘↑"
+action = "KEYFLOW_OCTAVE_UP"
+when = "view:chart"
+
+[[keys]]
+chord = "⌃↑"
+action = "KEYFLOW_OCTAVE_UP"
+when = "view:chart"
+
+[[keys]]
+chord = "⌘↓"
+action = "KEYFLOW_OCTAVE_DOWN"
+when = "view:chart"
+
+[[keys]]
+chord = "⌃↓"
+action = "KEYFLOW_OCTAVE_DOWN"
+when = "view:chart"
+
+[[keys]]
+chord = "→"
+action = "KEYFLOW_NEXT"
+when = "view:chart"
+
+[[keys]]
+chord = "←"
+action = "KEYFLOW_PREVIOUS"
+when = "view:chart"
+
+[[keys]]
+chord = "⌘→"
+action = "KEYFLOW_NEXT_BAR"
+when = "view:chart"
+
+[[keys]]
+chord = "⌃→"
+action = "KEYFLOW_NEXT_BAR"
+when = "view:chart"
+
+[[keys]]
+chord = "⌘←"
+action = "KEYFLOW_PREVIOUS_BAR"
+when = "view:chart"
+
+[[keys]]
+chord = "⌃←"
+action = "KEYFLOW_PREVIOUS_BAR"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥⌘←"
+action = "KEYFLOW_FIRST_BAR"
+when = "view:chart"
+
+[[keys]]
+chord = "⌃⌥←"
+action = "KEYFLOW_FIRST_BAR"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥⌘→"
+action = "KEYFLOW_LAST_BAR"
+when = "view:chart"
+
+[[keys]]
+chord = "⌃⌥→"
+action = "KEYFLOW_LAST_BAR"
+when = "view:chart"
+
+[[keys]]
+chord = "⌫"
+action = "KEYFLOW_DELETE"
+when = "view:chart"
+
+[[keys]]
+chord = "Esc"
+action = "KEYFLOW_ESCAPE"
+when = "view:chart"
+
+[[keys]]
+chord = "⇧A"
+action = "KEYFLOW_ADD_A"
+when = "view:chart"
+
+[[keys]]
+chord = "⇧B"
+action = "KEYFLOW_ADD_B"
+when = "view:chart"
+
+[[keys]]
+chord = "⇧C"
+action = "KEYFLOW_ADD_C"
+when = "view:chart"
+
+[[keys]]
+chord = "⇧D"
+action = "KEYFLOW_ADD_D"
+when = "view:chart"
+
+[[keys]]
+chord = "⇧E"
+action = "KEYFLOW_ADD_E"
+when = "view:chart"
+
+[[keys]]
+chord = "⇧F"
+action = "KEYFLOW_ADD_F"
+when = "view:chart"
+
+[[keys]]
+chord = "⇧G"
+action = "KEYFLOW_ADD_G"
+when = "view:chart"
+
+[[keys]]
+chord = "W"
+action = "KEYFLOW_DOUBLE"
+when = "view:chart"
+
+[[keys]]
+chord = "Q"
+action = "KEYFLOW_HALVE"
+when = "view:chart"
+
+[[keys]]
+chord = "⇧W"
+action = "KEYFLOW_LONGER"
+when = "view:chart"
+
+[[keys]]
+chord = "⇧Q"
+action = "KEYFLOW_SHORTER"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥⌘1"
+action = "KEYFLOW_VOICE_1"
+when = "view:chart"
+
+[[keys]]
+chord = "⌃⌥1"
+action = "KEYFLOW_VOICE_1"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥⌘2"
+action = "KEYFLOW_VOICE_2"
+when = "view:chart"
+
+[[keys]]
+chord = "⌃⌥2"
+action = "KEYFLOW_VOICE_2"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥⌘3"
+action = "KEYFLOW_VOICE_3"
+when = "view:chart"
+
+[[keys]]
+chord = "⌃⌥3"
+action = "KEYFLOW_VOICE_3"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥⌘4"
+action = "KEYFLOW_VOICE_4"
+when = "view:chart"
+
+[[keys]]
+chord = "⌃⌥4"
+action = "KEYFLOW_VOICE_4"
+when = "view:chart"
+
+[[keys]]
+chord = "⌘3"
+action = "KEYFLOW_TRIPLET"
+when = "view:chart"
+
+[[keys]]
+chord = "⌃3"
+action = "KEYFLOW_TRIPLET"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥↑"
+action = "KEYFLOW_QUALITY_UP"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥↓"
+action = "KEYFLOW_QUALITY_DOWN"
+when = "view:chart"
+
+[[keys]]
+chord = "⇧⌘I"
+action = "KEYFLOW_REPITCH"
+when = "view:chart"
+
+[[keys]]
+chord = "⌃⇧I"
+action = "KEYFLOW_REPITCH"
+when = "view:chart"
+
+[[keys]]
+chord = "J"
+action = "KEYFLOW_RESPELL"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥1"
+action = "KEYFLOW_INTERVAL_1"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥2"
+action = "KEYFLOW_INTERVAL_2"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥3"
+action = "KEYFLOW_INTERVAL_3"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥4"
+action = "KEYFLOW_INTERVAL_4"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥5"
+action = "KEYFLOW_INTERVAL_5"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥6"
+action = "KEYFLOW_INTERVAL_6"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥7"
+action = "KEYFLOW_INTERVAL_7"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥8"
+action = "KEYFLOW_INTERVAL_8"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥9"
+action = "KEYFLOW_INTERVAL_9"
+when = "view:chart"
+
+[[keys]]
+chord = "N"
+action = "KEYFLOW_NOTE_INPUT"
+when = "view:chart"
+
+[[keys]]
+chord = "M"
+action = "KEYFLOW_INPUT_BY_DURATION"
+when = "view:chart"
+
+[[keys]]
+chord = "K"
+action = "KEYFLOW_INPUT_SYNTAX"
+when = "view:chart"
+
+[[keys]]
+chord = "1"
+action = "KEYFLOW_DURATION_64TH"
+when = "view:chart"
+
+[[keys]]
+chord = "2"
+action = "KEYFLOW_DURATION_32ND"
+when = "view:chart"
+
+[[keys]]
+chord = "3"
+action = "KEYFLOW_DURATION_16TH"
+when = "view:chart"
+
+[[keys]]
+chord = "4"
+action = "KEYFLOW_DURATION_EIGHTH"
+when = "view:chart"
+
+[[keys]]
+chord = "5"
+action = "KEYFLOW_DURATION_QUARTER"
+when = "view:chart"
+
+[[keys]]
+chord = "6"
+action = "KEYFLOW_DURATION_HALF"
+when = "view:chart"
+
+[[keys]]
+chord = "7"
+action = "KEYFLOW_DURATION_WHOLE"
+when = "view:chart"
+
+[[keys]]
+chord = "."
+action = "KEYFLOW_DOT"
+when = "view:chart"
+
+[[keys]]
+chord = "-"
+action = "KEYFLOW_FLAT"
+when = "view:chart"
+
+[[keys]]
+chord = "="
+action = "KEYFLOW_NATURAL"
+when = "view:chart"
+
+[[keys]]
+chord = "+"
+action = "KEYFLOW_SHARP"
+when = "view:chart"
+
+[[keys]]
+chord = "T"
+action = "KEYFLOW_TIE"
+when = "view:chart"
+
+[[keys]]
+chord = "⌘Z"
+action = "KEYFLOW_UNDO"
+when = "view:chart"
+
+[[keys]]
+chord = "⌃Z"
+action = "KEYFLOW_UNDO"
+when = "view:chart"
+
+[[keys]]
+chord = "⇧⌘Z"
+action = "KEYFLOW_REDO"
+when = "view:chart"
+
+[[keys]]
+chord = "⌃⇧Z"
+action = "KEYFLOW_REDO"
+when = "view:chart"
+
+[[keys]]
+chord = "Y"
+action = "KEYFLOW_TARGET_SWITCH"
+when = "view:chart"
+
+[[keys]]
+chord = "↵"
+action = "KEYFLOW_CHORD_EDIT"
+when = "view:chart"
+
+[[keys]]
+chord = "⌘="
+action = "KEYFLOW_ZOOM_IN"
+when = "view:chart"
+
+[[keys]]
+chord = "⌃="
+action = "KEYFLOW_ZOOM_IN"
+when = "view:chart"
+
+[[keys]]
+chord = "⌘-"
+action = "KEYFLOW_ZOOM_OUT"
+when = "view:chart"
+
+[[keys]]
+chord = "⌃-"
+action = "KEYFLOW_ZOOM_OUT"
+when = "view:chart"
+
+[[keys]]
+chord = "⌘0"
+action = "KEYFLOW_ZOOM_100"
+when = "view:chart"
+
+[[keys]]
+chord = "⌃0"
+action = "KEYFLOW_ZOOM_100"
+when = "view:chart"
+
+[[keys]]
+chord = "⌥⌘0"
+action = "KEYFLOW_ZOOM_FIT"
+when = "view:chart"
+
+[[keys]]
+chord = "⌃⌥0"
+action = "KEYFLOW_ZOOM_FIT"
+when = "view:chart"
