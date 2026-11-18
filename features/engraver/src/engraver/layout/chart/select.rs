@@ -148,8 +148,17 @@ pub fn selectables(layout: &ChartLayoutResult) -> Vec<Selectable> {
     walk(&layout.scene, Affine::IDENTITY, &mut Vec::new(), &mut found);
 
     // Every bar, from the layout's own boxes: a measure that wraps is one
-    // per system it sits on.
-    for beat in &layout.beat_positions {
+    // per system it sits on. The count-in's beats (negative ticks, their
+    // own small boxes in the header) are not bars: their measures count
+    // from 0 too, and would take `bar#0` from the chart's first bar
+    // (`export::follow::bar_boxes` leaves them out the same way).
+    let bar_beats = || {
+        layout
+            .beat_positions
+            .iter()
+            .filter(|b| b.absolute_tick >= 0)
+    };
+    for beat in bar_beats() {
         let rect = Rect::new(
             beat.measure_x0,
             beat.staff_y,
@@ -186,9 +195,7 @@ pub fn selectables(layout: &ChartLayoutResult) -> Vec<Selectable> {
     });
 
     let mut counts = std::collections::HashMap::<Kind, usize>::new();
-    let bars: Vec<(Rect, usize)> = layout
-        .beat_positions
-        .iter()
+    let bars: Vec<(Rect, usize)> = bar_beats()
         .map(|b| {
             (
                 Rect::new(

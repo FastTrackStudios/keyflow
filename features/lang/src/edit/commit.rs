@@ -16,18 +16,14 @@ use keyflow_proto::Chart;
 use keyflow_proto::chart::types::{Measure, RhythmElement};
 
 use super::chords::ChordBar;
-use super::input::Score;
+use super::input::{Score, replays};
 use super::music::Bar;
 use crate::text::chart::parse_chart;
 use crate::text::chart::parser::bar_cells;
 
 /// Every bar of `chart`, in order, as the score counts them.
 fn measures(chart: &Chart) -> Vec<&Measure> {
-    chart
-        .sections
-        .iter()
-        .flat_map(|s| s.measures().iter())
-        .collect()
+    super::input::bars(chart)
 }
 
 /// Bar `index`'s text range in the source (bytes), or why it has none.
@@ -184,7 +180,7 @@ pub fn write_bars(
 ) -> Result<String, String> {
     let (text, bars) = bars_text(source, chart, score, changed)?;
     let measures = measures(chart);
-    check(&text, &measures, &bars, |after| {
+    check(&text, &measures, &replays(chart), &bars, |after| {
         for &index in &bars {
             let chords = ChordBar::from_measure(after[index]);
             if chords.folded() != score.chords[index].folded() {
@@ -304,7 +300,7 @@ pub fn splice_syntax(
     edits.extend(appended(source, chart, &measures, &cells[fit..]));
     let text = splice(source, edits);
     let written: Vec<usize> = (from..from + cells.len()).collect();
-    check(&text, &measures, &written, |_| Ok(()))?;
+    check(&text, &measures, &replays(chart), &written, |_| Ok(()))?;
     Ok((text, cells.len()))
 }
 
@@ -564,9 +560,7 @@ fn prefixes(source: &str, chart: &Chart) -> Vec<String> {
         .find_map(|s| s.source_span.as_ref().map(|sp| sp.start))
         .unwrap_or(0);
     let header = source[..first].trim_end();
-    chart
-        .sections
-        .iter()
+    super::input::sections(chart)
         .flat_map(|s| {
             let line = s.source_span.as_ref().map_or("VS", |sp| {
                 let (a, b) = line_of(source, sp.start);
@@ -797,10 +791,12 @@ fn splice(source: &str, mut edits: Vec<(usize, usize, String)>) -> String {
 }
 
 /// `text` read back: it parses, it has as many bars as `before`, every
-/// bar but `written` reads as it did, and `more` agrees.
+/// bar but `written` reads as it did, and `more` agrees. `replays` is
+/// `before`'s bars' [`replays`]: a bar that plays a written one follows it.
 fn check(
     text: &str,
     before: &[&Measure],
+    replays: &[Option<usize>],
     written: &[usize],
     more: impl FnOnce(&[&Measure]) -> Result<(), String>,
 ) -> Result<(), String> {
@@ -833,7 +829,7 @@ fn check(
             music_of(&x, false) == music_of(b, false)
         };
         // A bar that plays a written bar again follows it.
-        let follows = a.replays.is_some_and(|g| {
+        let follows = replays.get(i).copied().flatten().is_some_and(|g| {
             written.contains(&g) && measures.get(g).is_some_and(|w| same_music(w, b))
         });
         if !written.contains(&i) && !written_out && !follows && !same_music(a, b) {
@@ -1118,6 +1114,37 @@ mod tests {
                 .unwrap(),
             "A_1"
         );
+    }
+
+    #[test]
+    fn a_count_in_is_not_one_of_the_bars_note_input_edits() {
+        // Drawn in the header as a countdown, the count-in has no measure
+        // number: bar 0 is the verse's first, as the engraver numbers it,
+        // and a replay counts the same bars.
+        let text = "Edit - Test\n4/4\n\nCount 2\n\nVS 2\n| C | G |\n\nCH 1\n| F |\n\nVS\n";
+        let chart = parse_chart(text).unwrap();
+        let mut score = Score::from_text(text, &chart);
+        assert_eq!(score.bars.len(), 5);
+        assert_eq!(score.replays, [None, None, None, Some(0), Some(1)]);
+        let mut input = InputState {
+            mode: Mode::NoteName,
+            ..InputState::default()
+        };
+        input.apply(&mut score, Op::MoveTo(crate::edit::Pos { bar: 2, tick: 0 }));
+        assert!(input.status(&score).contains("bar 3, beat 1"));
+        input.apply(&mut score, Op::Duration(Value::Whole));
+        let out = input.apply(&mut score, Op::Letter('A'));
+        assert_eq!(out.changed, [2]);
+        let new = write_bars(text, &chart, &score, &out.changed).unwrap();
+        assert!(new.contains("| C | G |\n\nCH 1\n| A_1 |"), "{new}");
+        // An entry on the replayed verse is written at the first.
+        let chart = parse_chart(&new).unwrap();
+        let mut score = Score::from_text(&new, &chart);
+        input.apply(&mut score, Op::MoveTo(crate::edit::Pos { bar: 4, tick: 0 }));
+        let out = input.apply(&mut score, Op::Letter('E'));
+        assert_eq!(out.changed, [1]);
+        let newer = write_bars(&new, &chart, &score, &out.changed).unwrap();
+        assert!(newer.contains("| C | E_1 |"), "{newer}");
     }
 
     #[test]

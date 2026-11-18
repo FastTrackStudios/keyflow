@@ -28,5 +28,5 @@ pub mod input;
 pub mod music;
 
 pub use chords::{ChordBar, ChordEvent, Slot};
-pub use input::{InputState, Mode, Op, Outcome, Pos, Score, Target};
+pub use input::{InputState, Mode, Op, Outcome, Pos, Score, Target, bars, replays, sections};
 pub use music::{Bar, Duration, Event, EventKind, Pitch, TICKS_PER_WHOLE, Value};
