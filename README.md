@@ -42,3 +42,10 @@ Taken on Keyflow `feat/chart-selection-and-input-modes` after keyflow#92, in the
 |---|---|
 | `captures/round3/kf1280-light-voices-triplet.png` | bar 6 of YELLOW with two voices: voice 1 stems up, voice 2 stems down with a triplet under a `3`. The cursor is in voice 2's colour (green), restored after a reload |
 | `captures/round3/kf390-light-voices-triplet.png` | the same bar at 390 px |
+
+## Round 4
+
+| file | what it shows |
+|---|---|
+| `captures/round4/kf1280-blank-chart.png` | a blank chart (`Sketch\n4/4\n`) opened: its title and an empty first system, framed as a page |
+| `captures/round4/kf1280-retype-chord-and-replay.png` | *Held* (`E /// G#m / G#m B /// C#sus2 / C#sus2`, then CH, then a bare `VS`): bar 2 of the held-chord line edited to D (the line written out as `E /// G#m \| D_1 \| B /// C#sus2 / C#sus2`), the D retyped as `Dsus4` in the bar under the chart, and VS 2 playing VS 1's bars, D included |
