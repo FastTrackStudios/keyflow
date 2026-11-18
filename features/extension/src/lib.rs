@@ -202,6 +202,27 @@ impl Extension for Keyflow {
             }
         });
         ext.action("KEYFLOW_CHORD_EDIT", |_| async { chord_edit().await });
+        // Edit mode: the palettes beside the chart and the note-input
+        // toolbar over it, together. Off, the pane is the chart alone
+        // (reading it, following playback).
+        ext.action("KEYFLOW_EDIT_MODE", |args| async move {
+            let shown = dispatch("KEYFLOW_STATE", Json::Null)
+                .await
+                .ok()
+                .and_then(|s| s.get("palettes").and_then(Json::as_bool))
+                .unwrap_or(true);
+            let on = args.get("on").and_then(Json::as_bool).unwrap_or(!shown);
+            if shown != on {
+                dispatch("KEYFLOW_PALETTES", Json::Null).await?;
+            }
+            let place = if on { "view:keyflow/chart" } else { "hidden" };
+            dispatch(
+                "TOOLBAR_SHOW",
+                serde_json::json!({ "id": "keyflow/note-input", "where": place }),
+            )
+            .await?;
+            Ok(serde_json::json!({ "edit": on }))
+        });
         // The chart's zoom from the keyboard, MuseScore's keys: a step of
         // the wheel's, 100%, or the pane's width.
         for (name, step) in [

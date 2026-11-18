@@ -70,7 +70,29 @@ fn run_playhead() {
                     let stale = starts
                         .get(&doc)
                         .is_none_or(|(_, at)| at.elapsed() >= STRUCTURE_EVERY);
-                    if stale && let Some(read) = runtime.block_on(chart_start_elsewhere(&doc)) {
+                    // Whether the chart writes its own lead-in (an intro, a
+                    // count-in): one that does not starts after the session's.
+                    let has_lead_in = crate::open_charts().get(&key).is_none_or(|open| {
+                        open.data.read(|s| {
+                            // Its first section past a count-in (which is
+                            // before the session's bar 1 either way).
+                            s.chart
+                                .sections
+                                .iter()
+                                .map(|section| &section.section.section_type)
+                                .find(|kind| !matches!(kind, keyflow::SectionType::CountIn))
+                                .is_none_or(|kind| {
+                                    matches!(
+                                        kind,
+                                        keyflow::SectionType::Intro | keyflow::SectionType::Opening
+                                    )
+                                })
+                        })
+                    });
+                    if stale
+                        && let Some(read) =
+                            runtime.block_on(chart_start_elsewhere(&doc, has_lead_in))
+                    {
                         starts.insert(doc.clone(), (read, Instant::now()));
                     }
                     starts.get(&doc).map_or(0.0, |(start, _)| *start)
@@ -93,14 +115,14 @@ fn run_playhead() {
 
 /// The chart's start in a session another extension provides, through
 /// `fts.session`'s structure.
-async fn chart_start_elsewhere(doc: &str) -> Option<f64> {
+async fn chart_start_elsewhere(doc: &str, chart_has_lead_in: bool) -> Option<f64> {
     let source = ChartSource::Session {
         doc: doc.to_owned(),
     };
     let call = source.structure_call().ok()??;
     let handle = crate::handle().ok()?;
     let reply = crate::ask_session(&handle, &call).await.ok()?;
-    ChartSource::chart_start_of(&reply).ok()
+    ChartSource::chart_start_aligned(&reply, chart_has_lead_in).ok()
 }
 
 #[cfg(test)]
