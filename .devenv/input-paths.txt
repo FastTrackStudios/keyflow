@@ -1,0 +1,11 @@
+/home/cody/.config/nixpkgs/overlays
+/home/cody/.config/nixpkgs/overlays.nix
+/run/media/Development/wt/keyflow-control/.devenv/bootstrap/bootstrapLib.nix
+/run/media/Development/wt/keyflow-control/.devenv/bootstrap/default.nix
+/run/media/Development/wt/keyflow-control/.devenv/bootstrap/resolve-lock.nix
+/run/media/Development/wt/keyflow-control/.env
+/run/media/Development/wt/keyflow-control/devenv.local.nix
+/run/media/Development/wt/keyflow-control/devenv.lock
+/run/media/Development/wt/keyflow-control/devenv.nix
+/run/media/Development/wt/keyflow-control/devenv.yaml
+/run/user/1000/devenv-019e219/processes/native-manager.pid
