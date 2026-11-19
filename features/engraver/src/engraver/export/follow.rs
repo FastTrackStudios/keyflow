@@ -18,6 +18,14 @@
 //! leave pass two lit on the wrong bar. A click on a repeated bar seeks to its
 //! last pass (the topmost rect).
 //!
+//! Over the bars, the cursor: a second follow box (`<g class="kf-steps"
+//! data-follow-playhead>`, the page follows a box inside a box on its own)
+//! of one `<rect class="kf-step" data-at="…">` per rhythmic event as it is
+//! played (`layout::chart::playback`): the symbol sounding is marked, and
+//! the mark jumps to the next at its time, as MuseScore's playback cursor
+//! does. The bars keep the clicks (a click seeks to its bar) and are no
+//! longer washed while they play.
+//!
 //! The drawing underneath is untouched: without a [`Follow`] the export is
 //! byte-for-byte what it was.
 
@@ -28,6 +36,7 @@ use keyflow_lang::text::bar_times::{BarClock, BarTime, bar_times};
 use keyflow_proto::Chart;
 
 use crate::engraver::layout::chart::ChartLayoutResult;
+use crate::engraver::layout::chart::playback::PlaybackTrack;
 
 /// The bar times to put on an engraving, and the recording they belong to.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -146,6 +155,28 @@ pub fn add_follow(
         );
     }
 
+    // The cursor: one rect per rhythmic event played, in a follow box of
+    // its own over the bars (it takes no clicks: the bar under it does).
+    let mut steps = String::new();
+    for event in PlaybackTrack::from_bars(result, &follow.bars).events() {
+        if page.is_some_and(|p| p != event.page) {
+            continue;
+        }
+        let (x0, y0, x1, y1) = event.cursor;
+        let _ = writeln!(
+            steps,
+            r#"  <rect class="kf-step" data-at="{:.3}" data-bar="{}" data-pass="{}" data-beat="{:.3}" x="{:.2}" y="{:.2}" width="{:.2}" height="{:.2}"/>"#,
+            event.start,
+            event.bar + 1,
+            event.pass,
+            event.beat + 1.0,
+            x0,
+            y0,
+            x1 - x0,
+            y1 - y0,
+        );
+    }
+
     let mut attrs = String::from(" data-follow-playhead=\"\"");
     if let Some(media) = &follow.media {
         let _ = write!(attrs, " data-media=\"{}\"", escape_attr(media));
@@ -159,7 +190,13 @@ pub fn add_follow(
     out.push_str("<g class=\"kf-follow\">\n");
     out.push_str(STYLE);
     out.push_str(&rects);
-    out.push_str("</g>\n");
+    out.push_str("<g class=\"kf-steps\" data-follow-playhead=\"\"");
+    if let Some(media) = &follow.media {
+        let _ = write!(out, " data-media=\"{}\"", escape_attr(media));
+    }
+    out.push_str(">\n");
+    out.push_str(&steps);
+    out.push_str("</g>\n</g>\n");
     out.push_str(&svg[close..]);
     out
 }
@@ -180,9 +217,12 @@ pub fn add_follow_pages(
         .collect()
 }
 
-/// The bars are invisible until current; a click anywhere on one lands on
-/// it (`pointer-events: all` on a fill nobody sees).
-const STYLE: &str = "  <style>.kf-bar{fill:#f5a623;fill-opacity:0;pointer-events:all;cursor:pointer}.kf-bar[aria-current=time]{fill-opacity:0.18}</style>\n";
+/// The bars are never seen: a click anywhere on one lands on it
+/// (`pointer-events: all` on a fill nobody sees), and the bar playing is
+/// not washed (`!important`: a page's own rule for a current `[data-at]`
+/// would tint it). The step that is current is the cursor: the playback
+/// blue, translucent, taking no clicks.
+const STYLE: &str = "  <style>.kf-bar{fill:#3b82f6;fill-opacity:0;pointer-events:all;cursor:pointer}.kf-bar[aria-current=time]{fill-opacity:0!important}.kf-step{fill:#3b82f6;fill-opacity:0;pointer-events:none}.kf-step[aria-current=time]{fill:#3b82f6!important;fill-opacity:0.38!important}</style>\n";
 
 fn escape_attr(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
@@ -213,9 +253,9 @@ mod tests {
     }
 
     fn data_at(svg: &str) -> Vec<(String, String)> {
-        svg.match_indices("data-at=\"")
+        svg.match_indices("class=\"kf-bar\" data-at=\"")
             .map(|(i, _)| {
-                let rest = &svg[i + 9..];
+                let rest = &svg[i + 24..];
                 let at = rest[..rest.find('"').unwrap()].to_owned();
                 let b = rest.find("data-bar=\"").unwrap() + 10;
                 let bar = rest[b..b + rest[b..].find('"').unwrap()].to_owned();
@@ -286,5 +326,57 @@ mod tests {
         // The two passes of bar 1 cover the same box.
         let boxes = bar_boxes(&layout);
         assert_eq!(boxes.len(), 4);
+    }
+
+    /// `(bar, beat, at)` of every step, in document order.
+    fn steps(svg: &str) -> Vec<(String, String, String)> {
+        let attr = |rest: &str, name: &str| {
+            let from = rest.find(&format!("{name}=\"")).unwrap() + name.len() + 2;
+            rest[from..from + rest[from..].find('"').unwrap()].to_owned()
+        };
+        svg.match_indices("<rect class=\"kf-step\"")
+            .map(|(i, _)| {
+                let rest = &svg[i..];
+                (
+                    attr(rest, "data-bar"),
+                    attr(rest, "data-beat"),
+                    attr(rest, "data-at"),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_cursor_is_a_step_per_symbol_in_a_box_of_its_own() {
+        let (chart, layout, svg) = engrave(
+            "Song - Artist\n120bpm 4/4 #C\n\\downbeat = 1\n\nVS 3\nC_1\nG_2 F_4 r4\n|: C_1 :|\n",
+        );
+        let follow = Follow::from_header(&chart).unwrap();
+        let out = add_follow(&svg, &layout, &follow, None);
+        let s = |b: &str, beat: &str, at: &str| (b.to_owned(), beat.to_owned(), at.to_owned());
+        assert_eq!(
+            steps(&out),
+            vec![
+                s("1", "1.000", "1.000"),
+                s("2", "1.000", "3.000"),
+                s("2", "3.000", "4.000"),
+                s("2", "4.000", "4.500"),
+                s("3", "1.000", "5.000"),
+                s("3", "1.000", "7.000"),
+            ],
+            "in time order, the repeated bar twice"
+        );
+        // Its own follow box inside the root's, after the bars; nothing
+        // glides (the page moves a `data-glide` item between its marks).
+        let inner = out
+            .find("<g class=\"kf-steps\" data-follow-playhead=\"\">")
+            .unwrap();
+        assert!(inner > out.rfind("class=\"kf-bar\"").unwrap());
+        assert!(!out.contains("data-glide"));
+        // The bar playing is not washed; the step is.
+        assert!(out.contains(".kf-bar[aria-current=time]{fill-opacity:0!important}"));
+        assert!(out.contains(
+            ".kf-step[aria-current=time]{fill:#3b82f6!important;fill-opacity:0.38!important}"
+        ));
     }
 }

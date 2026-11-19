@@ -241,6 +241,25 @@ impl Extension for Keyflow {
             rerender_input().await;
             Ok(json!({ "ruler": on }))
         });
+        // How playback is shown: the stepped cursor on the symbol
+        // sounding (the default), or the old line gliding across the bar.
+        ext.action("KEYFLOW_PLAYBACK_CURSOR", |args| async move {
+            use keyflow::engraver::renderer::PlayheadStyle;
+            let style = match args.get("style").and_then(Json::as_str) {
+                Some("smooth") => PlayheadStyle::Smooth,
+                Some("stepped") => PlayheadStyle::Stepped,
+                Some(other) => return Err(format!("style: stepped or smooth, not {other}")),
+                None => match keyflow_ui::paint_view::playhead_style() {
+                    PlayheadStyle::Stepped => PlayheadStyle::Smooth,
+                    PlayheadStyle::Smooth => PlayheadStyle::Stepped,
+                },
+            };
+            keyflow_ui::paint_view::set_playhead_style(style);
+            for open in open_charts().values() {
+                open.wake.wake();
+            }
+            Ok(json!({ "style": if style == PlayheadStyle::Smooth { "smooth" } else { "stepped" } }))
+        });
         ext.action("KEYFLOW_TARGET_SWITCH", |_| async {
             let next = match edit_state().input.target {
                 edit::Target::Chords => edit::Target::Notes,

@@ -23,11 +23,14 @@ const FRAME: Duration = Duration::from_millis(33);
 const STRUCTURE_EVERY: Duration = Duration::from_secs(2);
 
 /// The chart time to draw for a session at `session_seconds`: from the
-/// song's bar 1, which is `chart_start` seconds into the session. Before
-/// it (the count-in) the chart's start.
+/// song's bar 1, which is `chart_start` seconds into the session. `None`
+/// before it (a count-in, or lead-in bars the chart does not write): the
+/// cursor sits on the symbol sounding, and none of the chart's is yet.
 #[must_use]
-pub fn chart_seconds(session_seconds: f64, chart_start: f64) -> f64 {
-    (session_seconds - chart_start).max(0.0)
+pub fn chart_seconds(session_seconds: f64, chart_start: f64) -> Option<f64> {
+    let at = session_seconds - chart_start;
+    // A millisecond's grace: a session stopped at bar 1 shows bar 1.
+    (at >= -0.001).then_some(at.max(0.0))
 }
 
 /// Starts the playhead for every chart pane on a session, once.
@@ -98,7 +101,7 @@ fn run_playhead() {
                     starts.get(&doc).map_or(0.0, |(start, _)| *start)
                 }
             };
-            let playhead = shown.map(|(at, _)| chart_seconds(at, start));
+            let playhead = shown.and_then(|(at, _)| chart_seconds(at, start));
             // Moved by less than a millisecond: not drawn again.
             let bits = playhead.map(|s| (s * 1000.0).round().to_bits());
             if drawn.get(&key) == Some(&bits) {
@@ -132,11 +135,11 @@ mod tests {
     #[test]
     fn the_charts_time_starts_at_the_songs_bar_one() {
         // Four bars of count-in at 160 BPM: the verse is 6 s in.
-        assert!((chart_seconds(6.0, 6.0) - 0.0).abs() < 1e-12);
-        assert!((chart_seconds(9.0, 6.0) - 3.0).abs() < 1e-12);
-        // In the count-in, the chart's start.
-        assert!((chart_seconds(2.0, 6.0) - 0.0).abs() < 1e-12);
+        assert_eq!(chart_seconds(6.0, 6.0), Some(0.0));
+        assert_eq!(chart_seconds(9.0, 6.0), Some(3.0));
+        // In the count-in no symbol of the chart is sounding: no cursor.
+        assert_eq!(chart_seconds(2.0, 6.0), None);
         // No count-in: the session's own time.
-        assert!((chart_seconds(9.0, 0.0) - 9.0).abs() < 1e-12);
+        assert_eq!(chart_seconds(9.0, 0.0), Some(9.0));
     }
 }

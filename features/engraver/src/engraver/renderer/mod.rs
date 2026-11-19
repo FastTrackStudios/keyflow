@@ -43,7 +43,7 @@ pub use theme::{
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use view::LayoutWorker;
-pub use view::{ChartView, LayoutJob, PageRecording, PreparedLayout, points_to_px};
+pub use view::{ChartView, LayoutJob, PageRecording, PlayheadStyle, PreparedLayout, points_to_px};
 
 #[cfg(feature = "engraver-example")]
 pub use context::VelloRenderContext;

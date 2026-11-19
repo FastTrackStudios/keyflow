@@ -17,7 +17,7 @@ use architect_workspace::paint::{
 };
 use architect_workspace::{Button, Extras, HostData, ViewCtx, ViewInput};
 use keyflow::engraver::layout::chart::select::{Selectable, in_box, pick};
-use keyflow::engraver::renderer::{self, ChartTheme, LayoutWorker, points_to_px};
+use keyflow::engraver::renderer::{self, ChartTheme, LayoutWorker, PlayheadStyle, points_to_px};
 
 use crate::selection::{Gesture, Selection};
 
@@ -310,6 +310,37 @@ const PLAYHEAD_Z: i32 = 3;
 const LASSO_Z: i32 = 4;
 const INPUT_Z: i32 = 5;
 
+/// How every chart pane shows playback: 0 the stepped cursor, 1 the
+/// smooth line. Process-wide, as a preference is (not a chart's).
+static PLAYHEAD_STYLE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+/// Show playback on every chart pane as `style`: the stepped cursor
+/// (the default) or the old line gliding across the bar.
+pub fn set_playhead_style(style: PlayheadStyle) {
+    let value = u8::from(style == PlayheadStyle::Smooth);
+    PLAYHEAD_STYLE.store(value, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// How chart panes show playback ([`set_playhead_style`]).
+#[must_use]
+pub fn playhead_style() -> PlayheadStyle {
+    match PLAYHEAD_STYLE.load(std::sync::atomic::Ordering::Relaxed) {
+        1 => PlayheadStyle::Smooth,
+        _ => PlayheadStyle::Stepped,
+    }
+}
+
+/// What a recorded playhead layer was drawn for: the stepped cursor's
+/// event (its place in playing order; none where there is no cursor), so
+/// a time inside the same event is the same key and the layer is kept;
+/// the smooth line's time itself.
+fn playhead_key(style: PlayheadStyle, event: Option<usize>, secs: f64) -> u64 {
+    match style {
+        PlayheadStyle::Stepped => event.map_or(u64::MAX, |index| index as u64),
+        PlayheadStyle::Smooth => secs.to_bits(),
+    }
+}
+
 /// How far, in chart points, a click may miss what it selects.
 const PICK_SLOP: f64 = 3.0;
 
@@ -481,7 +512,7 @@ struct Recorded {
     entry: Option<((Vec<String>, Color), Layer)>,
     /// The pointer's shadow note, and its layer.
     pointer: Option<((usize, i64, i32, PointerShadow, Color), Layer)>,
-    /// The playhead's time it was drawn at, and its layer.
+    /// What the playhead was drawn for ([`playhead_key`]), and its layer.
     playhead: Option<(u64, Option<Layer>)>,
     /// The laid-out chart's selectables, at that generation.
     selectables: Vec<Selectable>,
@@ -1183,13 +1214,24 @@ impl ChartPaintView {
         true
     }
 
-    /// The playhead at `secs`, in chart pixels at 100%: drawn again only
-    /// when the time moved.
+    /// The playhead at `secs`, in chart pixels at 100%. The stepped
+    /// cursor is one rectangle on the symbol sounding, so it is recorded
+    /// again only when it moves to another symbol
+    /// ([`playhead_key`]): between two events the same layer is handed
+    /// back and nothing is sent. The smooth line is recorded per time.
     fn playhead_layer(&mut self, secs: Option<f64>) -> Option<Layer> {
         let secs = secs?;
-        let bits = secs.to_bits();
+        if self.view.playhead_style() != playhead_style() {
+            self.view.set_playhead_style(playhead_style());
+            self.recorded.playhead = None;
+        }
+        let key = playhead_key(
+            self.view.playhead_style(),
+            self.view.playhead_event(secs).map(|(index, _)| index),
+            secs,
+        );
         if let Some((at, layer)) = &self.recorded.playhead
-            && *at == bits
+            && *at == key
         {
             return layer.clone();
         }
@@ -1198,7 +1240,7 @@ impl ChartPaintView {
             .view
             .paint_playhead(&mut scene, secs)
             .then(|| Layer::new(Arc::new(scene.commands)).z(PLAYHEAD_Z));
-        self.recorded.playhead = Some((bits, layer.clone()));
+        self.recorded.playhead = Some((key, layer.clone()));
         layer
     }
 
@@ -2043,6 +2085,25 @@ mod tests {
     }
 
     #[test]
+    fn the_stepped_cursor_is_drawn_again_only_on_an_event_boundary() {
+        // Thirty times a second inside one symbol: one key, one layer.
+        let a = playhead_key(PlayheadStyle::Stepped, Some(4), 2.000);
+        let b = playhead_key(PlayheadStyle::Stepped, Some(4), 2.033);
+        assert_eq!(a, b);
+        assert_ne!(a, playhead_key(PlayheadStyle::Stepped, Some(5), 2.5));
+        // No cursor (before bar 1) is its own key, not event 0's.
+        assert_ne!(
+            playhead_key(PlayheadStyle::Stepped, None, -1.0),
+            playhead_key(PlayheadStyle::Stepped, Some(0), 0.0)
+        );
+        // The smooth line moves with the time.
+        assert_ne!(
+            playhead_key(PlayheadStyle::Smooth, Some(4), 2.000),
+            playhead_key(PlayheadStyle::Smooth, Some(4), 2.033)
+        );
+    }
+
+    #[test]
     fn the_view_follows_the_cursor_just_far_enough() {
         let view = (400.0, 300.0);
         // In view: no scroll.
@@ -2053,7 +2114,10 @@ mod tests {
         // A measure on the next page, out of view: that page from its edge.
         let next = Rect::new(700.0, 100.0, 800.0, 160.0);
         let page = Rect::new(650.0, 0.0, 1000.0, 280.0);
-        assert_eq!(turn_page((0.0, 0.0), next, Some(page), view), (638.0, -12.0));
+        assert_eq!(
+            turn_page((0.0, 0.0), next, Some(page), view),
+            (638.0, -12.0)
+        );
         // Below: scrolled until its bottom is in, with a margin.
         let below = Rect::new(100.0, 500.0, 200.0, 560.0);
         let (_, y) = follow((0.0, 0.0), below, view);

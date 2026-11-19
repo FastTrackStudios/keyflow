@@ -84,6 +84,14 @@ effect = "mutating"
 params = '{"type":"object","properties":{"dark":{"type":"boolean"},"follow":{"type":"boolean"}}}'
 
 [[actions]]
+id = "KEYFLOW_PLAYBACK_CURSOR"
+name = "Keyflow: playback cursor"
+description = "How a chart shows playback. `style: \"stepped\"` (the default) is MuseScore's cursor: a translucent bar the height of the staff on the slash, note or rest sounding, jumping to the next at its time. `style: \"smooth\"` is the line gliding across the bar. Without `style` it switches between the two."
+group = "Keyflow"
+effect = "mutating"
+params = '{"type":"object","properties":{"style":{"type":"string","enum":["stepped","smooth"]}}}'
+
+[[actions]]
 id = "KEYFLOW_RELOAD"
 name = "Keyflow: reload the chart"
 description = "Reads the open charts (`path`: only that one) from their documents again and engraves them."

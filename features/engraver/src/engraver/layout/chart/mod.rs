@@ -25,6 +25,7 @@ pub mod notation_renderer;
 pub mod page_rendering;
 mod paginated;
 pub mod pipeline;
+pub mod playback;
 pub mod prefix_renderer;
 pub mod rhythm_builder;
 pub mod section_layout;
