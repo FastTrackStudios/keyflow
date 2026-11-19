@@ -1179,6 +1179,22 @@ effect = "mutating"
 params = '{"type":"object","properties":{"doc":{"type":"string"},"request":{}},"required":["doc","request"]}'
 
 [[actions]]
+id = "KEYFLOW_SESSION_TYPE_CHART"
+name = "Keyflow: type a session's chart into its timeline"
+description = "Writes the chart of session `doc` (the active chart's session without it) into the session's timeline as typed items Keyflow owns: a bar, chord, rest, cue and dynamic each an item at its time from the session's bar 1, a chord's push its own fields. From then on an edit to that chart keeps them in step (only what it changed is written). Returns how many writes it took and what is there."
+group = "Session"
+effect = "mutating"
+params = '{"type":"object","properties":{"doc":{"type":"string"}}}'
+
+[[actions]]
+id = "KEYFLOW_SESSION_TYPED"
+name = "Keyflow: a session's typed chart"
+description = "What the timeline of session `doc` (the active chart's session without it) holds of its chart as typed items: its chords (bar, beat, symbol, time, push, accent, staccato), cues and dynamics, the count of bars and rests, and what of the chart's text is not typed yet."
+group = "Session"
+effect = "read_only"
+params = '{"type":"object","properties":{"doc":{"type":"string"}}}'
+
+[[actions]]
 id = "KEYFLOW_SESSION_OPEN"
 name = "Session: open"
 description = "Opens a `.session` file (`path`; when it is not there, made with the chart read from `chart_path`, or with `chart`, Keyflow source; either must read as a chart) and serves it as fts.session. Answers `{id, pane}`."

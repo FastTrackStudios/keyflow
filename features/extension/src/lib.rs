@@ -28,6 +28,8 @@ pub mod session_host;
 #[cfg(not(target_family = "wasm"))]
 pub mod session_view;
 pub mod tools;
+#[cfg(not(target_family = "wasm"))]
+pub mod typed_session;
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -292,6 +294,8 @@ impl Extension for Keyflow {
             syntax_write(&typed).await
         });
         selection::build(ext);
+        #[cfg(not(target_family = "wasm"))]
+        typed_session::build(ext);
         ext.action("KEYFLOW_INPUT_STATE", |_| async { Ok(input_state()) });
         ext.action("KEYFLOW_UNDO", |_| async { history(true).await });
         ext.action("KEYFLOW_REDO", |_| async { history(false).await });
@@ -1057,7 +1061,15 @@ async fn write_text(handle: &Handle, path: &str, text: String, name: &str) -> Re
         else {
             return Ok(());
         };
-        return ask_session(handle, &call).await.map(|_| ());
+        ask_session(handle, &call).await?;
+        // A session whose chart has been typed into its timeline: the
+        // items kept in step with the edit (what it changed, written).
+        #[cfg(not(target_family = "wasm"))]
+        if let Err(why) = typed_session::retype(handle, path, &text, false).await {
+            // The edit is written; only the typed items are behind.
+            edit_state().refused = Some(format!("The chart's typed items were not updated: {why}"));
+        }
+        return Ok(());
     }
     handle
         .host(HostRequest::EditDocument {
