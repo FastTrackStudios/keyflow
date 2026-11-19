@@ -2053,7 +2053,10 @@ mod tests {
         // A measure on the next page, out of view: that page from its edge.
         let next = Rect::new(700.0, 100.0, 800.0, 160.0);
         let page = Rect::new(650.0, 0.0, 1000.0, 280.0);
-        assert_eq!(turn_page((0.0, 0.0), next, Some(page), view), (638.0, -12.0));
+        assert_eq!(
+            turn_page((0.0, 0.0), next, Some(page), view),
+            (638.0, -12.0)
+        );
         // Below: scrolled until its bottom is in, with a margin.
         let below = Rect::new(100.0, 500.0, 200.0, 560.0);
         let (_, y) = follow((0.0, 0.0), below, view);

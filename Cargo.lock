@@ -16677,12 +16677,13 @@ dependencies = [
 [[package]]
 name = "session"
 version = "0.1.0"
-source = "git+https://github.com/FastTrackStudios/session?rev=a8ec37a454c767c0558973412c4d321746066d02#a8ec37a454c767c0558973412c4d321746066d02"
+source = "git+https://github.com/FastTrackStudios/session?rev=f186f34b8451e3a1543ac78a2c99d1ab02c1b352#f186f34b8451e3a1543ac78a2c99d1ab02c1b352"
 dependencies = [
  "crdt",
  "facet",
  "facet-json",
  "loro",
+ "uuid",
  "web-time",
 ]
 
