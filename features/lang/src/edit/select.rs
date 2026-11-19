@@ -1,46 +1,57 @@
-//! Actions on what is selected: rough the chart in by text, then select on
-//! the engraved chart (or by script) and run an action on the selection.
+//! Actions on what is selected: rough the chart in, then select on the
+//! engraved chart (or by script) and run an action on the selection.
 //!
 //! A selection is a list of [`Pick`]s: bars, a place (a bar and a beat), a
-//! piece of the chart's text (what a clicked chord symbol hands over), or
-//! something that is not music an action can move (a section label, a
-//! barline), which an action refuses by name. [`apply`] resolves the picks
-//! to the chord tokens they name and rewrites those tokens in the chart's
-//! text, each in place and nothing else: the person's line breaks, spacing
-//! and comments stay as they were, and what is written is the language's
-//! own syntax, never a second representation.
+//! chord symbol clicked on the chart, or something that is not music an
+//! action can move (a section label, a barline), which an action refuses
+//! by name. An action changes the chart's **model**: [`apply`] resolves
+//! the picks to the chords they name and computes each one's new fields.
 //!
 //! # Push and Pull
 //!
 //! A push is an anticipation: the chord arrives early and is tied over
-//! into the beat it is written on. The language writes it before the
-//! chord: `'G` an eighth early, `''G` a sixteenth, `'''G` a thirty-second
-//! (`'tG` a triplet eighth, `'_4G` a quarter). A pull is the opposite,
-//! written after it: `G'` an eighth late, `G''` a sixteenth.
+//! into the beat it is written on. In the model it is the chord's own
+//! field, [`ChordInstance::push_pull`]: whether it is a push or a pull,
+//! and a [`PushPullAmount`] (a level, 1 an eighth, 2 a sixteenth, 3 a
+//! thirty-second, on a base: plain, triplet, a tuplet, or an explicit
+//! value). [`push_pull_after`] is the whole of Push and Pull: the field's
+//! next value from its present one. Nothing here adds or removes
+//! apostrophes; `'G` and `''G` are how that field is typed in syntax mode
+//! and how it reads when the chart is shown as text.
 //!
-//! [`Action::Push`] with no step adds one apostrophe on that ladder and
-//! [`Action::Pull`] takes one off, through zero into the pulls:
+//! With no step, Push moves the field one level along and Pull one back,
+//! through "not pushed" into the pulls:
 //!
 //! ```text
-//! G''  ←  G'  ←  G  →  'G  →  ''G  →  '''G
-//!         pull       push
+//! pull 16th ← pull 8th ← none → push 8th → push 16th → push 32nd
 //! ```
 //!
-//! so a push and then a pull give back the text there was. Note what the
-//! apostrophes mean: the second one makes an eighth's push a sixteenth's,
-//! which is *nearer* the beat, not further from it. With a [`Step`] the
-//! action writes that step's spelling outright (`Push(Sixteenth)` is
-//! `''G` whatever was there), and the opposite action with the same step
-//! takes it off again. A step the syntax has no spelling for is refused.
+//! so a push and then a pull give back what there was. (The levels are
+//! the type's: the second is a sixteenth, which is *nearer* the beat than
+//! an eighth, not further.) With a [`Step`] the action sets that amount
+//! outright, and the opposite action with the same step clears it.
 //!
 //! What the bar's slashes do: nothing. A push does not change what is
-//! written on the beat (`C // 'G / F /` is still four beats); the engraver
-//! draws the early arrival and its tie, over a barline, a line or a page
-//! too. So the bar always still adds up.
+//! written on the beat; the engraver draws the early arrival and its tie,
+//! over a barline, a line or a page too. So the bar always still adds up.
+//!
+//! # Saving
+//!
+//! A chart is stored today as its text (a `.kf` document, or the text
+//! entry Keyflow keeps in a session), and its model is read from that. So
+//! [`apply`] also gives the stored text with each changed chord written
+//! from its new fields ([`Applied::text`]), reads the model back from it
+//! ([`Applied::chart`]), and refuses the edit if a chord's field read back
+//! is not the one the action set: what is saved is what was done, or
+//! nothing is saved. A field value the text cannot write (a pull on a
+//! triplet or tuplet base) is refused with that reason, not approximated.
+//!
+//! [`ChordInstance::push_pull`]: keyflow_proto::chart::types::ChordInstance
 
 use std::collections::BTreeSet;
 
 use keyflow_proto::chart::Measure;
+use keyflow_proto::chord::{LilySyntax, PushPullAmount, PushPullBase};
 
 use super::chords;
 use super::input::{bars, replays};
@@ -88,25 +99,89 @@ impl Step {
         })
     }
 
-    fn shift(self) -> Shift {
+    /// The amount it is in the model's type.
+    #[must_use]
+    pub fn amount(self) -> PushPullAmount {
+        let level = |level, base| PushPullAmount { level, base };
         match self {
-            Self::Eighth => Shift::Count(1),
-            Self::Sixteenth => Shift::Count(2),
-            Self::ThirtySecond => Shift::Count(3),
-            Self::TripletEighth => Shift::Triplet,
-            Self::Quarter => Shift::Quarter,
+            Self::Eighth => level(1, PushPullBase::Standard),
+            Self::Sixteenth => level(2, PushPullBase::Standard),
+            Self::ThirtySecond => level(3, PushPullBase::Standard),
+            Self::TripletEighth => level(1, PushPullBase::Triplet),
+            Self::Quarter => PushPullAmount::single(PushPullBase::Duration {
+                duration: LilySyntax::Quarter,
+                dotted: false,
+                triplet: false,
+            }),
         }
     }
+}
+
+/// A chord's push field: `None` not pushed, `(true, amount)` pushed (it
+/// sounds `amount` early), `(false, amount)` pulled (late).
+pub type PushPull = Option<(bool, PushPullAmount)>;
+
+/// The most levels the type holds: a thirty-second.
+const MAX_LEVEL: u8 = 3;
+
+/// Push (`push`) or Pull on a chord whose field is `now`: the field's
+/// next value. With no `step`, one level along the plain ladder (pulls
+/// below "not pushed", pushes above); with one, that amount set, or
+/// cleared when the opposite of it is what is there.
+///
+/// # Errors
+///
+/// Past the ladder's end, or a step-less press on a field that is not on
+/// the plain ladder (a triplet's, an explicit value's): the reason.
+pub fn push_pull_after(now: PushPull, push: bool, step: Option<Step>) -> Result<PushPull, String> {
+    if let Some(step) = step {
+        let amount = step.amount();
+        // The opposite action with the same step takes it off.
+        return Ok(match now {
+            Some((was_push, was)) if was_push != push && was == amount => None,
+            _ => Some((push, amount)),
+        });
+    }
+    let level = match now {
+        None => 0_i8,
+        Some((is_push, a)) if matches!(a.base, PushPullBase::Standard) => {
+            let n = a.level.clamp(1, MAX_LEVEL) as i8;
+            if is_push { n } else { -n }
+        }
+        Some(_) => {
+            return Err(
+                "it is pushed or pulled by a triplet's or an explicit value, which has no level to step: name a step"
+                    .to_owned(),
+            );
+        }
+    };
+    let next = if push { level + 1 } else { level - 1 };
+    if next.unsigned_abs() > MAX_LEVEL {
+        return Err(format!(
+            "a thirty-second {} is the most a chord's push holds",
+            if push { "early" } else { "late" }
+        ));
+    }
+    Ok(match next {
+        0 => None,
+        n => Some((
+            n > 0,
+            PushPullAmount {
+                level: n.unsigned_abs(),
+                base: PushPullBase::Standard,
+            },
+        )),
+    })
 }
 
 /// What to do to the chords selected.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
-    /// Earlier: one apostrophe more (`G` → `'G` → `''G`), or `step`'s
-    /// spelling.
+    /// Earlier: the chord's push field a level on, or set to `step`
+    /// ([`push_pull_after`]).
     Push(Option<Step>),
-    /// Later: one apostrophe fewer, through none into the pulls (`'G` →
-    /// `G` → `G'`), or `step`'s spelling.
+    /// Later: a level back, through "not pushed" into the pulls, or set
+    /// to `step`.
     Pull(Option<Step>),
     /// An accent put on (`>G`), or taken off when every chord has one.
     Accent,
@@ -144,7 +219,9 @@ pub struct ChordRef {
     /// The beat it is written on, from 1 (the meter's beats); `None` in a
     /// bar whose chords cannot be told apart by beat.
     pub beat: Option<f64>,
-    /// Its token, as written (`'F#m7/A_4`).
+    /// Its push field in the model.
+    pub push_pull: PushPull,
+    /// Its token in the chart's stored text (`'F#m7/A_4`).
     pub token: String,
     /// Where its token is in the source, in bytes.
     pub start: usize,
@@ -155,14 +232,22 @@ pub struct ChordRef {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Change {
     pub bar: usize,
+    /// Its place among the bar's chords, from 0.
+    pub index: usize,
+    /// Its push field before and after (the same for an action that is
+    /// not a push or a pull).
+    pub push_pull: (PushPull, PushPull),
+    /// Its token in the stored text, before and after.
     pub was: String,
     pub now: String,
 }
 
 /// What an action did.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone)]
 pub struct Applied {
-    /// The chart's text after it.
+    /// The chart after it: the model read back from what is saved.
+    pub chart: Chart,
+    /// The chart's stored text after it.
     pub text: String,
     pub changed: Vec<Change>,
     /// What it left alone, and why, in words for a status line.
@@ -193,6 +278,7 @@ pub fn chords_of(source: &str, chart: &Chart) -> Vec<ChordRef> {
                 bar,
                 index,
                 beat: beats.as_ref().and_then(|b| b.get(index).copied()),
+                push_pull: chord.push_pull,
                 token: token.to_owned(),
                 start,
                 end,
@@ -357,8 +443,8 @@ pub fn apply(source: &str, picks: &[Pick], action: &Action) -> Result<Applied, S
     let mut edits: Vec<(usize, usize, String)> = Vec::new();
     let mut changed = Vec::new();
     for c in &chosen {
-        let now = match rewrite(c, action, take_off, &measures) {
-            Ok(now) => now,
+        let (now, field) = match rewrite(c, action, take_off, &measures) {
+            Ok(done) => done,
             Err(why) => {
                 skipped.push(format!("Bar {}, {}: {why}", c.bar + 1, c.token));
                 continue;
@@ -368,6 +454,8 @@ pub fn apply(source: &str, picks: &[Pick], action: &Action) -> Result<Applied, S
             edits.push((c.start, c.end, now.clone()));
             changed.push(Change {
                 bar: c.bar,
+                index: c.index,
+                push_pull: (c.push_pull, field),
                 was: c.token.clone(),
                 now,
             });
@@ -389,28 +477,56 @@ pub fn apply(source: &str, picks: &[Pick], action: &Action) -> Result<Applied, S
     if bars(&after).len() != measures.len() {
         return Err("Not written: it would change how many bars the chart has".to_owned());
     }
+    // What is saved is what was done: each chord's push field, read back
+    // from the stored text, is the one the action set.
+    // (By its token, not its place among the bar's chords: the parser
+    // puts a silent placeholder before a section's first chord when that
+    // chord is pushed, so places move.)
+    let reopened = bars(&after);
+    for change in &changed {
+        let read = reopened.get(change.bar).is_some_and(|m| {
+            m.chords.iter().any(|c| {
+                c.push_pull == change.push_pull.1
+                    && c.source_span
+                        .and_then(|s| text.get(s.start..s.start + s.len))
+                        .is_some_and(|token| token == change.now)
+            })
+        });
+        if !read {
+            return Err(format!(
+                "Not saved: bar {}'s {} would not read back as it was set",
+                change.bar + 1,
+                change.was
+            ));
+        }
+    }
+    drop(reopened);
     Ok(Applied {
+        chart: after,
         text,
         changed,
         skipped,
     })
 }
 
-/// `c`'s token after `action`.
+/// `c` after `action`: its push field, and its token in the stored text
+/// written from its fields.
 fn rewrite(
     c: &ChordRef,
     action: &Action,
     take_off: bool,
     measures: &[&Measure],
-) -> Result<String, String> {
+) -> Result<(String, PushPull), String> {
     let mut shape = Shape::of(&c.token)?;
+    let mut field = c.push_pull;
     match action {
         Action::Push(step) | Action::Pull(step) => {
             let push = matches!(action, Action::Push(_));
-            shape.shift(push, *step)?;
-            if shape.push != Shift::None {
-                arrives_early(c, &shape, measures)?;
+            field = push_pull_after(c.push_pull, push, *step)?;
+            if let Some((true, amount)) = field {
+                arrives_early(c, amount, measures)?;
             }
+            shape.set_field(field)?;
         }
         Action::Accent => shape.set_mark('>', !take_off),
         Action::Staccato => shape.set_mark('.', !take_off),
@@ -430,6 +546,7 @@ fn rewrite(
             let new = Shape::of(typed)?;
             // Marks typed replace the chord's; none typed keep them.
             if !new.lead.is_empty() || new.push != Shift::None || new.pull != Shift::None {
+                field = new.field();
                 shape.lead = new.lead;
                 shape.push = new.push;
                 shape.pull = new.pull;
@@ -440,12 +557,16 @@ fn rewrite(
             }
         }
     }
-    Ok(shape.text())
+    Ok((shape.text(), field))
 }
 
 /// Whether a pushed `c` has somewhere to arrive: not before the chart's
 /// first bar, and not on or before the chord it follows in its bar.
-fn arrives_early(c: &ChordRef, shape: &Shape, measures: &[&Measure]) -> Result<(), String> {
+fn arrives_early(
+    c: &ChordRef,
+    amount: PushPullAmount,
+    measures: &[&Measure],
+) -> Result<(), String> {
     let first_in_bar = c.index == 0 && c.beat.is_none_or(|b| b <= 1.0 + 1e-6);
     if first_in_bar {
         if c.bar == 0 {
@@ -463,7 +584,7 @@ fn arrives_early(c: &ChordRef, shape: &Shape, measures: &[&Measure]) -> Result<(
     };
     let den = f64::from(measure.time_signature.1.max(1));
     // The step in the meter's beats (a quarter is `den / 4` of them).
-    let early = shape.push.quarters() * den / 4.0;
+    let early = amount.to_beats() * den / 4.0;
     let before =
         beats_of(measure).and_then(|b| c.index.checked_sub(1).and_then(|i| b.get(i).copied()));
     if let Some(prev) = before
@@ -524,13 +645,32 @@ enum Shift {
 }
 
 impl Shift {
-    /// Its length in quarter notes.
-    fn quarters(self) -> f64 {
-        match self {
-            Self::None => 0.0,
-            Self::Count(n) => 1.0 / f64::from(1_u32 << n.min(3)),
-            Self::Triplet => 1.0 / 3.0,
-            Self::Quarter => 1.0,
+    /// The amount it writes.
+    fn amount(self) -> Option<PushPullAmount> {
+        Some(match self {
+            Self::None => return None,
+            Self::Count(n) => PushPullAmount {
+                level: n,
+                base: PushPullBase::Standard,
+            },
+            Self::Triplet => Step::TripletEighth.amount(),
+            Self::Quarter => Step::Quarter.amount(),
+        })
+    }
+
+    /// How `amount` is written, when the text has a way to write it here.
+    fn of(amount: PushPullAmount) -> Option<Self> {
+        match amount.base {
+            PushPullBase::Standard if (1..=MAX_COUNT).contains(&amount.level) => {
+                Some(Self::Count(amount.level))
+            }
+            PushPullBase::Triplet if amount.level == 1 => Some(Self::Triplet),
+            PushPullBase::Duration {
+                duration: LilySyntax::Quarter,
+                dotted: false,
+                triplet: false,
+            } => Some(Self::Quarter),
+            _ => None,
         }
     }
 }
@@ -633,76 +773,42 @@ impl Shape {
         }
     }
 
-    /// Pushed (`push`) or pulled a step: one apostrophe along the ladder,
-    /// or `step`'s spelling.
-    fn shift(&mut self, push: bool, step: Option<Step>) -> Result<(), String> {
-        let Some(step) = step else {
-            // The ladder: pulls below zero, pushes above.
-            let level = match (self.push, self.pull) {
-                (Shift::None, Shift::None) => 0_i8,
-                (Shift::Count(n), Shift::None) => n as i8,
-                (Shift::None, Shift::Count(n)) => -(n as i8),
-                _ => {
+    /// The push field its text writes.
+    fn field(&self) -> PushPull {
+        match (self.push.amount(), self.pull.amount()) {
+            (Some(a), _) => Some((true, a)),
+            (None, Some(a)) => Some((false, a)),
+            (None, None) => None,
+        }
+    }
+
+    /// Its text made to write `field`: the model's push, as the stored
+    /// text spells it. `Err` for a value the text has no way to write
+    /// here, which is then not saved rather than saved as something else.
+    fn set_field(&mut self, field: PushPull) -> Result<(), String> {
+        let unwritable = || {
+            "the chart's text has no way to write that amount here, so it is not saved as something else: retype the chord with it"
+                .to_owned()
+        };
+        let (push, pull) = match field {
+            None => (Shift::None, Shift::None),
+            Some((true, a)) => (Shift::of(a).ok_or_else(unwritable)?, Shift::None),
+            Some((false, a)) => {
+                let shift = Shift::of(a).ok_or_else(unwritable)?;
+                if shift == Shift::Triplet {
                     return Err(
-                        "it is pushed or pulled by a value with no apostrophe to add or take off: name a step"
+                        "a triplet pull is written after the chord's letter (`Ct'`), which this action does not produce: type it"
                             .to_owned(),
                     );
                 }
-            };
-            let next = if push { level + 1 } else { level - 1 };
-            if next > MAX_COUNT as i8 {
-                return Err(
-                    "three apostrophes (a thirty-second) is the most the language writes"
-                        .to_owned(),
-                );
+                if !self.tail.is_empty() {
+                    return Err(late_with_length());
+                }
+                (Shift::None, shift)
             }
-            if next < -(MAX_COUNT as i8) {
-                return Err(
-                    "three apostrophes (a thirty-second late) is the most the language writes"
-                        .to_owned(),
-                );
-            }
-            return self.set(next);
         };
-        let wanted = step.shift();
-        // The opposite action with the same step takes it off.
-        let (mine, other) = if push {
-            (&mut self.push, &mut self.pull)
-        } else {
-            (&mut self.pull, &mut self.push)
-        };
-        if *other == wanted {
-            *other = Shift::None;
-            return Ok(());
-        }
-        if !push && wanted == Shift::Triplet {
-            return Err(
-                "the language writes a triplet pull after the chord's letter (`Ct'`), which this action does not produce: type it"
-                    .to_owned(),
-            );
-        }
-        if !push && !self.tail.is_empty() {
-            return Err(late_with_length());
-        }
-        *other = Shift::None;
-        *mine = wanted;
-        Ok(())
-    }
-
-    fn set(&mut self, level: i8) -> Result<(), String> {
-        if level < 0 && !self.tail.is_empty() {
-            return Err(late_with_length());
-        }
-        self.push = if level > 0 {
-            Shift::Count(level.unsigned_abs())
-        } else {
-            Shift::None
-        };
-        self.pull = if level < 0 {
-            Shift::Count(level.unsigned_abs())
-        } else {
-            Shift::None
-        };
+        self.push = push;
+        self.pull = pull;
         Ok(())
     }
 }
@@ -725,7 +831,25 @@ mod tests {
     }
 
     fn run(source: &str, picks: &[Pick], action: Action) -> String {
-        apply(source, picks, &action).expect("applies").text
+        match apply(source, picks, &action) {
+            Ok(done) => done.text,
+            Err(why) => panic!("not applied: {why}"),
+        }
+    }
+
+    /// Why `action` was refused.
+    fn refused(source: &str, picks: &[Pick], action: Action) -> String {
+        match apply(source, picks, &action) {
+            Ok(done) => panic!("applied: {}", done.text),
+            Err(why) => why,
+        }
+    }
+
+    fn done(source: &str, picks: &[Pick], action: Action) -> Applied {
+        match apply(source, picks, &action) {
+            Ok(done) => done,
+            Err(why) => panic!("not applied: {why}"),
+        }
     }
 
     /// The lines of `after` that differ from `before`'s, by number.
@@ -748,8 +872,8 @@ mod tests {
         assert!(twice.contains("C // ''G //"), "{twice}");
         let thrice = run(&twice, &at(0, 3.0), Action::Push(None));
         assert!(thrice.contains("C // '''G //"));
-        let why = apply(&thrice, &at(0, 3.0), &Action::Push(None)).unwrap_err();
-        assert!(why.contains("thirty-second"), "{why}");
+        let why = refused(&thrice, &at(0, 3.0), Action::Push(None));
+        assert!(why.contains("thirty-second early"), "{why}");
         // Back down the same way, to the text there was.
         let back = run(&twice, &at(0, 3.0), Action::Pull(None));
         assert_eq!(back, once);
@@ -804,7 +928,7 @@ mod tests {
         }
         let pulled = run(SONG, &at(0, 3.0), Action::Pull(Some(Step::Sixteenth)));
         assert!(pulled.contains("C // G'' //"));
-        let why = apply(SONG, &at(0, 3.0), &Action::Pull(Some(Step::TripletEighth))).unwrap_err();
+        let why = refused(SONG, &at(0, 3.0), Action::Pull(Some(Step::TripletEighth)));
         assert!(why.contains("triplet"), "{why}");
         assert_eq!(Step::named("16"), Some(Step::Sixteenth));
         assert_eq!(Step::named("half"), None, "no spelling: refused by name");
@@ -817,7 +941,7 @@ mod tests {
         assert!(bar.contains("'Am   //   'F //"), "spacing kept: {bar}");
         assert_eq!(lines_changed(SONG, &bar), [7]);
         // Bars 2 to 4: every chord but none of bar 1's.
-        let out = apply(SONG, &[Pick::Bars { from: 1, to: 3 }], &Action::Push(None)).unwrap();
+        let out = done(SONG, &[Pick::Bars { from: 1, to: 3 }], Action::Push(None));
         assert_eq!(out.changed.len(), 6, "{:?}", out.changed);
         assert_eq!(lines_changed(SONG, &out.text), [7, 8, 9]);
         assert!(out.text.contains("'C_2 'G_4 'F_4"));
@@ -833,10 +957,10 @@ mod tests {
 
     #[test]
     fn the_first_chord_has_no_bar_to_arrive_in() {
-        let why = apply(SONG, &at(0, 1.0), &Action::Push(None)).unwrap_err();
+        let why = refused(SONG, &at(0, 1.0), Action::Push(None));
         assert!(why.contains("no bar before bar 1"), "{why}");
         // A range that starts at bar 1 pushes the rest and says so.
-        let out = apply(SONG, &[Pick::Bars { from: 0, to: 0 }], &Action::Push(None)).unwrap();
+        let out = done(SONG, &[Pick::Bars { from: 0, to: 0 }], Action::Push(None));
         assert!(out.text.contains("C // 'G //"));
         assert_eq!(out.skipped.len(), 1);
         // Pulled, it has: later is inside its own bar.
@@ -857,7 +981,7 @@ mod tests {
     #[test]
     fn a_push_onto_the_chord_before_it_is_refused() {
         // G_4 then F_4 a beat later: a quarter's push lands on the G.
-        let why = apply(SONG, &at(2, 4.0), &Action::Push(Some(Step::Quarter))).unwrap_err();
+        let why = refused(SONG, &at(2, 4.0), Action::Push(Some(Step::Quarter)));
         assert!(why.contains("beat is taken"), "{why}");
         // An eighth's has room.
         assert!(run(SONG, &at(2, 4.0), Action::Push(None)).contains("C_2 G_4 'F_4"));
@@ -865,7 +989,7 @@ mod tests {
 
     #[test]
     fn a_chord_with_a_length_is_not_pulled() {
-        let why = apply(SONG, &at(2, 3.0), &Action::Pull(None)).unwrap_err();
+        let why = refused(SONG, &at(2, 3.0), Action::Pull(None));
         assert!(why.contains("pulled a quarter"), "{why}");
     }
 
@@ -877,8 +1001,7 @@ mod tests {
             ("measure-number", "bar number"),
             ("dynamic", "placed by its bar and beat"),
         ] {
-            let why =
-                apply(SONG, &[Pick::Other(kind.to_owned())], &Action::Push(None)).unwrap_err();
+            let why = refused(SONG, &[Pick::Other(kind.to_owned())], Action::Push(None));
             assert!(why.contains(word), "{kind}: {why}");
         }
         // With a chord beside it, the chord is pushed and the rest named.
@@ -886,7 +1009,7 @@ mod tests {
             Pick::Other("section".to_owned()),
             Pick::At { bar: 0, beat: 3.0 },
         ];
-        let out = apply(SONG, &picks, &Action::Push(None)).unwrap();
+        let out = done(SONG, &picks, Action::Push(None));
         assert_eq!(out.changed.len(), 1);
         assert_eq!(out.skipped.len(), 1);
     }
@@ -904,13 +1027,12 @@ mod tests {
     #[test]
     fn a_bar_that_plays_another_again_changes_the_bar_it_plays() {
         let src = "Again - Test\n#C 120bpm 4/4\n\nVS 4\nC // G //\n%\nF\nC\n";
-        let out = apply(src, &[Pick::Bars { from: 1, to: 1 }], &Action::Push(None));
         // Bar 2 is `%`: what is written is bar 1, whose G is pushed (its C
         // is the chart's first chord).
-        let out = out.unwrap();
+        let out = done(src, &[Pick::Bars { from: 1, to: 1 }], Action::Push(None));
         assert!(out.text.contains("C // 'G //\n%\n"), "{}", out.text);
         // Both bars selected: each chord once, not twice.
-        let both = apply(src, &[Pick::Bars { from: 0, to: 1 }], &Action::Push(None)).unwrap();
+        let both = done(src, &[Pick::Bars { from: 0, to: 1 }], Action::Push(None));
         assert_eq!(both.text, out.text);
     }
 
@@ -945,8 +1067,95 @@ mod tests {
     fn retyping_keeps_the_length_and_the_marks() {
         let out = run(SONG, &at(2, 3.0), Action::Retype("Gsus4".to_owned()));
         assert!(out.contains("C_2 Gsus4_4 F_4"), "{out}");
-        let why = apply(SONG, &at(2, 3.0), &Action::Retype("??".to_owned())).unwrap_err();
+        let why = refused(SONG, &at(2, 3.0), Action::Retype("??".to_owned()));
         assert!(why.contains("not a chord symbol"));
+    }
+
+    #[test]
+    fn push_and_pull_are_the_chords_field_stepped() {
+        let std = |level| PushPullAmount {
+            level,
+            base: PushPullBase::Standard,
+        };
+        // The ladder, on the type.
+        let mut field: PushPull = None;
+        let mut seen = Vec::new();
+        for _ in 0..3 {
+            field = push_pull_after(field, true, None).unwrap();
+            seen.push(field);
+        }
+        assert_eq!(
+            seen,
+            [
+                Some((true, std(1))),
+                Some((true, std(2))),
+                Some((true, std(3)))
+            ]
+        );
+        assert!(
+            push_pull_after(field, true, None).is_err(),
+            "no fourth level"
+        );
+        for _ in 0..3 {
+            field = push_pull_after(field, false, None).unwrap();
+        }
+        assert_eq!(field, None, "pulled back to not pushed");
+        assert_eq!(
+            push_pull_after(None, false, None).unwrap(),
+            Some((false, std(1))),
+            "then late"
+        );
+        // A step sets its amount, and the opposite with it clears it.
+        let triplet = push_pull_after(None, true, Some(Step::TripletEighth)).unwrap();
+        assert_eq!(
+            triplet.map(|(p, a)| (p, a.base)),
+            Some((true, PushPullBase::Triplet))
+        );
+        assert_eq!(
+            push_pull_after(triplet, false, Some(Step::TripletEighth)).unwrap(),
+            None
+        );
+        // A triplet's push has no level to step.
+        assert!(push_pull_after(triplet, true, None).is_err());
+    }
+
+    #[test]
+    fn what_is_saved_reopens_as_the_model_the_action_made() {
+        let out = done(SONG, &[Pick::Bars { from: 0, to: 3 }], Action::Push(None));
+        // Every chord the action changed carries its new field in the
+        // model read back from what was saved; every other chord's is as
+        // it was.
+        let before = parse_chart(SONG).unwrap();
+        let (was, now) = (bars(&before), bars(&out.chart));
+        assert_eq!(was.len(), now.len());
+        let mut changed = 0;
+        for (bar, (a, b)) in was.iter().zip(&now).enumerate() {
+            assert_eq!(a.chords.len(), b.chords.len());
+            for (index, (x, y)) in a.chords.iter().zip(&b.chords).enumerate() {
+                assert_eq!(x.full_symbol, y.full_symbol);
+                match out
+                    .changed
+                    .iter()
+                    .find(|c| c.bar == bar && c.index == index)
+                {
+                    Some(change) => {
+                        changed += 1;
+                        assert_eq!(change.push_pull.0, x.push_pull);
+                        assert_eq!(change.push_pull.1, y.push_pull);
+                        assert!(y.push_pull.is_some_and(|p| p.0), "pushed");
+                    }
+                    None => assert_eq!(x.push_pull, y.push_pull),
+                }
+            }
+        }
+        assert_eq!(changed, out.changed.len());
+        // And saving that model's text again changes nothing.
+        let again = parse_chart(&out.text).unwrap();
+        for (a, b) in bars(&again).iter().zip(&now) {
+            for (x, y) in a.chords.iter().zip(&b.chords) {
+                assert_eq!(x.push_pull, y.push_pull);
+            }
+        }
     }
 
     #[test]
