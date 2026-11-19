@@ -273,11 +273,28 @@ impl PaintView for MountedChart {
 /// the one under the pointer. The pane writes it as it changes, when its
 /// host gave it one in its extras. Both are presence: this person's view
 /// of the chart, not the chart.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ChartSelection {
     pub keys: Vec<String>,
     /// The element under the pointer, highlighted as itself.
     pub hover: Option<String>,
+    /// What each of `keys` is, for an action on the selection: a key
+    /// names an element in this layout only, and these say what it is in
+    /// the chart.
+    pub items: Vec<SelectedItem>,
+}
+
+/// One selected element as an action needs it.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SelectedItem {
+    pub key: String,
+    /// Its kind's name (`chord`, `bar`, `note`, `rest`, `section`…).
+    pub kind: &'static str,
+    /// Its text in the chart's source (bytes `start..end`), when the
+    /// layout kept it: a chord symbol's.
+    pub span: Option<(usize, usize)>,
+    /// The bar it is in or on, and how far across it its left edge is.
+    pub bar: Option<(usize, f64)>,
 }
 
 /// The layers a chart is drawn in, by key. Each page is its own (its
@@ -1318,9 +1335,15 @@ impl ChartPaintView {
     /// The selection out to the host, when it asked for it.
     fn publish(&self, ctx: &ViewCtx) {
         if let Some(out) = ctx.data::<ChartSelection>() {
+            let keys = self.selection.items().to_vec();
+            let items = keys
+                .iter()
+                .filter_map(|key| self.selected_item(key))
+                .collect();
             let now = ChartSelection {
-                keys: self.selection.items().to_vec(),
+                keys,
                 hover: self.hover.clone(),
+                items,
             };
             if out.read(|s| *s != now) {
                 out.set(now);
@@ -1330,6 +1353,39 @@ impl ChartPaintView {
 }
 
 impl ChartPaintView {
+    /// What the selectable `key` is in the chart ([`SelectedItem`]).
+    fn selected_item(&self, key: &str) -> Option<SelectedItem> {
+        let found = self.recorded.selectables.iter().find(|s| s.key == key)?;
+        let bar_of = |key: &str| -> Option<usize> {
+            let n = key.strip_prefix("bar#")?;
+            n.split('.').next()?.parse().ok()
+        };
+        // The bar whose column it starts in, on the nearest staff.
+        let bar = bar_of(key).map(|n| (n, 0.0)).or_else(|| {
+            let at = found.bounds;
+            let mid = at.x0 + at.width().min(2.0) / 2.0;
+            self.recorded
+                .selectables
+                .iter()
+                .filter(|s| s.key.starts_with("bar#"))
+                .filter(|s| mid >= s.bounds.x0 && mid <= s.bounds.x1)
+                .min_by(|a, b| {
+                    let d = |s: &Selectable| (s.bounds.center().y - at.center().y).abs();
+                    d(a).total_cmp(&d(b))
+                })
+                .and_then(|s| {
+                    let fraction = (at.x0 - s.bounds.x0) / s.bounds.width().max(1.0);
+                    bar_of(&s.key).map(|n| (n, fraction.clamp(0.0, 1.0)))
+                })
+        });
+        Some(SelectedItem {
+            key: key.to_owned(),
+            kind: found.kind.name(),
+            span: found.span.map(|s| (s.start, s.start + s.len)),
+            bar,
+        })
+    }
+
     /// What the host saw a pointer do to an element's region: the hover
     /// as it enters and leaves (the host hit-tests; no pointer move reaches
     /// here for it), a press as a click on it (MuseScore's selection, and

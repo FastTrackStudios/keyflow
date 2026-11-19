@@ -22,6 +22,7 @@ pub mod icons;
 pub mod input;
 pub mod keep;
 pub mod palette;
+pub mod selection;
 #[cfg(not(target_family = "wasm"))]
 pub mod session_host;
 #[cfg(not(target_family = "wasm"))]
@@ -190,6 +191,21 @@ impl Extension for Keyflow {
         // accent or a staccato on it), as MuseScore applies a palette.
         ext.action("KEYFLOW_PALETTE_APPLY", |args| async move {
             let token = text(&args, "token").ok_or("token: the palette cell's token")?;
+            // A push or a pull is an action on the selection (any number
+            // of chords, bars, a range), not a mark on one chord.
+            let shift = match token.as_str() {
+                "'" => Some(("KEYFLOW_SELECTION_PUSH", "eighth")),
+                "''" => Some(("KEYFLOW_SELECTION_PUSH", "sixteenth")),
+                "pull" => Some(("KEYFLOW_SELECTION_PULL", "eighth")),
+                _ => None,
+            };
+            if let Some((action, step)) = shift {
+                if let Err(why) = dispatch(action, json!({ "step": step })).await {
+                    edit_state().refused = Some(why);
+                    rerender_input().await;
+                }
+                return Ok(input_state());
+            }
             let then =
                 palette::cell(&token).ok_or_else(|| format!("{token}: not a palette cell"))?;
             match then {
@@ -275,6 +291,7 @@ impl Extension for Keyflow {
             let typed = text(&args, "text").ok_or("text: the bars to write")?;
             syntax_write(&typed).await
         });
+        selection::build(ext);
         ext.action("KEYFLOW_INPUT_STATE", |_| async { Ok(input_state()) });
         ext.action("KEYFLOW_UNDO", |_| async { history(true).await });
         ext.action("KEYFLOW_REDO", |_| async { history(false).await });
@@ -919,7 +936,7 @@ async fn give_back_document_place(key: u64, path: &str) {
     o.data.update(|s| s.view = ChartView { zoom, scroll });
     o.selection.set(ChartSelection {
         keys: selection,
-        hover: None,
+        ..ChartSelection::default()
     });
     o.wake.wake();
     DOCUMENT_PLACES
@@ -968,7 +985,7 @@ async fn give_back_place(key: u64) -> bool {
         o.data.update(|s| s.view = ChartView { zoom, scroll });
         o.selection.set(ChartSelection {
             keys: selection,
-            hover: None,
+            ..ChartSelection::default()
         });
         o.wake.wake();
     }
@@ -1098,6 +1115,13 @@ fn remember(
         undo.remove(0);
     }
     REDO.lock().unwrap_or_else(PoisonError::into_inner).clear();
+}
+
+/// An edit made by an action on the selection: kept to undo as note
+/// input's are (the cursor where it was).
+pub(crate) fn remember_edit(path: &str, before: String, after: String) {
+    let input = edit_state().input.clone();
+    remember(path, before, after, (input.clone(), input));
 }
 
 /// ⌘Z (`undo`) or ⇧⌘Z: the chart's last edit taken back (or made again):

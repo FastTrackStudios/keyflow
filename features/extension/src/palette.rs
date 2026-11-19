@@ -147,6 +147,7 @@ pub const PALETTES: &[Palette] = &[
             g('\u{E4C0}', "", "\\fermata", "Fermata"),
             t("Push", "'", "Push (an eighth early)"),
             t("Push 16", "''", "Push (a sixteenth early)"),
+            t("Pull", "pull", "Pull (an eighth late)"),
             t("Stop", "\\stop", "Stop"),
             t("Tie", "~", "Tie into the next bar"),
         ],
