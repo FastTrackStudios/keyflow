@@ -232,7 +232,33 @@ fn what_is_not_typed_yet_is_counted() {
     let untyped = TypedChart::untyped(&parse_chart(more).unwrap());
     assert!(!untyped.is_nothing());
     assert_eq!(untyped.bars_with_notes, 1, "{untyped:?}");
-    assert_eq!(untyped.rests, 1);
-    assert_eq!(untyped.dynamics, 1);
     assert_eq!(untyped.repeats, 1);
+    assert_eq!(untyped.bars_unplaced, 0);
+}
+
+#[test]
+fn rests_and_dynamics_are_items_too() {
+    let src = "Hits - Test\n#C 120bpm 4/4\n\nVS 3\ndyn mf\nC_2 r2\n>F_8 r8 r2.\ndyn ff\nG\n";
+    let chart = parse_chart(src).unwrap();
+    let typed = TypedChart::of(&chart);
+    let rests: Vec<(usize, f64, f64)> = typed
+        .rests
+        .iter()
+        .map(|r| (r.bar, r.beat, r.length))
+        .collect();
+    assert_eq!(rests, [(0, 3.0, 2.0), (1, 1.5, 0.5), (1, 2.0, 3.0)]);
+    let dynamics: Vec<(usize, &str)> = typed
+        .dynamics
+        .iter()
+        .map(|d| (d.bar, d.text.as_str()))
+        .collect();
+    assert_eq!(dynamics, [(0, "mf"), (2, "ff")]);
+    assert!(
+        TypedChart::untyped(&chart).is_nothing(),
+        "the whole chart is typed"
+    );
+    let doc = SessionDoc::new();
+    assert_eq!(read(&doc), TypedChart::default());
+    import(&doc, &chart).unwrap();
+    assert_eq!(read(&doc), typed);
 }

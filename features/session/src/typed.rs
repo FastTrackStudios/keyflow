@@ -13,13 +13,15 @@
 //!
 //! # The schema (version [`SCHEMA`])
 //!
-//! Three lanes, owner `keyflow`:
+//! Five lanes, owner `keyflow`:
 //!
 //! | lane | item kind | at … end | payload |
 //! |---|---|---|---|
 //! | `keyflow.bars` | `keyflow.bar` | the bar's span | `index`, `numerator`, `denominator`, `section`, `section_start`, `plays` (the bar it plays again), `repeat_sign` |
 //! | `keyflow.chords` | `keyflow.chord` | the beat it is written on … the next chord or the barline | `symbol`, `bar`, `beat`, `push` (`early`, `level`, `base`, …; absent when not pushed), `accent`, `staccato` |
 //! | `keyflow.cues` | `keyflow.cue` | its bar and beat | `text`, `bar`, `beat`, `group` |
+//! | `keyflow.rhythm` | `keyflow.rest` | the rest's span | `bar`, `beat` |
+//! | `keyflow.dynamics` | `keyflow.dynamic` | its bar and beat | `text` (`mf`), `bar`, `beat` |
 //!
 //! Times are quarter notes on the session's timeline, from the song's
 //! bar 1 ([`session::Session::bar_one`]): the chart's bar 1 is the
@@ -31,11 +33,11 @@
 //! # What is typed, and what is not yet
 //!
 //! Typed: every bar and its meter, the section each belongs to, every
-//! chord with its beat, length, push, accent and staccato, and every text
-//! and instrument cue. **Not yet typed** ([`Untyped`] counts them for a
-//! chart): written melodies and notes, rests and hits as rhythm of their
-//! own, ties, dynamics and hairpins, lyric lanes, repeats and endings,
-//! fermatas and stops, key changes, and the header (title, key, tempo).
+//! chord with its beat, length, push, accent and staccato, every written
+//! rest, every dynamic, and every text and instrument cue. **Not yet
+//! typed** ([`Untyped`] counts what it can for a chart): written melodies
+//! and notes, ties, hairpins, lyric lanes, repeats and endings, fermatas
+//! and stops, key changes, and the header (title, key, tempo).
 //! Until those are, the text entry stays beside this and is what the
 //! chart is engraved from; this module is not wired into a running
 //! session yet.
@@ -67,6 +69,19 @@ pub const CUES: &str = "keyflow.cues";
 pub const BAR: &str = "keyflow.bar";
 pub const CHORD: &str = "keyflow.chord";
 pub const CUE: &str = "keyflow.cue";
+pub const RHYTHM: &str = "keyflow.rhythm";
+pub const REST: &str = "keyflow.rest";
+pub const DYNAMICS: &str = "keyflow.dynamics";
+pub const DYNAMIC: &str = "keyflow.dynamic";
+
+/// Keyflow's lanes, in order, with their names.
+const LANES: [(&str, &str); 5] = [
+    (BARS, "Bars"),
+    (CHORDS, "Chords"),
+    (RHYTHM, "Rhythm"),
+    (CUES, "Cues"),
+    (DYNAMICS, "Dynamics"),
+];
 
 /// One bar.
 #[derive(Debug, Clone, PartialEq)]
@@ -120,18 +135,37 @@ pub struct TypedCue {
     pub at: f64,
 }
 
+/// One written rest.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TypedRest {
+    pub bar: usize,
+    pub index: usize,
+    /// The beat it starts on, from 1.
+    pub beat: f64,
+    pub at: f64,
+    pub length: f64,
+}
+
+/// One dynamic.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TypedDynamic {
+    pub bar: usize,
+    pub index: usize,
+    /// As written (`mf`, `ff`).
+    pub text: String,
+    pub beat: f64,
+    pub at: f64,
+}
+
 /// What of a chart this schema does not hold yet, counted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Untyped {
     /// Bars with written notes (a melody, a voice).
     pub bars_with_notes: usize,
-    /// Rests and spaces written as rhythm.
-    pub rests: usize,
-    pub dynamics: usize,
     pub hairpins: usize,
     /// Bars that open or close a repeat, or start an ending.
     pub repeats: usize,
-    /// Bars whose chords could not be placed by beat.
+    /// Bars whose chords or rests could not be placed by beat.
     pub bars_unplaced: usize,
 }
 
@@ -140,8 +174,6 @@ impl Untyped {
     #[must_use]
     pub const fn is_nothing(&self) -> bool {
         self.bars_with_notes == 0
-            && self.rests == 0
-            && self.dynamics == 0
             && self.hairpins == 0
             && self.repeats == 0
             && self.bars_unplaced == 0
@@ -154,6 +186,8 @@ pub struct TypedChart {
     pub bars: Vec<TypedBar>,
     pub chords: Vec<TypedChord>,
     pub cues: Vec<TypedCue>,
+    pub rests: Vec<TypedRest>,
+    pub dynamics: Vec<TypedDynamic>,
 }
 
 /// A quarter note's worth of a meter's beat.
@@ -246,6 +280,45 @@ impl TypedChart {
                         at: at + (beat - 1.0) * unit,
                     });
                 }
+                // Its written rests, where its rhythm is read without doubt.
+                let rhythm = keyflow_lang::edit::ChordBar::from_measure(measure);
+                if own && rhythm.locked.is_none() {
+                    let whole = f64::from(keyflow_lang::edit::TICKS_PER_WHOLE);
+                    let rests = rhythm
+                        .events
+                        .iter()
+                        .zip(rhythm.starts())
+                        .filter(|(e, _)| matches!(e.slot, keyflow_lang::edit::Slot::Rest));
+                    for (k, (event, start)) in rests.enumerate() {
+                        let from = f64::from(start) * 4.0 / whole;
+                        out.rests.push(TypedRest {
+                            bar: index,
+                            index: k,
+                            beat: 1.0 + from / unit,
+                            at: at + from,
+                            length: f64::from(event.duration.ticks()) * 4.0 / whole,
+                        });
+                    }
+                }
+                let dynamics = measure
+                    .dynamics
+                    .iter()
+                    .map(|d| (d.text.clone(), f64::from(d.beat.unwrap_or(1))))
+                    .chain(measure.classical_dynamics.iter().map(|d| {
+                        (
+                            format!("{:?}", d.level).to_lowercase(),
+                            f64::from(d.beat.max(1)),
+                        )
+                    }));
+                for (k, (text, beat)) in dynamics.enumerate() {
+                    out.dynamics.push(TypedDynamic {
+                        bar: index,
+                        index: k,
+                        text,
+                        beat,
+                        at: at + (beat - 1.0) * unit,
+                    });
+                }
                 at += length;
                 index += 1;
             }
@@ -266,16 +339,18 @@ impl TypedChart {
                 out.bars_with_notes += 1;
             }
             if own {
-                out.rests += measure
+                let rests = measure
                     .rhythm_elements
                     .iter()
-                    .filter(|r| !matches!(r, RhythmElement::Chord(_)))
-                    .count();
-                if beats_of(measure).is_none() && !measure.chords.is_empty() {
+                    .any(|r| matches!(r, RhythmElement::Rest(_)));
+                let unread = keyflow_lang::edit::ChordBar::from_measure(measure)
+                    .locked
+                    .is_some();
+                if (beats_of(measure).is_none() && !measure.chords.is_empty()) || (rests && unread)
+                {
                     out.bars_unplaced += 1;
                 }
             }
-            out.dynamics += measure.dynamics.len() + measure.classical_dynamics.len();
             out.hairpins += measure.hairpins.len();
             if measure.start_repeat != RepeatMark::None
                 || measure.end_repeat != RepeatMark::None
@@ -352,6 +427,34 @@ impl TypedChart {
                         ("bar", int(c.bar)),
                         ("beat", Value::Float(c.beat)),
                         ("group", Value::Text(c.group.clone())),
+                    ]),
+                ),
+            );
+        }
+        for r in &self.rests {
+            out.insert(
+                ItemId(format!("keyflow.rest.{}.{}", r.bar, r.index)),
+                item(
+                    RHYTHM,
+                    REST,
+                    r.at,
+                    Some(r.at + r.length),
+                    Value::map([("bar", int(r.bar)), ("beat", Value::Float(r.beat))]),
+                ),
+            );
+        }
+        for d in &self.dynamics {
+            out.insert(
+                ItemId(format!("keyflow.dynamic.{}.{}", d.bar, d.index)),
+                item(
+                    DYNAMICS,
+                    DYNAMIC,
+                    d.at,
+                    None,
+                    Value::map([
+                        ("text", Value::Text(d.text.clone())),
+                        ("bar", int(d.bar)),
+                        ("beat", Value::Float(d.beat)),
                     ]),
                 ),
             );
@@ -449,10 +552,7 @@ pub fn origin(doc: &SessionDoc) -> f64 {
 pub fn import(doc: &SessionDoc, chart: &Chart) -> DocResult<TypedChart> {
     let typed = TypedChart::of(chart);
     let owner = ExtensionId::from(crate::EXTENSION);
-    for (order, (id, name)) in [(BARS, "Bars"), (CHORDS, "Chords"), (CUES, "Cues")]
-        .into_iter()
-        .enumerate()
-    {
+    for (order, (id, name)) in LANES.into_iter().enumerate() {
         let lane = Lane {
             owner: owner.clone(),
             kind: id.to_owned(),
@@ -471,7 +571,7 @@ pub fn import(doc: &SessionDoc, chart: &Chart) -> DocResult<TypedChart> {
             doc.put_item(id, item)?;
         }
     }
-    let lanes: BTreeSet<&str> = [BARS, CHORDS, CUES].into();
+    let lanes: BTreeSet<&str> = LANES.iter().map(|l| l.0).collect();
     for (id, item) in &have {
         if item.owner == owner && lanes.contains(item.lane.as_str()) && !wanted.contains_key(id) {
             doc.remove_item(id)?;
@@ -571,9 +671,39 @@ pub fn read(doc: &SessionDoc) -> TypedChart {
                     at,
                 });
             }
+            REST => {
+                let (Some(bar), Some(beat)) =
+                    (number(p, "bar"), p.get("beat").and_then(Value::as_f64))
+                else {
+                    continue;
+                };
+                out.rests.push(TypedRest {
+                    bar,
+                    index: place,
+                    beat,
+                    at,
+                    length,
+                });
+            }
+            DYNAMIC => {
+                let (Some(bar), Some(beat)) =
+                    (number(p, "bar"), p.get("beat").and_then(Value::as_f64))
+                else {
+                    continue;
+                };
+                out.dynamics.push(TypedDynamic {
+                    bar,
+                    index: place,
+                    text: text(p, "text"),
+                    beat,
+                    at,
+                });
+            }
             _ => {}
         }
     }
+    out.rests.sort_by_key(|r| (r.bar, r.index));
+    out.dynamics.sort_by_key(|d| (d.bar, d.index));
     out.bars.sort_by_key(|b| b.index);
     out.chords.sort_by_key(|c| (c.bar, c.index));
     out.cues.sort_by_key(|c| (c.bar, c.index));
