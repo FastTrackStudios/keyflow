@@ -10108,6 +10108,8 @@ dependencies = [
  "architect",
  "crdt",
  "facet-json",
+ "keyflow-lang",
+ "keyflow-proto",
  "session",
  "tempfile",
  "thiserror 2.0.20",

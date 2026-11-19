@@ -28,6 +28,8 @@
 //!   that reads or edits it. The chart view's one change to be in a
 //!   session: read through [`ChartSource`] instead of `read_document`.
 
+pub mod typed;
+
 use std::path::Path;
 
 use crdt::file::{DiskStorage, MAIN};

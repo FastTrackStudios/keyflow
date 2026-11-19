@@ -292,7 +292,8 @@ pub fn chords_of(source: &str, chart: &Chart) -> Vec<ChordRef> {
 /// sounds, put back by its push (it sounds early) or its pull (late),
 /// whatever value that is by. `None` when they do not come out one after
 /// another.
-fn beats_of(measure: &Measure) -> Option<Vec<f64>> {
+#[must_use]
+pub fn beats_of(measure: &Measure) -> Option<Vec<f64>> {
     let time = measure.time_signature;
     let whole = i64::from(super::music::TICKS_PER_WHOLE);
     let length = i64::from(super::music::bar_ticks(time)).max(1);

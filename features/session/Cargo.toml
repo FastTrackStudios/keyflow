@@ -12,6 +12,10 @@ publish = false
 # #182).
 session = { workspace = true, features = ["architect", "service", "extension"] }
 crdt = { workspace = true, features = ["vox"] }
+# The chart as typed data in the session (`typed`): the chart model it is
+# made from and read back to.
+keyflow-lang = { workspace = true }
+keyflow-proto = { workspace = true }
 facet-json = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }
