@@ -26,6 +26,7 @@ pub mod chords;
 pub mod commit;
 pub mod input;
 pub mod music;
+pub mod select;
 
 pub use chords::{ChordBar, ChordEvent, Slot};
 pub use input::{InputState, Mode, Op, Outcome, Pos, Score, Target, bars, replays, sections};

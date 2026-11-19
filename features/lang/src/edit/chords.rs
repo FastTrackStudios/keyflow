@@ -49,7 +49,7 @@ fn push_ticks(c: &keyflow_proto::chart::types::ChordInstance) -> u32 {
 }
 
 /// Ticks of `d` (beats as the measure counts them) in `time`.
-fn ticks_of(d: &MusicalDuration, time: (u8, u8)) -> u32 {
+pub(super) fn ticks_of(d: &MusicalDuration, time: (u8, u8)) -> u32 {
     use keyflow_proto::time::MusicalPositionExt as _;
     let sig = TimeSignature::new(u32::from(time.0), u32::from(time.1));
     let beats = d.to_beats(sig);
