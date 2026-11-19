@@ -234,12 +234,12 @@ mod tests {
             at,
             ["0.500", "4.500", "8.500", "12.500", "16.500", "20.500"]
         );
-        // The cursor: a step per symbol drawn (two a bar here, two
-        // seconds apart), bar 1's first at its downbeat on both passes.
+        // The cursor: a step per symbol drawn. The repeated bars are a
+        // whole-bar slash each, both passes; bars 3 and 4 four slashes.
         let steps = times("kf-step");
-        assert_eq!(steps.len(), 12, "six bars played");
-        assert_eq!(steps[..3], ["0.500", "2.500", "4.500"]);
-        assert_eq!(steps[4], "8.500", "the repeat, back at bar 1");
+        assert_eq!(steps.len(), 12);
+        assert_eq!(steps[..4], ["0.500", "4.500", "8.500", "12.500"]);
+        assert_eq!(steps[4..7], ["16.500", "17.500", "18.500"]);
     }
 
     #[test]
