@@ -576,7 +576,13 @@ mod tests {
         use tokio::time::{Instant, sleep};
 
         let doc = uuid::Uuid::new_v4();
-        let port = 46_000 + (std::process::id() % 1000);
+        // A port nothing holds now, asked of the OS: a fixed one in the
+        // ephemeral range is another program's outgoing connection on a
+        // busy machine, and the host then fails to bind.
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .and_then(|l| l.local_addr())
+            .map(|a| a.port())
+            .unwrap();
         let router = LayerRouter::new().with(
             doc_presence_service_descriptor(),
             DocPresenceDispatcher::new(PresenceHost::new(doc, 30_000)),
