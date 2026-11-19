@@ -1181,7 +1181,7 @@ params = '{"type":"object","properties":{"doc":{"type":"string"},"request":{}},"
 [[actions]]
 id = "KEYFLOW_SESSION_TYPE_CHART"
 name = "Keyflow: type a session's chart into its timeline"
-description = "Writes the chart of session `doc` (the active chart's session without it) into the session's timeline as typed items Keyflow owns: a bar, chord, rest, cue and dynamic each an item at its time from the session's bar 1, a chord's push its own fields. From then on an edit to that chart keeps them in step (only what it changed is written). Returns how many writes it took and what is there."
+description = "Writes the chart of session `doc` (the active chart's session without it) into the session itself: its sections become the session's regions, its meters and tempo the session's tempo map from bar 1, and its bars as played (a repeat's second pass the next bars, with the next bar numbers), chords, rests, cues and dynamics items Keyflow owns on the timeline, a chord's push its own fields. It changes the session's structure. From then on an edit to that chart keeps them in step (only what it changed is written). Returns how many writes it took and what is there."
 group = "Session"
 effect = "mutating"
 params = '{"type":"object","properties":{"doc":{"type":"string"}}}'
@@ -1189,7 +1189,7 @@ params = '{"type":"object","properties":{"doc":{"type":"string"}}}'
 [[actions]]
 id = "KEYFLOW_SESSION_TYPED"
 name = "Keyflow: a session's typed chart"
-description = "What the timeline of session `doc` (the active chart's session without it) holds of its chart as typed items: its chords (bar, beat, symbol, time, push, accent, staccato), cues and dynamics, the count of bars and rests, and what of the chart's text is not typed yet."
+description = "What the timeline of session `doc` (the active chart's session without it) holds of its chart as typed items: its bars as played (bar number, the written bar each plays and on which pass, its meter from the tempo map, its section from the regions), its chords (bar, beat, symbol, time, push, accent, staccato), cues and dynamics, the count of rests, and what of the chart's text is not typed yet."
 group = "Session"
 effect = "read_only"
 params = '{"type":"object","properties":{"doc":{"type":"string"}}}'

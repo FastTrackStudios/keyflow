@@ -1,6 +1,8 @@
 //! A session's chart as typed data (`keyflow_session::typed`): the chart's
-//! bars, chords, rests, cues and dynamics as items on the session's
-//! timeline, written through `fts.session` (whoever provides it).
+//! bars as played, chords, rests, cues and dynamics as items on the
+//! session's timeline, its sections the session's regions and its meters
+//! and tempo the session's tempo map, written through `fts.session`
+//! (whoever provides it).
 //!
 //! Asked for, not automatic: `KEYFLOW_SESSION_TYPE_CHART` types a
 //! session's chart into its timeline. Once a session has been typed, an
@@ -11,7 +13,7 @@
 
 use architect_extensions::linked::{Builder, Handle};
 use keyflow_session::ChartSource;
-use keyflow_session::typed::{self, Timeline, TypedChart};
+use keyflow_session::typed::{self, Held, TypedChart};
 use serde_json::{Value as Json, json};
 
 use crate::{ask_session, handle, read_text, text};
@@ -48,15 +50,18 @@ fn session_path(args: &Json) -> Result<String, String> {
 }
 
 /// The session's timeline as its provider answers.
-async fn timeline(handle: &Handle, source: &ChartSource) -> Result<Option<Timeline>, String> {
-    let Some([t, s]) = source.timeline_calls().map_err(|e| e.to_string())? else {
+async fn timeline(handle: &Handle, source: &ChartSource) -> Result<Option<Held>, String> {
+    let Some([t, s, d]) = source.timeline_calls().map_err(|e| e.to_string())? else {
         return Ok(None);
     };
-    let (t, s) = (
+    let (t, s, d) = (
         ask_session(handle, &t).await?,
         ask_session(handle, &s).await?,
+        ask_session(handle, &d).await?,
     );
-    Timeline::of(&t, &s).map(Some).map_err(|e| e.to_string())
+    Held::of_replies(&t, &s, &d)
+        .map(Some)
+        .map_err(|e| e.to_string())
 }
 
 /// The session at `path` made to hold `source`'s chart as typed items:
@@ -72,12 +77,22 @@ pub(crate) async fn retype(
     let Some(now) = timeline(handle, &at).await? else {
         return Ok(0);
     };
-    let typed_already = now.lanes.keys().any(|lane| lane.as_str() == typed::BARS);
-    if !force && !typed_already {
+    if !force && !now.is_typed() {
         return Ok(0);
     }
     let chart = keyflow::text::chart::parse_chart(source)?;
-    let requests = typed::plan(&TypedChart::of(&chart), now.origin, &now.lanes, &now.items);
+    // A session with a tempo map or sections of its own keeps them, and
+    // the chart must already agree with them: typed against a structure
+    // it does not fit, its bars would not be the session's bars.
+    let disagreements = now.disagreements(&chart);
+    let brings = now.brings();
+    if !(brings.tempo && brings.sections) && !disagreements.is_empty() {
+        return Err(format!(
+            "The chart does not fit the session's own structure, so it was not typed into it: {}",
+            disagreements.join("; ")
+        ));
+    }
+    let requests = typed::plan(&chart, &now);
     let calls = at.typed_calls(requests).map_err(|e| e.to_string())?;
     for call in &calls {
         ask_session(handle, call).await?;
@@ -100,7 +115,13 @@ async fn summary(handle: &Handle, path: &str) -> Result<Json, String> {
     Ok(json!({
         "path": path,
         "bar_one_quarter_notes": now.origin,
-        "bars": chart.bars.len(),
+        "bars": chart.bars.iter().map(|b| json!({
+            "bar": b.index + 1,
+            "plays_written_bar": b.written + 1,
+            "pass": b.pass,
+            "meter": [b.meter.0, b.meter.1],
+            "section": b.section,
+        })).collect::<Vec<_>>(),
         "chords": chart.chords.iter().map(|c| json!({
             "bar": c.bar + 1,
             "beat": c.beat,
@@ -120,7 +141,6 @@ async fn summary(handle: &Handle, path: &str) -> Result<Json, String> {
         "not_typed_yet": untyped.map(|u| json!({
             "bars_with_written_notes": u.bars_with_notes,
             "hairpins": u.hairpins,
-            "bars_with_repeats_or_endings": u.repeats,
             "bars_not_placed_by_beat": u.bars_unplaced,
         })),
     }))
