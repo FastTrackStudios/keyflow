@@ -404,6 +404,62 @@ impl ChartSource {
         }
     }
 
+    /// [`Self::chart_start_of`] for a chart that may leave the session's
+    /// lead-in out.
+    ///
+    /// The session's bar 1 can sit at the start of an intro (or a count-in)
+    /// the chart does not write: the tracks play four bars, the chart's
+    /// bar 1 is the verse. With `chart_has_lead_in` false and the session's
+    /// bar 1 inside a region named as a lead-in (`Intro…`, `Count…`,
+    /// `Click…`), the chart starts where the first region after it that is
+    /// not one starts: the two then agree section by section. Otherwise as
+    /// the session says.
+    ///
+    /// # Errors
+    ///
+    /// The reply is not the session's structure.
+    pub fn chart_start_aligned(reply: &str, chart_has_lead_in: bool) -> Result<f64> {
+        let Response::Structure {
+            tempo,
+            bar_one,
+            regions,
+            ..
+        } = response_of(reply).map_err(Error::Service)?
+        else {
+            return Err(Error::Service("not the structure".to_owned()));
+        };
+        let map = tempo
+            .to_tempo_map()
+            .map_err(|e| Error::Service(e.to_string()))?;
+        let start = bar_one.map_or(0.0, |at| at.seconds(&map));
+        if chart_has_lead_in {
+            return Ok(start);
+        }
+        let lead_in = |name: &str| {
+            let n = name.trim().to_ascii_lowercase();
+            n.starts_with("intro") || n.starts_with("count") || n.starts_with("click")
+        };
+        let spans: Vec<(f64, f64, bool)> = regions
+            .values()
+            .map(|r| (r.start.seconds(&map), r.end.seconds(&map), lead_in(&r.name)))
+            .collect();
+        const NEAR: f64 = 1e-3;
+        let Some(&(_, lead_end, _)) = spans
+            .iter()
+            .find(|(from, to, lead)| *lead && *from <= start + NEAR && start < *to - NEAR)
+        else {
+            return Ok(start);
+        };
+        Ok(spans
+            .iter()
+            .filter(|(from, _, lead)| !*lead && *from >= lead_end - NEAR)
+            .map(|(from, _, _)| *from)
+            .fold(None, |best: Option<f64>, from| {
+                Some(best.map_or(from, |b| b.min(from)))
+            })
+            .unwrap_or(start))
+    }
+
     /// The call that replaces `delete` characters at `at` of the chart
     /// with `insert` (positions in Unicode scalars); `None` for a document.
     ///
