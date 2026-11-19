@@ -55,7 +55,11 @@ use keyflow_lang::edit::{bars, chords, replays, sections};
 use keyflow_proto::Chart;
 use keyflow_proto::chord::{LilySyntax, PushPullAmount, PushPullBase};
 use session::doc::{DocResult, SessionDoc};
-use session::{ExtensionId, Item, ItemId, Lane, LaneId, Time, Value};
+use session::extension::{call_json, response_of};
+use session::service::{READ, Request, Response, WRITE};
+use session::{ExtensionId, Item, ItemId, Lane, LaneId, TempoMap, Time, Value};
+
+use crate::{ChartSource, Error, ServiceCall};
 
 /// This schema's version, kept in Keyflow's namespace as register
 /// [`SCHEMA_ENTRY`]: Keyflow migrates its own data.
@@ -541,17 +545,20 @@ pub fn origin(doc: &SessionDoc) -> f64 {
         .map_or(0.0, |at| at.quarter_notes(&doc.tempo()))
 }
 
-/// `chart` written into `doc` as typed data: Keyflow's three lanes, and
-/// its items made exactly `chart`'s (an item of Keyflow's on them that
-/// `chart` has no more is removed; another extension's is left). Importing
-/// the same chart again changes nothing.
-///
-/// # Errors
-///
-/// The document refused a write.
-pub fn import(doc: &SessionDoc, chart: &Chart) -> DocResult<TypedChart> {
-    let typed = TypedChart::of(chart);
+/// The writes that make a session's timeline hold `typed` with bar 1 at
+/// `origin` quarter notes, when it now holds `lanes` and `items`:
+/// Keyflow's lanes put, its items made exactly `typed`'s (one of Keyflow's
+/// on its lanes that `typed` has no more removed; another extension's
+/// left). Empty when it already does.
+#[must_use]
+pub fn plan(
+    typed: &TypedChart,
+    origin: f64,
+    lanes: &BTreeMap<LaneId, Lane>,
+    items: &BTreeMap<ItemId, Item>,
+) -> Vec<Request> {
     let owner = ExtensionId::from(crate::EXTENSION);
+    let mut out = Vec::new();
     for (order, (id, name)) in LANES.into_iter().enumerate() {
         let lane = Lane {
             owner: owner.clone(),
@@ -560,33 +567,61 @@ pub fn import(doc: &SessionDoc, chart: &Chart) -> DocResult<TypedChart> {
             order: order as f64,
             parent: None,
         };
-        if doc.lane(&LaneId::from(id)).as_ref() != Some(&lane) {
-            doc.put_lane(&LaneId::from(id), &lane)?;
+        let id = LaneId::from(id);
+        if lanes.get(&id) != Some(&lane) {
+            out.push(Request::PutLane { id, lane });
         }
     }
-    let wanted = typed.items(origin(doc));
-    let have = doc.items();
-    for (id, item) in &wanted {
-        if have.get(id) != Some(item) {
-            doc.put_item(id, item)?;
+    let wanted = typed.items(origin);
+    let mine: BTreeSet<&str> = LANES.iter().map(|l| l.0).collect();
+    for (id, item) in items {
+        if item.owner == owner && mine.contains(item.lane.as_str()) && !wanted.contains_key(id) {
+            out.push(Request::RemoveItem { id: id.clone() });
         }
     }
-    let lanes: BTreeSet<&str> = LANES.iter().map(|l| l.0).collect();
-    for (id, item) in &have {
-        if item.owner == owner && lanes.contains(item.lane.as_str()) && !wanted.contains_key(id) {
-            doc.remove_item(id)?;
+    for (id, item) in wanted {
+        if items.get(&id) != Some(&item) {
+            out.push(Request::PutItem { id, item });
         }
     }
-    doc.ext(&owner)?.set(SCHEMA_ENTRY, &Value::Int(SCHEMA))?;
+    out
+}
+
+/// `chart` written into `doc` as typed data ([`plan`]). Importing the
+/// same chart again changes nothing.
+///
+/// # Errors
+///
+/// The document refused a write.
+pub fn import(doc: &SessionDoc, chart: &Chart) -> DocResult<TypedChart> {
+    let typed = TypedChart::of(chart);
+    let owner = ExtensionId::from(crate::EXTENSION);
+    for request in plan(&typed, origin(doc), &doc.lanes(), &doc.items()) {
+        match request {
+            Request::PutLane { id, lane } => doc.put_lane(&id, &lane)?,
+            Request::PutItem { id, item } => doc.put_item(&id, &item)?,
+            Request::RemoveItem { id } => doc.remove_item(&id)?,
+            _ => {}
+        }
+    }
+    let version = Value::Int(SCHEMA);
+    if doc.read_ext(&owner).get(SCHEMA_ENTRY) != Some(&session::Entry::Register(version.clone())) {
+        doc.ext(&owner)?.set(SCHEMA_ENTRY, &version)?;
+    }
     Ok(typed)
 }
 
 /// The typed chart `doc` holds. Empty when it holds none.
 #[must_use]
 pub fn read(doc: &SessionDoc) -> TypedChart {
-    let from = origin(doc);
+    of_items(&doc.items(), origin(doc), &doc.tempo())
+}
+
+/// The typed chart among `items` (a session's, with bar 1 at `from`
+/// quarter notes under `tempo`).
+#[must_use]
+pub fn of_items(items: &BTreeMap<ItemId, Item>, from: f64, tempo: &TempoMap) -> TypedChart {
     let owner = ExtensionId::from(crate::EXTENSION);
-    let tempo = doc.tempo();
     let mut out = TypedChart::default();
     let number = |payload: &Value, key: &str| {
         payload
@@ -602,14 +637,12 @@ pub fn read(doc: &SessionDoc) -> TypedChart {
             .to_owned()
     };
     let flag = |payload: &Value, key: &str| matches!(payload.get(key), Some(Value::Bool(true)));
-    for (id, item) in doc.items() {
+    for (id, item) in items {
         if item.owner != owner {
             continue;
         }
-        let at = item.at.quarter_notes(&tempo) - from;
-        let length = item
-            .end
-            .map_or(0.0, |e| e.quarter_notes(&tempo) - from - at);
+        let at = item.at.quarter_notes(tempo) - from;
+        let length = item.end.map_or(0.0, |e| e.quarter_notes(tempo) - from - at);
         let p = &item.payload;
         // An item's place among its bar's, from its id's last part.
         let place = id
@@ -710,6 +743,24 @@ pub fn read(doc: &SessionDoc) -> TypedChart {
     out
 }
 
+/// Chord `item` with its push made `push`: its own push fields, the rest
+/// of it left as it is. `None` when it is not a chord.
+#[must_use]
+pub fn with_push(mut item: Item, push: PushPull) -> Option<Item> {
+    if item.kind != CHORD {
+        return None;
+    }
+    let Value::Map(mut payload) = item.payload else {
+        return None;
+    };
+    payload.retain(|key, _| !key.starts_with("push_"));
+    for (key, value) in push_fields(push) {
+        payload.insert(key.to_owned(), value);
+    }
+    item.payload = Value::Map(payload);
+    Some(item)
+}
+
 /// The push of chord `id` made `push`: one write to its item's own push
 /// fields, the rest of it (another person's accent, made meanwhile) left
 /// as it is. `Ok(false)` when there is no such chord.
@@ -718,17 +769,9 @@ pub fn read(doc: &SessionDoc) -> TypedChart {
 ///
 /// The document refused the write.
 pub fn set_push(doc: &SessionDoc, id: &ItemId, push: PushPull) -> DocResult<bool> {
-    let Some(mut item) = doc.item(id).filter(|i| i.kind == CHORD) else {
+    let Some(item) = doc.item(id).and_then(|i| with_push(i, push)) else {
         return Ok(false);
     };
-    let Value::Map(mut payload) = item.payload else {
-        return Ok(false);
-    };
-    payload.retain(|key, _| !key.starts_with("push_"));
-    for (key, value) in push_fields(push) {
-        payload.insert(key.to_owned(), value);
-    }
-    item.payload = Value::Map(payload);
     doc.put_item(id, &item)?;
     Ok(true)
 }
@@ -749,4 +792,94 @@ pub fn set_flag(doc: &SessionDoc, id: &ItemId, flag: &str, on: bool) -> DocResul
     payload.insert(flag.to_owned(), Value::Bool(on));
     doc.put_item(id, &item)?;
     Ok(true)
+}
+
+/// A session's timeline and where its bar 1 is, as a provider answers.
+pub struct Timeline {
+    pub lanes: BTreeMap<LaneId, Lane>,
+    pub items: BTreeMap<ItemId, Item>,
+    /// Bar 1, in quarter notes on the session's timeline.
+    pub origin: f64,
+    pub tempo: TempoMap,
+}
+
+impl Timeline {
+    /// From the replies to [`ChartSource::timeline_calls`], in order.
+    ///
+    /// # Errors
+    ///
+    /// A reply is not what was asked for.
+    pub fn of(timeline: &str, structure: &str) -> crate::Result<Self> {
+        let Response::Timeline { lanes, items } = response_of(timeline).map_err(Error::Service)?
+        else {
+            return Err(Error::Service("not the timeline".to_owned()));
+        };
+        let Response::Structure { tempo, bar_one, .. } =
+            response_of(structure).map_err(Error::Service)?
+        else {
+            return Err(Error::Service("not the structure".to_owned()));
+        };
+        let tempo = tempo
+            .to_tempo_map()
+            .map_err(|e| Error::Service(e.to_string()))?;
+        Ok(Self {
+            origin: bar_one.map_or(0.0, |at| at.quarter_notes(&tempo)),
+            lanes,
+            items,
+            tempo,
+        })
+    }
+
+    /// The typed chart on it.
+    #[must_use]
+    pub fn chart(&self) -> TypedChart {
+        of_items(&self.items, self.origin, &self.tempo)
+    }
+}
+
+impl ChartSource {
+    /// The calls that read a session's timeline and its structure (for
+    /// [`Timeline::of`]); `None` for a document, which has no timeline.
+    ///
+    /// # Errors
+    ///
+    /// A request could not be encoded.
+    pub fn timeline_calls(&self) -> crate::Result<Option<[ServiceCall; 2]>> {
+        let Self::Session { doc } = self else {
+            return Ok(None);
+        };
+        let call = |request| -> crate::Result<ServiceCall> {
+            Ok(ServiceCall {
+                service: session::extension::SERVICE,
+                method: READ,
+                args: call_json(doc, request).map_err(Error::Service)?,
+            })
+        };
+        Ok(Some([
+            call(Request::ReadTimeline)?,
+            call(Request::ReadStructure)?,
+        ]))
+    }
+
+    /// `requests` (from [`plan`], or one `PutItem` of an edit) as calls to
+    /// the session's provider, in order; empty for a document.
+    ///
+    /// # Errors
+    ///
+    /// A request could not be encoded.
+    pub fn typed_calls(&self, requests: Vec<Request>) -> crate::Result<Vec<ServiceCall>> {
+        let Self::Session { doc } = self else {
+            return Ok(Vec::new());
+        };
+        requests
+            .into_iter()
+            .map(|request| {
+                Ok(ServiceCall {
+                    service: session::extension::SERVICE,
+                    method: WRITE,
+                    args: call_json(doc, request).map_err(Error::Service)?,
+                })
+            })
+            .collect()
+    }
 }

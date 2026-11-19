@@ -262,3 +262,83 @@ fn rests_and_dynamics_are_items_too() {
     import(&doc, &chart).unwrap();
     assert_eq!(read(&doc), typed);
 }
+
+/// Through `fts.session`, as the chart view reaches a session held by any
+/// provider: the chart typed into it, read back, and a chord pushed with
+/// one call.
+#[test]
+fn a_session_held_by_a_provider_is_typed_through_the_service() {
+    use keyflow_session::{ChartSource, EXTENSION, Provider};
+    use session::service::Request;
+
+    let doc = SessionDoc::new();
+    doc.set_bar_one(Some(Time::QuarterNotes(8.0))).unwrap();
+    let id = uuid::Uuid::new_v4();
+    let provider = Provider::default();
+    provider.open_doc(id, doc.clone());
+    let source = ChartSource::Session {
+        doc: id.to_string(),
+    };
+    let ask = |call: &keyflow_session::ServiceCall| {
+        provider
+            .answer(call.method, &call.args, Some(EXTENSION))
+            .unwrap()
+    };
+    let timeline = || {
+        let [t, s] = source.timeline_calls().unwrap().unwrap();
+        typed::Timeline::of(&ask(&t), &ask(&s)).unwrap()
+    };
+
+    // Typed into it: the plan against what it holds, call by call.
+    let wanted = TypedChart::of(&chart());
+    let now = timeline();
+    assert_eq!(now.origin, 8.0, "the session's bar 1");
+    let requests = typed::plan(&wanted, now.origin, &now.lanes, &now.items);
+    assert!(requests.len() > wanted.bars.len());
+    for call in source.typed_calls(requests).unwrap() {
+        ask(&call);
+    }
+    // What the provider's document holds is the chart, and so is what the
+    // service reads back; a second plan has nothing to do.
+    assert_eq!(read(&doc), wanted);
+    let now = timeline();
+    assert_eq!(now.chart(), wanted);
+    assert!(typed::plan(&wanted, now.origin, &now.lanes, &now.items).is_empty());
+
+    // Push bar 3's Am: one item put.
+    let am = chord_id(2, 0);
+    let pushed = push_pull_after(None, true, None).unwrap();
+    let item = typed::with_push(now.items[&am].clone(), pushed).unwrap();
+    let calls = source
+        .typed_calls(vec![Request::PutItem { id: am, item }])
+        .unwrap();
+    assert_eq!(calls.len(), 1);
+    ask(&calls[0]);
+    assert_eq!(read(&doc).chords[2].push, pushed);
+
+    // Another extension reads where the chords are, not what they are.
+    let [t, _] = source.timeline_calls().unwrap().unwrap();
+    let theirs = provider
+        .answer(t.method, &t.args, Some("ignition"))
+        .unwrap();
+    let session::service::Response::Timeline { items, .. } =
+        session::extension::response_of(&theirs).unwrap()
+    else {
+        panic!("the timeline");
+    };
+    let chord = &items[&chord_id(0, 1)];
+    assert_eq!(chord.kind, CHORD);
+    assert_eq!(
+        chord.at,
+        Time::QuarterNotes(10.0),
+        "bar 1 beat 3, from the session's bar 1"
+    );
+    assert_eq!(chord.payload, Value::Null, "Keyflow's payload is Keyflow's");
+    // A document has no timeline to type.
+    assert!(
+        ChartSource::Document("a.kf".into())
+            .timeline_calls()
+            .unwrap()
+            .is_none()
+    );
+}
