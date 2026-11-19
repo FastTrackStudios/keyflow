@@ -127,6 +127,13 @@ pub const TARGET_KEY: (&str, &str) = ("KEYFLOW_TARGET_SWITCH", "Y");
 /// ↩: the selected chord symbol retyped, in a bar under the chart.
 pub const CHORD_EDIT_KEY: (&str, &str) = ("KEYFLOW_CHORD_EDIT", "↵");
 
+/// Push and Pull on what is selected: `<` earlier, `>` later (the plain
+/// `.` is the dot, and `,` is left free beside it).
+pub const SHIFT_KEYS: &[(&str, &str)] = &[
+    ("KEYFLOW_SELECTION_PUSH", "⇧,"),
+    ("KEYFLOW_SELECTION_PULL", "⇧."),
+];
+
 /// Every action with a key, and its key by default.
 pub fn default_keys() -> impl Iterator<Item = (&'static str, &'static str)> {
     OP_ACTIONS
@@ -138,6 +145,7 @@ pub fn default_keys() -> impl Iterator<Item = (&'static str, &'static str)> {
         .chain(ZOOM_KEYS.iter().copied())
         .chain(std::iter::once(TARGET_KEY))
         .chain(std::iter::once(CHORD_EDIT_KEY))
+        .chain(SHIFT_KEYS.iter().copied())
 }
 
 /// The chords `key` is bound as: itself (`⌘` the Mac's command key), and

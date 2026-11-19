@@ -120,8 +120,10 @@ fn assert_golden(name: &str, (w, h, rgba): &(u32, u32, Vec<u8>)) {
 
 /// The indices of the pixels that differ between two images.
 fn differing<'a>(a: &'a [u8], b: &'a [u8]) -> impl Iterator<Item = usize> + 'a {
-    a.chunks_exact(4)
-        .zip(b.chunks_exact(4))
+    a.as_chunks::<4>()
+        .0
+        .iter()
+        .zip(b.as_chunks::<4>().0)
         .enumerate()
         .filter(|(_, (a, b))| a.iter().zip(b.iter()).any(|(x, y)| x.abs_diff(*y) > 8))
         .map(|(i, _)| i)
