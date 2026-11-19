@@ -126,3 +126,8 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "chart"
+harness = false
+required-features = ["paint"]
