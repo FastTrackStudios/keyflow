@@ -159,6 +159,9 @@ architect-workspace = { git = "https://github.com/FastTrackStudios/architect", t
 architect-theme = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.14.0", default-features = false }
 # Layers as a process sends them (`ops::Sender`), in keyflow-ui's tests.
 architect-scene = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.14.0" }
+# The app's one playhead, which a browser's chart follows (the deck alone:
+# no extension, no bar).
+architect-playhead = { git = "https://github.com/FastTrackStudios/architect", tag = "v0.14.0", default-features = false }
 # The Architect app as a library (apps/architect, `architect_desktop::run`):
 # Keyflow's development window. Without its window here; the app turns
 # `gui` on. `vox` is the node's services, which every build needs.
