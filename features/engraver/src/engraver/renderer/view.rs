@@ -271,6 +271,52 @@ impl LayoutWorker {
     }
 }
 
+/// In a browser there is one thread: a job submitted is laid out there and
+/// then, and the next [`LayoutWorker::poll`] hands it over. The same
+/// calls as the thread's, so a view is written once.
+#[cfg(target_arch = "wasm32")]
+pub struct LayoutWorker {
+    done: std::sync::Mutex<Option<PreparedLayout>>,
+}
+
+#[cfg(target_arch = "wasm32")]
+impl LayoutWorker {
+    /// A worker on the page's one thread.
+    ///
+    /// # Errors
+    ///
+    /// None: the signature is the thread's.
+    pub fn spawn() -> std::io::Result<Self> {
+        Ok(Self {
+            done: std::sync::Mutex::new(None),
+        })
+    }
+
+    /// Lays `job` out now, in place of any layout not yet polled.
+    pub fn submit(&self, job: LayoutJob) {
+        let laid = job.run();
+        *self
+            .done
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(laid);
+    }
+
+    /// The newest finished layout since the last call, if any.
+    #[must_use]
+    pub fn poll(&self) -> Option<PreparedLayout> {
+        self.done
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take()
+    }
+
+    /// The layout last submitted, if not yet polled.
+    #[must_use]
+    pub fn wait(&self) -> Option<PreparedLayout> {
+        self.poll()
+    }
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 impl Drop for LayoutWorker {
     fn drop(&mut self) {

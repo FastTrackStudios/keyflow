@@ -59,7 +59,7 @@ pub mod prelude {
     pub use architect_ui::prelude::*;
 }
 
-#[cfg(all(feature = "paint-view", not(target_arch = "wasm32")))]
+#[cfg(feature = "paint-view")]
 pub mod paint_view;
 
 #[cfg(all(feature = "native-chart-editor", not(target_arch = "wasm32")))]

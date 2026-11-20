@@ -30,6 +30,8 @@ pub mod session_view;
 pub mod tools;
 #[cfg(not(target_family = "wasm"))]
 pub mod typed_session;
+#[cfg(target_family = "wasm")]
+mod web_pane;
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -37,8 +39,10 @@ use std::sync::{Mutex, PoisonError};
 
 use architect_extensions::contrib::{StateKind, StateWrite};
 use architect_extensions::hostcall::{DocEdit, HostRequest};
+#[cfg(not(target_family = "wasm"))]
+use architect_extensions::linked::PaintPane;
 use architect_extensions::linked::{
-    Builder, Extension, Handle, PaintPane, ViewState, use_pane_state, use_view_state,
+    Builder, Extension, Handle, ViewState, use_pane_state, use_view_state,
 };
 use architect_workspace::paint::peniko::Color;
 use architect_workspace::{HostData, PaintWake};
@@ -296,6 +300,8 @@ impl Extension for Keyflow {
         selection::build(ext);
         #[cfg(not(target_family = "wasm"))]
         typed_session::build(ext);
+        #[cfg(target_family = "wasm")]
+        browser_sessions(ext);
         ext.action("KEYFLOW_INPUT_STATE", |_| async { Ok(input_state()) });
         ext.action("KEYFLOW_UNDO", |_| async { history(true).await });
         ext.action("KEYFLOW_REDO", |_| async { history(false).await });
@@ -581,6 +587,16 @@ fn ChartPane() -> Element {
             }
         });
     });
+    // In a browser, on the page's timer.
+    #[cfg(target_family = "wasm")]
+    use_hook(|| {
+        let tell = tell.clone();
+        spawn(async move {
+            while tell.send(Msg::Keep).is_ok() {
+                gloo_timers::future::sleep(std::time::Duration::from_millis(700)).await;
+            }
+        });
+    });
     // The zoom readout kept up with the wheel and the keys: looked at
     // often, drawn again only when it changes.
     #[cfg(not(target_family = "wasm"))]
@@ -589,6 +605,15 @@ fn ChartPane() -> Element {
         std::thread::spawn(move || {
             while tell.send(Msg::Zoom).is_ok() {
                 std::thread::sleep(std::time::Duration::from_millis(120));
+            }
+        });
+    });
+    #[cfg(target_family = "wasm")]
+    use_hook(|| {
+        let tell = tell.clone();
+        spawn(async move {
+            while tell.send(Msg::Zoom).is_ok() {
+                gloo_timers::future::sleep(std::time::Duration::from_millis(120)).await;
             }
         });
     });
@@ -715,7 +740,7 @@ fn ChartPane() -> Element {
                     }
                 }
                 div { style: "flex:1; min-height:0;",
-                    PaintPane { mount: mount.mount.clone() }
+                    ChartCanvas { mount: mount.mount.clone(), pane: pane_id.clone(), path: path.clone() }
                 }
                 if mode() == Mode::Syntax || chord().is_some() {
                     div { style: "display:flex; gap:8px; align-items:center; padding:6px 10px; border-top:1px solid var(--border, #8884);",
@@ -1787,6 +1812,76 @@ enum ZoomTo {
     Fit,
 }
 
+/// The chart's paint view in its pane: a Blitz widget on a desk (and in
+/// a process), a WebGL2 canvas in a browser (`web_pane`).
+#[component]
+fn ChartCanvas(mount: architect_workspace::PaintMount, pane: String, path: String) -> Element {
+    #[cfg(not(target_family = "wasm"))]
+    {
+        let _ = (pane, path);
+        rsx! { PaintPane { mount } }
+    }
+    #[cfg(target_family = "wasm")]
+    rsx! { web_pane::WebChartPane { mount, pane, path } }
+}
+
+/// The session actions the manifest declares, in a browser: a session
+/// is hosted, joined and followed off the browser (`session_host`, vox
+/// on a socket), so each says so. A browser's chart follows the app's
+/// playhead instead (`web_pane`), and the engine in the page provides
+/// `fts.session` there.
+#[cfg(target_family = "wasm")]
+fn browser_sessions(ext: &mut Builder) {
+    const SESSIONS: [&str; 13] = [
+        "KEYFLOW_READ",
+        "KEYFLOW_WRITE",
+        "KEYFLOW_STRUCTURE",
+        "KEYFLOW_SESSION_BAR_ONE",
+        "KEYFLOW_SESSION_DOCUMENT",
+        "KEYFLOW_SESSION_FOLLOW",
+        "KEYFLOW_SESSION_JOIN",
+        "KEYFLOW_SESSION_OPEN",
+        "KEYFLOW_SESSION_PLAY",
+        "KEYFLOW_SESSION_SERVE",
+        "KEYFLOW_SESSION_STATE",
+        "KEYFLOW_SESSION_TYPE_CHART",
+        "KEYFLOW_SESSION_TYPED",
+    ];
+    for name in SESSIONS {
+        ext.action(name, move |_| async move {
+            Err::<Json, String>(format!(
+                "{name}: Keyflow hosts and follows sessions off the browser; \
+                 in a browser its chart follows the app's playhead"
+            ))
+        });
+    }
+}
+
+/// The song folder of the chart at `chart` (a vault path): its folder, or
+/// for an arrangement's chart (`<Song>/Arrangements/<name>/x.kf`) the
+/// song's. What a browser's chart matches the playing item against.
+#[must_use]
+pub fn song_folder(chart: &str) -> Option<std::path::PathBuf> {
+    let folder = std::path::Path::new(chart).parent()?;
+    let song = folder
+        .ancestors()
+        .find(|a| a.file_name().is_some_and(|n| n == "Arrangements"))
+        .and_then(std::path::Path::parent)
+        .unwrap_or(folder);
+    (!song.as_os_str().is_empty()).then(|| song.to_owned())
+}
+
+/// Every open chart of `path` drawn with the playhead at `at` seconds
+/// (none: no playhead), what a browser's chart follows the app's
+/// playhead by (`web_pane`).
+#[cfg(target_family = "wasm")]
+fn set_playhead(path: &str, at: Option<f64>) {
+    for open in open_charts().values().filter(|o| o.path == path) {
+        open.data.update(|s| s.playhead_secs = at);
+        open.wake.wake();
+    }
+}
+
 /// The active chart zoomed as `to` says, about the middle of its pane:
 /// the chart there stays there.
 fn zoom_chart(to: ZoomTo) -> Json {
@@ -2028,6 +2123,20 @@ fn dark_theme() -> ChartTheme {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_charts_song_folder_is_its_folder_or_its_arrangements_song() {
+        let at = |c: &str| song_folder(c).map(|p| p.to_string_lossy().into_owned());
+        assert_eq!(
+            at("Libraries/L/Fire/Fire.kf").as_deref(),
+            Some("Libraries/L/Fire")
+        );
+        assert_eq!(
+            at("Libraries/L/Know Me/Arrangements/Extended/Know Me (Extended).kf").as_deref(),
+            Some("Libraries/L/Know Me")
+        );
+        assert_eq!(at("Chart.kf"), None);
+    }
 
     fn step() -> Step {
         Step {
