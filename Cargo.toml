@@ -19,8 +19,12 @@
 [workspace]
 resolver = "3"
 
+# apps/architect, Keyflow's distribution of the Architect desktop app,
+# is out while Architect is stripped to an application framework (it has
+# no architect-desktop); Keyflow runs as an extension of Studio.
+exclude = ["apps/architect"]
+
 members = [
-    "apps/architect",
     "apps/cli",
     "features/keyflow",
     "features/lang",
@@ -163,7 +167,6 @@ architect-scene = { git = "https://github.com/FastTrackStudios/architect", branc
 # The Architect app as a library (apps/architect, `architect_desktop::run`):
 # Keyflow's development window. Without its window here; the app turns
 # `gui` on. `vox` is the node's services, which every build needs.
-architect-desktop = { git = "https://github.com/FastTrackStudios/architect", branch = "strip/application-framework", default-features = false, features = ["vox"] }
 # ── MusicXML parsing (keyflow) ─────────────────────────────────────────
 musicxml = "1.1"
 
@@ -289,7 +292,6 @@ architect-ui = { git = "https://www.github.com/FastTrackStudios/architect", bran
 # Reached both through the patched crates above and through the unpatched
 # ones (architect-workspace, -shell): unpatched, each lands twice in the lock.
 architect-theme = { git = "https://www.github.com/FastTrackStudios/architect", branch = "strip/application-framework" }
-architect-workspace-hack = { git = "https://www.github.com/FastTrackStudios/architect", branch = "strip/application-framework" }
 # What the session primitive brings (its `crdt` at v0.12.6), on the one
 # revision above, and what `crdt` itself uses that other Architect crates
 # also use (each must come from one source, or `architect-accounts` sees
