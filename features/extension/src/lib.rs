@@ -34,9 +34,10 @@ use std::sync::{Mutex, PoisonError};
 
 use architect_extensions::contrib::{StateKind, StateWrite};
 use architect_extensions::hostcall::{DocEdit, HostRequest};
-use architect_extensions::linked::{
-    Builder, Extension, Handle, PaintPane, ViewState, use_pane_state, use_view_state,
-};
+use architect_extensions::linked::{Builder, Extension, Handle};
+use architect_extensions_dioxus::BuilderExt as _;
+use architect_extensions_dioxus::PaintPane;
+use architect_extensions_dioxus::pane::{ViewState, use_pane_state, use_view_state};
 use architect_workspace::paint::peniko::Color;
 use architect_workspace::{HostData, PaintWake};
 use dioxus::prelude::*;
