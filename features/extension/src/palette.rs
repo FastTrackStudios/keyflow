@@ -231,7 +231,7 @@ const FALLBACK_INK: &str = "#9aa0a6";
 /// process view's host gives it; else [`FALLBACK_INK`].
 fn use_ink() -> String {
     #[cfg(all(not(target_family = "wasm"), unix))]
-    if let Some(ink) = architect_extensions::guest::use_theme()
+    if let Some(ink) = architect_extensions_dioxus::guest::use_theme()
         .as_ref()
         .and_then(|t| t.get("foreground").map(str::to_owned))
     {

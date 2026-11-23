@@ -3,6 +3,9 @@
 //! (`extension.toml`'s `[entry]`).
 
 #[cfg(not(target_family = "wasm"))]
+use architect_extensions_dioxus::guest::GuestExt as _;
+
+#[cfg(not(target_family = "wasm"))]
 fn main() -> Result<(), architect_extensions::guest::GuestError> {
     architect_extensions::guest::Guest::extension(&keyflow_extension::Keyflow).serve()
 }
