@@ -93,6 +93,17 @@ pub struct Chart {
 }
 
 impl Chart {
+    /// The tempo the chart opens at. [`Chart::tempo`] is the tempo in force
+    /// at the chart's END (the parser moves it on at each `->140bpm`), so a
+    /// chart with tempo changes opens at its first change's `from_tempo`.
+    #[must_use]
+    pub fn opening_tempo(&self) -> Option<crate::time::Tempo> {
+        match self.tempo_changes.first() {
+            Some(first) => first.from_tempo.or(self.tempo),
+            None => self.tempo,
+        }
+    }
+
     /// Create a new empty chart
     pub fn new() -> Self {
         Self {

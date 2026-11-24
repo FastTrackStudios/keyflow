@@ -76,7 +76,7 @@ impl ChartLayoutEngine {
                 total_height,
                 width,
                 &chart.metadata,
-                chart.tempo.as_ref(),
+                chart.opening_tempo().as_ref(),
                 count_in_measures,
                 time_signature,
                 has_pushed_first_chord,
@@ -94,7 +94,7 @@ impl ChartLayoutEngine {
         // Tempo / tick bookkeeping (same conventions as paginated path):
         // 480 ticks per quarter note. Continuous mode has no count-in synthesis,
         // so the song timeline starts at t=0, tick=0.
-        let tempo_bpm = chart.tempo.map(|t| t.bpm).unwrap_or(120.0);
+        let tempo_bpm = chart.opening_tempo().map(|t| t.bpm).unwrap_or(120.0);
         let seconds_per_tick = (60.0 / tempo_bpm) / 480.0;
         let mut cumulative_time = 0.0f64;
         let mut cumulative_ticks = 0i64;
