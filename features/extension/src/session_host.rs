@@ -657,6 +657,50 @@ mod tests {
         );
     }
 
+    /// The arguments each session action reads are ones its manifest
+    /// declares: the host refuses an argument the manifest's `params` does
+    /// not name, and the whole call with it (Studio's follow, with the
+    /// song's `title`, was refused so, and the chart never followed).
+    #[test]
+    fn the_manifest_declares_every_argument_the_session_actions_read() {
+        let declared = |action: &str| -> Vec<String> {
+            let at = crate::MANIFEST
+                .find(&format!("id = \"{action}\""))
+                .unwrap_or_else(|| panic!("{action} is in the manifest"));
+            let rest = &crate::MANIFEST[at..];
+            let line = rest
+                .lines()
+                .find(|l| l.starts_with("params = '"))
+                .expect("its params");
+            let schema: serde_json::Value =
+                serde_json::from_str(line.trim_start_matches("params = '").trim_end_matches('\''))
+                    .expect("its params are JSON");
+            schema["properties"]
+                .as_object()
+                .map(|p| p.keys().cloned().collect())
+                .unwrap_or_default()
+        };
+        for (action, reads) in [
+            (
+                "KEYFLOW_SESSION_FOLLOW",
+                &["url", "id", "title", "chart_path"][..],
+            ),
+            (
+                "KEYFLOW_SESSION_TYPE_CHART",
+                &["doc", "text", "chart_path"][..],
+            ),
+            ("KEYFLOW_SESSION_OPEN", &["path", "chart", "chart_path"][..]),
+        ] {
+            let have = declared(action);
+            for arg in reads {
+                assert!(
+                    have.iter().any(|h| h == arg),
+                    "{action} reads `{arg}`: {have:?}"
+                );
+            }
+        }
+    }
+
     #[test]
     fn a_new_sessions_chart_is_text_or_a_file_never_a_path_taken_for_text() {
         let chart = chart_source(&json!({ "chart": "Verse: C G Am F\n" })).unwrap();

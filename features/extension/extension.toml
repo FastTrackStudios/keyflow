@@ -1184,7 +1184,7 @@ name = "Keyflow: type a session's chart into its timeline"
 description = "Writes the chart of session `doc` (the active chart's session without it) into the session itself: its sections become the session's regions, its meters and tempo the session's tempo map from bar 1, and its bars as played (a repeat's second pass the next bars, with the next bar numbers), chords, rests, cues and dynamics items Keyflow owns on the timeline, a chord's push its own fields. It changes the session's structure. What it imports, in Keyflow's language: `text`, else the `.kf` at `chart_path`, else the chart text an older Keyflow kept in the session. A session's chart is its typed items from then on: an edit to it writes only the items it changed, never the session's tempo map or regions. Returns how many writes it took and what is there."
 group = "Session"
 effect = "mutating"
-params = '{"type":"object","properties":{"doc":{"type":"string"}}}'
+params = '{"type":"object","properties":{"doc":{"type":"string"},"text":{"type":"string"},"chart_path":{"type":"string"}}}'
 
 [[actions]]
 id = "KEYFLOW_SESSION_TYPED"
@@ -1216,7 +1216,7 @@ name = "Session: follow"
 description = "Follows session `id` hosted elsewhere (the DAW engine's, another app's) at `url` (`ws://host:port/vox`): its transport and its host's clock, so the chart on `session:<id>` draws where it plays. Holds no copy and provides nothing: the chart is read and written through the host's fts.session. The chart draws the session itself: its regions as sections with their bars, its tempo map, its markers, Keyflow's typed items in them, so a song nobody has charted shows its road map. `title` heads it. With `chart_path` (a .kf), that chart is imported as typed items when the session holds none yet."
 group = "Session"
 effect = "mutating"
-params = '{"type":"object","properties":{"url":{"type":"string"},"id":{"type":"string"},"chart_path":{"type":"string"}},"required":["url","id"]}'
+params = '{"type":"object","properties":{"url":{"type":"string"},"id":{"type":"string"},"title":{"type":"string"},"chart_path":{"type":"string"}},"required":["url","id"]}'
 
 [[actions]]
 id = "KEYFLOW_SESSION_BAR_ONE"
