@@ -150,12 +150,21 @@ fn chart_source(args: &Json) -> Result<String, String> {
 async fn open(args: Json) -> Result<Json, String> {
     let path = PathBuf::from(text(&args, "path")?);
     let chart = if path.exists() {
-        ChartSession::open(&path).await
+        ChartSession::open(&path).await.map_err(|e| e.to_string())?
     } else {
+        // A new session's chart, given in Keyflow's language, imported as
+        // typed items: the session holds no chart text.
         let source = chart_source(&args)?;
-        ChartSession::create(&path, &source).await
-    }
-    .map_err(|e| e.to_string())?;
+        let chart = ChartSession::create(&path, "")
+            .await
+            .map_err(|e| e.to_string())?;
+        if !source.trim().is_empty() {
+            let parsed = keyflow::parse(&source).map_err(|e| e.to_string())?;
+            keyflow_session::typed::import(chart.session(), &parsed).map_err(|e| e.to_string())?;
+            chart.save().await.map_err(|e| e.to_string())?;
+        }
+        chart
+    };
     let id = chart.id();
     let mut s = sessions();
     s.provider.open(&chart);
@@ -264,10 +273,14 @@ async fn join_presence(url: &str, id: Uuid, me: &str) -> Result<(), String> {
 async fn follow(args: Json) -> Result<Json, String> {
     let url = text(&args, "url")?;
     let id = id_of(&args)?;
+    if let Some(title) = args.get("title").and_then(Json::as_str) {
+        crate::set_session_title(&id.to_string(), title);
+    }
     join_presence(&url, id, "chart").await?;
-    // The chart into the session it follows, when it holds none yet: the
-    // `.kf` at `chart_path`, written through the host's fts.session as
-    // Keyflow's own data.
+    // A chart written in Keyflow's language beside the song (a `.kf` at
+    // `chart_path`), imported as Keyflow's typed items when the session
+    // holds none yet. The session's own structure is what the chart
+    // draws either way.
     let seeded = match args.get("chart_path").and_then(Json::as_str) {
         Some(path) => seed_chart(&id.to_string(), path).await?,
         None => false,
@@ -283,16 +296,20 @@ async fn follow(args: Json) -> Result<Json, String> {
     }))
 }
 
-/// Writes the chart at `chart_path` into session `doc` if it holds no
-/// chart: `true` when written.
+/// Imports the chart at `chart_path` (Keyflow's language) into session
+/// `doc` as typed items, if the session holds none yet: `true` when
+/// imported.
 async fn seed_chart(doc: &str, chart_path: &str) -> Result<bool, String> {
     let source = chart_source(&json!({ "chart_path": chart_path }))?;
     let handle = crate::handle()?;
     let pane = format!("session:{doc}");
-    if !crate::read_text(&handle, &pane).await?.trim().is_empty() {
+    let held = crate::held_of(&handle, &keyflow_session::ChartSource::of_pane_state(&pane))
+        .await?
+        .ok_or("a session has a timeline")?;
+    if held.is_typed() {
         return Ok(false);
     }
-    crate::write_text(&handle, &pane, source, "Chart").await?;
+    crate::typed_session::retype(&handle, &pane, &source, true).await?;
     crate::reload(Some(&pane));
     Ok(true)
 }
@@ -445,7 +462,10 @@ fn state() -> Json {
     let charts: Vec<Json> = s
         .charts
         .values()
-        .map(|c| json!({ "id": c.id().to_string(), "chart": c.chart() }))
+        .map(|c| {
+            let held = keyflow_session::typed::Held::of_doc(c.session());
+            json!({ "id": c.id().to_string(), "chart": held.shown_source("") })
+        })
         .collect();
     let (offset, round_trip) = host_clock(&s);
     let (leader, lead_epoch) = s.presence.as_ref().map_or((None, None), |peer| {

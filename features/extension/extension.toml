@@ -63,7 +63,7 @@ actions = ["WORKSPACE_TAB_SET", "TOOLBAR_SHOW"]
 [[actions]]
 id = "KEYFLOW_STATE"
 name = "Keyflow: open charts"
-description = "Every chart open in a pane: its `path`, whether it parsed (`error` when not), its zoom (`null` fits the page to the width) and scroll ([x, y], logical pixels), what is selected on it (`selection`, the selectables' keys in reading order), the element under the pointer (`hover`) and its pane's frame times (`frames`: count, p50, p99, slowest); whether the charts are pinned `dark` or follow the app's theme (`follows_app_theme`), and the toolbar's tools that are on (`tools_on`)."
+description = "Every chart open in a pane: its `path`, whether it parsed (`error` when not), its zoom (`null` fits the page to the width) and scroll ([x, y], logical pixels), what is selected on it (`selection`, the selectables' keys in reading order), the element under the pointer (`hover`) and its pane's frame times (`frames`: count, p50, p99, slowest); whether the charts are pinned `dark` or follow the app's theme (`follows_app_theme`), and the toolbar's tools that are on (`tools_on`). Each chart's `shows` says what it draws, for checking without a screenshot: `title`, `bars`, `count_in_bars`, its `sections` in order (name, first_bar, bars), its opening `tempo` and `tempo_changes` (bar, bpm), each meter from its bar on (`meters`), and how many `chords`. A chart on a session (`session:<id>`) draws the session itself: its regions as sections, its tempo map, its markers, with Keyflow's typed items in its bars."
 group = "Keyflow"
 effect = "read_only"
 
@@ -1181,7 +1181,7 @@ params = '{"type":"object","properties":{"doc":{"type":"string"},"request":{}},"
 [[actions]]
 id = "KEYFLOW_SESSION_TYPE_CHART"
 name = "Keyflow: type a session's chart into its timeline"
-description = "Writes the chart of session `doc` (the active chart's session without it) into the session itself: its sections become the session's regions, its meters and tempo the session's tempo map from bar 1, and its bars as played (a repeat's second pass the next bars, with the next bar numbers), chords, rests, cues and dynamics items Keyflow owns on the timeline, a chord's push its own fields. It changes the session's structure. From then on an edit to that chart keeps them in step (only what it changed is written). Returns how many writes it took and what is there."
+description = "Writes the chart of session `doc` (the active chart's session without it) into the session itself: its sections become the session's regions, its meters and tempo the session's tempo map from bar 1, and its bars as played (a repeat's second pass the next bars, with the next bar numbers), chords, rests, cues and dynamics items Keyflow owns on the timeline, a chord's push its own fields. It changes the session's structure. What it imports, in Keyflow's language: `text`, else the `.kf` at `chart_path`, else the chart text an older Keyflow kept in the session. A session's chart is its typed items from then on: an edit to it writes only the items it changed, never the session's tempo map or regions. Returns how many writes it took and what is there."
 group = "Session"
 effect = "mutating"
 params = '{"type":"object","properties":{"doc":{"type":"string"}}}'
@@ -1197,7 +1197,7 @@ params = '{"type":"object","properties":{"doc":{"type":"string"}}}'
 [[actions]]
 id = "KEYFLOW_SESSION_OPEN"
 name = "Session: open"
-description = "Opens a `.session` file (`path`; when it is not there, made with the chart read from `chart_path`, or with `chart`, Keyflow source; either must read as a chart) and serves it as fts.session. Answers `{id, pane}`."
+description = "Opens a `.session` file (`path`; when it is not there, made with the chart read from `chart_path`, or with `chart`, Keyflow source, imported as typed items; either must read as a chart) and serves it as fts.session. Answers `{id, pane}`."
 group = "Session"
 effect = "mutating"
 params = '{"type":"object","properties":{"path":{"type":"string"},"chart":{"type":"string"},"chart_path":{"type":"string"}},"required":["path"]}'
@@ -1213,7 +1213,7 @@ params = '{"type":"object","properties":{"id":{"type":"string"},"bind":{"type":"
 [[actions]]
 id = "KEYFLOW_SESSION_FOLLOW"
 name = "Session: follow"
-description = "Follows session `id` hosted elsewhere (the DAW engine's, another app's) at `url` (`ws://host:port/vox`): its transport and its host's clock, so the chart on `session:<id>` draws where it plays. Holds no copy and provides nothing: the chart is read and written through the host's fts.session. With `chart_path` (a .kf), the chart is written into the session when it holds none yet."
+description = "Follows session `id` hosted elsewhere (the DAW engine's, another app's) at `url` (`ws://host:port/vox`): its transport and its host's clock, so the chart on `session:<id>` draws where it plays. Holds no copy and provides nothing: the chart is read and written through the host's fts.session. The chart draws the session itself: its regions as sections with their bars, its tempo map, its markers, Keyflow's typed items in them, so a song nobody has charted shows its road map. `title` heads it. With `chart_path` (a .kf), that chart is imported as typed items when the session holds none yet."
 group = "Session"
 effect = "mutating"
 params = '{"type":"object","properties":{"url":{"type":"string"},"id":{"type":"string"},"chart_path":{"type":"string"}},"required":["url","id"]}'

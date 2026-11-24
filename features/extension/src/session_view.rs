@@ -52,8 +52,35 @@ fn run_playhead() {
     };
     let mut starts: HashMap<String, (f64, Instant)> = HashMap::new();
     let mut drawn: HashMap<u64, Option<u64>> = HashMap::new();
+    // What each session's chart showed when last read: read again every
+    // STRUCTURE_EVERY, and its panes reread when it changed (a section
+    // renamed or moved, a tempo or a meter changed, an item another
+    // replica wrote).
+    let mut shown: HashMap<String, (u64, Instant)> = HashMap::new();
     loop {
         std::thread::sleep(FRAME);
+        for doc in crate::open_charts()
+            .values()
+            .filter_map(|open| open.path.strip_prefix(keyflow_session::SESSION_PREFIX))
+            .map(str::to_owned)
+            .collect::<std::collections::BTreeSet<_>>()
+        {
+            let due = shown
+                .get(&doc)
+                .is_none_or(|(_, at)| at.elapsed() >= STRUCTURE_EVERY);
+            if !due {
+                continue;
+            }
+            let pane = format!("{}{doc}", keyflow_session::SESSION_PREFIX);
+            let Some(now) = runtime.block_on(shown_fingerprint(&pane)) else {
+                shown.insert(doc, (0, Instant::now()));
+                continue;
+            };
+            let before = shown.insert(doc, (now, Instant::now())).map(|(was, _)| was);
+            if before.is_some_and(|was| was != now) {
+                crate::reload(Some(&pane));
+            }
+        }
         let panes: Vec<(u64, String)> = crate::open_charts()
             .iter()
             .filter_map(|(key, open)| {
@@ -114,6 +141,17 @@ fn run_playhead() {
             }
         }
     }
+}
+
+/// A fingerprint of the chart session pane `pane` shows now (its road map
+/// and typed items, as composed): `None` when it could not be read.
+async fn shown_fingerprint(pane: &str) -> Option<u64> {
+    use std::hash::{Hash as _, Hasher as _};
+    let handle = crate::handle().ok()?;
+    let text = crate::read_text(&handle, pane).await.ok()?;
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    text.hash(&mut hasher);
+    Some(hasher.finish())
 }
 
 /// The chart's start in a session another extension provides, through

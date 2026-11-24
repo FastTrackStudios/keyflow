@@ -4,25 +4,25 @@
 //! and tempo the session's tempo map, written through `fts.session`
 //! (whoever provides it).
 //!
-//! Asked for, not automatic: `KEYFLOW_SESSION_TYPE_CHART` types a
-//! session's chart into its timeline. Once a session has been typed, an
-//! edit to its chart keeps the items in step (only what the edit changed
-//! is written: a chord pushed is one item put). The chart is still
-//! engraved from its text entry; the typed items are what other views
-//! read, and what the editor moves onto.
-
+//! The typed items are the chart's storage. The pane draws the session's
+//! road map with them in it (`read_text`, `keyflow_session::shown`), and
+//! an edit is written back as items ([`write_items`]): only the items it
+//! changed, never the session's tempo map or regions. Keyflow's language
+//! is an input method here, not storage: `KEYFLOW_SESSION_TYPE_CHART`
+//! imports a chart written in it (`text`, a `.kf` at `chart_path`, or the
+//! text entry an older Keyflow kept in the session) as items.
 use architect_extensions::linked::{Builder, Handle};
 use keyflow_session::ChartSource;
-use keyflow_session::typed::{self, Held, TypedChart};
+use keyflow_session::typed::{self, TypedChart};
 use serde_json::{Value as Json, json};
 
-use crate::{ask_session, handle, read_text, text};
+use crate::{ask_session, handle, held_of, read_text, text};
 
 pub(crate) fn build(ext: &mut Builder) {
     ext.action("KEYFLOW_SESSION_TYPE_CHART", |args| async move {
         let path = session_path(&args)?;
         let handle = handle()?;
-        let source = read_text(&handle, &path).await?;
+        let source = import_source(&handle, &path, &args).await?;
         let wrote = retype(&handle, &path, &source, true).await?;
         Ok(json!({ "path": path, "written": wrote, "chart": summary(&handle, &path).await? }))
     });
@@ -49,19 +49,45 @@ fn session_path(args: &Json) -> Result<String, String> {
         .ok_or_else(|| "Name a session with `doc`, or open a session's chart".to_owned())
 }
 
-/// The session's timeline as its provider answers.
-async fn timeline(handle: &Handle, source: &ChartSource) -> Result<Option<Held>, String> {
-    let Some([t, s, d]) = source.timeline_calls().map_err(|e| e.to_string())? else {
-        return Ok(None);
+/// The chart a `KEYFLOW_SESSION_TYPE_CHART` imports, in Keyflow's
+/// language: `text`, else the `.kf` at `chart_path`, else the text entry
+/// an older Keyflow kept in the session (`keyflow/chart`).
+async fn import_source(handle: &Handle, path: &str, args: &Json) -> Result<String, String> {
+    if let Some(source) = text(args, "text") {
+        return Ok(source);
+    }
+    if let Some(file) = text(args, "chart_path") {
+        return std::fs::read_to_string(&file).map_err(|e| format!("{file}: {e}"));
+    }
+    let call = ChartSource::of_pane_state(path)
+        .read_call()
+        .map_err(|e| e.to_string())?
+        .ok_or("a session's chart only")?;
+    let reply = ask_session(handle, &call).await?;
+    let source = ChartSource::chart_of(&reply).map_err(|e| e.to_string())?;
+    if source.trim().is_empty() {
+        return Err("Nothing to import: give `text` or `chart_path`".to_owned());
+    }
+    Ok(source)
+}
+
+/// An edit of the chart a session shows (`text`: what `read_text`
+/// composed, edited) written as Keyflow's items: only those it changed.
+/// The session's tempo map and regions are not written: they are the
+/// chart's structure already.
+pub(crate) async fn write_items(handle: &Handle, path: &str, text: &str) -> Result<usize, String> {
+    let at = ChartSource::of_pane_state(path);
+    let Some(now) = held_of(handle, &at).await? else {
+        return Ok(0);
     };
-    let (t, s, d) = (
-        ask_session(handle, &t).await?,
-        ask_session(handle, &s).await?,
-        ask_session(handle, &d).await?,
-    );
-    Held::of_replies(&t, &s, &d)
-        .map(Some)
-        .map_err(|e| e.to_string())
+    let chart = keyflow::text::chart::parse_chart(text)?;
+    let calls = at
+        .typed_calls(typed::plan_items(&chart, &now))
+        .map_err(|e| e.to_string())?;
+    for call in &calls {
+        ask_session(handle, call).await?;
+    }
+    Ok(calls.len())
 }
 
 /// The session at `path` made to hold `source`'s chart as typed items:
@@ -74,7 +100,7 @@ pub(crate) async fn retype(
     force: bool,
 ) -> Result<usize, String> {
     let at = ChartSource::of_pane_state(path);
-    let Some(now) = timeline(handle, &at).await? else {
+    let Some(now) = held_of(handle, &at).await? else {
         return Ok(0);
     };
     if !force && !now.is_typed() {
@@ -104,7 +130,7 @@ pub(crate) async fn retype(
 /// holds as typed items, and what of the chart's text is not typed yet.
 async fn summary(handle: &Handle, path: &str) -> Result<Json, String> {
     let at = ChartSource::of_pane_state(path);
-    let Some(now) = timeline(handle, &at).await? else {
+    let Some(now) = held_of(handle, &at).await? else {
         return Err("A document has no timeline: this is for a session's chart".to_owned());
     };
     let chart = now.chart();

@@ -1048,16 +1048,59 @@ fn active_chart() -> Option<(u64, String)> {
         .filter(|(_, path)| !path.is_empty())
 }
 
+/// Sessions' titles, by document id: what a chart on a session is titled
+/// (`KEYFLOW_SESSION_FOLLOW`'s `title`; the session itself has none).
+static TITLES: Mutex<BTreeMap<String, String>> = Mutex::new(BTreeMap::new());
+
+/// Titles the chart on session `doc`.
+pub(crate) fn set_session_title(doc: &str, title: &str) {
+    TITLES
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .insert(doc.to_owned(), title.trim().to_owned());
+}
+
+fn session_title(doc: &str) -> String {
+    TITLES
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get(doc)
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// What session `source` holds of a chart (its timeline, its structure and
+/// Keyflow's data), as its provider answers; `None` for a document.
+pub(crate) async fn held_of(
+    handle: &Handle,
+    source: &ChartSource,
+) -> Result<Option<keyflow_session::typed::Held>, String> {
+    let Some([t, s, d]) = source.timeline_calls().map_err(|e| e.to_string())? else {
+        return Ok(None);
+    };
+    let (t, s, d) = (
+        ask_session(handle, &t).await?,
+        ask_session(handle, &s).await?,
+        ask_session(handle, &d).await?,
+    );
+    keyflow_session::typed::Held::of_replies(&t, &s, &d)
+        .map(Some)
+        .map_err(|e| e.to_string())
+}
+
 /// A chart's text, through the host: the document at `path`, or, when the
-/// pane names a session (`session:<id>`), Keyflow's chart there through
-/// `fts.session`, as this extension.
+/// pane names a session (`session:<id>`), the chart the session holds:
+/// its road map (its regions as sections, its tempo map, its markers)
+/// with Keyflow's typed items in it, composed in Keyflow's language to be
+/// parsed and engraved ([`keyflow_session::shown`]). Never a text entry
+/// or a `.kf` file: a session nobody has charted shows its road map.
 async fn read_text(handle: &Handle, path: &str) -> Result<String, String> {
-    if let Some(call) = ChartSource::of_pane_state(path)
-        .read_call()
-        .map_err(|e| e.to_string())?
-    {
-        let reply = ask_session(handle, &call).await?;
-        return ChartSource::chart_of(&reply).map_err(|e| e.to_string());
+    let source = ChartSource::of_pane_state(path);
+    if let ChartSource::Session { doc } = &source {
+        let held = held_of(handle, &source)
+            .await?
+            .ok_or("a session has a timeline")?;
+        return Ok(held.shown_source(&session_title(doc)));
     }
     let answer = handle
         .host(HostRequest::ReadDocument {
@@ -1073,28 +1116,21 @@ async fn read_text(handle: &Handle, path: &str) -> Result<String, String> {
 
 /// `text` made the chart's text at `path`: for a document, one commit, one
 /// undo step named `name` (the host makes the edits that differ, so another
-/// person's typing elsewhere in it stays); for a session, the one splice
-/// between what the session holds now and `text`, through `fts.session`,
-/// so it merges per character the same way.
+/// person's typing elsewhere in it stays); for a session, the edit written
+/// as Keyflow's typed items through `fts.session` (only the items it
+/// changed), the session's tempo map and regions left as they are: `text`
+/// is the chart [`read_text`] composed, edited.
 async fn write_text(handle: &Handle, path: &str, text: String, name: &str) -> Result<(), String> {
     let source = ChartSource::of_pane_state(path);
     if let ChartSource::Session { .. } = source {
-        let now = read_text(handle, path).await?;
-        let Some(call) = source
-            .replace_call(&now, &text)
-            .map_err(|e| e.to_string())?
-        else {
-            return Ok(());
-        };
-        ask_session(handle, &call).await?;
-        // A session whose chart has been typed into its timeline: the
-        // items kept in step with the edit (what it changed, written).
+        let _ = name;
         #[cfg(not(target_family = "wasm"))]
-        if let Err(why) = typed_session::retype(handle, path, &text, false).await {
-            // The edit is written; only the typed items are behind.
-            edit_state().refused = Some(format!("The chart's typed items were not updated: {why}"));
+        {
+            typed_session::write_items(handle, path, &text).await?;
+            return Ok(());
         }
-        return Ok(());
+        #[cfg(target_family = "wasm")]
+        return Err("A session's chart is edited off the browser for now".to_owned());
     }
     handle
         .host(HostRequest::EditDocument {
@@ -2013,6 +2049,70 @@ fn service_request(call: &keyflow_session::ServiceCall) -> Result<HostRequest, S
     })
 }
 
+/// What `chart` shows, for an agent to check without a screenshot: its
+/// sections in order (name, first bar, bars), its bars, its count-in, its
+/// opening tempo and each change (by bar), each meter from its bar on, and
+/// how many chords it has. Bars count from the chart's bar 1 (a count-in
+/// keeps no numbers).
+fn shows(chart: &keyflow::Chart) -> Json {
+    let mut sections = Vec::new();
+    let mut count_in = 0;
+    let mut bar = 1_usize;
+    // Where each section's bar 1 is, by its index: a tempo change says
+    // its place as a bar in its section.
+    let mut first_bars = Vec::new();
+    let mut meters: Vec<Json> = Vec::new();
+    let mut meter = None;
+    let mut chords = 0;
+    for section in &chart.sections {
+        let measures = section.measures();
+        first_bars.push(bar);
+        if matches!(section.section.section_type, keyflow::SectionType::CountIn) {
+            count_in += measures.len();
+            continue;
+        }
+        sections.push(json!({
+            "name": section.section.display_name(),
+            "first_bar": bar,
+            "bars": measures.len(),
+        }));
+        for (n, m) in measures.iter().enumerate() {
+            chords += m
+                .chords
+                .iter()
+                .filter(|c| c.full_symbol.trim() != "s")
+                .count();
+            if meter != Some(m.time_signature) {
+                meter = Some(m.time_signature);
+                meters.push(json!({
+                    "bar": bar + n,
+                    "meter": format!("{}/{}", m.time_signature.0, m.time_signature.1),
+                }));
+            }
+        }
+        bar += measures.len();
+    }
+    let changes: Vec<Json> = chart
+        .tempo_changes
+        .iter()
+        .map(|c| {
+            let at = first_bars.get(c.section_index).copied().unwrap_or(1)
+                + usize::try_from(c.position.total_duration.measure).unwrap_or(0);
+            json!({ "bar": at, "bpm": c.to_tempo.bpm })
+        })
+        .collect();
+    json!({
+        "title": chart.metadata.title,
+        "bars": bar - 1,
+        "count_in_bars": count_in,
+        "sections": sections,
+        "tempo": chart.opening_tempo().map(|t| t.bpm),
+        "tempo_changes": changes,
+        "meters": meters,
+        "chords": chords,
+    })
+}
+
 /// The open charts, for `KEYFLOW_STATE`.
 fn state() -> Json {
     let charts: Vec<Json> = open_charts()
@@ -2024,6 +2124,7 @@ fn state() -> Json {
             json!({
                 "path": o.path,
                 "error": o.error,
+                "shows": o.data.read(|s| shows(&s.chart)),
                 "zoom": view.zoom,
                 "scroll": [view.scroll.0, view.scroll.1],
                 "selection": o.selection.read(|s| s.keys.clone()),
