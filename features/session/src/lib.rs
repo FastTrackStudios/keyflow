@@ -28,6 +28,7 @@
 //!   that reads or edits it. The chart view's one change to be in a
 //!   session: read through [`ChartSource`] instead of `read_document`.
 
+pub mod shown;
 pub mod typed;
 
 #[cfg(not(target_family = "wasm"))]

@@ -690,6 +690,8 @@ pub struct Held {
     pub lanes: BTreeMap<LaneId, Lane>,
     pub items: BTreeMap<ItemId, Item>,
     pub regions: BTreeMap<MarkId, Region>,
+    /// The session's markers: drawn above their bars ([`Held::road_map`]).
+    pub markers: BTreeMap<MarkId, session::Marker>,
     pub tempo: TempoMap,
     /// The song's bar 1, in quarter notes on the session's timeline.
     pub origin: f64,
@@ -707,6 +709,7 @@ impl Held {
             lanes: doc.lanes(),
             items: doc.items(),
             regions: doc.regions(),
+            markers: doc.markers(),
             origin: doc.bar_one().map_or(0.0, |at| at.quarter_notes(&tempo)),
             tempo,
             tempo_kept: doc
@@ -741,8 +744,8 @@ impl Held {
         let Response::Structure {
             tempo,
             regions,
+            markers,
             bar_one,
-            ..
         } = response_of(structure).map_err(Error::Service)?
         else {
             return Err(Error::Service("not the structure".to_owned()));
@@ -755,6 +758,7 @@ impl Held {
             lanes,
             items,
             regions,
+            markers,
             tempo,
             tempo_kept: false,
         }
@@ -978,9 +982,12 @@ impl Held {
             .points
             .iter()
             .any(|p| p.seconds > from + 1e-6);
+        // The session's own sections: regions it did not take from a chart,
+        // on the ruler its sections are on (the DAW engine puts its
+        // sections on a ruler of their own: `Some(lane)`, not the default).
         let own_sections = self.regions.iter().any(|(id, r)| {
             !id.as_str().starts_with(SECTION)
-                && r.ruler.is_none()
+                && r.ruler == self.sections_ruler()
                 && r.end.quarter_notes(&self.tempo) > self.origin + 1e-6
         });
         Brings {
@@ -1035,7 +1042,7 @@ impl Held {
         let starts: Vec<f64> = self
             .regions
             .values()
-            .filter(|r| r.ruler.is_none())
+            .filter(|r| r.ruler == self.sections_ruler())
             .map(|r| r.start.quarter_notes(&self.tempo) - self.origin)
             .collect();
         if !starts.is_empty() {
@@ -1060,9 +1067,28 @@ impl Held {
 /// left). Empty when it already holds it.
 #[must_use]
 pub fn plan(chart: &Chart, held: &Held) -> Vec<Request> {
+    plan_bringing(chart, held, held.brings())
+}
+
+/// [`plan`] for an edit of the chart a session shows
+/// ([`Held::shown_source`]): its tempo, meters and sections are the
+/// session's already, so only Keyflow's own items are written, never the
+/// session's tempo map or regions.
+#[must_use]
+pub fn plan_items(chart: &Chart, held: &Held) -> Vec<Request> {
+    plan_bringing(
+        chart,
+        held,
+        Brings {
+            tempo: false,
+            sections: false,
+        },
+    )
+}
+
+fn plan_bringing(chart: &Chart, held: &Held, brings: Brings) -> Vec<Request> {
     let typed = TypedChart::of(chart);
     let owner = ExtensionId::from(crate::EXTENSION);
-    let brings = held.brings();
     let mut out = Vec::new();
     if !held.is_typed() {
         // Decided once, when the chart is first typed: whose tempo it is.
