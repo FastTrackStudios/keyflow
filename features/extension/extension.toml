@@ -84,6 +84,14 @@ effect = "mutating"
 params = '{"type":"object","properties":{"dark":{"type":"boolean"},"follow":{"type":"boolean"}}}'
 
 [[actions]]
+id = "KEYFLOW_PLAYBACK_CURSOR"
+name = "Keyflow: playback cursor"
+description = "How a chart shows playback. `style: \"stepped\"` (the default) is MuseScore's cursor: a translucent bar the height of the staff on the slash, note or rest sounding, jumping to the next at its time. `style: \"smooth\"` is the line gliding across the bar. Without `style` it switches between the two."
+group = "Keyflow"
+effect = "mutating"
+params = '{"type":"object","properties":{"style":{"type":"string","enum":["stepped","smooth"]}}}'
+
+[[actions]]
 id = "KEYFLOW_RELOAD"
 name = "Keyflow: reload the chart"
 description = "Reads the open charts (`path`: only that one) from their documents again and engraves them."
@@ -828,6 +836,86 @@ group = "Keyflow"
 effect = "mutating"
 
 [[actions]]
+id = "KEYFLOW_SELECTION_PUSH"
+name = "Keyflow: push the selection"
+description = "Push (anticipate) every chord selected: its push field one level on (not pushed, an eighth early, a sixteenth, a thirty-second), or set to `step`. Pull undoes it. On the active chart or `path`'s; on what is selected or `select`. Refused, with why, for the chart's first chord, a beat already taken, or something that is not music (a section label, a barline)."
+group = "Keyflow"
+effect = "mutating"
+params = '{"type":"object","properties":{"path":{"type":"string"},"select":{"description":"What to act on instead of the selection: {bar}, {bar, beat}, {bars: [from, to]} (bars and beats from 1) or a list of them."},"step":{"type":"string","enum":["eighth","sixteenth","thirty-second","triplet","quarter"]}}}'
+
+[[actions]]
+id = "KEYFLOW_SELECTION_PULL"
+name = "Keyflow: pull the selection"
+description = "Pull every chord selected: its push field one level back, through not pushed into the pulls (an eighth late, a sixteenth), or set to `step` (clearing a push of the same step)."
+group = "Keyflow"
+effect = "mutating"
+params = '{"type":"object","properties":{"path":{"type":"string"},"select":{"description":"What to act on instead of the selection: {bar}, {bar, beat}, {bars: [from, to]} (bars and beats from 1) or a list of them."},"step":{"type":"string","enum":["eighth","sixteenth","thirty-second","triplet","quarter"]}}}'
+
+[[actions]]
+id = "KEYFLOW_SELECTION_ACCENT"
+name = "Keyflow: accent the selection"
+description = "An accent on every chord selected, or off when they all have one."
+group = "Keyflow"
+effect = "mutating"
+params = '{"type":"object","properties":{"path":{"type":"string"},"select":{"description":"What to act on instead of the selection: {bar}, {bar, beat}, {bars: [from, to]} (bars and beats from 1) or a list of them."}}}'
+
+[[actions]]
+id = "KEYFLOW_SELECTION_STACCATO"
+name = "Keyflow: staccato on the selection"
+description = "A staccato on every chord selected, or off when they all have one."
+group = "Keyflow"
+effect = "mutating"
+params = '{"type":"object","properties":{"path":{"type":"string"},"select":{"description":"What to act on instead of the selection: {bar}, {bar, beat}, {bars: [from, to]} (bars and beats from 1) or a list of them."}}}'
+
+[[actions]]
+id = "KEYFLOW_SELECTION_TRANSPOSE"
+name = "Keyflow: transpose the selection"
+description = "Every chord selected moved `by` semitones (-11 to 11), its bass too: up spelled with sharps, down with flats."
+group = "Keyflow"
+effect = "mutating"
+params = '{"type":"object","required":["by"],"properties":{"path":{"type":"string"},"select":{"description":"What to act on instead of the selection: {bar}, {bar, beat}, {bars: [from, to]} (bars and beats from 1) or a list of them."},"by":{"type":"integer"}}}'
+
+[[actions]]
+id = "KEYFLOW_SELECTION_CHORD"
+name = "Keyflow: retype the selected chords"
+description = "Every chord selected made the symbol `text`, its length and marks kept."
+group = "Keyflow"
+effect = "mutating"
+params = '{"type":"object","required":["text"],"properties":{"path":{"type":"string"},"select":{"description":"What to act on instead of the selection: {bar}, {bar, beat}, {bars: [from, to]} (bars and beats from 1) or a list of them."},"text":{"type":"string"}}}'
+
+[[actions]]
+id = "KEYFLOW_SELECT"
+name = "Keyflow: select"
+description = "Selects on the active chart or `path`'s: `select` is {bar}, {bar, beat}, {bars: [from, to]} (bars and beats from 1) or a list of them. The actions on the selection then act on it. Returns the chords selected."
+group = "Keyflow"
+effect = "mutating"
+params = '{"type":"object","properties":{"path":{"type":"string"},"select":{}}}'
+
+[[actions]]
+id = "KEYFLOW_SELECTION"
+name = "Keyflow: what is selected"
+description = "The selection on the active chart or `path`'s: the chords it names (`bar`, `beat`, `chord`, `push`) and what in it is not a chord, in words."
+group = "Keyflow"
+effect = "read_only"
+params = '{"type":"object","properties":{"path":{"type":"string"}}}'
+
+[[actions]]
+id = "KEYFLOW_DESCRIBE"
+name = "Keyflow: the chart's structure"
+description = "The chart at `path` (open in a pane or not; the active chart without it): its title and tempo, its sections with their bars, and every bar with its meter, the bar it plays again, its chords (each with its beat and its push) and its cues. What a script reads to decide what to edit."
+group = "Keyflow"
+effect = "read_only"
+params = '{"type":"object","properties":{"path":{"type":"string"}}}'
+
+[[actions]]
+id = "KEYFLOW_EDIT"
+name = "Keyflow: edit a chart"
+description = "Several actions on the chart at `path` (open or not) as one edit, one undo step: `steps` is a list of {select, action, step?, by?, text?}, `action` one of push, pull, accent, staccato, transpose, chord. All or nothing: a step refused refuses the edit, with why."
+group = "Keyflow"
+effect = "mutating"
+params = '{"type":"object","required":["steps"],"properties":{"path":{"type":"string"},"steps":{"type":"array","items":{"type":"object"}}}}'
+
+[[actions]]
 id = "KEYFLOW_INPUT_STATE"
 name = "Keyflow: note input state"
 description = "Note input as it is: the `mode`, the `duration`, the armed `accidental` (−2 to 2), the `rest` tool, the `cursor` (bar from 1, tick of 384 a whole), the `pitch` cursor, the `status` line and what the last operation could not do (`refused`)."
@@ -1091,6 +1179,22 @@ effect = "mutating"
 params = '{"type":"object","properties":{"doc":{"type":"string"},"request":{}},"required":["doc","request"]}'
 
 [[actions]]
+id = "KEYFLOW_SESSION_TYPE_CHART"
+name = "Keyflow: type a session's chart into its timeline"
+description = "Writes the chart of session `doc` (the active chart's session without it) into the session itself: its sections become the session's regions, its meters and tempo the session's tempo map from bar 1, and its bars as played (a repeat's second pass the next bars, with the next bar numbers), chords, rests, cues and dynamics items Keyflow owns on the timeline, a chord's push its own fields. It changes the session's structure. From then on an edit to that chart keeps them in step (only what it changed is written). Returns how many writes it took and what is there."
+group = "Session"
+effect = "mutating"
+params = '{"type":"object","properties":{"doc":{"type":"string"}}}'
+
+[[actions]]
+id = "KEYFLOW_SESSION_TYPED"
+name = "Keyflow: a session's typed chart"
+description = "What the timeline of session `doc` (the active chart's session without it) holds of its chart as typed items: its bars as played (bar number, the written bar each plays and on which pass, its meter from the tempo map, its section from the regions), its chords (bar, beat, symbol, time, push, accent, staccato), cues and dynamics, the count of rests, and what of the chart's text is not typed yet."
+group = "Session"
+effect = "read_only"
+params = '{"type":"object","properties":{"doc":{"type":"string"}}}'
+
+[[actions]]
 id = "KEYFLOW_SESSION_OPEN"
 name = "Session: open"
 description = "Opens a `.session` file (`path`; when it is not there, made with the chart read from `chart_path`, or with `chart`, Keyflow source; either must read as a chart) and serves it as fts.session. Answers `{id, pane}`."
@@ -1156,6 +1260,18 @@ effect = "read_only"
 # Note input's keys, MuseScore's: the app's keymap runs them while the
 # chart has the focus (`view:chart`), before it hears them, and the person
 # rebinds them in the action list. ⌘ chords are ⌃ off a Mac.
+
+# Push and Pull on what is selected: < earlier, > later (⇧, and ⇧.; the
+# plain . is the dot).
+[[keys]]
+chord = "⇧,"
+action = "KEYFLOW_SELECTION_PUSH"
+when = "view:chart"
+
+[[keys]]
+chord = "⇧."
+action = "KEYFLOW_SELECTION_PULL"
+when = "view:chart"
 
 [[keys]]
 chord = "A"

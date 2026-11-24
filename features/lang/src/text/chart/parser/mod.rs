@@ -218,23 +218,53 @@ impl<'a> ChartParser<'a> {
             (line, col)
         };
 
+        // A chord's token in the source: the token itself, or the token
+        // with the length the chord was written with (`C_2`, of which
+        // `original_token` keeps `C`).
+        let is_token = |source: &str, want: &str| {
+            source == want
+                || source
+                    .strip_prefix(want)
+                    .is_some_and(|rest| rest.starts_with('_'))
+        };
+        // How far ahead a chord's token is looked for. A chord whose token
+        // is not found (a recalled section's, a `.` repeat's, one the line
+        // pipeline rewrote) is left without a span, and the scan stays
+        // where it was: running to the end of the source for it left every
+        // chord after it with the line-relative span the pipeline gave it,
+        // which names some other text altogether.
+        const AHEAD: usize = 96;
+
         let mut ti = 0;
         for section in &mut self.sections {
             for measure in section.measures_mut() {
+                // A bar that plays another again (`%`, an `x2` copy, a
+                // recalled section's) writes no chord of its own: its
+                // chords are copies, and matching them would take the next
+                // bar's tokens.
+                let copy =
+                    measure.simile || measure.replays.is_some() || measure.plays_back.is_some();
                 for ci in &mut measure.chords {
                     let want = ci.original_token.trim();
-                    if want.is_empty() {
+                    if want.is_empty() || copy {
+                        ci.source_span = None;
                         continue;
                     }
-                    while ti < tokens.len() && tokens[ti].1 != want {
-                        ti += 1;
-                    }
-                    let Some(&(off, tok)) = tokens.get(ti) else {
-                        return; // ran out of source tokens to match
+                    let found = tokens
+                        .iter()
+                        .enumerate()
+                        .skip(ti)
+                        .take(AHEAD)
+                        .find(|(_, (_, tok))| is_token(tok, want))
+                        .map(|(i, _)| i);
+                    let Some(at) = found else {
+                        ci.source_span = None;
+                        continue;
                     };
+                    let (off, tok) = tokens[at];
                     let (line, col) = line_col(off);
                     ci.source_span = Some(TextSpan::with_location(off, tok.len(), line, col));
-                    ti += 1;
+                    ti = at + 1;
                 }
             }
         }
@@ -1025,6 +1055,26 @@ mod tests {
                 .collect();
             assert_eq!(bars, want, "{text:?}");
         }
+    }
+
+    /// A chord written with a note value, or after one, has its own
+    /// token's span: the scan used to run off the end of the source at the
+    /// first token it could not match (`C_2` against `C`) and leave every
+    /// chord after it with a span into the title line.
+    #[test]
+    fn chords_written_with_lengths_have_their_own_spans() {
+        let text = "Spans - Test\n#C 120bpm 4/4\n\nVS 4\nC // G //\nC_2 G_4 F_4\nDm ////\n>Am_8 !STOP r8 r2.\n";
+        let chart = parse_chart(text).expect("parse");
+        let mut seen = Vec::new();
+        for s in &chart.sections {
+            for m in s.measures() {
+                for c in &m.chords {
+                    let span = c.source_span.expect("a span");
+                    seen.push(&text[span.start..span.end()]);
+                }
+            }
+        }
+        assert_eq!(seen, ["C", "G", "C_2", "G_4", "F_4", "Dm", ">Am_8"]);
     }
 
     #[test]

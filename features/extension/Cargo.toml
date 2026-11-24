@@ -47,6 +47,16 @@ session = { workspace = true, features = ["sync", "extension"] }
 uuid = { workspace = true }
 tokio = { workspace = true, features = ["sync", "rt", "time"] }
 
+# In a browser: the chart on a WebGL2 canvas (`paint-web-ui`, src/web_pane.rs),
+# the app's Action List its view is given, and the page's timer. (The app's
+# playhead it followed, `architect-playhead`, is not in the stripped
+# Architect: until the application framework has one, a browser's chart
+# draws without a playhead.)
+[target.'cfg(target_family = "wasm")'.dependencies]
+architect = { workspace = true, features = ["action-list"] }
+architect-workspace = { workspace = true, features = ["paint-web-ui"] }
+gloo-timers = { version = "0.3", features = ["futures"] }
+
 [lints]
 workspace = true
 

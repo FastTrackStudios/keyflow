@@ -208,7 +208,8 @@ mod tests {
 
     /// A chart whose header names its recording draws a block a playing
     /// page follows: the root marked, a `data-at` per bar as played (a
-    /// repeat once per pass). Without the header, no trace of it.
+    /// repeat once per pass), and the cursor's step per symbol as played.
+    /// Without the header, no trace of it.
     #[test]
     fn a_timed_chart_follows_the_playhead() {
         let plain = render_svg_live(SIMPLE).expect("render ok");
@@ -218,18 +219,27 @@ mod tests {
                      VS 4\n|: C | F :| G C\n";
         let svg = render_svg_live(timed).expect("render ok");
         assert!(svg.contains("<svg data-follow-playhead=\"\" data-media=\"demo.mp3\" "));
-        let at: Vec<&str> = svg
-            .match_indices("data-at=\"")
-            .map(|(i, _)| {
-                let rest = &svg[i + 9..];
-                &rest[..rest.find('"').unwrap()]
-            })
-            .collect();
+        let times = |class: &str| -> Vec<&str> {
+            let open = format!("class=\"{class}\" data-at=\"");
+            svg.match_indices(&open)
+                .map(|(i, _)| {
+                    let rest = &svg[i + open.len()..];
+                    &rest[..rest.find('"').unwrap()]
+                })
+                .collect()
+        };
+        let at = times("kf-bar");
         // 60 bpm in 4/4: four seconds a bar; bars 1–2 twice, then 3 and 4.
         assert_eq!(
             at,
             ["0.500", "4.500", "8.500", "12.500", "16.500", "20.500"]
         );
+        // The cursor: a step per symbol drawn. The repeated bars are a
+        // whole-bar slash each, both passes; bars 3 and 4 four slashes.
+        let steps = times("kf-step");
+        assert_eq!(steps.len(), 12);
+        assert_eq!(steps[..4], ["0.500", "4.500", "8.500", "12.500"]);
+        assert_eq!(steps[4..7], ["16.500", "17.500", "18.500"]);
     }
 
     #[test]

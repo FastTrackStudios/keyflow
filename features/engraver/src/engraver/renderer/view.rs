@@ -56,6 +56,7 @@ use peniko::{Color, Fill};
 use crate::Chart;
 use crate::api::pipeline::{ChartPipeline, Preset, PresetOptions};
 use crate::engraver::layout::chart::cursor::{ChartCursor, CursorConfig};
+use crate::engraver::layout::chart::playback::{PlaybackEvent, PlaybackTrack};
 use crate::engraver::layout::chart::{
     ChartLayoutConfig, ChartLayoutEngine, ChartLayoutResult, LayoutMode,
 };
@@ -64,6 +65,7 @@ use crate::engraver::renderer::scene_renderer::SceneRenderBuilder;
 use crate::engraver::renderer::theme::{ArtworkLayer, ChartTheme, InkMap};
 use crate::engraver::scene::SceneNode;
 use crate::engraver::style::MStyle;
+use keyflow_lang::text::bar_times::BarClock;
 
 /// 96 CSS px per 72pt inch — the engraver's own scale between points (its
 /// layout unit) and pixels. Matches keyflow-ui's `DPI_SCALE`.
@@ -105,6 +107,24 @@ pub struct MeasureBox {
     pub staff_height: f64,
 }
 
+/// How a [`ChartView`] shows playback.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PlayheadStyle {
+    /// MuseScore's: a translucent bar the height of the system on the
+    /// symbol that is sounding, jumping to the next at its time
+    /// (`layout::chart::playback`).
+    #[default]
+    Stepped,
+    /// A wash over the bar with a thin line gliding across it
+    /// ([`CursorConfig::playback`]).
+    Smooth,
+}
+
+/// The stepped cursor's opacity, of 255: light enough that the slash and
+/// the staff lines under it stay black, strong enough to find at a glance
+/// from a music stand.
+const STEPPED_ALPHA: u8 = 96;
+
 /// A laid-out chart, cached until the content or the width class changes.
 pub struct ChartView {
     /// The SAME facade keyflow-ui's own chart renderer builds — see the
@@ -116,6 +136,9 @@ pub struct ChartView {
     cursor: ChartCursor,
     /// The cursor's own config, before a theme recolours it.
     cursor_base: CursorConfig,
+    /// How playback is shown: stepping from symbol to symbol, or the
+    /// line gliding across the bar.
+    playhead_style: PlayheadStyle,
     theme: ChartTheme,
     /// `theme.render` as a paint-time recolouring; `None` for the default
     /// look, which then paints exactly as laid out.
@@ -152,11 +175,13 @@ impl LayoutJob {
         let layout = self
             .engine
             .layout_chart_with_config(&self.chart, &self.mode, &self.config);
+        let track = PlaybackTrack::new(&layout, &self.chart, BarClock::at(0.0));
         PreparedLayout {
             key: self.key,
             layout_key: self.layout_key,
             spatium: self.config.spatium,
             layout,
+            track,
         }
     }
 
@@ -173,6 +198,8 @@ pub struct PreparedLayout {
     layout_key: u64,
     spatium: f64,
     layout: ChartLayoutResult,
+    /// The layout's rhythmic events in playing order, for the cursor.
+    track: PlaybackTrack,
 }
 
 impl PreparedLayout {
@@ -244,6 +271,52 @@ impl LayoutWorker {
     }
 }
 
+/// In a browser there is one thread: a job submitted is laid out there and
+/// then, and the next [`LayoutWorker::poll`] hands it over. The same
+/// calls as the thread's, so a view is written once.
+#[cfg(target_arch = "wasm32")]
+pub struct LayoutWorker {
+    done: std::sync::Mutex<Option<PreparedLayout>>,
+}
+
+#[cfg(target_arch = "wasm32")]
+impl LayoutWorker {
+    /// A worker on the page's one thread.
+    ///
+    /// # Errors
+    ///
+    /// None: the signature is the thread's.
+    pub fn spawn() -> std::io::Result<Self> {
+        Ok(Self {
+            done: std::sync::Mutex::new(None),
+        })
+    }
+
+    /// Lays `job` out now, in place of any layout not yet polled.
+    pub fn submit(&self, job: LayoutJob) {
+        let laid = job.run();
+        *self
+            .done
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(laid);
+    }
+
+    /// The newest finished layout since the last call, if any.
+    #[must_use]
+    pub fn poll(&self) -> Option<PreparedLayout> {
+        self.done
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take()
+    }
+
+    /// The layout last submitted, if not yet polled.
+    #[must_use]
+    pub fn wait(&self) -> Option<PreparedLayout> {
+        self.poll()
+    }
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 impl Drop for LayoutWorker {
     fn drop(&mut self) {
@@ -275,6 +348,9 @@ struct Cached {
     /// keyflow-ui's `chart_renderer.rs`, which is the reference this
     /// followed.
     spatium: f64,
+    /// The layout's rhythmic events in playing order: what the stepped
+    /// playback cursor sits on.
+    track: PlaybackTrack,
 }
 
 impl ChartView {
@@ -294,6 +370,7 @@ impl ChartView {
             pipeline,
             cursor: ChartCursor::new(CursorConfig::playback()),
             cursor_base: CursorConfig::playback(),
+            playhead_style: PlayheadStyle::default(),
             theme: ChartTheme::default(),
             ink_map: None,
             cached: None,
@@ -430,6 +507,7 @@ impl ChartView {
             layout_key: prepared.layout_key,
             layout: prepared.layout,
             spatium: prepared.spatium,
+            track: prepared.track,
         });
         self.generation = self.generation.wrapping_add(1);
         true
@@ -479,11 +557,13 @@ impl ChartView {
         if self.needs_layout(key) {
             let (mode, config) = self.layout_params();
             let layout = self.pipeline.layout_with_config(chart, &mode, &config);
+            let track = PlaybackTrack::new(&layout, chart, BarClock::at(0.0));
             self.cached = Some(Cached {
                 key,
                 layout_key: self.theme.layout_key(),
                 layout,
                 spatium: config.spatium,
+                track,
             });
             self.generation = self.generation.wrapping_add(1);
         }
@@ -577,13 +657,8 @@ impl ChartView {
 
         self.paint_artwork(scene, transform, &pages, ArtworkLayer::OverMusic);
 
-        if let Some(secs) = playhead_secs
-            && let Some(state) = self.cursor.compute_at_time(&cached.layout, secs)
-        {
-            // The SMuFL font, for a cursor that highlights a notehead
-            // glyph — keyflow-ui's own cursor render passes the same.
-            let font = bundle.smufl_font();
-            render_cursor_commands(scene, &state.commands, transform, Some(font));
+        if let Some(secs) = playhead_secs {
+            self.paint_playhead_with(scene, cached, secs, transform);
         }
 
         Some((cached.layout.total_width, cached.layout.total_height))
@@ -732,12 +807,80 @@ impl ChartView {
         let Some(cached) = self.cached.as_ref() else {
             return false;
         };
-        let Some(state) = self.cursor.compute_at_time(&cached.layout, playhead_secs) else {
-            return false;
-        };
-        let font = self.pipeline.fonts().smufl_font();
-        render_cursor_commands(scene, &state.commands, Affine::scale(DPI_SCALE), Some(font));
-        true
+        self.paint_playhead_with(scene, cached, playhead_secs, Affine::scale(DPI_SCALE))
+    }
+
+    fn paint_playhead_with(
+        &self,
+        scene: &mut impl PaintScene,
+        cached: &Cached,
+        playhead_secs: f64,
+        transform: Affine,
+    ) -> bool {
+        match self.playhead_style {
+            PlayheadStyle::Stepped => {
+                let Some(event) = cached.track.at(playhead_secs) else {
+                    return false;
+                };
+                let (x0, y0, x1, y1) = event.cursor;
+                scene.fill(
+                    Fill::NonZero,
+                    transform,
+                    self.playhead_colour(),
+                    None,
+                    &Rect::new(x0, y0, x1, y1),
+                );
+                true
+            }
+            PlayheadStyle::Smooth => {
+                let Some(state) = self.cursor.compute_at_time(&cached.layout, playhead_secs) else {
+                    return false;
+                };
+                // The SMuFL font, for a cursor that highlights a notehead
+                // glyph (keyflow-ui's own cursor render passes the same).
+                let font = self.pipeline.fonts().smufl_font();
+                render_cursor_commands(scene, &state.commands, transform, Some(font));
+                true
+            }
+        }
+    }
+
+    /// The stepped cursor's fill: the theme's `chart.cursor` (else the
+    /// playback blue), translucent, so the symbol under it still reads.
+    #[must_use]
+    pub fn playhead_colour(&self) -> Color {
+        let [r, g, b, _] = self.cursor.config.accent_color;
+        Color::from_rgba8(r, g, b, STEPPED_ALPHA)
+    }
+
+    /// How playback is shown ([`PlayheadStyle::Stepped`] unless set).
+    pub fn set_playhead_style(&mut self, style: PlayheadStyle) {
+        self.playhead_style = style;
+    }
+
+    /// How playback is shown.
+    #[must_use]
+    pub fn playhead_style(&self) -> PlayheadStyle {
+        self.playhead_style
+    }
+
+    /// The rhythmic event sounding at `playhead_secs` (chart time) and its
+    /// place in playing order: what the stepped cursor sits on. The index
+    /// changes exactly when the cursor moves, so a host draws the cursor
+    /// again only then. `None` before the first layout and where there is
+    /// no cursor (before bar 1, after the end, a bar not drawn).
+    #[must_use]
+    pub fn playhead_event(&self, playhead_secs: f64) -> Option<(usize, &PlaybackEvent)> {
+        let track = &self.cached.as_ref()?.track;
+        let index = track.index_at(playhead_secs)?;
+        Some((index, &track.events()[index]))
+    }
+
+    /// The laid-out chart's events in playing order. `None` before the
+    /// first layout.
+    #[must_use]
+    pub fn playback_track(&self) -> Option<&PlaybackTrack> {
+        self.cached.as_ref().map(|c| &c.track)
     }
 
     /// Where the playback cursor at `playhead_secs` (chart time) is: its
@@ -748,6 +891,15 @@ impl ChartView {
     #[must_use]
     pub fn playhead_box(&self, playhead_secs: f64) -> Option<(usize, (f64, f64, f64, f64))> {
         let cached = self.cached.as_ref()?;
+        if self.playhead_style == PlayheadStyle::Stepped {
+            let event = cached.track.at(playhead_secs)?;
+            let (x0, y0, x1, y1) = event.symbol;
+            let h = y1 - y0;
+            return Some((
+                event.bar,
+                (x0 - h, h.mul_add(-2.5, y0), x1 + h, h.mul_add(1.75, y0)),
+            ));
+        }
         let state = self.cursor.compute_at_time(&cached.layout, playhead_secs)?;
         let h = state.cursor_height;
         Some((

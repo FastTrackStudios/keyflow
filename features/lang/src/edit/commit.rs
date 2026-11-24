@@ -369,6 +369,14 @@ pub fn splice_syntax(
     if cells.is_empty() {
         return Err("Type one or more bars, separated by |".to_owned());
     }
+    // A repeat sign is a barline, between the bars: typed here it was
+    // read as a plain barline and the repeat dropped without a word.
+    if has_repeat_sign(typed) {
+        return Err(
+            "Repeat signs (|: :| x4) are not written from here yet: the bars were not written, so the repeat is not lost. Type the bars without them"
+                .to_owned(),
+        );
+    }
     let measures = measures(chart);
     if from > measures.len() {
         return Err(format!("There is no bar {}", from + 1));
@@ -389,6 +397,40 @@ pub fn splice_syntax(
     let written: Vec<usize> = (from..from + cells.len()).collect();
     check(&text, &measures, &replays(chart), &written, |_| Ok(()))?;
     Ok((text, cells.len()))
+}
+
+/// Whether `typed` writes a repeat barline (`|:`, `:|`, `:|x4`) outside a
+/// melody or a parallel block.
+fn has_repeat_sign(typed: &str) -> bool {
+    let bytes = typed.as_bytes();
+    let mut depth = 0i32;
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'{' => depth += 1,
+            b'}' => depth = (depth - 1).max(0),
+            b'<' if bytes.get(i + 1) == Some(&b'<') => {
+                depth += 1;
+                i += 1;
+            }
+            b'>' if bytes.get(i + 1) == Some(&b'>') => {
+                depth = (depth - 1).max(0);
+                i += 1;
+            }
+            b'"' => {
+                // A cue's text: a colon in it is not a barline.
+                i += 1;
+                while i < bytes.len() && bytes[i] != b'"' {
+                    i += 1;
+                }
+            }
+            b'|' if depth == 0 && bytes.get(i + 1) == Some(&b':') => return true,
+            b':' if depth == 0 && bytes.get(i + 1) == Some(&b'|') => return true,
+            _ => {}
+        }
+        i += 1;
+    }
+    false
 }
 
 /// The text edits that add `extra` bars after the chart's last: on a line
@@ -1057,6 +1099,21 @@ fn music_of(m: &Measure, places: bool) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_repeat_sign_typed_is_refused_not_dropped() {
+        let src = "Song - Test\n#C 120bpm 4/4\n\nVS 4\nC\nC\nC\nC\n";
+        let chart = crate::text::chart::parse_chart(src).unwrap();
+        for typed in ["|: G :|", "|: G | Am :|x4", "G :| F"] {
+            let why = splice_syntax(src, &chart, 1, typed).unwrap_err();
+            assert!(why.contains("Repeat signs"), "{typed}: {why}");
+        }
+        // A colon in a cue, a barline in a melody and plain barlines are
+        // none of them repeats.
+        for typed in ["\"Vox: in\" G", "G | Am", "<< G ; m{ C:44 D:44 E:42 } >>"] {
+            assert!(splice_syntax(src, &chart, 1, typed).is_ok(), "{typed}");
+        }
+    }
+
     use super::*;
     use crate::edit::input::{InputState, Mode, Op, Target};
     use crate::edit::music::Value;

@@ -22,11 +22,16 @@ pub mod icons;
 pub mod input;
 pub mod keep;
 pub mod palette;
+pub mod selection;
 #[cfg(not(target_family = "wasm"))]
 pub mod session_host;
 #[cfg(not(target_family = "wasm"))]
 pub mod session_view;
 pub mod tools;
+#[cfg(not(target_family = "wasm"))]
+pub mod typed_session;
+#[cfg(target_family = "wasm")]
+mod web_pane;
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -36,6 +41,7 @@ use architect_extensions::contrib::{StateKind, StateWrite};
 use architect_extensions::hostcall::{DocEdit, HostRequest};
 use architect_extensions::linked::{Builder, Extension, Handle};
 use architect_extensions_dioxus::BuilderExt as _;
+#[cfg(not(target_family = "wasm"))]
 use architect_extensions_dioxus::PaintPane;
 use architect_extensions_dioxus::pane::{ViewState, use_pane_state, use_view_state};
 use architect_workspace::paint::peniko::Color;
@@ -191,6 +197,21 @@ impl Extension for Keyflow {
         // accent or a staccato on it), as MuseScore applies a palette.
         ext.action("KEYFLOW_PALETTE_APPLY", |args| async move {
             let token = text(&args, "token").ok_or("token: the palette cell's token")?;
+            // A push or a pull is an action on the selection (any number
+            // of chords, bars, a range), not a mark on one chord.
+            let shift = match token.as_str() {
+                "'" => Some(("KEYFLOW_SELECTION_PUSH", "eighth")),
+                "''" => Some(("KEYFLOW_SELECTION_PUSH", "sixteenth")),
+                "pull" => Some(("KEYFLOW_SELECTION_PULL", "eighth")),
+                _ => None,
+            };
+            if let Some((action, step)) = shift {
+                if let Err(why) = dispatch(action, json!({ "step": step })).await {
+                    edit_state().refused = Some(why);
+                    rerender_input().await;
+                }
+                return Ok(input_state());
+            }
             let then =
                 palette::cell(&token).ok_or_else(|| format!("{token}: not a palette cell"))?;
             match then {
@@ -242,6 +263,25 @@ impl Extension for Keyflow {
             rerender_input().await;
             Ok(json!({ "ruler": on }))
         });
+        // How playback is shown: the stepped cursor on the symbol
+        // sounding (the default), or the old line gliding across the bar.
+        ext.action("KEYFLOW_PLAYBACK_CURSOR", |args| async move {
+            use keyflow::engraver::renderer::PlayheadStyle;
+            let style = match args.get("style").and_then(Json::as_str) {
+                Some("smooth") => PlayheadStyle::Smooth,
+                Some("stepped") => PlayheadStyle::Stepped,
+                Some(other) => return Err(format!("style: stepped or smooth, not {other}")),
+                None => match keyflow_ui::paint_view::playhead_style() {
+                    PlayheadStyle::Stepped => PlayheadStyle::Smooth,
+                    PlayheadStyle::Smooth => PlayheadStyle::Stepped,
+                },
+            };
+            keyflow_ui::paint_view::set_playhead_style(style);
+            for open in open_charts().values() {
+                open.wake.wake();
+            }
+            Ok(json!({ "style": if style == PlayheadStyle::Smooth { "smooth" } else { "stepped" } }))
+        });
         ext.action("KEYFLOW_TARGET_SWITCH", |_| async {
             let next = match edit_state().input.target {
                 edit::Target::Chords => edit::Target::Notes,
@@ -257,6 +297,11 @@ impl Extension for Keyflow {
             let typed = text(&args, "text").ok_or("text: the bars to write")?;
             syntax_write(&typed).await
         });
+        selection::build(ext);
+        #[cfg(not(target_family = "wasm"))]
+        typed_session::build(ext);
+        #[cfg(target_family = "wasm")]
+        browser_sessions(ext);
         ext.action("KEYFLOW_INPUT_STATE", |_| async { Ok(input_state()) });
         ext.action("KEYFLOW_UNDO", |_| async { history(true).await });
         ext.action("KEYFLOW_REDO", |_| async { history(false).await });
@@ -542,6 +587,16 @@ fn ChartPane() -> Element {
             }
         });
     });
+    // In a browser, on the page's timer.
+    #[cfg(target_family = "wasm")]
+    use_hook(|| {
+        let tell = tell.clone();
+        spawn(async move {
+            while tell.send(Msg::Keep).is_ok() {
+                gloo_timers::future::sleep(std::time::Duration::from_millis(700)).await;
+            }
+        });
+    });
     // The zoom readout kept up with the wheel and the keys: looked at
     // often, drawn again only when it changes.
     #[cfg(not(target_family = "wasm"))]
@@ -550,6 +605,15 @@ fn ChartPane() -> Element {
         std::thread::spawn(move || {
             while tell.send(Msg::Zoom).is_ok() {
                 std::thread::sleep(std::time::Duration::from_millis(120));
+            }
+        });
+    });
+    #[cfg(target_family = "wasm")]
+    use_hook(|| {
+        let tell = tell.clone();
+        spawn(async move {
+            while tell.send(Msg::Zoom).is_ok() {
+                gloo_timers::future::sleep(std::time::Duration::from_millis(120)).await;
             }
         });
     });
@@ -676,7 +740,7 @@ fn ChartPane() -> Element {
                     }
                 }
                 div { style: "flex:1; min-height:0;",
-                    PaintPane { mount: mount.mount.clone() }
+                    ChartCanvas { mount: mount.mount.clone(), pane: pane_id.clone(), path: path.clone() }
                 }
                 if mode() == Mode::Syntax || chord().is_some() {
                     div { style: "display:flex; gap:8px; align-items:center; padding:6px 10px; border-top:1px solid var(--border, #8884);",
@@ -901,7 +965,7 @@ async fn give_back_document_place(key: u64, path: &str) {
     o.data.update(|s| s.view = ChartView { zoom, scroll });
     o.selection.set(ChartSelection {
         keys: selection,
-        hover: None,
+        ..ChartSelection::default()
     });
     o.wake.wake();
     DOCUMENT_PLACES
@@ -950,7 +1014,7 @@ async fn give_back_place(key: u64) -> bool {
         o.data.update(|s| s.view = ChartView { zoom, scroll });
         o.selection.set(ChartSelection {
             keys: selection,
-            hover: None,
+            ..ChartSelection::default()
         });
         o.wake.wake();
     }
@@ -1022,7 +1086,15 @@ async fn write_text(handle: &Handle, path: &str, text: String, name: &str) -> Re
         else {
             return Ok(());
         };
-        return ask_session(handle, &call).await.map(|_| ());
+        ask_session(handle, &call).await?;
+        // A session whose chart has been typed into its timeline: the
+        // items kept in step with the edit (what it changed, written).
+        #[cfg(not(target_family = "wasm"))]
+        if let Err(why) = typed_session::retype(handle, path, &text, false).await {
+            // The edit is written; only the typed items are behind.
+            edit_state().refused = Some(format!("The chart's typed items were not updated: {why}"));
+        }
+        return Ok(());
     }
     handle
         .host(HostRequest::EditDocument {
@@ -1080,6 +1152,13 @@ fn remember(
         undo.remove(0);
     }
     REDO.lock().unwrap_or_else(PoisonError::into_inner).clear();
+}
+
+/// An edit made by an action on the selection: kept to undo as note
+/// input's are (the cursor where it was).
+pub(crate) fn remember_edit(path: &str, before: String, after: String) {
+    let input = edit_state().input.clone();
+    remember(path, before, after, (input.clone(), input));
 }
 
 /// ⌘Z (`undo`) or ⇧⌘Z: the chart's last edit taken back (or made again):
@@ -1733,6 +1812,76 @@ enum ZoomTo {
     Fit,
 }
 
+/// The chart's paint view in its pane: a Blitz widget on a desk (and in
+/// a process), a WebGL2 canvas in a browser (`web_pane`).
+#[component]
+fn ChartCanvas(mount: architect_workspace::PaintMount, pane: String, path: String) -> Element {
+    #[cfg(not(target_family = "wasm"))]
+    {
+        let _ = (pane, path);
+        rsx! { PaintPane { mount } }
+    }
+    #[cfg(target_family = "wasm")]
+    rsx! { web_pane::WebChartPane { mount, pane, path } }
+}
+
+/// The session actions the manifest declares, in a browser: a session
+/// is hosted, joined and followed off the browser (`session_host`, vox
+/// on a socket), so each says so. A browser's chart follows the app's
+/// playhead instead (`web_pane`), and the engine in the page provides
+/// `fts.session` there.
+#[cfg(target_family = "wasm")]
+fn browser_sessions(ext: &mut Builder) {
+    const SESSIONS: [&str; 13] = [
+        "KEYFLOW_READ",
+        "KEYFLOW_WRITE",
+        "KEYFLOW_STRUCTURE",
+        "KEYFLOW_SESSION_BAR_ONE",
+        "KEYFLOW_SESSION_DOCUMENT",
+        "KEYFLOW_SESSION_FOLLOW",
+        "KEYFLOW_SESSION_JOIN",
+        "KEYFLOW_SESSION_OPEN",
+        "KEYFLOW_SESSION_PLAY",
+        "KEYFLOW_SESSION_SERVE",
+        "KEYFLOW_SESSION_STATE",
+        "KEYFLOW_SESSION_TYPE_CHART",
+        "KEYFLOW_SESSION_TYPED",
+    ];
+    for name in SESSIONS {
+        ext.action(name, move |_| async move {
+            Err::<Json, String>(format!(
+                "{name}: Keyflow hosts and follows sessions off the browser; \
+                 in a browser its chart follows the app's playhead"
+            ))
+        });
+    }
+}
+
+/// The song folder of the chart at `chart` (a vault path): its folder, or
+/// for an arrangement's chart (`<Song>/Arrangements/<name>/x.kf`) the
+/// song's. What a browser's chart matches the playing item against.
+#[must_use]
+pub fn song_folder(chart: &str) -> Option<std::path::PathBuf> {
+    let folder = std::path::Path::new(chart).parent()?;
+    let song = folder
+        .ancestors()
+        .find(|a| a.file_name().is_some_and(|n| n == "Arrangements"))
+        .and_then(std::path::Path::parent)
+        .unwrap_or(folder);
+    (!song.as_os_str().is_empty()).then(|| song.to_owned())
+}
+
+/// Every open chart of `path` drawn with the playhead at `at` seconds
+/// (none: no playhead), what a browser's chart follows the app's
+/// playhead by (`web_pane`).
+#[cfg(target_family = "wasm")]
+fn set_playhead(path: &str, at: Option<f64>) {
+    for open in open_charts().values().filter(|o| o.path == path) {
+        open.data.update(|s| s.playhead_secs = at);
+        open.wake.wake();
+    }
+}
+
 /// The active chart zoomed as `to` says, about the middle of its pane:
 /// the chart there stays there.
 fn zoom_chart(to: ZoomTo) -> Json {
@@ -1974,6 +2123,20 @@ fn dark_theme() -> ChartTheme {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_charts_song_folder_is_its_folder_or_its_arrangements_song() {
+        let at = |c: &str| song_folder(c).map(|p| p.to_string_lossy().into_owned());
+        assert_eq!(
+            at("Libraries/L/Fire/Fire.kf").as_deref(),
+            Some("Libraries/L/Fire")
+        );
+        assert_eq!(
+            at("Libraries/L/Know Me/Arrangements/Extended/Know Me (Extended).kf").as_deref(),
+            Some("Libraries/L/Know Me")
+        );
+        assert_eq!(at("Chart.kf"), None);
+    }
 
     fn step() -> Step {
         Step {

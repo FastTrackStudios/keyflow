@@ -28,9 +28,14 @@
 //!   that reads or edits it. The chart view's one change to be in a
 //!   session: read through [`ChartSource`] instead of `read_document`.
 
+pub mod typed;
+
+#[cfg(not(target_family = "wasm"))]
 use std::path::Path;
 
-use crdt::file::{DiskStorage, MAIN};
+#[cfg(not(target_family = "wasm"))]
+use crdt::file::DiskStorage;
+use crdt::file::MAIN;
 use crdt::persistence::Persistence as _;
 use crdt::{CrdtDoc, DocFile, TextBinding};
 use session::doc::SessionDoc;
@@ -74,6 +79,7 @@ impl ChartSession {
     /// # Errors
     ///
     /// The file could not be made, or the document refused the chart.
+    #[cfg(not(target_family = "wasm"))]
     pub async fn create(path: &Path, chart: &str) -> Result<Self> {
         let storage = DiskStorage::open(path).map_err(|e| Error::File(e.to_string()))?;
         let file = DocFile::create(storage, &session::doc::kind())
@@ -90,6 +96,7 @@ impl ChartSession {
     /// # Errors
     ///
     /// No such file, not a session, or from a newer build.
+    #[cfg(not(target_family = "wasm"))]
     pub async fn open(path: &Path) -> Result<Self> {
         let storage = DiskStorage::open(path).map_err(|e| Error::File(e.to_string()))?;
         let file = DocFile::open(storage, &session::doc::kind())
@@ -104,6 +111,7 @@ impl ChartSession {
     /// # Errors
     ///
     /// The file could not be made.
+    #[cfg(not(target_family = "wasm"))]
     pub async fn adopt(path: &Path, id: Uuid) -> Result<Self> {
         let storage = DiskStorage::open(path).map_err(|e| Error::File(e.to_string()))?;
         let file = DocFile::adopt(storage, &session::doc::kind(), id)
@@ -112,6 +120,7 @@ impl ChartSession {
         Self::over(file).await
     }
 
+    #[cfg(not(target_family = "wasm"))]
     async fn over(file: DocFile) -> Result<Self> {
         let id = file
             .id()
