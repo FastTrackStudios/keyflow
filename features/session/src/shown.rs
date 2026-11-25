@@ -218,8 +218,14 @@ fn header(name: &str, bars: u32) -> String {
         .filter(|(_, n)| n.chars().all(|c| c.is_ascii_digit()))
         .map_or(name, |(base, _)| base)
         .trim();
+    // A section word alone (`Chorus`, `Pre Chorus`, `Post-Chorus`): a name
+    // with more in it (`Post-Chorus / Break`, `Outro (A Face On A Lover)`)
+    // is not read back as a header unless bracketed, and its bars would
+    // fold into the section before.
     let builtin = !base.is_empty()
-        && !base.contains(['[', ']', '"', ';'])
+        && base
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == ' ' || c == '-')
         && matches!(SectionType::parse(base), Ok(kind) if !matches!(kind, SectionType::Custom(_)));
     if builtin {
         return format!("{} {bars}", base.to_uppercase());

@@ -314,3 +314,40 @@ fn a_beat_mapped_session_reads_as_its_bars() {
         "one tempo, not a mark a bar:\n{shown}"
     );
 }
+
+/// Sections named the way an arrangement names them (a slash, a note in
+/// brackets) are still sections of their own: each keeps its bars.
+#[test]
+fn sections_with_free_names_keep_their_bars() {
+    let names = [
+        "Intro",
+        "Chorus 1",
+        "Post-Chorus / Break",
+        "Verse 2",
+        "Outro (A Face On A Lover)",
+        "Pre Chorus",
+    ];
+    let road = RoadMap {
+        lead_in: 0,
+        sections: names
+            .iter()
+            .enumerate()
+            .map(|(n, name)| RoadSection {
+                name: (*name).to_owned(),
+                first_bar: 1 + 4 * i32::try_from(n).unwrap(),
+                bars: 4,
+            })
+            .collect(),
+        tempo: vec![RoadTempo {
+            bar: 1,
+            bpm: 107.0,
+            meter: (4, 4),
+        }],
+        markers: Vec::new(),
+    };
+    let shown = road.source("Names", &keyflow_session::typed::TypedChart::default());
+    let chart = parse_chart(&shown).unwrap_or_else(|e| panic!("{e}\n{shown}"));
+    assert_eq!(chart.sections.len(), names.len(), "{shown}");
+    let typed = keyflow_session::typed::TypedChart::of(&chart);
+    assert_eq!(typed.bars.len(), 4 * names.len(), "{shown}");
+}
