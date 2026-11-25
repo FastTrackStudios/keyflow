@@ -676,8 +676,7 @@ fn a_section_added_before_the_others_keeps_their_regions() {
 /// not to the bar's end: imported and shown again, the bar still adds up.
 #[test]
 fn a_chord_before_a_rest_lasts_until_the_rest() {
-    const STOPS: &str =
-        "Stops - Test\n#C 100bpm 4/4\n\nVS 2\nDm7 /// G7\n>Am_8 !STOP r8 r2.\n\nCH 2\nF // >G_8 !STOP r8 r4\nC\n";
+    const STOPS: &str = "Stops - Test\n#C 100bpm 4/4\n\nVS 2\nDm7 /// G7\n>Am_8 !STOP r8 r2.\n\nCH 2\nF // >G_8 !STOP r8 r4\nC\n";
     let chart = parse_chart(STOPS).expect("the chart parses");
     let doc = SessionDoc::new();
     let typed = import(&doc, &chart).unwrap();
@@ -692,7 +691,11 @@ fn a_chord_before_a_rest_lasts_until_the_rest() {
     assert_eq!(length("Am"), 0.5, "an eighth, then the rests");
     assert_eq!(length("F"), 2.0, "a half, up to the G");
     assert_eq!(length("G"), 0.5, "an eighth, then the rests");
-    assert_eq!(length("G7"), 1.0, "a beat, to the bar's end: no rest in its bar");
+    assert_eq!(
+        length("G7"),
+        1.0,
+        "a beat, to the bar's end: no rest in its bar"
+    );
     // What the pane composes from the session parses, every section the
     // bars its header says.
     let shown = Held::of_doc(&doc).shown_source("Stops");

@@ -239,3 +239,27 @@ fn apply(doc: &SessionDoc, request: session::service::Request) {
     let call = session::extension::call_json("song", request).unwrap();
     session::extension::answer(&sessions, method, &call, Some("keyflow")).unwrap();
 }
+
+/// Typed bars the session has no regions for (its regions removed, or
+/// never saved) are still drawn: one section of their own.
+#[test]
+fn typed_bars_without_regions_are_still_drawn() {
+    const SONG: &str = "Bare - Test\n#C 100bpm 4/4\n\nVS 2\nC\nG\n\nCH 2\nF\nC\n";
+    let doc = SessionDoc::new();
+    let typed = keyflow_session::typed::import(&doc, &parse_chart(SONG).unwrap()).unwrap();
+    for id in doc.regions().keys() {
+        doc.remove_region(id).unwrap();
+    }
+    let shown = Held::of_doc(&doc).shown_source("Bare");
+    let back = keyflow_session::typed::TypedChart::of(
+        &parse_chart(&shown).unwrap_or_else(|e| panic!("{e}\n{shown}")),
+    );
+    assert_eq!(back.bars.len(), typed.bars.len(), "{shown}");
+    let symbols = |t: &keyflow_session::typed::TypedChart| {
+        t.chords
+            .iter()
+            .map(|c| c.symbol.clone())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(symbols(&back), symbols(&typed));
+}

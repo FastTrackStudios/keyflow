@@ -409,6 +409,27 @@ impl Held {
     /// `title`: its road map with its typed items in it.
     #[must_use]
     pub fn shown_source(&self, title: &str) -> String {
-        self.road_map().source(title, &self.chart())
+        let typed = self.chart();
+        let mut road = self.road_map();
+        // Typed bars past the session's sections (a session with no
+        // regions, or regions that end before the chart does) are drawn
+        // all the same, in a section of their own.
+        let covered: i64 = road.sections.last().map_or(i64::from(road.lead_in), |s| {
+            i64::from(s.first_bar) + i64::from(s.bars) - 1
+        });
+        let typed_bars = i64::try_from(typed.bars.len()).unwrap_or(i64::MAX);
+        if typed_bars > covered
+            && let (Ok(first_bar), Ok(bars)) = (
+                i32::try_from(covered + 1),
+                u32::try_from(typed_bars - covered),
+            )
+        {
+            road.sections.push(RoadSection {
+                name: String::new(),
+                first_bar,
+                bars,
+            });
+        }
+        road.source(title, &typed)
     }
 }
