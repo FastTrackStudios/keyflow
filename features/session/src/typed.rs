@@ -594,6 +594,21 @@ fn written_of(measure: &keyflow_proto::chart::Measure) -> Written {
             }
         }
     }
+    // A chord lasts to the next chord or the bar's end unless a rest comes
+    // first: `>C#m9_8 r8 r2.` is an eighth, not the whole bar with three
+    // beats of rest after it.
+    for chord in &mut out.chords {
+        let (from, length) = (chord.2, chord.3);
+        if let Some(rest) = out
+            .rests
+            .iter()
+            .map(|r| r.1)
+            .filter(|r| *r > from + 1e-9 && *r < from + length - 1e-9)
+            .min_by(f64::total_cmp)
+        {
+            chord.3 = rest - from;
+        }
+    }
     for c in &measure.text_cues {
         let beat = f64::from(c.beat.unwrap_or(1));
         out.cues.push((

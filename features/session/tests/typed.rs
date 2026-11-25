@@ -671,3 +671,30 @@ fn a_section_added_before_the_others_keeps_their_regions() {
         Time::QuarterNotes(4.0)
     );
 }
+
+/// A chord written before rests in its bar lasts until the first rest,
+/// not to the bar's end: imported and shown again, the bar still adds up.
+#[test]
+fn a_chord_before_a_rest_lasts_until_the_rest() {
+    const STOPS: &str =
+        "Stops - Test\n#C 100bpm 4/4\n\nVS 2\nDm7 /// G7\n>Am_8 !STOP r8 r2.\n\nCH 2\nF // >G_8 !STOP r8 r4\nC\n";
+    let chart = parse_chart(STOPS).expect("the chart parses");
+    let doc = SessionDoc::new();
+    let typed = import(&doc, &chart).unwrap();
+    let length = |symbol: &str| {
+        typed
+            .chords
+            .iter()
+            .find(|c| c.symbol == symbol)
+            .map(|c| c.length)
+            .unwrap()
+    };
+    assert_eq!(length("Am"), 0.5, "an eighth, then the rests");
+    assert_eq!(length("F"), 2.0, "a half, up to the G");
+    assert_eq!(length("G"), 0.5, "an eighth, then the rests");
+    assert_eq!(length("G7"), 1.0, "a beat, to the bar's end: no rest in its bar");
+    // What the pane composes from the session parses, every section the
+    // bars its header says.
+    let shown = Held::of_doc(&doc).shown_source("Stops");
+    parse_chart(&shown).unwrap_or_else(|e| panic!("{e}\n{shown}"));
+}
