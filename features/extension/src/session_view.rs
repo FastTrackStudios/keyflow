@@ -59,12 +59,16 @@ fn run_playhead() {
     let mut shown: HashMap<String, (u64, Instant)> = HashMap::new();
     loop {
         std::thread::sleep(FRAME);
-        for doc in crate::open_charts()
+        // Collected first: a `for` header's temporaries live for the whole
+        // loop, and the body reloads the panes (`crate::reload`), which
+        // takes the open charts' lock again. Held across it, the lock
+        // deadlocks this thread, and with it every pane and chart action.
+        let docs: std::collections::BTreeSet<String> = crate::open_charts()
             .values()
             .filter_map(|open| open.path.strip_prefix(keyflow_session::SESSION_PREFIX))
             .map(str::to_owned)
-            .collect::<std::collections::BTreeSet<_>>()
-        {
+            .collect();
+        for doc in docs {
             let due = shown
                 .get(&doc)
                 .is_none_or(|(_, at)| at.elapsed() >= STRUCTURE_EVERY);
