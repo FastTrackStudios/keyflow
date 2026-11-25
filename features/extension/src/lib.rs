@@ -1868,7 +1868,7 @@ fn ChartCanvas(mount: architect_workspace::PaintMount, pane: String, path: Strin
 /// `fts.session` there.
 #[cfg(target_family = "wasm")]
 fn browser_sessions(ext: &mut Builder) {
-    const SESSIONS: [&str; 13] = [
+    const SESSIONS: [&str; 14] = [
         "KEYFLOW_READ",
         "KEYFLOW_WRITE",
         "KEYFLOW_STRUCTURE",
@@ -1879,6 +1879,7 @@ fn browser_sessions(ext: &mut Builder) {
         "KEYFLOW_SESSION_OPEN",
         "KEYFLOW_SESSION_PLAY",
         "KEYFLOW_SESSION_SERVE",
+        "KEYFLOW_SESSION_SHOWN",
         "KEYFLOW_SESSION_STATE",
         "KEYFLOW_SESSION_TYPE_CHART",
         "KEYFLOW_SESSION_TYPED",

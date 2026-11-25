@@ -30,6 +30,12 @@ pub(crate) fn build(ext: &mut Builder) {
         let path = session_path(&args)?;
         summary(&handle()?, &path).await
     });
+    ext.action("KEYFLOW_SESSION_SHOWN", |args| async move {
+        let path = session_path(&args)?;
+        let text = read_text(&handle()?, &path).await?;
+        let error = keyflow::parse(&text).err().map(|e| e.to_string());
+        Ok(json!({ "path": path, "text": text, "error": error }))
+    });
 }
 
 /// The session chart an action is on: `doc` (a session's id), else the

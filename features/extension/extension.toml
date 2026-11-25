@@ -1195,6 +1195,14 @@ effect = "read_only"
 params = '{"type":"object","properties":{"doc":{"type":"string"}}}'
 
 [[actions]]
+id = "KEYFLOW_SESSION_SHOWN"
+name = "Keyflow: a session's chart as text"
+description = "The chart session `doc` (the active chart's session without it) shows, in Keyflow's language, as the pane composes it from the session's regions, tempo map and markers with Keyflow's typed items in them, and whether that text parses (`error` when not). For finding why a session's chart does not draw."
+group = "Session"
+effect = "read_only"
+params = '{"type":"object","properties":{"doc":{"type":"string"}}}'
+
+[[actions]]
 id = "KEYFLOW_SESSION_OPEN"
 name = "Session: open"
 description = "Opens a `.session` file (`path`; when it is not there, made with the chart read from `chart_path`, or with `chart`, Keyflow source, imported as typed items; either must read as a chart) and serves it as fts.session. Answers `{id, pane}`."
