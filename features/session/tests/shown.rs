@@ -263,3 +263,54 @@ fn typed_bars_without_regions_are_still_drawn() {
     };
     assert_eq!(symbols(&back), symbols(&typed));
 }
+
+/// A recording's beat map (a tempo point on every bar, drifting a little,
+/// as a session measured from a live take has) shows as one tempo: the
+/// chart still has the bars its sections say, and no tempo mark on every
+/// bar.
+#[test]
+fn a_beat_mapped_session_reads_as_its_bars() {
+    let doc = SessionDoc::new();
+    // 32 bars of 4/4 drifting between 107 and 108.5 BPM, a point per bar.
+    let mut points = Vec::new();
+    let mut at = 0.0;
+    for bar in 0..32 {
+        let bpm = 107.0 + f64::from(bar % 16) * 0.1;
+        points.push(TempoMap::point(at, bpm, Some(TimeSignature::new(4, 4))));
+        at += 4.0 * 60.0 / bpm;
+    }
+    let end = at;
+    doc.set_tempo(&TempoMap::new(107.0, TimeSignature::new(4, 4), points))
+        .unwrap();
+    let tempo = doc.tempo();
+    let bar_start = |bar: f64| Time::QuarterNotes(bar * 4.0).seconds(&tempo);
+    for (n, (name, from, to)) in [
+        ("Intro", 0.0, 8.0),
+        ("Chorus 1", 8.0, 24.0),
+        ("Verse 1", 24.0, 32.0),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let to = if to >= 32.0 { end } else { bar_start(to) };
+        doc.put_region(
+            &MarkId(format!("region-{n}")),
+            &Region {
+                start: Time::Seconds(bar_start(from)),
+                end: Time::Seconds(to),
+                name: name.into(),
+                color: None,
+                ruler: Some(1),
+            },
+        )
+        .unwrap();
+    }
+    let shown = Held::of_doc(&doc).shown_source("Beat map");
+    let chart = parse_chart(&shown).unwrap_or_else(|e| panic!("{e}\n{shown}"));
+    let bars = keyflow_session::typed::TypedChart::of(&chart).bars.len();
+    assert_eq!(bars, 32, "{shown}");
+    assert!(
+        shown.matches("bpm").count() <= 2,
+        "one tempo, not a mark a bar:\n{shown}"
+    );
+}

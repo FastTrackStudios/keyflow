@@ -236,6 +236,10 @@ fn header(name: &str, bars: u32) -> String {
     }
 }
 
+/// The smallest tempo change (BPM) a session's chart marks: less is a
+/// recording's drift, which a beat map follows bar by bar.
+const SHOWN_TEMPO_STEP: f64 = 3.0;
+
 /// `quarters` as a note value (`_4`, `_2.`), when it is one.
 fn note_value(quarters: f64) -> Option<&'static str> {
     const VALUES: [(f64, &str); 9] = [
@@ -372,8 +376,11 @@ impl RoadMap {
                 }
                 for change in self.tempo.iter().skip(1).filter(|t| t.bar == bar) {
                     // A tempo that changes (not a meter alone), and a cue
-                    // saying it: the engraver does not draw a `->` yet.
-                    if (change.bpm - bpm).abs() < 1e-3 {
+                    // saying it: the engraver does not draw a `->` yet. A
+                    // recording's beat map drifts a little every bar: a
+                    // change under SHOWN_TEMPO_STEP is that drift, not a
+                    // tempo the chart marks.
+                    if (change.bpm - bpm).abs() < SHOWN_TEMPO_STEP {
                         continue;
                     }
                     bpm = change.bpm;
