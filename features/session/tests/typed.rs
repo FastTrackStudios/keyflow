@@ -554,3 +554,120 @@ fn a_sessions_own_structure_is_kept_and_the_chart_read_against_it() {
         "{why:?}"
     );
 }
+
+/// [`SONG`] with a bar of E written into the verse after its `%`.
+fn with_a_bar_inserted() -> keyflow_proto::Chart {
+    let song = SONG.replace("VS 4", "VS 5").replace("%\n", "%\nE\n");
+    parse_chart(&song).expect("the edited chart parses")
+}
+
+/// The id of the chord `symbol` on played bar `bar` (from 0).
+fn id_of(doc: &SessionDoc, symbol: &str, bar: i64) -> ItemId {
+    let found: Vec<ItemId> = doc
+        .items()
+        .into_iter()
+        .filter(|(_, i)| {
+            i.kind == CHORD
+                && i.payload.get("symbol").and_then(Value::as_str) == Some(symbol)
+                && i.payload.get("bar").and_then(Value::as_i64) == Some(bar)
+        })
+        .map(|(id, _)| id)
+        .collect();
+    assert_eq!(found.len(), 1, "{symbol} on bar {bar}: {found:?}");
+    found[0].clone()
+}
+
+#[test]
+fn a_bar_inserted_keeps_every_items_identity() {
+    let doc = SessionDoc::new();
+    import(&doc, &chart()).unwrap();
+    let before: std::collections::BTreeSet<ItemId> = doc.items().into_keys().collect();
+    let am = id_of(&doc, "Am", 2);
+    let c = id_of(&doc, "C", 8);
+
+    let edited = with_a_bar_inserted();
+    let requests = plan(&edited, &Held::of_doc(&doc));
+    assert!(
+        !requests
+            .iter()
+            .any(|r| matches!(r, session::service::Request::RemoveItem { .. })),
+        "nothing is removed: {requests:?}"
+    );
+    import(&doc, &edited).unwrap();
+
+    // The bars after the new one moved, and are the same items.
+    assert_eq!(id_of(&doc, "Am", 3), am);
+    assert_eq!(id_of(&doc, "C", 9), c);
+    // The new bar and its chord are new ids, none a removed item's.
+    let after: std::collections::BTreeSet<ItemId> = doc.items().into_keys().collect();
+    let new: Vec<&ItemId> = after.difference(&before).collect();
+    assert_eq!(new.len(), 2, "one bar, one chord: {new:?}");
+    assert!(new.contains(&&id_of(&doc, "E", 2)));
+    assert!(before.is_subset(&after));
+    // It reads back as the edited chart, and is written once.
+    assert_eq!(read(&doc), TypedChart::of(&edited));
+    let vv = doc.doc().oplog_vv();
+    import(&doc, &edited).unwrap();
+    assert_eq!(
+        doc.doc().oplog_vv(),
+        vv,
+        "importing the edit again writes nothing"
+    );
+}
+
+#[test]
+fn a_mark_made_meanwhile_stays_on_its_chord_when_a_bar_is_inserted_before_it() {
+    let ours = SessionDoc::new();
+    import(&ours, &chart()).unwrap();
+    let theirs = SessionDoc::new();
+    sync(&ours, &theirs);
+
+    // At once: they put a staccato on the last bar's C, we insert a bar
+    // in the verse, which moves that C to bar 10.
+    let c = id_of(&theirs, "C", 8);
+    assert!(set_flag(&theirs, &c, "staccato", true).unwrap());
+    import(&ours, &with_a_bar_inserted()).unwrap();
+    sync(&ours, &theirs);
+    sync(&theirs, &ours);
+
+    let (a, b) = (read(&ours), read(&theirs));
+    assert_eq!(a, b, "both hold the same chart");
+    let staccatos: Vec<(usize, &str)> = a
+        .chords
+        .iter()
+        .filter(|c| c.staccato)
+        .map(|c| (c.bar, c.symbol.as_str()))
+        .collect();
+    // The verse's `.F` is written staccato; theirs is on the C, now bar 10.
+    assert_eq!(staccatos, [(3, "F"), (9, "C")]);
+}
+
+#[test]
+fn a_section_added_before_the_others_keeps_their_regions() {
+    let doc = SessionDoc::new();
+    import(&doc, &chart()).unwrap();
+    let regions = doc.regions();
+    let verse = regions[&MarkId::from("keyflow.section.0")].clone();
+    assert_eq!(verse.name, "Verse");
+
+    let song = SONG.replace("VS 4\n", "IN 1\nC\n\nVS 4\n");
+    import(&doc, &parse_chart(&song).unwrap()).unwrap();
+    let regions = doc.regions();
+    let names: Vec<(&str, &str)> = regions
+        .iter()
+        .map(|(id, r)| (id.as_str(), r.name.as_str()))
+        .collect();
+    assert_eq!(
+        names,
+        [
+            ("keyflow.section.0", "Verse"),
+            ("keyflow.section.0~2", "Intro"),
+            ("keyflow.section.1", "Chorus"),
+        ]
+    );
+    // The verse is the same region, a bar later.
+    assert_eq!(
+        regions[&MarkId::from("keyflow.section.0")].start,
+        Time::QuarterNotes(4.0)
+    );
+}

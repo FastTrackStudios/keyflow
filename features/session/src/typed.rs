@@ -437,9 +437,15 @@ impl TypedChart {
     }
 
     /// Every item, by its id, with bar 1 at `origin` quarter notes on the
-    /// session's timeline.
+    /// session's timeline: ids minted from position ([`bar_id`],
+    /// [`chord_id`]), what a first import writes.
     #[must_use]
     pub fn items(&self, origin: f64) -> BTreeMap<ItemId, Item> {
+        self.items_with(origin, &Ids::positional(self))
+    }
+
+    /// Every item, by the id `ids` gives it.
+    fn items_with(&self, origin: f64, ids: &Ids) -> BTreeMap<ItemId, Item> {
         let owner = ExtensionId::from(crate::EXTENSION);
         let item = |lane: &str, kind: &str, at: f64, end: Option<f64>, payload: Value| Item {
             owner: owner.clone(),
@@ -451,7 +457,7 @@ impl TypedChart {
         };
         let int = |n: usize| Value::Int(i64::try_from(n).unwrap_or(i64::MAX));
         let mut out = BTreeMap::new();
-        for b in &self.bars {
+        for (b, id) in self.bars.iter().zip(&ids.bars) {
             let payload = vec![
                 ("index", int(b.index)),
                 ("written", int(b.written)),
@@ -466,11 +472,11 @@ impl TypedChart {
                 ("repeat_sign", Value::Bool(b.repeat_sign)),
             ];
             out.insert(
-                bar_id(b.index),
+                id.clone(),
                 item(BARS, BAR, b.at, Some(b.at + b.length), Value::map(payload)),
             );
         }
-        for c in &self.chords {
+        for (c, id) in self.chords.iter().zip(&ids.chords) {
             let mut payload = vec![
                 ("symbol", Value::Text(c.symbol.clone())),
                 ("bar", int(c.bar)),
@@ -482,7 +488,7 @@ impl TypedChart {
             ];
             payload.extend(push_fields(c.push));
             out.insert(
-                chord_id(c.bar, c.index),
+                id.clone(),
                 item(
                     CHORDS,
                     CHORD,
@@ -492,9 +498,9 @@ impl TypedChart {
                 ),
             );
         }
-        for c in &self.cues {
+        for (c, id) in self.cues.iter().zip(&ids.cues) {
             out.insert(
-                ItemId(format!("keyflow.cue.{}.{}", c.bar, c.index)),
+                id.clone(),
                 item(
                     CUES,
                     CUE,
@@ -509,9 +515,9 @@ impl TypedChart {
                 ),
             );
         }
-        for r in &self.rests {
+        for (r, id) in self.rests.iter().zip(&ids.rests) {
             out.insert(
-                ItemId(format!("keyflow.rest.{}.{}", r.bar, r.index)),
+                id.clone(),
                 item(
                     RHYTHM,
                     REST,
@@ -521,9 +527,9 @@ impl TypedChart {
                 ),
             );
         }
-        for d in &self.dynamics {
+        for (d, id) in self.dynamics.iter().zip(&ids.dynamics) {
             out.insert(
-                ItemId(format!("keyflow.dynamic.{}.{}", d.bar, d.index)),
+                id.clone(),
                 item(
                     DYNAMICS,
                     DYNAMIC,
@@ -615,6 +621,10 @@ fn written_of(measure: &keyflow_proto::chart::Measure) -> Written {
             (beat - 1.0) * unit,
         ));
     }
+    // In time order, as a session reads them back (a bar's text cues are
+    // parsed before its staff text, whatever their beats).
+    out.cues.sort_by(|a, b| a.2.total_cmp(&b.2));
+    out.dynamics.sort_by(|a, b| a.2.total_cmp(&b.2));
     out
 }
 
@@ -629,6 +639,223 @@ pub fn bar_id(index: usize) -> ItemId {
 #[must_use]
 pub fn chord_id(bar: usize, index: usize) -> ItemId {
     ItemId(format!("keyflow.chord.{bar}.{index}"))
+}
+
+/// The id of cue, rest or dynamic `index` of played bar `bar`.
+fn placed_id(kind: &str, bar: usize, index: usize) -> ItemId {
+    ItemId(format!("keyflow.{kind}.{bar}.{index}"))
+}
+
+/// An id for each of a [`TypedChart`]'s bars and items, in its order.
+///
+/// # Identity
+///
+/// An item's id is minted once, when it first appears, and kept: it is
+/// not its place. An edit comes to [`plan`] as a whole chart, parsed, with
+/// no ids in it, so [`Held::ids_for`] finds each of its bars and items in
+/// what the session holds (an alignment: the longest run of bars alike,
+/// then within each bar the items alike, a changed one paired with the one
+/// it replaces) and gives it that one's id. Inserting a bar mints one id
+/// and moves the bars after it; a chord pushed by someone else meanwhile
+/// is still that chord. A first import mints ids from position, so two
+/// replicas importing one chart make the same items.
+#[derive(Debug, Clone, Default, PartialEq)]
+struct Ids {
+    bars: Vec<ItemId>,
+    chords: Vec<ItemId>,
+    cues: Vec<ItemId>,
+    rests: Vec<ItemId>,
+    dynamics: Vec<ItemId>,
+}
+
+impl Ids {
+    /// Ids from position: what a chart nobody has typed yet is given.
+    fn positional(chart: &TypedChart) -> Self {
+        Self {
+            bars: chart.bars.iter().map(|b| bar_id(b.index)).collect(),
+            chords: chart
+                .chords
+                .iter()
+                .map(|c| chord_id(c.bar, c.index))
+                .collect(),
+            cues: chart
+                .cues
+                .iter()
+                .map(|c| placed_id("cue", c.bar, c.index))
+                .collect(),
+            rests: chart
+                .rests
+                .iter()
+                .map(|r| placed_id("rest", r.bar, r.index))
+                .collect(),
+            dynamics: chart
+                .dynamics
+                .iter()
+                .map(|d| placed_id("dynamic", d.bar, d.index))
+                .collect(),
+        }
+    }
+}
+
+/// For each of `new`, the one of `old` it is: the longest common
+/// subsequence of keys, then each gap between two matches whose two sides
+/// are as long paired in order (a bar or a chord changed in place).
+/// Each of `old` is matched at most once.
+fn align<K: PartialEq>(old: &[K], new: &[K]) -> Vec<Option<usize>> {
+    let (n, m) = (old.len(), new.len());
+    // lcs[i][j]: the longest common subsequence of old[i..] and new[j..].
+    let mut lcs = vec![vec![0u32; m + 1]; n + 1];
+    for i in (0..n).rev() {
+        for j in (0..m).rev() {
+            lcs[i][j] = if old[i] == new[j] {
+                lcs[i + 1][j + 1] + 1
+            } else {
+                lcs[i + 1][j].max(lcs[i][j + 1])
+            };
+        }
+    }
+    let mut out = vec![None; m];
+    let (mut i, mut j) = (0, 0);
+    // Where the gap being walked started, on each side.
+    let (mut gap_old, mut gap_new) = (0, 0);
+    let close_gap = |out: &mut Vec<Option<usize>>, i: usize, j: usize, go: usize, gn: usize| {
+        if i - go == j - gn {
+            for k in 0..(j - gn) {
+                out[gn + k] = Some(go + k);
+            }
+        }
+    };
+    while i < n && j < m {
+        if old[i] == new[j] {
+            close_gap(&mut out, i, j, gap_old, gap_new);
+            out[j] = Some(i);
+            i += 1;
+            j += 1;
+            (gap_old, gap_new) = (i, j);
+        } else if lcs[i + 1][j] >= lcs[i][j + 1] {
+            i += 1;
+        } else {
+            j += 1;
+        }
+    }
+    close_gap(&mut out, n, m, gap_old, gap_new);
+    out
+}
+
+/// What a bar is, for matching one chart's bars with another's: what is
+/// in it and its marks, not where it is.
+fn bar_keys(chart: &TypedChart) -> Vec<String> {
+    let mut keys: BTreeMap<usize, String> = chart
+        .bars
+        .iter()
+        .map(|b| {
+            (
+                b.index,
+                format!(
+                    "{}/{} p{} {}{}{} {:?} {}|",
+                    b.meter.0,
+                    b.meter.1,
+                    b.pass,
+                    u8::from(b.repeat_start),
+                    u8::from(b.repeat_end),
+                    b.repeat_count,
+                    b.ending,
+                    u8::from(b.repeat_sign),
+                ),
+            )
+        })
+        .collect();
+    let mut add = |bar: usize, part: String| {
+        if let Some(key) = keys.get_mut(&bar) {
+            key.push_str(&part);
+            key.push('|');
+        }
+    };
+    for c in &chart.chords {
+        add(c.bar, chord_key(c));
+    }
+    for r in &chart.rests {
+        add(r.bar, format!("r{}:{}", r.beat, r.length));
+    }
+    for c in &chart.cues {
+        add(c.bar, format!("q{}:{}:{}", c.beat, c.group, c.text));
+    }
+    for d in &chart.dynamics {
+        add(d.bar, format!("d{}:{}", d.beat, d.text));
+    }
+    chart.bars.iter().map(|b| keys[&b.index].clone()).collect()
+}
+
+fn chord_key(c: &TypedChord) -> String {
+    format!(
+        "c{}:{}:{:?}:{}{}",
+        c.beat,
+        c.symbol,
+        c.push,
+        u8::from(c.accent),
+        u8::from(c.staccato)
+    )
+}
+
+/// Ids not given yet: a wanted one if it is free, else the same with
+/// `~2`, `~3` …, so two replicas making the same edit mint the same ids.
+struct Mint {
+    taken: BTreeSet<String>,
+}
+
+impl Mint {
+    fn id(&mut self, wanted: &str) -> String {
+        let mut id = wanted.to_owned();
+        let mut n = 2;
+        while self.taken.contains(&id) {
+            id = format!("{wanted}~{n}");
+            n += 1;
+        }
+        self.taken.insert(id.clone());
+        id
+    }
+}
+
+/// The ids of `new`'s items of one kind: each found in `old` (by
+/// [`align`], within the bar its bar was matched with) keeps that one's
+/// id; the rest are minted from `positional`.
+fn child_ids<T>(
+    old: &[T],
+    old_ids: &[ItemId],
+    new: &[T],
+    bar_of: impl Fn(&T) -> usize,
+    key: impl Fn(&T) -> String,
+    positional: impl Fn(&T) -> ItemId,
+    old_bar: &BTreeMap<usize, usize>,
+    mint: &mut Mint,
+) -> Vec<ItemId> {
+    let mut by_bar: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    for (k, item) in old.iter().enumerate() {
+        by_bar.entry(bar_of(item)).or_default().push(k);
+    }
+    let mut out: Vec<Option<ItemId>> = vec![None; new.len()];
+    let mut new_by_bar: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    for (k, item) in new.iter().enumerate() {
+        new_by_bar.entry(bar_of(item)).or_default().push(k);
+    }
+    for (bar, mine) in &new_by_bar {
+        let theirs = old_bar
+            .get(bar)
+            .and_then(|b| by_bar.get(b))
+            .cloned()
+            .unwrap_or_default();
+        let old_keys: Vec<String> = theirs.iter().map(|&k| key(&old[k])).collect();
+        let new_keys: Vec<String> = mine.iter().map(|&k| key(&new[k])).collect();
+        for (n, found) in align(&old_keys, &new_keys).into_iter().enumerate() {
+            if let Some(o) = found {
+                out[mine[n]] = Some(old_ids[theirs[o]].clone());
+            }
+        }
+    }
+    out.into_iter()
+        .zip(new)
+        .map(|(id, item)| id.unwrap_or_else(|| ItemId(mint.id(positional(item).as_str()))))
+        .collect()
 }
 
 /// A push field as payload keys: none when not pushed.
@@ -780,8 +1007,14 @@ impl Held {
     /// the tempo map and its section from the region it lies in.
     #[must_use]
     pub fn chart(&self) -> TypedChart {
+        self.chart_and_ids().0
+    }
+
+    /// [`Held::chart`], with each bar's and item's id.
+    fn chart_and_ids(&self) -> (TypedChart, Ids) {
         let owner = ExtensionId::from(crate::EXTENSION);
         let mut out = TypedChart::default();
+        let mut ids = Ids::default();
         let number = |payload: &Value, key: &str| {
             payload
                 .get(key)
@@ -818,13 +1051,8 @@ impl Held {
                 .end
                 .map_or(0.0, |e| e.quarter_notes(&self.tempo) - self.origin - at);
             let p = &item.payload;
-            // An item's place among its bar's, from its id's last part.
-            let place = id
-                .as_str()
-                .rsplit('.')
-                .next()
-                .and_then(|n| n.parse::<usize>().ok())
-                .unwrap_or(0);
+            // Its place among its bar's is from its time (below), not its id.
+            let place = 0;
             let placed = || Some((number(p, "bar")?, p.get("beat").and_then(Value::as_f64)?));
             match item.kind.as_str() {
                 BAR => {
@@ -840,6 +1068,7 @@ impl Held {
                     let section = regions
                         .iter()
                         .find(|(from, to, _)| at >= from - 1e-6 && at < to - 1e-6);
+                    ids.bars.push(id.clone());
                     out.bars.push(TypedBar {
                         index,
                         written,
@@ -866,6 +1095,7 @@ impl Held {
                     let Some((bar, beat)) = placed() else {
                         continue;
                     };
+                    ids.chords.push(id.clone());
                     out.chords.push(TypedChord {
                         bar,
                         index: place,
@@ -883,6 +1113,7 @@ impl Held {
                     let Some((bar, beat)) = placed() else {
                         continue;
                     };
+                    ids.cues.push(id.clone());
                     out.cues.push(TypedCue {
                         bar,
                         index: place,
@@ -896,6 +1127,7 @@ impl Held {
                     let Some((bar, beat)) = placed() else {
                         continue;
                     };
+                    ids.rests.push(id.clone());
                     out.rests.push(TypedRest {
                         bar,
                         index: place,
@@ -908,6 +1140,7 @@ impl Held {
                     let Some((bar, beat)) = placed() else {
                         continue;
                     };
+                    ids.dynamics.push(id.clone());
                     out.dynamics.push(TypedDynamic {
                         bar,
                         index: place,
@@ -919,12 +1152,103 @@ impl Held {
                 _ => {}
             }
         }
-        out.bars.sort_by_key(|b| b.index);
-        out.chords.sort_by_key(|c| (c.bar, c.index));
-        out.cues.sort_by_key(|c| (c.bar, c.index));
-        out.rests.sort_by_key(|r| (r.bar, r.index));
-        out.dynamics.sort_by_key(|d| (d.bar, d.index));
-        out
+        out.bars = sorted(out.bars, &mut ids.bars, |a, b| a.index.cmp(&b.index));
+        out.chords = placed_in_order(
+            out.chords,
+            &mut ids.chords,
+            |c| (c.bar, c.at),
+            |c, k| c.index = k,
+        );
+        out.cues = placed_in_order(
+            out.cues,
+            &mut ids.cues,
+            |c| (c.bar, c.at),
+            |c, k| c.index = k,
+        );
+        out.rests = placed_in_order(
+            out.rests,
+            &mut ids.rests,
+            |r| (r.bar, r.at),
+            |r, k| r.index = k,
+        );
+        out.dynamics = placed_in_order(
+            out.dynamics,
+            &mut ids.dynamics,
+            |d| (d.bar, d.at),
+            |d, k| d.index = k,
+        );
+        (out, ids)
+    }
+
+    /// The ids `chart` (an edit of [`Held::chart`]) is written with: each
+    /// bar and item that is one the session holds keeps its id, the rest
+    /// are minted ([`Ids`]).
+    fn ids_for(&self, chart: &TypedChart) -> Ids {
+        if !self.is_typed() {
+            return Ids::positional(chart);
+        }
+        let (old, old_ids) = self.chart_and_ids();
+        let mut mint = Mint {
+            taken: self.items.keys().map(|id| id.as_str().to_owned()).collect(),
+        };
+        let matched = align(&bar_keys(&old), &bar_keys(chart));
+        // A new bar's index → the index of the held bar it is.
+        let old_bar: BTreeMap<usize, usize> = matched
+            .iter()
+            .zip(&chart.bars)
+            .filter_map(|(m, b)| Some((b.index, old.bars[(*m)?].index)))
+            .collect();
+        let bars = matched
+            .iter()
+            .zip(&chart.bars)
+            .map(|(m, b)| match m {
+                Some(o) => old_ids.bars[*o].clone(),
+                None => ItemId(mint.id(bar_id(b.index).as_str())),
+            })
+            .collect();
+        Ids {
+            bars,
+            chords: child_ids(
+                &old.chords,
+                &old_ids.chords,
+                &chart.chords,
+                |c| c.bar,
+                |c| format!("{}:{}", c.beat, c.symbol),
+                |c| chord_id(c.bar, c.index),
+                &old_bar,
+                &mut mint,
+            ),
+            cues: child_ids(
+                &old.cues,
+                &old_ids.cues,
+                &chart.cues,
+                |c| c.bar,
+                |c| format!("{}:{}:{}", c.beat, c.group, c.text),
+                |c| placed_id("cue", c.bar, c.index),
+                &old_bar,
+                &mut mint,
+            ),
+            rests: child_ids(
+                &old.rests,
+                &old_ids.rests,
+                &chart.rests,
+                |r| r.bar,
+                |r| format!("{}:{}", r.beat, r.length),
+                |r| placed_id("rest", r.bar, r.index),
+                &old_bar,
+                &mut mint,
+            ),
+            dynamics: child_ids(
+                &old.dynamics,
+                &old_ids.dynamics,
+                &chart.dynamics,
+                |d| d.bar,
+                |d| format!("{}:{}", d.beat, d.text),
+                |d| placed_id("dynamic", d.bar, d.index),
+                &old_bar,
+                &mut mint,
+            ),
+        }
     }
 
     /// The session's tempo map with `chart`'s tempo and meters from bar 1
@@ -1114,10 +1438,39 @@ fn plan_bringing(chart: &Chart, held: &Held, brings: Brings) -> Vec<Request> {
     } else {
         Vec::new()
     };
+    // A section the chart brought keeps its region's id when one before
+    // it is added or removed, as an item does ([`Ids`]).
+    let mut brought: Vec<(&MarkId, &Region)> = held
+        .regions
+        .iter()
+        .filter(|(id, _)| id.as_str().starts_with(SECTION))
+        .collect();
+    brought.sort_by(|a, b| {
+        a.1.start
+            .quarter_notes(&held.tempo)
+            .total_cmp(&b.1.start.quarter_notes(&held.tempo))
+    });
+    let names: Vec<&str> = brought.iter().map(|(_, r)| r.name.as_str()).collect();
+    let wanted_names: Vec<&str> = sections.iter().map(|s| s.0.as_str()).collect();
+    let mut mint = Mint {
+        taken: held
+            .regions
+            .keys()
+            .map(|id| id.as_str().to_owned())
+            .collect(),
+    };
+    let region_ids: Vec<MarkId> = align(&names, &wanted_names)
+        .into_iter()
+        .enumerate()
+        .map(|(n, found)| match found {
+            Some(o) => brought[o].0.clone(),
+            None => MarkId(mint.id(&format!("{SECTION}{n}"))),
+        })
+        .collect();
     let mut wanted_regions = BTreeMap::new();
-    for (n, (name, from, to)) in sections.into_iter().enumerate() {
+    for ((name, from, to), id) in sections.into_iter().zip(region_ids) {
         wanted_regions.insert(
-            MarkId(format!("{SECTION}{n}")),
+            id,
             Region {
                 start: Time::QuarterNotes(held.origin + from),
                 end: Time::QuarterNotes(held.origin + to),
@@ -1157,7 +1510,7 @@ fn plan_bringing(chart: &Chart, held: &Held, brings: Brings) -> Vec<Request> {
             out.push(Request::PutLane { id, lane });
         }
     }
-    let wanted = typed.items(held.origin);
+    let wanted = typed.items_with(held.origin, &held.ids_for(&typed));
     let mine: BTreeSet<&str> = LANES.iter().map(|l| l.0).collect();
     for (id, item) in &held.items {
         if item.owner == owner && mine.contains(item.lane.as_str()) && !wanted.contains_key(id) {
@@ -1287,6 +1640,43 @@ pub fn set_flag(doc: &SessionDoc, id: &ItemId, flag: &str, on: bool) -> DocResul
     payload.insert(flag.to_owned(), Value::Bool(on));
     doc.put_item(id, &item)?;
     Ok(true)
+}
+
+/// `items` and their `ids` sorted together by `order`.
+fn sorted<T>(
+    items: Vec<T>,
+    ids: &mut Vec<ItemId>,
+    order: impl Fn(&T, &T) -> std::cmp::Ordering,
+) -> Vec<T> {
+    let mut both: Vec<(T, ItemId)> = items.into_iter().zip(ids.drain(..)).collect();
+    both.sort_by(|a, b| order(&a.0, &b.0).then_with(|| a.1.cmp(&b.1)));
+    let (items, sorted_ids): (Vec<T>, Vec<ItemId>) = both.into_iter().unzip();
+    *ids = sorted_ids;
+    items
+}
+
+/// `items` in their bars in time order, each given its place in its bar.
+fn placed_in_order<T>(
+    items: Vec<T>,
+    ids: &mut Vec<ItemId>,
+    at: impl Fn(&T) -> (usize, f64),
+    set_place: impl Fn(&mut T, usize),
+) -> Vec<T> {
+    let mut items = sorted(items, ids, |a, b| {
+        let (a, b) = (at(a), at(b));
+        a.0.cmp(&b.0).then(a.1.total_cmp(&b.1))
+    });
+    let mut bar = None;
+    let mut place = 0;
+    for item in &mut items {
+        let this = at(item).0;
+        if bar != Some(this) {
+            (bar, place) = (Some(this), 0);
+        }
+        set_place(item, place);
+        place += 1;
+    }
+    items
 }
 
 impl ChartSource {
